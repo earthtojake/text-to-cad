@@ -290,10 +290,10 @@ Animation (`ToolPanel`s; their rows `kit/inspector/panelRows.jsx`), then Search,
 the tabs' place (one tab is a plain title, a row high, its list right under it) — its lists at its full height, in one
 12px text size and 28px rows, a row's one glyph on the 16px line and its name 32px in. What is picked is read in Quick
 Edit's chip list (each reference its kind and key facts: `kit/inspector/inspect.js`'s descriptions); the hover tip over
-the canvas is the frame's (`kit/shell/ViewFrame.jsx`). The panel always pushes the model aside; a view under 700px starts
-it collapsed, never written (`kit/shell/sidebars.js`); it is sized from its grip (240px at first), its toggle the navbar's
-first control, before the logo (`file-viewer/panelToggles.js`; ⌘\), and \ hides it and the strip; on a phone the
-toggle opens it as a sheet from the left (`primitives/sheet.jsx`).
+the canvas is the frame's (`kit/shell/ViewFrame.jsx`). The panel always pushes the model aside; a view that would leave the
+model under 640px beside it starts it collapsed, never written (`kit/shell/sidebars.js`); it is 256px wide until its grip
+sets another width, its toggle the navbar's first control, before the logo (`file-viewer/panelToggles.js`; ⌘\); on a
+phone the toggle opens it as a sheet from the left (`primitives/sheet.jsx`).
 Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is
 the description's link tree, with the Model's rows and search box; see

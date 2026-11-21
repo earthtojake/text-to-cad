@@ -25,8 +25,7 @@ export function ToolbarTooltipScope({ enabled = true, children }) {
  * toolbar over a canvas, where a tooltip would cover what is being pointed at. A string is the
  * tooltip's text where it is shorter than the accessible name (Display's "Display"). `shortcut`, the
  * key that does what the button does ("V", "⇧L"), follows the name in the tooltip, muted, as a
- * design tool's tooltips show it, and is the button's `aria-keyshortcuts`; `hint`, a line under it naming
- * another key that reaches it (a panel's "\\ hides all"). `active`: the tool in hand,
+ * design tool's tooltips show it, and is the button's `aria-keyshortcuts`. `active`: the tool in hand,
  * in the strip's pressed fill (neutral), its icon in the brand's icon colour (`--brand-icon`), with no tooltip (it is chosen already).
  * An expanded button (`aria-expanded`, a menu's trigger with its menu open) has no tooltip either, unless what it expands
  * is not over it (`expandedTooltip`: the navbar's panel toggle, whose panel opens beside the model).
@@ -39,7 +38,6 @@ export function ToolbarButton({
   tooltip = true,
   tooltipSide = "bottom",
   shortcut = "",
-  hint = "",
   expandedTooltip = false,
   className,
   children,
@@ -62,8 +60,6 @@ export function ToolbarButton({
   );
   if (!tooltip) return button;
   const text = typeof tooltip === "string" ? tooltip : label;
-  const keys = shortcut ? <span className="flex items-center gap-3">{text}<span className="text-muted-foreground" data-tooltip-shortcut="">{shortcut}</span></span> : text;
-  // A second key that also reaches it, said under the first (`hint`: "\ hides all"), muted.
-  const content = hint ? <span className="flex flex-col gap-0.5">{keys}<span className="text-muted-foreground" data-tooltip-hint="">{hint}</span></span> : keys;
+  const content = shortcut ? <span className="flex items-center gap-3">{text}<span className="text-muted-foreground" data-tooltip-shortcut="">{shortcut}</span></span> : text;
   return <TooltipHint content={content} disabled={!tipEnabled} side={tooltipSide}>{button}</TooltipHint>;
 }

@@ -45,7 +45,8 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  *
  * The view's panel toggle (`panels.left`, which the view's frame says: `../panelToggles.js`), the row's first control,
  * before the logo, over a file that has a panel (never over the home); the strip's 28px tile, the same neutral button
- * open or shut, its tooltip naming its key and the key that hides everything.
+ * open or shut, its tooltip naming its key, its icon on the panel's inset (`--panel-inset`, 16px), the line every
+ * text and control in the panel beside it stands on.
  *
  * Right, only what a host or a file adds, in this order: the file's own actions (the viewer's
  * one: a dismissed alert's icon, which brings its card back); last, outermost, the host's own actions
@@ -304,10 +305,10 @@ export function SidebarIcon(props) {
 /**
  * The panel's toggle, the row's first control: the strip's 28px tile, the same neutral button whether its panel is
  * open or shut (no pressed fill: the panel beside the model says which), its state said to assistive technology
- * (`aria-expanded`), its tooltip its name ("Hide panel", "Show panel"), its key and the key that hides everything.
+ * (`aria-expanded`), its tooltip its name ("Hide panel", "Show panel") and its key.
  */
 function PanelToggleButton({ toggle }) {
-  return <ToolbarButton label={toggle.label} shortcut={toggle.shortcut || ""} hint={toggle.hint || ""} tooltipSide="bottom" expandedTooltip
+  return <ToolbarButton label={toggle.label} shortcut={toggle.shortcut || ""} tooltipSide="bottom" expandedTooltip
     aria-expanded={toggle.open} onClick={toggle.toggle}
     className="size-7 shrink-0 rounded-md text-muted-foreground [&>svg]:size-4!" data-navbar-panel="left">
     <SidebarIcon />
@@ -335,7 +336,7 @@ function PanelToggleButton({ toggle }) {
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
  * @param {{ left(element: HTMLElement | null): void, right(element: HTMLElement | null): void } | null} [props.homeSlots]
  *   Over the home: where its controls go (`../navbarSlots.js`), two slots on the grid's column.
- * @param {{ left?: { open: boolean, label: string, shortcut?: string, hint?: string, toggle(): void } | null } | null} [props.panels]
+ * @param {{ left?: { open: boolean, label: string, shortcut?: string, toggle(): void } | null } | null} [props.panels]
  *   The view's panel toggle, where it has a panel (`../panelToggles.js`).
  * @param {((element: HTMLElement | null) => void) | null} [props.viewSlot] Over a file: where its view puts its view settings
  *   (`../navbarSlots.js`'s `NavbarViewSlotContext`).
@@ -350,8 +351,9 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
   const homing = Boolean(homeSlots && !file);
   const homeInsets = useHomeColumn(header, trail, homing);
   const leadNav = <nav ref={lead} aria-label={t("navbar.viewer")} className={cn("flex min-w-0 items-center overflow-hidden text-sm", homing ? "shrink-0" : "flex-1")}>
-    {/* The panel's toggle first, where the file has a panel (the home has none), then the logo. */}
-    {file && panels?.left ? <span className="mr-0.5 flex shrink-0 items-center"><PanelToggleButton toggle={panels.left} /></span> : null}
+    {/* The panel's toggle first, where the file has a panel (the home has none), then the logo, edge to edge. Its icon
+        stands on the panel's inset, 16px in: the row's 8px, 2px here and its 28px tile's own 6px round its 16px icon. */}
+    {file && panels?.left ? <span className="ml-0.5 flex shrink-0 items-center"><PanelToggleButton toggle={panels.left} /></span> : null}
     {onHome || menu ? <LogoMenu onHome={onHome} menu={menu} /> : null}
     {/* A phone's row has no room for them: Back and Forward are a desktop's alone. */}
     {history && !mobile ? <HistoryButtons viewHistory={history} /> : null}

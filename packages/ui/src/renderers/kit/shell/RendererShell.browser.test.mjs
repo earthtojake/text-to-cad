@@ -1019,9 +1019,8 @@ test('an alert the model survives is drawn on the canvas, beside the docked pane
 });
 
 // The one panel (`sidebars.js`): it always pushes the model aside, never over it; where open it would leave the model
-// under 640px (896px of view, with its 256px) it starts collapsed (never written), and opened then it pushes; \ hides
-// it and the strip and brings back what was open.
-test('the panel always pushes, starts collapsed where the model would keep under 640px without writing it, and \\ hides and restores it', async (t) => {
+// under 640px (896px of view, with its 256px) it starts collapsed (never written), and opened then it pushes.
+test('the panel always pushes, and starts collapsed where the model would keep under 640px without writing it', async (t) => {
   const origin = await serve(t);
   const page = await browser.newPage({ viewport: { width: 1400, height: 640 } });
   t.after(() => page.close());
@@ -1083,15 +1082,6 @@ test('the panel always pushes, starts collapsed where the model would keep under
   // Wide again: open, as the person left it.
   await width(1300);
   await waitMode('push');
-  // \ hides the panel and the strip, and brings back exactly what was open; the choice is the file's, kept.
-  await surface.focus();
-  await page.keyboard.press('\\');
-  await waitMode('closed');
-  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'the strip goes too');
-  assert.ok(/"hidden":true/.test(await kept()));
-  await page.keyboard.press('\\');
-  await waitMode('push');
-  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 1);
   // A person's close is kept: closed by its button, the panel stays closed when the view is wide.
   await pane.locator('[data-navbar-panel="left"]').click();
   assert.equal(await mode(), 'closed');
@@ -1188,42 +1178,57 @@ test('Copy Prompt keeps its words at the 400px bar, and is its icon alone only w
   assert.deepEqual([narrow.bar < 400, narrow.words], [true, false], `a window narrower than the bar: the icon alone: ${JSON.stringify(narrow)}`);
 });
 
-// The qdd actuator's four tabs fit the 256px panel in English, with no scrolling: the head is the tabs alone, and the
-// search is the Model tab's first row, over its tree, gone from the other tabs; / brings it back with the keyboard in it.
-test('four tabs fit the 256px panel unscrolled, and the search is the Model tab\'s first row alone; a phone\'s sheet draws the same tabs, search and rows', async (t) => {
+// The qdd actuator's four tabs, Model, Params, Joints and Motion, and the search's icon fit the 256px panel in English:
+// no ⋯. At the grip's 200px the tabs that do not fit are ⋯'s items, in order, and the open tab stays shown, in the last
+// shown tab's place (`FlatPanel.jsx`'s `fitTabs`): measured as drawn, nothing in the row overlapping, cut or past the panel.
+test('four tabs and the search fit the 256px panel with no ⋯; at 200px ⋯ holds the rest, the open tab still shown; a phone\'s sheet draws the same tabs and rows', async (t) => {
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
   await page.goto(`${origin}/?file=panel-qdd.harness`);
   const pane = page.getByTestId('one');
   await pane.locator('[data-flat-panel-tab="animation"]').waitFor();
-  const fit = await pane.locator('aside[data-flat-panel]').evaluate(aside => {
-    const strip = aside.querySelector('[data-flat-panel-tabs]');
-    return { width: Math.round(aside.getBoundingClientRect().width), names: [...strip.querySelectorAll('[data-flat-panel-tab-name]')].map(name => name.textContent),
-      overflow: strip.scrollWidth - strip.clientWidth, clipped: strip.getAttribute('data-clipped'), head: [...aside.querySelector('[data-flat-panel-head]').children].length };
+  const head = () => pane.locator('aside[data-flat-panel]').evaluate(aside => {
+    const box = aside.getBoundingClientRect(), row = aside.querySelector('[data-flat-panel-head]');
+    const shown = [...row.querySelectorAll('[role=tab], [data-flat-panel-more], [data-flat-panel-search-open]')].map(node => node.getBoundingClientRect());
+    const tabs = [...row.querySelectorAll('[role=tab]')];
+    return { width: Math.round(box.width), tabs: tabs.map(tab => tab.getAttribute('data-flat-panel-tab')),
+      names: tabs.map(tab => tab.querySelector('[data-flat-panel-tab-name]').textContent),
+      more: Boolean(row.querySelector('[data-flat-panel-more]')), search: Boolean(row.querySelector('[data-flat-panel-search-open]')),
+      apart: shown.every((rect, at) => at === 0 || shown[at - 1].right <= rect.left + 0.5),
+      inside: shown.every(rect => rect.left >= box.left - 0.5 && rect.right <= box.left + aside.clientWidth + 0.5),
+      whole: tabs.every(tab => tab.scrollWidth <= tab.clientWidth + 0.5) };
   });
-  assert.deepEqual(fit, { width: 256, names: ['Model', 'Params', 'Joints', 'Animation'], overflow: 0, clipped: null, head: 1 });
-  const search = pane.locator('[data-flat-panel-body] > [data-flat-panel-search] input');
-  assert.equal(await search.count(), 1);
+  assert.deepEqual(await head(), { width: 256, tabs: ['tree', 'parameters', 'position', 'animation'], names: ['Model', 'Params', 'Joints', 'Motion'],
+    more: false, search: true, apart: true, inside: true, whole: true });
+  // The last tab open, the panel at the grip's least: ⋯ holds what does not fit, the open tab shown.
   await pane.locator('[data-flat-panel-tab="animation"]').click();
-  assert.equal(await search.count(), 0);
-  await pane.locator('canvas').first().click();
-  await page.keyboard.press('/');
-  await search.waitFor();
-  assert.equal(await search.evaluate(input => document.activeElement === input), true);
-  assert.equal(await pane.locator('[data-flat-panel-tab="tree"]').getAttribute('aria-selected'), 'true');
+  await pane.getByRole('separator', { name: 'Resize panel' }).press('Home');
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-flat-panel-head] [data-flat-panel-more]'));
+  const narrow = await head();
+  assert.deepEqual([narrow.width, narrow.more, narrow.search, narrow.apart, narrow.inside, narrow.whole, narrow.tabs.at(-1)],
+    [200, true, true, true, true, true, 'animation'], `at 200px: ${JSON.stringify(narrow)}`);
+  await pane.locator('[data-flat-panel-more]').click();
+  const held = await page.locator('[data-flat-panel-more-menu] [data-flat-panel-more-tab]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-flat-panel-more-tab')));
+  const order = ['tree', 'parameters', 'position', 'animation'];
+  assert.ok(held.length > 0 && held.every(id => !narrow.tabs.includes(id)), `⋯ holds the tabs not shown: ${JSON.stringify({ held, shown: narrow.tabs })}`);
+  assert.deepEqual([...held].sort((a, b) => order.indexOf(a) - order.indexOf(b)), held, 'in the tabs\' order');
+  assert.deepEqual([...narrow.tabs, ...held].sort(), [...order].sort(), 'every tab shown or in ⋯');
+  await page.keyboard.press('Escape');
+  await page.locator('[data-flat-panel-more-menu]').waitFor({ state: 'detached' });
+  await pane.getByRole('separator', { name: 'Resize panel' }).press('End');
+  await page.waitForFunction(() => !document.querySelector('[data-testid="one"] [data-flat-panel-head] [data-flat-panel-more]'));
   // On a phone the panel is a sheet of the same components: a tree row's gap, glyph slot, actions (their gap, size and
-  // inset), a tab's size and type and the search row are the desktop's, only the row a finger's height (36px, its own);
-  // and the four tabs fit the sheet's strip, or it scrolls as the desktop's does, its clipped edge marked.
+  // inset) and a tab's size and type are the desktop's, only the row a finger's height (36px, its own); the four tabs
+  // fit the sheet's head, with no ⋯.
   const geometry = () => page.evaluate(() => {
     const surface = [...document.querySelectorAll('[data-testid="one"] [data-panel-surface], [data-panel-sheet] [data-panel-surface]')].find(node => !node.hidden && node.getBoundingClientRect().width > 0);
     const row = surface.querySelector('[data-tree-row]'), actions = row.querySelector('[data-row-actions]'), [isolate, hide] = actions.querySelectorAll('button');
-    const tab = surface.querySelector('[role=tab]'), strip = surface.querySelector('[data-flat-panel-tabs]'), search = surface.querySelector('[data-slot="tree-filter"]');
+    const tab = surface.querySelector('[role=tab]');
     const size = node => { const r = node.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; };
     return { row: { gap: getComputedStyle(row).columnGap, glyph: size(row.querySelector('[data-tree-row-glyph]'))[0], actionsGap: getComputedStyle(actions).columnGap,
       between: Math.round(hide.getBoundingClientRect().left - isolate.getBoundingClientRect().right), button: size(isolate), inset: getComputedStyle(actions).paddingRight },
     height: Math.round(row.getBoundingClientRect().height), tab: [Math.round(tab.getBoundingClientRect().height), getComputedStyle(tab).paddingLeft, getComputedStyle(tab).fontSize],
-    search: search ? Math.round(search.getBoundingClientRect().height) : null,
-    strip: { overflow: strip.scrollWidth - strip.clientWidth, clipped: strip.getAttribute('data-clipped'), tabs: strip.children.length } };
+    tabs: surface.querySelectorAll('[data-flat-panel-head] [role=tab]').length, more: Boolean(surface.querySelector('[data-flat-panel-more]')) };
   });
   await pane.locator('[data-flat-panel-tab="tree"]').click();
   const desktop = await geometry();
@@ -1234,51 +1239,8 @@ test('four tabs fit the 256px panel unscrolled, and the search is the Model tab\
   await page.locator('[data-panel-sheet] [data-tree-row]').first().waitFor();
   await settle(page);
   const phone = await geometry();
-  assert.deepEqual([phone.row, phone.tab, phone.search], [desktop.row, desktop.tab, desktop.search], `the phone's rows, tabs and search are the desktop's: ${JSON.stringify({ desktop, phone })}`);
-  assert.deepEqual([desktop.height, phone.height, desktop.row.between, phone.strip.tabs], [28, 36, 2, 4]);
-  assert.ok(phone.strip.overflow <= 0 || phone.strip.clipped === 'end', `the sheet's strip fits or shows it scrolls: ${JSON.stringify(phone.strip)}`);
-  assert.equal(await page.locator('[data-panel-sheet] [data-flat-panel-head] button:not([role=tab])').count(), 0, 'the sheet\'s head is the tabs alone: no Back');
-  assert.deepEqual(errors, []);
-});
-
-// The panel's tab strip (`FlatPanel.jsx`), scrolled sideways away from its open tab, the last: a trackpad's swipe
-// (small sideways steps with vertical jitter, some of it larger than the step) and a mouse's wheel each move it one
-// way only, frame by frame, never snapping back toward the open tab.
-test('the panel\'s tab strip scrolls away from its open tab one way, under a trackpad\'s swipe and a mouse\'s wheel', async (t) => {
-  const origin = await serve(t);
-  const { page, errors } = await newPage(t);
-  await page.goto(`${origin}/?file=panel.harness`);
-  // Its three tabs fit the 240px panel in English: spaced out as a longer translation is, they do not.
-  await page.addStyleTag({ content: '[data-flat-panel-tab-name], [data-flat-panel-tab] [aria-hidden] { letter-spacing: 6px; }' });
-  const pane = page.getByTestId('one');
-  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
-  await pane.getByRole('button', { name: 'Pose', exact: true }).click();
-  const strip = pane.locator('[data-flat-panel-tabs]');
-  await strip.locator('[data-flat-panel-tab="position"]').click();
-  await page.waitForFunction(() => {
-    const element = document.querySelector('[data-testid="one"] [data-flat-panel-tabs]');
-    return element && element.scrollWidth > element.clientWidth + 20 && element.scrollLeft + element.clientWidth >= element.scrollWidth - 1;
-  });
-  const box = await strip.boundingBox();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  const reset = () => strip.evaluate(element => {
-    element.scrollLeft = element.scrollWidth;
-    window.__stripLog = [];
-    const tick = () => { window.__stripLog.push(element.scrollLeft); if (window.__stripLog.length < 600) requestAnimationFrame(tick); };
-    requestAnimationFrame(tick);
-  });
-  const readLog = () => page.evaluate(() => [...window.__stripLog, document.querySelector('[data-testid="one"] [data-flat-panel-tabs]').scrollLeft]);
-  for (const [what, step] of [['a trackpad\'s swipe', at => [-2, at % 3 === 0 ? 3 : -1]], ['a mouse\'s wheel', () => [0, -4]]]) {
-    // A new gesture: the last one's events long gone (`FlatPanel.jsx`'s `WHEEL_GESTURE_GAP_MS`).
-    await page.waitForTimeout(300);
-    await reset();
-    const start = await strip.evaluate(element => element.scrollLeft);
-    for (let at = 0; at < 12; at++) { await page.mouse.wheel(...step(at)); await settle(page); }
-    await settle(page);
-    const log = await readLog();
-    const back = log.findIndex((value, at) => at > 0 && value > log[at - 1] + 0.5);
-    assert.equal(back, -1, `${what}: never back toward the open tab: ${log.join(' ')}`);
-    assert.ok(log.at(-1) < start - 10, `${what}: it moved: ${start} to ${log.at(-1)}`);
-  }
+  assert.deepEqual([phone.row, phone.tab], [desktop.row, desktop.tab], `the phone's rows and tabs are the desktop's: ${JSON.stringify({ desktop, phone })}`);
+  assert.deepEqual([desktop.height, phone.height, desktop.row.between, desktop.tabs, desktop.more, phone.tabs, phone.more], [28, 36, 2, 4, false, 4, false]);
+  assert.equal(await page.locator('[data-panel-sheet] [data-flat-panel-head] button:not([role=tab]):not([data-flat-panel-search-open])').count(), 0, 'the sheet\'s head is the tabs and the search alone: no Back');
   assert.deepEqual(errors, []);
 });

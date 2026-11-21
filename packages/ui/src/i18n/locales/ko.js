@@ -609,7 +609,6 @@ export default {
   "inspector.kind.reference": "참조",
   "inspector.kind.item": "항목",
   "inspector.kindOf": "{owner}의 {kind}",
-  "sidebars.hideAllHint": "{key} 모두 숨기기",
   "chip.groupList": "{name}",
   "chip.group.part": "부품 {count}개",
   "chip.group.face": "면 {count}개",

@@ -45,8 +45,8 @@ import { DEFAULT_PANEL_WIDTH, MIN_MODEL_WIDTH } from "./sidebars.js";
 /**
  * The panel's state that is the file's (`filePanel.js`): kept in the file's view as its camera is, so a
  * reload brings it back for that file and another file starts at its own — its width (`FLAT_PANEL_DEFAULT_WIDTH` at first) and
- * its tab (the first at first), and the person's choices (`record`, written by `change`: open or closed,
- * \ having hidden it), which `ViewFrame.jsx` reads with the view's width (`sidebars.js`). `focusSearch` counts
+ * its tab (the first at first), and the person's choice (`record`, written by `change`: open or closed), which
+ * `ViewFrame.jsx` reads with the view's width (`sidebars.js`). `focusSearch` counts
  * the requests to open it on its search (/).
  *
  * A file with no panel of its own starts from the tab's old shared one, where the tab still carries it
@@ -146,8 +146,6 @@ export const FLAT_PANEL_DEFAULT_WIDTH = DEFAULT_PANEL_WIDTH;
 export const FLAT_PANEL_MIN_WIDTH = 200;
 /** The toggle's key, as its tooltip shows it: ⌘\ on a Mac (the host's `environment.platform`), Ctrl+\ elsewhere. */
 export const flatPanelShortcut = platform => (platform === "darwin" ? "⌘\\" : "Ctrl+\\");
-/** The key that hides the panel and the strip, and brings back what was open: \ alone. */
-export const HIDE_ALL_SHORTCUT = "\\";
 
 const FlatPanelContext = createContext(null);
 /**
@@ -298,7 +296,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
     onClose();
   };
   // The width: the person's, from the grip on the right edge, one write when it lets go (`PanelSurface.jsx`).
-  const { drawnWidth, grip } = usePanelWidth({ side: "left", width, minWidth: FLAT_PANEL_MIN_WIDTH, maxWidth, onWidthChange });
+  const { drawnWidth, grip } = usePanelWidth({ width, minWidth: FLAT_PANEL_MIN_WIDTH, maxWidth, onWidthChange });
 
   const active = tabs.some(entry => entry.id === tab) ? tab : tabs[0]?.id;
   const activeRef = useRef(active);
@@ -446,9 +444,10 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   const searchButton = searchable.size && !searchOpen ? <button type="button" aria-label={searchLabel} className={ICON_BUTTON_CLASS} onClick={openSearch}
     data-flat-panel-search-open=""><Search aria-hidden="true" /></button> : null;
   const searchBox = searchOpen ? <TreeFilterInput label={searchLabel} placeholder={t("flatPanel.searchPlaceholder")} value={query} onChange={setQuery} onKeyDown={onSearchKeyDown}
-    inputRef={input} dense onDismiss={closeSearch} dismissLabel={t("flatPanel.closeSearch")} className="min-w-0 flex-1 px-0 shadow-none" data-flat-panel-search="" /> : null;
+    inputRef={input} dense onDismiss={closeSearch} dismissLabel={t("flatPanel.closeSearch")} className="min-w-0 flex-1 px-0 shadow-none" data-flat-panel-search=""
+    style={SEARCH_BOX_HANG} /> : null;
   const activeCount = searching && searchable.has(active) ? counts[active] : null;
-  const aside = <PanelSurface side="left" mode={page ? "page" : "push"} label={label} open={open} hidden={hidden}
+  const aside = <PanelSurface mode={page ? "page" : "push"} label={label} open={open} hidden={hidden}
     width={drawnWidth} grip={page ? null : grip} gripLabel={t("flatPanel.resize")} onKeyDown={onPanelKeyDown} data-flat-panel={mode} headRule={!single || searchOpen} headCompact={compactHead}
     headStack={searchOpen && !single} headRef={head} headInsets={HEAD_INSETS} headProps={{ "data-flat-panel-head": "", "data-searching": searchOpen ? "" : undefined }} scrollerRef={scroller}
     scrollerProps={{ "data-flat-panel-scroller": "" }}
@@ -488,5 +487,10 @@ const TAB_GAP_PX = 2;
  * pill (and the one tab's title in its place) by its own 5px (`px-[5px]`), the icon buttons at the row's end (⋯, the
  * search) by theirs (a 14px glyph in a 28px button: 7px). */
 const HEAD_INSETS = Object.freeze({ start: 5, end: 7 });
+/** Where the open search box's icon and its X's glyph stand in from its edges (`TreeFilterInput`, dense: its 12px icon
+ * 7px in; its X's 12px glyph centred in a 16px button 6px from the right: 8px). */
+const SEARCH_INSETS = Object.freeze({ start: 7, end: 8 });
+/** The box hangs out past the head's padding by the difference, so its icon starts, and its X ends, on the inset. */
+const SEARCH_BOX_HANG = Object.freeze({ marginLeft: HEAD_INSETS.start - SEARCH_INSETS.start, marginRight: HEAD_INSETS.end - SEARCH_INSETS.end });
 /** The room between the head row's icons (⋯ and the search) and before them: Tailwind's gap-1. */
 const ICON_GAP_PX = 4;

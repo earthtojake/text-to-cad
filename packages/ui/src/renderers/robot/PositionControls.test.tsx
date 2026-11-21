@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render as mount, screen } from '@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import PositionControls from '../../../dist/renderers/robot/PositionControls.js';
 import { createPoseStore } from '../../../dist/renderers/robot/poseStore.js';
-import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
+import FlatPanel, { FLAT_PANEL_DEFAULT_WIDTH } from '../../../dist/renderers/kit/shell/FlatPanel.js';
 import ToolPanel from '../../../dist/renderers/kit/tools/ToolPanel.js';
 import { fixturePayload } from './__tests__/robotFixtures.js';
 
@@ -15,7 +15,7 @@ afterEach(cleanup);
 // As the shell draws it: the Position tab of the view's panel, open.
 const render = (controls: React.ReactElement) => mount(<FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
   sections={<ToolPanel id="position" title="Joints" label="Joint controls" fit="details">{controls}</ToolPanel>}
-  tab="position" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />);
+  tab="position" onTabChange={() => {}} width={FLAT_PANEL_DEFAULT_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />);
 const poseLabel = () => screen.getByRole('button', { name: /^Position: / }).getAttribute('aria-label');
 const field = (name: string, unit: string) => screen.getByRole('textbox', { name: `${name} value in ${unit}` }) as HTMLInputElement;
 

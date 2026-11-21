@@ -152,8 +152,20 @@ async function open(t, file, { panel = true } = {}) {
       if (await pill.count()) await pill.click();
       // One tab is a title, not a tab: nothing to press.
       await pane.locator('[data-flat-panel] [role=tab], [data-flat-panel] [data-flat-panel-heading]').first().waitFor();
-      const tab = pane.locator('[data-flat-panel]').getByRole('tab', { name, exact: true });
-      if (!await tab.count()) { await pane.locator('[data-flat-panel] [data-flat-panel-heading]').filter({ hasText: name }).waitFor(); return; }
+      // A tab's name says ", changed" while its state is off its default (Joints, posed); one that does not fit the head
+      // is ⋯'s item.
+      const tab = pane.locator('[data-flat-panel]').getByRole('tab', { name: new RegExp(`^${name}(, changed)?$`) });
+      if (!await tab.count()) {
+        const more = pane.locator('[data-flat-panel] [data-flat-panel-more]');
+        if (await more.count()) {
+          await more.click();
+          const item = pane.page().locator('[data-flat-panel-more-menu] [data-flat-panel-more-tab]').filter({ hasText: name });
+          if (await item.count()) { await item.click(); await tab.waitFor(); return; }
+          await pane.page().keyboard.press('Escape');
+        }
+        await pane.locator('[data-flat-panel] [data-flat-panel-heading]').filter({ hasText: name }).waitFor();
+        return;
+      }
       if (await tab.getAttribute('aria-selected') !== 'true') await tab.click();
       await pane.locator('[data-flat-panel] [role=tab][aria-selected="true"]').filter({ hasText: name }).waitFor();
     },
@@ -294,7 +306,8 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   const poseSelect = position.locator('[data-pose-row] [data-pose-menu]');
   assert.equal(await poseSelect.getAttribute('aria-label'), 'Position: Default');
   // The slider control: its number field on the label's 28px line, 22 tall and as wide as its value (32 to 96), never
-  // clipping its number; the slider under them from the label's left edge to the field's right edge.
+  // clipping its number; the slider under them from the label's left edge to the right edge of the field's text (its
+  // content box: the field's outline hangs past the panel's inset by its own 6px and 1px edge, `SliderField.jsx`).
   const fields = await position.locator('[data-slider-field] [data-slider-field-value-box]').evaluateAll(boxes => boxes.map(field => {
     const box = field.getBoundingClientRect(), input = field.querySelector('input');
     return { value: input.value, width: box.width, height: box.height, fits: input.scrollWidth <= input.clientWidth };
@@ -306,7 +319,8 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
     const range = document.createRange();
     range.selectNodeContents(label);
     const track = control.querySelector('[data-slot=slider-track]').getBoundingClientRect();
-    const valueRight = field.getBoundingClientRect().right;
+    const style = getComputedStyle(field);
+    const valueRight = field.getBoundingClientRect().right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
     return { label: range.getBoundingClientRect().left, valueRight, track: [track.left, track.right] };
   }));
   assert.ok(lines.every(line => Math.abs(line.track[0] - line.label) <= 0.5 && Math.abs(line.track[1] - line.valueRight) <= 0.5),
@@ -494,9 +508,11 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   await robot.pickLinks();
   await robot.linksPanel().waitFor();
   await robot.pressed([]);
-  // Its rows stand on the panel's lines, as every list's do: the search row, the Links tab's first, has its icon
-  // in the first row's glyph box (its left and its width, so their centres too, to the half pixel), and the
+  // Its rows stand on the panel's lines, as every list's do: the panel's search, opened from its icon in the head, has
+  // its icon in the first row's glyph box (its left and its width, so their centres too, to the half pixel), and the
   // search's text starts on the rows' labels' line.
+  await pane.locator('[data-flat-panel] [data-flat-panel-search-open]').click();
+  await pane.locator('[data-flat-panel] [data-flat-panel-search] input').waitFor();
   const head = await pane.locator('[data-flat-panel]').evaluate(panel => {
     const icon = panel.querySelector('[data-flat-panel-search] svg').getBoundingClientRect();
     const input = panel.querySelector('[data-flat-panel-search] input');
@@ -508,6 +524,8 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   });
   assert.ok(Math.abs(head.icon[0] - head.slot[0]) <= 0.5 && Math.abs(head.icon[1] - head.slot[1]) <= 0.5 && Math.abs(head.text - head.name) <= 0.5,
     `the search icon in the rows' glyph box, its text on their labels' line: ${JSON.stringify(head)}`);
+  await pane.getByRole('button', { name: 'Close search', exact: true }).click();
+  await pane.locator('[data-flat-panel] [data-flat-panel-search]').waitFor({ state: 'detached' });
   // The tree: a frame-only root is elided, so the base leads it, pinned (no chevron of its own).
   assert.equal(await pane.getByRole('button', { name: 'Select base_footprint', exact: true }).count(), 0);
   assert.equal(await pane.getByRole('button', { name: 'Collapse base', exact: true }).count(), 0);
@@ -635,10 +653,11 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   await headCard.getByRole('button', { name: 'base', exact: true }).first().click();
   await robot.pressed(['Select base']);
   await robot.openSection('Links');
-  // The panel's search box finds a link by the joint that carries it.
+  // The panel's search, opened from its icon in the head, finds a link by the joint that carries it; its X closes it.
+  await pane.locator('[data-flat-panel] [data-flat-panel-search-open]').click();
   await pane.getByRole('textbox', { name: 'Search the model', exact: true }).fill('nod');
   await pane.getByRole('list', { name: 'Link search results' }).getByRole('button', { name: 'Select head', exact: true }).waitFor();
-  await pane.getByRole('button', { name: 'Clear filter', exact: true }).click();
+  await pane.getByRole('button', { name: 'Close search', exact: true }).click();
   await pane.getByRole('list', { name: 'Robot links', exact: true }).waitFor();
 
   // Host commands: a robot has no faces or edges for a command to select, and says so; clearSelection clears the link selection.

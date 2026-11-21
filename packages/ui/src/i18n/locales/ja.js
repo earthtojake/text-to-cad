@@ -609,7 +609,6 @@ export default {
   "inspector.kind.reference": "参照",
   "inspector.kind.item": "項目",
   "inspector.kindOf": "{owner} の{kind}",
-  "sidebars.hideAllHint": "{key} ですべて隠す",
   "chip.groupList": "{name}",
   "chip.group.part": "部品 {count} 個",
   "chip.group.face": "面 {count} 個",

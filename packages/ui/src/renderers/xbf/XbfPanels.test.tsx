@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
+import FlatPanel, { FLAT_PANEL_DEFAULT_WIDTH } from '../../../dist/renderers/kit/shell/FlatPanel.js';
 import XbfPositionSection, { useXbfPose } from '../../../dist/renderers/xbf/XbfPositionSection.js';
 import XbfModelTree from '../../../dist/renderers/xbf/XbfModelTree.js';
 import ToolPanel from '../../../dist/renderers/kit/tools/ToolPanel.js';
@@ -46,7 +46,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); while (restores.length) rest
 // A section as the shell draws it: a tab of the view's panel, open.
 function InPanel({ tab, children }: { tab: string, children: React.ReactNode }) {
   return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
-    sections={children} tab={tab} onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />;
+    sections={children} tab={tab} onTabChange={() => {}} width={FLAT_PANEL_DEFAULT_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />;
 }
 
 // One assembly: a hinge of a base and two arms of one part, and a pin beside it, as the engine serves it.
@@ -133,7 +133,7 @@ it("a part file's Model is the panel's first tab, open at first, holding its one
       onTogglePartVisibility: (id: string) => setHidden(now => now.includes(id) ? now.filter(item => item !== id) : [...now, id]),
       onSelectTreeNode: (id: string | string[], { multiSelect = false } = {}) => setSelected(now => nextSelectionIds(now, [id].flat(), multiSelect)) };
     return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model" tab={undefined} onTabChange={() => {}}
-      width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} sections={<>
+      width={FLAT_PANEL_DEFAULT_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} sections={<>
         <XbfModelTree tree={tree} active selectedIds={selected} partControls={partControls} />
         <ToolPanel id="parameters" title="Params" label="Parameters" fit="details"><div /></ToolPanel>
       </>} />;

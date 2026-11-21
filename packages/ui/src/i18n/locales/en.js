@@ -633,7 +633,6 @@ export default {
   "inspector.kind.reference": "Reference",
   "inspector.kind.item": "Item",
   "inspector.kindOf": "{kind} of {owner}",
-  "sidebars.hideAllHint": "{key} hides all",
   "chip.groupList": "{name}",
   "chip.group.part": "{count} parts",
   "chip.group.face": "{count} faces",

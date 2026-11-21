@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { DEFAULT_PANEL_WIDTH, MIN_MODEL_WIDTH, sidebarCollapsed, sidebarLayout, sidebarWant, toggleSidebar } from "./sidebars.js";
 
-const state = (frameWidth, extra = {}) => ({ frameWidth, want: true, has: true, opened: false, hidden: false, ...extra });
+const state = (frameWidth, extra = {}) => ({ frameWidth, want: true, has: true, opened: false, ...extra });
 
 test("the one panel always pushes; it starts collapsed where open it would leave the model under 640px", () => {
   assert.equal(MIN_MODEL_WIDTH, 640);
@@ -39,10 +39,4 @@ test("a person's close and open are kept", () => {
   // Absent choices are open.
   assert.equal(sidebarWant(undefined), true);
   assert.equal(sidebarWant(false), false);
-});
-
-test("\\ hides everything and brings back exactly what was open", () => {
-  const before = state(650, { opened: true });
-  assert.equal(sidebarLayout({ ...before, hidden: true }).mode, "closed");
-  assert.deepEqual(sidebarLayout({ ...before, hidden: false }), sidebarLayout(before));
 });

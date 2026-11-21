@@ -143,7 +143,7 @@ DXF's are its own canvas's. Nothing a renderer does opens or closes the explorer
 file's name opens that). The layout a person gives the tool stack's panels is one
 of the tab's settings (`settings.toolStack` of the tab record, `@cad/ui/tab-store`),
 beside the appearance and the home's layout; the panel — open or collapsed by the person (a collapse the
-view's width made is not kept), its width and tab, and \ having hidden it — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
+view's width made is not kept), its width and its tab — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
 into the renderer's record by `FileViewer`).
 The model area is drawn in **the viewport's theme**, not the host's `colorScheme`: the person's Background
 (`settings.viewportBackground` of the tab record: Light by default, Dark, Theme), resolved by

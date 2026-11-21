@@ -91,9 +91,10 @@ after(async () => {
 });
 
 // Every visible piece of the panel's content, measured where it is drawn: a text node's glyphs (a range round its
-// trimmed text), an icon, a control (a field, a switch, a select's trigger, a slider's track). Each is `{ left, right,
-// kind, text, depth, line }`, x from the panel's left; `depth` a tree row's level, `line` the row it is on (its top,
-// rounded), `end` whether it is a right-hand value (a switch, a value's field, a row's last action, a select's chevron).
+// trimmed text), an icon, a control (a field, a switch, a slider's track) and a box round a choice (a select's or a
+// dropdown's trigger, a checkbox: its glyphs are inside it, so not measured). Each is `{ left, right, kind, text, depth,
+// line, where, path }`, x from the panel's left; `depth` a tree row's level, `line` the row it is on (its top, rounded).
+// A slider's thumb, which stands where its value puts it, is not measured.
 function measurePanel() {
   const panel = document.querySelector('[data-testid="one"] [data-flat-panel]');
   const box = panel.getBoundingClientRect();
@@ -113,7 +114,10 @@ function measurePanel() {
   };
   const push = (element, rect, kind, text = '') => items.push({ left: rect.left - box.left, right: rect.right - box.left, kind, text: text.slice(0, 40),
     depth: depthOf(element), line: Math.round(rect.top - box.top), where: element.closest('[data-flat-panel-head]') ? 'head' : 'body',
-    path: [element.closest('[data-tree-row]') ? 'row' : '', element.closest('[data-flat-panel-tab]') ? 'tab' : ''].filter(Boolean).join(',') });
+    path: [element.closest('[data-tree-row]') ? 'row' : '', element.closest('[data-flat-panel-tab]') ? 'tab' : ''].filter(Boolean).join(','),
+    // Inside a button or a box: what its box holds, the box's edge the one on the line (a tab's name, Save's word, a
+    // dropdown's choice).
+    held: Boolean(element.closest('button, [role=combobox], [aria-haspopup]')) });
   const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const text = node.textContent;
@@ -128,15 +132,18 @@ function measurePanel() {
     const left = Math.min(...rects.map(rect => rect.left)), right = Math.max(...rects.map(rect => rect.right));
     push(node.parentElement, { left, right, top: rects[0].top }, 'text', text.trim());
   }
-  for (const element of panel.querySelectorAll('svg, input:not([type=hidden]):not([type=range]), [role=switch], [role=combobox], [data-slider-field-track], [role=slider]')) {
+  const BOX = '[data-flat-panel-body] :is([role=combobox], [aria-haspopup=menu], [data-slot=checkbox])';
+  // The search's field is no box (no border, fill or ring): its magnifier and its X are what stand on the insets.
+  for (const element of panel.querySelectorAll(`svg, input:not([type=hidden]):not([type=range]):not([data-flat-panel-search] input), [role=switch], [data-slider-field-track], ${BOX}`)) {
     if (element.closest('svg') !== element && element.tagName.toLowerCase() !== 'svg' && element.closest('svg')) continue;
     if (element.tagName.toLowerCase() === 'svg' && element.parentElement.closest('svg')) continue;
     if (!shown(element)) continue;
-    if (element.matches('[role=slider]') && element.closest('[data-slider-field-track]')) continue;
-    const kind = element.matches('svg') ? 'icon' : element.matches('[data-slider-field-track]') ? 'track' : element.matches('[role=switch]') ? 'switch' : 'control';
+    if (element.matches('svg') && element.parentElement.closest(BOX)) continue;
+    const kind = element.matches('svg') ? 'icon' : element.matches('[data-slider-field-track]') ? 'track' : element.matches('[role=switch]') ? 'switch'
+      : element.matches(BOX) ? 'box' : 'control';
     push(element, element.getBoundingClientRect(), kind, element.getAttribute('aria-label') || '');
   }
-  return { width: box.width, items };
+  return { width: box.width, clientWidth: panel.clientWidth, items };
 }
 
 const open = async (t, file, viewport = { width: 1280, height: 800 }) => {
@@ -170,15 +177,51 @@ async function chooseTab(page, pane, id) {
 }
 const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
+// What the inset asks of one tab's measures (`--panel-inset`, 16px; a tree level 10px more): nothing left of its level's
+// line or past the right inset (the panel's `clientWidth`, inside its 1px rule, less 16px); each line's first piece, in
+// the panel's left half, on its level's line — a row's glyph slot, or its name 16px after an empty slot — but a box,
+// which stands in its row's control column, and a right-aligned line; and every right-hand piece ends on the right inset: a switch, a slider's
+// track, a box, and the last piece of a line in the right half (a row's last action, a value's unit, the head's last
+// icon), but a word a button or a box holds, whose box stands on the line.
+const LEVEL = 10, NAME = 16;
+function offInset({ clientWidth, items }) {
+  const right = clientWidth - INSET, near = (value, line) => Math.abs(value - line) <= 0.5;
+  const off = [];
+  for (const item of items) {
+    const level = INSET + LEVEL * item.depth;
+    if (item.left < level - 0.5 || item.right > right + 0.5) off.push(['outside the insets', item]);
+    if (['switch', 'track', 'box'].includes(item.kind) && !near(item.right, right)) off.push(['not ending on the right inset', item]);
+  }
+  const lines = Map.groupBy(items.filter(item => item.kind !== 'box'), item => `${item.where}@${item.line}`);
+  for (const line of lines.values()) {
+    const last = line.filter(item => !item.held).reduce((a, b) => (b.right > a.right ? b : a), { right: -Infinity });
+    if (last.left > clientWidth / 2 && !near(last.right, right)) off.push(['a line not ending on the right inset', last]);
+    // A line of one text ending on the right inset is right-aligned (Parameters' status over Reset and Save).
+    const first = line.reduce((a, b) => (b.left < a.left ? b : a));
+    const level = INSET + LEVEL * first.depth, aligned = line.length === 1 && first.kind === 'text' && near(first.right, right);
+    if (first.left < clientWidth / 2 && !aligned && !near(first.left, level) && !near(first.left, level + NAME)) off.push(['a line not starting on the inset', first]);
+  }
+  return off;
+}
+
 async function report(page, pane, label) {
   const ids = await tabIds(pane);
   const all = [];
   for (const id of ids.length ? ids : [null]) {
     if (id) await chooseTab(page, pane, id);
     await settle(page);
-    const { width, items } = await page.evaluate(measurePanel);
-    all.push({ tab: id, width, items });
-    if (process.env.PANEL_INSET_SHOTS) await pane.locator('[data-flat-panel]').screenshot({ path: `${process.env.PANEL_INSET_SHOTS}/${label}-${id || 'one'}.png` });
+    const { width, clientWidth, items } = await page.evaluate(measurePanel);
+    all.push({ tab: id, width, clientWidth, items });
+  }
+  // The search open, over the first tab it covers: its magnifier on the inset, its X's glyph ending on the right one.
+  if (await pane.locator('[data-flat-panel-search-open]').count()) {
+    await pane.locator('[data-flat-panel-search-open]').click();
+    await pane.locator('[data-flat-panel-search] input').fill('a');
+    await settle(page);
+    const { width, clientWidth, items } = await page.evaluate(measurePanel);
+    all.push({ tab: 'search', width, clientWidth, items });
+    await page.keyboard.press('Escape');
+    await pane.locator('[data-flat-panel-search]').waitFor({ state: 'detached' });
   }
   if (process.env.PANEL_INSET_DUMP) console.log(JSON.stringify({ label, all }, null, 1));
   return all;
@@ -186,7 +229,18 @@ async function report(page, pane, label) {
 
 for (const file of Object.keys(FILES)) {
   test(`${file}: the panel's content stands on the inset`, async t => {
-    const { page, pane } = await open(t, file);
-    await report(page, pane, file);
+    const { page, pane, errors } = await open(t, file);
+    for (const { tab, clientWidth, items } of await report(page, pane, file)) {
+      assert.ok(items.length > 0, `${file}, ${tab}: something measured`);
+      assert.equal(clientWidth, 255, `${file}, ${tab}: the 256px panel, inside its 1px rule`);
+      assert.deepEqual(offInset({ clientWidth, items }), [], `${file}, ${tab}: every piece on the inset`);
+    }
+    // The navbar's panel toggle's icon, over the panel, on the same line.
+    const toggle = await page.evaluate(() => {
+      const icon = document.querySelector('[data-testid="one"] [data-navbar-panel="left"] svg').getBoundingClientRect();
+      return icon.left - document.querySelector('[data-testid="one"] [data-flat-panel]').getBoundingClientRect().left;
+    });
+    assert.ok(Math.abs(toggle - INSET) <= 0.5, `${file}: the navbar's toggle's icon at ${toggle}px`);
+    assert.deepEqual(errors, []);
   });
 }

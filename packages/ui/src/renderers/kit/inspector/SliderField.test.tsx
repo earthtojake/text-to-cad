@@ -45,11 +45,11 @@ it('is a label, a number field with its unit after it, and a slider, in that ord
   expect(input.compareDocumentPosition(thumb) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(root.querySelector('svg')).toBeNull();
   // As wide as what it holds (22px tall, 32px at least, 96 at most), so a longer value grows it to the left from the
-  // slider's right edge; no fill at rest, an outline under the pointer, the brand's edge edited, each 6px off the text;
-  // nothing past the slider's right edge (no negative margin).
+  // slider's right edge; no fill at rest, an outline under the pointer, the brand's edge edited, each 6px off the text.
+  // In a panel its text ends on the panel's inset, where the track ends: its box hangs past by its own 7px (6px and its edge).
   for (const name of ['h-[22px]', 'w-max', 'min-w-8', 'max-w-24', 'bg-transparent', 'px-1.5', 'hover:border-foreground/20', 'data-[editing]:border-brand']) expect(box.className).toContain(name);
   expect(box.className).not.toMatch(/(^|\s)bg-foreground\//);
-  expect(box.className).not.toMatch(/(^|\s)-m[rx]-/);
+  expect(box.className.split(' ')).toContain('-mr-[7px]');
   press(input);
   expect(box.hasAttribute('data-editing')).toBe(true);
 });
