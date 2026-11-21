@@ -185,6 +185,10 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
   Inactive WebGL scenes are released, and a file's view (its camera, Display
   settings and pose) lasts only while it is the file on screen: a refresh brings it
   back, and leaving the file drops it.
+- **The page asks browsers not to translate it** (`translate="no"` and `class="notranslate"` on `<html>`, and
+  `<meta name="google" content="notranslate">`, in `index.html`): the viewer speaks its own locales, and a
+  browser's page translation rewrites text nodes React owns, so React's next commit throws `NotFoundError` and
+  the page can go blank. The CAD app's two pages say the same. Only `classList` touches `<html>`'s class.
 - **Vite's transform cache can outlive HMR and hard reloads.** If a source
   edit does not show up, restart the dev server and delete
   `node_modules/.vite`.
