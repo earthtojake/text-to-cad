@@ -26,6 +26,9 @@ def recognise(step):
     word = bytes(step).split()[0]
     if word == b"hang":
         threading.Event().wait()
+    if word == b"hog":
+        held = b"x" * (256 * 2 ** 20)  # written, so resident
+        threading.Event().wait()
     if word == b"die":
         os._exit(7)
     if word == b"refuse":

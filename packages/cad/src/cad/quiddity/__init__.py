@@ -15,13 +15,17 @@ its documentation. What is missing without us is the tie to a document, and four
   checked against the kernel on every call, face by face, and a part whose faces cannot be shown to be the
   same has no features at all rather than some (``_features``, the gate).
 - **A run that ends.** quiddity runs in a process of its own (``_process``, ``_recogniser``, ``_frames``): a part
-  it has not answered in ``timeout_s`` is given up and its process stopped, and nothing it does reaches the
-  process that holds the kernel.
+  it has not answered in ``timeout_s`` is given up and its process stopped, as is one its process holds too much
+  memory with, and nothing it does reaches the process that holds the kernel. A part of more faces than
+  ``_features.FACES`` is not handed over at all: quiddity's time grows faster than a part's faces, and whether a
+  part is read is the part's own, never the speed of the computer that reads it.
 - **An honest absence.** A result says ``available``. Where it is False nothing was measured, and ``reason``
-  says why (``REASONS``): no wheel for this platform, no environment that holds quiddity, an input quiddity
-  refused, a run that failed, stopped or ran out of time, a document of another schema, a mapping the kernel did
-  not confirm. No call raises for any of these. And an available result is not a complete one: quiddity leaves
-  faces ``unexplained`` and says so, so "no hole found" never means "no hole there".
+  says why (``REASONS``): no wheel for this platform, no environment that holds quiddity (or none in time: no
+  part waits on the network for one), a part of too many faces, an input quiddity refused, a run that failed,
+  stopped or ran out of time or of memory, an answer this code does not read, a document of another schema, a
+  mapping the kernel did not confirm. No call raises for any of these. And an available result is not a
+  complete one: quiddity leaves faces ``unexplained`` and says so, so "no hole found" never means "no hole
+  there".
 
 **A result** is plain data, JSON-safe, the same for the same part, lengths in millimetres, points and
 directions in the coordinates of the shape handed over:
@@ -73,7 +77,8 @@ def features(part: Any, *, timeout_s: float = TIMEOUT_S) -> dict[str, Any]:
     read alone and as it stands. The result is plain data (this module's docstring): ``available`` True with
     the ``records``, the ``holes`` and the ``accounting`` of every face, each face its ordinal on the part; or
     ``available`` False with the ``reason`` nothing was measured. A part quiddity has not answered in
-    ``timeout_s`` seconds is ``timed_out``."""
+    ``timeout_s`` seconds is ``timed_out``; a ``timeout_s`` that is no positive, finite number is refused
+    (``ValueError``)."""
     return features_of([part], timeout_s=timeout_s)[0]
 
 
@@ -82,4 +87,4 @@ def features_of(parts: Iterable[Any], *, timeout_s: float = TIMEOUT_S) -> list[d
     so a document's parts cost one start. ``timeout_s`` is each part's own."""
     from cad.quiddity import _features
 
-    return _features.features_of(parts, float(timeout_s))
+    return _features.features_of(parts, timeout_s)
