@@ -37,12 +37,16 @@ from cad._internal.dfm._common import mm, not_applicable, occurrences
 from cad._internal.dfm.rules import OWN, Rule, RuleSet, Source
 from cad.results import CheckFinding
 
-__all__ = ["DEFAULT_SHEET", "LARGEST_PLATE", "MEASURED_FROM", "OPTIONS", "RULES", "context", "findings", "k_factor",
-           "sheet_size",
+__all__ = ["DEFAULT_SHEET", "LARGEST_PLATE", "MEASURED_FROM", "MEASURES", "OPTIONS", "RULES", "context", "findings",
+           "k_factor", "sheet_size",
            "summary", "validate"]
 
 OPTIONS: dict[str, Any] = {"thickness": None, "k_factor": None, "bend_radius": None, "kerf": None,
                            "sheet_size": None}
+#: The options its measurement reads (``kept.measuring``): the thickness given beside the one measured, and the
+#: K-factor each bend is unfolded with -- given, or the material's from the chart (``k_factor``), so the material
+#: is read too. The bend radius, the kerf and the sheet size are the rules' alone.
+MEASURES = ("thickness", "k_factor", "material")
 MEASURED_FROM = ("brep",)
 ACCESSED = "2026-11-03"
 

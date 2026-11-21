@@ -5,10 +5,12 @@ STEP, an xbf or a document the engine holds, once its options are resolved (``ca
 
 The document is read as the engine reads it (``_dfm_brep.read``); the process's module measures it
 (``_dfm_cnc``, ``_dfm_sheet``, ``_dfm_molding``, ``_dfm_printing``: each ``measure(document, options,
-candidates)``, a report of plain data, facts alone); the type side makes the result of the report: the
+candidates)``, a report of plain data, facts alone, handed the options its process declares it reads alone:
+``kept.Measuring``); the type side makes the result of the report: the
 process's findings and the rules' verdicts (``manufacturing.finish``). Given no process
 (``measure_declared``), the document is read first and measured for the process its parts declare, the
-options resolved for it then (``manufacturing.declared``).
+options resolved for it then (``manufacturing.declared``). Asked to describe a document rather than measure it
+(``described``), a checks process answers what a measurement of it would read (``_dfm_brep.content``).
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ import numpy as np
 
 from cad.build123d import _dfm_brep
 
-__all__ = ["checked", "dfm", "held", "measure", "measure_declared"]
+__all__ = ["checked", "described", "dfm", "held", "measure", "measure_declared"]
 
 
 #: A solid of less volume than this fraction of its box's diagonal cubed holds no material: zero volume.
@@ -185,13 +187,20 @@ def _scale(document: _dfm_brep.Document, document_type: str, report: dict[str, A
 
 def _measured(document: _dfm_brep.Document, document_type: str, process: str, options: dict[str, Any],
               candidates: bool) -> dict[str, Any]:
-    from cad._internal.dfm import Unmeasured
+    """The report of ``document`` for ``process``, measured with the options its measurement reads alone
+    (``kept.Measuring``): a read of any other fails it (``RuntimeError``), even one a family caught."""
+    from cad._internal.dfm import Unmeasured, kept
 
     if not document.parts:
         raise Unmeasured("document_empty", "the document holds no part with a face to measure")
     doubt = _integrity(document, process)
     module = importlib.import_module(f"cad.build123d._dfm_{process}")
-    report = module.measure(document, options, candidates)
+    measuring = kept.Measuring(process, options)
+    report = module.measure(document, measuring, candidates)
+    if measuring.undeclared:
+        raise RuntimeError(f"the {process} measurement read {', '.join(sorted(measuring.undeclared))}, which "
+                           f"cad._internal.dfm.{process}.MEASURES does not declare: declare it, or leave it to the "
+                           "rules")
     _scale(document, document_type, report)
     found = [*doubt, *(report.pop("findings", None) or ())]
     if document.empty:
@@ -269,6 +278,27 @@ def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]
     except ArgumentRefused as refused:
         return {"refused": str(refused)}
     return {"measured": {"process": process, "resolved": resolved, "report": report}}
+
+
+def described(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]:
+    """What one of the engine's checks processes answers when ``check`` asks it to describe a document it holds
+    (``{"describe": True, "type", ...}``) rather than measure it: what a measurement of it reads (``source``, as
+    ``held`` reads it, its parts read in place, never copied, since nothing meshes them), as its content record --
+    ``{"content": {...}}`` (``_dfm_brep.content``: plain data with its ``key``) -- or ``{"unmeasured": {"code",
+    "message"}}`` for a document that does not read, as ``held`` says it. ``read``: what a reading failure is said
+    as. Nothing is measured, and no option is read."""
+    from cad._internal.dfm import Unmeasured
+
+    try:
+        try:
+            document = _dfm_brep.of_source(source, copy=False)
+        except Unmeasured:
+            raise
+        except Exception as error:  # noqa: BLE001 - a document that does not read is the answer
+            raise Unmeasured("document_unreadable", f"failed to read {read or 'the document'}: {error}") from None
+        return {"content": _dfm_brep.content(document)}
+    except Unmeasured as failure:
+        return {"unmeasured": {"code": failure.code, "message": failure.message}}
 
 
 def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidates: bool = False,

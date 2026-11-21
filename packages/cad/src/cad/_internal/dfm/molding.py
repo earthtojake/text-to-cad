@@ -48,12 +48,15 @@ from cad._internal.dfm._common import mm, not_applicable, occurrence_count, occu
 from cad._internal.dfm.rules import OWN, Rule, RuleSet, Source
 from cad.results import CheckFinding
 
-__all__ = ["BROAD_WALLS", "CLAMP_FACTORS", "DEFAULT_PULL", "DRAFT_FLOOR_DEG_PER_MM", "MEASURED_FROM", "OPTIONS",
-           "RULES", "WALL_RANGES", "better_pull", "clamp", "context", "dominates", "findings", "ranked", "summary",
-           "validate"]
+__all__ = ["BROAD_WALLS", "CLAMP_FACTORS", "DEFAULT_PULL", "DRAFT_FLOOR_DEG_PER_MM", "MEASURED_FROM", "MEASURES",
+           "OPTIONS", "RULES", "WALL_RANGES", "better_pull", "clamp", "context", "dominates", "findings", "ranked",
+           "summary", "validate"]
 
 #: ``pull``: None is not given -- measured along ``DEFAULT_PULL``, and said to be the default.
 OPTIONS: dict[str, Any] = {"pull": None, "wall_limit": 45.0, "zero_tol": 0.05, "cavities": None}
+#: The options its measurement reads (``kept.measuring``): the pull every face is drafted and released along,
+#: and the angles a wall and a face square to it are read at. The cavities and the material are the rules' alone.
+MEASURES = ("pull", "wall_limit", "zero_tol")
 DEFAULT_PULL = "z"
 MEASURED_FROM = ("brep",)  # a mesh's chords misread draft, undercuts and walls: judged on exact geometry alone
 _ACCESSED = "2026-11-03"

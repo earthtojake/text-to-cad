@@ -365,8 +365,10 @@ class KeptResultTest(unittest.TestCase):
     def test_what_measures_is_the_code_as_it_loaded_and_the_b_rep_checks_libraries(self) -> None:
         """Taken when a check is first asked, never as ``cad.engine`` is imported, of every source file -- a
         ``.py``, or the ``.pyc`` an install of bytecode alone has in its place, never ``__pycache__`` -- read again
-        only once one's size or time changes; a code edited since the library loaded is no other process's. The
-        libraries a B-rep check measures with, each read from the path's listings (two of one name in a folder:
+        only once one's size or time changes; a code edited since the library loaded is no other process's. Each
+        process's measuring code is of its own files alone (``_measuring.DFM``): an edit to another's, or to no
+        process's, leaves it as it was, and one since the library loaded makes it no other's, the rest standing.
+        The libraries a B-rep check measures with, each read from the path's listings (two of one name in a folder:
         the one written last); a process with no kernel names no library."""
         import importlib.metadata
         import importlib.util
@@ -379,8 +381,22 @@ class KeptResultTest(unittest.TestCase):
                                   text=True, check=True)
         self.assertEqual(imported.stdout.strip(), "False", "nothing of it loads, nor is taken, on import")
         self.assertFalse(contract.measuring()["code"].endswith(_measuring.EDITED), "the code as this process loaded it")
+        self.assertEqual(set(contract.measuring()["dfm"]), set(PROCESSES))
+        self.assertFalse(any(code.endswith(_measuring.EDITED) for code in contract.measuring()["dfm"].values()))
         with mock.patch.dict(_measuring._TAKEN, clear=True), mock.patch.object(cad, "_LOADED_NS", 0):
             self.assertTrue(contract.measuring()["code"].endswith(_measuring.EDITED), "edited since it loaded")
+            self.assertTrue(all(code.endswith(_measuring.EDITED) for code in contract.measuring()["dfm"].values()))
+        stated = _measuring._measure
+
+        def sheet_edited(root: object = None) -> tuple:
+            found, newest, changed = stated(root)
+            return found, newest, {**changed, "sheet": cad._LOADED_NS + 1}
+
+        with mock.patch.dict(_measuring._TAKEN, clear=True), mock.patch.object(_measuring, "_measure", sheet_edited):
+            said = contract.measuring()
+        self.assertEqual({process for process, code in said["dfm"].items() if code.endswith(_measuring.EDITED)},
+                         {"sheet"}, "one process's files edited since: its code alone is no other's")
+        self.assertFalse(said["code"].endswith(_measuring.EDITED))
         self.assertEqual(set(contract.measure()["libraries"]), {"build123d", "OCP", "bd_materials", "numpy"})
         with mock.patch.object(importlib.metadata, "version", side_effect=AssertionError("the long way")):
             self.assertEqual(_measuring._version("OCP", _measuring.MEASURING["OCP"], {"cadquery_ocp": "8.0.1"}),
@@ -402,14 +418,31 @@ class KeptResultTest(unittest.TestCase):
         (root / "__pycache__").mkdir()
         for name, data in (("a.py", b"a"), ("b.pyc", b"b"), ("a.pyc", b"x"), ("__pycache__/a.cpython.pyc", b"y")):
             (root / name).write_bytes(data)
+        for place in {*_measuring.DFM_COMMON, *(place for own in _measuring.DFM.values() for place in own)}:
+            (root / place).parent.mkdir(parents=True, exist_ok=True)
+            (root / place).write_bytes(place.encode())
         first = contract.measure(root)["code"]
+        measuring = contract.measure(root)["dfm"]
+        self.assertEqual(len(set(measuring.values())), len(PROCESSES), "each process's own")
         with mock.patch("builtins.open", side_effect=AssertionError("read again")):
             self.assertEqual(_measuring._code(root)[0], first, "the same files, sizes and times: none read")
-        for name, changes in (("a.pyc", False), ("__pycache__/a.cpython.pyc", False), ("b.pyc", True), ("a.py", True)):
+            self.assertEqual(contract.measure(root)["dfm"], measuring)
+        for name, changes, measures in (("a.pyc", False, ()), ("__pycache__/a.cpython.pyc", False, ()),
+                                        ("b.pyc", True, ()), ("a.py", True, ()),
+                                        ("build123d/_dfm_sheet.py", True, {"sheet"}),
+                                        ("_internal/dfm/rules.py", True, set(PROCESSES))):
             with self.subTest(name=name):
                 (root / name).write_bytes(b"edited " + name.encode())
-                self.assertEqual(contract.measure(root)["code"] != first, changes)
-                first = contract.measure(root)["code"]
+                found = contract.measure(root)
+                self.assertEqual(found["code"] != first, changes)
+                self.assertEqual({process for process in PROCESSES if found["dfm"][process] != measuring[process]},
+                                 set(measures))
+                first, measuring = found["code"], found["dfm"]
+        (root / "_internal" / "molding_geometry.py").rename(root / "_internal" / "molding_geometry.pyc")
+        found = contract.measure(root)["dfm"]
+        self.assertNotEqual(found["molding"], measuring["molding"], "its .pyc in its place")
+        (root / "_internal" / "molding_geometry.pyc").write_bytes(b"compiled again")
+        self.assertNotEqual(contract.measure(root)["dfm"]["molding"], found["molding"], "and read as it")
 
 
 if __name__ == "__main__":

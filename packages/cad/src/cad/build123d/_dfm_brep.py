@@ -26,6 +26,11 @@ mesh (a finer one is kept, not made again) and measure otherwise than a fresh re
 measured on a copy that shares nothing with the held document: its geometry and whatever mesh it was read
 with (``BRepBuilderAPI_Copy``), so a second process checked finds the document as it was read.
 
+**What a measurement reads.** The parts as read, said as plain data (``content``): each part's prototype's
+geometry key, its names, how its occurrences stand and its declared material's physics and process, and the token
+of any mesh it was read with (``_meshed``) -- what a measurement of the document reads of it, and nothing of its
+bytes, its path or its look.
+
 **The measures.** A face's surface (``surface``: a plane's normal, a cylinder's or a cone's axis and
 radius, which way the material lies); an edge between two faces (``edges``: concave or convex, the angle
 inside the material, smooth where the faces are tangent); exact rays (``Rays``: the first hit, or every
@@ -46,8 +51,8 @@ import numpy as np
 
 from cad._internal.dfm import Unmeasured
 
-__all__ = ["Document", "Edge", "Part", "Rays", "Sample", "Surface", "edges", "inside", "of_source", "parts_of", "read",
-           "samples", "surface"]
+__all__ = ["Document", "Edge", "NOT_CONTENT", "Part", "Rays", "Sample", "Surface", "content", "edges", "inside",
+           "of_source", "parts_of", "read", "samples", "surface"]
 
 # Two faces meeting at an edge within this many degrees of each other are tangent: a fillet's join.
 SMOOTH_DEG = 1.0
@@ -71,6 +76,9 @@ class Part:
     placements: tuple[tuple[float, float, float], ...] = ((0.0, 0.0, 0.0),)
     face_names: dict[int, str] = field(default_factory=dict)
     material: Any = None             # the part's declared material (a bd_materials FinishedMaterial), or None
+    key: str = ""                    # its prototype's geometry key (``Prototype.key``); "" for a live shape's part
+    matrix: tuple[float, ...] = ()   # the column-major 4x4 its first occurrence is placed by; () for a live shape's
+    mesh: str = ""                   # the token of the triangulation it was read with (``_meshed``); "" for none
     _faces: list[Any] | None = field(default=None, repr=False)
     _edges: list[Any] | None = field(default=None, repr=False)
     _face_map: Any = field(default=None, repr=False)
@@ -237,6 +245,40 @@ class _Standing:
         return Document(name=name, parts=[part for part in self.parts if part.faces()], source=source, empty=empty)
 
 
+def _meshed(shape: Any) -> str:
+    """The token of the triangulation ``shape``'s faces were read with: "" where no face holds one, else a digest
+    of each face's -- its ordinal, its nodes, its triangles and the deflection it was made to. A measurement meshes
+    a part's faces (``BRepMesh``), which keeps a triangulation fine enough where it finds one: a part read with one
+    is measured otherwise than the same part read with none (the module's **Never the held shapes themselves**),
+    so the token is part of what a measurement reads (``content``)."""
+    import hashlib
+    import struct
+
+    from OCP.BRep import BRep_Tool
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopExp import TopExp
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.TopoDS import TopoDS
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as TopTools_IndexedMapOfShape
+
+    faces = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(shape, TopAbs_FACE, faces)
+    found = None
+    for ordinal in range(1, faces.Extent() + 1):
+        triangulation = BRep_Tool.Triangulation_s(TopoDS.Face(faces.FindKey(ordinal)), TopLoc_Location())
+        if triangulation is None:
+            continue
+        found = found or hashlib.blake2b(digest_size=16)
+        nodes, triangles = triangulation.NbNodes(), triangulation.NbTriangles()
+        found.update(struct.pack("<3qd", ordinal, nodes, triangles, float(triangulation.Deflection())))
+        for index in range(1, nodes + 1):
+            node = triangulation.Node(index)
+            found.update(struct.pack("<3d", node.X(), node.Y(), node.Z()))
+        for index in range(1, triangles + 1):
+            found.update(struct.pack("<3q", *triangulation.Triangle(index).Get()))
+    return found.hexdigest() if found is not None else ""
+
+
 def _loaded(loaded: Any, copy: bool = False) -> Document:
     import build123d as bd
 
@@ -245,6 +287,7 @@ def _loaded(loaded: Any, copy: bool = False) -> Document:
     structure = loaded.structure()
     root = refs.structure_tree(structure)
     standing = _Standing()
+    meshes: dict[int, str] = {}  # each prototype's token, taken once
     for node in root.parts():
         payload = node.payload
         prototype = int(payload["prototype"])
@@ -252,10 +295,15 @@ def _loaded(loaded: Any, copy: bool = False) -> Document:
         proto = loaded.prototypes[prototype]
         instance = loaded.instances[int(payload["instance"])]
 
-        def make(proto: Any = proto, instance: Any = instance, node: Any = node, path: str = path) -> Part:
+        def make(proto: Any = proto, instance: Any = instance, node: Any = node, path: str = path,
+                 prototype: int = prototype) -> Part:
             placed = bd.Shape.cast((_copied(proto.shape) if copy else proto.shape).Moved(_trsf(instance.matrix)))
+            if prototype not in meshes:
+                meshes[prototype] = _meshed(proto.shape)
             return Part(name=proto.name, owner=refs.owner_text(root, node), shape=placed, paths=(path,),
-                        face_names=dict(proto.face_names), material=getattr(proto, "material", None))
+                        face_names=dict(proto.face_names), material=getattr(proto, "material", None),
+                        key=str(proto.key), matrix=tuple(float(value) for value in instance.matrix),
+                        mesh=meshes[prototype])
 
         standing.add(prototype, *_placement(instance.matrix), path, make)
     return standing.document(loaded.name, str(loaded.path))
@@ -274,14 +322,15 @@ def read(document_type: str, source: Any) -> Document:
         raise Unmeasured("document_unreadable", f"failed to read {path.name}: {error}") from None
 
 
-def of_source(source: Any) -> Document:
+def of_source(source: Any, *, copy: bool = True) -> Document:
     """The parts of a document one of the engine's checks processes holds (an ``export.Source`` its reader
     read: a STEP's or an xbf's file, a held document's bytes), as that reader read it (``source.loaded``), which
-    is what ``read`` reads -- each part a copy, never the held shapes themselves (the module's docstring).
-    ``Unmeasured`` for a source no reader read: a mesh, which holds no B-rep."""
+    is what ``read`` reads -- each part a copy, never the held shapes themselves (the module's docstring), but
+    with ``copy`` False, for what reads the parts and measures nothing (``content``). ``Unmeasured`` for a source
+    no reader read: a mesh, which holds no B-rep."""
     if source.loaded is None:
         raise Unmeasured("document_unreadable", f"{source.name} holds no B-rep to measure")
-    return _loaded(source.loaded, copy=True)
+    return _loaded(source.loaded, copy=copy)
 
 
 def parts_of(shape: Any, name: str | None = None) -> Document:
@@ -356,6 +405,47 @@ def every_occurrence(document: Document) -> Document:
             parts.append(Part(name=part.name, owner=path, shape=moved, paths=(path,),
                               face_names=dict(part.face_names), material=part.material))
     return Document(name=document.name, parts=parts, source=document.source, empty=list(document.empty))
+
+
+# --- what a measurement reads ----------------------------------------------------------------------------
+
+#: What of a ``Part`` and of a ``Document`` their content record (``content``) leaves out, and why: what no
+#: measurement reads, or what other fields stand for.
+NOT_CONTENT: dict[str, str] = {
+    "shape": "its prototype's geometry key, the matrix its first occurrence stands by and its mesh's token",
+    "face_names": "no measurement reads a face's name: a finding names a face by its ref",
+    "_faces": "made of the shape when first asked", "_edges": "made of the shape when first asked",
+    "_face_map": "made of the shape when first asked", "_edge_map": "made of the shape when first asked",
+    "_edge_context": "made of the shape when first asked",
+    "source": "the path it was read from: no measurement reads it",
+}
+
+
+def content(document: Document) -> dict[str, Any]:
+    """What a measurement of ``document`` (a STEP's or an xbf's parts as the engine reads them, ``of_source`` or
+    ``read``) reads of it, as plain data, with its key (``key``: ``kept.content_key``): its name, which reaches its
+    source and its refs; the owners of its parts that hold no face (``empty``); and each part as it stands, in
+    order -- its prototype's geometry key (``key``: the bytes it is meshed from, ``document.geometry_key``), its
+    name, its refs' owner, its occurrences' paths, the matrix its first occurrence stands by (``matrix``), how far
+    each other lies from it (``placements``) and how many stand so, its declared material as a measurement reads
+    it (``material``: ``document.material_json`` without its look, ``pbr`` -- its physics and the process it
+    declares, so a colour or a finish changes nothing) and the token of the triangulation it was read with
+    (``mesh``, ``_meshed``). A field left out is said in ``NOT_CONTENT``. Two documents of one record are one
+    measurement, whatever their bytes, paths or versions; nothing is measured, and the shapes are only read."""
+    from cad._internal.dfm import kept
+    from cad.engine.document import material_json
+
+    def material(found: Any) -> dict[str, Any] | None:
+        said = material_json(found)
+        return None if said is None else {name: value for name, value in said.items() if name != "pbr"}
+
+    record: dict[str, Any] = {
+        "name": document.name, "empty": list(document.empty),
+        "parts": [{"key": part.key, "name": part.name, "owner": part.owner, "paths": list(part.paths),
+                   "matrix": list(part.matrix), "placements": [list(shift) for shift in part.placements],
+                   "occurrences": part.occurrences, "material": material(part.material), "mesh": part.mesh}
+                  for part in document.parts]}
+    return {**record, "key": kept.content_key(record)}
 
 
 # --- copies ----------------------------------------------------------------------------------------------

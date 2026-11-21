@@ -31,8 +31,8 @@ from cad._internal.dfm._common import mm, not_applicable, where
 from cad._internal.dfm.rules import OWN, Rule, RuleSet, Source
 from cad.results import CheckFinding
 
-__all__ = ["BUILD_VOLUMES", "DEFAULT_ANGLE", "DEFAULT_LAYER", "MEASURED_FROM", "OPTIONS", "RULES", "TECHNOLOGIES",
-           "angle_limit", "build_volume", "context", "findings", "layer_height", "machine_volume",
+__all__ = ["BUILD_VOLUMES", "DEFAULT_ANGLE", "DEFAULT_LAYER", "MEASURED_FROM", "MEASURES", "OPTIONS", "RULES",
+           "TECHNOLOGIES", "angle_limit", "build_volume", "context", "findings", "layer_height", "machine_volume",
            "printer_settings", "summary", "validate", "wall_minimum"]
 
 #: The printing technologies: fused filament, selective laser sintering, stereolithography and DLP,
@@ -42,6 +42,10 @@ TECHNOLOGIES = ("fdm", "sls", "sla", "mjf", "pbf")
 POWDER = ("sls", "mjf")
 OPTIONS: dict[str, Any] = {"technology": "fdm", "build_volume": None, "angle_limit": None, "samples": 2000,
                            "layer_height": None, "nozzle": None, "printer": None}
+#: The options its measurement reads (``kept.measuring``): the technology and what it prints with -- the overhang
+#: angle, the layer, the nozzle a wall's minimum follows, the build volume (a printer's, which names itself) --
+#: and how densely a face is sampled. The material is the rules' alone.
+MEASURES = ("technology", "angle_limit", "layer_height", "samples", "nozzle", "build_volume", "printer")
 MEASURED_FROM = ("brep", "mesh")
 #: The overhang angle (from horizontal) each technology counts as needing support when none is given: the
 #: rules' (Hubs FDM 45, Hubs SLA 19 from level, Protolabs metal 45 to the plate; powder none).
