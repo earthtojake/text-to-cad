@@ -393,13 +393,25 @@ it('a board without its index is the picture, its view controls, and its Layers 
   dispose();
 });
 
-it('none of the chrome while the board loads, or once it failed to: the card, with the server’s own sentence', async () => {
+it('a board has its panel from the first frame, open as it stays once the board is in, and no tools till then; once it failed to load, none of the chrome: the card, with the server’s own sentence', async () => {
   let answer: ((response: Response) => void) | null = null;
   readPlot = () => new Promise<Response>((resolve) => { answer = resolve; });
+  const loading = await open();
+  await waitFor(() => expect(answer).not.toBeNull());
+  const toggle = () => loading.pane.querySelector('[data-viewer-navbar] [data-navbar-panel]')?.getAttribute('aria-expanded') ?? null;
+  const aside = loading.pane.querySelector<HTMLElement>('aside[data-flat-panel]');
+  const first = toggle();
+  expect([first, aside?.querySelector('[data-flat-panel-heading]')?.textContent, within(loading.pane).queryByRole('group', { name: 'Interaction tools' })])
+    .toEqual(['true', 'Parts', null]);
+  await act(async () => { answer!(json(BOARD)); });
+  await opened(loading.pane);
+  expect(toggle()).toBe(first);
+  loading.dispose();
+  cleanup();
+
+  answer = null;
   const { pane, dispose } = await open('broken.kicad_pcb');
   await waitFor(() => expect(answer).not.toBeNull());
-  expect(within(pane).queryByRole('group', { name: 'Interaction tools' })).toBeNull();
-  expect(pane.querySelector('[data-flat-panel], [data-navbar-panel="left"]')).toBeNull();
   await act(async () => { answer!(json({ error: UNREADABLE }, 400)); });
   const alert = await within(pane).findByRole('alert');
   expect(alert.textContent).toContain('is not a KiCad board');

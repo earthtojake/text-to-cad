@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { MousePointer2 } from "lucide-react";
 import { scenePartCount, viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 import { useExportView } from "../../export/context.js";
@@ -25,17 +25,17 @@ const NO_REFERENCES = Object.freeze([]);
 function MeshSurface({ view, data }) {
   const { t } = useI18n();
   const document = useWorkspaceDocument({ view, data });
-  const loaded = useMeshScene({ entry: document.entry, resources: document.client.resources });
+  const loaded = useMeshScene({ entry: document.entry, resources: document.client.resources, name: view.file.name });
   const scene = loaded.scene;
   const loadAlert = useMemo(() => workspaceLoadAlert({
     catalogError: document.catalogError, error: loaded.error, modelKey: document.modelKey, hasScene: Boolean(scene), t
   }) || (loaded.empty ? noGeometryAlert(document.modelKey, t) : null),
   [document.catalogError, loaded.error, loaded.empty, document.modelKey, scene, t]);
-  // A 3MF has objects and a unit; an STL is one mesh in none.
-  const parted = /\.3mf$/i.test(view.file.path);
-  const toolModes = parted ? THREE_MF_TOOL_MODES : STL_TOOL_MODES;
-  // Parts where a 3MF has several objects to colour; an STL is one mesh.
-  const features = useMemo(() => viewFeaturesForKind(parted ? "3mf" : "stl", { parts: scenePartCount(scene) }), [parted, scene]);
+  // A 3MF has objects and a unit; an STL has bodies (`stlBodies.js`) and no unit, so nothing to measure in.
+  const threeMf = /\.3mf$/i.test(view.file.path);
+  const toolModes = threeMf ? THREE_MF_TOOL_MODES : STL_TOOL_MODES;
+  // Parts where the file has several objects or bodies to colour.
+  const features = useMemo(() => viewFeaturesForKind(threeMf ? "3mf" : "stl", { parts: scenePartCount(scene) }), [threeMf, scene]);
 
   const shellRef = useRef(null);
   const sceneRef = useRef(scene);
@@ -43,12 +43,15 @@ function MeshSurface({ view, data }) {
   const preview = usePreviewState();
   const previewing = preview.previewing;
   const tools = useSceneToolState({ toolModes, previewing, fileKey: document.modelKey, revision: loaded.revision,
-    measurable: parted, resource: document.resource });
+    measurable: threeMf, resource: document.resource });
   const { measure } = tools;
   const requestHighlightFrame = useCallback(() => shellRef.current?.requestFrame?.(), []);
-  const selection = useSceneSelection({ scene: parted ? scene : null, requestRender: requestHighlightFrame });
+  const selection = useSceneSelection({ scene, requestRender: requestHighlightFrame });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+  // An STL's bodies arrive after its first scene (one body, the whole file): what was picked in it goes, since its
+  // `b1` now names the largest body.
+  useEffect(() => { if (loaded.split) selectionRef.current.clear(); }, [loaded.split]);
   const measureRef = useRef(measure);
   measureRef.current = measure;
   const live = useMemo(() => ({
@@ -88,12 +91,12 @@ function MeshSurface({ view, data }) {
     doc: document.modelKey, revision: loaded.revision, file: view.file.path, name: view.file.name
   } : null, [scene, loaded.revision, document.modelKey, host.environment.compact, view.file.path, view.file.name]);
   useExportView(exportView);
-  const sceneTools = useSceneTools({ shell, scene, features, state: tools, measurable: parted, clearParts: selection.clear });
-  const selectActive = parted && !previewing && Boolean(scene) && shell.toolMode === MESH_TOOL.SELECT;
-  // Select on every mesh file: an STL's picks nothing, the view's plain navigation.
+  const sceneTools = useSceneTools({ shell, scene, features, state: tools, measurable: threeMf, clearParts: selection.clear });
+  const selectActive = !previewing && Boolean(scene) && shell.toolMode === MESH_TOOL.SELECT;
+  // Select picks a 3MF's objects and an STL's bodies.
   const strip = [shell.tools.own({ id: MESH_TOOL.SELECT, label: t("tool.select"), shortcut: TOOL_SHORTCUTS.select, icon: SELECT_ICON }), ...sceneTools.tools];
-  // A 3MF's picked objects; an STL's Quick Edit carries the whole file and nothing picked in it.
-  const { references, chips } = useSceneReferences({ scene: parted ? scene : null, selection, resource: shell.frame.resource });
+  // The picked objects or bodies, as references (`model.3mf#o2.1`, `model.stl#b2`).
+  const { references, chips } = useSceneReferences({ scene, selection, resource: shell.frame.resource });
   const resourcePath = shell.frame.resource?.path;
   const nameObject = useCallback(reference => {
     const id = reference?.resource?.path === resourcePath && reference.target?.kind === "cad-selector" ? reference.target.selectors[0] : "";
@@ -120,14 +123,14 @@ function MeshSurface({ view, data }) {
     run: () => { const box = scene?.selectionBounds?.(selectionRef.current.selected); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
   };
 
-  // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows. No panel, so no Selected pane.
-  const described = useSceneDescribe(parted ? scene : null);
-  const inspect = useSceneInspect({ scene: previewing ? null : parted ? scene : null, selection, describe: described });
+  // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows.
+  const described = useSceneDescribe(scene);
+  const inspect = useSceneInspect({ scene: previewing ? null : scene, selection, describe: described });
 
-  // A 3MF of several objects has the view's panel, its Model tab the objects (`SceneTreeSection.jsx`), as a GLB's nodes
-  // are; an STL, and a 3MF of one object, none: there is nothing to list that the model does not show.
-  const sidebar = parted && scene?.nodeTree?.length > 1 ? <SceneTreeSection tree={scene.nodeTree} selection={selection} active={!previewing}
-    onPick={() => { if (shellRef.current?.toolMode !== MESH_TOOL.SELECT) shellRef.current?.selectTool(MESH_TOOL.SELECT); }} /> : null;
+  // The view's panel, from the first frame: its Model tab the file's objects or bodies (`SceneTreeSection.jsx`), as a
+  // GLB's nodes are, a row each — a 3MF of one object, or an STL of one body, its one row — empty while the file loads.
+  const sidebar = <SceneTreeSection tree={scene ? scene.nodeTree : null} selection={selection} active={!previewing}
+    onPick={() => { if (shellRef.current?.toolMode !== MESH_TOOL.SELECT) shellRef.current?.selectTool(MESH_TOOL.SELECT); }} />;
   return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} previewView={previewView}
     inspect={inspect} sidebar={sidebar}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameObject}
@@ -135,7 +138,7 @@ function MeshSurface({ view, data }) {
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}
     viewportOverlay={viewport => { viewportRef.current = viewport; return <>
       {sceneTools.overlay(viewport)}
-      {parted ? <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} /> : null}
+      <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} />
     </>; }} />;
 }
 

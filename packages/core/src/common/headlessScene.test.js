@@ -242,7 +242,7 @@ test("a family scene has no CAD edges, a one-part GLB no Explode, and --mode lis
 
   const stl = headlessSceneModel(THREE, headlessSceneFamily(job("stl")).build(THREE, await buildMeshDataFromStlBuffer(stlBytes()), job("stl")),
     headlessSceneDress(context.sceneSettings));
-  assert.deepEqual(stl.listParts().map(({ id, name, triangleCount }) => [id, name, triangleCount]), [["mesh:0", "", 24]], "an STL is one mesh, the part Annotate hangs its ink on");
+  assert.deepEqual(stl.listParts().map(({ id, name, triangleCount }) => [id, name, triangleCount]), [["b1", "", 24]], "an STL not split is one body, b1: the part Annotate hangs its ink on, as the viewer names it");
   stl.dispose();
 
   // A robot lists down its tree, root first: a link, then the links it carries (as the file has them).

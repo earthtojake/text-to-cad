@@ -296,7 +296,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   them, its **Parameters**, **Joints** and **Animation** — whatever tool is in hand; collapsed, nothing over the model
   (its toggle is the navbar's); on a phone the same toggle opens it as a sheet from the left (see [A phone's
   sidebar](#a-phones-sidebar)).
-  A file with nothing to list (an STL) has none. What is selected is read in Quick Edit's chip list.
+  Every file has it, from the view's first frame (a GLB's, a 3MF's and an STL's Model too, a row at the least). What is
+  selected is read in Quick Edit's chip list.
 - **Quick Edit** at the bottom, 16px up, centred on the window as the strip is, over the panel where it meets it:
   400px wide at most, else the window less 16px a side (`QUICK_EDIT_MAX_PX`, `QUICK_EDIT_MARGIN_PX`), a STEP's or a
   robot's: the bar of the note a person writes to their agent, there only while something is picked or drawn
@@ -403,7 +404,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | URDF / SRDF | Select, Draw, Measure; Clip, the navbar View ▾ and Preview, Home attached to the cube |
 | GLB | Select, Draw, Measure; Explode (several rigid nodes that draw), Clip, the navbar View ▾ and Preview, Home attached to the cube |
 | 3MF | Select, Draw, Measure; Clip, the navbar View ▾ and Preview, Home attached to the cube |
-| STL | Select (in hand, the view's navigation: an STL picks nothing), Draw; Clip, the navbar View ▾ and Preview, Home attached to the cube |
+| STL | Select (in hand: its bodies), Draw; Clip, the navbar View ▾ and Preview, Home attached to the cube |
 | DXF | Select (in hand: a tap picks an entity, a plain drag draws [the box](#box-selection); a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom), Draw, Measure; no view controls: a drawing is 2D |
 | KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a plain drag draws [the box](#box-selection), naming the area on the view's working layer where it takes nothing; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane’s smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Draw, Measure; the zoom pill in the corner, Display, Flip and 2D/3D (in 3D Home) the stack under it |
 | KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a plain drag draws [the box](#box-selection), taking what it touches; the rest are a board's drags; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Draw, Measure; no view controls (no layers, and its colours are the theme's). |
@@ -432,7 +433,7 @@ it is as it was. Preview's tile alone is a mode.
 
 | Tool | Pressing it | Its sub-toolbar | Leaving it |
 | --- | --- | --- | --- |
-| Select | The default tool of every 3D file but an STL; picks what its filter ticks, or a GLB's nodes, a 3MF's objects (Shift adds; Delete deletes annotations and measurements); what is picked is Quick Edit's chips | None: its filter is the chevron after its button | The selection stays, lit and in Quick Edit, under any tool |
+| Select | The default tool of every 3D file; picks what its filter ticks, or a GLB's nodes, a 3MF's objects, an STL's bodies (Shift adds; Delete deletes annotations and measurements); what is picked is Quick Edit's chips | None: its filter is the chevron after its button | The selection stays, lit and in Quick Edit, under any tool |
 | Draw | Draws on the view with the tool in hand: the pen, the highlighter, a shape (line, arrow, rectangle, ellipse), text, Fill (a closed shape's interior) or the eraser; its button shows that tool | One row: the drawing tools (Pen, Highlighter, Line, Arrow, Rectangle, Ellipse, Text, Fill, Eraser), a rule, then Color, Stroke width, Placement and Clear annotations (Undo and Redo are ⌘Z, ⇧⌘Z) | The annotations stay in the model, their chip in Quick Edit; Draw keeps what it last drew with, the strip showing its icon |
 | Measure | Arms picking two entities and reading what the pair makes (an engine document's — an `.xbf`'s or a STEP's — exact vertices, edges and faces, what its filter ticks; on a mesh, two points on its surface, approximately, in its file's unit; a drawing's ends, centres and lines, in the unit it declares, else "units"); each result a chip in its colour | Its measurements, as chips, then Clear measurements; none while nothing is measured | Unfinished picks are cancelled; completed measurements stay, drawn on the model, their row back with the tool |
 | Explode / Clip | Takes it up over Select (a press on the model still picks); an edit applies the effect (Explode's, as a motion: see below) | One row, the drawing tools' width: the slider, its amount beside it, Reset; Clip's axis first, whose dropdown holds its settings | The effect stays on the model, the dot on its tile |
@@ -768,9 +769,18 @@ the picture is drawn in what it leaves, nothing of it under the panel. It is **t
 structure, then what the file lets the person set. Its tabs: a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy, a drawing's Layers (handed in); a 3D
 view's its renderer's structure (`ToolPanel`s, each a tab by its name: a STEP's or an `.xbf`'s **Model** — an assembly's
 tree, a part file's one row —, the Model's Show all on a line over its rows, the trees searched by the panel's search;
-a robot's **Links**). A GLB's Model tab is its node tree, and a 3MF of several objects lists
-them (`kit/inspector/SceneTreeSection.jsx`: a row a node, a pick in it the same as on the model); an STL, and a 3MF of
-one object, have no panel. A drawing always has its Layers, a drawing of one layer its one row. After the structure's
+a robot's **Links**). A GLB's Model tab is its node tree, a 3MF's its objects and an STL's its bodies
+(`kit/inspector/SceneTreeSection.jsx`: a row a node, an object or a body, a pick in it the same as on the model). **Every
+file has the panel, from the view's first frame**: its structure's tab is there while the file loads, empty until it is
+in, so neither the panel nor its toggle comes in late and pushes the model aside, and it is open or collapsed then as it
+is once the file is in; a load that fails has none. A file whose tree is optional always shows it, even of one row, as a
+STEP part does: a 3MF of one object its one row, a GLB of one node its one, a GLB with no node one row named for the
+file, which picks nothing. An STL lists its bodies (`stlBodies.js`: the triangles that share corners, welded at a
+millionth of the model's diagonal), largest first by triangles, as **Body 1**…**Body N** (a named solid of an ASCII STL
+its own row, by its name); an STL of one body is one row named for the file (or for its one named solid), and one of
+more than 2,000 bodies is not split: one row. The bodies are split after the model shows (on a million triangles the
+split takes about twice the parse), so the row for the file stands until they are in. A drawing always has its Layers,
+a drawing of one layer its one row. After the structure's
 tabs, **only where the file has them**, what it lets the person set, each a tab by its name (`ToolPanel`s, the
 renderer's `fileSections`, then the shell's Animation): **Params** ([Parameters](#parameters)), **Joints** (Reset in
 its actions row, last, as Parameters' Reset and Save are), **Animation** (`kit/tools/playbar/AnimationSection.jsx`,
@@ -963,8 +973,9 @@ structure. Every rule here, and why:
   - a robot's link (`robot/LinkDetails.jsx`'s `robotLinkItem`): its mass, and its joint to its parent —
     name, type, and the parent link, a press selecting it ("Root link" for the root); a named mesh object
     its link and size;
-  - a GLB's node and a 3MF's object (their scenes' `describePart`): a node's index, triangles, size in
-    the file's metres and authored material; an object's build item and triangles.
+  - a GLB's node, a 3MF's object and an STL's body (their scenes' `describePart`): a node's index, triangles, size in
+    the file's metres and authored material; an object's build item and triangles; a body's number ("2 of 5") and
+    triangles.
 - **A hover tip** — the frame's, every view's that picks (`ViewFrame.jsx`, `kit/shell/HoverTip.jsx`'s
   `useFrameHoverTip`): under Select, the name of what a press would pick there (the view's `hovered`) and
   its short kind — a pad's or a pin's net, a part's value (`U12.57 · /TVRAM12`); a drawing entity's
@@ -1112,7 +1123,7 @@ Its panels follow these rules:
   under every tool. No pick or tool opens or closes the explorer, on desktop or mobile.
 
 **The one row.** Every list of the view's panel — the Parts, the Nets, the Hierarchy, a
-board's and a drawing's Layers, the Model (an engine document's, a GLB's, a 3MF's), the Links, a
+board's and a drawing's Layers, the Model (an engine document's, a GLB's, a 3MF's, an STL's), the Links, a
 model's parameters' headings, every search hit — is built of the STEP/xbf Model tree's base components
 (`primitives/tree-row.jsx`, `primitives/tree-filter.jsx`), never a view's own: ONE row,
 `TreeRowSurface`, which alone sets its horizontal geometry, so a fix to it lands in every list; its

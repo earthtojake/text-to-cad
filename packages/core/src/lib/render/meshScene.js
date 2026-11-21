@@ -26,7 +26,8 @@ function boundsOf(THREE, objects) {
  * @param {typeof import("three")} THREE
  * @param {import("./meshObjects.js").MeshObject[]} objects  `buildMeshObjects`.
  *   The scene owns their geometries from here on (a sibling's share its source's: `createSibling`).
- * @param {{ units?: import("../viewer/sceneUnits.js").SceneUnits }} [options]  What the file measures in.
+ * @param {{ units?: import("../viewer/sceneUnits.js").SceneUnits, name?: string }} [options]  What the file measures in,
+ *   and the name of an STL's one unnamed body (the file's: its single row in the view's panel).
  * @returns {import("../viewer/sceneContract.js").KitScene & { meshCount: number }}
  *   A 3MF's objects (those with a `path`) are picked, named and lit by their place in its build:
  *   `o2.1`, the second build item's first component, as a STEP names an occurrence.
@@ -47,8 +48,8 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS, 
     mesh.userData.cadFillIndex = object.paletteIndex;
     // A 3MF's object by its place in the build (`o2.1`); an STL's body by its number (`b3`, `stlBodies.js`).
     mesh.userData.objectPath = object.path ? `o${object.path.join(".")}` : `b${object.body || root.children.length + 1}`;
-    // What Annotate hangs a mark on, here and in a snapshot (`annotation.js`).
-    mesh.userData.partId = mesh.userData.objectPath || `mesh:${root.children.length}`;
+    // What Annotate hangs a mark on, here and in a snapshot (`annotation.js`): the object or body a pick names.
+    mesh.userData.partId = mesh.userData.objectPath;
     root.add(mesh);
     return material;
   });
@@ -150,7 +151,7 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS, 
      * geometry's owner, so the sibling is disposed first.
      */
     createSibling() {
-      return createMeshScene(THREE, objects.map(object => ({ ...object, geometry: shareGeometry(THREE, object.geometry) })), { units });
+      return createMeshScene(THREE, objects.map(object => ({ ...object, geometry: shareGeometry(THREE, object.geometry) })), { units, name });
     },
     dispose() {
       if (disposed) return;
@@ -172,10 +173,11 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS, 
  *
  * @param {typeof import("three")} THREE
  * @param {object} meshData  `buildMeshDataFromStlBuffer` / `buildMeshDataFrom3MfBuffer` output.
+ * @param {{ name?: string }} [options]  `name`: the file's, which an STL's one unnamed body takes (its single row).
  */
-export function buildMeshScene(THREE, meshData) {
+export function buildMeshScene(THREE, meshData, { name = "" } = {}) {
   const objects = buildMeshObjects(THREE, meshData);
   // A 3MF says the unit its numbers are in; an STL says none.
   const units = meshData?.unit ? threeMfSceneUnits(meshData.unit) : UNITLESS_SCENE_UNITS;
-  return objects.length ? createMeshScene(THREE, objects, { units }) : null;
+  return objects.length ? createMeshScene(THREE, objects, { units, name }) : null;
 }

@@ -148,10 +148,13 @@ function GlbSurface({ view, data }) {
     run: () => { const box = scene?.selectionBounds?.(selectionRef.current.selected); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
   };
 
-  // The view's panel: the Model tab, the file's node tree (`SceneTreeSection.jsx`), a row a node, a pick in it
-  // taking Select up and picking the node as a press on the model does. A GLB of one node has its one row.
-  const sidebar = scene?.nodeTree?.length ? <SceneTreeSection tree={scene.nodeTree} selection={selection} active={!previewing}
-    onPick={() => { if (shellRef.current?.toolMode !== GLB_TOOL.SELECT) shellRef.current?.selectTool(GLB_TOOL.SELECT); }} /> : null;
+  // The view's panel, from the first frame: the Model tab, the file's node tree (`SceneTreeSection.jsx`), a row a node,
+  // a pick in it taking Select up and picking the node as a press on the model does; empty while the file loads. A GLB
+  // of one node has its one row, and one with no node its one row too, the file's, which picks nothing.
+  const tree = useMemo(() => (scene ? scene.nodeTree?.length ? scene.nodeTree : [{ id: "file", label: view.file.name, part: null, children: [] }] : null),
+    [scene, view.file.name]);
+  const sidebar = <SceneTreeSection tree={tree} selection={selection} active={!previewing}
+    onPick={() => { if (shellRef.current?.toolMode !== GLB_TOOL.SELECT) shellRef.current?.selectTool(GLB_TOOL.SELECT); }} />;
   // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows.
   const described = useSceneDescribe(scene);
   const inspect = useSceneInspect({ scene: previewing ? null : scene, selection, describe: described });
@@ -166,8 +169,6 @@ function GlbSurface({ view, data }) {
       <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} />
     </>; }} />;
 }
-
-// Every node of a tree of `{ children }`, counted.
 
 export default function GlbRenderer(props) {
   const { data, ...view } = props;

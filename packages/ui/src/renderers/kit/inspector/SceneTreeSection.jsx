@@ -29,14 +29,15 @@ function ownersOf(roots) {
 function NodeRow({ node, depth, expanded, toggle, highlighted, choose, hover, rowRefs }) {
   const { t } = useI18n();
   const branch = node.children.length > 0, open = expanded.has(node.id);
-  const press = event => (node.part ? choose(node.part, event) : toggle(node));
+  // A part picks; a branch opens; a leaf that draws nothing (the one row, the file's, of a scene with none) does neither.
+  const press = event => (node.part ? choose(node.part, event) : branch ? toggle(node) : null);
   return <li className="min-w-0">
     <TreeRowSurface ref={element => { if (element) rowRefs.current.set(node.id, element); else rowRefs.current.delete(node.id); }}
       dense depth={depth} active={Boolean(node.part && highlighted.has(node.part))} className="group/row"
       onMouseEnter={() => hover(node.part || "")} onMouseLeave={() => hover("")} data-scene-node={node.id}>
       {branch ? <TreeRowToggle open={open} label={t(open ? "tree.collapse" : "tree.expand", { name: node.label })} onToggle={() => toggle(node)} />
         : node.part ? glyph(Box) : <TreeRowGlyph />}
-      <button type="button" aria-label={node.part ? t("tree.select", { name: node.label }) : t(open ? "tree.collapse" : "tree.expand", { name: node.label })}
+      <button type="button" aria-label={node.part ? t("tree.select", { name: node.label }) : branch ? t(open ? "tree.collapse" : "tree.expand", { name: node.label }) : node.label}
         aria-pressed={node.part ? highlighted.has(node.part) : undefined} onClick={press} className={TREE_ROW_NAME_CLASS}>
         <TreeRowLabel>{node.label}</TreeRowLabel>
       </button>

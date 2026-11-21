@@ -416,7 +416,7 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
     ['display', 'projection', 'background', 'grid'], 'the menu\'s rows: Display, Projection, Background, Grid');
   await display.locator('[data-view-sub="display"]').click();
   assert.deepEqual(await page.locator('[data-view-sub-content="display"] [data-display-mode-option]').allInnerTexts(), ['Solid'], 'an STL of one mesh: Solid alone');
-  assert.equal(await first.locator('[data-viewer-navbar] [data-navbar-panel]').count(), 0, 'an STL has nothing to list: no panel, so no toggle');
+  assert.equal(await first.locator('[data-viewer-navbar] [data-navbar-panel]').count(), 1, 'an STL has its panel (its Model tab, its one body), so its toggle');
   const grid = display.locator('[data-view-toggle="grid"]');
   await grid.click();
   assert.equal(await grid.getAttribute('aria-checked'), 'true');
