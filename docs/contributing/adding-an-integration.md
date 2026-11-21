@@ -132,9 +132,11 @@ write code for that tool: OCP is a dependency of `build123d`, not an integration
       version checked; run headless with a private home and no display; one missing-tool result
       saying the install hint. Only the program itself is ever run, never a desktop app or a wrapper
       that starts one; test each rule. A variable that names another copy (`CAD_KICAD_CLI`, `CAD_CCX`) is
-      the last resort where the pinned copy does not run on a person's computer: add one only for a
-      program the extra carries (the registry's probe, `override`), and name it in the refusal for a
-      missing program.
+      the last resort where the pinned copy does not run on a person's computer (law 30): add one only
+      for a program the extra carries, declare it, and name it in the refusal for a missing program.
+      Declare it a setting (`setting=True` and a `kind` in `cad._internal.environment`) and read it with
+      `environment.value`: that one declaration gives it the saved setting, `cad config`, its row in the
+      server's README and the tests' coverage; the refusal then names `cad config set <key> PATH` first.
 - [ ] **The tool's own commands**, when its extra puts a command line in an environment (kicode's
       `kicad-cli`): name each in the registry entry's `commands`, and give the integration a `_command`
       module (`cad/<name>/_command.py`, `main(argv)`, argv the command's name and its arguments) that

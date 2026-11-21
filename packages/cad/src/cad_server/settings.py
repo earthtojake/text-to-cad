@@ -12,7 +12,9 @@ The file is one JSON object with a section per feature, each owned by the module
 whether the
 server runs the install command once where cad is newer than the release it is up to date for,
 ``{"auto_update": true|false}``, off where it is absent, the same module and ``plugin_catch_up.py``, which keeps that
-release in a record of its own). A change reads,
+release in a record of its own; ``config``: the settings an environment variable overrides, ``{key: "value as
+typed"}``, written by ``cad config`` (``cli/config.py``) and read, by the library alone, through
+``cad._internal.environment.value``, which takes a file it cannot read for one with no section). A change reads,
 changes and writes its own section under the state folder's one lock (``update_section``,
 ``file_lock.state``), so two apps changing settings at once never undo each other, whichever
 sections they touch.

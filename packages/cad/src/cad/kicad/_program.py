@@ -132,8 +132,9 @@ def packaged() -> Path | None:
 
 
 def carried() -> bool:
-    """Whether this process runs KiCad itself: ``CAD_KICAD_CLI`` names one, or it holds kicode."""
-    return bool(os.environ.get(_PROBE.override, "").strip()) or packaged() is not None
+    """Whether this process runs KiCad itself: ``CAD_KICAD_CLI`` (or its saved setting) names one, or it holds
+    kicode."""
+    return bool(programs._named_outright(_PROBE.override)) or packaged() is not None
 
 
 def _is_packaged(cli: Path) -> bool:
@@ -149,8 +150,9 @@ KICAD = programs.Program.from_probe(_PROBE, names=CLI_NAMES, installed=lambda: [
                                      homes=_HOMES, title="KiCad 9", search_path=False)
 #: What an edit needs beyond a check's or an export's kicad-cli: its headless api-server.
 API_SERVER_HINT = ("kicad_pcb.edit and kicad_sch.edit run kicad-cli's headless api-server, which kicode's kicad-cli (cad[kicad]) "
-                   "and a KiCad nightly's (10.99) have; a check or an export needs only KiCad 9 or newer. Unset "
-                   "CAD_KICAD_CLI to run kicode's, or set it to a nightly's kicad-cli")
+                   "and a KiCad nightly's (10.99) have; a check or an export needs only KiCad 9 or newer. `cad config "
+                   "unset kicad_cli`, with CAD_KICAD_CLI unset, runs kicode's; `cad config set kicad_cli PATH` "
+                   "names a nightly's kicad-cli")
 KICAD_MINIMUM = KICAD.minimum
 
 

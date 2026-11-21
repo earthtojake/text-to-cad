@@ -285,8 +285,8 @@ of one operation, and the result is printed as it would be here (`FeaResult.from
 
 **The KiCad board's DRC, the schematic's ERC and their exports.** `cad kicad_pcb drc` and `cad kicad_pcb export` are the library's
 `cad.kicad_pcb.drc` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same
-way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: `CAD_KICAD_CLI`
-names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
+way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`:
+`CAD_KICAD_CLI` or its saved setting names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
 installation's release, made once by the engine (about 100 MB to download from PyPI, mostly kicode, and 340 MB on disk, the first time). kicad-cli
 is found by the library's helper (`cad._internal.programs`: the override, then `kicode.executable()`; never
 `PATH` or KiCad's installation folders) and run headless in a private folder, with `kicode.environment(root)`

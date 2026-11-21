@@ -1084,7 +1084,7 @@ def _taken(model: Any, context: Any, shown: str, cache: str | None, remembered: 
     targets = model.targets()
     xbf = next((Path(path) for kind, path in targets if kind == "xbf"), None)
     name = f"{model.script}::{model.name}"
-    if not memo.enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
+    if not memo.enabled() or not memo.bodies_enabled():
         return {"used": False, "reason": "retention is off"}, None
     folder = xbf.parent if xbf is not None else model.script.parent  # what the closure's paths are relative to
     clock = time.perf_counter()

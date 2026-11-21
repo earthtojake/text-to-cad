@@ -321,11 +321,13 @@ def _cgroup_limit() -> int | None:
 
 
 def memory_budget() -> int:
-    """The daemon's memory budget, in bytes: ``CAD_ENGINE_MEMORY_MB``, else a quarter of the
-    machine's physical memory (of its cgroup's limit, when that is less), else 4 GiB where neither
-    can be read."""
+    """The daemon's memory budget, in bytes: ``CAD_ENGINE_MEMORY_MB`` (else its saved setting, ``cad config``),
+    else a quarter of the machine's physical memory (of its cgroup's limit, when that is less), else 4 GiB where
+    neither can be read."""
+    from cad.engine.places import setting
+
     try:
-        given = float(os.environ.get("CAD_ENGINE_MEMORY_MB", "").strip() or 0)
+        given = float(setting("CAD_ENGINE_MEMORY_MB")[0].strip() or 0)
     except ValueError:
         given = 0.0
     if given > 0:
