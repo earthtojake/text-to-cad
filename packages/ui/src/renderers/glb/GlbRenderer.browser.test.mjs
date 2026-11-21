@@ -12,13 +12,30 @@ import { PNG } from 'pngjs';
 
 // Fixtures, served from memory: cadgen's exports of two boxes with authored colours (core's
 // `lib/render/fixtures`), static and with the clip that slides one of them from its rest pose,
-// and bytes that are not a GLB at all.
+// a GLB with no node, made here, and bytes that are not a GLB at all.
 const CORE_FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@cad/core/lib/render/glbMeshData.js')), 'fixtures');
+// A GLB of its JSON chunk alone (12 bytes of header, then the chunk, padded to four bytes with spaces).
+function glbOf(json) {
+  const text = Buffer.from(JSON.stringify(json));
+  const chunk = Buffer.concat([text, Buffer.alloc((4 - text.length % 4) % 4, 0x20)]);
+  const head = Buffer.alloc(20);
+  head.writeUInt32LE(0x46546c67, 0); head.writeUInt32LE(2, 4); head.writeUInt32LE(20 + chunk.length, 8);
+  head.writeUInt32LE(chunk.length, 12); head.writeUInt32LE(0x4e4f534a, 16);
+  return Buffer.concat([head, chunk]);
+}
 const FILES = {
   'static.glb': readFileSync(join(CORE_FIXTURES, 'pair.glb')),
   'animated.glb': readFileSync(join(CORE_FIXTURES, 'pair.slide.glb')),
+  'bare.glb': glbOf({ asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [] }] }),
   'broken.glb': Buffer.from('glTF is not what this is'),
 };
+// A file's bytes held back until the test lets them go: the view as it is before the file arrives.
+const holds = new Map();
+function hold(name) {
+  let release;
+  holds.set(name, new Promise(resolve => { release = resolve; }));
+  return () => { holds.delete(name); release(); };
+}
 
 // The harness renders its panes at a fixed CSS size; the spec draws them smaller, so a software
 // GL (CI's SwiftShader) has fewer pixels to fill and a capture fewer to read.
@@ -42,8 +59,14 @@ before(async () => {
         { kind: 'glb', file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: data.length }))).map(entry => ({ entry, revision: entry.hash })) }));
     } else if (url.pathname.endsWith('/api/v1/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
-    } else if (FILES[name]) { response.setHeader('Content-Type', 'model/gltf-binary'); response.end(FILES[name]); }
-    else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
+    } else if (FILES[name]) {
+      response.setHeader('Content-Type', 'model/gltf-binary');
+      Promise.resolve(holds.get(name)).then(() => response.end(FILES[name]));
+    } else {
+      const width = Number(url.searchParams.get('width')) || 800;
+      response.setHeader('Content-Type', 'text/html');
+      response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE.replace('800px', `${width}px`)}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`);
+    }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
@@ -54,9 +77,9 @@ after(async () => {
   if (server) await new Promise(resolve => server.close(resolve));
 });
 
-// `record` opens the page as a previous session left its tab (`window.__cadTabRecord`).
-async function open(t, file, { record = null } = {}) {
-  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+// `record` opens the page as a previous session left its tab (`window.__cadTabRecord`); `width`, the view's.
+async function open(t, file, { record = null, width = 800 } = {}) {
+  const page = await browser.newPage({ viewport: { width, height: 500 }, deviceScaleFactor: 1 });
   t.after(() => page.close());
   page.setDefaultTimeout(15000);
   const errors = [];
@@ -68,7 +91,7 @@ async function open(t, file, { record = null } = {}) {
     }
   });
   if (record) await page.addInitScript(stored => { window.__cadTabRecord = stored; }, record);
-  await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}`);
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}&width=${width}`);
   return { page, errors, pane: page.getByTestId('one') };
 }
 
@@ -134,12 +157,19 @@ const playbar = pane => pane.getByRole('toolbar', { name: 'Animation playback', 
 const displayButton = pane => pane.locator('[data-navbar-view-controls] [data-display-mode]');
 // Display's menu opened, its rows read (the modes by id; whether Grid is there; the Background's choices), and shut again.
 async function displayMenu(pane) {
+  const page = pane.page();
   await displayButton(pane).click();
-  const menu = pane.page().locator('[role=menu][aria-label="View"]');
-  await menu.locator('[data-display-mode-option]').first().waitFor();
-  const read = selector => menu.locator(selector).evaluateAll(items => items.map(item => item.getAttribute('data-display-mode-option') ?? item.getAttribute('data-display-background') ?? 'grid'));
-  const rows = { modes: await read('[data-display-mode-option]'), grid: (await read('[data-display-grid]')).length === 1, backgrounds: await read('[data-display-background]') };
-  await pane.page().keyboard.press('Escape');
+  const menu = page.locator('[role=menu][aria-label="View"]');
+  // A choice is a submenu (Display ▸, Background ▸), opened from its row; Grid a check row of the menu itself.
+  const choices = async (id, attribute) => {
+    await menu.locator(`[data-view-sub="${id}"]`).click();
+    const options = page.locator(`[data-view-sub-content="${id}"] [${attribute}]`);
+    await options.first().waitFor();
+    return options.evaluateAll((items, name) => items.map(item => item.getAttribute(name)), attribute);
+  };
+  const rows = { modes: await choices('display', 'data-display-mode-option'), grid: await menu.locator('[data-view-toggle="grid"]').count() === 1,
+    backgrounds: await choices('background', 'data-display-background') };
+  await page.keyboard.press('Escape');
   await menu.waitFor({ state: 'detached' });
   return rows;
 }
@@ -249,7 +279,7 @@ test('a static GLB opens on its native scene in Select: its tools, its display m
   assert.equal(await pane.locator('[data-cad-tool-stack] [data-tool-panel]').count(), 0, 'nothing in the tool stack');
   // Display: its modes (a GLB has no edges to draw: no mode made of them; its two parts, Parts to colour), then Grid and
   // the Background, every 3D view's, and no settings a mode would bring.
-  assert.deepEqual(await displayMenu(pane), { modes: ['solid', 'parts'], grid: true, backgrounds: ['light', 'dark', 'theme'] });
+  assert.deepEqual(await displayMenu(pane), { modes: ['solid', 'parts'], grid: true, backgrounds: ['light', 'dark'] });
   // The panel put away leaves the scene the whole width; let that frame land before comparing pictures.
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 790);
   await settle(page);
@@ -472,6 +502,25 @@ test('a GLB\'s tools: Select picks a node into Quick Edit, Measure reads metres 
   await pane.getByRole('button', { name: 'Select', exact: true }).click();
   assert.equal(await pane.getByRole('button', { name: 'Clip', exact: true }).getAttribute('data-changed'), '');
   assert.equal(await page.evaluate(() => window.__cadStage().cut), 1);
+  assert.deepEqual(errors, []);
+});
+
+test('a GLB has its Model tab from the first frame, open as it stays once the file is in; one with no node lists the file', async (t) => {
+  // Wide enough that the panel starts open beside the model (it keeps 640px).
+  const release = hold('bare.glb');
+  const { page, pane, errors } = await open(t, 'bare.glb', { width: 1000 });
+  const panel = pane.locator('aside[data-flat-panel]');
+  await panel.locator('[data-flat-panel-heading]').filter({ hasText: 'Model' }).waitFor();
+  const toggle = pane.locator('[data-viewer-navbar] [data-navbar-panel]');
+  const first = await toggle.getAttribute('aria-expanded');
+  assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await panel.locator('[data-scene-node]').count()], ['true', true, 0],
+    'open, the file still loading, its list empty');
+  release();
+  await ready(pane);
+  const row = panel.locator('[data-scene-node="file"]');
+  await row.waitFor();
+  assert.deepEqual([await row.innerText(), await row.locator('button[aria-pressed]').count()], ['bare.glb', 0], 'the file\'s one row, which picks nothing');
+  assert.equal(await toggle.getAttribute('aria-expanded'), first, 'the panel as it was at the first frame');
   assert.deepEqual(errors, []);
 });
 

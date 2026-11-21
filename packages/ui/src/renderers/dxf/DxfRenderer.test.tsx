@@ -426,6 +426,24 @@ it('an unreadable drawing shows the server\'s own sentence, and an empty one say
   empty.dispose();
 });
 
+// Every file has its panel from the first frame: a drawing's Layers while it is read, its rows once it is in, the
+// panel open then as it is once the drawing is on screen.
+it('a drawing has its Layers from the first frame, open as it stays once the drawing is in', async () => {
+  let release = noop;
+  readDrawing = () => new Promise(resolve => { release = () => resolve(json(LAYERED)); });
+  const { pane, dispose } = await openDrawing('composer', null, undefined, { drawn: false });
+  const aside = await waitFor(() => { const element = pane.querySelector<HTMLElement>('aside[data-flat-panel]'); expect(element).not.toBeNull(); return element!; });
+  const toggle = () => pane.querySelector('[data-viewer-navbar] [data-navbar-panel]')!.getAttribute('aria-expanded');
+  const rows = () => [...aside.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row'));
+  const first = toggle();
+  expect([first, aside.querySelector('[data-flat-panel-heading]')!.textContent, pane.querySelector('[aria-busy="true"]') !== null, rows()])
+    .toEqual(['true', 'Layers', true, []]);
+  await act(async () => { release(); });
+  await waitFor(() => expect(rows()).toEqual(['CUT', 'BEND', 'ENGRAVE', 'HARDWARE', 'CENTRE', '0']));
+  expect(toggle()).toBe(first);
+  dispose();
+});
+
 it('a rewritten drawing stays on screen while its next revision is read, and after one that will not read', async () => {
   const { pane, canvas, refresh, dispose } = await openDrawing();
   let release = noop;

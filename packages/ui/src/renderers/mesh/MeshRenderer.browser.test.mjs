@@ -9,9 +9,10 @@ import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
 import { strToU8, zipSync } from 'three/examples/jsm/libs/fflate.module.js';
 
-// Inline fixtures, served from memory: an ASCII STL box, a 3MF package with two
-// boxes of two base-material colours, a 3MF whose objects carry no colour, a well
-// formed STL with no triangles, and bytes that are no STL at all.
+// Inline fixtures, served from memory: an ASCII STL box (its solid named), a binary STL of one box and one of two
+// bodies (a box, then a smaller tetrahedron before it in the file), a 3MF package with two boxes of two base-material
+// colours, a 3MF whose objects carry no colour, a 3MF of one object, a well formed STL with no triangles, and bytes
+// that are no STL at all.
 const CORNERS = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]];
 const TRIANGLES = [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [2, 3, 7], [2, 7, 6], [1, 2, 6], [1, 6, 5], [3, 0, 4], [3, 4, 7]];
 const boxCorners = ([x, y, z], size) => CORNERS.map(corner => [x + corner[0] * size, y + corner[1] * size, z + corner[2] * size]);
@@ -20,6 +21,16 @@ function stlBox(origin, size) {
   const facets = TRIANGLES.map(triangle => `facet normal 0 0 0\nouter loop\n${triangle.map(index => `vertex ${corners[index].join(' ')}`).join('\n')}\nendloop\nendfacet`);
   return `solid box\n${facets.join('\n')}\nendsolid box\n`;
 }
+// A binary STL of these triangles (each three corners), its facets' normals left at zero.
+function binaryStl(triangles) {
+  const bytes = Buffer.alloc(84 + triangles.length * 50);
+  bytes.writeUInt32LE(triangles.length, 80);
+  triangles.forEach((triangle, index) => triangle.flat().forEach((value, at) => bytes.writeFloatLE(value, 84 + index * 50 + 12 + at * 4)));
+  return bytes;
+}
+const boxFacets = (origin, size) => { const corners = boxCorners(origin, size); return TRIANGLES.map(triangle => triangle.map(index => corners[index])); };
+const tetraFacets = ([x, y, z], size) => [[[0, 0, 0], [0, 1, 0], [1, 0, 0]], [[0, 0, 0], [1, 0, 0], [0, 0, 1]], [[1, 0, 0], [0, 1, 0], [0, 0, 1]], [[0, 0, 0], [0, 0, 1], [0, 1, 0]]]
+  .map(triangle => triangle.map(([a, b, c]) => [x + a * size, y + b * size, z + c * size]));
 function threeMf(objects) {
   const colored = objects.some(object => object.color);
   const model = `<?xml version="1.0" encoding="UTF-8"?>
@@ -43,10 +54,21 @@ const FILES = {
   'part.stl': Buffer.from(stlBox([0, 0, 0], 20)),
   'pair.3mf': threeMf([{ name: 'base', origin: [0, 0, 0], size: 20, color: '#D02020' }, { name: 'rider', origin: [30, 0, 0], size: 10, color: '#2040D0' }]),
   'plain.3mf': threeMf([{ name: 'base', origin: [0, 0, 0], size: 20 }, { name: 'rider', origin: [30, 0, 0], size: 10 }]),
+  'single.3mf': threeMf([{ name: 'bracket', origin: [0, 0, 0], size: 20 }]),
+  'cube.stl': binaryStl(boxFacets([0, 0, 0], 20)),
+  'bodies.stl': binaryStl([...tetraFacets([30, 0, 0], 10), ...boxFacets([0, 0, 0], 20)]),
   // A binary STL that is well formed and holds no triangles: an 80 byte header and a zero count.
   'empty.stl': Buffer.alloc(84),
   'broken.stl': Buffer.from('solid this is prose and not a mesh\nfacet normal but never a vertex\n'),
 };
+
+// A file's bytes held back until the test lets them go: the view as it is before the file arrives.
+const holds = new Map();
+function hold(name) {
+  let release;
+  holds.set(name, new Promise(resolve => { release = resolve; }));
+  return () => { holds.delete(name); release(); };
+}
 
 // The harness renders its panes at a fixed CSS size; the spec draws them smaller, so a software
 // GL (CI's SwiftShader) has fewer pixels to fill and a capture fewer to read.
@@ -72,8 +94,14 @@ before(async () => {
         { kind: file.split('.').pop(), file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: data.length }))).map(entry => ({ entry, revision: entry.hash })) }));
     } else if (url.pathname.endsWith('/api/v1/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
-    } else if (FILES[name]) { response.setHeader('Content-Type', 'application/octet-stream'); response.end(FILES[name]); }
-    else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
+    } else if (FILES[name]) {
+      response.setHeader('Content-Type', 'application/octet-stream');
+      Promise.resolve(holds.get(name)).then(() => response.end(FILES[name]));
+    } else {
+      const width = Number(url.searchParams.get('width')) || 800;
+      response.setHeader('Content-Type', 'text/html');
+      response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE.replace('800px', `${width}px`)}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`);
+    }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
@@ -84,8 +112,9 @@ after(async () => {
   if (server) await new Promise(resolve => server.close(resolve));
 });
 
-async function open(t, file) {
-  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+// `width`: the view's.
+async function open(t, file, { width = 800 } = {}) {
+  const page = await browser.newPage({ viewport: { width, height: 500 }, deviceScaleFactor: 1 });
   t.after(() => page.close());
   page.setDefaultTimeout(15000);
   const errors = [];
@@ -96,7 +125,7 @@ async function open(t, file) {
       Object.defineProperty(window, name, { get() { throw new Error(`Renderer accessed ${name}`); } });
     }
   });
-  await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}`);
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}&width=${width}`);
   return { page, errors, pane: page.getByTestId('one') };
 }
 
@@ -110,7 +139,7 @@ async function exported(page, file) {
   assert.deepEqual([shown.doc, shown.file, shown.name], [`/models/${file}`, `/models/${file}`, file]);
   assert.ok(shown.revision.endsWith(`-${file}`), `the catalog hash of the bytes shown: ${shown.revision}`);
 }
-// A mesh file's strip: an STL's Select (in hand, picking nothing), Draw and Clip; a 3MF's Select (in hand),
+// A mesh file's strip: an STL's Select (in hand, picking its bodies), Draw and Clip; a 3MF's Select (in hand),
 // Draw, Measure and Clip. Clip is a tool as Draw is, pressed while in hand. Preview ends the strip; Display and
 // Projection are the corner's stack over the cube.
 const STL_TOOLS = ['Select:true', 'Draw:false', 'Clip:false'];
@@ -150,12 +179,19 @@ function projector(camera, box) {
 const displayButton = pane => pane.locator('[data-navbar-view-controls] [data-display-mode]');
 // Display's menu opened, its rows read (the modes by id; whether Grid is there; the Background's choices), and shut again.
 async function displayMenu(pane) {
+  const page = pane.page();
   await displayButton(pane).click();
-  const menu = pane.page().locator('[role=menu][aria-label="View"]');
-  await menu.locator('[data-display-mode-option]').first().waitFor();
-  const read = selector => menu.locator(selector).evaluateAll(items => items.map(item => item.getAttribute('data-display-mode-option') ?? item.getAttribute('data-display-background') ?? 'grid'));
-  const rows = { modes: await read('[data-display-mode-option]'), grid: (await read('[data-display-grid]')).length === 1, backgrounds: await read('[data-display-background]') };
-  await pane.page().keyboard.press('Escape');
+  const menu = page.locator('[role=menu][aria-label="View"]');
+  // A choice is a submenu (Display ▸, Background ▸), opened from its row; Grid a check row of the menu itself.
+  const choices = async (id, attribute) => {
+    await menu.locator(`[data-view-sub="${id}"]`).click();
+    const options = page.locator(`[data-view-sub-content="${id}"] [${attribute}]`);
+    await options.first().waitFor();
+    return options.evaluateAll((items, name) => items.map(item => item.getAttribute(name)), attribute);
+  };
+  const rows = { modes: await choices('display', 'data-display-mode-option'), grid: await menu.locator('[data-view-toggle="grid"]').count() === 1,
+    backgrounds: await choices('background', 'data-display-background') };
+  await page.keyboard.press('Escape');
   await menu.waitFor({ state: 'detached' });
   return rows;
 }
@@ -216,24 +252,22 @@ const isNeutral = color => Math.max(...color) - Math.min(...color) < 60;
 const isRed = ([r, g, b]) => r > 150 && g < 90 && b < 90;
 const isBlue = ([r, g, b]) => b > 150 && r < 90 && g < 130;
 
-test('an STL opens as one mesh in Select, which picks nothing: display settings, orbit, host commands and state all work', async (t) => {
+test('an STL opens in Select, its one body the file: display settings, orbit, host commands and state all work', async (t) => {
   const requested = requests.length;
   const { page, pane, errors } = await open(t, 'part.stl');
   await ready(pane);
   assert.deepEqual(errors, []);
   await exported(page, 'part.stl');
 
-  // An STL is one mesh in no unit: Select navigates and picks nothing, nothing to measure; it is drawn on and cut.
+  // An STL is in no unit: Select picks its bodies, nothing to measure; it is drawn on and cut.
   await meshTools(pane, STL_TOOLS);
   assert.equal(await pane.locator('[data-quick-edit-box]').count(), 0, 'Quick Edit opens on a mark, never by itself');
   assert.equal(await pane.locator('[data-navbar-view-controls]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
     'an STL is 3D: Preview is the navbar\'s, after Display');
 
-  // A mesh has no panel of its own: its only settings are Display's, the corner's menu, never over the model.
-  assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing in the tool stack');
   // One mesh: Solid alone (Shaded would be Solid again, and Parts has one part to colour), then the Grid switch and
   // the Background, in every view, and no settings a mode would bring.
-  assert.deepEqual(await displayMenu(pane), { modes: ['solid'], grid: true, backgrounds: ['light', 'dark', 'theme'] });
+  assert.deepEqual(await displayMenu(pane), { modes: ['solid'], grid: true, backgrounds: ['light', 'dark'] });
   assert.equal(await pane.locator('[data-cad-tool-stack] [data-tool-panel]').count(), 0, 'nothing joins the tool stack');
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 790);
   await settle(page);
@@ -276,8 +310,8 @@ test('an STL opens as one mesh in Select, which picks nothing: display settings,
     requestAnimationFrame(step);
   }));
 
-  // A secondary tap on the canvas opens the view's menu, an STL's the framing alone (it picks
-  // nothing), and the browser's own stays off the canvas.
+  // A secondary tap on the model opens the view's menu, its body's reference and Select, then the framing, and the
+  // browser's own stays off the canvas.
   await page.evaluate(() => {
     window.nativeMenu = [];
     document.addEventListener('contextmenu', event => window.nativeMenu.push(event.defaultPrevented));
@@ -286,7 +320,7 @@ test('an STL opens as one mesh in Select, which picks nothing: display settings,
   // The press has reached the page, and a menu it opened would be up two frames on.
   await page.waitForFunction(() => window.nativeMenu.length > 0);
   await settle(page);
-  assert.deepEqual(await page.getByRole('menuitem').allTextContents(), ['Zoom to fit', 'Zoom to selection']);
+  assert.deepEqual(await page.getByRole('menuitem').allTextContents(), ['Copy Reference', 'Select', 'Zoom to fit', 'Zoom to selection']);
   assert.deepEqual(await page.evaluate(() => window.nativeMenu), [true], 'the native menu is still prevented');
   await page.keyboard.press('Escape');
   await page.getByRole('menu').waitFor({ state: 'detached' });
@@ -301,8 +335,8 @@ test('an STL opens as one mesh in Select, which picks nothing: display settings,
   const state = await page.evaluate(() => window.cadHarness.a.controller.readState());
   assert.deepEqual([state.resource.path, state.revision, state.loading, state.selection], ['/models/part.stl', 'one-part.stl', false, []]);
   const declined = await page.evaluate(() => window.cadHarness.a.controller.select({ selectors: ['f:part.make_box1.1'] }).then(() => '', error => error.message));
-  assert.match(declined, /A mesh file has no references a command can select/);
-  assert.equal(await page.evaluate(() => window.cadHarness.a.controller.clearSelection().then(() => '', error => error.message)), '', 'a selection clears, an STL\'s empty one too');
+  assert.match(declined, /A mesh file's objects and bodies are picked by a person in the viewport under Select/);
+  assert.equal(await page.evaluate(() => window.cadHarness.a.controller.clearSelection().then(() => '', error => error.message)), '', 'a selection clears, an empty one too');
   // A host's request to select a reference is consumed without a notification.
   await page.evaluate(() => window.cadHarness.selectReference('f:part.make_box1.1'));
   await page.waitForFunction(() => !window.cadHarness.a.commands.getSnapshot().selectReference);
@@ -410,6 +444,46 @@ test('a 3MF\'s tools: Select picks an object by its place in the build, Measure 
   await display(stl.page, { clip: { enabled: true, axis: 'z' } });
   await stl.page.waitForFunction(() => window.__cadStage().cut === 1);
   assert.deepEqual([...errors, ...stl.errors], []);
+});
+
+// The view's panel: its Model tab, its rows (`[data-scene-node]`), and the navbar's toggle, which says whether it is open.
+const modelRows = pane => pane.locator('aside[data-flat-panel] [data-scene-node]');
+const panelOpen = pane => pane.locator('[data-viewer-navbar] [data-navbar-panel]').getAttribute('aria-expanded');
+
+test('every mesh file has its Model tab from the first frame, open as it stays once the file is in, a row for its one object or body', async (t) => {
+  // Wide enough that the panel starts open beside the model (it keeps 640px).
+  for (const [file, rows] of [['cube.stl', ['cube.stl']], ['part.stl', ['box']], ['single.3mf', ['bracket']]]) {
+    const release = hold(file);
+    const { pane, errors } = await open(t, file, { width: 1000 });
+    await pane.locator('aside[data-flat-panel] [data-flat-panel-heading]').filter({ hasText: 'Model' }).waitFor();
+    const first = await panelOpen(pane);
+    assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await modelRows(pane).count()], ['true', true, 0],
+      `${file}: open, the file still loading, its list empty`);
+    release();
+    await ready(pane);
+    await modelRows(pane).first().waitFor();
+    assert.deepEqual(await modelRows(pane).allInnerTexts(), rows, `${file}: one row, named for the file, its solid or its object`);
+    assert.equal(await panelOpen(pane), first, `${file}: the panel as it was at the first frame`);
+    assert.deepEqual(errors, []);
+  }
+});
+
+test('an STL of several bodies lists them largest first once split, and Select picks the body under the pointer', async (t) => {
+  const { page, pane, errors } = await open(t, 'bodies.stl', { width: 1000 });
+  await ready(pane);
+  // The model shows as one body first; its bodies follow, the box (12 triangles) before the tetrahedron (4).
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] aside[data-flat-panel] [data-scene-node]').length === 2);
+  assert.deepEqual(await modelRows(pane).allInnerTexts(), ['Body 1', 'Body 2']);
+  await display(page, GUIDES_OFF);
+  await settle(page);
+  const at = projector(await page.evaluate(() => window.__cadCamera()), await pane.locator('[data-cad-surface] canvas').first().boundingBox());
+  await page.mouse.click(...at([10, 10, 20]));
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedObjects?.join() === 'b1');
+  // The middle of the tetrahedron's slanted face.
+  await page.mouse.click(...at([10 / 3 + 30, 10 / 3, 10 / 3]));
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedObjects?.join() === 'b2');
+  assert.equal(await modelRows(pane).nth(1).locator('button[aria-pressed]').getAttribute('aria-pressed'), 'true', 'its row lit');
+  assert.deepEqual(errors, []);
 });
 
 test('a corrupt mesh raises the viewer\'s load alert and an empty one says there is no geometry', async (t) => {
