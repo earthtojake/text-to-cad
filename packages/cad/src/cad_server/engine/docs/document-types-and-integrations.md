@@ -60,7 +60,7 @@ runners) for `export`, `snapshot` and `inspect`, each with its source said as th
 without `--tolerance` or `--angle`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
 function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
 repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
-choices (`sdf.validate`'s `gz_check`, `dfm`'s `process`, `rules`, `units` and `technology`), so a value outside them is the
+choices (`dfm`'s `process`, `rules`, `units` and `technology`), so a value outside them is the
 parser's usage error, naming the flag; a value the function itself refuses by name raises the library's
 `ArgumentRefused` (`cad._internal.refused`), which the command says as the command line's
 (`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation

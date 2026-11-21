@@ -10,7 +10,7 @@ const viewport = renderModel(THREE, { root: scene.root, bounds: scene.bounds }, 
 const result = await captureModel(viewport, captureOptions);
 ```
 
-Every file family (GLB, STL, 3MF, URDF, SRDF, SDF, and an engine document: an `.xbf`, or a
+Every file family (GLB, STL, 3MF, URDF, SRDF, and an engine document: an `.xbf`, or a
 STEP, which the viewer and a snapshot open as one) is drawn by ITS OWN scene
 builder, the one the viewer's renderer for it calls too: the snapshot page loads the
 file with that family's loader, builds the scene with that family's builder, dresses it
@@ -566,7 +566,7 @@ The engine's own snapshots are drawn by OCCT and never load it.
 
 The snapshot page's half of "one scene builder per file family". `headlessSceneFamily(job)`
 answers, from the job's resolved kind, the family whose loader and builder draw it (GLB;
-STL and 3MF; URDF, SRDF and SDF; an engine document, `xbf`, whose `resolved.url` is its API
+STL and 3MF; URDF and SRDF; an engine document, `xbf`, whose `resolved.url` is its API
 URL on the engine: `loadXbfDocument` + `createXbfScene`), or null for a STEP document. The
 dress carries the view's `edges` too, for a scene that draws CAD edges of its own (an engine
 document's), as the xbf renderer hands them to its scene in the viewer. A family is

@@ -93,7 +93,7 @@ src/
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
     xbf/            an engine document (.xbf) and a STEP: model tree, Position
-    robot/          URDF, SRDF and SDF: Position and Links
+    robot/          URDF and SRDF: Position and Links
     glb/, mesh/     GLB, and STL/3MF triangle meshes
     dxf/            2D drawings
     workspace/      a viewer file's catalog entry and document load
@@ -265,7 +265,7 @@ the drawing tools' colour, stroke width, placement and history; Measure's chips.
 Clip's slider rows open in a popover from their tiles, taking up no tool.
 What there is to read of the file is the view's panel, docked at the left, whatever the tool
 (`kit/shell/FlatPanel.jsx`): one search, then a tab per section — an assembly's Model, a
-robot's Links, Position, an SDF's metadata; a board's Parts, Nets and Layers, a schematic's Parts,
+robot's Links, Position; a board's Parts, Nets and Layers, a schematic's Parts,
 Nets and Hierarchy, a drawing's Layers — and, under the lists, the Selected pane: what is picked and
 what it is connected to, the same component as its Quick Edit chip's card (`kit/inspector/ItemDetail.jsx`,
 from the view's one description of a pick, `kit/inspector/inspect.js`), with the hover tip over the

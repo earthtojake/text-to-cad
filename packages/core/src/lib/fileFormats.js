@@ -15,7 +15,6 @@ export const RENDER_FORMAT = Object.freeze({
   DXF: TYPES.dxf.wire,
   URDF: TYPES.urdf.wire,
   SRDF: TYPES.srdf.wire,
-  SDF: TYPES.sdf.wire,
   // A cadgen engine document (`cad.engine`): served by the engine, drawn by its own renderer.
   XBF: TYPES.xbf.wire,
   KICAD_PCB: TYPES.kicad_pcb.wire,

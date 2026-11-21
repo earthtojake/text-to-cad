@@ -43,7 +43,7 @@ cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF
                                              mesh, is refused, saying what shows it); Q summary (the default
                                              without REF), structure (the summary with nothing measured),
                                              closure, geometry (the default with REF) or build
-cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
+cad urdf|srdf validate FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
 cad mujoco check FILE [--strict] [--json]    a MuJoCo model's file (an MJCF: no document type, an
                                              integration's operation), compiled by MuJoCo: what it

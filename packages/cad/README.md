@@ -58,7 +58,7 @@ These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
   id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`, `step`,
-  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
+  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
   and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
   engine's memory, addressed by its document id or the handle its call returns (`@model` declares one);
@@ -100,7 +100,7 @@ its operations and what writes it.
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad mcp`: a stateless stdio peer of the engine’s
-HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
+HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF and SRDF checks; a MuJoCo model's
 check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
@@ -404,8 +404,8 @@ src/cad/
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
                          #   B-rep type's solve and ranges: model's, xbf's and step's)
-  urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
-                         #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
+  urdf/, srdf/           # the robot descriptions' types: `validate` and the checks behind it
+                         #   (_source.py, _validation.py)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
                          #   engine/formats/kicad, the standard library alone, and its flat
                          #   still engine/render/board.py); drc, export and edit (a with

@@ -114,6 +114,9 @@ VARIABLES: dict[str, Variable] = _table(
     Variable("CAD_ENGINE_WORKER_RSS_MB", PUBLIC, "the memory the server's kernel processes may hold together, in "
                                                  "MiB (default: a quarter of the machine's; 0: no cap)",
              setting=True, kind="number", at_start=True),
+    Variable("CAD_ENGINE_WORKER_CEILING_MB", PUBLIC, "the most memory one busy kernel process may hold before the "
+                                                     "server stops it, in MiB (default: half the machine's; 0: none)",
+             setting=True, kind="number", at_start=True),
     Variable("CAD_ENGINE_MEMORY_MB", PUBLIC, "the memory the server may hold documents in, in MiB (default: a "
                                              "quarter of the machine's)",
              setting=True, kind="number", at_start=True),

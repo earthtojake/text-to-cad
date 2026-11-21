@@ -247,3 +247,7 @@ def rig():
 - `cad server status` lists each document as `live` (its worker holds it), `held` (the
   server answers it without one, and a ref's `made_by` is null), `unsaved` (lost: run
   its script) or `detached` (its script is gone).
+- **A build that runs away on memory is stopped.** A worker past
+  `CAD_ENGINE_WORKER_CEILING_MB` (default: half the machine's memory) at two of the server's
+  checks, half a minute apart, is stopped, and the build's error says so. The server reads
+  the setting when it starts.

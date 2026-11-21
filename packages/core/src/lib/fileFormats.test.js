@@ -21,7 +21,6 @@ test("entrySourceFormat maps manifest kinds to stable render formats", () => {
   assert.equal(entrySourceFormat({ kind: "gltf" }), RENDER_FORMAT.GLB);
   assert.equal(entrySourceFormat({ kind: "urdf" }), RENDER_FORMAT.URDF);
   assert.equal(entrySourceFormat({ kind: "srdf" }), RENDER_FORMAT.SRDF);
-  assert.equal(entrySourceFormat({ kind: "sdf" }), RENDER_FORMAT.SDF);
   assert.equal(entrySourceFormat({ kind: "kicad_pcb" }), RENDER_FORMAT.KICAD_PCB);
 });
 

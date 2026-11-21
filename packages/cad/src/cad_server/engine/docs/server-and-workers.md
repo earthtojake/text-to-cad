@@ -14,8 +14,9 @@ cache); and with the machine. **No timer retires a worker either**: memory alone
 documents are saved to the cache, past the memory budget what no page watches leaves memory for it
 (**Document lifetime**), and past the workers' memory cap, or under the system's memory pressure,
 idle workers go (below). It holds a pool of warm workers, one per model script and Python (and one for
-the documents no worker built), each a process whose memo lives as long as it does, and one standby. Its rules are a standard pool's, and nothing else: no admission guess, no refusal;
-the operating system does the rest. (What the daemon itself holds, the documents and their
+the documents no worker built), each a process whose memo lives as long as it does, and one standby.
+Its rules are a standard pool's and one ceiling on a busy process (below): no admission guess, no
+refusal; the operating system does the rest. (What the daemon itself holds, the documents and their
 tessellations, is under one memory budget: **Document lifetime**.)
 
 - **A cap.** At most `CAD_ENGINE_WORKERS` workers are alive (default: the machine's
@@ -61,6 +62,18 @@ tessellations, is under one memory budget: **Document lifetime**.)
   measured; a test's seam, `Pressure.from_environment`). A busy process is never retired, and an idle worker under the cap lives as long as the
   engine. A worker alone over the cap after a build is retired at once: the report says so
   (`retired`), and once it has answered the daemon drains it and closes its stdin.
+- **A busy process has a ceiling.** Retiring never takes a busy process, and a build in native code
+  (an OCCT boolean that runs away, say) cannot stop itself, so a process past
+  `CAD_ENGINE_WORKER_CEILING_MB` (default: half the machine's memory, at least 4 GiB; `0` for none;
+  read when the engine starts) at two `Daemon.tend` rounds running, during one request, is killed
+  (`Supervisor.overrun`). Two readings, so a peak that comes back down is never taken for a runaway: a
+  runaway runs up to two rounds, a minute by default, past the ceiling. A reading under it, or another
+  request, starts the count again, and a process whose request ended while it was measured is never
+  killed: an idle worker is drained before it stops. Its memory is read from outside, as the system
+  counts it (`worker.footprint_mb`: compressed and swapped pages too), since a busy worker says its own
+  only when it answers; a platform that will not say has no ceiling. Its build fails as a build out of
+  memory (`MemoryError`, `daemon._overran`): the error says the engine stopped it, at what size and
+  past which setting; it is no crash of the engine's, and its page does not offer to report it.
 - **Collected when idle.** A worker builds with Python's cyclic collector off and collects once
   no request has come for half a second, so a script's calls one after another never wait on
   it. A worker over its memory cap collects before it measures again.

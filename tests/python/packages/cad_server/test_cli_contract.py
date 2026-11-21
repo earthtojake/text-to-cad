@@ -140,7 +140,7 @@ class TheParser(unittest.TestCase):
                 if "_runtime" not in path.relative_to(PACKAGE).parts  # the bundled plugin: skills, not the server
                 and re.search(r"\bArgumentParser\(", path.read_text(encoding="utf-8"))]
         self.assertEqual(made, [])
-        for name in ("status", "delete", "xbf export", "sdf validate", "kicad_pcb inspect", "setup", "telemetry"):
+        for name in ("status", "delete", "xbf export", "mujoco check", "kicad_pcb inspect", "setup", "telemetry"):
             with self.subTest(command=name):
                 found = cli.build_parser_for(name)
                 self.assertIsInstance(found, Parser)

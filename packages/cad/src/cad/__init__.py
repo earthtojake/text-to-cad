@@ -3,7 +3,7 @@ declare.
 
 The root holds ``__version__``, ``CadDeprecationWarning`` and the document types, one object each
 (``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file), ``xbf``,
-``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``sdf``, ``srdf``, ``kicad_pcb`` and
+``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``srdf``, ``kicad_pcb`` and
 ``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step("arm.step")``), its edit where
 its files are changed in place (``with kicad_pcb.edit("board.kicad_pcb") as board:``), its reader where it
 has one (``step.read``) and its
@@ -60,7 +60,7 @@ del _install_font_guard
 # and a process the server did not start -- a model's own, in the CAD kernel environment -- counts nothing.
 
 # The document types (``cad.registry.DOCUMENT_TYPES``), each a subpackage that is a ``DocumentType``.
-_TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
+_TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch")
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
 _INTEGRATIONS = ("build123d", "kicad", "trimesh", "mujoco", "coacd", "netgen", "calculix", "blender", "orcaslicer")
@@ -100,7 +100,7 @@ def __dir__() -> list[str]:
 if _TYPE_CHECKING:
     # Mirrors the lazy __getattr__ above so type checkers and editors see the root without importing
     # OCP. Every name here must have a branch there.
-    from cad import dxf, glb, kicad_pcb, kicad_sch, model, sdf, srdf, step, stl, threemf, urdf, xbf
+    from cad import dxf, glb, kicad_pcb, kicad_sch, model, srdf, step, stl, threemf, urdf, xbf
 
 
 @_cache

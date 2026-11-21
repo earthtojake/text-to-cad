@@ -319,6 +319,7 @@ it is set and not blank, then the saved setting, then the default.
 | `CAD_ENGINE_PORT` | `engine_port` | The server's HTTP port (0: any free one); `cad server start --port` says the same for one start |
 | `CAD_ENGINE_WORKERS` | `engine_workers` | The most model workers alive at once (default: the machine's cores) |
 | `CAD_ENGINE_WORKER_RSS_MB` | `engine_worker_rss_mb` | The memory the server's kernel processes may hold together, in MiB (default: a quarter of the machine's; 0: no cap) |
+| `CAD_ENGINE_WORKER_CEILING_MB` | `engine_worker_ceiling_mb` | The most memory one busy kernel process may hold before the server stops it, in MiB (default: half the machine's; 0: none) |
 | `CAD_ENGINE_MEMORY_MB` | `engine_memory_mb` | The memory the server may hold documents in, in MiB (default: a quarter of the machine's) |
 | `CAD_ENGINE_CHECKS` | `engine_checks` | How many checks are measured at once (default: half the cores, one to four) |
 | `CAD_ENGINE_CHECK_SECONDS` | `engine_check_seconds` | The longest one check may run before it is stopped (default: half an hour; 0: no limit) |

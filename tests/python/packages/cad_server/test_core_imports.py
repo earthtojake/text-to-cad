@@ -46,7 +46,7 @@ MODEL_ENTRY_POINTS = ("cadgen", "cad", "cad.engine", "cad.engine.api", "cad.engi
                       "cad.engine.worker", "cad.engine.client", "cad.engine.serve", "cad.engine.reader",
                       "cad.engine.render.service", "cad.engine.snapshot", "cad.build123d", "cad.registry",
                       "cad.step", "cad.xbf",
-                      "cad.build123d._geometry", "cad.build123d._flatten", "cad.eng_drawing", "cad.urdf", "cad.sdf",
+                      "cad.build123d._geometry", "cad.build123d._flatten", "cad.eng_drawing", "cad.urdf",
                       "cad.srdf")
 
 

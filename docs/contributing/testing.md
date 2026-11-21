@@ -193,6 +193,7 @@ In the table, the packages are `packages/cad`, `packages/aliases` and `scripts/b
 | platform | `packages (Windows I/3)` | as `packages (Linux)` | The same suites on Windows |
 | platform | `routing (macOS)` | the packages; the router's unit files | Those files on the third C library (the router's copper is held to one digest on all three) |
 | integration | `fea` | the packages; its suite | `test-fea.sh`, with netgen and CalculiX installed (the lock's `fea` group) |
+| integration | `fea (Windows smoke)` | as `fea`, on its flag | One solve of the fea suite through the command on Windows, with the cad-ccx wheel for that platform: about 2 minutes a run, most of it installing |
 | integration | `kicad` | the packages; its suite | `test-kicad.sh`, in the environment of `cad[kicad]` |
 | integration | `blender` | the packages; its suite | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |
 | integration | `packaging` | what ships in a wheel (the packages, the UI, `apps/web`, `apps/mcp`); the scripts that build and check it | The bundle from clean, its layout, the wheels' contents and the installed commands |

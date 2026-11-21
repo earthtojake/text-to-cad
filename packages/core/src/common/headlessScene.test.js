@@ -66,10 +66,10 @@ function materialState(object3D) {
 }
 
 test("every file family the parity page draws reaches its viewer builder; a STEP model and a drawing do not", async () => {
-  for (const kind of ["glb", "stl", "3mf", "urdf", "srdf", "sdf"]) assert.ok(headlessSceneFamily(job(kind)), kind);
+  for (const kind of ["glb", "stl", "3mf", "urdf", "srdf"]) assert.ok(headlessSceneFamily(job(kind)), kind);
   for (const kind of ["step", "stp", "dxf", ""]) assert.equal(headlessSceneFamily(job(kind)), null, kind || "(none)");
   assert.equal(headlessSceneFamily(job("stl")), headlessSceneFamily(job("3mf")), "STL and 3MF are one family: the mesh renderer's");
-  assert.equal(headlessSceneFamily(job("urdf")), headlessSceneFamily(job("sdf")), "URDF, SRDF and SDF are one family: the robot renderer's");
+  assert.equal(headlessSceneFamily(job("urdf")), headlessSceneFamily(job("srdf")), "URDF and SRDF are one family: the robot renderer's");
 
   // What each family's build returns IS its builder's scene: the viewer renderer's own object.
   const document = await buildGlbDocumentFromBuffer(glbBytes());

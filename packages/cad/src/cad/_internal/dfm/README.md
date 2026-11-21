@@ -934,18 +934,29 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   with no flat flange: sheet (`parts.rolled`), which this check does not unroll, so its `bends` are not
   measured and the check is `NOT CHECKED`, never an error of the part's. A face touching both faces of a pair
   is a cut edge; a cone between a skin and a coaxial
-  hole wall is a countersink. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
+  hole wall is a countersink, and so is the cone of a hole sunk through the full thickness (to a knife edge at
+  the far skin, or past it): it touches both skins, no wall is left, and its hole is its small end. A cone in
+  several faces (two half faces, as some systems write a hole) is one: its small end is the circle its faces'
+  arcs close together, and a hole a skin split through it holds no wire of, read back from the flat, is
+  countersunk where a countersink's axis runs through it and that countersink's hole is its size. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
   most `t` along it, a cone, torus or sphere about its normal; along an ellipse or a spline, a face with no
   axis to read whose sampled normals all face the skin's side, at a slant to it somewhere; within the sheet)
   is an `edge_break`, and a face square to the skin (a plane across it, a cylinder about its normal, a face
   with no axis square to it at every sample) that reaches it and its opposite skin through breaks is a cut
-  edge: its rays run across the plate and measure its width, never its thickness. A skin's rays that reach
+  edge: its rays run across the plate and measure its width, never its thickness. A cut may be several faces
+  across the thickness, none touching both skins: a plate extruded both ways along an ellipse or a spline
+  (the kernel merges the two halves of a plane or a cylinder, and leaves a surface of extrusion's two faces,
+  split at mid-thickness), layers joined and never merged. From each skin, its countersinks and its breaks,
+  the faces square to it are followed through their tangent joins, and a face reached from a skin and from
+  its opposite is a cut edge; a hole's wall in several faces is one wall, and the countersink beside one of
+  them is the hole's. A skin's rays that reach
   the other skin's break are short by that break, which is its own finding, not the skin's. A bend's end is broken by a cone or a torus
   about the bend's axis, beside one of its cylinders and a cut edge or a flange's break, within the sheet:
-  an `edge_break` too, and the bend's length runs to the cut. A cut edge rounded whole from one skin to the
-  other (a full round, r = t/2: a convex cylinder along the skins, a torus or sphere about their normal, and
-  the face that turns a corner of the outline between two) leaves no face of the cut square to the skins: it
-  is an `edge_break` of both, no cut edge. A cone, torus, sphere or freeform face whose
+  an `edge_break` too, and the bend's length runs to the cut; a full round run on round the bend is a torus
+  about its axis t/2 round, from one of its cylinders to the other, read the same. A cut edge rounded whole
+  from one skin to the other (a full round, r = t/2: a convex cylinder along the skins, a torus or sphere
+  about their normal, and the face that turns a corner of the outline between two) leaves no face of the cut
+  square to the skins: it is an `edge_break` of both, no cut edge. A cone, torus, sphere or freeform face whose
   rays cross `t` is `formed` (a cone between flanges is not a bend). A face square between two opposite planes that face away from each other,
   nearer each other than its own rays run, is the cut edge of a stretch off the thickness (a 3 mm wall's end
   cap): the stretch is judged on its skins, not on rays that run along it. Everything else, and any stretch
@@ -954,7 +965,8 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   thickness that touch are one feature: they share the ref of the one furthest off it (`location`; each
   keeps its own in `face`), so a pocket's floor and walls are one finding.
 - **Bends.** The skins and bend cylinders joined by tangent edges are the sheet's two sides; the side with
-  the largest skin is unfolded, its coplanar skins the flanges. A bend's angle is its cylinder's angular
+  the largest skin is unfolded (a skin in several faces, split through a hole, read whole: its coplanar faces
+  joined), its coplanar skins the flanges. A bend's angle is its cylinder's angular
   span (checked against the flanges' normals), its length the extent along the axis, its tangent lines
   where the cylinders meet the flanges. A corner joined without a bend is a `sharp_bends` item: two skins at
   an angle meeting at an edge (`Box + Box`, a shelled box), a round on one side of a corner with no
@@ -979,7 +991,8 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   the area its pieces share -- each two intersected, never their areas less the fused pattern's, which a
   STEP written as NURBS loses a little of -- is its overlap (`flat_overlap_mm2`);
   a hole of the fused flat no face's inner wire gave (one crossing a bend's tangent line, part of both
-  faces' outer wires) is read back from it, `in_bend` where it reaches a bend's strip. Where a chamfer or a
+  faces' outer wires) is read back from it, `in_bend` where it reaches a bend's strip (a skin's inner wire
+  of one degenerate edge, a point a full round's corner touches the skin at, is no hole). Where a chamfer or a
   round breaks the cut edge the skin stops short of the cut, so each flange's breaks are laid into its plane
   and fused on: the flat is the cut outline (an 80 x 40 x 3 plate chamfered 0.5 mm unfolds 80 x 40, not 79 x
   39), and a hole with a broken rim is read back from it at its cut size. A break's edge that is no line and
@@ -989,10 +1002,19 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   breaks are unrolled with its strip, and every break is laid face up, as the flanges are (the far skin's
   project face down, and were left beside the flat as pieces of their own). A full round is laid in its two
   halves, split at the sheet's mid-plane where it is widest (laid whole, its outline folds back on itself to
-  a line): an 80 x 40 plate with full-round ends unfolds 80 x 40, not 78 x 40, and a hole with a full-round
-  rim is its narrowest.
+  a line), and round a bend at the cylinder midway through the sheet, each half unrolled: an 80 x 40 plate
+  with full-round ends unfolds 80 x 40, not 78 x 40, a 50 mm wide bracket with full-round sides is 50 mm
+  wide across its bends too, not 48, and a hole with a full-round rim is its narrowest.
   A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
   rim, the flat's the hole under it (a plate countersunk from both sides has one whichever side unfolds).
+  A rim that runs off the outline, into a cutout or into another rim is no whole circle of the skin's, and
+  the cone no whole turn there: the edges between two passes of its seam are laid as one outline, less the
+  hole, which is read from the cone's small end; the wire that rim is part of is no hole of its own and is
+  read back from the flat. A cone in several faces is laid face by face, and where a corner of the outline
+  leaves one of them touching no skin, it is laid with the rest of its cone; a round hole of the flat whose
+  rim such pieces drew in chords (its points on one circle within their sag) is round, no cutout. What a
+  countersink or a break cuts is counted up to the plane of the skin it faces once, however many faces that
+  skin is in.
   `cad.build123d.unfold(shape, thickness=, k_factor=, material=, bend_lines=False)` returns it
   (`bend_lines=True`: a Compound of `CUT` and `BEND` children, one DXF layer each, `BEND` empty for a flat
   plate), and raises `ValueError`
@@ -1002,9 +1024,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   spline's alike (at most 720 points; 48 to a curve left an 80 x 40 ellipse 79.957 long). At K = 0.5 the flat area equals volume / t exactly (`neutral_area_ratio`); the flat's area
   with each strip widened to K = 0.5, over volume / t, is `flat_material_fraction`: 1 where the flat holds
   all of the part's material. The volume is the sheet's as cut and bent: the part's, and what its
-  countersinks and edge breaks cut from it afterwards (under each one's face, up to the skin it faces, or
-  for a bend's end the cylinder it breaks, on the face's triangulation), which the blank has and the flat's
-  area counts.
+  countersinks and edge breaks cut from it afterwards (under each one's face, up to the skin it faces, for
+  a bend's end the cylinder it breaks, or for a full round round a bend the outline's plane square to the
+  axis, where it is widest: it runs from one cylinder to the other; on the face's triangulation), which the
+  blank has and the flat's area counts.
 
 ### Families (each `{"items": [...], "count": n}`, items sorted worst first, capped at 300)
 
@@ -1479,7 +1502,8 @@ the options go on to the engine unresolved), and `resolved` carries plain values
 `printable_height` as `build_volume`, the first `nozzle_diameter` as `nozzle` -- each only where its own option is
 not given -- and `printer` as `{name, file, supplied}`, the name `printer_settings_id`, else `name`, else the file's.
 The volume is then the printer's own, judged as `--build-volume` is (`volume_origin` names the printer and the
-file), the nozzle a nozzle given. A file that is no such 3MF or JSON, or has no bed or height, is refused naming
+file and says the volume is the bed's bounding box: a round bed's outline and an excluded zone are not read), the
+nozzle a nozzle given. A file that is no such 3MF or JSON, or has no bed or height, is refused naming
 the file; a preset with `inherits` and no bed holds only its differences, and the refusal says to give a 3MF the
 slicer saved. A technology other than `fdm` refuses it.
 The build volume is the printer's given (`--build-volume` or `--printer`), else a typical machine of the

@@ -113,8 +113,8 @@ function RobotSearchRow({ match, highlighted, cursor, selection, hiddenIds, onVi
 
 /**
  * @param {object} props
- * @param {object | null} props.robot The payload cadgen resolved (`cadgen.robot_payload`): a URDF, an SRDF's paired URDF
- *   with the SRDF's semantics on it, or an SDF.
+ * @param {object | null} props.robot The payload cadgen resolved (`cadgen.robot_payload`): a URDF, or an SRDF's paired
+ *   URDF with the SRDF's semantics on it.
  * @param {object[]} props.components `buildRobotParts(...).components`: every visual or named mesh object.
  * @param {{ id: string, link: string }[]} props.parts Mesh parts: which viewport geometry belongs to which link.
  * @param {string[]} [props.hiddenPartIds] Hidden visual component ids.

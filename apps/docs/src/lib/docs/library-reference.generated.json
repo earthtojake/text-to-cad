@@ -447,40 +447,16 @@
    ]
   },
   {
-   "name": "sdf",
-   "module": "cad.sdf",
-   "title": "SDF",
-   "doc": 39,
-   "members": [
-    {
-     "name": "snapshot",
-     "kind": "function",
-     "operation": true,
-     "summary": "draw it as the viewer does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
-     "doc": 6
-    },
-    {
-     "name": "validate",
-     "kind": "function",
-     "operation": true,
-     "summary": "check it for conformance, and with gz sdf --check where it is installed",
-     "signature": "(path: Path, *, strict: bool = False, gz_check: GzCheck = 'auto', gz_remote: bool = False, verbose: bool = False) -> CheckResult",
-     "doc": 40
-    }
-   ]
-  },
-  {
    "name": "kicad_pcb",
    "module": "cad.kicad_pcb",
    "title": "KiCad PCB",
-   "doc": 41,
+   "doc": 39,
    "members": [
     {
      "name": "read",
      "kind": "function",
      "signature": "(path: Path | str) -> BoardView",
-     "doc": 42
+     "doc": 40
     },
     {
      "name": "export",
@@ -488,7 +464,7 @@
      "operation": true,
      "summary": "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, step, glb, odb, ipc2581, pdf or dxf",
      "signature": "(board: Path | str, to: str, out: Path | str) -> ExportResult",
-     "doc": 43
+     "doc": 41
     },
     {
      "name": "snapshot",
@@ -504,7 +480,7 @@
      "operation": true,
      "summary": "what the board holds: its format, thickness, size, layers, parts and nets",
      "signature": "(path: Path | str) -> dict",
-     "doc": 44
+     "doc": 42
     },
     {
      "name": "drc",
@@ -512,19 +488,19 @@
      "operation": true,
      "summary": "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
      "signature": "(board: Path) -> CheckResult",
-     "doc": 45
+     "doc": 43
     },
     {
      "name": "edit",
      "kind": "function",
      "signature": "(board: Path | str) -> AbstractContextManager[Any]",
-     "doc": 46
+     "doc": 44
     },
     {
      "name": "inside",
      "kind": "function",
      "signature": "(point: XY, polygon: Sequence[XY]) -> bool",
-     "doc": 47
+     "doc": 45
     }
    ]
   },
@@ -532,13 +508,13 @@
    "name": "kicad_sch",
    "module": "cad.kicad_sch",
    "title": "KiCad schematic",
-   "doc": 48,
+   "doc": 46,
    "members": [
     {
      "name": "read",
      "kind": "function",
      "signature": "(path: Path | str) -> SchematicView",
-     "doc": 49
+     "doc": 47
     },
     {
      "name": "export",
@@ -546,7 +522,7 @@
      "operation": true,
      "summary": "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder",
      "signature": "(schematic: Path | str, to: str, out: Path | str) -> ExportResult",
-     "doc": 50
+     "doc": 48
     },
     {
      "name": "snapshot",
@@ -562,7 +538,7 @@
      "operation": true,
      "summary": "what the schematic holds: its sheets, parts and nets; with a ref, what that names",
      "signature": "(path: Path | str, ref: str | None = None) -> dict",
-     "doc": 51
+     "doc": 49
     },
     {
      "name": "erc",
@@ -570,13 +546,13 @@
      "operation": true,
      "summary": "KiCad's electrical rules check: errors fail it, warnings are said",
      "signature": "(schematic: Path) -> CheckResult",
-     "doc": 52
+     "doc": 50
     },
     {
      "name": "edit",
      "kind": "function",
      "signature": "(schematic: Path | str) -> AbstractContextManager[Any]",
-     "doc": 53
+     "doc": 51
     }
    ]
   }
@@ -585,7 +561,7 @@
   {
    "name": "build123d",
    "module": "cad.build123d",
-   "doc": 54,
+   "doc": 52,
    "members": [
     {
      "name": "ClosestPoints",
@@ -598,7 +574,7 @@
      "bases": [
       "RuntimeError"
      ],
-     "doc": 55
+     "doc": 53
     },
     {
      "name": "GeometryIssue",
@@ -614,229 +590,229 @@
      "name": "animation",
      "kind": "function",
      "signature": "(assembly: Any, name: str, *, duration: Any) -> Any",
-     "doc": 56
+     "doc": 54
     },
     {
      "name": "body",
      "kind": "function",
      "signature": "(part: Any, name: str | None = None) -> Any",
-     "doc": 57
+     "doc": 55
     },
     {
      "name": "boundary_edges",
      "kind": "function",
      "signature": "(shell: Shell) -> tuple[Edge, ...]",
-     "doc": 58
+     "doc": 56
     },
     {
      "name": "closest_points",
      "kind": "function",
      "signature": "(a: Shape, b: Shape) -> ClosestPoints",
-     "doc": 59
+     "doc": 57
     },
     {
      "name": "cnc",
      "kind": "function",
      "signature": "(shape: Any, *, material: str | None = None, axes: int | None = None, turning: bool = False, tools: Any = None, stock: Any = None, strict: bool = False) -> Any",
-     "doc": 60
+     "doc": 58
     },
     {
      "name": "configuration_sequence",
      "kind": "function",
      "signature": "(assembly: Any, name: str, waypoints_or_fn: Any = None, *, sweep: Any = None, duration: Any = None, ease: str = 'cubic', **removed: Any) -> Any",
-     "doc": 61
+     "doc": 59
     },
     {
      "name": "dfm",
      "kind": "function",
      "signature": "(shape: Any, *, process: str | None = None, candidates: bool = False, strict: bool = False, **options: Any) -> Any",
-     "doc": 62
+     "doc": 60
     },
     {
      "name": "frame",
      "kind": "function",
      "signature": "(part: Any, name: str, location: Any) -> Any",
-     "doc": 63
+     "doc": 61
     },
     {
      "name": "free",
      "kind": "function",
      "signature": "(shape: Any) -> Any",
-     "doc": 64
+     "doc": 62
     },
     {
      "name": "gear_pair",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **joints: Any) -> Any",
-     "doc": 65
+     "doc": 63
     },
     {
      "name": "is_sound",
      "kind": "function",
      "signature": "(shape: Shape) -> bool",
-     "doc": 66
+     "doc": 64
     },
     {
      "name": "leaves",
      "kind": "function",
      "signature": "(tree: Any, *, paths: bool = False) -> list[Any]",
-     "doc": 67
+     "doc": 65
     },
     {
      "name": "limits",
      "kind": "function",
      "signature": "(assembly: Any, joint: str, *, effort: float | None = None, velocity: float | None = None) -> Any",
-     "doc": 68
+     "doc": 66
     },
     {
      "name": "link",
      "kind": "function",
      "signature": "(shape: Any, name: str) -> Any",
-     "doc": 69
+     "doc": 67
     },
     {
      "name": "mass",
      "kind": "function",
      "signature": "(shape: Any, grams: float) -> Any",
-     "doc": 70
+     "doc": 68
     },
     {
      "name": "mass_properties",
      "kind": "function",
      "signature": "(bodies: Iterable[tuple[Solid, float]]) -> MassProperties",
-     "doc": 71
+     "doc": 69
     },
     {
      "name": "materials",
      "kind": "module",
      "module": "cad.build123d.materials",
-     "doc": 72,
+     "doc": 70,
      "members": [
       {
        "name": "soldermask",
        "kind": "function",
        "signature": "(color: Color = 'green', finish: Finish = 'glossy') -> FinishedMaterial",
-       "doc": 73
+       "doc": 71
       },
       {
        "name": "soldermask_green",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 74
+       "doc": 72
       },
       {
        "name": "soldermask_matte_black",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 75
+       "doc": 73
       },
       {
        "name": "fr4",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 76
+       "doc": 74
       },
       {
        "name": "silkscreen",
        "kind": "function",
        "signature": "(color: Color = 'white') -> FinishedMaterial",
-       "doc": 77
+       "doc": 75
       },
       {
        "name": "bare_copper",
        "kind": "function",
        "signature": "(oxidized: bool = False) -> FinishedMaterial",
-       "doc": 78
+       "doc": 76
       },
       {
        "name": "enig",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 79
+       "doc": 77
       },
       {
        "name": "hasl",
        "kind": "function",
        "signature": "(lead_free: bool = True) -> FinishedMaterial",
-       "doc": 80
+       "doc": 78
       },
       {
        "name": "solder",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 81
+       "doc": 79
       },
       {
        "name": "mold_compound",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 82
+       "doc": 80
       },
       {
        "name": "ceramic",
        "kind": "function",
        "signature": "(color: Color = 'white') -> FinishedMaterial",
-       "doc": 83
+       "doc": 81
       },
       {
        "name": "led_lens",
        "kind": "function",
        "signature": "(color: Color = 'clear', diffused: bool = False) -> FinishedMaterial",
-       "doc": 84
+       "doc": 82
       },
       {
        "name": "connector_housing",
        "kind": "function",
        "signature": "(color: Color = 'black') -> FinishedMaterial",
-       "doc": 85
+       "doc": 83
       },
       {
        "name": "anodized",
        "kind": "function",
        "signature": "(color: Color = 'clear', substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 86
+       "doc": 84
       },
       {
        "name": "anodized_black",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 87
+       "doc": 85
       },
       {
        "name": "powder_coat",
        "kind": "function",
        "signature": "(color: Color = 'black', finish: Sheen = 'satin', substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 88
+       "doc": 86
       },
       {
        "name": "powder_coat_black",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 89
+       "doc": 87
       },
       {
        "name": "bead_blasted",
        "kind": "function",
        "signature": "(substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 90
+       "doc": 88
       },
       {
        "name": "brushed",
        "kind": "function",
        "signature": "(substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 91
+       "doc": 89
       },
       {
        "name": "zinc_plated",
        "kind": "function",
        "signature": "(passivation: str = 'clear', substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 92
+       "doc": 90
       },
       {
        "name": "black_oxide",
        "kind": "function",
        "signature": "(oiled: bool = True, substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 93
+       "doc": 91
       }
      ]
     },
@@ -844,98 +820,98 @@
      "name": "mechanism_state",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **values: Any) -> Any",
-     "doc": 94
+     "doc": 92
     },
     {
      "name": "memo",
      "kind": "function",
      "signature": "(function: Any = None, /, **options: Any) -> Any",
-     "doc": 95
+     "doc": 93
     },
     {
      "name": "molding",
      "kind": "function",
      "signature": "(shape: Any, *, material: str | None = None, pull: Any = None, wall_limit: float | None = None, zero_tol: float | None = None, cavities: int | None = None, candidates: bool = False, strict: bool = False) -> Any",
-     "doc": 96
+     "doc": 94
     },
     {
      "name": "overlap_volume",
      "kind": "function",
      "signature": "(a: Solid | Compound, b: Solid | Compound) -> float",
-     "doc": 97
+     "doc": 95
     },
     {
      "name": "paint",
      "kind": "function",
      "signature": "(shape: Any, faces: Any, color: Any) -> Any",
-     "doc": 98
+     "doc": 96
     },
     {
      "name": "point_mass",
      "kind": "function",
      "signature": "(part: Any, grams: float, at: Any, *, name: str | None = None, inertia: tuple[float, float, float] | None = None) -> Any",
-     "doc": 99
+     "doc": 97
     },
     {
      "name": "posed",
      "kind": "function",
      "signature": "(assembly: Any, state: Any) -> Any",
-     "doc": 100
+     "doc": 98
     },
     {
      "name": "printing",
      "kind": "function",
      "signature": "(shape: Any, *, material: str | None = None, technology: str | None = None, build_volume: Any = None, angle_limit: float | None = None, layer_height: float | None = None, nozzle: float | None = None, printer: Any = None, candidates: bool = False, strict: bool = False) -> Any",
-     "doc": 101
+     "doc": 99
     },
     {
      "name": "rack_and_pinion_pair",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **joints: Any) -> Any",
-     "doc": 102
+     "doc": 100
     },
     {
      "name": "screw_pair",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **joints: Any) -> Any",
-     "doc": 103
+     "doc": 101
     },
     {
      "name": "self_intersections",
      "kind": "function",
      "signature": "(shape: Shape) -> tuple[GeometryIssue, ...]",
-     "doc": 104
+     "doc": 102
     },
     {
      "name": "sheet_metal",
      "kind": "function",
      "signature": "(shape: Any, *, material: str | None = None, thickness: float | None = None, k_factor: float | None = None, bend_radius: float | None = None, kerf: float | None = None, sheet_size: Any = None, strict: bool = False) -> Any",
-     "doc": 105
+     "doc": 103
     },
     {
      "name": "topology_errors",
      "kind": "function",
      "signature": "(shape: Shape) -> tuple[GeometryIssue, ...]",
-     "doc": 106
+     "doc": 104
     },
     {
      "name": "unfold",
      "kind": "function",
      "signature": "(shape: Any, *, thickness: float | None = None, k_factor: float | None = None, material: str | None = None, bend_lines: bool = False) -> Any",
-     "doc": 107
+     "doc": 105
     }
    ]
   },
   {
    "name": "kicad",
    "module": "cad.kicad",
-   "doc": 108,
+   "doc": 106,
    "members": [
     {
      "name": "Routed",
      "kind": "class",
      "signature": "(connections: tuple[Any, ...], tracks: int, vias: int, length: float, seconds: float, warnings: tuple[str, ...] = ())",
-     "doc": 109,
+     "doc": 107,
      "members": [
       {
        "name": "ok",
@@ -951,7 +927,7 @@
        "name": "human_lines",
        "kind": "method",
        "signature": "() -> list[str]",
-       "doc": 110
+       "doc": 108
       }
      ]
     },
@@ -959,109 +935,109 @@
      "name": "route",
      "kind": "function",
      "signature": "(board: Any, connections: Sequence[Any] | None = None, *, layers: Any = None, width: float | None = None, clearance: float | None = None, vias: int | None = None, via_cost: float | None = None) -> Routed",
-     "doc": 111
+     "doc": 109
     }
    ]
   },
   {
    "name": "trimesh",
    "module": "cad.trimesh",
-   "doc": 112,
+   "doc": 110,
    "members": [
     {
      "name": "orientations",
      "kind": "function",
      "signature": "(mesh: Any, *, units: str = 'mm', angle_limit: float = 45.0) -> dict[str, Any]",
-     "doc": 113
+     "doc": 111
     },
     {
      "name": "printing",
      "kind": "function",
      "signature": "(mesh: Any, *, units: str = 'mm', samples: int = 2000, angle_limit: float = 45.0) -> dict[str, Any]",
-     "doc": 114
+     "doc": 112
     }
    ]
   },
   {
    "name": "mujoco",
    "module": "cad.mujoco",
-   "doc": 115,
+   "doc": 113,
    "members": [
     {
      "name": "check",
      "kind": "function",
      "signature": "(path: Path, *, strict: bool = False, verbose: bool = False) -> CheckResult",
-     "doc": 116
+     "doc": 114
     },
     {
      "name": "collisions",
      "kind": "function",
      "signature": "(spec, part)",
-     "doc": 117
+     "doc": 115
     },
     {
      "name": "decompose",
      "kind": "function",
      "signature": "(spec, part, *, max_hulls=16, threshold=None)",
-     "doc": 118
+     "doc": 116
     },
     {
      "name": "fit",
      "kind": "function",
      "signature": "(spec, part, kind)",
-     "doc": 119
+     "doc": 117
     },
     {
      "name": "parts",
      "kind": "function",
      "signature": "(spec)",
-     "doc": 120
+     "doc": 118
     },
     {
      "name": "save",
      "kind": "function",
      "signature": "(spec, path)",
-     "doc": 121
+     "doc": 119
     },
     {
      "name": "spec",
      "kind": "function",
      "signature": "(thing, *, assets=None, tolerance=None, zero=None)",
-     "doc": 122
+     "doc": 120
     }
    ]
   },
   {
    "name": "coacd",
    "module": "cad.coacd",
-   "doc": 123
+   "doc": 121
   },
   {
    "name": "netgen",
    "module": "cad.netgen",
-   "doc": 124
+   "doc": 122
   },
   {
    "name": "calculix",
    "module": "cad.calculix",
-   "doc": 125
+   "doc": 123
   },
   {
    "name": "blender",
    "module": "cad.blender",
-   "doc": 126,
+   "doc": 124,
    "members": [
     {
      "name": "Clip",
      "kind": "class",
      "signature": "(name: str, kind: str, duration: float)",
-     "doc": 127
+     "doc": 125
     },
     {
      "name": "Model",
      "kind": "class",
      "signature": "(root: bpy.types.Object, roots: list, objects: dict, nodes: dict, clips: dict, box: tuple, fps: int, clip: str | None = None)",
-     "doc": 128,
+     "doc": 126,
      "members": [
       {
        "name": "center",
@@ -1077,13 +1053,13 @@
        "name": "play",
        "kind": "method",
        "signature": "(name: str | None) -> None",
-       "doc": 129
+       "doc": 127
       },
       {
        "name": "bounds",
        "kind": "method",
        "signature": "() -> tuple",
-       "doc": 130
+       "doc": 128
       }
      ]
     },
@@ -1091,13 +1067,13 @@
      "name": "load",
      "kind": "function",
      "signature": "(path: str | Path, clip: str | None = None, fps: int = 24) -> Model",
-     "doc": 131
+     "doc": 129
     }
    ]
   }
  ],
  "texts": [
-  "cad: CAD models as Python, built by its engine (``cad.engine``) into documents and the files they\ndeclare.\n\nThe root holds ``__version__``, ``CadDeprecationWarning`` and the document types, one object each\n(``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file), ``xbf``,\n``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``sdf``, ``srdf``, ``kicad_pcb`` and\n``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step(\"arm.step\")``), its edit where\nits files are changed in place (``with kicad_pcb.edit(\"board.kicad_pcb\") as board:``), its reader where it\nhas one (``step.read``) and its\noperations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,\n``.inspect``, and those named for what they do (``.dfm``, ``.solve``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are\nthe build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's\n``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,\n``cad.trimesh`` (a mesh's 3D printing measurements: ``printing``, ``orientations``); those that call MuJoCo\nare the mujoco integration's, ``cad.mujoco`` (a document as a ``mujoco.MjSpec``, a part's collision chosen on\nit, the spec saved, and a MuJoCo model checked by MuJoCo's own compiler: ``spec``, ``fit``, ``save``, ``check``); and those that take Blender's are the blender integration's, ``cad.blender`` (``load``: a\nGLB in Blender's scene, for a render). Process control (``cad serve``, ``status``, ``stop``,\n``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD\nkernel, and ``import build123d`` binds a module the kernel loads into on its first attribute\n(``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,\n...) are aliases of what they name now, each saying so once (``_internal/aliases.py``).",
+  "cad: CAD models as Python, built by its engine (``cad.engine``) into documents and the files they\ndeclare.\n\nThe root holds ``__version__``, ``CadDeprecationWarning`` and the document types, one object each\n(``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file), ``xbf``,\n``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``srdf``, ``kicad_pcb`` and\n``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step(\"arm.step\")``), its edit where\nits files are changed in place (``with kicad_pcb.edit(\"board.kicad_pcb\") as board:``), its reader where it\nhas one (``step.read``) and its\noperations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,\n``.inspect``, and those named for what they do (``.dfm``, ``.solve``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are\nthe build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's\n``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,\n``cad.trimesh`` (a mesh's 3D printing measurements: ``printing``, ``orientations``); those that call MuJoCo\nare the mujoco integration's, ``cad.mujoco`` (a document as a ``mujoco.MjSpec``, a part's collision chosen on\nit, the spec saved, and a MuJoCo model checked by MuJoCo's own compiler: ``spec``, ``fit``, ``save``, ``check``); and those that take Blender's are the blender integration's, ``cad.blender`` (``load``: a\nGLB in Blender's scene, for a render). Process control (``cad serve``, ``status``, ``stop``,\n``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD\nkernel, and ``import build123d`` binds a module the kernel loads into on its first attribute\n(``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,\n...) are aliases of what they name now, each saying so once (``_internal/aliases.py``).",
   "The release of the library this is, as its distribution's metadata says it.",
   "A spelling the library still answers, under the name it has now. A ``FutureWarning``, so Python\nshows it by default: the people who read it are a model's authors, not a library's developers.",
   "``cad.model``: the model document type, a model built from code and held in the engine's memory\n(``cad.registry``).\n\nA model has no file behind it: it is addressed by its document id (``cad run SCRIPT.py`` prints it) or\nthe handle its call returns. ``@model`` declares one (``@model(name=...)``; ``model(shape, name=...)`` hands\na shape over), with no file of its own; the files it declares are the other types' decorators\n(``@xbf(\"XBF/arm.xbf\")``, ``@step(\"arm.step\")``). Its operations are the ``cad model <operation>`` commands':\n``model.export(handle_or_id, *destinations, tolerance=None, angle=None)``, ``model.snapshot(...)``,\n``model.inspect(...)`` and ``model.dfm(handle_or_id, process=\"cnc\")`` (or ``\"sheet\"``, ``\"molding\"``,\n``\"printing\"``), which checks it for manufacturing on its exact geometry, measured by the engine with the build123d\nintegration (``cad._internal.manufacturing``), and\n``model.solve(handle_or_id, study=..., out=\"results/\")``, a stress study of it (``cad._internal.fea.operation``),\nwhich reads an ``.xbf`` the engine writes of it in a temporary folder. A file is\nrefused by name: ``arm.xbf`` is an xbf's (``cad.xbf``). Everything loads on first use: ``import cad.model``\nimports no CAD kernel (``cad._internal.document_type``).",
@@ -1136,8 +1112,6 @@
   "Check one URDF robot description for conformance.\n\nCollects every finding in one pass — structure, joints, inertials, mesh\nreferences — rather than stopping at the first. Errors always block; under\n``strict`` warnings do too.\n\npath: the .urdf file to check.\nstrict: treat warnings as blocking.\npackages: ``package://NAME/...`` mesh URI roots, name -> directory.\nverbose: narrate the target on stderr.",
   "``cad.srdf``: the SRDF document type (``cad.registry``), a MoveIt2 semantic description.\n\nNo decorator, for the reason :mod:`cad.urdf` gives. ``cad srdf validate`` is a generated\nMIRROR of :func:`validate`; ``cad srdf snapshot`` draws one.\n\nAn SRDF is only meaningful against its URDF. ``urdf=`` (``--urdf``) names it; without it, the\npaired URDF is found from the SRDF's robot name and directory, and a missing pairing is itself\na finding.",
   "Check one SRDF against its paired URDF.\n\nCross-validates every name, chain, state and disabled pair the SRDF declares\nagainst the robot the URDF actually describes. Errors always block; under\n``strict`` warnings do too.\n\npath: the .srdf file to check.\nstrict: treat warnings as blocking.\nurdf: the URDF to check it against; found from its robot name and folder without it.\nverbose: narrate the target on stderr.",
-  "``cad.sdf``: the SDF document type (``cad.registry``), an SDFormat world or model.\n\nNo decorator, for the reason :mod:`cad.urdf` gives: a world or model description is\nauthored, not generated. ``cad sdf validate`` is a generated MIRROR of :func:`validate`;\n``cad sdf snapshot`` draws one (``cad.engine.snapshot``). ``GZ_CHECK_MODES`` is the\nvocabulary of its ``gz_check`` option.",
-  "Check one SDFormat world or model for conformance.\n\nThe bundled checks are dependency-light and catch common structural errors;\nthey are not a replacement for libsdformat or a target simulator. Errors\nalways block; under ``strict`` warnings do too.\n\npath: the .sdf file to check.\nstrict: treat warnings as blocking.\ngz_check: run `gz sdf --check` as external validation — auto (when the tool\n    is installed), required (fail without it), or never.\ngz_remote: let `gz sdf --check` resolve the document's remote <uri> references\n    (http, https, fuel). Off by default: gz does not run on a document that names\n    one, so validating a file never fetches from a host the file names.\nverbose: narrate the target on stderr.",
   "``cad.kicad_pcb``: the KiCad PCB document type (``cad.registry``), a saved KiCad board.\n\nA ``.kicad_pcb`` is an AUTHORED file, edited in KiCad, as text or in place by :func:`edit`, never a\ndocument a model makes: the type has no decorator. Its functions take paths and our own board objects, so\nthey are the type's, not the ``kicad`` integration's (the signature rule):\n\n* :func:`read` parses the file and the ``.kicad_pro`` beside it with the standard library\n  (:mod:`cad.engine.formats.kicad`), so a check script run with ``cad run`` imports it without the\n  CAD kernel and without KiCad; :func:`inside` is the even-odd test a check measures a pour or an\n  outline with, in the same millimetres.\n* :func:`inspect` is the board in one look as plain data -- its format, thickness, size, layers, parts\n  and nets -- what ``cad kicad_pcb inspect`` prints; ``snapshot`` draws it flat, as ``cad kicad_pcb\n  snapshot`` does.\n* :func:`edit` opens the saved board in KiCad's IPC API for a ``with`` block, the ``kicad`` integration's\n  (``cad.kicad._session``): the block gets KiPy's open board, which is saved at its end when it was changed\n  (made by KiCad when the file is not there yet) and not at all when the block raises.\n* :func:`drc` (KiCad's design rule check) and :func:`export` (its fabrication, assembly and 3D outputs)\n  run KiCad's own ``kicad-cli``, the ``kicad`` integration's (kicode, ``cad[kicad]``): they are the\n  commands ``cad kicad_pcb drc`` and ``cad kicad_pcb export``, one to one. Where this environment lacks\n  kicode, the command runs them in the environment of ``cad[kicad]`` the engine makes on first need; a\n  function called here says to install the extra (or run the script with ``cad run``, which does).",
   "The KiCad board at ``path`` (a ``.kicad_pcb``; any board KiCad opens) for board references.\n\nEverything is in KiCad's frame: millimetres, y down, as the board file holds them. Reads\nthe file and the ``.kicad_pro`` beside it (for net classes); runs nothing.",
   "KiCad's ``to`` export of the saved ``board`` into the folder ``out`` (``cad kicad_pcb export BOARD\n--to KIND -o DIR``): ``to`` is one of ``gerbers``, ``drill``, ``pos``, ``bom``, ``step``, ``glb``,\n``odb``, ``ipc2581``, ``pdf`` and ``dxf`` (``cad.kicad._export``'s table says what each writes). The\nresult says the files written and any warning. ``RuntimeError`` in KiCad's words when it fails.",

@@ -524,8 +524,8 @@ jobs:
   # person's computer: netgen, cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the cad-ccx package), solves.
   # Its suite (tests/python/packages/fea, test-fea.sh) is this job's alone: the study's parse, checks and
   # materials, the solves against hand calculations, assemblies, the results folder and its pictures (drawn under
-  # Xvfb), and the command through the library's runner of one operation. Linux only: the stack is the same
-  # wheels everywhere, and the solves are CPU-bound. About 2 minutes.
+  # Xvfb), and the command through the library's runner of one operation. The full suite stays on Linux.
+  # The Windows job below runs one real solve through the command with the wheel for that platform.
   fea:
     name: fea
     needs: changes
@@ -562,6 +562,37 @@ jobs:
 
       - name: Run the fea suite
         run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-fea.sh
+        shell: bash
+
+  fea-windows:
+    name: fea (Windows smoke)
+    needs: changes
+    if: needs.changes.outputs.fea == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        timeout-minutes: 10
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: packages/core
+
+      - name: Install the netgen and calculix integrations
+        timeout-minutes: 5
+        run: uv sync --locked --inexact --group fea
+
+      - name: Solve a cantilever through cad step solve
+        timeout-minutes: 4
+        run: |
+          python -c "from cad._internal.fea.mesh import require_fea_stack; require_fea_stack()"
+          python -m unittest -v tests.python.packages.fea.test_fea.Cantilever.test_the_cli_reports_the_same_numbers_as_json
         shell: bash
 
   # Blender as a Python module (bpy): the server, on its own Python as everywhere, runs one script that
@@ -928,6 +959,7 @@ jobs:
       - real-install
       - update-rehearsal
       - fea
+      - fea-windows
       - blender
       - kicad
       - skills

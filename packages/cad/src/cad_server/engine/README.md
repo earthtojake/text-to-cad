@@ -1,7 +1,7 @@
 # cad.engine
 
 A **document** is what a person reviews. Its kind is either a file format the viewer reads (STEP, XBF, STL, GLB,
-3MF, DXF, URDF, SRDF, SDF) or something derived from code: a model, built by this engine. A document exists so that a
+3MF, DXF, URDF, SRDF) or something derived from code: a model, built by this engine. A document exists so that a
 person can review the subjective output of an agent, a design, and answer it through the viewer's tools:
 annotate, select, quick edit. These pages are how the engine makes, holds and serves documents.
 

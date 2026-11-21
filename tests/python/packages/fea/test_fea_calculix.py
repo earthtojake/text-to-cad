@@ -54,18 +54,31 @@ class FindCcx(unittest.TestCase):
                 with self.assertRaisesRegex(calculix.CalculixMissingError, "which is not ccx"):
                     calculix.find_ccx()
 
-    @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
-    def test_the_cad_ccx_package_is_the_one_run_and_never_one_on_path(self):
+    def test_the_cad_ccx_package_version_needs_no_probe_and_ignores_path(self):
         with tempfile.TemporaryDirectory() as name:
-            packaged = _program(Path(name), "This is Version 2.23")
+            filename = "ccx.exe" if sys.platform == "win32" else "ccx"
+            packaged = Path(name) / filename
+            packaged.touch(mode=0o755)
             on_path = Path(name) / "path"
             on_path.mkdir()
-            _program(on_path, "This is Version 2.22")
-            ccx = mock.Mock(executable=mock.Mock(return_value=Path(packaged)))
+            (on_path / filename).touch(mode=0o755)
+            ccx = mock.Mock(executable=mock.Mock(return_value=packaged), version=mock.Mock(return_value="2.23"))
             with mock.patch.dict(os.environ, {calculix.CCX_ENV: "", "PATH": str(on_path)}), \
-                    mock.patch.dict(sys.modules, {"cad_ccx": ccx}):
+                    mock.patch.dict(sys.modules, {"cad_ccx": ccx}), \
+                    mock.patch.object(calculix.subprocess, "run", return_value=mock.Mock(stdout="This is Version 2.23")) as run:
                 found = calculix.find_ccx()
-        self.assertEqual((found.path, found.version), (packaged, "2.23"))
+        self.assertEqual(run.call_count, 0)
+        self.assertEqual((found.path, found.version), (str(packaged), "2.23"))
+
+    def test_an_explicit_override_still_probes_the_named_program(self):
+        with tempfile.TemporaryDirectory() as name:
+            binary = Path(name) / ("ccx.exe" if sys.platform == "win32" else "ccx")
+            binary.touch(mode=0o755)
+            with mock.patch.dict(os.environ, {calculix.CCX_ENV: str(binary)}), \
+                    mock.patch.object(calculix.subprocess, "run", return_value=mock.Mock(stdout="This is Version 2.24")) as run:
+                found = calculix.find_ccx()
+            self.assertEqual(run.call_args.args[0], [str(binary), "-v"])
+        self.assertEqual((found.path, found.version), (str(binary), "2.24"))
 
     def test_without_the_cad_ccx_package_it_is_refused_with_the_extra(self):
         with mock.patch.dict(os.environ, {calculix.CCX_ENV: ""}), mock.patch.dict(sys.modules, {"cad_ccx": None}):
@@ -119,6 +132,28 @@ class FindCcx(unittest.TestCase):
             other.mkdir()
             named = _silent(other)
             with mock.patch.dict(os.environ, {calculix.CCX_ENV: named}), mock.patch.dict(sys.modules, {"cad_ccx": ccx}):
+                with self.assertRaisesRegex(calculix.CalculixMissingError, "reports no version"):
+                    calculix.find_ccx()
+
+    @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
+    def test_the_package_s_ccx_named_by_the_setting_has_the_package_s_version_and_a_copy_does_not(self):
+        # CAD_CCX naming the package's own program, by any spelling of its path, is the same CalculiX as naming
+        # nothing; a copy of it elsewhere is another program, asked and refused when it says no version.
+        with tempfile.TemporaryDirectory() as name:
+            folder = Path(name)
+            packaged = Path(_silent(folder))
+            ccx = mock.Mock(executable=mock.Mock(return_value=packaged), version=mock.Mock(return_value="2.23"))
+            (folder / "link").mkdir()
+            (folder / "link" / "ccx").symlink_to(packaged)
+            spelled = str(folder / "link" / ".." / "link" / "ccx")
+            for named in (str(packaged), spelled):
+                with mock.patch.dict(os.environ, {calculix.CCX_ENV: named}), mock.patch.dict(sys.modules, {"cad_ccx": ccx}):
+                    self.assertEqual(calculix.find_ccx().version, "2.23")
+            (folder / "copy").mkdir()
+            copy = folder / "copy" / "ccx"
+            copy.write_bytes(packaged.read_bytes())
+            copy.chmod(packaged.stat().st_mode)
+            with mock.patch.dict(os.environ, {calculix.CCX_ENV: str(copy)}), mock.patch.dict(sys.modules, {"cad_ccx": ccx}):
                 with self.assertRaisesRegex(calculix.CalculixMissingError, "reports no version"):
                     calculix.find_ccx()
 

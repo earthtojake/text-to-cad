@@ -143,6 +143,22 @@ it('a choice starts its export at once with a spinning toast; the menu stays the
   expect(downloads.save).not.toHaveBeenCalled();
 });
 
+it('starts distinct exports on HTTP without crypto.randomUUID', async () => {
+  const { service } = server();
+  const getRandomValues = crypto.getRandomValues.bind(crypto);
+  vi.stubGlobal('crypto', { getRandomValues });
+  mount(service, { save: vi.fn() });
+  const user = userEvent.setup({ skipHover: true });
+  await exportOnce(user, 'GLB');
+  await waitFor(() => expect(service.create).toHaveBeenCalledTimes(1));
+  await exportOnce(user, 'GLB');
+  await waitFor(() => expect(service.create).toHaveBeenCalledTimes(2));
+  const [first, second] = service.create.mock.calls.map(([request]) => request.requestId);
+  expect(first).toMatch(/^[\w-]{16,100}$/);
+  expect(second).toMatch(/^[\w-]{16,100}$/);
+  expect(first).not.toBe(second);
+});
+
 it('a board\'s choice is KiCad\'s format, named as the server names its download: a folder of files is one .zip', async () => {
   const { service } = server();
   const downloads = { save: vi.fn(), remember: vi.fn() };

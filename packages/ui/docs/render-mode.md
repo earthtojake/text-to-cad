@@ -215,7 +215,7 @@ alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`
 | `xbf` | `.xbf`, STEP, STP | Yes |
 | `glb` | GLB | Yes |
 | `mesh` | STL, 3MF | Yes |
-| `robot` | URDF, SRDF, SDF | Yes |
+| `robot` | URDF, SRDF | Yes |
 | `dxf` | DXF | No: a 2D drawing, on a surface of its own, without the shell |
 | `board` | KiCad board | No Preview: drawn flat; its Display is the board's own (mode, side, pours, layers, Dim, the zones' and tracks' opacities), drawn in the app's theme |
 

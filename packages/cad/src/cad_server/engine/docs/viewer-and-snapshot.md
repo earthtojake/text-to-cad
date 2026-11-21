@@ -209,14 +209,14 @@ per file (read again when a file it read changes) or with `daemon=False` in this
   IOR, transmission, clear coat, anisotropy, emissive strength) and its base colour texture,
   drawn on its texture coordinates in the lit looks. `--pose` is refused: a mesh has no
   mechanism.
-- **A robot** (`.urdf`, `.sdf`, `.srdf`) is its link visuals' meshes (STL, 3MF and GLB files, a
+- **A robot** (`.urdf`, `.srdf`) is its link visuals' meshes (STL, 3MF and GLB files, a
   `package://NAME/...` one in the ROS package the description is in: the nearest folder above it
   named NAME or holding a `package.xml` that names it, as the viewer finds it too; a
-  box, cylinder, sphere or capsule made and meshed by the kernel), each in its colour. Solid and
+  box, cylinder or sphere made and meshed by the kernel), each in its colour. Solid and
   Parts draw its faces alone, as the viewer draws a robot: a link mesh's edges are its triangles'
   folds, which along a thin curved part (a cable's wires, tessellated at the engine's angle) are
-  lines a pixel apart that hide its colour; the line modes draw them. A URDF (and an SRDF's group states over it) and an SDF are each read
-  once, in the engine (`urdf_source.py`, `sdf_source.py`, into the one
+  lines a pixel apart that hide its colour; the line modes draw them. A URDF (and an SRDF's group states over it) is read
+  once, in the engine (`urdf_source.py`, into the one
   articulation of `robot_model.py`: every link's frame at rest, its visuals, its joints with their
   mimics and four-bars, its named poses), and the viewer's payload (the server's
   `robot_payload.py`) and the stills (`formats/robot.py`) are two views of that read, each

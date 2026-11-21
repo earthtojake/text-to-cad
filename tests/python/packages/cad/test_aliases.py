@@ -38,8 +38,7 @@ MODULES = {
     "cad.ap242": "cad.build123d", "cad.gltf": "cad.build123d", "cad.geometry": "cad.build123d._geometry",
     "cad.flatten": "cad.build123d._flatten", "cad.findings": "cad._internal.findings",
     "cad.xml_common": "cad._internal.xml_common", "cad.check_fonts": "cad._internal.check_fonts",
-    "cad.urdf_source": "cad.urdf._source", "cad.sdf_source": "cad.sdf._source",
-    "cad.sdf_validation": "cad.sdf._validation", "cad.sdf_external": "cad.sdf._external",
+    "cad.urdf_source": "cad.urdf._source",
     "cad.srdf_source": "cad.srdf._source", "cad.srdf_validation": "cad.srdf._validation",
 }
 

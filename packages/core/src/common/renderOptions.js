@@ -69,7 +69,7 @@ export function inferRenderSceneScale({
     return normalizeRenderSceneScale(normalizedExplicit);
   }
   const normalizedKind = String(kind || "").trim().toLowerCase();
-  return normalizedKind === "urdf" || normalizedKind === "srdf" || normalizedKind === "sdf"
+  return normalizedKind === "urdf" || normalizedKind === "srdf"
     ? RENDER_SCENE_SCALE.URDF
     : RENDER_SCENE_SCALE.CAD;
 }

@@ -25,7 +25,6 @@ import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } 
 import PositionControls from "./PositionControls.jsx";
 import { useRobotDescribe, useRobotInspect, useRobotReferences, useRobotTip } from "./robotReferences.jsx";
 import LinksSection from "./LinksSection.jsx";
-import SdfSection from "./SdfSection.jsx";
 import { prepareRobotJointHandles, robotJointHandles } from "./jointHandles.js";
 import { createPoseStore, poseLogic } from "./poseStore.js";
 import { ROBOT_DECLINED_LIVE_COMMANDS, ROBOT_TOOL, ROBOT_TOOL_MODES } from "./tools.js";
@@ -64,7 +63,6 @@ function RobotSurface({ view, data }) {
   const document = useWorkspaceDocument({ view, data });
   const loaded = useRobotDocument({ entry: document.entry, client: document.client, resources: document.client.resources });
   const robot = loaded.robot;
-  const kind = String(document.entry?.kind || "").toLowerCase();
 
   // ---- pose: outside React ------------------------------------------------------------
   // The pose slice of the file's view (`kit/shell/fileView.js`): the control values, written
@@ -305,14 +303,11 @@ function RobotSurface({ view, data }) {
         onChange={value => { setSelectFilter(value); selectTool(ROBOT_TOOL.SELECT); }} /> }),
     ...sceneTools.tools
   ];
-  // The view's panel, whatever the tool: the Links (and an SDF's own metadata), then Position's controls.
+  // The view's panel, whatever the tool: the Links, then Position's controls.
   const sidebarShown = !shell.previewing;
   const sidebar = <>
     <LinksSection key={modelKey} active={sidebarShown} robot={robot?.robot || null} components={robot?.components}
       parts={robot?.parts} hiddenPartIds={hiddenPartIds} onVisibilityChange={changeVisibility} selection={treeSelection} onOpenFile={view.onOpenFile} />
-    {kind === "sdf" ? <ToolPanel id="sdf" title="SDF" label="SDF" fit="details" defaultCollapsed>
-      <SdfSection info={robot?.robot?.sdf || null} />
-    </ToolPanel> : null}
     {/* Headed "Position"; its Pose row's Default puts the joints back. */}
     {posable && pose ? <PositionSection pose={pose} previewPose={previewPose} revision={robot.revision} /> : null}
   </>;

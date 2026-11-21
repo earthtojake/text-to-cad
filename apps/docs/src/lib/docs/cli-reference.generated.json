@@ -2938,172 +2938,6 @@
    ]
   },
   {
-   "name": "sdf",
-   "summary": "SDF",
-   "usage": "cad sdf <operation> FILE [options]",
-   "operations": [
-    {
-     "command": "cad sdf snapshot",
-     "summary": "draw it as the viewer does, into a PNG",
-     "usage": "cad sdf snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
-     "arguments": [
-      {
-       "name": "SRC",
-       "help": 103,
-       "optional": true
-      },
-      {
-       "name": "OUT.png",
-       "help": 7,
-       "optional": true
-      }
-     ],
-     "options": [
-      {
-       "flags": [
-        "--job"
-       ],
-       "metavar": "PACKET",
-       "help": 8
-      },
-      {
-       "flags": [
-        "--display"
-       ],
-       "metavar": "DISPLAY",
-       "help": 9
-      },
-      {
-       "flags": [
-        "--grid"
-       ],
-       "help": 10
-      },
-      {
-       "flags": [
-        "--camera"
-       ],
-       "metavar": "CAMERA",
-       "help": 11
-      },
-      {
-       "flags": [
-        "--width"
-       ],
-       "metavar": "WIDTH"
-      },
-      {
-       "flags": [
-        "--height"
-       ],
-       "metavar": "HEIGHT"
-      },
-      {
-       "flags": [
-        "--size-profile"
-       ],
-       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
-       "choices": [
-        "assembly",
-        "assembly-large",
-        "contact-sheet",
-        "diagnostic",
-        "labeled",
-        "presentation",
-        "presentation-large",
-        "simple",
-        "simple-square"
-       ]
-      },
-      {
-       "flags": [
-        "--preview"
-       ],
-       "help": 12
-      },
-      {
-       "flags": [
-        "--pose"
-       ],
-       "metavar": "POSE",
-       "help": 13
-      },
-      {
-       "flags": [
-        "--annotation"
-       ],
-       "metavar": "FILE",
-       "help": 14
-      },
-      {
-       "flags": [
-        "--measurements"
-       ],
-       "metavar": "FILE",
-       "help": 15
-      },
-      {
-       "flags": [
-        "--json"
-       ],
-       "help": 16
-      }
-     ]
-    },
-    {
-     "command": "cad sdf validate",
-     "summary": "check it for conformance, and with gz sdf --check where it is installed",
-     "usage": "cad sdf validate [--strict] [--gz-check {auto,required,never}] [--gz-remote] [--verbose] [--json] PATH",
-     "description": 104,
-     "arguments": [
-      {
-       "name": "PATH",
-       "help": 105
-      }
-     ],
-     "options": [
-      {
-       "flags": [
-        "--strict"
-       ],
-       "help": 100
-      },
-      {
-       "flags": [
-        "--gz-check"
-       ],
-       "metavar": "{auto,required,never}",
-       "help": 106,
-       "choices": [
-        "auto",
-        "required",
-        "never"
-       ],
-       "default": "auto"
-      },
-      {
-       "flags": [
-        "--gz-remote"
-       ],
-       "help": 107
-      },
-      {
-       "flags": [
-        "--verbose"
-       ],
-       "help": 102
-      },
-      {
-       "flags": [
-        "--json"
-       ],
-       "help": 46
-      }
-     ]
-    }
-   ]
-  },
-  {
    "name": "kicad_pcb",
    "summary": "KiCad PCB",
    "usage": "cad kicad_pcb <operation> FILE [options]",
@@ -3112,11 +2946,11 @@
      "command": "cad kicad_pcb export",
      "summary": "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, step, glb, odb, ipc2581, pdf or dxf",
      "usage": "cad kicad_pcb export --to {gerbers,drill,pos,bom,step,glb,odb,ipc2581,pdf,dxf} --out DIR [--json] BOARD",
-     "description": 108,
+     "description": 103,
      "arguments": [
       {
        "name": "BOARD",
-       "help": 109
+       "help": 104
       }
      ],
      "options": [
@@ -3125,7 +2959,7 @@
         "--to"
        ],
        "metavar": "{gerbers,drill,pos,bom,step,glb,odb,ipc2581,pdf,dxf}",
-       "help": 110,
+       "help": 105,
        "choices": [
         "gerbers",
         "drill",
@@ -3146,14 +2980,14 @@
         "--out"
        ],
        "metavar": "DIR",
-       "help": 111,
+       "help": 106,
        "required": true
       },
       {
        "flags": [
         "--json"
        ],
-       "help": 112
+       "help": 107
       }
      ]
     },
@@ -3164,7 +2998,7 @@
      "arguments": [
       {
        "name": "SRC",
-       "help": 113,
+       "help": 108,
        "optional": true
       },
       {
@@ -3268,7 +3102,7 @@
         "--window"
        ],
        "metavar": "X0,Y0,X1,Y1",
-       "help": 114
+       "help": 109
       }
      ]
     },
@@ -3276,11 +3110,11 @@
      "command": "cad kicad_pcb inspect",
      "summary": "what the board holds: its format, thickness, size, layers, parts and nets",
      "usage": "cad kicad_pcb inspect [--json] BOARD",
-     "description": 115,
+     "description": 110,
      "arguments": [
       {
        "name": "BOARD",
-       "help": 109
+       "help": 104
       }
      ],
      "options": [
@@ -3288,7 +3122,7 @@
        "flags": [
         "--json"
        ],
-       "help": 112
+       "help": 107
       }
      ]
     },
@@ -3296,11 +3130,11 @@
      "command": "cad kicad_pcb drc",
      "summary": "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
      "usage": "cad kicad_pcb drc [--json] BOARD",
-     "description": 116,
+     "description": 111,
      "arguments": [
       {
        "name": "BOARD",
-       "help": 117
+       "help": 112
       }
      ],
      "options": [
@@ -3323,11 +3157,11 @@
      "command": "cad kicad_sch export",
      "summary": "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder",
      "usage": "cad kicad_sch export --to {pdf,svg,netlist,bom} --out DIR [--json] SCHEMATIC",
-     "description": 118,
+     "description": 113,
      "arguments": [
       {
        "name": "SCHEMATIC",
-       "help": 119
+       "help": 114
       }
      ],
      "options": [
@@ -3336,7 +3170,7 @@
         "--to"
        ],
        "metavar": "{pdf,svg,netlist,bom}",
-       "help": 120,
+       "help": 115,
        "choices": [
         "pdf",
         "svg",
@@ -3351,14 +3185,14 @@
         "--out"
        ],
        "metavar": "DIR",
-       "help": 111,
+       "help": 106,
        "required": true
       },
       {
        "flags": [
         "--json"
        ],
-       "help": 112
+       "help": 107
       }
      ]
     },
@@ -3366,11 +3200,11 @@
      "command": "cad kicad_sch snapshot",
      "summary": "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG",
      "usage": "cad kicad_sch snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
-     "description": 121,
+     "description": 116,
      "arguments": [
       {
        "name": "SRC",
-       "help": 122,
+       "help": 117,
        "optional": true
       },
       {
@@ -3474,13 +3308,13 @@
         "--sheet"
        ],
        "metavar": "PATH",
-       "help": 123
+       "help": 118
       },
       {
        "flags": [
         "--border"
        ],
-       "help": 124
+       "help": 119
       }
      ]
     },
@@ -3488,15 +3322,15 @@
      "command": "cad kicad_sch inspect",
      "summary": "what the schematic holds: its sheets, parts and nets; with a ref, what that names",
      "usage": "cad kicad_sch inspect [--json] SCHEMATIC [REF]",
-     "description": 125,
+     "description": 120,
      "arguments": [
       {
        "name": "SCHEMATIC",
-       "help": 119
+       "help": 114
       },
       {
        "name": "REF",
-       "help": 126,
+       "help": 121,
        "optional": true
       }
      ],
@@ -3505,7 +3339,7 @@
        "flags": [
         "--json"
        ],
-       "help": 112
+       "help": 107
       }
      ]
     },
@@ -3513,11 +3347,11 @@
      "command": "cad kicad_sch erc",
      "summary": "KiCad's electrical rules check: errors fail it, warnings are said",
      "usage": "cad kicad_sch erc [--json] SCHEMATIC",
-     "description": 127,
+     "description": 122,
      "arguments": [
       {
        "name": "SCHEMATIC",
-       "help": 128
+       "help": 123
       }
      ],
      "options": [
@@ -3542,11 +3376,11 @@
      "command": "cad mujoco check",
      "summary": "compile a MuJoCo model (an MJCF) with MuJoCo and check it: what MuJoCo refuses or warns of, the model-health checks, what collides as what, and the contact excludes",
      "usage": "cad mujoco check [--strict] [--verbose] [--json] PATH",
-     "description": 129,
+     "description": 124,
      "arguments": [
       {
        "name": "PATH",
-       "help": 130
+       "help": 125
       }
      ],
      "options": [
@@ -3578,7 +3412,7 @@
    "command": "cad cache",
    "summary": "cad's cache: dir, prune (what this release cannot use), clean (all of it)",
    "usage": "cad cache {dir,prune,clean} ...",
-   "description": 131,
+   "description": 126,
    "arguments": [
     {
      "name": "{dir,prune,clean} ...",
@@ -3594,25 +3428,25 @@
    "command": "cad cache dir",
    "summary": "print where cad's cache is",
    "usage": "cad cache dir",
-   "description": 132
+   "description": 127
   },
   {
    "command": "cad cache prune",
    "summary": "remove what this release of cad cannot use",
    "usage": "cad cache prune",
-   "description": 133
+   "description": 128
   },
   {
    "command": "cad cache clean",
    "summary": "remove all of cad's cache; cad makes it again as it needs it",
    "usage": "cad cache clean",
-   "description": 134
+   "description": 129
   },
   {
    "command": "cad config",
    "summary": "show or change the settings an environment variable overrides: list, get, set, unset",
    "usage": "cad config [--json] {list,get,set,unset} ...",
-   "description": 135,
+   "description": 130,
    "arguments": [
     {
      "name": "{list,get,set,unset} ...",
@@ -3629,7 +3463,7 @@
      "flags": [
       "--json"
      ],
-     "help": 136
+     "help": 131
     }
    ]
   },
@@ -3637,13 +3471,13 @@
    "command": "cad config list",
    "summary": "every setting: its value in effect, where that came from, and its variable",
    "usage": "cad config list [--json]",
-   "description": 137,
+   "description": 132,
    "options": [
     {
      "flags": [
       "--json"
      ],
-     "help": 138
+     "help": 133
     }
    ]
   },
@@ -3651,11 +3485,11 @@
    "command": "cad config get",
    "summary": "one setting's value in effect, and where it came from",
    "usage": "cad config get [--json] KEY",
-   "description": 139,
+   "description": 134,
    "arguments": [
     {
      "name": "KEY",
-     "help": 140
+     "help": 135
     }
    ],
    "options": [
@@ -3663,7 +3497,7 @@
      "flags": [
       "--json"
      ],
-     "help": 141
+     "help": 136
     }
    ]
   },
@@ -3671,15 +3505,15 @@
    "command": "cad config set",
    "summary": "save a setting's value",
    "usage": "cad config set KEY VALUE",
-   "description": 142,
+   "description": 137,
    "arguments": [
     {
      "name": "KEY",
-     "help": 140
+     "help": 135
     },
     {
      "name": "VALUE",
-     "help": 143
+     "help": 138
     }
    ]
   },
@@ -3687,11 +3521,11 @@
    "command": "cad config unset",
    "summary": "remove a setting's saved value, so its default holds",
    "usage": "cad config unset KEY",
-   "description": 144,
+   "description": 139,
    "arguments": [
     {
      "name": "KEY",
-     "help": 140
+     "help": 135
     }
    ]
   },
@@ -3699,11 +3533,11 @@
    "command": "cad delete",
    "summary": "delete documents: record, cached document, the engine's copy",
    "usage": "cad delete [--dry-run] [--yes] [--json] DOC [DOC ...]",
-   "description": 145,
+   "description": 140,
    "arguments": [
     {
      "name": "DOC",
-     "help": 146,
+     "help": 141,
      "repeatable": true
     }
    ],
@@ -3712,20 +3546,20 @@
      "flags": [
       "--dry-run"
      ],
-     "help": 147
+     "help": 142
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 148
+     "help": 143
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 149
+     "help": 144
     }
    ]
   },
@@ -3733,19 +3567,19 @@
    "command": "cad doctor",
    "summary": "report this cad, its folders, its kernel and the server; it changes nothing",
    "usage": "cad doctor [--check] [--json]",
-   "description": 150,
+   "description": 145,
    "options": [
     {
      "flags": [
       "--check"
      ],
-     "help": 151
+     "help": 146
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 152
+     "help": 147
     }
    ]
   },
@@ -3753,13 +3587,13 @@
    "command": "cad mcp",
    "summary": "serve the CAD app to the agent app that starts it, over MCP on stdin and stdout",
    "usage": "cad mcp",
-   "description": 153
+   "description": 148
   },
   {
    "command": "cad plugin",
    "summary": "the plugin in your agent apps: `install` puts it in or updates it; `update auto`: whether cad's updates update it too",
    "usage": "cad plugin {install} ...",
-   "description": 154,
+   "description": 149,
    "arguments": [
     {
      "name": "{install} ...",
@@ -3774,7 +3608,7 @@
    "command": "cad plugin install",
    "summary": "install the plugin in every agent app found on this computer, or update it there",
    "usage": "cad plugin install",
-   "description": 155
+   "description": 150
   },
   {
    "command": "cad plugin update",
@@ -3793,7 +3627,7 @@
    "command": "cad plugin update auto",
    "summary": "show or change whether cad's updates update the plugin too",
    "usage": "cad plugin update auto [{status,on,off}]",
-   "description": 156,
+   "description": 151,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3810,13 +3644,13 @@
    "command": "cad run",
    "summary": "run a script (or -m, -c) as uv run does, cad pinned at this device's release with the integrations its imports use",
    "usage": "cad run [uv run's options] SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE [ARGS...] | COMMAND [ARGS...]",
-   "description": 157
+   "description": 152
   },
   {
    "command": "cad server",
    "summary": "the cad server: start, stop, status",
    "usage": "cad server [--rotate-token] [--yes] {start,stop,status} ...",
-   "description": 158,
+   "description": 153,
    "arguments": [
     {
      "name": "{start,stop,status} ...",
@@ -3832,14 +3666,14 @@
      "flags": [
       "--rotate-token"
      ],
-     "help": 159
+     "help": 154
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 160
+     "help": 155
     }
    ]
   },
@@ -3847,20 +3681,20 @@
    "command": "cad server start",
    "summary": "start the cad server where it is not running",
    "usage": "cad server start [--port PORT] [--foreground]",
-   "description": 161,
+   "description": 156,
    "options": [
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 162
+     "help": 157
     },
     {
      "flags": [
       "--foreground"
      ],
-     "help": 163
+     "help": 158
     }
    ]
   },
@@ -3873,7 +3707,7 @@
      "flags": [
       "--json"
      ],
-     "help": 164
+     "help": 159
     }
    ]
   },
@@ -3886,7 +3720,7 @@
      "flags": [
       "--json"
      ],
-     "help": 165
+     "help": 160
     }
    ]
   },
@@ -3894,7 +3728,7 @@
    "command": "cad telemetry",
    "summary": "show or change the usage stats and crash reports CAD sends: status, on, off",
    "usage": "cad telemetry [{status,on,off}]",
-   "description": 166,
+   "description": 161,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3911,7 +3745,7 @@
    "command": "cad update",
    "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
    "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
-   "description": 167,
+   "description": 162,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -3925,7 +3759,7 @@
      "flags": [
       "--major"
      ],
-     "help": 168
+     "help": 163
     }
    ]
   },
@@ -3933,7 +3767,7 @@
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 169,
+   "description": 164,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3950,11 +3784,11 @@
    "command": "cad viewer",
    "summary": "open a viewer page on the running cad server",
    "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 170,
+   "description": 165,
    "arguments": [
     {
      "name": "FILE",
-     "help": 171,
+     "help": 166,
      "optional": true,
      "repeatable": true
     }
@@ -3965,39 +3799,39 @@
       "--host"
      ],
      "metavar": "HOST",
-     "help": 172
+     "help": 167
     },
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 173
+     "help": 168
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 174
+     "help": 169
     },
     {
      "flags": [
       "--no-open"
      ],
-     "help": 175
+     "help": 170
     },
     {
      "flags": [
       "--dist"
      ],
      "metavar": "DIST",
-     "help": 176
+     "help": 171
     },
     {
      "flags": [
       "--api-only"
      ],
-     "help": 177
+     "help": 172
     }
    ]
   }
@@ -4106,11 +3940,6 @@
   "treat warnings as blocking.",
   "the URDF to check it against; found from its robot name and folder without it.",
   "narrate the target on stderr.",
-  "the .sdf file; with --job, drawn in place of every job's input",
-  "Check one SDFormat world or model for conformance.",
-  "the .sdf file to check.",
-  "run `gz sdf --check` as external validation — auto (when the tool is installed), required (fail without it), or never.",
-  "let `gz sdf --check` resolve the document's remote <uri> references (http, https, fuel). Off by default: gz does not run on a document that names one, so validating a file never fetches from a host the file names.",
   "Write a saved KiCad board's fabrication, assembly or 3D output with KiCad's kicad-cli, headless, into a folder.",
   "the .kicad_pcb (its .kicad_pro beside it)",
   "what to write: gerbers and drill (a folder of files), pos (placement CSV), bom (the schematic's parts CSV), step and glb (3D), odb (ODB++ zip), ipc2581, pdf (a front and a back fabrication drawing) or dxf (the outline and holes)",
@@ -4125,7 +3954,7 @@
   "the .kicad_sch (any sheet of its project: the whole hierarchy is read)",
   "what to write: pdf, svg, netlist, bom",
   "draw a document or a file the viewer opens as the viewer does, into a PNG",
-  "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf), a drawing (.dxf), a KiCad board (.kicad_pcb) or schematic (.kicad_sch), or a document id (a model's, which cad run SCRIPT.py prints: drawn from what the engine holds); with --job, drawn in place of every job's input",
+  "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .srdf), a drawing (.dxf), a KiCad board (.kicad_pcb) or schematic (.kicad_sch), or a document id (a model's, which cad run SCRIPT.py prints: drawn from what the engine holds); with --job, drawn in place of every job's input",
   "the sheet to draw, by its path: / (the root, the default), /Power/; the same as --display '{\"sheet\": PATH}'",
   "draw KiCad's page as printed: the page's edge and the drawing sheet's frame (off by default; the title block is drawn unless --display '{\"title\": false}')",
   "What a saved KiCad schematic holds: its sheets, parts and nets, read from its project's root; with REF, what that reference names (#U3, #U3.7, #net:VBUS, #sheet:/Power/, #wire:<uuid>).",
