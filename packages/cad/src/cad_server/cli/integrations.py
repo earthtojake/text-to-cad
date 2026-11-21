@@ -133,6 +133,8 @@ def integration_main(integration: str, argv: Sequence[str] | None = None, prog: 
         sys.stderr.write(f"{prog}: {problem}\n\n" + integration_usage(integration))
         return 2
     operation, rest = argv[0], argv[1:]
+    if INTEGRATIONS[integration].deprecated and not wants_json(rest):
+        sys.stderr.write(f"{prog}: deprecated and will be removed: {INTEGRATIONS[integration].deprecated}\n")
     run = OPERATIONS.get((integration, operation))
     if run is None:
         from cad_server._internal.cli_parser import suggest

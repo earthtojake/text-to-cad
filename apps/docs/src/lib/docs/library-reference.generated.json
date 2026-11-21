@@ -1070,55 +1070,10 @@
      "doc": 129
     }
    ]
-  },
-  {
-   "name": "orcaslicer",
-   "module": "cad.orcaslicer",
-   "doc": 130,
-   "members": [
-    {
-     "name": "Completed",
-     "kind": "class",
-     "signature": "(printer: Path, process: Path, filaments: tuple[Path, ...])",
-     "doc": 131,
-     "members": [
-      {
-       "name": "human_lines",
-       "kind": "method",
-       "signature": "() -> list[str]"
-      }
-     ]
-    },
-    {
-     "name": "Presets",
-     "kind": "class",
-     "signature": "(kind: str, names: tuple[str, ...])",
-     "doc": 132,
-     "members": [
-      {
-       "name": "human_lines",
-       "kind": "method",
-       "signature": "() -> list[str]"
-      }
-     ]
-    },
-    {
-     "name": "complete",
-     "kind": "function",
-     "signature": "(*, printer: str, process: str, filament: tuple[str, ...] = (), out: Path = Path('presets'), profiles: tuple[str, ...] = ()) -> Completed",
-     "doc": 133
-    },
-    {
-     "name": "presets",
-     "kind": "function",
-     "signature": "(kind: Literal['machine', 'process', 'filament'], *, match: str = '', profiles: tuple[str, ...] = ()) -> Presets",
-     "doc": 134
-    }
-   ]
   }
  ],
  "texts": [
-  "cad: CAD models as Python, built by its engine (``cad.engine``) into documents and the files they\ndeclare.\n\nThe root holds ``__version__``, ``CadDeprecationWarning`` and the document types, one object each\n(``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file), ``xbf``,\n``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``srdf``, ``kicad_pcb`` and\n``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step(\"arm.step\")``), its edit where\nits files are changed in place (``with kicad_pcb.edit(\"board.kicad_pcb\") as board:``), its reader where it\nhas one (``step.read``) and its\noperations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,\n``.inspect``, and those named for what they do (``.dfm``, ``.solve``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are\nthe build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's\n``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,\n``cad.trimesh`` (a mesh's 3D printing measurements: ``printing``, ``orientations``); those that call MuJoCo\nare the mujoco integration's, ``cad.mujoco`` (a document as a ``mujoco.MjSpec``, a part's collision chosen on\nit, the spec saved, and a MuJoCo model checked by MuJoCo's own compiler: ``spec``, ``fit``, ``save``, ``check``); those that take Blender's are the blender integration's, ``cad.blender`` (``load``: a\nGLB in Blender's scene, for a render); and OrcaSlicer's presets, written complete for its command line, are\nthe orcaslicer integration's, ``cad.orcaslicer`` (``presets``, ``complete``). Process control (``cad serve``, ``status``, ``stop``,\n``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD\nkernel, and ``import build123d`` binds a module the kernel loads into on its first attribute\n(``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,\n...) are aliases of what they name now, each saying so once (``_internal/aliases.py``).",
+  "cad: CAD models as Python, built by its engine (``cad.engine``) into documents and the files they\ndeclare.\n\nThe root holds ``__version__``, ``CadDeprecationWarning`` and the document types, one object each\n(``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file), ``xbf``,\n``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``srdf``, ``kicad_pcb`` and\n``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step(\"arm.step\")``), its edit where\nits files are changed in place (``with kicad_pcb.edit(\"board.kicad_pcb\") as board:``), its reader where it\nhas one (``step.read``) and its\noperations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,\n``.inspect``, and those named for what they do (``.dfm``, ``.solve``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are\nthe build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's\n``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,\n``cad.trimesh`` (a mesh's 3D printing measurements: ``printing``, ``orientations``); those that call MuJoCo\nare the mujoco integration's, ``cad.mujoco`` (a document as a ``mujoco.MjSpec``, a part's collision chosen on\nit, the spec saved, and a MuJoCo model checked by MuJoCo's own compiler: ``spec``, ``fit``, ``save``, ``check``); and those that take Blender's are the blender integration's, ``cad.blender`` (``load``: a\nGLB in Blender's scene, for a render). Process control (``cad serve``, ``status``, ``stop``,\n``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD\nkernel, and ``import build123d`` binds a module the kernel loads into on its first attribute\n(``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,\n...) are aliases of what they name now, each saying so once (``_internal/aliases.py``).",
   "The release of the library this is, as its distribution's metadata says it.",
   "A spelling the library still answers, under the name it has now. A ``FutureWarning``, so Python\nshows it by default: the people who read it are a model's authors, not a library's developers.",
   "``cad.model``: the model document type, a model built from code and held in the engine's memory\n(``cad.registry``).\n\nA model has no file behind it: it is addressed by its document id (``cad run SCRIPT.py`` prints it) or\nthe handle its call returns. ``@model`` declares one (``@model(name=...)``; ``model(shape, name=...)`` hands\na shape over), with no file of its own; the files it declares are the other types' decorators\n(``@xbf(\"XBF/arm.xbf\")``, ``@step(\"arm.step\")``). Its operations are the ``cad model <operation>`` commands':\n``model.export(handle_or_id, *destinations, tolerance=None, angle=None)``, ``model.snapshot(...)``,\n``model.inspect(...)`` and ``model.dfm(handle_or_id, process=\"cnc\")`` (or ``\"sheet\"``, ``\"molding\"``,\n``\"printing\"``), which checks it for manufacturing on its exact geometry, measured by the engine with the build123d\nintegration (``cad._internal.manufacturing``), and\n``model.solve(handle_or_id, study=..., out=\"results/\")``, a stress study of it (``cad._internal.fea.operation``),\nwhich reads an ``.xbf`` the engine writes of it in a temporary folder. A file is\nrefused by name: ``arm.xbf`` is an xbf's (``cad.xbf``). Everything loads on first use: ``import cad.model``\nimports no CAD kernel (``cad._internal.document_type``).",
@@ -1247,11 +1202,6 @@
   "The imported model. ``root`` is the object of the scene's first root node (``roots``: of each, in the\nfile's order; for a root that is a skin's joint, the objects nearest it below). ``objects`` is each node's\nobject by the node's name (in a GLB cad wrote, its path below the root, ``arm/head/pin_1``); a node with\nno name by the name Blender gave its object (``Mesh_0``, ``Node_3``); a name given twice, the last.\n``nodes`` is each by its index in the file, which tells two of one name apart. Both hold every node\nBlender made an object of: a skin's joints are bones (the module). ``clips`` by name, ``box`` the world\nbox (low, high corners in metres) of the pose the file was written in, ``fps`` the scene's frame rate\n(``fps_base`` 1), and ``clip`` the one playing.",
   "Play the clip ``name`` (None: no clip, every part where the file places it), the scene at its\nframe 0. The scene's range is the clip's, frames 0 to its duration at the model's fps.",
   "The world box (low, high corners in metres) of every mesh at the scene's current frame.",
-  "Import the GLB at ``path`` into the current scene and play ``clip`` (None: stand still). The scene's\nframe rate is set to ``fps`` (``render.fps``, with ``render.fps_base`` 1) before the import, which keys\neach clip's seconds at it. ``ValueError`` for a file that is no GLB, or one with no node; Blender's own\n``RuntimeError`` for one its importer cannot read, once everything the import made is removed.",
-  "``cad.orcaslicer``: the orcaslicer integration -- complete OrcaSlicer presets for its command line.\n\nOrcaSlicer stores a preset as its differences from a parent (``inherits``), and its command line neither fills\nthe parent's settings in nor reads compatibility conditions: given a preset as OrcaSlicer saved it, it slices with\ndefaults, and it refuses a process whose ``compatible_printers`` does not name the printer. That is what is missing\nwithout us, and all this integration adds:\n\n- ``presets(kind, match=...)`` lists the presets a person can select, of one kind (``machine``, ``process`` or\n  ``filament``), from their own OrcaSlicer folders and the app's built-in profiles: ``cad orcaslicer presets``.\n- ``complete(printer=..., process=..., filament=(...), out=...)`` writes a printer, a process and each filament\n  complete into a folder -- every parent merged in, the process and filaments naming the printer as compatible,\n  each saved as a user preset that ``inherits`` its system preset -- as ``printer.json``, ``process.json`` and\n  ``filament-N.json``, ready for OrcaSlicer's ``--load-settings`` and ``--load-filaments``: ``cad orcaslicer\n  complete``.\n\nEverything else is OrcaSlicer's own: the slice is its command line, run as it is, and its app opens a model for\nthe person. Nothing here runs OrcaSlicer, needs the engine or the CAD kernel, or reaches the network: it reads\nand writes JSON files, with the standard library alone, so the integration has no extra.",
-  "The complete presets written: the printer's, the process's and each filament's file, in order.",
-  "The selectable presets of one kind, by name, sorted.",
-  "Write a printer, a process and filaments complete, for OrcaSlicer's command line.\n\nEach is merged with every parent it inherits from, the process and each filament name the printer as\ncompatible, and each is saved as a user preset of the system preset it comes from: printer.json,\nprocess.json and filament-N.json in the folder. Where several vendors ship a preset of one name, the one\nthat lists the printer, else the one nearest it, is taken.\n\nprinter: the printer (machine) preset's name, or a preset JSON file.\nprocess: the process preset's name, or a preset JSON file.\nfilament: a filament preset's name or file; once per material, in the printer's filament order.\nout: the folder the complete presets are written into.\nprofiles: another folder of OrcaSlicer presets to search first; once per folder.",
-  "List the OrcaSlicer presets of one kind a person can select.\n\nThey are searched in the folders given first, then the person's own OrcaSlicer presets, then the app's\nbuilt-in profiles (macOS, Windows, Linux and the Flathub build's folders). OrcaSlicer 2.5 and later ships\nits system presets as binary caches (.opc), which are not read: where none of the kind is found and a cache\nis there, the listing is refused, naming the cache, rather than empty.\n\nkind: machine (a printer), process or filament.\nmatch: only names containing this text, in any case.\nprofiles: another folder of OrcaSlicer presets to search first; once per folder."
+  "Import the GLB at ``path`` into the current scene and play ``clip`` (None: stand still). The scene's\nframe rate is set to ``fps`` (``render.fps``, with ``render.fps_base`` 1) before the import, which keys\neach clip's seconds at it. ``ValueError`` for a file that is no GLB, or one with no node; Blender's own\n``RuntimeError`` for one its importer cannot read, once everything the import made is removed."
  ]
 }

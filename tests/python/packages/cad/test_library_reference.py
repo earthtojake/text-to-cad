@@ -34,7 +34,9 @@ class TheCopyIsTheLibrary(unittest.TestCase):
 
         docs = reference.as_docs()
         self.assertEqual([entry["name"] for entry in docs["documentTypes"]], list(DOCUMENT_TYPES))
-        self.assertEqual([entry["name"] for entry in docs["integrations"]], list(INTEGRATIONS))
+        # A deprecated integration is left out, as `cad --help` leaves it out.
+        self.assertEqual([entry["name"] for entry in docs["integrations"]],
+                         [name for name, entry in INTEGRATIONS.items() if not entry.deprecated])
         self.assertEqual({entry["name"] for entry in docs["names"]} | set(DOCUMENT_TYPES), set(cad.__all__))
         for entry in docs["documentTypes"]:
             with self.subTest(type=entry["name"]):

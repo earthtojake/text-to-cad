@@ -312,7 +312,12 @@ in the environment of `cad[mujoco]` at the installation's release, made once by 
 and `mujoco-studio`, about 20 MB: the compiler and the bindings, and Studio's web viewer, no GL). A
 MuJoCo function's `save` says the same of the file it wrote.
 
-**OrcaSlicer's presets.** OrcaSlicer keeps a preset as its differences from a parent (`inherits`), and its
+**OrcaSlicer's presets (deprecated).** The `orcaslicer` integration is on its way out: a project saved from
+OrcaSlicer's app carries its settings and slices on its command line as it is, and from OrcaSlicer 2.5 the
+built-in presets are binary caches these commands cannot read. Its commands stay, unlisted, while skill text of
+the last 30 days uses them, and say on stderr that they are deprecated (the registry entry's `deprecated`).
+What they do until then:
+OrcaSlicer keeps a preset as its differences from a parent (`inherits`), and its
 command line neither fills the parent in nor reads compatibility conditions. The `orcaslicer` integration's two
 operations take preset names, not a file (`cli/integrations.py`): `cad orcaslicer presets KIND` lists the
 selectable presets of one kind, and `cad orcaslicer complete` writes a printer, a process and each filament

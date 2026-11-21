@@ -79,8 +79,8 @@ cad_server/
   findings carry a severity, a code and a location (`--json`). `cad <type> --help` lists a type's
   operations, `cad <type> <operation> --help` its options, and a file of another type is refused by name
   (`cli/document_types.py`, each type's module `cli/<type>.py`).
-- **Integrations**, for a tool's own files that are no document type: `cad mujoco check MODEL.xml`,
-  `cad orcaslicer presets KIND`, `cad orcaslicer complete` (`cli/integrations.py`).
+- **Integrations**, for a tool's own files that are no document type: `cad mujoco check MODEL.xml`
+  (`cli/integrations.py`). `cad orcaslicer presets|complete` are deprecated: unlisted, still run, and say so.
 - **The server**: `cad server start` starts it, detached, and says so; `cad server stop` stops it;
   `cad server status` says whether it runs, its release, its workers and what they build.
   `cad server start --foreground` runs it in this process; `cad server --rotate-token` replaces the page

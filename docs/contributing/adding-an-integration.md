@@ -25,7 +25,9 @@ Three questions decide most of it.
 3. **What is missing without us?** Name it: a result every check shares, a guarantee the tool does not
    give, a fact it does not report, the tie between its objects and our documents. That is the whole
    of what we write. If nothing is missing, the skill teaches the tool as it is and there is no
-   integration to add.
+   integration to add. Check what the tool itself does before writing code around its files:
+   `cad orcaslicer` completed presets from OrcaSlicer's own folders, could not once OrcaSlicer kept
+   them in binary caches, and is deprecated.
 
 What those answers gave so far:
 
