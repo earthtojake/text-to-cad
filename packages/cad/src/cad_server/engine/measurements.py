@@ -6,8 +6,10 @@ Two kinds of entry, each in memory and in the engine's cache folder:
 
 - **An alias** says what a measurement reads of one version of a document: its content record
   (``cad.build123d._dfm_brep.content``, made in a checks process and keyed by ``kept.content_key``), under a
-  token of that version -- ``model_token``: a model's id and its revision; ``build_token``: for a build whose
-  revision does not outlive the engine, its id and its generation, kept in memory alone; ``file_token``: the
+  token of that version -- ``model_token``: a model's id and what names its version beyond the engine's life
+  (its revision with a digest of what the engine knows the build made: ``Daemon._check_built``);
+  ``build_token``: for a build that has no such name, its id and its generation, kept in memory alone;
+  ``file_token``: the
   digest of a file's bytes with its name's stem and suffix, which are all of its path a read takes (an unnamed
   root is named by the stem), so the same bytes under the same name anywhere are one alias. With it is kept what
   described it
@@ -31,18 +33,31 @@ alone; None keeps nothing there), each file written whole:
     checks/results/<xx>/<content key>-<digest of the measure>.json
                                                                 {"format", "content", "measure", "by", "result"}
 
-A model keeps its ``REVISIONS`` most recently used aliases; the files' aliases are held to ``FILE_ALIASES`` and
-``FILE_ALIAS_BYTES``, the results to ``DISK_RESULTS`` and ``DISK_RESULT_BYTES``, the least recently used (by
-its time on disk, set again by each read) going first. A file that does not read as what its name says -- not
-JSON, another format, another token's, record's or measurement's, a record whose key is not its own -- is
-removed, never served. The files' aliases and the results are listed once each, at their first use (the
-half-written files a stopped engine left swept then); one gone since leaves the list as it is asked for. A
-folder that cannot be written keeps nothing there, each entry trying its own write.
+A model keeps its ``REVISIONS`` most recently used aliases, and the models' together are held to
+``MODEL_ALIASES`` and ``MODEL_ALIAS_BYTES``; the files' aliases to ``FILE_ALIASES`` and ``FILE_ALIAS_BYTES``,
+the results to ``DISK_RESULTS`` and ``DISK_RESULT_BYTES``, the least recently used (by its time on disk, set
+again by each read) going first. A file that does not read as what its name says -- not JSON, another format,
+another token's, record's or measurement's, a record whose key is not its own -- is removed, never served.
+Each of the three is listed once, at its first use (the half-written files a stopped engine left swept
+then); one gone since leaves the list as it is asked for. A folder that cannot be written keeps nothing
+there, each entry trying its own write.
 
-**A deleted document** (``deleted``, told by ``Registry.delete`` under the document's lock) takes its own
-aliases with it, in memory and ``checks/models/<id>/``, and a check of it that began before names none
-(``epoch``, ``name``'s ``since``: asked under that lock). The results are no document's: they outlive every
-document they were measured of, and go by their bounds or with the cache.
+**A deleted document** takes its own aliases with it. Its folder of them, ``checks/models/<id>/``, is the
+registry's to remove with the document's others (``Registry.delete``, ``registry.CHECKED``), whether an engine
+runs or not: a model built again under the id may hold other parts at a revision it had before, which an
+alias left behind would answer for. A running engine is told (``deleted``, under the document's lock) and
+drops what it holds of them in memory; and a check of the document that began before neither names an alias
+nor takes one from disk into memory (``epoch``: asked under that lock). The results are no document's: they
+outlive every document they were measured of, and go by their bounds or with the cache.
+
+**What a model's alias takes for granted.** A build is not always a function of its closure: it can read the
+environment, an argument, a clock, so a model built again at a revision it had before -- after an edit undone,
+or after it was deleted -- may hold other parts. A check answered from what was kept asks no process, and so
+would catch nothing; hence a model's version is named by its revision *and* the build's facts as the engine
+holds them (its parts' geometry keys and counts, their looks and materials, its bounds and joints), and a
+deleted document's aliases go with it. What the facts do not hold -- a part's name, where it stands inside the
+same bounds -- is taken for granted of two builds at one revision that agree in all the facts; where a process
+is asked, a measurement of other parts than the alias says is caught and the alias forgotten (``forget``).
 """
 
 from __future__ import annotations
@@ -58,9 +73,11 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable
 
+from cad_server.engine.registry import CHECKED
+
 __all__ = ["ALIASES", "ALIAS_BYTES", "DISK_RESULTS", "DISK_RESULT_BYTES", "FILE_ALIASES", "FILE_ALIAS_BYTES",
-           "FORMAT", "RESULTS", "RESULT_BYTES", "REVISIONS", "ROOT", "Measurements", "build_token", "file_token",
-           "is_record", "model_token"]
+           "FORMAT", "MODEL_ALIASES", "MODEL_ALIAS_BYTES", "RESULTS", "RESULT_BYTES", "REVISIONS", "ROOT",
+           "Measurements", "build_token", "file_token", "is_key", "is_record", "model_token"]
 
 # At most this many aliases kept in memory, and this many bytes of them (their JSON).
 ALIASES = 1024
@@ -68,24 +85,33 @@ ALIAS_BYTES = 32 * 2**20
 # At most this many results kept in memory, and this many bytes of them.
 RESULTS = 128
 RESULT_BYTES = 64 * 2**20
-# On disk: a model's aliases at most; the files' aliases and their bytes; the results and theirs.
+# On disk: a model's aliases at most, and the models' together and their bytes; the files' aliases and their
+# bytes; the results and theirs.
 REVISIONS = 8
+MODEL_ALIASES = 4096
+MODEL_ALIAS_BYTES = 32 * 2**20
 FILE_ALIASES = 4096
 FILE_ALIAS_BYTES = 32 * 2**20
 DISK_RESULTS = 1024
 DISK_RESULT_BYTES = 256 * 2**20
 # The format of an entry's file: another is a file that does not read.
 FORMAT = 1
-# The store's folder in the cache folder, and its three inside it.
+# The store's folder in the cache folder, and its three inside it: the models' aliases where the registry
+# removes a deleted document's (``registry.CHECKED``).
 ROOT = "checks"
-MODELS, FILES, KEPT = f"{ROOT}/models", f"{ROOT}/files", f"{ROOT}/results"
+MODELS, FILES, KEPT = CHECKED, f"{ROOT}/files", f"{ROOT}/results"
 
 _KEY = re.compile(r"[0-9a-f]{32}")
 
 
+def is_key(text: Any) -> bool:
+    """Whether ``text`` is a content record's key, as ``kept.content_key`` makes one."""
+    return isinstance(text, str) and _KEY.fullmatch(text) is not None
+
+
 def model_token(ident: str, revision: str) -> tuple[str, ...]:
-    """A model document's version as an alias names it: its id and its revision, its build closure's key, the
-    same in any process."""
+    """A model document's version as an alias names it: its id and what names the version in any engine
+    (``revision``: its build closure's key, with what the engine knows the build made where it says so)."""
     return ("model", str(ident), str(revision))
 
 
@@ -168,19 +194,17 @@ class _Kept:
 
 
 class _Shelf:
-    """One bounded folder of the store on disk (``inside``): its entries at ``<inside>/<xx>/<name>.json``,
-    ``xx`` the name's first two characters, listed and stated once per cache folder (nothing read, the
-    half-written files there swept), held to ``limit`` files and ``budget`` bytes, the least recently used --
-    by its time on disk, which a read sets again -- going first (call with the store's disk lock held)."""
+    """One bounded folder of the store on disk (``inside``): its entries two folders down,
+    ``<inside>/<folder>/<name>.json``, listed and stated once per cache folder (nothing read, the half-written
+    files there swept), held to ``limit`` files and ``budget`` bytes -- and each folder of it to ``within``
+    files, where one is given -- the least recently used, by its time on disk, which a read sets again, going
+    first (call with the store's disk lock held)."""
 
-    def __init__(self, inside: str, limit: int, budget: int) -> None:
-        self.inside, self.limit, self.budget = inside, limit, budget
+    def __init__(self, inside: str, limit: int, budget: int, within: int | None = None) -> None:
+        self.inside, self.limit, self.budget, self.within = inside, limit, budget, within
         self.index: dict[str, tuple[int, float]] | None = None
         self.root: Any = None
         self.bytes = 0
-
-    def place(self, name: str) -> str:
-        return f"{self.inside}/{name[:2]}/{name}.json"
 
     def listed(self, held: Any) -> dict[str, tuple[int, float]]:
         root = getattr(held, "root", held)
@@ -207,18 +231,23 @@ class _Shelf:
         if found is not None:
             self.bytes -= found[0]
 
+    def dropped(self, folder: str) -> None:
+        """Every entry of ``<inside>/<folder>/`` out of the list: the folder went, with what it was of."""
+        mine = f"{self.inside}/{folder}/"
+        for inside in [inside for inside in self.index or {} if inside.startswith(mine)]:
+            self.forget(inside)
+
     def remove(self, held: Any, inside: str) -> None:
         _removed(held, inside)
         self.forget(inside)
         try:
-            os.rmdir(held.path(inside.rsplit("/", 1)[0]))  # its ``<xx>/``, gone with its last entry
+            os.rmdir(held.path(inside.rsplit("/", 1)[0]))  # its folder, gone with its last entry
         except (OSError, ValueError):
             pass  # not empty, or gone already
 
-    def read(self, held: Any, name: str, good: Callable[[dict[str, Any]], bool]) -> dict[str, Any] | None:
-        """The entry ``name`` as written, where ``good`` says it is what its name says; else None, one that
-        does not read removed and one gone dropped from the list."""
-        inside = self.place(name)
+    def read(self, held: Any, inside: str, good: Callable[[dict[str, Any]], bool]) -> dict[str, Any] | None:
+        """The entry at ``inside`` as written, where ``good`` says it is what its name says; else None, one
+        that does not read removed and one gone dropped from the list."""
         found, there = _read(held, inside, good)
         if found is None:
             if there:
@@ -232,13 +261,13 @@ class _Shelf:
             index[inside] = (index[inside][0], _stamped(held, inside))
         return found
 
-    def write(self, held: Any, name: str, entry: dict[str, Any]) -> None:
-        """``entry`` written whole as ``name``, the shelf held to its bounds; one over the budget alone, or a
-        folder that takes no write, keeps nothing."""
+    def write(self, held: Any, inside: str, entry: dict[str, Any]) -> None:
+        """``entry`` written whole at ``inside``, its folder and the shelf held to their bounds, the one just
+        written never the one to go; one over the budget alone, or a folder that takes no write, keeps
+        nothing."""
         data = _text(entry).encode("utf-8")
         if len(data) > self.budget:
             return
-        inside = self.place(name)
         index = self.listed(held)
         try:
             held.write(inside, data)
@@ -247,8 +276,19 @@ class _Shelf:
         self.forget(inside)
         index[inside] = (len(data), time.time())
         self.bytes += len(data)
+
+        def oldest(places: Any) -> str:
+            return min((place for place in places if place != inside), key=lambda place: index[place][1])
+
+        if self.within is not None:
+            mine = inside.rsplit("/", 1)[0] + "/"
+            beside = [place for place in index if place.startswith(mine)]
+            while len(beside) > max(1, self.within):
+                gone = oldest(beside)
+                beside.remove(gone)
+                self.remove(held, gone)
         while len(index) > 1 and (len(index) > self.limit or self.bytes > self.budget):
-            self.remove(held, min((place for place in index if place != inside), key=lambda place: index[place][1]))
+            self.remove(held, oldest(index))
 
     def status(self) -> tuple[int | None, int]:
         return (None if self.index is None else len(self.index)), self.bytes
@@ -286,20 +326,21 @@ def _read(held: Any, inside: str, good: Callable[[dict[str, Any]], bool]) -> tup
 
 class Measurements:
     """The kept aliases and results (the module): ``content`` and ``name`` an alias, ``get`` and ``keep`` a
-    result, ``forget`` an alias found wrong, ``deleted`` a document's own, ``status`` the counts. ``folder()``:
-    the engine's registry, whose cache folder holds the store and whose lock of a document a model's alias is
-    written under (``Registry.lock``), or a ``registry.Folder`` alone (a test's); None: nothing is kept on
-    disk."""
+    result, ``forget`` an alias found wrong, ``deleted`` what memory holds of a deleted document, ``status`` the
+    counts. ``folder()``: the engine's registry, whose cache folder holds the store and whose lock of a document
+    a model's alias is read and written under (``Registry.lock``), or a ``registry.Folder`` alone (a test's);
+    None: nothing is kept on disk."""
 
     def __init__(self, folder: Callable[[], Any] | None = None, *, results: int = RESULTS,
                  budget: int = RESULT_BYTES, aliases: int = ALIASES, disk_results: int = DISK_RESULTS,
                  disk_budget: int = DISK_RESULT_BYTES, file_aliases: int = FILE_ALIASES,
-                 revisions: int = REVISIONS) -> None:
-        self.folder, self.revisions = folder, revisions
+                 model_aliases: int = MODEL_ALIASES, revisions: int = REVISIONS) -> None:
+        self.folder = folder
         self.lock = threading.Lock()  # what memory holds, and the counts
         self.disk = threading.Lock()  # the files and their lists: never taken with ``lock`` held, nor it with this
         self.aliases = _Kept(aliases, ALIAS_BYTES)
         self.results = _Kept(results, budget)
+        self.models = _Shelf(MODELS, model_aliases, MODEL_ALIAS_BYTES, within=revisions)
         self.files = _Shelf(FILES, file_aliases, FILE_ALIAS_BYTES)
         self.kept = _Shelf(KEPT, disk_results, disk_budget)
         self.described = 0
@@ -321,17 +362,23 @@ class Measurements:
 
     # --- aliases ------------------------------------------------------------------------------------
 
-    @staticmethod
-    def _alias(token: tuple[str, ...]) -> tuple[str, str] | None:
-        """Where a token's alias is on disk: a model's folder and its file there, or None and its name on the
-        files' shelf. ``ValueError`` for a model token whose id is none."""
-        if token[0] != "model":
-            return None
-        from cad.engine.ids import is_id
+    def _place(self, token: tuple[str, ...]) -> tuple[_Shelf, str]:
+        """Where a token's alias is on disk: its shelf and its place there -- a model's in its document's own
+        folder, a file's by its token's digest. ``ValueError`` for a model token whose id is none."""
+        if token[0] == "model":
+            from cad.engine.ids import is_id
 
-        if not is_id(token[1]):
-            raise ValueError(f"{token[1]!r} is not a document id")
-        return f"{MODELS}/{token[1]}", f"{_digest(token[2])}.json"
+            if not is_id(token[1]):
+                raise ValueError(f"{token[1]!r} is not a document id")
+            return self.models, f"{MODELS}/{token[1]}/{_digest(token[2])}.json"
+        name = _digest(_text(list(token)), 16)
+        return self.files, f"{FILES}/{name[:2]}/{name}.json"
+
+    @staticmethod
+    def _document(token: tuple[str, ...]) -> str | None:
+        """The document a token's alias is the own of (a model's, by either token), or None: a file's bytes are
+        no document's."""
+        return token[1] if token[0] in ("model", "build") else None
 
     def content(self, token: tuple[str, ...], serves: Callable[[Any], bool] = lambda _by: True
                 ) -> dict[str, Any] | None:
@@ -342,35 +389,36 @@ class Measurements:
         with self.lock:
             found = self.aliases.get(token)
         if found is None and token[0] != "build":
-            found = self._alias_on_disk(token)
-            if found is not None:
-                with self.lock:
-                    self.aliases.put(token, *found)
+            found = self._restored(token)
         if found is None or not serves(found[1]):
             return None
         return found[0]
 
-    def _alias_on_disk(self, token: tuple[str, ...]) -> tuple[dict[str, Any], Any] | None:
-        held, _locks = self._held()
+    def _restored(self, token: tuple[str, ...]) -> tuple[dict[str, Any], Any] | None:
+        """``token``'s alias read from disk and taken into memory -- a model's under the registry's lock of its
+        document, as ``name`` writes one, and neither answered nor taken where the document was deleted while
+        it was read (``epoch``): its aliases are gone, and stay gone."""
+        held, locks = self._held()
         if held is None:
             return None
+        shelf, inside = self._place(token)
+        ident = self._document(token)
 
         def good(found: dict[str, Any]) -> bool:
             return (found.get("token") == list(token) and isinstance(found.get("by"), dict)
                     and is_record(found.get("content")))
 
-        model = self._alias(token)
-        with self.disk:
-            if model is None:
-                found = self.files.read(held, _digest(_text(list(token)), 16), good)
-            else:
-                inside = f"{model[0]}/{model[1]}"
-                found, there = _read(held, inside, good)
-                if found is not None:
-                    _stamped(held, inside)
-                elif there:
-                    _removed(held, inside)  # one that does not read: never served
-        return None if found is None else (found["content"], found["by"])
+        with (locks(ident) if locks is not None and ident is not None else contextlib.nullcontext()):
+            since = self.epoch(ident)
+            with self.disk:
+                found = shelf.read(held, inside, good)
+            if found is None:
+                return None
+            with self.lock:
+                if ident is not None and self.deletions.get(ident, 0) != since:
+                    return None
+                self.aliases.put(token, found["content"], found["by"])
+        return found["content"], found["by"]
 
     def epoch(self, ident: str | None) -> int:
         """How many times document ``ident`` was deleted so far: what ``name``'s ``since`` names."""
@@ -386,9 +434,7 @@ class Measurements:
         token = tuple(token)
         by = by if isinstance(by, dict) else {}
         held, locks = self._held()
-        model = self._alias(token)
-        ident = token[1] if token[0] in ("model", "build") else None
-        entry = {"format": FORMAT, "token": list(token), "content": content, "by": by}
+        ident = self._document(token)
         with (locks(ident) if locks is not None and ident is not None else contextlib.nullcontext()):
             if ident is not None and since is not None and self.epoch(ident) != since:
                 return  # deleted since the check began: its aliases are gone, and stay gone
@@ -396,34 +442,9 @@ class Measurements:
                 self.aliases.put(token, content, by)
             if held is None or token[0] == "build":
                 return
+            shelf, inside = self._place(token)
             with self.disk:
-                if model is None:
-                    self.files.write(held, _digest(_text(list(token)), 16), entry)
-                    return
-                try:
-                    held.write(f"{model[0]}/{model[1]}", _text(entry).encode("utf-8"))
-                except OSError:
-                    return
-                self._trimmed(held, *model)
-
-    def _trimmed(self, held: Any, folder: str, written: str) -> None:
-        """A model's aliases held to ``revisions`` -- the one just ``written`` and the most recently used of the
-        others (by their time on disk) -- and a half-written file a stopped engine left there swept."""
-        stated: list[tuple[float, str]] = []
-        for name in held.names(folder):
-            inside = f"{folder}/{name}"
-            if not name.endswith(".json"):
-                if ".json." in name and name.endswith(".tmp"):
-                    _removed(held, inside)
-                continue
-            if name == written:
-                continue
-            try:
-                stated.append((held.path(inside).stat().st_mtime, inside))
-            except OSError:
-                continue
-        for _changed, inside in sorted(stated)[:max(0, len(stated) + 1 - self.revisions)]:
-            _removed(held, inside)
+                shelf.write(held, inside, {"format": FORMAT, "token": list(token), "content": content, "by": by})
 
     def forget(self, token: tuple[str, ...]) -> None:
         """``token``'s alias dropped, from memory and from disk: a measurement of that version read another
@@ -434,35 +455,29 @@ class Measurements:
         held, _locks = self._held()
         if held is None or token[0] == "build":
             return
-        model = self._alias(token)
+        shelf, inside = self._place(token)
         with self.disk:
-            if model is None:
-                self.files.remove(held, self.files.place(_digest(_text(list(token)), 16)))
-            else:
-                _removed(held, f"{model[0]}/{model[1]}")
+            shelf.remove(held, inside)
 
     def deleted(self, ident: str) -> None:
-        """Document id ``ident`` deleted (``Registry.delete``, told under its lock): its aliases dropped from
-        memory and its folder of them removed, and a check of it that began before names none (``epoch``)."""
-        from cad.engine.ids import is_id
-
+        """Document id ``ident`` deleted (``Registry.delete``, told under its lock, its folder of aliases
+        removed with its others): what memory holds of them dropped, the folder's entries out of the list, and
+        a check of it that began before neither names an alias nor takes one into memory (``epoch``)."""
         with self.lock:
             self.deletions[ident] = self.deletions.get(ident, 0) + 1
-            for token in [token for token in self.aliases.held
-                          if token[0] in ("model", "build") and token[1] == ident]:
+            for token in [token for token in self.aliases.held if self._document(token) == ident]:
                 self.aliases.drop(token)
-        held, _locks = self._held()
-        if held is not None and is_id(ident):
-            with self.disk:
-                _removed(held, f"{MODELS}/{ident}")
+        with self.disk:
+            self.models.dropped(ident)
 
     # --- results ------------------------------------------------------------------------------------
 
     @staticmethod
     def _result(content_key: str, measure: str) -> str:
-        if not (isinstance(content_key, str) and _KEY.fullmatch(content_key)):
+        if not is_key(content_key):
             raise ValueError(f"{content_key!r} is not a content record's key")
-        return f"{content_key}-{_digest(measure)}"
+        name = f"{content_key}-{_digest(measure)}"
+        return f"{KEPT}/{name[:2]}/{name}.json"
 
     def get(self, content_key: str, measure: str, serves: Callable[[Any], bool] = lambda _by: True
             ) -> dict[str, Any] | None:
@@ -470,7 +485,7 @@ class Measurements:
         where what measured it stands for the caller (``serves(by)``); None for none kept, or one another's
         measuring made, which the next ``keep`` replaces. Looked for in memory, then on disk, and taken into
         memory from there."""
-        name = self._result(content_key, measure)
+        inside = self._result(content_key, measure)
         with self.lock:
             found = self.results.get((content_key, measure))
             if found is not None:
@@ -488,7 +503,7 @@ class Measurements:
                     and isinstance(entry["result"].get("report"), dict))
 
         with self.disk:
-            entry = self.kept.read(held, name, good)
+            entry = self.kept.read(held, inside, good)
         if entry is None:
             return None
         with self.lock:
@@ -503,7 +518,7 @@ class Measurements:
         """``result`` (``{"report"}``) kept as measurement ``measure``'s of the record ``content_key``, measured
         ``by`` (the digest of the code that measured its process, and the libraries), in memory and on disk,
         each held to its bounds; one kept under the same keys before is replaced."""
-        name = self._result(content_key, measure)
+        inside = self._result(content_key, measure)
         by = by if isinstance(by, dict) else {}
         with self.lock:
             self.results.put((content_key, measure), result, by)
@@ -511,8 +526,8 @@ class Measurements:
         if held is None:
             return
         with self.disk:
-            self.kept.write(held, name, {"format": FORMAT, "content": content_key, "measure": measure, "by": by,
-                                         "result": result})
+            self.kept.write(held, inside, {"format": FORMAT, "content": content_key, "measure": measure, "by": by,
+                                           "result": result})
 
     # --- what it holds ------------------------------------------------------------------------------
 
@@ -525,7 +540,8 @@ class Measurements:
     def status(self) -> dict[str, Any]:
         """The results and the aliases held in memory (``held`` and ``bytes``, ``aliases``), the documents
         described and those read for it, the results reused and, of them, those restored from disk, and what
-        the disk holds of each, once listed (``disk``; None with no cache folder)."""
+        the disk holds, once listed (``disk``: the results and their bytes, and the aliases of the files and
+        of the models that were listed; None with no cache folder)."""
         with self.lock:
             found: dict[str, Any] = {
                 "held": len(self.results.held), "bytes": self.results.bytes, "aliases": len(self.aliases.held),
@@ -534,6 +550,7 @@ class Measurements:
             found["disk"] = None
             return found
         with self.disk:
-            (held, size), (aliases, _alias_bytes) = self.kept.status(), self.files.status()
-        found["disk"] = {"held": held, "bytes": size, "aliases": aliases}
+            (held, size), aliases = self.kept.status(), [self.files.status()[0], self.models.status()[0]]
+        listed = [count for count in aliases if count is not None]
+        found["disk"] = {"held": held, "bytes": size, "aliases": sum(listed) if listed else None}
         return found

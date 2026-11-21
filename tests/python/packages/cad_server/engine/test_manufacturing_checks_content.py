@@ -56,6 +56,26 @@ if __name__ == "__main__":
     print(block().id)
 """
 
+# A plate whose width its build reads from the environment: what a build closure does not hold, so two builds of
+# it at one revision are two documents.
+SIZED = """
+import os
+
+import build123d as bd
+from cad import model
+
+
+@model
+def plate():
+    part = bd.Box(float(os.environ["CAD_TEST_WIDTH"]), 30, 10) - bd.Pos(0, 0, 3) * bd.Box(20, 10, 4.01)
+    part.label = "plate"
+    return part
+
+
+if __name__ == "__main__":
+    print(plate().id)
+"""
+
 COUNTED = ("measured", "reused", "described", "read")
 
 
@@ -232,6 +252,44 @@ class ContentTest(unittest.TestCase):
         before = _counts()
         self.assertEqual(self.reuses("model", plate, exported, "cnc")["measured"], first["measured"])
         self.assertEqual(_counts()["restored"], before["restored"] + 1, "from what the engine before it kept on disk")
+
+    def test_a_model_deleted_with_no_engine_running_is_read_again_when_it_is_built_again(self) -> None:
+        """What the engine remembers a model's versions hold goes with the model, whoever deletes it: ``cad
+        delete`` with no server to ask removes it itself. So a model built again under its id -- by the same
+        code, at the same revision, to other parts, as a build that reads its environment can -- is read and
+        measured as it is, never answered for by the one deleted."""
+        from cad.engine import api
+        from cad_server.engine.cli import delete
+
+        fixture = Fixture(self, SIZED, {"CAD_TEST_WIDTH": "57"})
+        (plate,) = fixture.ids
+        first = self.measures("model", plate, "cnc")
+        known = Path(os.environ["CAD_CACHE_DIR"]) / "checks" / "models" / plate
+        self.assertEqual(len(list(known.glob("*.json"))), 1)
+        api.stop()
+        self.addCleanup(engine_daemon.start)  # whatever happens next, the file's own engine is there again
+        self.assertEqual([row["id"] for row in delete([plate])], [plate])
+        self.assertFalse(known.exists(), "removed with the document, by the command itself")
+        engine_daemon.start()
+        fixture.env["CAD_TEST_WIDTH"] = "58"
+        self.assertEqual(fixture.build(), [plate])
+        again = self.measures("model", plate, "cnc")
+        self.assertEqual([found["measured"]["report"]["bodies"][0]["bbox_mm"][0] for found in (first, again)], [57.0, 58.0])
+
+    def test_a_model_built_otherwise_at_a_revision_it_had_is_another_version(self) -> None:
+        """An edit undone brings a model back to a revision it had, and with no process asked where the build
+        made what it made then. Where it did not -- the build reads its environment, which no closure holds --
+        the engine sees by the build's facts that it is another document, reads it, and measures it as it is."""
+        fixture = Fixture(self, SIZED, {"CAD_TEST_WIDTH": "59"})
+        (plate,) = fixture.ids
+        first = self.measures("model", plate, "cnc")
+        fixture.build(SIZED.replace("Box(20, 10, 4.01)", "Box(21, 10, 4.01)"))  # an edit, built
+        fixture.env["CAD_TEST_WIDTH"] = "60"
+        fixture.build(SIZED)  # undone, in another environment: the revision it had, another plate
+        before = _counts()
+        again = asked(self, "model", plate, "cnc")
+        self.assertEqual(self.since(before), {"measured": 1, "reused": 0, "described": 1, "read": 1})
+        self.assertEqual([found["measured"]["report"]["bodies"][0]["bbox_mm"][0] for found in (first, again)], [59.0, 60.0])
 
 
 if __name__ == "__main__":

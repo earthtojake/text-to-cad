@@ -707,7 +707,7 @@ class Daemon:
             lease=lambda slot: self.supervisor.lease("checks", slot, {}),
             release=self.supervisor.release, version=self._check_version, read=self._check_document,
             durable=self._durable, stopping=lambda: self.draining or self.stopping.is_set(), limits=limits,
-            measurements=Measurements(self._checks_folder))
+            measurements=Measurements(self._checks_folder), built=self._check_built)
         # Told of each document the registry deletes, under its lock (``Registry.delete``): its kept checks go,
         # and what the kept measurements say its versions hold (the measurements are no document's, and stay).
         registry.FORGOTTEN.extend((self.checks.store.deleted, self.checks.measurements.deleted))
@@ -1238,6 +1238,35 @@ class Daemon:
 
         revision = record.get("revision")
         return (ident, revision) if durable(revision) else None
+
+    def _check_built(self, ident: str, version: str | None) -> str | None:
+        """What names model document ``ident``'s version among the kept measurements, while its generation is
+        ``version``: its revision, with a digest of what the engine knows that build made (its facts,
+        ``delta.facts``: its parts' geometry keys and how many of each, their looks and materials, its bounds,
+        its joints) -- the build's own, else, for a document taken up from the cache, its record's for that
+        revision. A build is not always a function of its closure (it can read the environment, an argument,
+        a clock), so a model built again at a revision it had before may hold other parts: by its facts it is
+        then another version, and is read again. None for a build with no key, another generation, or a
+        build nothing is known of: such a version is known for this engine's life alone."""
+        with self.models.lock:
+            record = self.models.records.get(ident)
+        if record is None or version is None or str(record["version"]) != version:
+            return None
+        import hashlib
+
+        from cad_server.engine.models import durable
+
+        revision, facts = record.get("revision"), record.get("facts")
+        if not durable(revision):
+            return None
+        if facts is None:
+            held = self.models.registry()
+            kept = held.get(ident) if held is not None else None
+            facts = kept.get("facts") if kept is not None and kept.get("revision") == revision else None
+        if not isinstance(facts, dict):
+            return None
+        said = json.dumps(facts, sort_keys=True, separators=(",", ":"), default=str)
+        return f"{revision}-{hashlib.blake2b(said.encode('utf-8'), digest_size=8).hexdigest()}"
 
     def _check_document(self, ident: str) -> tuple[dict[str, Any], bytes]:
         """Document ``ident`` as a checks process reads it (``checks_runner.Runner``'s ``read``): a file's path,

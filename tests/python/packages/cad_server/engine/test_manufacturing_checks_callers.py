@@ -541,20 +541,77 @@ class RunnerTest(unittest.TestCase):
     def test_a_measurement_of_other_parts_than_its_record_says_is_asked_again_and_the_record_forgotten(self) -> None:
         """The measurer says the key of the parts it measured. Where that is not the record the check was
         resolved from -- the version's alias told wrong, a file rewritten between its describing and its
-        measuring -- nothing of it is kept or answered: the alias is forgotten and the check asked again, of
-        the document as a process reads it now."""
+        measuring -- nothing of it is answered from that record: the alias is forgotten, the report kept under
+        the key it said, and the check asked again, of the document as a process reads it now, which finds
+        it."""
         from cad_server.engine.measurements import model_token
 
         engine = Engine()
         kept, token, stale = engine.runner.measurements, model_token(DOC, "r-v1"), record(geometry="stale")
         kept.name(token, stale, {"code": MEASURES["code"], "libraries": MEASURES["libraries"]})
         answer = engine.check({"id": DOC})["done"]
-        self.assertEqual((answer["checked"]["measured"]["report"], answer.get("reused", False)), ({"of": "v1"}, False))
-        self.assertEqual((len(engine.orders()), len(engine.orders(describe=True))), (2, 1),
-                         "measured, found to be of other parts, described, measured")
+        self.assertEqual(answer["checked"]["measured"]["report"], {"of": "v1"})
+        self.assertEqual((len(engine.orders()), len(engine.orders(describe=True))), (1, 1),
+                         "measured, found to be of other parts and kept as theirs, described: measured once")
         self.assertEqual((kept.content(token), engine.runner.status()["held"]), (record(geometry="v1"), 1),
                          "the record as it reads, and the one measurement of it")
         self.assertTrue(engine.check({"id": DOC})["done"]["reused"])
+
+    def test_two_names_of_one_file_are_one_check_only_under_one_name(self) -> None:
+        """A hard link is the same file, and under another name another document where its root has none (it
+        takes the file's): asked while the first runs, it is described by its own name and waits for no one.
+        Under the same name in another folder it is the same document, and waits for the first."""
+        engine = Engine(size=2)
+        engine.holding = True
+        first = self.file("un.step")
+        folder = Path(first["path"]).parent
+        (folder / "sub").mkdir()
+        other, same = {"path": str(folder / "other.step")}, {"path": str(folder / "sub" / "un.step")}
+        for link in (other, same):
+            os.link(first["path"], link["path"])
+        asked = [engine.ask(first)]
+        _until(self, lambda: len(engine.requests) == 1, "the first is described")
+        asked.append(engine.ask(other))
+        _until(self, lambda: len(engine.requests) == 2, "its other name is described too, in a process of its own")
+        asked.append(engine.ask(same))
+        _until(self, lambda: engine.runner.status()["waited"] == 1, "the same name elsewhere waits for the first")
+        engine.let_go()
+        for thread in asked:
+            self.assertIn("measured", thread.result(self)["done"]["checked"])
+        self.assertEqual(sorted(order["source"]["path"] for order in engine.orders(describe=True)),
+                         sorted([first["path"], other["path"]]), "each name read as itself, the same name once")
+        self.assertEqual(engine.runner.status()["waited"], 1)
+
+    def test_a_caller_that_names_no_library_is_answered_by_what_the_checks_processes_measure_with_now(self) -> None:
+        """The ``cad`` command has no kernel and names no library. Where the engine knows what its checks
+        processes measure with, a kept record or result answers such a caller only if it was made with those:
+        after the base is made again with another library, what the one before measured is measured again.
+        Where the engine does not know yet -- none has started since it did -- any of its code's answers."""
+        from cad_server.engine.measurements import Measurements
+        from cad_server.engine.registry import Folder
+
+        folder = Folder(tempfile.mkdtemp(prefix="engine-dfm-base-"))
+        self.addCleanup(shutil.rmtree, folder.root, True)
+        bare = {**MEASURES, "libraries": {}}
+        newer = {**MEASURES, "libraries": {**MEASURES["libraries"], "numpy": "2.1.0"}}
+
+        def engine_of(base: dict[str, Any]) -> Engine:
+            """A fresh engine on the same cache folder whose checks processes measure with ``base``."""
+            engine = Engine(measurements=Measurements(lambda: folder))
+            measured = engine.measured
+            engine.answer = lambda order: measured({**order, "check": {**order["check"], "measures": base}})
+            return engine
+
+        self.assertNotIn("reused", engine_of(MEASURES).check({"id": DOC}, measures=MEASURES)["done"])
+        unknown = engine_of(newer)
+        self.assertEqual((unknown.check({"id": DOC}, measures=bare)["done"].get("reused"), unknown.requests), (True, []),
+                         "no checks process has said what measures: its code's answer stands")
+        remade = engine_of(newer)
+        remade.check({"id": DOC}, measures=newer, process="sheet")  # a checks process of the new base says so
+        answers = [remade.check({"id": DOC}, measures=bare)["done"] for _ in range(2)]
+        self.assertEqual([answer.get("reused", False) for answer in answers], [False, True],
+                         "measured with the base's libraries as they are now, and kept as theirs")
+        self.assertEqual([order["check"]["process"] for order in remade.orders()], ["sheet", "cnc"])
 
     def test_a_measurement_is_kept_whatever_it_could_not_measure_unless_it_is_transient(self) -> None:
         """A report with a family not measured is what its code makes of those parts, and is kept; one its

@@ -9,6 +9,8 @@ import json
 import os
 import shutil
 import tempfile
+import threading
+import time
 import unittest
 import uuid
 from pathlib import Path
@@ -110,9 +112,6 @@ class MeasurementsTest(unittest.TestCase):
         ident = str(uuid.uuid4())
         for revision in ("r1", "r2", "r3"):
             store.name(model_token(ident, revision), record(geometry=revision), BY)
-            for name in folder.names(f"checks/models/{ident}"):  # each older by its time on disk, whatever the clock's
-                at = folder.path(f"checks/models/{ident}/{name}").stat().st_mtime - 10.0
-                os.utime(folder.path(f"checks/models/{ident}/{name}"), (at, at))
         fresh = Measurements(lambda: folder)
         self.assertEqual([fresh.content(model_token(ident, revision)) is not None for revision in ("r1", "r2", "r3")],
                          [False, True, True], "a model keeps its latest revisions")
@@ -120,8 +119,30 @@ class MeasurementsTest(unittest.TestCase):
         path = Path(folder.root) / "part.step"
         for digest in ("d1", "d2", "d3"):
             store.name(file_token(digest, path), record(geometry=digest), BY)
-        self.assertEqual(store.status()["disk"]["aliases"], 2)
+        self.assertEqual(store.status()["disk"]["aliases"], 4, "two of the model's, two of the files'")
         self.assertIsNone(Measurements(lambda: folder).content(file_token("d1", path)))
+
+        # The models' aliases together are bounded too, a model checked long ago going first, its folder with it;
+        # and what a stopped engine left half written in a model's folder is swept as the models' are listed.
+        models = [str(uuid.uuid4()) for _ in range(3)]
+        folder.path(f"checks/models/{models[0]}").mkdir(parents=True)
+        folder.path(f"checks/models/{models[0]}/x.json.1.ab.tmp").write_bytes(b"{")
+        store = Measurements(lambda: folder, model_aliases=3)
+        for model in models[:2]:
+            store.name(model_token(model, "r1"), record(geometry=model), BY)
+        self.assertEqual([name.endswith(".json") for name in folder.names(f"checks/models/{models[0]}")], [True],
+                         "the half-written file went")
+        self.assertEqual(store.status()["disk"]["aliases"], 3, "one of the model above went for the third")
+        for model, ago in ((ident, 30.0), (models[0], 20.0), (models[1], 10.0)):  # each by its time on disk
+            for name in folder.names(f"checks/models/{model}"):
+                at = folder.path(f"checks/models/{model}/{name}").stat().st_mtime - ago
+                os.utime(folder.path(f"checks/models/{model}/{name}"), (at, at))
+        fresh = Measurements(lambda: folder, model_aliases=3)
+        self.assertIsNotNone(fresh.content(model_token(models[0], "r1")))  # read: the most recently used
+        fresh.name(model_token(models[2], "r1"), record(geometry=models[2]), BY)
+        self.assertEqual(sorted(folder.names("checks/models")), sorted(models),
+                         "the model above, least recently used, went, its folder with its last alias")
+        self.assertEqual(fresh.status()["disk"]["aliases"], 3)
 
     def test_an_entry_that_does_not_read_as_what_its_name_says_is_removed_never_served(self) -> None:
         from cad_server.engine.measurements import Measurements, model_token
@@ -194,23 +215,34 @@ class MeasurementsTest(unittest.TestCase):
         self.assertEqual(store.status()["disk"]["held"], 0, "gone with its folder: out of the list as it is asked for")
 
     def test_a_deleted_document_takes_its_own_aliases_and_no_measurement(self) -> None:
-        """Deleting a document (``Registry.delete``) removes the aliases of its versions, in memory and on disk,
-        and a check of it that began before names none; the results, which are no document's, stay."""
+        """Deleting a document removes the aliases of its versions with its folders, whether an engine runs or
+        not -- the registry removes them itself (``Registry.delete``), as ``cad delete`` does with no server to
+        ask -- so a model built again under the id, which may hold other parts at a revision it had, is read
+        again. An engine that runs drops what it holds of them in memory, and a check of the document that
+        began before names none. The results, which are no document's, stay."""
         from cad_server.engine import registry
         from cad_server.engine.measurements import Measurements, build_token, model_token
+        from cad_server.engine.models import delete
         from cad_server.engine.registry import Registry
 
         root = Path(tempfile.mkdtemp(prefix="engine-dfm-deleted-"))
         self.addCleanup(shutil.rmtree, root, True)
         held = Registry(root / "state", cache=root / "cache")
+        a, b, c, plate = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4()), record()
         store = Measurements(lambda: held)
+        for ident in (a, b, c):
+            store.name(model_token(ident, "r1"), plate, BY)
+        store.keep(plate["key"], "cnc", {"report": {"x": 1}}, BY)
+
+        # No engine: the deletion is the command's own, and tells no one.
+        self.assertEqual(registry.FORGOTTEN, [])
+        delete(held, c)
+        self.assertEqual(held.cache.names("checks/models"), sorted([a, b]))
+        self.assertIsNone(Measurements(lambda: held).content(model_token(c, "r1")), "the engine started next finds none")
+
         registry.FORGOTTEN.append(store.deleted)
         self.addCleanup(registry.FORGOTTEN.remove, store.deleted)
-        a, b, plate = str(uuid.uuid4()), str(uuid.uuid4()), record()
-        for ident in (a, b):
-            store.name(model_token(ident, "r1"), plate, BY)
         store.name(build_token(b, "g1"), plate, BY)
-        store.keep(plate["key"], "cnc", {"report": {"x": 1}}, BY)
         since = store.epoch(b)
         held.delete(b)
         self.assertEqual((store.content(model_token(b, "r1")), held.cache.names("checks/models")), (None, [a]))
@@ -222,6 +254,37 @@ class MeasurementsTest(unittest.TestCase):
         self.assertEqual(store.content(model_token(b, "r1")), plate, "built and checked again: named again")
         self.assertEqual((store.content(model_token(a, "r1")), Measurements(lambda: held).get(plate["key"], "cnc")),
                          (plate, {"report": {"x": 1}}), "another document's, and the measurement, as they were")
+
+    def test_an_alias_read_as_its_document_is_deleted_is_neither_answered_nor_kept(self) -> None:
+        """A check reads a model's alias from disk as the model is deleted: what it read is of a document gone,
+        so it is not answered and does not come back into memory, where the next check of a model built again
+        under the id would find it."""
+        from cad_server.engine.measurements import Measurements, model_token
+
+        folder = self.folder()
+        ident, plate = str(uuid.uuid4()), record()
+        Measurements(lambda: folder).name(model_token(ident, "r1"), plate, BY)
+        store = Measurements(lambda: folder)
+        read = store.models.read
+        deleting = threading.Thread(target=lambda: (shutil.rmtree(folder.path(f"checks/models/{ident}")),
+                                                     store.deleted(ident)), daemon=True)
+
+        def deleted_as_it_is_read(*args: Any) -> Any:
+            found = read(*args)
+            deleting.start()  # as ``Registry.delete`` does: its folder removed, the store told
+            deadline = time.monotonic() + 60.0
+            while store.epoch(ident) == 0:  # the deletion is counted before the read goes on
+                self.assertLess(time.monotonic(), deadline, "the deletion never ran")
+                time.sleep(0.001)
+            return found
+
+        store.models.read = deleted_as_it_is_read
+        self.assertIsNone(store.content(model_token(ident, "r1")))
+        deleting.join(60.0)
+        store.models.read = read
+        self.assertEqual((store.status()["aliases"], store.content(model_token(ident, "r1"))), (0, None))
+        store.name(model_token(ident, "r1"), plate, BY)
+        self.assertEqual(Measurements(lambda: folder).content(model_token(ident, "r1")), plate, "read as ever, undeleted")
 
 
 if __name__ == "__main__":

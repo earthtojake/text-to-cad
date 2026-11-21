@@ -57,7 +57,7 @@ from cad.engine.atomic_replace import replace_atomic
 from cad.engine.ids import is_id
 from cad.engine.records import (DOCUMENTS, RECORD, SCHEMA, command, detached, home, parse, program, relative, rerun)
 
-__all__ = ["DOCUMENTS", "ENGINES", "ENGINE_FIELDS", "ENGINE_SCHEMA", "FACTORY", "FORGOTTEN", "Folder", "OBSERVERS", "PICTURES", "RECORD", "Registry", "SCHEMA", "TOKEN",
+__all__ = ["CHECKED", "DOCUMENTS", "ENGINES", "ENGINE_FIELDS", "ENGINE_SCHEMA", "FACTORY", "FORGOTTEN", "Folder", "OBSERVERS", "PICTURES", "RECORD", "Registry", "SCHEMA", "TOKEN",
            "command", "current", "detached", "home", "pictures", "program", "relative"]
 
 ENGINES = "engines"
@@ -83,10 +83,15 @@ def pictures(record: dict[str, Any] | None) -> set[str]:
             if isinstance(name, str) and _PICTURE.fullmatch(name)}
 
 
+# Where, in the cache folder, the kept measurements say what each version of a model document holds
+# (``measurements``): ``<CHECKED>/<id>/``, a document's own, which goes with it (``Registry.delete``).
+CHECKED = "checks/models"
+
 # Told of every record written (one that changed), after it is on disk; never waited on for more.
 OBSERVERS: list[Callable[[dict[str, Any]], None]] = []
-# Told of every document id deleted (``Registry.delete``), under its lock, its folders gone: what the engine
-# keeps of it elsewhere goes too (``checks.Checks.deleted``, ``measurements.Measurements.deleted``).
+# Told of every document id deleted (``Registry.delete``), under its lock, its folders gone: what a running
+# engine holds of it in memory goes too (``checks.Checks.deleted``, ``measurements.Measurements.deleted``).
+# Nothing on disk is theirs to remove: a deletion with no engine running tells no one.
 FORGOTTEN: list[Callable[[str], None]] = []
 # Makes the registry another way than of the user's state and cache folders (``current``): a test's seam.
 FACTORY: Callable[[], "Registry"] | None = None
@@ -244,9 +249,12 @@ class Registry:
         return [record for record in (self.get(name) for name in self.state.names(DOCUMENTS)) if record is not None]
 
     def delete(self, ident: str) -> bool:
-        """Forget document ``ident``: its folder, whole, its cache file in the cache folder, and its
-        Recents pictures that no other record names (``forget_pictures``: a record re-pointed under a
-        new id keeps the pictures it names)."""
+        """Forget document ``ident``: its folder, whole, its folder in the cache folder (its cache file, the
+        views derived from it), what the kept measurements say its versions hold (``CHECKED``: a model built
+        again under this id may hold other parts at a revision it had before), and its Recents pictures that
+        no other record names (``forget_pictures``: a record re-pointed under a new id keeps the pictures it
+        names). All of it here, whether an engine runs or not; what one holds in memory it is told to drop
+        (``FORGOTTEN``)."""
         if not is_id(ident):
             return False
         with self._lock(ident):
@@ -255,6 +263,7 @@ class Registry:
             self.state.remove(f"{DOCUMENTS}/{ident}")
             if self.cache is not None:
                 self.cache.remove(f"{DOCUMENTS}/{ident}")
+                self.cache.remove(f"{CHECKED}/{ident}")
             for forget in list(FORGOTTEN):
                 try:
                     forget(ident)

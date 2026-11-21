@@ -67,7 +67,7 @@ from cad.engine.frames import failed_type
 from cad.engine.worker import CHECK_SECONDS, check_limits, resident_of
 
 from cad_server.engine.checks import Checks, Pool, Withdrawn, digest
-from cad_server.engine.measurements import Measurements, build_token, file_token, is_record, model_token
+from cad_server.engine.measurements import Measurements, build_token, file_token, is_key, is_record, model_token
 from cad_server.engine.supervisor import Gone
 
 __all__ = ["FAILURES", "SECONDS", "STOPPED", "SUPERSEDED", "Asked", "Limits", "Runner", "State", "file_key",
@@ -146,7 +146,7 @@ class Asked:
     one; and ``finished``, set when it has ended."""
 
     def __init__(self, token: str, what: dict[str, Any], gone: threading.Event | None,
-                 same: tuple[str, str, str] | None) -> None:
+                 same: tuple[str, ...] | None) -> None:
         self.token, self.what, self.same = token, dict(what), same
         self.state = State.ASKED
         self.callers: list[threading.Event | None] = [gone]
@@ -188,7 +188,11 @@ class _Try:
     key among the checks (``document``) and its version then (``before``: a model's generation, the digest of a
     file's bytes; None for none); the id and version of it that outlive the engine (``durable``); how many
     times it had been deleted (``since``); and, for a manufacturing check, what the kept measurements name that
-    version by (``token``: ``measurements.model_token``, ``build_token`` or ``file_token``; None for none)."""
+    version by (``token``: ``measurements.model_token``, ``build_token`` or ``file_token``; None for none) and
+    the libraries a kept alias or result must have been made with to answer this caller (``libraries``: those
+    it names; for a caller that names none, the ``cad`` command's, those the checks processes measure with now,
+    where the pool knows them -- so a base made again with other libraries is not answered for by the one
+    before -- and none where it does not know yet)."""
 
     spec: dict[str, Any]
     check: dict[str, Any]
@@ -199,6 +203,7 @@ class _Try:
     durable: tuple[str, str] | None
     since: int
     token: tuple[str, ...] | None = None
+    libraries: dict[str, Any] = dataclasses.field(default_factory=dict)
 
 
 class Runner:
@@ -210,24 +215,29 @@ class Runner:
     requests; ``version(ident)``, a model document's generation (None: no such document; ``ValueError``: a
     refusal); ``read(ident)``, the document as a checks process reads it -- ``({"path"}, b"")`` for a file's,
     ``({"document", "name"}, its xbf bytes)`` for a model's -- or ``ValueError``; ``durable(ident, version)``,
-    the version of it that outlives the engine with its id, or None; ``stopping()``, whether the engine stops;
-    ``limits``; and ``resident``, a process's memory read from outside it."""
+    the version of it that outlives the engine with its id, or None; ``built(ident, version)``, what names
+    that version among the kept measurements, which outlives the engine too -- its revision with what the
+    engine knows the build made, so a model built otherwise at a revision it had is another version -- or None
+    (by default ``durable``'s version); ``stopping()``, whether the engine stops; ``limits``; and ``resident``,
+    a process's memory read from outside it."""
 
     def __init__(self, store: Checks, pool: Pool, *, lease: Callable[[str], Any], release: Callable[[Any], None],
                  version: Callable[[str], str | None], read: Callable[[str], tuple[dict[str, Any], bytes]],
                  durable: Callable[[str, str | None], tuple[str, str] | None],
                  stopping: Callable[[], bool] = lambda: False, limits: Limits | None = None,
                  resident: Callable[[int | None], float | None] = resident_of,
-                 measurements: Measurements | None = None) -> None:
+                 measurements: Measurements | None = None,
+                 built: Callable[[str, str | None], str | None] | None = None) -> None:
         self.store, self.pool = store, pool
         self.measurements = measurements if measurements is not None else Measurements()
+        self._built = built
         self._lease, self._release, self._version, self._read, self._durable = lease, release, version, read, durable
         self.stopping, self.limits, self.resident = stopping, limits or Limits(), resident
         self.lock = threading.Lock()
         # The checks asked and not yet ended, by their token; and by what they check (document, version,
         # check), what the same check asked meanwhile attaches to.
         self.asked: dict[str, Asked] = {}
-        self.running: dict[tuple[str, str, str], Asked] = {}
+        self.running: dict[tuple[str, ...], Asked] = {}
         self.watching = False
 
     # --- one check ----------------------------------------------------------------------------------
@@ -281,6 +291,8 @@ class Runner:
             told(nobody)  # no word of the code that measures each process: nothing of its is kept or found here
             return
         self.store.listed()  # once: what an earlier release kept by a document's version is removed, never read
+        # Whose libraries a kept alias or result must be of to answer this caller (``_Try.libraries``).
+        libraries = (measures["libraries"] or (known or {}).get("libraries") or {}) if content else {}
         key = Checks.key(check, release(), measures.get("code"))
         ident = str(spec["id"]) if "id" in spec else None
         what = {"type": check.get("type"), "process": check.get("process"),
@@ -295,8 +307,10 @@ class Runner:
                 if ident is not None:
                     document, before = f"model:{ident}", self._version(ident)
                     durable = self._durable(ident, before)
+                    named = (self._built(ident, before) if self._built is not None else
+                             durable[1] if durable is not None else None)
                     token = (None if before is None else
-                             model_token(*durable) if durable is not None else build_token(ident, before))
+                             model_token(ident, named) if named is not None else build_token(ident, before))
                 else:
                     path = str(spec["path"])
                     document, before = file_key(path), digest(Path(path))
@@ -307,8 +321,13 @@ class Runner:
                 return
             since = (self.measurements.epoch(ident) if content else
                      self.store.epoch(durable[0] if durable is not None else ident))
-            attempt = _Try(spec, check, measures, ident, document, before, durable, since, token if content else None)
-            same = (document, before, key) if before is not None else None
+            attempt = _Try(spec, check, measures, ident, document, before, durable, since,
+                           token if content else None, libraries)
+            # What the same check asked meanwhile attaches to. A manufacturing check of a file is the same only
+            # under the name its alias is by (``file_token``: a root with no name takes the file's): two names of
+            # one file, hard links, are one file to the pool and two documents to a measurement.
+            name = token[2:] if content and ident is None and token is not None else ()
+            same = (document, before, key, *name) if before is not None else None
             with self.lock:
                 # Under one lock with a check's end (which keeps its result, then leaves ``running``) and with
                 # a reaping (which takes its victim out of it): a check of this version is kept, or running, or
@@ -379,8 +398,8 @@ class Runner:
         A describing is part of the check's life: under its lease, stopped and limited as its measuring is.
         A report is kept under the key of the record its measurer says it measured (``content_key``); where
         that is not the record the check was resolved from -- its alias told wrong, its file was rewritten
-        between its describing and its measuring -- nothing of it is kept or answered, the alias is forgotten
-        and the check asked again, as of a document that changed."""
+        between its describing and its measuring -- nothing of it is answered, the alias is forgotten and the
+        check asked again, as of a document that changed, which finds the report kept under the key it said."""
         from cad._internal.dfm import kept
         from cad.engine.contract import measures_for
         from cad.engine.previous import version as release
@@ -397,7 +416,7 @@ class Runner:
         def asks(record: dict[str, Any]) -> dict[str, Any]:
             """What the check asks of a document of ``record`` (``kept.asked``), with its measurement's key
             (``measure``) and whom a kept result of it must have been measured by (``by``): the digest of the
-            code that measures its process in the caller, and the caller's libraries."""
+            code that measures its process in the caller, and the libraries that answer it (``_Try.libraries``)."""
             try:
                 ask = kept.asked(record, check)
             except Exception as error:  # noqa: BLE001 - the check's own failure: its words, as a process says one
@@ -406,7 +425,7 @@ class Runner:
                 code = measures["dfm"][ask["process"]]
                 ask["measure"] = kept.measure_key(check["type"], ask["process"], bool(check.get("candidates")),
                                                   ask["resolved"], code)
-                ask["by"] = {"code": code, "libraries": measures["libraries"]}
+                ask["by"] = {"code": code, "libraries": attempt.libraries}
             return ask
 
         def mine(ask: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
@@ -430,7 +449,8 @@ class Runner:
 
         def known() -> dict[str, Any] | None:
             """The record kept for the try's version, where what described it describes for the caller."""
-            return store.content(token, lambda by: measures_for(measures, by)) if token is not None else None
+            asks_as = {**measures, "libraries": attempt.libraries}
+            return store.content(token, lambda by: measures_for(asks_as, by)) if token is not None else None
 
         record = known()
         ask: dict[str, Any] = {}
@@ -503,16 +523,21 @@ class Runner:
             return superseded
         if not (isinstance(measured.get("measured"), dict) and isinstance(measured["measured"].get("report"), dict)):
             return answer  # no part a process makes, a document that did not read: as said, never kept
-        if measured.get("content_key") != record["key"]:
-            # It measured other parts than the record says: the alias told wrong, or the file was rewritten since
-            # it was described. Nothing of it stands for this check: asked again, of the document as it reads now.
-            if token is not None:
-                store.forget(token)
-            return superseded
         by = measured.get("measures")
         made = ({"code": by["dfm"].get(ask["process"]), "libraries": by.get("libraries")}
                 if isinstance(by, dict) and isinstance(by.get("dfm"), dict) else None)
-        if _keepable(measured) and made is not None and measures_for(ask["by"], made):
+        keeps = _keepable(measured) and made is not None and measures_for(ask["by"], made)
+        if measured.get("content_key") != record["key"]:
+            # It measured other parts than the record says: the alias told wrong, or the file was rewritten since
+            # it was described. Nothing of it stands for this check, which is asked again of the document as it
+            # reads now; but it is a measurement of the parts whose key it says, and is kept as theirs, where the
+            # check asked again may find it.
+            if token is not None:
+                store.forget(token)
+            if keeps and is_key(measured.get("content_key")):
+                store.keep(measured["content_key"], ask["measure"], {"report": measured["measured"]["report"]}, made)
+            return superseded
+        if keeps:
             store.keep(record["key"], ask["measure"], {"report": measured["measured"]["report"]}, made)
         said = {name: value for name, value in measured.items() if name not in ("measured", "content_key", "transient")}
         return answered({"measured": mine(ask, measured["measured"]["report"]), **said})
