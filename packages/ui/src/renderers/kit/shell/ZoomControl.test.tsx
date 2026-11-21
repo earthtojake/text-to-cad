@@ -47,8 +47,8 @@ it('the zoom is its percentage, redrawn as the view says it moved, and its menu 
 });
 
 // The zoom is ONE control: its percentage and a chevron, no − or +, on a faint resting surface (not the strip's chrome),
-// 28px tall; its outer edge on the cube box's (12px in) and its middle on the tool strip's (8px down, 40px tall).
-it("the zoom is one dropdown, the percentage and a chevron on a faint surface, centred on the strip's line at the cube box's edge", async () => {
+// 28px tall; its outer edge the corner's inset (12px) in and its middle on the tool strip's (8px down, 40px tall).
+it("the zoom is one dropdown, the percentage and a chevron on a faint surface, centred on the strip's line at the corner's inset", async () => {
   const { FLOATING_CHROME_SURFACE_CLASS } = await import('../../../../dist/lib/floatingSurface.js');
   const zoom = { read: () => 100, subscribe: () => () => {}, zoomBy: vi.fn(), fit: vi.fn() };
   const view = render(<ZoomControl zoom={zoom} />);
