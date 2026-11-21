@@ -70,5 +70,22 @@ export function sidebarCollapsed(frameWidth, panelWidth = DEFAULT_PANEL_WIDTH) {
   return frameWidth > 0 && frameWidth - panelWidth < MIN_MODEL_WIDTH;
 }
 
+// The panel surface's metrics the file viewer's stand-in for it needs too (`renderers/kit/shell/PanelSurface.jsx`, which
+// uses these): drawn before any view is up, it stands exactly where the view's loading panel will.
+
+/** The panel's vertical step: 8px over the head's row (and under it, to its rule, where it has one). */
+export const PANEL_SURFACE_PX = 8;
+/** The head's row where it is one title (the view's single tab, or a tab not known yet): a list row's height, 28px. */
+export const PANEL_TITLE_HEAD_PX = 28;
+/** The body under a one-title head starts this far under it (`FlatPanel.jsx`'s `pt-1`), so the list follows the title. */
+export const PANEL_TITLE_BODY_GAP_PX = 4;
+/**
+ * The rows' horizontal geometry the panel sets (`primitives/tree-row.jsx` reads it): a row's fill hangs half the inset
+ * out past the line and its glyph stands half the inset into it; its last action's glyph ends the inset from the
+ * panel's right (half the inset, less that button's own 2px).
+ */
+export const PANEL_ROW_VARIABLES = Object.freeze({ "--tree-row-pad": "calc(var(--panel-inset) / 2)", "--tree-row-hang": "calc(var(--panel-inset) / 2)",
+  "--tree-row-actions-pad": "calc(var(--panel-inset) / 2 - 2px)" });
+
 /** The person's choice as the file's entry keeps it (`filePanel.js`'s `open`): open (true) or closed (false), absent for the default, open. */
 export const sidebarWant = kept => kept !== false;

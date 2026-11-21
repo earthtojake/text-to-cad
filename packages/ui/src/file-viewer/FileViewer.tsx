@@ -14,7 +14,9 @@ import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { I18nProvider, translator } from "../i18n/index.js";
 import { mayTakeKeyboard } from "./takeKeyboard.js";
 import { FilePanelContext, filePanelOf, withFilePanel } from "./filePanel.js";
-import { DEFAULT_PANEL_WIDTH, PanelFrameContext, PanelTogglesContext, sidebarCollapsed, sidebarWant } from "./panelToggles.js";
+import { DEFAULT_PANEL_WIDTH, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX, PANEL_TITLE_BODY_GAP_PX, PANEL_TITLE_HEAD_PX, PanelFrameContext, PanelTogglesContext,
+  sidebarCollapsed, sidebarWant } from "./panelToggles.js";
+import { TreeRowsLoading } from "../primitives/tree-row.jsx";
 import { NavbarSlotsContext, NavbarViewSlotContext } from "./navbarSlots.js";
 import type { PanelToggles } from "./panelToggles.js";
 
@@ -126,8 +128,10 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // said yet: the navbar has its toggle from the page's first frame, in the state the view will open it in (the
   // file's choice for this session, else open where the model keeps 640px beside it: `sidebars.js`), drawn
   // disabled: the view's own opening over a narrow width is its frame's and cannot be handed to it, so a press here
-  // could not be kept as it would be. Open, the panel's frame stands in its place, at its width, its body empty
-  // (`data-panel-loading`), so nothing moves as the view takes over. A file that will not open has neither.
+  // could not be kept as it would be. Open, the panel's frame stands in its place, at its width (`data-panel-loading`),
+  // drawn as the view's own panel is while its file loads: a one-title head (a bar where the title will be: the tab is not
+  // known yet) and the placeholder rows (`TreeRowsLoading`), on the same lines (`panelToggles.js`'s metrics), so nothing
+  // moves as the view takes over. A file that will not open has neither.
   const bodyBox = useRef<HTMLDivElement | null>(null);
   const [bodyWidth, setBodyWidth] = useState(0);
   const pending = Boolean(path) && (loaded.status === "loading" || (loaded.status === "ready" && saidToggles?.key !== key));
@@ -168,7 +172,14 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   else if (loaded.status === "loading") {
     const loading = presentation?.loading ?? <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground" role="status"><Spinner className="size-3.5" />{t("file.opening")}</div>;
     body = pendingOpen ? <div className="flex h-full min-h-0">
-      <aside aria-hidden="true" className="relative h-full shrink-0 border-r border-border bg-sidebar" style={{ width: pendingWidth }} data-panel-loading="" />
+      <aside aria-busy="true" className="relative flex h-full shrink-0 flex-col border-r border-border bg-sidebar text-ui" style={{ ...PANEL_ROW_VARIABLES, width: pendingWidth }}
+        data-panel-loading="">
+        <div aria-hidden="true" className="box-content flex shrink-0 items-center border-b border-transparent px-(--panel-inset)"
+          style={{ paddingTop: PANEL_SURFACE_PX, height: PANEL_TITLE_HEAD_PX }} data-panel-head="">
+          <span className="block h-2 w-12 rounded-full bg-muted-foreground/20 motion-safe:animate-pulse" data-panel-loading-title="" />
+        </div>
+        <div className="flex flex-col px-(--panel-inset)" style={{ paddingTop: PANEL_TITLE_BODY_GAP_PX }}><TreeRowsLoading label={t("spinner.loading")} /></div>
+      </aside>
       <div className="min-w-0 flex-1">{loading}</div>
     </div> : loading;
   }

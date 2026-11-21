@@ -87,7 +87,11 @@ function workspace(id: string, store: TabStore) {
   const name = file.split('/').pop() || file;
   const source: FileSource = {
     id,
-    stat: async (path) => ({ path, name: path.split('/').pop() || path, kind: 'file', size: 400, extension: path.split('.').pop() || '' }),
+    // A spec may hold the file's stat back (`window.__cadHoldStat`, a promise): the page's own phase, before any view is up.
+    stat: async (path) => {
+      await (window as unknown as { __cadHoldStat?: Promise<void> }).__cadHoldStat;
+      return { path, name: path.split('/').pop() || path, kind: 'file', size: 400, extension: path.split('.').pop() || '' };
+    },
     list: async () => [{ path: file, name, kind: 'file' }],
     search: async () => ({ paths: [file], truncated: false })
   };

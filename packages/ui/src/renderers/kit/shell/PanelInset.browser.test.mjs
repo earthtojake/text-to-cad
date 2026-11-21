@@ -54,10 +54,11 @@ before(async () => {
     }
     const rest = path.slice(at);
     if (rest === '/api/v1/documents' && request.method === 'GET') {
-      return json(response, { documents: Object.entries(FILES).map(([file, kind]) => {
+      const answer = () => json(response, { documents: Object.entries(FILES).map(([file, kind]) => {
         const entry = { kind, file: `/models/${file}`, url: `/${file}`, hash: `h-${file}`, bytes: 4096 };
         return { entry, revision: entry.hash };
       }) });
+      return answer();
     }
     if (rest === '/api/v1/documents' && request.method === 'POST') {
       let body = '';
@@ -280,12 +281,31 @@ for (const file of Object.keys(FILES)) {
 
 // While a file loads, a structure tab with no row shows placeholder rows on the rows' own lines: each glyph block on the
 // inset, each name's bar where a name starts (16px after the glyph's line), none past the right inset.
-test('a loading tab\'s placeholder rows stand on the inset', async t => {
+test('a loading tab\'s placeholder rows stand on the inset, where the page\'s own stand-in drew them before the view was up', async t => {
   let release;
   held = new Promise(resolve => { release = resolve; });
   t.after(() => { release(); held = null; });
-  const { page, pane, errors } = await open(t, 'layered.dxf');
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  t.after(() => page.close().catch(() => {}));
+  page.setDefaultTimeout(20000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  // The page's own phase held too (the harness's stat, `window.__cadHoldStat`), until the test lets it go.
+  await page.addInitScript(() => { window.Worker = undefined; window.__cadHoldStat = new Promise(resolve => { window.__cadReleaseStat = resolve; }); });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=layered.dxf`);
+  const pane = page.getByTestId('one');
+  // The panel's box, its head's height and its first placeholder row's top, from the page's left and top.
+  const place = selector => page.evaluate(selector => {
+    const aside = document.querySelector(`[data-testid="one"] ${selector}`), box = aside.getBoundingClientRect();
+    const head = aside.querySelector('[data-panel-head]').getBoundingClientRect(), row = aside.querySelector('[data-tree-row-placeholder]').getBoundingClientRect();
+    return [box.left, box.width, head.height, row.top];
+  }, selector);
+  // The page's phase (the file not looked up yet): its stand-in; then the view's, the drawing still on its way.
+  await pane.locator('aside[data-panel-loading] [data-tree-row-placeholder]').first().waitFor();
+  const before = await place('aside[data-panel-loading]');
+  await page.evaluate(() => window.__cadReleaseStat());
   await pane.locator('[data-flat-panel] [data-tree-row-placeholder]').first().waitFor();
+  assert.deepEqual(await place('[data-flat-panel]'), before, 'nothing moves as the view takes over from the page\'s stand-in');
   const placed = await page.evaluate(() => {
     const panel = document.querySelector('[data-testid="one"] [data-flat-panel]'), left = panel.getBoundingClientRect().left;
     const edges = selector => [...panel.querySelectorAll(selector)].map(node => node.getBoundingClientRect()).map(rect => [rect.left - left, rect.right - left]);

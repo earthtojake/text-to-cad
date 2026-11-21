@@ -11,6 +11,7 @@ import { ToolStackContext } from "../tools/ToolStack.jsx";
 import { FilePanelContext, hasLegacyFilePanel, legacyFilePanel, legacyFilePanelTab, readFilePanel, withoutLegacyFilePanel } from "../../../file-viewer/filePanel.js";
 import { PanelSurface, usePanelWidth } from "./PanelSurface.jsx";
 import { DEFAULT_PANEL_WIDTH, MIN_MODEL_WIDTH } from "./sidebars.js";
+import { PANEL_TITLE_BODY_GAP_PX } from "../../../file-viewer/panelToggles.js";
 
 /**
  * The view's one panel, the sidebar (`ViewFrame.jsx`), docked at the view's left edge the way KiCad's Appearance
@@ -503,7 +504,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
       </div> : searchButton}
     </>}>
       <FlatPanelContext.Provider value={panel}>
-        <div ref={body} className={cn("group/body flex flex-col px-(--panel-inset) py-2", compactHead && "pt-1")} data-flat-panel-body="">
+        <div ref={body} className="group/body flex flex-col px-(--panel-inset) py-2" style={compactHead ? { paddingTop: PANEL_TITLE_BODY_GAP_PX } : undefined} data-flat-panel-body="">
           {sections ? <ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider> : tabs.map(entry => {
             const shown = entry.id === active;
             return <section key={entry.id} role="tabpanel" id={ids_(entry.id).panel} aria-label={entry.label}

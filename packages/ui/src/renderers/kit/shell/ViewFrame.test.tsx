@@ -73,3 +73,20 @@ it("the hover tip takes the view's short words where it has them, and never runs
   vi.useRealTimers();
 });
 
+
+// A file's loading covers are drawn on the viewport's Background as the person has it, whatever the app's theme: the
+// page's own (`file-viewer/presentation`'s, before any view is up) and the view's, so nothing flashes between them and
+// the picture. The cover's scheme is the class over it, which sets its canvas and its ink.
+it("the loading covers, the page's and the view's, are on the viewport's Background, Light or Dark", async () => {
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
+  const { ViewerLoadingOverlay } = await import('../../../../dist/file-viewer/presentation.js');
+  const scheme = (root: Element) => root.querySelector('.cad-loading-overlay')!.closest('.light, .dark')!.classList.contains('light') ? 'light' : 'dark';
+  for (const background of ['light', 'dark']) {
+    const page = render(<div className="dark"><ViewerLoadingOverlay viewerLoading background={background} /></div>);
+    const view = render(<div className="dark"><ViewFrame file="part.step" mobile={false} compact={false} chromeHidden tools={[]} layout={{}} onLayoutChange={() => {}}
+      viewport={{ scheme: background }} loading={{ opening: true }}>{null}</ViewFrame></div>);
+    expect([scheme(page.container), scheme(view.container)]).toEqual([background, background]);
+    cleanup();
+  }
+  vi.unstubAllGlobals();
+});

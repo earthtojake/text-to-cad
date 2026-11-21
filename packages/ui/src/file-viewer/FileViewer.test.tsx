@@ -57,8 +57,13 @@ it('has the panel\'s toggle from a document page\'s first frame, in the state it
   const toggle = () => document.querySelector<HTMLElement>('[data-navbar-panel="left"]');
   const look = () => [toggle()?.getAttribute('aria-expanded'), toggle()?.getAttribute('aria-disabled'), Boolean(document.querySelector('aside[data-panel-loading]')), fileName().textContent];
   const view = render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{}} onStateChange={() => {}} />);
-  // The first frame: the toggle, open and not pressable yet, the panel's frame in its place, and no id for a name.
+  // The first frame: the toggle, open and not pressable yet, the panel's frame in its place, and no id for a name. The
+  // frame is drawn as the view's loading panel is: a one-title head (a bar for the title not known yet), then the
+  // placeholder rows, busy (their places against the view's are `PanelInset.browser.test.mjs`'s).
   expect(look()).toEqual(['true', 'true', true, '']);
+  const frame = document.querySelector('aside[data-panel-loading]')!;
+  expect([frame.getAttribute('aria-busy'), Boolean(frame.querySelector('[data-panel-head] [data-panel-loading-title]')),
+    frame.querySelectorAll('[data-tree-row-placeholder]').length, within(frame as HTMLElement).getByRole('status').textContent]).toEqual(['true', true, 6, 'Loading']);
   await act(async () => answer());
   await screen.findByText('shown');
   expect(look()).toEqual(['true', null, false, 'qdd_actuator']);
