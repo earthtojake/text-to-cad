@@ -159,7 +159,9 @@ export function ExportControls({ service, downloads, file, children }: {
     if (!displayed) return;
     usage.used(choice.control || `export_${choice.format}`);
     // The document as its code built it, at the revision on screen: never a selection or a pose.
-    const request: ExportRequest = { requestId: crypto.randomUUID(), epoch: '', source: { doc: displayed.doc, revision: displayed.revision }, format: choice.format };
+    // The local viewer also runs on HTTP origins where randomUUID is unavailable.
+    const requestId = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+    const request: ExportRequest = { requestId, epoch: '', source: { doc: displayed.doc, revision: displayed.revision }, format: choice.format };
     const stem = (displayed.name.split('::').pop() || 'model').replace(/\.[^.]+$/, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 100);
     start({ request, filename: (stem || 'model') + choice.extension });
   };
