@@ -64,6 +64,9 @@ INITIALIZE_SECONDS = 20.0
 READY_SECONDS = 5.0
 ANSWER_SECONDS = 25.0
 DOOR_SECONDS = 20.0
+# How long the session's end, told to the server as this process leaves (``Proxy.close``), may take: a server that
+# answers does so at once, and the server ends the session with the hold anyway.
+CLOSE_SECONDS = 5.0
 STARTING = f"the {client.COMMAND} server is starting: try again shortly"
 # The JSON-RPC error a request answered here carries (the server's own -32000, an implementation's).
 UNAVAILABLE = -32000
@@ -473,9 +476,10 @@ class Proxy:
         with self.lock:
             ident = self.session
         if ident:
-            # The session's end, told to the server that holds it, where one runs: never a server started to hear it.
+            # The session's end, told to the server that holds it, where one runs: never a server started to hear it,
+            # and never waited for past ``CLOSE_SECONDS`` (a signal does not cut it short: ``_Leaving``).
             try:
-                self.call("DELETE", "/mcp", headers={"Mcp-Session-Id": ident})
+                self.call("DELETE", "/mcp", headers={"Mcp-Session-Id": ident}, timeout=CLOSE_SECONDS)
             except OSError:
                 pass
 
@@ -506,8 +510,25 @@ def _greeting(params):
             "serverInfo": {"name": "cad", "title": "CAD", "version": version()}}
 
 
-def _leave(number, _frame):
-    raise SystemExit(128 + number)
+class _Leaving:
+    """What ``serve`` gives SIGTERM, SIGHUP and SIGINT, the signals a host ends this process with, often two at once
+    (a stop of the process group reaches ``cad mcp`` both directly and through the ``uvx`` it runs under, which
+    passes each signal on; SIGINT then SIGTERM). The first signal while the host is served raises ``SystemExit``
+    (128 + its number), which ends the serving as the input's end does. Every later one, and any while this process
+    leaves (``leaving``: the session's end told to the server, a start under way finished), is noted and returns:
+    raised there it would cut the leaving short, and raised while ``threading`` re-acquires a lock (a thread's start,
+    an event's wait) it leaves the lock unheld, so the lock's release raises ``RuntimeError`` in the exit's place."""
+
+    def __init__(self):
+        self.number = None  # the first signal taken
+        self.leaving = False
+
+    def __call__(self, number, _frame):
+        if self.number is not None:
+            return
+        self.number = number
+        if not self.leaving:
+            raise SystemExit(128 + number)
 
 
 def serve():
@@ -533,17 +554,21 @@ def serve():
     connection = Connection(requests, output, proxy.handle, workers=64, notification=proxy.notify)
     proxy.tell = connection.notify
     # A host that ends this process with a signal rather than by closing its input (or both, at once): it
-    # leaves as at the input's end, its session ended (``proxy.close``) before it exits.
+    # leaves as at the input's end, its session ended (``proxy.close``) before it exits, whatever signals follow.
+    leave = _Leaving()
     for name in ("SIGTERM", "SIGHUP", "SIGINT"):
         if hasattr(signal, name):
-            signal.signal(getattr(signal, name), _leave)
+            signal.signal(getattr(signal, name), leave)
     try:
         connection.serve()
     finally:
+        leave.leaving = True
         proxy.close()
         # A start under way is finished before this process leaves, never left half done (cad being installed, a
         # server of another release stopped and this release's not yet started): it is bounded.
         holder.started.wait(INSTALL_SECONDS + INSTALLED_SECONDS)
+    if leave.number is not None:
+        raise SystemExit(128 + leave.number)  # the input ended, and a signal came while it left
     return 0
 
 
