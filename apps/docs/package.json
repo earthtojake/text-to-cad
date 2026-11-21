@@ -22,7 +22,7 @@
     "clsx": "^2.1.1",
     "github-slugger": "^2.0.0",
     "hast-util-to-jsx-runtime": "^2.3.7",
-    "lucide-react": "^1.73.0",
+    "lucide-react": "^1.74.0",
     "mdast-util-to-string": "^4.0.0",
     "meshoptimizer": "^1.3.0",
     "next": "16.4.6",
