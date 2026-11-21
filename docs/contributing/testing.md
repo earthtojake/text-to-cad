@@ -35,7 +35,7 @@ Each is held by a test where one can hold it.
 | static | `static` | every change, nothing installed but Python and Node | The version and tree checks, the policy tests that read only the repository's text, the API's tests: under a minute |
 | unit | `packages (Linux)`, `js-core`, `js-ui`, `js-web`, `js-mcp`, `docs`, `skills` | when its component changes | Behaviour of one package or app |
 | platform | `packages (Windows)`, `routing (macOS)` | with every change to the packages | What differs by operating system: paths, locks, subprocesses, line endings, the C library |
-| integration | `fea`, `kicad`, `blender`, `packaging`, `viewer-e2e` | with every change to the packages; the last two with the UI and the apps too | A third-party tool installed as a person has it; the wheels as they ship; the bundled viewer through the real backend |
+| integration | `fea`, `fea (Windows smoke)`, `kicad`, `blender`, `packaging`, `viewer-e2e` | with every change to the packages; the last two with the UI and the apps too | A third-party tool installed as a person has it; the wheels as they ship; the bundled viewer through the real backend |
 | release | `packages (Python 3.11 floor)`, `install (Linux)`, `install (Windows)` | a full run: a `VERSION` change, nightly, a dispatch | Rare breaks that must not reach a release, at a cost not worth paying on every push |
 | gate | `CI` | always | The one required check |
 
@@ -234,6 +234,7 @@ decide which tests reach it. The components:
 | `js-mcp` | `packages/ui`, `apps/mcp` | The CAD app's type check, units and one-file build |
 | `docs` | `apps/docs`, `docs/install.md` and `docs/migrations` (the documentation site sets them), `scripts/brand`, the one-line installers | Lint, the Next build, which resolves every link of the documentation, icon verification, the brand marks |
 | `fea` | the packages, its suite | `test-fea.sh`, with netgen and CalculiX installed (the lock's `fea` group) |
+| `fea (Windows smoke)` | the same, on `fea`'s flag | One solve of the fea suite through the command on Windows, with the cad-ccx wheel for that platform: about 2 minutes a run, most of it installing |
 | `kicad` | the packages, its suite | `test-kicad.sh`, in the environment of `cad[kicad]` |
 | `blender` | the packages, its suite | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |
 | `packaging` | the packages, the UI, `apps/web`, `apps/mcp`: whatever ships in a wheel | Clean bundle, layout, the wheels' contents, the installed commands |

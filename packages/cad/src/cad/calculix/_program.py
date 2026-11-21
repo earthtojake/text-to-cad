@@ -102,7 +102,7 @@ def find_ccx() -> Ccx:
     :class:`CalculixMissingError` naming why and how to install it."""
     try:
         path = programs.find(CCX).absolute()  # relative, it would be read in the folder a solve runs in
-        if os.environ.get(CCX_ENV, "").strip():
+        if os.environ.get(CCX_ENV, "").strip() and not _is_packaged(path):
             version = _version(path)
         else:
             # The wheel knows which CalculiX it carries. The Windows binary can print its
@@ -113,6 +113,15 @@ def find_ccx() -> Ccx:
         return Ccx(path=str(path), version=programs.check_version(CCX, path, version))
     except programs.ProgramMissing as error:
         raise CalculixMissingError(str(error)) from None
+
+
+def _is_packaged(path: Path) -> bool:
+    """Whether ``path`` is the ``cad-ccx`` package's own ``ccx``, the same file however ``CAD_CCX`` spells it: that one
+    takes the version the package states, as when nothing is named. Any other program is asked, never assumed."""
+    def real(found: Path) -> str:
+        return os.path.normcase(os.path.realpath(found))
+
+    return any(real(found) == real(path) for found in _installed())
 
 
 def _version(path: Path) -> str | None:
