@@ -2236,6 +2236,30 @@ class PluginCatchUpTest(Case):
         self.assertFalse(self.catch_up.due(), "no second run after the bridge's")
         self.assertEqual(self.catch_up.read()["for"], "0.1.0")
 
+    def test_the_bridge_s_run_done_with_an_app_failed_holds_nothing_back_and_leaves_a_run_owed(self) -> None:
+        """BRIDGE-ONLY. While install mode is owed, its run is the computer's one; it is done once cad is installed,
+        whatever the apps did, and where an app's step failed the plugin is then this rule's: held back no longer, and
+        owed a run for the release install mode was owed for, though no run of the global install marked it (here the
+        plugin's step ran a cad from uv's cache, or none could run it)."""
+        from cad_server._internal import install_script
+
+        self.switch_on()
+        self.catch_up.noted("0.0.9")
+        install_script.owe("0.1.0", now=1000.0)
+        self.assertFalse(self.catch_up.due(), "held while install mode is owed")
+        # An attempt begun at 1000.0 whose report says cad is there and an app's step failed.
+        install_script._write({**install_script.read(), "attempts": 1, "first": 1000.0, "last": 1000.0,
+                               "outcome": install_script.RUNNING})
+        (self.state / install_script.REPORT).write_text(json.dumps({"setup": 0, "apps": {
+            "claude": "installed", "gemini": "failed"}}), encoding="utf-8")
+        self.assertFalse(self.catch_up.due(), "held while it runs")
+        install_script.Carrier(began=0.0).tend("0.1.0", self.told.append, mono=10.0, wall=1100.0)
+        self.assertEqual(install_script.read()["state"], install_script.DONE)
+        self.assertEqual(self.catch_up.read(), {"for": "0.0.9", "owed": "0.1.0"})
+        self.assertTrue(self.catch_up.due(), "the plugin is this rule's now")
+        self.begun()
+        self.assertEqual((self.catch_up.read()["release"], self.catch_up.read()["tries"]), ("0.1.0", 1))
+
     def test_turned_on_by_an_install_run_ending_badly_it_is_on_and_nothing_is_taken_as_up_to_date(self) -> None:
         """The hosted install command turns the switch on as its last step wherever cad is there, and says how its run
         is ending (``FAILED_ENV``), as it did for 0.11.12 and 0.11.13, which read it the same way: ending badly, the

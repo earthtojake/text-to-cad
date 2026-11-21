@@ -297,8 +297,11 @@ carries the command, every install would fail: the deploy asks first.
 `cad plugin install` and, through `cad@latest`, with the two that do not. Those two and the bridge
 run it unattended, so what they read of it never changes: no options, exit status 0 only where the
 run ended well, and the report it writes where `CAD_INSTALL_REPORT` names a file. The bridge reads
-that report, never the exit status, so where the plugin's step ended non-zero and named no app as
-failed, the script writes `"plugin": "failed"` there itself, and the bridge runs it again later.
+that report, never the exit status. The bridge of 0.11.12 to 0.11.14, with cad installed, takes a
+run for a failed one only where a value of its `apps` says `failed`; so where the plugin's step
+ended non-zero and named no app as failed, the script writes `"plugin": "failed"` there itself, and
+that bridge runs it again later. A later release's takes a run that installed cad as done, and
+leaves a `failed` there to the plugin's retry (the bridge, below).
 While PyPI's newest cad has no `cad plugin install`, nothing of `main` can be deployed to the
 production site, a fix to a page included: only a preview. A person's run updates a working cad at
 once from PyPI, under neither the feed's hour nor a hold. cad's table is long, and many of its rows
@@ -318,12 +321,31 @@ the new cad arrived by the uv line on a computer the install command set up befo
 install command once. The code that does this is kept apart and marked (`cad_server/cli/setup.py`),
 so that a later release deletes it in one change.
 
-**Why.** That updater cannot be changed, and it is the only way those computers reach the new
-design without a person doing anything.
+The bridge's run of the install command is done once its report says cad is installed, whatever the
+apps' steps did. Where one failed (an app's, or the plugin's step as a whole), that is left to the
+plugin's ordinary retry (who updates which copy, above): the computer is marked as owed a run for
+the release, and the retry, held back while the bridge's run is owed, then runs `cad plugin install`
+at most three times for the release, an hour or more apart, and three more with each newer cad. Only
+a run that did not install cad (its cad step failed, it wrote no report, or it could not start) is
+run again: an hour later at a server's start, then once a day, at most 30 times in 30 days. Until
+0.11.14 an app's failure kept the run failed, and so retrying, too.
+
+**Why.** That updater cannot be changed, and it is the only way those computers reach the new design
+without a person doing anything. The run is there to bring a computer onto that design: cad
+installed globally, its updates on, the plugin's switch on. Once cad is installed that is done, and
+an app that fails is the failure any computer can meet, which cad already retries one way, bounded
+for each release. Kept failed for it, the run ran every app again each day for up to 30 days, held
+the ordinary retry back the while, and was counted as failed where cad was installed; and some apps
+fail for reasons no run of ours can fix: an app release that fails every git install by itself, or
+one nobody is signed in to.
 
 **What it costs.** A few commands stay for those releases: `cad setup --engine-update`; plain
-`cad setup`, which a `cad update` typed on those releases runs; and the hidden short forms
-`cad status` and `cad stop` their skill text uses.
+`cad setup`, which a `cad update` typed on those releases runs; and the hidden short forms `cad status`
+and `cad stop` their skill text uses. An app that fails in the bridge's run gets three tries a
+release, not one a day: one that would come right by itself within the month waits for the next
+release of cad, or for a person's `cad plugin install`. The bridge's run is counted as done where an
+app failed; the app is counted by the run of `cad plugin install` that met it, as any run's apps
+are.
 
 ## Old releases are carried through the newest 0.11
 

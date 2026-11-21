@@ -93,10 +93,34 @@ export const community = {
   items: [
     {
       title: "Studio",
-      body: "An open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand.",
+      body: "A community app by @amywork777: an open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand.",
       links: [
         { text: "Website", href: "https://texttocad.studio" },
         { text: "GitHub", href: "https://github.com/amywork777/studio" },
+      ],
+    },
+    {
+      title: "build123d",
+      body: "The Python CAD library text-to-cad's models are written in: parts and assemblies as code, with sketches, features and joints, built on OpenCASCADE.",
+      links: [
+        { text: "Docs", href: "https://build123d.readthedocs.io" },
+        { text: "GitHub", href: "https://github.com/gumyr/build123d" },
+      ],
+    },
+    {
+      title: "OpenCASCADE",
+      body: "The open-source geometry kernel under build123d: it builds the solids and reads and writes the STEP files.",
+      links: [
+        { text: "Website", href: "https://dev.opencascade.org" },
+        { text: "GitHub", href: "https://github.com/Open-Cascade-SAS/OCCT" },
+      ],
+    },
+    {
+      title: "kicode",
+      body: "KiCad's command line, kicad-cli, and its Python client, KiPy, in one Python package: the headless KiCad that text-to-cad's circuit boards run on, with nothing else of KiCad installed. Unofficial: not made or supported by the KiCad project.",
+      links: [
+        { text: "PyPI", href: "https://pypi.org/project/kicode/" },
+        { text: "GitHub", href: "https://github.com/earthtojake/kicode" },
       ],
     },
   ],

@@ -250,7 +250,8 @@ most three runs for one release, each an hour or more after the one before, so a
 at most three runs in the background for each release. Never where the update check is off for the process
 (`CAD_UPDATE_CHECK=0`, CI, a development build), where `CAD_ENGINE_UPDATE_INSTALLER` is set and empty (a
 test's way to say the server runs nothing by itself; `cad plugin install` reads no such variable), for a cad
-that is no global install, or while the bridge owes its own run of the hosted install command.
+that is no global install, or while the bridge owes its own run of the hosted install command: until a run of it
+installs cad, which ends it whatever the apps did, an app that failed there left to this rule.
 The helper and `cad update` run none. `cad doctor` shows the record. One run at a time: `cad plugin install`
 holds `install-command.lock` in the data folder from start to end; a second run waits for it, but one a server
 began, which exits 75 and is tried again an hour later. A run tries for the lock for

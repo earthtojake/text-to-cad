@@ -425,7 +425,12 @@ def hull(points: np.ndarray) -> np.ndarray:
         for i in indices:
             while len(kept) >= 2:
                 a, b = kept[-2], kept[-1]
-                if (xs[b] - xs[a]) * (ys[i] - ys[a]) - (ys[b] - ys[a]) * (xs[i] - xs[a]) > 1e-12:
+                turn = (xs[b] - xs[a]) * (ys[i] - ys[a]) - (ys[b] - ys[a]) * (xs[i] - xs[a])
+                # b goes where a, b, i turn right or run straight, and where they turn left by no more than noise
+                # with b between a and i. Not between, b is a corner and stays: the points of one vertical line
+                # whose x differ by rounding come sorted by that rounding, not by y, so i may lie back before b
+                if turn > 1e-12 or (turn > 0.0 and (xs[b] - xs[a]) * (xs[i] - xs[b])
+                                    + (ys[b] - ys[a]) * (ys[i] - ys[b]) < 0.0):
                     break
                 kept.pop()
             kept.append(i)

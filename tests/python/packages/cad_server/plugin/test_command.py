@@ -23,7 +23,7 @@ from cad_server import analytics, updates
 from cad_server._internal import auto_update, auto_update_helper, plugin_catch_up
 from cad_server.cli import plugin as command
 from cad_server.plugin import apps, computer, run, source
-from tests.python.support.agent_apps import PluginRuns
+from tests.python.support.agent_apps import CODEX_ADD, PluginRuns
 
 ADD = [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
        ["plugin", "install", "text-to-cad@earthtojake"]]
@@ -72,7 +72,7 @@ class InstallTests(PluginRuns):
         self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
         self.assertEqual(self.calls("claude"), ADD)
         self.assertEqual(self.calls("codex"),
-                         [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"],
+                         [CODEX_ADD,
                           ["plugin", "add", "text-to-cad@earthtojake"]])
         self.assertEqual(self.calls("gemini"), [["extensions", "install", source.URL, "--ref", "latest", "--consent"]])
         # Cursor and Grok Build load Claude Code's plugin: none of their own.

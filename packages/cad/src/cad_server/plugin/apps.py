@@ -37,6 +37,14 @@ from .terminal import Live
 
 # The CLI the Codex app bundles (macOS).
 CODEX_BUNDLED = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"
+# What Codex checks out of the `latest` branch (`marketplace add --sparse`): the catalog, Codex's manifest and what it
+# names (its logo, the skills, the server line), the files at the branch's root coming with them. Without it, Codex
+# clones the whole repository, every commit of every branch (over 400 MB), as it adds the catalog and again at every
+# `marketplace upgrade`, which gives that clone 30 seconds (0.171.0): too few on a Windows computer (measured: 47 s
+# on Windows Server 2022, 25 s on a fast Linux one), where the upgrade, and so every update, failed. Sparse, the add
+# and the upgrade take 2 to 3 seconds and keep 19 MB. A file the Codex manifest comes to name outside these is added
+# here (``tests/python/global/test_plugin_manifests.py`` checks it).
+CODEX_SPARSE = (".claude-plugin", ".codex-plugin", "skills", "codex.mcp.json")
 
 
 # --- the apps -----------------------------------------------------------------------------------------
@@ -93,8 +101,11 @@ class App:
     ``{url}``, ``{branch}``, ``{plugin}``, ``{catalog}`` and ``{folder}`` filled in. ``installed``: whether ours is there
     already; without it, ``update`` runs first and ``install`` where that fails. ``handler``: an app whose old
     copies need more than its commands (Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Claude Desktop,
-    Hermes Agent, Antigravity).
-    ``folder``: an agent with no plugin command, given the skills in its own folder; ``marks`` find it."""
+    Hermes Agent, Antigravity), or whose commands depend on what it holds already (GitHub Copilot CLI).
+    ``folder``: an agent with no plugin command, given the skills in its own folder; ``marks`` find it.
+    ``signed_out``: an app that takes a plugin only from a person signed in to it says so in these words; where it does,
+    the app is skipped with what it said, not failed (``plugin_command``): nothing a run can do changes it, and a run
+    again changes nothing until the person signs in."""
 
     key: str
     name: str
@@ -106,6 +117,7 @@ class App:
     handler: Optional[Callable[["App", Here, Context], Outcome]] = None
     folder: Optional[Callable[[Here], Path]] = None
     marks: Optional[Callable[[Here], List[Path]]] = None
+    signed_out: str = ""  # what the app's command says where nobody is signed in to it (a pattern, any case)
 
     def run(self, here: Here, context: Context) -> Outcome:
         if self.handler is not None:
@@ -136,12 +148,17 @@ def plugin_command(app: App, here: Here, context: Context) -> Outcome:
                 return ran
         return None
 
+    def give_up(failed: Ran) -> Outcome:
+        if app.signed_out and re.search(app.signed_out, failed.out, re.IGNORECASE):
+            return Outcome("skipped", f"nobody is signed in to it ({failed.last()})")
+        raise Failed(failed.last(), failed.reason)
+
     known = app.installed(here) if app.installed is not None else None
     if known and update:
         failed = run_all(update)
         if failed is None:
             return Outcome("updated")
-        raise Failed(failed.last(), failed.reason)
+        return give_up(failed)
     if known is None and update and run_all(update) is None:
         return Outcome("updated")
     install = fill(app.install, source, here)
@@ -150,7 +167,7 @@ def plugin_command(app: App, here: Here, context: Context) -> Outcome:
         return Outcome("installed")
     if app.installed is not None and app.installed(here):
         return Outcome("installed", f"its command said: {failed.last()}")
-    raise Failed(failed.last(), failed.reason)
+    return give_up(failed)
 
 
 # Claude Code and Codex: a plugin is name@catalog. Ours from GitHub is text-to-cad@earthtojake, from the repository's
@@ -165,6 +182,7 @@ class Catalog:
     kind: str  # github, git, directory, other
     where: str = ""  # the repository or the folder
     ref: str = ""
+    sparse: Tuple[str, ...] = ()  # the paths a git copy checks out, where it checks out a few (Codex's ``--sparse``)
 
     def ours(self, here: Here) -> bool:
         if self.name == DEV_CATALOG:
@@ -175,20 +193,23 @@ class Catalog:
             return our_folder(here, self.where)
         return False
 
-    def matches(self, here: Here, source: Source) -> bool:
-        """Whether it is the catalog the source installs from, as the source would add it."""
+    def matches(self, here: Here, source: Source, sparse: Sequence[str] = ()) -> bool:
+        """Whether it is the catalog the source installs from, as the source would add it (``sparse``: the paths a
+        git copy of it checks out, none for all)."""
         if source.local:
             return self.kind == "directory" and same_path(self.where, source.folder)
-        return self.kind in ("github", "git") and our_repository(self.where) and self.ref == BRANCH
+        return (self.kind in ("github", "git") and our_repository(self.where) and self.ref == BRANCH
+                and tuple(self.sparse) == tuple(sparse))
 
 
 def marketplace_app(app: App, here: Here, context: Context, cli: Optional[str], catalogs: Dict[str, Catalog],
-                    plugins: Sequence[str], verbs: Dict[str, Any]) -> Outcome:
+                    plugins: Sequence[str], verbs: Dict[str, Any], sparse: Sequence[str] = ()) -> Outcome:
     """Claude Code's and Codex's flow. First ours is put in: the source's catalog added (or brought up to date) and
     our plugin installed (or updated) from it. Only once that worked do our other catalogs and plugins go. Where a
     catalog of ours under the source's name points elsewhere (``main``, a checkout) it must be replaced: GitHub is
     checked first, and if the new one cannot be added and installed, the old one is put back. ``verbs``: the app's
-    commands, by what they do; ``verbs["readd"]`` makes the command that adds a recorded catalog again."""
+    commands, by what they do; ``verbs["readd"]`` makes the command that adds a recorded catalog again. ``sparse``: the
+    paths the app's copy of a GitHub catalog checks out (none: all); one of ours that checks out others is replaced."""
     if not cli:
         return NOT_FOUND
     source = context.source
@@ -207,7 +228,7 @@ def marketplace_app(app: App, here: Here, context: Context, cli: Optional[str], 
     if present is not None and not present.ours(here):
         raise Failed(f"the {target} catalog is another source's ({present.where or present.kind}): left alone")
     replaced = False
-    if present is not None and present.matches(here, source):
+    if present is not None and present.matches(here, source, sparse):
         do("refresh")
         do("update" if ours in plugins else "install")
         status = "updated" if ours in plugins else "installed"
@@ -351,35 +372,42 @@ def codex_cli(here: Here) -> Optional[str]:
 
 def codex(app: App, here: Here, context: Context) -> Outcome:
     """Codex, from its config (``$CODEX_HOME/config.toml``: ``[marketplaces.<name>]`` with ``source_type``,
-    ``source`` and ``ref``; ``[plugins."<id>"]``). A copy from OpenAI's directory (``openai-*``) is left.
-    Verified: `codex plugin --help` and its subcommands (0.169: `marketplace add <owner/repo> --ref`, `marketplace
-    upgrade`, `add`, `remove`); docs https://developers.openai.com/codex/plugins/build (`--ref`, `upgrade`). `add`
-    again after `upgrade` copies the plugin again: Codex keeps a copy, and the docs do not say an upgrade refreshes
-    it."""
+    ``source``, ``ref`` and ``sparse_paths``; ``[plugins."<id>"]``). A copy from OpenAI's directory (``openai-*``) is
+    left. Our GitHub catalog checks out ``CODEX_SPARSE`` alone; one added before it did (a whole clone, whose upgrade
+    fails on a slow disk) is replaced. Verified: `codex plugin --help` and its subcommands (0.169: `marketplace add
+    <owner/repo> --ref`, `marketplace upgrade`, `add`, `remove`; 0.171: `--sparse`, there in 0.139 already, which
+    finds no plugin in our catalog with or without it), and the commands run (0.149.1,
+    0.169.0 and 0.171.0 on Linux, 0.171.0 on Windows, no one signed in); docs
+    https://developers.openai.com/codex/plugins/build (`--ref`, `upgrade`). `add` again after `upgrade` copies the
+    plugin again: Codex keeps a copy, and the docs do not say an upgrade refreshes it."""
     config = read_toml(Path(here.environ.get("CODEX_HOME") or here.home / ".codex") / "config.toml")
     plugins = list(table(config.get("plugins")).keys())
     catalogs = {}
     for name, entry in table(config.get("marketplaces")).items():
         if isinstance(entry, dict):
             local = entry.get("source_type") == "local"
+            paths = entry.get("sparse_paths")
             catalogs[name] = Catalog(name, "directory" if local else "git", str(entry.get("source") or ""),
-                                     str(entry.get("ref") or ""))
+                                     str(entry.get("ref") or ""),
+                                     tuple(str(path) for path in paths) if isinstance(paths, list) else ())
 
     def readd(catalog: Catalog) -> List[str]:
         return ["plugin", "marketplace", "add", catalog.where,
-                *(["--ref", catalog.ref] if catalog.ref and catalog.kind != "directory" else [])]
+                *(["--ref", catalog.ref] if catalog.ref and catalog.kind != "directory" else []),
+                *[word for path in catalog.sparse for word in ("--sparse", path)]]
 
     verbs = {
         "remove": [["plugin", "remove"]],
         "forget": [["plugin", "marketplace", "remove"]],
-        "add": [["plugin", "marketplace", "add", "{repo}", "--ref", "{branch}"]],
+        "add": [["plugin", "marketplace", "add", "{repo}", "--ref", "{branch}",
+                 *[word for path in CODEX_SPARSE for word in ("--sparse", path)]]],
         "add_local": [["plugin", "marketplace", "add", "{folder}"]],
         "refresh": [] if context.source.local else [["plugin", "marketplace", "upgrade", "{catalog}"]],
         "install": [["plugin", "add", "{plugin}@{catalog}"]],
         "update": [["plugin", "add", "{plugin}@{catalog}"]],
         "readd": readd,
     }
-    return marketplace_app(app, here, context, codex_cli(here), catalogs, plugins, verbs)
+    return marketplace_app(app, here, context, codex_cli(here), catalogs, plugins, verbs, CODEX_SPARSE)
 
 
 def git_origin(folder: Path) -> Optional[str]:
@@ -711,6 +739,38 @@ def antigravity(app: App, here: Here, context: Context) -> Outcome:
     finally:
         shutil.rmtree(aside, ignore_errors=True)
     return Outcome("updated")
+
+
+def copilot(app: App, here: Here, context: Context) -> Outcome:
+    """GitHub Copilot CLI: ``plugin update text-to-cad``, else the catalog added (``plugin marketplace add
+    earthtojake/text-to-cad#latest``) and our plugin installed from it (``plugin install text-to-cad@earthtojake``).
+    Its ``marketplace add`` of a catalog it has already ends with exit status 1 (``Marketplace "earthtojake" already
+    registered``), so where a run added the catalog and its install did not go in, or a person uninstalled the plugin
+    and kept the catalog, every later run would fail at the add: the add is made only where its settings
+    (``$COPILOT_HOME/settings.json``, default ``~/.copilot``: ``extraKnownMarketplaces``) do not name the catalog
+    already. A catalog of that name from another source is left alone. Verified: `copilot plugin --help` and its
+    subcommands, and the commands run (1.0.55, 1.0.67, 1.0.79, 1.0.114, on Linux; 1.0.114 on Windows); docs
+    https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference. 1.0.43 takes no
+    ``#ref`` (it clones ``text-to-cad#latest``), and 0.0.x has no ``plugin`` command."""
+    cli = here.which("copilot")
+    if not cli:
+        return NOT_FOUND
+    source = context.source
+    if source.local:
+        return Outcome("skipped", "no install from a local folder")
+    words = source.words()
+    if here.run([cli, "plugin", "update", PLUGIN]).ok:
+        return Outcome("updated")
+    settings = Path(here.environ.get("COPILOT_HOME") or here.home / ".copilot") / "settings.json"
+    known = table(table(table(read_json(settings)).get("extraKnownMarketplaces")).get(source.catalog))
+    where = table(known.get("source"))
+    if not known:
+        here.must([cli, "plugin", "marketplace", "add", "{repo}#{branch}".format(**words)])
+    elif not our_repository(where.get("repo") or where.get("url")):
+        raise Failed(f"the {source.catalog} catalog is another source's "
+                     f"({where.get('repo') or where.get('url') or 'elsewhere'}): left alone")
+    here.must([cli, "plugin", "install", "{plugin}@{catalog}".format(**words)])
+    return Outcome("installed")
 
 
 def desktop_config(here: Here) -> Path:
@@ -1058,18 +1118,16 @@ APPS: Tuple[App, ...] = (
         install=[["plugin", "marketplace", "add", "{repo}"], ["plugin", "install", "{plugin}@text-to-cad", "--scope", "user"]],
         update=[["plugin", "marketplace", "update", "text-to-cad"], ["plugin", "update", "{plugin}@text-to-cad", "--scope", "user"]]),
     # Devin CLI. Docs https://docs.devin.ai/cli/extensibility/plugins/overview (install owner/repo -y; no ref: main;
-    # update <name>; it reads .claude-plugin/plugin.json). Not run.
+    # update <name>; it reads .claude-plugin/plugin.json; managing plugins needs a person signed in). Run, signed out
+    # (3000.14 on Windows): each command ends with exit status 1 and "Error: You must be logged in to manage plugins.
+    # Run `devin auth login` first.", so it is skipped there; not run signed in.
     App("devin", "Devin CLI", command="devin",
         install=[["plugins", "install", "{repo}", "-y"]], update=[["plugins", "update", "{plugin}"]],
-        local=[["plugins", "install", "--local", "{folder}", "-y"]]),
+        local=[["plugins", "install", "--local", "{folder}", "-y"]], signed_out=r"must be logged in"),
     # Antigravity (``antigravity``, above): installed again to update; uninstalled only where that fails. Not run.
     App("antigravity", "Antigravity", command="agy", handler=antigravity),
-    # GitHub Copilot CLI. Docs https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference
-    # (marketplace add owner/repo#ref; the catalog is named by its marketplace.json; install name@marketplace;
-    # update <name>). Superpowers installs it the same way. Not run.
-    App("copilot", "GitHub Copilot CLI", command="copilot",
-        install=[["plugin", "marketplace", "add", "{repo}#{branch}"], ["plugin", "install", "{plugin}@{catalog}"]],
-        update=[["plugin", "update", "{plugin}"]]),
+    # GitHub Copilot CLI (``copilot``, above): updated, else the catalog added where it has none, and installed.
+    App("copilot", "GitHub Copilot CLI", command="copilot", handler=copilot),
     # Pi. Docs https://docs.pi.dev/latest/packages (`pi install git:github.com/o/r@ref`; personal installs are recorded
     # in ~/.pi/agent/settings.json; `pi update` never moves a configured ref, so an update is the install again).
     # Lane C ran the install from a local copy; not run against GitHub here.

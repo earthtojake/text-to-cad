@@ -381,6 +381,9 @@ the launch's `_meta` first (`host/capability.ts`).
   that becomes a blob module only when something imports it, so a view parses
   what it shows rather than all of the app (`vite.config.mjs`). `dist/index.html` is the
   same app as one page, for development and the release's source maps.
+- **Both pages ask browsers not to translate the app** (`translate="no"`, `class="notranslate"` on `<html>`, and
+  `<meta name="google" content="notranslate">`, in `shell.html` and `index.html`): it speaks its own locales,
+  and a browser's page translation rewrites text nodes React owns, so React's next commit throws `NotFoundError`.
 - **Nothing waits unseen.** While the home's list is read, placeholder cards (or
   rows) stand where the models will be; a model being opened shows a spinner over
   its picture, and takes no second press, until the launch switches to the

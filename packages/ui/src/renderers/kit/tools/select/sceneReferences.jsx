@@ -36,10 +36,22 @@ export function useSceneInspect({ scene, selection, describe, tip = null, frame 
     [scene, selected, describe, words, pointed, select, hover, frame, copyText, glyphs, data]);
 }
 
-/** What Copy Reference copies for `ids` in the file on screen: one reference naming them all ("" off a workspace file). */
+/**
+ * One reference into the file on screen naming `ids`, and what it copies, or null off a workspace file or where
+ * the file's grammar cannot name an id (`formatPromptReference` refuses it). A view draws a pick whatever its
+ * scene calls it, so a pick that cannot be named is that view's, not a reason to throw where a chip is drawn
+ * (a throw inside the hook's `useMemo` takes the whole view down with it): it is no reference and copies nothing.
+ * `validatePromptReference` stays strict for what sends or parses a reference; this is the display's guard.
+ */
+function named(resource, ids) {
+  if (resource?.kind !== "workspace-file" || !ids.length) return null;
+  const reference = { resource: { ...resource }, target: { kind: "cad-selector", selectors: [...ids] } };
+  try { return { reference, text: formatPromptReference(reference) }; } catch { return null; }
+}
+
+/** What Copy Reference copies for `ids` in the file on screen: one reference naming them all ("" off a workspace file, or where one cannot be named). */
 export function sceneCopyText(resource, ids) {
-  return resource?.kind === "workspace-file" && ids.length
-    ? formatPromptReference({ resource: { ...resource }, target: { kind: "cad-selector", selectors: [...ids] } }) : "";
+  return named(resource, ids)?.text ?? "";
 }
 
 /**
@@ -47,7 +59,8 @@ export function sceneCopyText(resource, ids) {
  * the file on screen, by the id its scene picks it by — the file's own name for it, whose grammar
  * is its renderer's (`renderers.md`) — and as a chip named as the file names it, its card what the
  * view says of it (`describe`, the Selected pane's: `useSceneDescribe` unless the view has its own).
- * A click on a chip copies its reference; its X drops it; resting on it lights it.
+ * A click on a chip copies its reference; its X drops it; resting on it lights it. A pick the file's grammar
+ * cannot name is still a chip, with nothing to copy, and no reference.
  *
  * @param {{ scene: { describePart?: (id: string) => ({ name: string, facts: { label: string, value: string }[] } | null) } | null,
  *   describe?: ((id: string) => import("../../inspector/inspect.js").DetailItem | null) | null,
@@ -60,13 +73,11 @@ export function useSceneReferences({ scene, selection, resource, describe = null
   const described = describe || own;
   return useMemo(() => {
     if (!scene) return { references: EMPTY, chips: EMPTY };
-    const reference = id => (resource?.kind === "workspace-file"
-      ? { resource: { ...resource }, target: { kind: "cad-selector", selectors: [id] } } : null);
-    const references = selected.map(reference).filter(Boolean);
-    const chips = selected.map((id) => {
+    const names = selected.map(id => named(resource, [id]));
+    const references = names.map(name => name?.reference).filter(Boolean);
+    const chips = selected.map((id, at) => {
       const detail = described(id);
-      const value = reference(id);
-      return { key: `part:${id}`, label: detail?.title || id, glyph: "solid", id, ...(value ? { copy: formatPromptReference(value) } : {}),
+      return { key: `part:${id}`, label: detail?.title || id, glyph: "solid", id, ...(names[at] ? { copy: names[at].text } : {}),
         detail,
         onRemove: () => select(id, { multiSelect: true }), onHover: on => hover(on ? id : "") };
     });
