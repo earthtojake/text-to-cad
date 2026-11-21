@@ -88,6 +88,17 @@ def _plain(result: Any) -> Any:
 MEASURES = {"code": "c0de", "libraries": {"build123d": "0.13.0", "OCP": "8.0.1", "numpy": "2.0.0"}}
 
 
+def record(name: str = "plate", geometry: str = "g1", material: Any = None) -> dict[str, Any]:
+    """A content record of one part of geometry ``geometry``, keyed as a checks process keys it
+    (``cad.build123d._dfm_brep.content``)."""
+    from cad._internal.dfm import kept
+
+    content = {"name": name, "empty": [], "parts": [{
+        "key": geometry, "name": name, "owner": "", "paths": [name], "matrix": [1.0, 0.0, 0.0, 0.0] * 4,
+        "placements": [[0.0, 0.0, 0.0]], "occurrences": 1, "material": material, "mesh": ""}]}
+    return {**content, "key": kept.content_key(content)}
+
+
 def _counts() -> dict[str, int]:
     from cad.engine import api
 
