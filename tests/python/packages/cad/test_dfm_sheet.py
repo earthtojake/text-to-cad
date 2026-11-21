@@ -433,6 +433,19 @@ class OutlineTest(unittest.TestCase):
         self.assertAlmostEqual(tab["length_mm"], 15.0, places=4)
         self.assertGreater(tab["xyz"][0], 40.0)  # located at the tab
 
+    def test_the_hull_keeps_the_corners_of_a_side_that_is_vertical_but_for_rounding(self) -> None:
+        # a flat's outline as an unfold laid it: the points of its two vertical sides differ in x by rounding
+        # (1e-15), so they come sorted by that and not by y. The hull dropped the corners (-50, -37) and
+        # (0, 31.4), and the flat read 77.262 x 37.377 for 68.398 x 50
+        low, top = 9.39822971502571, 31.39822971502571
+        points = [(-6.0, -12.0), (-6.0, low), (9.369662123902149e-17, low), (5.523736751135049e-17, top),
+                  (-50.00000000000001, top), (-50.0, low), (-44.0, 9.398229715025709), (-44.0, -12.0),
+                  (-50.0, -12.0), (-50.0, -37.0), (2.613352407788645e-15, -37.0), (-5.492429656686475e-18, -12.0)]
+        self.assertEqual(plane.hull(points).tolist(), [4, 9, 10, 3])
+        long, short, _ = plane.min_rectangle(points)
+        self.assertAlmostEqual(long, top + 37.0, places=9)
+        self.assertAlmostEqual(short, 50.0, places=9)
+
 
 class TypeSideTest(unittest.TestCase):
     def test_k_factor_defaults(self) -> None:
