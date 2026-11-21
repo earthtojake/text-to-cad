@@ -74,10 +74,15 @@ cad_server/
   names it: `cad model export <id>`, `cad xbf export`, `cad step snapshot`, `cad glb inspect`,
   `cad urdf validate`. `model` is a model the engine holds, by its document id, with no file. `export`,
   `snapshot` and `inspect` are shared by every type that has them; every other operation is named for
-  what it does -- `dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate` -- each a check whose
+  what it does -- `dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate`, `mesh`, `fit`, `bake` -- each a check whose
   findings carry a severity, a code and a location (`--json`). `cad <type> --help` lists a type's
   operations, `cad <type> <operation> --help` its options, and a file of another type is refused by name
-  (`cli/document_types.py`, each type's module `cli/<type>.py`).
+  (`cli/document_types.py`, each type's module `cli/<type>.py`). A GSL model, omega's (`.gsl`), is a
+  document type, shown as its field: `cad gsl validate MODEL.gsl [--mesh MESH.stl] [--strict]` meshes it with
+  omega-core's `gsl` (or takes the mesh given) and judges the mesh against the field, since `gsl` exits 0 on one
+  it got wrong, in the environment of `cad[omega]` where this one lacks it; `cad gsl mesh MODEL.gsl [OUT.glb]
+  [--define NAME=NUMBER] [--depth N]` writes the mesh as a GLB once it passes the same judgement, and keeps it by
+  what made it; `cad run gsl ...` is `gsl` as it is.
 - **Integrations**, for a tool's own files that are no document type: `cad mujoco check MODEL.xml`,
   `cad orcaslicer presets KIND`, `cad orcaslicer complete` (`cli/integrations.py`).
 - **The server**: `cad server start` starts it, detached, and says so; `cad server stop` stops it;

@@ -1148,6 +1148,15 @@ def _apart(shape: Any) -> Any:
     from OCP.TopExp import TopExp
     from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
+    if shape.NbChildren() == 0 and int(shape.ShapeType()) == 0:
+        # A compound holding nothing (a part that is a GSL concept, ``cad.gsl.concept``) has no topology for the
+        # copy to make again, and the copy is the shape it was given: an empty compound of its own instead.
+        from OCP.BRep import BRep_Builder
+        from OCP.TopoDS import TopoDS_Compound
+
+        made = TopoDS_Compound()
+        BRep_Builder().MakeCompound(made)
+        return made.Located(shape.Location())
     made = BRepBuilderAPI_Copy(shape, False, False).Shape()
     mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(made, mapped)
@@ -2158,9 +2167,10 @@ def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
 #: holds it), the masses declared on it or above it (``[[levels above the part, grams], ...]``, the outermost
 #: first: 0 is the part's own), its point masses (``{name: {"grams", "at": 16 floats column-major mm,
 #: "inertia"?}}``), the nodes declared free at or above it (``[levels above the part, ...]``, the outermost
-#: first) and the link names declared at or above it (``[[levels above the part, name], ...]``, the outermost
-#: first).
-DECLARED = ("body", "drives", "mass", "pointMasses", "free", "link")
+#: first), the link names declared at or above it (``[[levels above the part, name], ...]``, the outermost
+#: first) and the GSL concept it stands for or was baked from (``{"gsl", "role", "digest", "values"?}``,
+#: ``declarations.concept_value``).
+DECLARED = ("body", "drives", "mass", "pointMasses", "free", "link", "concept")
 
 
 def _nodes(state: dict[str, Any], path: str) -> tuple[tuple[int, str, Any], ...]:
@@ -2227,6 +2237,9 @@ def _declared(state: dict[str, Any], path: str, masses: tuple[tuple[int, float],
     named = [[up, value] for up, key, value in nodes if key == "link"]
     if named:
         found["link"] = named
+    concept = state.get(declarations.CONCEPT)
+    if concept is not None:
+        found["concept"] = declarations.concept_value(concept, path)
     return found
 
 

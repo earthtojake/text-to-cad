@@ -3530,6 +3530,272 @@
      ]
     }
    ]
+  },
+  {
+   "name": "gsl",
+   "summary": "GSL",
+   "usage": "cad gsl <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad gsl validate",
+     "summary": "mesh it with gsl and check the mesh against the field: it compiles, it is closed and manifold, it points outward, it stops short of the @scene box, and its volume is the field's",
+     "usage": "cad gsl validate [--mesh MESH] [--strict] [--verbose] [--json] PATH",
+     "description": 129,
+     "arguments": [
+      {
+       "name": "PATH",
+       "help": 130
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--mesh"
+       ],
+       "metavar": "MESH",
+       "help": 131
+      },
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 100
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 102
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 46
+      }
+     ]
+    },
+    {
+     "command": "cad gsl mesh",
+     "summary": "write it as a GLB, with values for its names, once a mesh is wanted: the mesh is checked against the field as validate does before it is written, and kept, so the same model and values are meshed once",
+     "usage": "cad gsl mesh [--define DEFINE] [--depth DEPTH] [--strict] [--verbose] [--json] PATH [OUT]",
+     "description": 132,
+     "arguments": [
+      {
+       "name": "PATH",
+       "help": 133
+      },
+      {
+       "name": "OUT",
+       "help": 134,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--define"
+       ],
+       "metavar": "DEFINE",
+       "help": 135,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--depth"
+       ],
+       "metavar": "DEPTH",
+       "help": 136
+      },
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 100
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 102
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 46
+      }
+     ]
+    },
+    {
+     "command": "cad gsl fit",
+     "summary": "check exact parts against this concept through its field, with no mesh of it: each part's clearance, where one runs into its material, and the contacts the design means",
+     "usage": "cad gsl fit [--contact CONTACT] [--define DEFINE] [--tolerance TOLERANCE] [--contact-radius RADIUS] [--density DENSITY] [--chord CHORD] [--strict] [--verbose] [--json] PATH [EXACT]",
+     "description": 137,
+     "arguments": [
+      {
+       "name": "PATH",
+       "help": 138
+      },
+      {
+       "name": "EXACT",
+       "help": 139,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--contact"
+       ],
+       "metavar": "CONTACT",
+       "help": 140,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--define"
+       ],
+       "metavar": "DEFINE",
+       "help": 141,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--tolerance"
+       ],
+       "metavar": "TOLERANCE",
+       "help": 142,
+       "default": 0.01
+      },
+      {
+       "flags": [
+        "--contact-radius"
+       ],
+       "metavar": "RADIUS",
+       "help": 143,
+       "default": 3.0
+      },
+      {
+       "flags": [
+        "--density"
+       ],
+       "metavar": "DENSITY",
+       "help": 144,
+       "default": 4.0
+      },
+      {
+       "flags": [
+        "--chord"
+       ],
+       "metavar": "CHORD",
+       "help": 145,
+       "default": 0.01
+      },
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 100
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 102
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 46
+      }
+     ]
+    },
+    {
+     "command": "cad gsl bake",
+     "summary": "check an exact part baked from this concept against its field, both ways, and keep the concept as baked; --stale says where the concept has moved since",
+     "usage": "cad gsl bake [--stale] [--define DEFINE] [--max-deviation DEVIATION] [--tolerance TOLERANCE] [--density DENSITY] [--chord CHORD] [--strict] [--verbose] [--json] PATH [EXACT]",
+     "description": 146,
+     "arguments": [
+      {
+       "name": "PATH",
+       "help": 147
+      },
+      {
+       "name": "EXACT",
+       "help": 148,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--stale"
+       ],
+       "help": 149
+      },
+      {
+       "flags": [
+        "--define"
+       ],
+       "metavar": "DEFINE",
+       "help": 141,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--max-deviation"
+       ],
+       "metavar": "DEVIATION",
+       "help": 150,
+       "default": 0.0
+      },
+      {
+       "flags": [
+        "--tolerance"
+       ],
+       "metavar": "TOLERANCE",
+       "help": 151,
+       "default": 0.01
+      },
+      {
+       "flags": [
+        "--density"
+       ],
+       "metavar": "DENSITY",
+       "help": 144,
+       "default": 4.0
+      },
+      {
+       "flags": [
+        "--chord"
+       ],
+       "metavar": "CHORD",
+       "help": 145,
+       "default": 0.01
+      },
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 100
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 102
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 46
+      }
+     ]
+    }
+   ]
   }
  ],
  "integrations": [
@@ -3542,11 +3808,11 @@
      "command": "cad mujoco check",
      "summary": "compile a MuJoCo model (an MJCF) with MuJoCo and check it: what MuJoCo refuses or warns of, the model-health checks, what collides as what, and the contact excludes",
      "usage": "cad mujoco check [--strict] [--verbose] [--json] PATH",
-     "description": 129,
+     "description": 152,
      "arguments": [
       {
        "name": "PATH",
-       "help": 130
+       "help": 153
       }
      ],
      "options": [
@@ -3581,11 +3847,11 @@
      "command": "cad orcaslicer presets",
      "summary": "list the presets of one kind a person can select (machine, process or filament), from their own OrcaSlicer folders and the app's profiles",
      "usage": "cad orcaslicer presets [--match MATCH] [--profiles PROFILES] [--json] KIND",
-     "description": 131,
+     "description": 154,
      "arguments": [
       {
        "name": "KIND",
-       "help": 132,
+       "help": 155,
        "choices": [
         "machine",
         "process",
@@ -3599,14 +3865,14 @@
         "--match"
        ],
        "metavar": "MATCH",
-       "help": 133
+       "help": 156
       },
       {
        "flags": [
         "--profiles"
        ],
        "metavar": "PROFILES",
-       "help": 134,
+       "help": 157,
        "repeatable": true
       },
       {
@@ -3621,14 +3887,14 @@
      "command": "cad orcaslicer complete",
      "summary": "write a printer, a process and filaments complete for OrcaSlicer's command line: every parent merged in, the printer named as compatible",
      "usage": "cad orcaslicer complete --printer PRINTER --process PROCESS [--filament FILAMENT] [--out OUT] [--profiles PROFILES] [--json]",
-     "description": 135,
+     "description": 158,
      "options": [
       {
        "flags": [
         "--printer"
        ],
        "metavar": "PRINTER",
-       "help": 136,
+       "help": 159,
        "required": true
       },
       {
@@ -3636,7 +3902,7 @@
         "--process"
        ],
        "metavar": "PROCESS",
-       "help": 137,
+       "help": 160,
        "required": true
       },
       {
@@ -3644,7 +3910,7 @@
         "--filament"
        ],
        "metavar": "FILAMENT",
-       "help": 138,
+       "help": 161,
        "repeatable": true
       },
       {
@@ -3652,14 +3918,14 @@
         "--out"
        ],
        "metavar": "OUT",
-       "help": 139
+       "help": 162
       },
       {
        "flags": [
         "--profiles"
        ],
        "metavar": "PROFILES",
-       "help": 134,
+       "help": 157,
        "repeatable": true
       },
       {
@@ -3678,7 +3944,7 @@
    "command": "cad cache",
    "summary": "cad's cache: dir, prune (what this release cannot use), clean (all of it)",
    "usage": "cad cache {dir,prune,clean} ...",
-   "description": 140,
+   "description": 163,
    "arguments": [
     {
      "name": "{dir,prune,clean} ...",
@@ -3694,29 +3960,29 @@
    "command": "cad cache dir",
    "summary": "print where cad's cache is",
    "usage": "cad cache dir",
-   "description": 141
+   "description": 164
   },
   {
    "command": "cad cache prune",
    "summary": "remove what this release of cad cannot use",
    "usage": "cad cache prune",
-   "description": 142
+   "description": 165
   },
   {
    "command": "cad cache clean",
    "summary": "remove all of cad's cache; cad makes it again as it needs it",
    "usage": "cad cache clean",
-   "description": 143
+   "description": 166
   },
   {
    "command": "cad delete",
    "summary": "delete documents: record, cached document, the engine's copy",
    "usage": "cad delete [--dry-run] [--yes] [--json] DOC [DOC ...]",
-   "description": 144,
+   "description": 167,
    "arguments": [
     {
      "name": "DOC",
-     "help": 145,
+     "help": 168,
      "repeatable": true
     }
    ],
@@ -3725,20 +3991,20 @@
      "flags": [
       "--dry-run"
      ],
-     "help": 146
+     "help": 169
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 147
+     "help": 170
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 148
+     "help": 171
     }
    ]
   },
@@ -3746,19 +4012,19 @@
    "command": "cad doctor",
    "summary": "report this cad, its folders, its kernel and the server; it changes nothing",
    "usage": "cad doctor [--check] [--json]",
-   "description": 149,
+   "description": 172,
    "options": [
     {
      "flags": [
       "--check"
      ],
-     "help": 150
+     "help": 173
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 151
+     "help": 174
     }
    ]
   },
@@ -3766,13 +4032,13 @@
    "command": "cad mcp",
    "summary": "serve the CAD app to the agent app that starts it, over MCP on stdin and stdout",
    "usage": "cad mcp",
-   "description": 152
+   "description": 175
   },
   {
    "command": "cad plugin",
    "summary": "the plugin in your agent apps: `install` puts it in or updates it; `update auto`: whether cad's updates update it too",
    "usage": "cad plugin {install} ...",
-   "description": 153,
+   "description": 176,
    "arguments": [
     {
      "name": "{install} ...",
@@ -3787,7 +4053,7 @@
    "command": "cad plugin install",
    "summary": "install the plugin in every agent app found on this computer, or update it there",
    "usage": "cad plugin install",
-   "description": 154
+   "description": 177
   },
   {
    "command": "cad plugin update",
@@ -3806,7 +4072,7 @@
    "command": "cad plugin update auto",
    "summary": "show or change whether cad's updates update the plugin too",
    "usage": "cad plugin update auto [{status,on,off}]",
-   "description": 155,
+   "description": 178,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3823,13 +4089,13 @@
    "command": "cad run",
    "summary": "run a script (or -m, -c) as uv run does, cad pinned at this device's release with the integrations its imports use",
    "usage": "cad run [uv run's options] SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE [ARGS...] | COMMAND [ARGS...]",
-   "description": 156
+   "description": 179
   },
   {
    "command": "cad server",
    "summary": "the cad server: start, stop, status",
    "usage": "cad server [--rotate-token] [--yes] {start,stop,status} ...",
-   "description": 157,
+   "description": 180,
    "arguments": [
     {
      "name": "{start,stop,status} ...",
@@ -3845,14 +4111,14 @@
      "flags": [
       "--rotate-token"
      ],
-     "help": 158
+     "help": 181
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 159
+     "help": 182
     }
    ]
   },
@@ -3860,20 +4126,20 @@
    "command": "cad server start",
    "summary": "start the cad server where it is not running",
    "usage": "cad server start [--port PORT] [--foreground]",
-   "description": 160,
+   "description": 183,
    "options": [
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 161
+     "help": 184
     },
     {
      "flags": [
       "--foreground"
      ],
-     "help": 162
+     "help": 185
     }
    ]
   },
@@ -3886,7 +4152,7 @@
      "flags": [
       "--json"
      ],
-     "help": 163
+     "help": 186
     }
    ]
   },
@@ -3899,7 +4165,7 @@
      "flags": [
       "--json"
      ],
-     "help": 164
+     "help": 187
     }
    ]
   },
@@ -3907,7 +4173,7 @@
    "command": "cad telemetry",
    "summary": "show or change the usage stats and crash reports CAD sends: status, on, off",
    "usage": "cad telemetry [{status,on,off}]",
-   "description": 165,
+   "description": 188,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3924,7 +4190,7 @@
    "command": "cad update",
    "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
    "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
-   "description": 166,
+   "description": 189,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -3938,7 +4204,7 @@
      "flags": [
       "--major"
      ],
-     "help": 167
+     "help": 190
     }
    ]
   },
@@ -3946,7 +4212,7 @@
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 168,
+   "description": 191,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3963,11 +4229,11 @@
    "command": "cad viewer",
    "summary": "open a viewer page on the running cad server",
    "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 169,
+   "description": 192,
    "arguments": [
     {
      "name": "FILE",
-     "help": 170,
+     "help": 193,
      "optional": true,
      "repeatable": true
     }
@@ -3978,39 +4244,39 @@
       "--host"
      ],
      "metavar": "HOST",
-     "help": 171
+     "help": 194
     },
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 172
+     "help": 195
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 173
+     "help": 196
     },
     {
      "flags": [
       "--no-open"
      ],
-     "help": 174
+     "help": 197
     },
     {
      "flags": [
       "--dist"
      ],
      "metavar": "DIST",
-     "help": 175
+     "help": 198
     },
     {
      "flags": [
       "--api-only"
      ],
-     "help": 176
+     "help": 199
     }
    ]
   }
@@ -4145,6 +4411,29 @@
   "a reference to resolve: #U3, #U3.7, #net:GND",
   "Check the KiCad schematic SCHEMATIC with KiCad's electrical rules check.",
   "the .kicad_sch to check (any sheet of its project: the check reads the whole hierarchy).",
+  "Mesh one GSL model with omega's ``gsl`` and check the mesh against the model's field.",
+  "the .gsl model to check.",
+  "an STL of this model to judge instead of meshing it here (one written by `gsl compile -t stl`).",
+  "Mesh one GSL model into a GLB with omega's ``gsl``, checked against the model's field, and keep it.",
+  "the .gsl model to mesh.",
+  "where to write the GLB; without it the mesh is left where cad keeps it, and named in the result.",
+  "a value for one of the model's top-level names, as name=number (r=6.5); repeat it for several.",
+  "the mesher's octree depth (gsl's own is 9); one more halves the cell and takes about four times as long.",
+  "Check exact parts against a GSL concept part they must fit with, through its field, with no mesh of it.",
+  "the .gsl concept; or, alone, the assembly that names its concepts: a document id or an .xbf.",
+  "the exact parts: a document id (cad run prints it), an .xbf, a .step, or a .glb.",
+  "a point x,y,z (mm) where an exact part should touch the concept; repeat it for several.",
+  "a value for one of the concept's top-level names, as name=number (r=6.5); repeat it for several.",
+  "mm within which a field value is the concept's surface.",
+  "mm about a contact's point in which the exact surface is looked for.",
+  "points sampled a square millimetre of exact surface, besides its vertices.",
+  "mm chord tolerance an id, .xbf or .step is meshed at to be sampled.",
+  "Check an exact part baked from a GSL concept against the concept's field, both ways, and keep the concept as baked; with ``stale``, say where the concept has moved since.",
+  "the .gsl concept; or, alone, the assembly that names its baked parts: a document id or an .xbf.",
+  "the exact part: a document id (cad run prints it), an .xbf, a .step, or a .glb.",
+  "hold the concept as it is now to the copy kept at its last bake, instead of baking.",
+  "mm the exact part may depart from the concept, either way, before the bake fails (0: no limit).",
+  "mm within which a field value is the concept's surface, and a change is no change.",
   "Compile one MuJoCo model with MuJoCo and check it.",
   "the .xml or .mjcf file to check.",
   "List the OrcaSlicer presets of one kind a person can select.",

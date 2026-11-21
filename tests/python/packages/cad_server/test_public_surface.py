@@ -42,6 +42,13 @@ MIRRORS: dict[str, tuple[str, str]] = {
     # The mujoco integration's check of a MuJoCo model's file, which is no document type: run here, or where
     # mujoco is not installed, in cad[mujoco]'s environment (``cad_server.cli.integrations``).
     "mujoco check": ("cad.mujoco", "check"),
+    # A GSL model's check of its mesh against its field, and its mesh on request: the omega integration's gsl,
+    # run here or in cad[omega]'s environment (``cad_server.cli.document_types``).
+    "gsl validate": ("cad.gsl", "validate"),
+    "gsl mesh": ("cad.gsl", "mesh"),
+    # Exact parts held to a GSL concept's field, the omega integration's too: fitted around it, and baked from it.
+    "gsl fit": ("cad.gsl", "fit"),
+    "gsl bake": ("cad.gsl", "bake"),
     # The orcaslicer integration's presets, found by name in OrcaSlicer's own folders, listed and written complete:
     # standard library alone, so always run here.
     "orcaslicer presets": ("cad.orcaslicer", "presets"),

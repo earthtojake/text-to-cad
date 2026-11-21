@@ -36,6 +36,9 @@ import { resolveMaterialFillBaseColor, shapeSourceColor } from "./surfaceMateria
 // reflecting the scene's environment; in every other look (a fill, X-ray, Flat) it wears the
 // look's finish like any other surface.
 //
+// A material marked `userData.cadOwnLook` dresses itself and is left alone: one that is no
+// triangle's surface (a marched field's, `render/fieldScene.js`), which no stand-in can replace.
+//
 // Colour modes are the material settings' own: `overrideSourceColors` paints every
 // part with a fill (one colour, or the palette cycled per mesh: in traversal
 // order, or at the place a mesh names in `userData.cadFillIndex`); otherwise a
@@ -66,7 +69,7 @@ export function surfaceOffset(depthWrite, own = null) {
 }
 
 function litMaterial(material) {
-  return Boolean(material?.isMeshStandardMaterial);
+  return Boolean(material?.isMeshStandardMaterial) && material.userData?.cadOwnLook !== true;
 }
 
 function readAuthored(material) {

@@ -66,10 +66,12 @@ These words mean one thing each, in the code, the commands and every document.
   shows: each has a view. A file cad writes or checks and never shows is none, whatever cad does with it: an
   MJCF, MuJoCo's own model file, is an export's destination and the mujoco integration's to check, and
   MuJoCo Studio shows it; an OrcaSlicer preset is the orcaslicer integration's to write complete, and
-  OrcaSlicer reads it.
+  OrcaSlicer reads it. A GSL model (`.gsl`), omega's, is a document type though it is text an agent writes:
+  cad shows it as the field it is (its view is `field`, the page marching it with no mesh), and the omega
+  integration's `gsl` is the tool behind its operations.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `orcaslicer`),
+  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `orcaslicer`, `omega`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs, where it needs any (`orcaslicer`'s code is the standard library alone, so it has none); our
   code for it -- helpers that take its objects, producers and operations; and a process kind: in-process,
@@ -103,7 +105,10 @@ materials, references to geometry, snapshots drawn by OCCT; the viewer (`cad vie
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
 check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); OrcaSlicer's
-presets written complete for its command line (`cad.orcaslicer`); a 3D
+presets written complete for its command line (`cad.orcaslicer`); a GSL
+model's mesh checked against its field (`cad.gsl.validate`: omega's `gsl` meshes it, and the mesh is held closed,
+manifold, outward, inside its `@scene` box and to the volume omega's evaluator proves), and written as a GLB once
+it passes (`cad.gsl.mesh`: with values for the model's names, kept by what made it); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
 B-rep document's interference check (`cad.<type>.interference(source, poses=..., fits=...)`: every

@@ -93,7 +93,9 @@ export function presentXbfTree(structure) {
     const selectionId = children ? xbfAssemblyId(path) : xbfElementId(source.instance);
     const label = String(source?.name || (placed ? prototypes[source.prototype]?.name : "") || "(unnamed)");
     const node = { id: `model:${selectionId}`, selectionId, kind: children ? "assembly" : "part", label,
-      component: placed ? String(prototypes[source.prototype]?.key ?? source.prototype) : null, leafPartIds: [], children: [] };
+      component: placed ? String(prototypes[source.prototype]?.key ?? source.prototype) : null, leafPartIds: [], children: [],
+      // What the part is to a GSL concept, where it names one: "body" (it IS the concept) or "baked" (made from it).
+      concept: placed ? prototypes[source.prototype]?.concept?.role || null : null };
     nodes.set(selectionId, node);
     owners.set(selectionId, chain);
     entries.set(selectionId, source);

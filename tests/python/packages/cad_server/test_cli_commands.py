@@ -39,6 +39,7 @@ TYPES = {
     "sdf": ("snapshot", "validate"),
     "kicad_pcb": ("export", "snapshot", "inspect", "drc"),
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
+    "gsl": ("validate", "mesh", "fit", "bake"),
 }
 COMMANDS = ("serve", "status", "stop", "delete", "server", "mcp", "run", "requirement", "doctor", "cache", "setup",
             "viewer", "telemetry", "update", "plugin")
@@ -134,7 +135,7 @@ class TheCommandTable(unittest.TestCase):
         from cad.registry import DOCUMENT_TYPES as TYPES_TABLE
         from cad_server.cli.document_types import OPERATIONS
 
-        rest = {"export": ["out.step"], "snapshot": ["out.png"], "dfm": []}
+        rest = {"export": ["out.step"], "snapshot": ["out.png"], "dfm": [], "fit": ["exact.glb"], "bake": ["exact.glb"]}
         for document_type, operation in sorted(OPERATIONS):
             entry = TYPES_TABLE[document_type]
             if not entry.has_file:

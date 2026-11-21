@@ -968,7 +968,11 @@ fix to it lands in every list. In the panel's numbers (216px wide, its body padd
   mask, `ROW_NAME_UNDER_ACTIONS`): nothing is drawn behind the buttons and the row keeps its own
   colour. An assembly row's are **Isolate** then the **Hide/Reveal** eye (a part file has no
   Isolate); while the row is isolated its Isolate is the way out, an X (**Exit isolate**), shown the
-  whole time, and its eye is off; a part's or a net's, and a layer's, the eye alone. A Links row that draws something — a
+  whole time, and its eye is off; a part's or a net's, and a layer's, the eye alone. A part baked from a GSL
+  concept has one more, first: how it is shown, a button that wears what is shown now (its exact body, the
+  concept, both) and goes to the next, shown the whole time while the part is not its exact body, as a hidden
+  row's eye is; the part's menu offers the same (**Show exact**, **Show concept**, **Show both**), and a part
+  that is a concept **Convert to B-rep**, which picks the part and begins Quick Edit's note for the agent. A Links row that draws something — a
   link with visuals, or one visual — has the eye alone, in its search hit too: a link's hides its
   own visuals, never its child links, and on a partly hidden link hides the rest.
 
@@ -1093,7 +1097,11 @@ edge parts the light net from the copper round it in dark. In 3D the step back i
 never on the see-through plane round the slab, and the edge is drawn on the face as in 2D.
 
 A 3D view's Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
-of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with
+of its own, and there is no settings page. One model adds to it: an assembly with parts baked from a
+GSL concept ends the list, after a rule and under the muted name **Show as**, with **Exact** and
+**Concept**, which show every such part at once as its exact body or as its concept, the one on
+screen ticked and neither while the parts differ. A part's own row still sets that part alone, and is
+where it is shown as both. The modes, in order, are **Solid** (shaded with
 the model's CAD edges, the default), **Shaded** (no edges), **Parts** (Solid with each part
 its own colour), **X-ray**, **Hidden line** and **Wireframe**, filtered by the view's
 injected capabilities (`viewFeaturesForKind`, `@cad/core/common/viewSettings.js`; the

@@ -1,6 +1,6 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the viewer shows live; exports STEP, STL, 3MF, GLB, DXF and xbf files on request; resolves prompt references, measures geometry, checks whether a part can be machined, cut and bent, molded or printed, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, DXF files, flat patterns, gaskets and laser or waterjet cut layouts, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF, GLB and DXF files in the viewer. Not for the robot and world descriptions the robot-simulation skill writes.
+description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the viewer shows live; exports STEP, STL, 3MF, GLB, DXF and xbf files on request; resolves prompt references, measures geometry, checks whether a part can be machined, cut and bent, molded or printed, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, DXF files, flat patterns, gaskets and laser or waterjet cut layouts, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF, GLB and DXF files in the viewer. Also writes GSL implicit models (`.gsl`) and answers questions about one (mass, walls, clearances, interference, slider ranges) by querying the field. Not for the robot and world descriptions the robot-simulation skill writes.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -12,6 +12,13 @@ A model is a Python function; running its script rebuilds it in text-to-cad's wa
 the page the person has open updates. Files are exports, made when asked.
 
 ## Start with the task
+
+A new part is an **exact** part, built in build123d, unless the request asks for a concept. A **concept** is a
+shape to see and change quickly while its form is still being settled, roughed out in GSL. Make one only where
+the request asks for it: a concept, a rough or quick look, GSL, omega or an implicit model, work on an existing
+`.gsl`, or a lattice, an infill or a blended organic shape. A request that names none of these gets build123d,
+and no concept is made first. Making a settled concept exact is a bake, checked against the concept's
+field: [From concept to exact geometry](references/omega-gsl.md#from-concept-to-exact-geometry).
 
 | Task | Start with | Reference |
 | --- | --- | --- |
@@ -27,6 +34,7 @@ the page the person has open updates. Files are exports, made when asked.
 | **Find how far each joint can move** | `cad model ranges <id>`, then the ranges in the body. | [Joint stops](#joint-stops) |
 | **Explode, reveal or showcase a model** | `cad.build123d`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF, GLB or DXF** | Show it to the user. | [Show the model](#show-the-model) |
+| **Rough out a part as a quick concept, where one is asked for; or model a lattice, an infill or a blended organic shape (GSL, omega)** | A `.gsl` with `@scene(size)`, its blends the library's at nominal radii; after every edit its picture, `bounds` and a few `eval` points (`cad run gsl render`, `cad run gsl eval`), and `cad gsl mesh part.gsl part.glb` only when a file is wanted. | [GSL](references/omega-gsl.md) |
 | **Can it be machined, cut and bent, molded or printed?** | The part's model or file, its material and the process the request names or implies; with none, no check. | [Can it be made?](#can-it-be-made) |
 | **Will it hold under a load, how far does it bend?** | The fea skill ($fea), on the model's id or its STEP or xbf. | Its study reference |
 

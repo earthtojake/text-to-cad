@@ -11,6 +11,8 @@ import { GridIcon } from "../view-settings/DisplayModeOptions.js";
 
 // The camera's two projections, as Display's list names them where a view keeps Projection there.
 const PROJECTIONS = Object.freeze(["orthographic", "perspective"]);
+// The two ways a part baked from a concept is shown, as Display's list names them.
+const SHOWN_AS = Object.freeze(["exact", "concept"]);
 
 /**
  * Display's choices, one list wherever it is shown (the Display tile's menu, a phone's More
@@ -19,13 +21,16 @@ const PROJECTIONS = Object.freeze(["orthographic", "perspective"]);
  * (`disabled`: what the view's own settings came to by hand), and may have no grid. A view that keeps
  * the camera's projection here, a setting it changes seldom, rather than as a tile of its own
  * (`ProjectionToggle.jsx`), ends the list with it (`projection`): after a rule, under its muted name,
- * Orthographic and Perspective, the one on screen ticked.
+ * Orthographic and Perspective, the one on screen ticked. A view whose model has parts baked from a
+ * concept ends the list the same way with how they are shown (`shownAs`): Exact and Concept, every such
+ * part at once, neither ticked while the parts differ.
  *
  * @param {{ mode: { value: string, options: { value: string, label?: string, Icon?: Function, disabled?: boolean }[], onChange(value: string): void },
  *   grid?: { value: boolean, onChange(value: boolean): void } | null,
- *   projection?: { value: string, onChange(value: string): void } | null }} props
+ *   projection?: { value: string, onChange(value: string): void } | null,
+ *   shownAs?: { value: string, onChange(value: string): void } | null }} props
  */
-export function DisplayMenuItems({ mode, grid = null, projection = null }) {
+export function DisplayMenuItems({ mode, grid = null, projection = null, shownAs = null }) {
   const { t } = useI18n();
   return <>
     <DropdownMenuRadioGroup aria-label={t("display.mode")} value={mode.value} onValueChange={mode.onChange}>
@@ -49,6 +54,14 @@ export function DisplayMenuItems({ mode, grid = null, projection = null }) {
         {PROJECTIONS.map(value => <DropdownMenuRadioItem key={value} value={value} data-display-projection={value}>{t(`projection.${value}`)}</DropdownMenuRadioItem>)}
       </DropdownMenuRadioGroup>
     </> : null}
+    {shownAs ? <>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel className="text-muted-foreground">{t("display.shownAs")}</DropdownMenuLabel>
+      <DropdownMenuRadioGroup aria-label={t("display.shownAs")} value={shownAs.value}
+        onValueChange={value => { if (value !== shownAs.value) shownAs.onChange(value); }}>
+        {SHOWN_AS.map(value => <DropdownMenuRadioItem key={value} value={value} data-display-shown-as={value}>{t(`display.shownAs.${value}`)}</DropdownMenuRadioItem>)}
+      </DropdownMenuRadioGroup>
+    </> : null}
   </>;
 }
 
@@ -58,7 +71,7 @@ export function DisplayMenuItems({ mode, grid = null, projection = null }) {
  * projection chosen does; the Grid switch leaves it open. Projection is otherwise a tile of its own that
  * switches on a click (`ProjectionToggle.jsx`); on a phone Display is More's submenu instead (`RendererShell.jsx`).
  */
-export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid = null, projection = null, icon = null }) {
+export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid = null, projection = null, shownAs = null, icon = null }) {
   const { t } = useI18n();
   const tileClass = useStripButtonClass();
   const current = mode.options.find(option => option.value === mode.value) || mode.options[0];
@@ -76,7 +89,7 @@ export default function DisplayPopover({ disabled = false, boundary = null, tool
     <DropdownMenuContent align="center" sideOffset={6} collisionPadding={8} collisionBoundary={boundary || undefined} aria-label={t("display.label")}
       className={cn(FLOATING_SURFACE_CLASS, "w-44 data-[state=closed]:animate-none!")}>
       <DropdownMenuLabel className="text-muted-foreground">{t("display.label")}</DropdownMenuLabel>
-      <DisplayMenuItems mode={mode} grid={grid} projection={projection} />
+      <DisplayMenuItems mode={mode} grid={grid} projection={projection} shownAs={shownAs} />
     </DropdownMenuContent>
   </DropdownMenu>;
 }

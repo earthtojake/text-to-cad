@@ -6,6 +6,9 @@ import { xbfMotions, xbfMotionTimeline } from "@cad/core/lib/xbf/xbfMotion.js";
 import { createAnimationClock } from "../kit/tools/playbar/animationClock.js";
 import { playbackFrameTime, usePlaybackFrames } from "../kit/tools/playbar/usePlaybackFrames.js";
 
+// The clip of a document that has no motion and whose concepts read their clock: `time` from 0 to this, looping.
+const TIME_CLIP = "time";
+const TIME_CLIP_SEC = 10;
 const REST = Object.freeze({ activeClipId: "", enabled: false, playing: false, elapsedSec: 0, speed: 1, loopEnabled: true });
 
 /** Each motion of the mechanism as the transport lists it, with its timeline. */
@@ -37,12 +40,25 @@ function motionRows(kinematics) {
  * @param {object | null} kinematics  The scene's mechanism (`xbfKinematics.js`).
  * @param {(values: Record<string, number[]> | null) => void} pose  Poses the scene at a frame's
  *   values; null gives the pose back.
+ * @param {{ timed: boolean, label: string, set: (seconds: number) => void } | null} [time]  The clock of the
+ *   document's GSL concepts (`time` in GSL): `set` hears each frame's seconds, a motion's or, for a document with
+ *   no motion whose concepts are `timed`, those of a clip of the clock alone, named `label`; 0 when let go of.
  * @returns the routine runtime, or null for a document with no motions. Beyond the kit's contract,
  *   `noun` ("Motion") names it, and `valuesAt(t)` is the motion in hand's values at `t`.
  */
-export function useXbfMotion(kinematics, pose) {
+export function useXbfMotion(kinematics, pose, time = null) {
   const clock = useMemo(() => createAnimationClock(), []);
-  const clips = useMemo(() => motionRows(kinematics), [kinematics]);
+  const timed = time?.timed === true;
+  const timeLabel = time?.label || "";
+  // A document whose GSL concepts read their clock and that has no motion of its own is played by a clip of
+  // the clock alone: the same transport, posing nothing.
+  const clips = useMemo(() => {
+    const motions = motionRows(kinematics);
+    return motions.length || !timed ? motions
+      : [{ id: TIME_CLIP, label: timeLabel, duration: TIME_CLIP_SEC, timeline: { values: () => null } }];
+  }, [kinematics, timed, timeLabel]);
+  const timeRef = useRef(time);
+  timeRef.current = time;
   const [state, setState] = useState(REST);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -122,11 +138,16 @@ export function useXbfMotion(kinematics, pose) {
   useEffect(() => {
     if (!timeline) return undefined;
     // One function, two callers: React for a scrub or a new motion, the clock per playing tick.
-    frameRef.current = elapsedSec => poseRef.current?.(timeline.values(elapsedSec));
+    // The concepts' clock runs with whatever plays: a motion's own time, or the clock's clip.
+    frameRef.current = (elapsedSec) => {
+      poseRef.current?.(timeline.values(elapsedSec));
+      timeRef.current?.set?.(elapsedSec);
+    };
     frameRef.current(playbackFrameTime(clock, stateRef.current));
     return () => {
       frameRef.current = null;
       poseRef.current?.(null);
+      timeRef.current?.set?.(0);
     };
   }, [timeline, clock]);
   // A scrub, a pause, and a play's first frame (from the start again, when it played from the end).

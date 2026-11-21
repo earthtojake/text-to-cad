@@ -162,10 +162,10 @@ const DOUBLE_PRESS_MS = 600;
  *   and Preview viewport's `runtimeLifecycle` and `onCameraSettled`. Preview is a view of its own
  *   (`PreviewView.jsx`) over the editor's, which nothing of it reaches.
  */
-export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
+export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, quickEditDraft = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
   frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, boxSelect = null, inkTouches = null,
-  doubleClickFits = true, zoomToSelection = null, inspect = null }) {
+  doubleClickFits = true, zoomToSelection = null, inspect = null, displayShownAs = null }) {
   const { t } = useI18n();
   const frame = shell.frame;
   // What a tool's letter takes up (`useRendererShell`'s `onKey`): the strip as drawn now.
@@ -409,7 +409,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const updateStatus = { preview: Boolean(frame.loading.preview), onRetry: frame.viewUpdate.retry,
     update: frame.loading.updating && !frame.viewUpdate.status.error ? modelUpdateStatus(frame.loading.progress) : frame.viewUpdate.status };
   const quickEdit = references ? <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden} docked={mobile}
-    resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt}
+    resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt} draft={quickEditDraft}
     onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
   // The view's own controls end the strip, after its rule: Projection (the state button), Display (its menu),
   // then Preview. A phone has no room for them on its strip: they are rows of its More, with the zoom.
@@ -419,10 +419,10 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
       // In a phone's More, a row that switches it the same way.
       onSelect: () => frame.projection.onChange(otherProjection(frame.projection.value)) },
     { id: "display", label: t("display.label"), icon: DisplayIcon ? <DisplayIcon /> : null, disabled: shell.idle,
-      tile: <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid} />,
+      tile: <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid} shownAs={displayShownAs} />,
       // In a phone's More, the same list opened under its row, in More itself (`FloatingToolBar.js`'s TouchStrip):
-      // the modes, then Grid.
-      submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} /> },
+      // the modes, then Grid, then how the parts baked from a concept are shown, where the model has any.
+      submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} shownAs={displayShownAs} /> },
     ...(mobile ? [zoomViewControl(zoom, { t, disabled: shell.idle })] : []),
     { id: "preview", label: t("preview.label"), icon: <Play aria-hidden="true" />, disabled: shell.idle, onSelect: enterPreview,
       tile: <ViewControl label={t("preview.label")} disabled={shell.idle} onClick={enterPreview}><Play aria-hidden="true" /></ViewControl> }

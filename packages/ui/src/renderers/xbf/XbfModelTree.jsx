@@ -1,6 +1,6 @@
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Box, Boxes, EyeOff } from 'lucide-react';
+import { Blend, Box, Boxes, EyeOff } from 'lucide-react';
 import { Button } from '@cad/ui/primitives/button';
 import { ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowGlyph, TreeRowLabel, TreeRowSurface, TreeRowToggle, useTreeRowHeight } from '@cad/ui/primitives/tree-row';
 import { TreeFilterHighlight, TreeFilterInput } from '@cad/ui/primitives/tree-filter';
@@ -23,6 +23,8 @@ const EMPTY = [];
 const NO_CONTROLS = {};
 const ROW_KEYS = new Set(['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End']);
 const icons = {part:Box,assembly:Boxes,group:Boxes};
+// A part that is a GSL concept (no shape of its own, drawn as its field) wears its own glyph.
+const glyphOf = node => (node.concept === 'body' ? Blend : icons[node.kind] || Box);
 
 // What hides a row or puts it out of reach, as sets: `availabilityOf(partControls)`.
 function availabilityOf(hiddenPartIds, selectableNodeIds) {
@@ -82,7 +84,7 @@ function ModelingRow({ node, depth, open, branch, locked, disabled, selected, jo
     <TreeRowSurface dense depth={depth} actions={actionCount} active={selected} className={cn('group/row', hiddenByOwner && 'opacity-50')}
       onMouseEnter={() => partControls.onHoverTreeNode?.(node.selectionId || '')}
       onMouseLeave={() => partControls.onHoverTreeNode?.('')} style={joinedCorners(joinAbove, joinBelow)}>
-      {branch ? <Disclosure node={node} open={open} locked={locked} toggle={toggle}/> : kindGlyph(Box)}
+      {branch ? <Disclosure node={node} open={open} locked={locked} toggle={toggle}/> : kindGlyph(glyphOf(node))}
       <TooltipHint content={node.label} overflowOnly><button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected}
         disabled={disabled || unavailable || !(node.selectionId || node.memberSelectionIds?.length)}
         onClick={event=>{if(event.detail < 2)choose(node,event);}} onDoubleClick={event=>choose(node,event)}
@@ -100,7 +102,7 @@ const MemoModelingRow = memo(ModelingRow);
 function ModelingSearchRow({ match, index, availability, selected, joinAbove, joinBelow, actionsShown, actionCount, cursor, choose, disabled, partControls }) {
   const { t } = useI18n();
   const {entry,indices}=match,{node}=entry;
-  const Icon = icons[node.kind] || Box;
+  const Icon = glyphOf(node);
   const {hiddenByOwner,unavailable}=modelTreeSearchChain(index,match.at).reduce(
     (owner,step)=>nodeAvailability(step,availability,owner.hiddenByOwner,owner.outsideFrontier),{hiddenByOwner:false,outsideFrontier:false});
   const underActions = actionCount && (actionsShown ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover);
@@ -303,9 +305,9 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
   const matches=found.matches;
   const cursorIndex=searching ? matches.findIndex(match=>match.entry.node.id === cursorId) : -1;
   const searchPinned=useMemo(()=>cursorIndex < 0 ? EMPTY : [cursorIndex],[cursorIndex]);
-  const {isAssemblyView,hiddenPartIds,focusedNodeIds,onHoverTreeNode,onFocusTreeNode,onUnfocusTreeNode,onTogglePartVisibility,menuForNode,partMenuActions}=partControls;
-  const rowControls=useMemo(()=>({isAssemblyView,hiddenPartIds,focusedNodeIds,onHoverTreeNode,onFocusTreeNode,onUnfocusTreeNode,onTogglePartVisibility,menuForNode,partMenuActions}),
-    [isAssemblyView,hiddenPartIds,focusedNodeIds,onHoverTreeNode,onFocusTreeNode,onUnfocusTreeNode,onTogglePartVisibility,menuForNode,partMenuActions]);
+  const {isAssemblyView,hiddenPartIds,focusedNodeIds,onHoverTreeNode,onFocusTreeNode,onUnfocusTreeNode,onTogglePartVisibility,menuForNode,partMenuActions,representationOf,onShowAs}=partControls;
+  const rowControls=useMemo(()=>({isAssemblyView,hiddenPartIds,focusedNodeIds,onHoverTreeNode,onFocusTreeNode,onUnfocusTreeNode,onTogglePartVisibility,menuForNode,partMenuActions,representationOf,onShowAs}),
+    [isAssemblyView,hiddenPartIds,focusedNodeIds,onHoverTreeNode,onFocusTreeNode,onUnfocusTreeNode,onTogglePartVisibility,menuForNode,partMenuActions,representationOf,onShowAs]);
   const actionsOf=node=>node.selectionId ? rowActionsLayout(node,partControls) : null;
   const renderTreeRow=at=>{
     const row=rows[at],on=highlighted.has(row.node.id),actions=actionsOf(row.node);

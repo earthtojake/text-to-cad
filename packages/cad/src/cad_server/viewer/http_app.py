@@ -230,7 +230,8 @@ _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /gro
                   "kinematics, POST pose, POST mesh")
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
-                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source"}
+                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source",
+                "field": "field, field/textures/<name>, source"}
 # A model's document has no file, so no source.
 _KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
                 for entry in DOCUMENT_TYPES.values()}
@@ -289,6 +290,7 @@ class CadApp:
         from cad_server._internal.picker import available
 
         from .drawings import DrawingRenders
+        from .fields import FieldAnswers
         from .plots import BoardAnswers
         from .prompt_files import PromptFiles
 
@@ -296,6 +298,8 @@ class CadApp:
         self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
         # A board's plot and DRC, made with KiCad off the request and kept by its bytes (``plots.py``).
         self.boards = BoardAnswers(on_crash=lambda error: self._crashed(error, bugs_only=True))
+        # A GSL model's field, written by omega's gsl off the request and kept by its bytes (``fields.py``).
+        self.fields = FieldAnswers(on_crash=lambda error: self._crashed(error, bugs_only=True))
         # The engine's documents (an .xbf, a STEP): each served off the request, and the page's
         # reads dispatched directly to its document server (``documents.py``).
         self.engine_documents = documents or EngineDocuments(on_crash=lambda error: self._crashed(error, bugs_only=True))
@@ -899,6 +903,10 @@ class CadApp:
             return self._methods(request, {"GET": lambda: self._handle_board(request, response, path, rest[0])})
         if kind == "kicad_pcb" and rest == ["models"]:
             return self._methods(request, {"GET": lambda: self._handle_board_models(response, path)})
+        if kind == "gsl" and rest == ["field"]:
+            return self._methods(request, {"GET": lambda: self._handle_field(request, response, path)})
+        if kind == "gsl" and len(rest) == 3 and rest[:2] == ["field", "textures"]:
+            return self._methods(request, {"GET": lambda: self._handle_field_texture(response, path, rest[2])})
         if kind == "kicad_sch" and rest == ["plot"]:
             return self._methods(request, {"GET": lambda: self._handle_schematic(request, response, path)})
         if kind in ROBOT_KINDS and (rest == ["structure"] or (len(rest) == 2 and rest[0] == "parts")):
@@ -1368,6 +1376,34 @@ class CadApp:
         if status >= 400 and "hint" not in body:
             body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
         response.send_json(status, body)
+
+    def _handle_field(self, request, response, path):
+        """``GET /api/v1/documents/gsl/<id>/field``: what the page marches a GSL model with, the shader library
+        omega's gsl writes of it: ``fields.py`` owns the rules. It is made off the request and kept by the
+        model's bytes, answered 202 while it is made, 304 for the key a request names (``If-None-Match``),
+        compressed where the browser takes it. A model gsl does not compile is a 400 in gsl's words."""
+        from .compressed import Coded, send
+
+        status, body, key = self.fields.response(path or "", if_none_match=request.header("if-none-match"))
+        tag = (("etag", f'"{key}"'),) if key else ()
+        if status == 304:
+            response.send_bytes(304, b"", "", tag)
+            return
+        if isinstance(body, Coded):
+            send(request, response, status, body, "application/json; charset=utf-8", tag)
+            return
+        if status >= 400 and "hint" not in body:
+            body = {**body, "hint": ("fix the model as gsl says: `cad run gsl compile -t ast --no-meta -o - FILE` "
+                                     "names the line" if status == 400 else _FUNNEL_HINTS.get(status, _ROUTES_HINT))}
+        response.send_json(status, body)
+
+    def _handle_field_texture(self, response, path, name):
+        """``GET /api/v1/documents/gsl/<id>/field/textures/<name>``: one texture the model's field reads, as
+        raw texels in the format its field names: a file the field's payload names, and no other."""
+        found = self.fields.texture(path or "", name)
+        if found is None:
+            raise ApiError(404, f"the field has no texture {name!r}", "read its names from the document's field")
+        response.stream_file(found, os.stat(found), "application/octet-stream", RAW_FILE_HEADERS)
 
     def _handle_board_models(self, response, path):
         """``GET /api/v1/documents/kicad_pcb/<id>/models``: the board's 3D models table (``plots.BoardAnswers.models``):

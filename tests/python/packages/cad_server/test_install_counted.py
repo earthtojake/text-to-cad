@@ -92,7 +92,7 @@ class CountedTest(unittest.TestCase):
                          ["settings.json", "settings.lock", analytics.INSTALLS])
         self.assertEqual(self.started, [self.settings], "a sender at once: the run may be cad's last for a long while")
         [batch] = sent(self.settings)
-        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (12, "cli", RELEASE))
+        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (13, "cli", RELEASE))
         self.assertNotIn("client", batch)
         self.assertEqual(batch["events"], [
             {"name": "install", "by": "script", "outcome": "ok", "logo": "played", "colour": "24bit", "seconds": 72,

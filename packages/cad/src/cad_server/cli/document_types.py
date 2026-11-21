@@ -583,6 +583,96 @@ def _kicad_rules(document_type: str, operation: str) -> Callable[[list[str], str
     return run
 
 
+#: A GSL model's operations whose second argument is exact parts (a document id, an .xbf, a .step, a mesh).
+_AGAINST_EXACT = ("fit", "bake")
+
+
+def _omega_checked(operation: str) -> Callable[[list[str], str], int]:
+    """A GSL model's operation (``validate``, ``mesh``, ``fit``, ``bake``), the omega integration's: its options
+    its function's signature, run here where this environment holds omega-core (a checkout's), else in the
+    environment of ``cad[omega]``, made on first need, its file refused here first. The exact parts ``fit`` and
+    ``bake`` take are meshed into a GLB here first (``cad.omega._fit.as_glb``), where the engine is."""
+
+    def run(argv: list[str], prog: str) -> int:
+        from cad.results import CheckFinding, CheckResult
+        from cad_server._internal import integration_env
+        from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
+                                                            _verb, emit, generated_parser)
+
+        target = ("cad.gsl", operation)
+        verb = _verb(target)
+        if operation in _AGAINST_EXACT:
+            # ``fit`` and ``bake`` take a concept and the exact parts, or an assembly alone that names its concepts.
+            parser = _present(generated_parser(target, prog=prog))
+            parser.checks.append(lambda parsed: _concept_or_assembly(operation, parsed))  # type: ignore[attr-defined]
+        else:
+            parser = _present(_typed(generated_parser(target, prog=prog), "gsl", operation, _first_parameter(target)))
+        parsed = parser.parse_args(argv)
+        positional, keywords = _call_arguments(verb, parsed, explicit_keywords=_explicit_option_dests(parser, argv))
+        positional = [value for value in positional if value is not None]
+
+        def said(line: str) -> None:
+            print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+        def elsewhere() -> CheckResult:
+            found = integration_env.call(integration_env.environment("omega", said), "gsl", operation,
+                                         [str(Path(value).expanduser().resolve()) for value in positional], keywords)
+            return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
+                               findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
+                               summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+
+        def here() -> object:
+            return verb(*positional, **keywords)
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="cad-gsl-exact-", ignore_cleanup_errors=True) as scratch:
+            if operation in _AGAINST_EXACT and len(positional) == 1:
+                # An assembly alone: its exact parts and what it says of its concepts, read here where the engine is.
+                from cad.engine.export import ExportRefused
+                from cad.omega._fit import CHORD_MM, as_plan
+
+                try:
+                    positional[0] = str(as_plan(positional[0], Path(scratch), keywords.get("chord", CHORD_MM)))
+                except (ExportRefused, OSError, ValueError, RuntimeError) as error:
+                    print(f"{prog}: the assembly's concepts were not read from {positional[0]}: {error}", file=sys.stderr)
+                    return 2
+            if operation in _AGAINST_EXACT and len(positional) > 1:
+                # The exact parts are meshed here, where the engine is, so the omega environment reads a GLB.
+                from cad.engine.export import ExportRefused
+                from cad.omega._fit import CHORD_MM, as_glb
+
+                try:
+                    positional[1] = str(as_glb(positional[1], Path(scratch), keywords.get("chord", CHORD_MM)))
+                except (ExportRefused, OSError, ValueError) as error:
+                    print(f"{prog}: the exact parts were not read from {positional[1]}: {error}", file=sys.stderr)
+                    return 2
+            return emit(here if integration_env.carries("omega") else elsewhere, prog=prog,
+                        as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose=bool(getattr(parsed, "verbose", False)))
+
+    return run
+
+
+def _concept_or_assembly(operation: str, parsed: argparse.Namespace) -> None:
+    """What ``cad gsl fit`` and ``cad gsl bake`` read first: with the exact parts named, a ``.gsl`` as any GSL
+    operation's (``_refuse_other_type``); alone, the assembly that names its concepts, a document id or an
+    ``.xbf``, refused by name when it is neither."""
+    from cad.engine.ids import is_id
+    from cad_server._internal.cli_errors import Failure
+
+    source = str(getattr(parsed, "path"))
+    if getattr(parsed, "exact", None) is not None:
+        _refuse_other_type("gsl", operation, source)
+        return
+    if is_id(source):
+        return
+    if Path(source).suffix.lower() != ".xbf":
+        raise Failure(f"{source} alone is no assembly: cad gsl {operation} takes a .gsl concept and the exact parts, or "
+                      "alone a document id or an .xbf whose model names its concepts", "wrong_type")
+    if not Path(source).expanduser().is_file():
+        raise Failure(f"{source} is not there", "not_found")
+
+
 def _first_parameter(target: tuple[str, str]) -> str:
     import inspect
 
@@ -893,6 +983,10 @@ _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_sch", "export"): _kicad_export("kicad_sch"),
     ("kicad_sch", "inspect"): _schematic_inspect,
     ("kicad_sch", "snapshot"): _schematic_snapshot,
+    ("gsl", "validate"): _omega_checked("validate"),
+    ("gsl", "mesh"): _omega_checked("mesh"),
+    ("gsl", "fit"): _omega_checked("fit"),
+    ("gsl", "bake"): _omega_checked("bake"),
 }
 
 

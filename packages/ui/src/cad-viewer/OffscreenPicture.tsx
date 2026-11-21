@@ -10,6 +10,7 @@ import { createBoardRenderer } from '../renderers/board/index.js';
 import { createDxfRenderer } from '../renderers/dxf/index.js';
 import { createGlbRenderer } from '../renderers/glb/index.js';
 import { createMeshRenderer } from '../renderers/mesh/index.js';
+import { createFieldRenderer } from '../renderers/field/index.js';
 import { createRobotRenderer } from '../renderers/robot/index.js';
 import { createSchematicRenderer } from '../renderers/schematic/index.js';
 import type { CadPreferenceSource } from '../renderers/workspace/index.js';
@@ -27,6 +28,7 @@ export function cadRenderers(client: CadWorkspaceService, preferences: CadPrefer
     createSchematicRenderer({ client, preferences, live }),
     createGlbRenderer({ client, preferences, live }),
     createMeshRenderer({ client, preferences, live }),
+    createFieldRenderer({ client, preferences, live }),
     createRobotRenderer({ client, preferences, live }),
     createXbfRenderer({ client, preferences, live }),
   ];

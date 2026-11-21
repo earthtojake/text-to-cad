@@ -9,7 +9,10 @@
     "ranges",
     "drc",
     "erc",
-    "validate"
+    "validate",
+    "mesh",
+    "fit",
+    "bake"
   ],
   "integrationOperations": [
     "check",
@@ -21,7 +24,8 @@
     "mesh",
     "drawing",
     "robot",
-    "plot"
+    "plot",
+    "field"
   ],
   "documentTypes": [
     {
@@ -725,6 +729,52 @@
         ]
       },
       "producers": []
+    },
+    {
+      "id": "gsl",
+      "title": "GSL",
+      "summary": "an implicit (signed-distance) model in GSL, omega-core's language: a field, drawn as it is and meshed on request",
+      "extensions": [
+        ".gsl"
+      ],
+      "mime": "text/plain; charset=utf-8",
+      "view": "field",
+      "content": [
+        "field",
+        "bodies",
+        "sliders"
+      ],
+      "operations": [
+        {
+          "name": "validate",
+          "summary": "mesh it with gsl and check the mesh against the field: it compiles, it is closed and manifold, it points outward, it stops short of the @scene box, and its volume is the field's",
+          "integration": "omega",
+          "engine": false
+        },
+        {
+          "name": "mesh",
+          "summary": "write it as a GLB, with values for its names, once a mesh is wanted: the mesh is checked against the field as validate does before it is written, and kept, so the same model and values are meshed once",
+          "integration": "omega",
+          "engine": false
+        },
+        {
+          "name": "fit",
+          "summary": "check exact parts against this concept through its field, with no mesh of it: each part's clearance, where one runs into its material, and the contacts the design means",
+          "integration": "omega",
+          "engine": false
+        },
+        {
+          "name": "bake",
+          "summary": "check an exact part baked from this concept against its field, both ways, and keep the concept as baked; --stale says where the concept has moved since",
+          "integration": "omega",
+          "engine": false
+        }
+      ],
+      "decorator": false,
+      "reader": false,
+      "readerIntegration": null,
+      "edit": null,
+      "producers": []
     }
   ],
   "integrations": [
@@ -914,6 +964,38 @@
         "name": "ccx",
         "minimum": "2.20",
         "override": "CAD_CCX"
+      }
+    },
+    {
+      "name": "omega",
+      "summary": "omega-core's gsl, the compiler and mesher of GSL, Gradient Control Laboratories' language for implicit (signed-distance) models, and its client for the field's queries: `cad run gsl ...` is gsl as it is, and a GSL model's own operations (`cad gsl validate`, `cad gsl mesh`) run it",
+      "extra": "omega",
+      "process": "separate",
+      "operations": [],
+      "files": [],
+      "modules": [
+        "omega_core"
+      ],
+      "distributions": [
+        "omega-core"
+      ],
+      "commands": [
+        "gsl"
+      ],
+      "holds": "omega's gsl compiler and mesher",
+      "downloadMb": 13,
+      "alongside": [],
+      "python": null,
+      "platforms": [
+        "macOS arm64",
+        "macOS x86-64",
+        "Linux x86-64",
+        "Linux arm64"
+      ],
+      "program": {
+        "name": "gsl",
+        "minimum": "0.1.1",
+        "override": "CAD_GSL"
       }
     },
     {

@@ -50,9 +50,11 @@ export function xbfModelMenu({ tree, assembly, expandedIds, hiddenCount, zoomSel
  * The part menu for ONE node of the model; its actions take the whole selection with them
  * (`actionNodeIds`).
  */
-export function xbfPartMenu({ tree, nodeId, assembly, hiddenIds, isolatedIds, selectedNodeIds, expandedIds, copyText, zoomSelectionAvailable, shape = "all" }) {
+export function xbfPartMenu({ tree, nodeId, assembly, hiddenIds, isolatedIds, selectedNodeIds, expandedIds, copyText, zoomSelectionAvailable, shape = "all", concepts = [] }) {
   const node = tree.nodes.get(nodeId);
   if (!node) return null;
+  // A single part baked from a concept says how it is shown now, and its menu offers the other ways.
+  const baked = node.leafPartIds.length === 1 ? concepts.find(concept => concept.id === node.leafPartIds[0] && concept.role === "baked") : null;
   const hidden = node.leafPartIds.length > 0 && node.leafPartIds.every(id => hiddenIds.includes(id));
   const focused = isolatedIds.includes(nodeId);
   const selected = selectedNodeIds.includes(nodeId);
@@ -60,6 +62,9 @@ export function xbfPartMenu({ tree, nodeId, assembly, hiddenIds, isolatedIds, se
   const expansion = expansionState({ tree, expandedIds, actionNodeIds });
   return {
     nodeId, label: node.label, zoomSelectionAvailable, selected, hidden, focused, actionNodeIds,
+    representation: baked?.representation || null, representationId: baked?.id || null,
+    // A part that is a concept can be handed to the agent to be made exact.
+    convertible: node.concept === "body",
     actionCount: actionNodeIds.length || 1, copyText,
     selectDisabled: !selected && hidden,
     showIsolate: assembly, isolateDisabled: false,

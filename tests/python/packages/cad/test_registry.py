@@ -73,7 +73,8 @@ class TheTableIsTheSource(unittest.TestCase):
         # An integration has operations of its own only on its tool's own files, which are no document type (files
         # cad checks or writes and never shows): a MuJoCo model's, which mujoco checks, and OrcaSlicer's presets,
         # found by name, which orcaslicer lists and writes complete. A name is a type's or an integration's, a
-        # suffix one or the other's, and a type's file has its operations there alone.
+        # suffix one or the other's, and a type's file has its operations there alone: a GSL
+        # model is a type, shown as a field, and omega is the tool behind its operations.
         self.assertEqual({"mujoco": (("check",), (".xml", ".mjcf")), "orcaslicer": (("presets", "complete"), ())},
                          {name: (found.operation_names, found.files)
                           for name, found in registry.INTEGRATIONS.items() if found.operations})

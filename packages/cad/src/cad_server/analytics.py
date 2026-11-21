@@ -201,6 +201,7 @@ LOG = logging.getLogger("cad_server.analytics")
 OWN = frozenset({"cad", "cadgen", "cad_server"})
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
+# 13: a GSL model, a field the page draws, is a format of its own (``gsl``);
 # 12: each run of the plugin's install in the agent apps, which cad runs itself (``install``), and each app where one
 # failed (``install_failure``);
 # 11: where a batch comes from is one field, ``app`` (the agent app, detected), one batch per app; the channel of 10
@@ -214,7 +215,7 @@ PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
 # engine's documents (kind ``xbf``) and a command's sender (process ``cli``); 5: why builds and snapshots
 # failed, and each batch's id and time; 4: why tool calls failed; 3: the old build daemon's counts, and files as
 # numbers; 2: the install's channel replaced `source`
-SCHEMA = 12
+SCHEMA = 13
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
 # the answer: it lives in the state folder, which every release reads, not in its code. Neither schema 4, 5 nor 6 raised it
@@ -244,7 +245,8 @@ SCHEMA = 12
 # where it did not, in which of the agent apps cad puts the plugin in and why, in a word of ours -- an app named only
 # where its install failed, by cad's own key for it (the app running cad was named already, ``app``), never which
 # apps a computer has -- with a count of the apps found and failed, the run's seconds and what its terminal drew.
-# Never a path, a version of an app's, a message or anything typed, under the same ids.
+# Never a path, a version of an app's, a message or anything typed, under the same ids. Nor
+# schema 13: one more format.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.

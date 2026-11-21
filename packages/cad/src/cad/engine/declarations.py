@@ -71,11 +71,39 @@ MASS = "_mass"  # grams, the part's or the assembly's whole
 POINTS = "_points"  # {name: (grams, Location in the part's own frame, (ixx, iyy, izz) kg*m^2 or None)}
 FREE = "_free"  # True: what the node holds floats (``free``)
 LINK = "_link"  # the name of the link the node's parts make (``link``)
+# The GSL concept a part stands for or was baked from (``cad.gsl.concept``, ``cad.gsl.baked``): no fact of a
+# robot, so no declaration of this module's; kept here because the document reads every attribute by these names.
+CONCEPT = "_concept"  # {"gsl": the .gsl's absolute path, "role": one of ``ROLES``, "digest", "values"?}
+#: What a part is to its concept: the concept itself, drawn and checked as its field (``body``, a part with no
+#: shape of its own), or an exact part made from it (``baked``), the concept its other representation.
+ROLES = ("body", "baked")
 #: What ``limits`` declares of a joint, by its keyword: the drive's bounds.
 DRIVE = ("effort", "velocity")
 # The joints a drive bounds, by build123d's class, and the ones it refuses: a bound of one value.
 DRIVEN = ("RevoluteJoint", "LinearJoint")
 UNDRIVEN = ("CylindricalJoint", "BallJoint")
+
+
+def concept_value(value: Any, said: str) -> dict[str, Any]:
+    """A part's concept (``CONCEPT``) as the document holds it, checked: the ``.gsl``'s path, the role, the
+    file's digest as the model's run read it, and the values given for its names, finite numbers by name."""
+    if not isinstance(value, dict) or set(value) - {"gsl", "role", "digest", "values"}:
+        raise ValueError(f"{said}: a concept is {{gsl, role, digest, values}}, not {value!r}")
+    path, role, digest = value.get("gsl"), value.get("role"), value.get("digest")
+    if not isinstance(path, str) or not path.lower().endswith(".gsl"):
+        raise ValueError(f"{said}: a concept is a .gsl file's path, not {path!r}")
+    if role not in ROLES:
+        raise ValueError(f"{said}: a concept's role is one of {', '.join(ROLES)}, not {role!r}")
+    if not isinstance(digest, str) or not digest:
+        raise ValueError(f"{said}: a concept names its file's digest, not {digest!r}")
+    values = value.get("values") or {}
+    held: dict[str, float] = {}
+    for name, number in sorted(values.items()):
+        if (not isinstance(name, str) or not name.isidentifier() or isinstance(number, bool)
+                or not isinstance(number, (int, float)) or not math.isfinite(number)):
+            raise ValueError(f"{said}: a concept's value is a finite number by its name, not {name!r}={number!r}")
+        held[name] = float(number)
+    return {"gsl": path, "role": role, "digest": digest, **({"values": held} if held else {})}
 
 
 def _shape(part: Any, said: str) -> Any:

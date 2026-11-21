@@ -84,6 +84,13 @@ export function assemblyPartMenuEntries(menu, { disabled = false, actions = {}, 
     visibility("visibility", menu.hidden === true ? t("tree.reveal") : t("tree.hide"), off(menu.visibilityDisabled),
       run(menu.hidden === true ? actions.onReveal : actions.onHide));
   }
+  // A part baked from a concept: the other ways to show it (its exact body, the concept, both).
+  if (menu.representation) {
+    const shows = { exact: ["menu.showExact", actions.onShowExact], concept: ["menu.showConcept", actions.onShowConcept], both: ["menu.showBoth", actions.onShowBoth] };
+    Object.entries(shows).filter(([value]) => value !== menu.representation)
+      .forEach(([value, [text, action]], at) => entries.push(entry(`show-${value}`, t(text), disabled, run(action), at === 0)));
+  }
+  if (menu.convertible === true) entries.push(entry("convert-to-brep", t("menu.convertToBrep"), disabled, run(actions.onConvertToBrep), true));
   if (menu.showExpandCollapse === true) {
     entries.push(entry("expand", t("menu.expand"), disabled || menu.expandSelectedDisabled !== false, run(actions.onExpandSelected), true));
     entries.push(entry("collapse", t("menu.collapse"), disabled || menu.collapseSelectedDisabled !== false, run(actions.onCollapseSelected)));
