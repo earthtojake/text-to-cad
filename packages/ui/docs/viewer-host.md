@@ -527,7 +527,8 @@ viewport's top-right (`notice`); no host hands it today, since the navbar holds 
 panel toggle is the navbar's** (`file-viewer/panelToggles.js`): the view's frame says it (`usePanelToggles`), and the
 navbar draws it first, before the logo, the same neutral button open or shut (`aria-expanded` says which, pinned or
 not), with the pointer handlers the frame hands with it (`hover`): a mouse resting on it peeks the collapsed panel over
-the model, pushing nothing, until the pointer leaves both; otherwise a collapsed panel leaves nothing over the model.
+the model as a floating card, pushing nothing, until the pointer leaves both (only the toggle's click, or ⌘\, pins it);
+otherwise a collapsed panel leaves nothing over the model.
 In Preview, in
 every host, the navbar steps aside for Preview's own bar. Over the home the navbar has the logo and its menu (no Back
 to home), Back and Forward where the host hands a `history`, then the home's own controls on the grid's column —
@@ -623,7 +624,7 @@ The viewport's edges and corners are the shell's, never the host's: the tool str
 top centre of the window, ending in Preview (a 3D view's), the tool in hand's sub-toolbar under it, the one panel
 (the file's structure, then its Parameters, Joints and Animation, as tabs) docked at the left, pinned open always pushing
 the model aside (collapsed on its own where it would leave the model under 640px; a mouse resting on its toggle peeks
-it over the model, pushing nothing), Quick Edit's bar at the bottom centred on the window as the strip is
+it over the model as a floating card, pushing nothing, and only the toggle pins it), Quick Edit's bar at the bottom centred on the window as the strip is
 (the panel never moves either; where they meet it they sit above it), the bottom row Quick Edit's alone, and at the
 top-right the view cube (a 68px box at the corner's 12px inset) with, centred under the drawn cube, one row: Home and
 **View** (one menu: Projection, Display, Background and Grid, `ViewSettingsMenu.jsx`), with a navbar or without; or a

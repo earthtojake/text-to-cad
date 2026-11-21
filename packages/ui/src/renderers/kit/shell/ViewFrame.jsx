@@ -154,7 +154,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     if (current.mobile) { if (current.phoneHas) setSheetOpen(open => !open); return; }
     if (!current.has) return;
     // A click (or ⌘\) while it peeks pins it: the panel opens as a click on a collapsed one always has.
-    closePeek();
+    closePeek(false);
     const next = toggleSidebar(current);
     if (next.kept) change({ open: next.want });
     setOpened(next.opened);
@@ -176,7 +176,8 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     search: () => {
       if (stateRef.current.mobile) return false;
       if (!stateRef.current.has) return false;
-      if (sidebarLayout(stateRef.current).mode === "closed") toggle();
+      // A peek opens its search where it is: only the toggle pins it.
+      if (sidebarLayout(stateRef.current).mode === "closed" && !peek.peeking) toggle();
       flat.askSearch();
       return true;
     }
@@ -277,8 +278,8 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
       data-slot="cad-file-view" data-cad-surface="" data-cad-selecting={selecting ? "" : undefined} {...surface} tabIndex={-1} {...rootHandlers}
       onPointerDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest("canvas")) return;
-        // A press on the model puts a peek away.
-        closePeek();
+        // A press on the model puts a peek away (the keyboard goes to the view, below).
+        closePeek(false);
         event.currentTarget.focus({ preventScroll: true });
         onCanvasPress?.(event);
       }}>

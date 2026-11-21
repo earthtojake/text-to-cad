@@ -21,6 +21,22 @@ import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 export const PANEL_SURFACE_PX = 8;
 /** A peeking panel's elevation over the view: the floating chrome's shadow (`lib/floatingSurface.js`'s `shadow-md`). */
 export const PANEL_PEEK_ELEVATION_CLASS = "shadow-md";
+/**
+ * A peeking panel is a card floating over the view (as Codex's and other apps' unpinned sidebars are), so it reads as
+ * hovering: its surface stands this far in from the window's left edge, the navbar's bottom and the view's bottom, its
+ * right edge this far short of the docked panel's, with the floating chrome's rounded corners (the strip's 10px), border
+ * and shadow, on the chrome's colour. Its content does not move: the panel's box is the docked one, and the card is drawn
+ * behind it, its content clipped to the card's inside, so every tab, row and control stands where it does docked. 4px
+ * leaves a row's fill (8px out from the content line) 3px of the card's inside at the left and 4px at the right.
+ */
+export const PANEL_PEEK_GAP_PX = 4;
+const PANEL_PEEK_RADIUS_PX = 10;
+// In the panel's padding box (its right 1px is the docked panel's rule, kept transparent so the content's width holds).
+const PEEK_CARD_STYLE = Object.freeze({ inset: `${PANEL_PEEK_GAP_PX}px ${PANEL_PEEK_GAP_PX - 1}px ${PANEL_PEEK_GAP_PX}px ${PANEL_PEEK_GAP_PX}px`,
+  borderRadius: PANEL_PEEK_RADIUS_PX });
+// The content, clipped to the card's inside (within its 1px border): the head's rule, a scrolled row and the sticky
+// actions foot end inside the card, never past its rounded corners.
+const PEEK_CONTENT_STYLE = Object.freeze({ clipPath: `inset(${PANEL_PEEK_GAP_PX + 1}px ${PANEL_PEEK_GAP_PX}px ${PANEL_PEEK_GAP_PX + 1}px ${PANEL_PEEK_GAP_PX + 1}px round ${PANEL_PEEK_RADIUS_PX - 1}px)` });
 const HALF_INSET = "calc(var(--panel-inset) / 2)";
 // A row's fill hangs half the inset out past the line and its glyph stands half the inset into it; its last action's
 // glyph ends the inset from the panel's right (half the inset, less that button's own 2px).
@@ -90,25 +106,32 @@ export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
  *   children?: import("react").ReactNode, peek?: boolean, asideRef?: import("react").Ref<HTMLElement> }} props
  *   `headInsets`: how far the head's first and last boxes hang out past the inset (their own padding: a tab's pill's,
  *   an icon button's), so what they hold stands on it. `peek`: a collapsed panel shown over the view, at its docked
- *   place and width, taking no room (`data-panel-peek`, elevated). Other props (`data-*`, handlers) go on the `<aside>`.
+ *   place and width, taking no room (`data-panel-peek`): a card inside that box (`PANEL_PEEK_GAP_PX`), its content where
+ *   the docked panel's is. Other props (`data-*`, handlers) go on the `<aside>`.
  */
 export function PanelSurface({ mode, label, open, hidden = false, width, grip, gripLabel, head, headRule = true, headCompact = false, headStack = false, headRef, headProps = {},
   headInsets = NO_HEAD_INSETS, scrollerRef, scrollerProps = {}, onKeyDown, peek = false, asideRef, children, ...props }) {
   const page = mode === "page";
-  return <aside ref={asideRef} aria-label={label} data-panel-surface={page ? "page" : "docked"} data-open={open ? "" : undefined} hidden={!open || hidden}
-    data-panel-peek={peek && open && !hidden ? "" : undefined} onKeyDown={onKeyDown} {...props}
-    className={cn("flex min-h-0 flex-col bg-sidebar text-ui text-foreground",
-      mode === "push" && !peek && "relative h-full shrink-0 border-r border-border",
-      mode === "push" && peek && cn("absolute inset-y-0 left-0 z-40 border-r border-border", PANEL_PEEK_ELEVATION_CLASS),
-      page && "absolute inset-0 z-50")}
-    style={page ? PANEL_ROW_VARIABLES : { ...PANEL_ROW_VARIABLES, width }}>
-    {head === null ? null : <div ref={headRef} className={cn("box-content flex shrink-0 gap-1 border-b", headStack ? "flex-col items-stretch" : "items-center", headStack ? null : headCompact ? "h-7" : "h-8", headRule ? "border-border" : "border-transparent")}
+  const peeking = mode === "push" && peek;
+  const headNode = head === null ? null : <div ref={headRef} className={cn("box-content flex shrink-0 gap-1 border-b", headStack ? "flex-col items-stretch" : "items-center", headStack ? null : headCompact ? "h-7" : "h-8", headRule ? "border-border" : "border-transparent")}
       style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: headCompact ? 0 : PANEL_SURFACE_PX,
         paddingLeft: `calc(var(--panel-inset) - ${headInsets.start}px)`, paddingRight: `calc(var(--panel-inset) - ${headInsets.end}px)` }} data-panel-head="" data-rule={headRule ? "" : undefined}
-      data-compact={headCompact ? "" : undefined} {...headProps}>{head}</div>}
-    <ScrollArea className="min-h-0 flex-1" viewportRef={scrollerRef} viewportProps={{ "data-panel-scroller": "", ...scrollerProps }}>
+      data-compact={headCompact ? "" : undefined} {...headProps}>{head}</div>;
+  const scroll = <ScrollArea className="min-h-0 flex-1" viewportRef={scrollerRef} viewportProps={{ "data-panel-scroller": "", ...scrollerProps }}>
       {children}
-    </ScrollArea>
+    </ScrollArea>;
+  return <aside ref={asideRef} aria-label={label} data-panel-surface={page ? "page" : "docked"} data-open={open ? "" : undefined} hidden={!open || hidden}
+    data-panel-peek={peek && open && !hidden ? "" : undefined} onKeyDown={onKeyDown} {...props}
+    className={cn("flex min-h-0 flex-col text-ui text-foreground", !peeking && "bg-sidebar",
+      mode === "push" && !peek && "relative h-full shrink-0 border-r border-border",
+      peeking && "absolute inset-y-0 left-0 z-40 border-r border-transparent",
+      page && "absolute inset-0 z-50")}
+    style={page ? PANEL_ROW_VARIABLES : { ...PANEL_ROW_VARIABLES, width }}>
+    {peeking ? <>
+      <div aria-hidden="true" className={cn("pointer-events-none absolute border border-border bg-sidebar", PANEL_PEEK_ELEVATION_CLASS)} style={PEEK_CARD_STYLE}
+        data-panel-peek-card="" />
+      <div className="relative flex min-h-0 flex-1 flex-col" style={PEEK_CONTENT_STYLE}>{headNode}{scroll}</div>
+    </> : <>{headNode}{scroll}</>}
     {page || !grip ? null : <div role="separator" aria-orientation="vertical" aria-label={gripLabel} tabIndex={0}
       aria-valuenow={grip["aria-valuenow"]} aria-valuemin={grip["aria-valuemin"]} aria-valuemax={grip["aria-valuemax"]}
       className={cn("absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize touch-none focus-visible:outline-none",

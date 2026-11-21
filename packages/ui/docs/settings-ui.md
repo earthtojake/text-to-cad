@@ -825,19 +825,30 @@ structure. Every rule here, and why:
   while a mouse button is held (a drag passing over it), and never for a pointer that cannot rest (a finger: a phone's,
   or a touch screen's press, is a click) nor on keyboard focus — ⌘\ is the keyboard's way to it. It goes once the
   pointer has been outside both the toggle and the panel for the same 500ms, so the pointer can travel from the button
-  down into it; it stays while the pointer is in either, while the keyboard is in it (typing in its search) or while a
-  popup opened from it is up (a dropdown, ⋯). Everything in it works as in the docked panel — the same component:
-  tabs, search, a row's pick, sliders. **Escape** puts it away (before anything else of the view's: the tool in hand and
-  the selection stay), and so does a press on the model. **A click on the toggle while it peeks pins it**: open,
-  pushing and kept, as a click on a collapsed panel always is (a click with no peek up opens it, as ever). A peek is
-  never kept: the file's `open` is the person's pin or close alone.
+  down into it; it stays while the pointer is in either, and while a popup opened from it is up (a dropdown, ⋯: the
+  pointer is in that popup then), and the delay runs again once that popup is shut. **The keyboard in it does not hold
+  it**: the pointer gone, it goes, whatever has focus, and focus that was in it goes to the toggle, never left on a
+  panel that is gone. Everything in it works as in the docked panel — the same component: tabs, search (/ opens it in
+  the peek), a row's pick, sliders. **Escape** puts it away (before anything else of the view's: the tool in hand and
+  the selection stay), and so does a press on the model. **Only the toggle pins it**: a click on it while it peeks
+  (or its key, ⌘\) pins it — open, pushing and kept, as a click on a collapsed panel always is (a click with no peek
+  up opens it, as ever); nothing done inside it pins it, neither a pick, a tab, a search nor a slider, so moving off a
+  peek always closes it. A peek is never kept: the file's `open` is the person's pin or close alone.
 - **Pinned, it always pushes.** Open, it takes its width beside the model, the model's area the narrower for it (the
   model centred in what is left); nothing pinned overlays the model at any width, and Escape and a press on the model
   mean what they always mean. **A peek is the one thing that overlays**: it floats over the view at the docked panel's
-  place and width (the file's, or the 256px default), the full height under the navbar, told from the docked panel by
-  the floating chrome's elevation (`shadow-md`, at its right edge), and pushes nothing — the canvas keeps its size and
-  the camera does not move — because a glance at the tree should not resize the picture; the strip and Quick Edit stay
-  centred on the window, over it, as over the docked panel. **A narrow pane starts it collapsed**: it starts open only where the model's area keeps 640px beside
+  place and width (the file's, or the 256px default) and pushes nothing — the canvas keeps its size and the camera does
+  not move — because a glance at the tree should not resize the picture; the strip and Quick Edit stay centred on the
+  window, over it, as over the docked panel. **A peek is a card**, so it reads as hovering, as Codex's and other apps'
+  unpinned sidebars do: its surface stands 4px in (`PanelSurface.jsx`'s `PANEL_PEEK_GAP_PX`) from the window's left
+  edge, the navbar's bottom and the view's bottom, its right edge 4px short of the docked panel's, with the floating
+  chrome's own rounded corners (the strip's 10px), border and shadow (`shadow-md`), on the chrome's colour. **Nothing
+  in it moves**: every tab, row, label, control and icon stands where it does in the docked panel at that width (the
+  16px line from the window's edge, the right content line where the docked panel's is) — the card cuts into the
+  panel's padding, never its content — and the head's rule, a scrolled row and the sticky actions foot end inside the
+  card, clipped to its rounded inside; 4px leaves a row's fill, 8px out from the content line, 3px of the card's inside
+  at the left and 4px at the right. Pinned, the panel is as it always was: full height, touching the edges, its rule at
+  its right. **A narrow pane starts it collapsed**: it starts open only where the model's area keeps 640px beside
   it (`sidebars.js`'s `MIN_MODEL_WIDTH`), so the view at least 640px and the panel's width (896px with the 256px
   panel), and collapsed below. **That
   collapse isn't remembered**, so widening the view brings back the person's choice; opened over it, it pushes. The
@@ -2145,8 +2156,8 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   them, and neither is any other binding's: ⇧1, ⇧2 and ⇧0 are the zoom's, ⇧P and ⇧L the drawing tools'.
 - **⌘\\** (Ctrl+\\) shows and hides the panel, in every view that has one (a board, a schematic,
   a drawing with Layers, a STEP, a robot), and **/** opens it on its search with the keyboard in the box, while the
-  view has the keyboard; in the box, Escape closes the search. While the panel peeks, ⌘\\ pins it. **\\** alone does
-  nothing.
+  view has the keyboard; in the box, Escape closes the search. While the panel peeks, ⌘\\ pins it (the toggle's key,
+  the one other way to pin it), and / opens its search in the peek, pinning nothing. **\\** alone does nothing.
   On a phone ⌘\\ opens and shuts the panel's sheet; / does nothing there.
 - **Arrow keys** orbit the viewer that has focus or the pointer over
   it, never every mounted viewport; they do nothing in Preview or with a
