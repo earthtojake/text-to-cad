@@ -188,9 +188,12 @@ The directory updates its copy.
 Or install it from this repository:
 
 ```bash
-codex plugin marketplace add earthtojake/text-to-cad --ref latest
+codex plugin marketplace add earthtojake/text-to-cad --ref latest --sparse .claude-plugin --sparse .codex-plugin --sparse skills --sparse codex.mcp.json
 codex plugin add text-to-cad@earthtojake
 ```
+
+The `--sparse` paths keep Codex to the plugin's files: without them it clones the whole repository, and
+its `marketplace upgrade` can run out of time on a slow disk.
 
 To update:
 
@@ -258,7 +261,8 @@ To update, run the same command again.
 devin plugins install earthtojake/text-to-cad
 ```
 
-To update: `devin plugins update text-to-cad`.
+To update: `devin plugins update text-to-cad`. Devin CLI takes a plugin only once you are signed in
+(`devin auth login`): until then the install command skips it and says so.
 
 ### Factory Droid
 

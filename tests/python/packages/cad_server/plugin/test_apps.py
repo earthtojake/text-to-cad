@@ -16,7 +16,13 @@ from pathlib import Path
 
 import cad_server
 from cad_server.plugin import apps, computer, source
-from tests.python.support.agent_apps import LATEST, OURS, OURS_OLD, STAND_IN, THEIRS, PluginRuns
+from tests.python.support.agent_apps import CODEX_ADD, LATEST, OURS, OURS_OLD, STAND_IN, THEIRS, PluginRuns
+
+
+# Codex's config with our catalog as this release adds it: from GitHub at `latest`, a few paths checked out.
+CODEX_CONFIG = ('[marketplaces.earthtojake]\nsource_type = "git"\nsource = "https://github.com/earthtojake/text-to-cad.git"\n'
+                'ref = "latest"\nsparse_paths = [".claude-plugin", ".codex-plugin", "skills", "codex.mcp.json"]\n'
+                '[plugins."text-to-cad@earthtojake"]\nenabled = true\n')
 
 
 @unittest.skipIf(os.name == "nt", "the stand-ins are scripts run by their #! line")
@@ -25,9 +31,7 @@ class AppTableTests(PluginRuns):
         self.programs("claude", "codex", "gemini")
         github = {"source": "github", "repo": "earthtojake/text-to-cad", "ref": "latest"}
         self.claude_records({"text-to-cad@earthtojake": 1}, {"earthtojake": github})
-        self.write(".codex/config.toml", '[marketplaces.earthtojake]\nsource_type = "git"\n'
-                                         'source = "https://github.com/earthtojake/text-to-cad.git"\nref = "latest"\n'
-                                         '[plugins."text-to-cad@earthtojake"]\nenabled = true\n')
+        self.write(".codex/config.toml", CODEX_CONFIG)
         self.write(".gemini/extensions/text-to-cad/.gemini-extension-install.json",
                    {"type": "git", "source": source.URL, "ref": "latest"})
         done = self.run_install()
@@ -163,7 +167,7 @@ class AppTableTests(PluginRuns):
         self.assertEqual(self.kept(), {"switch": False, "record": {"owed": cad_server.__version__}})
         self.assertNotIn("Start a new session", done.stdout)
         self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"]])
-        self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"]])
+        self.assertEqual(self.calls("codex"), [CODEX_ADD])
         # Gemini CLI's linked extension had to go for ours to come in: it is put back as it was.
         self.assertEqual(self.calls("gemini")[-1][:2], ["extensions", "install"])
         self.assertEqual(json.loads(record.read_text(encoding="utf-8")), {"type": "link", "source": folder})
@@ -315,7 +319,7 @@ class AppTableTests(PluginRuns):
                                   ["plugin", "uninstall", "text-to-cad@text-to-cad"],
                                   ["plugin", "marketplace", "remove", "--scope", "user", "text-to-cad"],
                                   ["plugin", "uninstall", "cad@earthtojake"]])
-        self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"],
+        self.assertEqual(self.calls("codex"), [CODEX_ADD,
                                                ["plugin", "add", "text-to-cad@earthtojake"],
                                                ["plugin", "remove", "text-to-cad@text-to-cad"],
                                                ["plugin", "marketplace", "remove", "text-to-cad"]])
@@ -521,6 +525,67 @@ class AppTableTests(PluginRuns):
         self.assertTrue(report.stopped)
         self.assertEqual((report.outcomes, self.calls()), ({}, []))
         self.assertTrue((self.home / ".agents/skills/fea/SKILL.md").is_file())
+
+    def test_codex_s_whole_clone_of_our_catalog_is_replaced_by_one_of_a_few_paths(self) -> None:
+        # Added whole, Codex clones every commit of the repository, and its upgrade gives that clone 30 seconds: too
+        # few on Windows, where every update failed. Such a catalog is added again, sparse, and put back where that
+        # fails.
+        self.programs("codex")
+        whole = CODEX_CONFIG.replace('sparse_paths = [".claude-plugin", ".codex-plugin", "skills", "codex.mcp.json"]\n', "")
+        self.write(".codex/config.toml", whole)
+        done = self.run_install()
+        self.assertEqual(self.calls("codex"), [["plugin", "remove", "text-to-cad@earthtojake"],
+                                               ["plugin", "marketplace", "remove", "earthtojake"],
+                                               CODEX_ADD, ["plugin", "add", "text-to-cad@earthtojake"]])
+        self.assertIn("Codex: updated\n", done.stdout)
+        failed = self.run_install(FAKE_FAIL="codex:--sparse")
+        self.assertEqual(self.calls("codex")[3:], [["plugin", "marketplace", "add",
+                                                    "https://github.com/earthtojake/text-to-cad.git", "--ref", "latest"],
+                                                   ["plugin", "add", "text-to-cad@earthtojake"]])
+        self.assertIn("the earlier copy was put back", failed.stdout)
+        # Added sparse, it is upgraded where it is.
+        self.write(".codex/config.toml", CODEX_CONFIG)
+        self.run_install()
+        self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "upgrade", "earthtojake"],
+                                               ["plugin", "add", "text-to-cad@earthtojake"]])
+
+    def test_copilot_adds_our_catalog_only_where_it_has_none(self) -> None:
+        # Copilot CLI's `marketplace add` fails for a catalog it has: a run whose add went in and whose install did
+        # not, or a person who uninstalled the plugin and kept the catalog, must still get the plugin.
+        self.programs("copilot")
+        fresh = self.run_install()
+        self.assertEqual(self.calls("copilot"), [["plugin", "update", "text-to-cad"],
+                                                 ["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
+                                                 ["plugin", "install", "text-to-cad@earthtojake"]])
+        self.assertIn("GitHub Copilot CLI: installed\n", fresh.stdout)
+        self.assertEqual(self.run_install().stdout.count("GitHub Copilot CLI: updated\n"), 1)
+        (self.home / ".copilot" / "config.json").unlink()  # uninstalled, the catalog kept
+        kept = self.run_install()
+        self.assertEqual(self.calls("copilot"), [["plugin", "update", "text-to-cad"],
+                                                 ["plugin", "install", "text-to-cad@earthtojake"]])
+        self.assertIn("GitHub Copilot CLI: installed\n", kept.stdout)
+        # A catalog of that name from somewhere else is left alone.
+        self.write(".copilot/settings.json", {"extraKnownMarketplaces": {"earthtojake": {
+            "source": {"source": "github", "repo": "someone/else"}}}})
+        (self.home / ".copilot" / "config.json").unlink()
+        theirs = self.run_install()
+        self.assertEqual(self.calls("copilot"), [["plugin", "update", "text-to-cad"]])
+        self.assertIn("GitHub Copilot CLI: failed: the earthtojake catalog is another source's (someone/else)",
+                      theirs.stdout)
+
+    def test_an_app_nobody_is_signed_in_to_is_skipped_with_what_it_said_not_failed(self) -> None:
+        # Devin CLI manages plugins only for a person signed in: nothing a run does changes that, so the run does not
+        # count it as failed (and so try it again and again), and says what the app said to do.
+        self.programs("devin")
+        done = self.run_install(FAKE_SIGNED_OUT="1")
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertEqual(self.calls("devin"), [["plugins", "update", "text-to-cad"],
+                                               ["plugins", "install", "earthtojake/text-to-cad", "-y"]])
+        self.assertIn("Devin CLI: skipped: nobody is signed in to it (Error: You must be logged in to manage plugins. "
+                      "Run `devin auth login` first.)\n", done.stdout)
+        self.assertEqual(self.kept()["record"].get("for"), cad_server.__version__)
+        # Any other failure of its command is still a failure.
+        self.assertIn("Devin CLI: failed: devin: something went wrong", self.run_install(FAKE_FAIL="devin").stdout)
 
     def test_one_app_failing_stops_no_other(self) -> None:
         self.programs("codex", "gemini")
