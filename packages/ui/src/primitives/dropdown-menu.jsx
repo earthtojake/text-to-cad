@@ -7,19 +7,51 @@ import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import { cn } from "@cad/ui/utils"
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 
+// A menu's open state, held here so its trigger can open it at a finger's click (below).
+const MenuOpenContext = React.createContext(null);
+
+/** @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Root>} props */
 function DropdownMenu({
+  open: openProp,
+  defaultOpen = false,
+  onOpenChange,
   ...props
 }) {
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
+  const [own, setOwn] = React.useState(defaultOpen);
+  const controlled = openProp !== undefined;
+  const open = controlled ? openProp : own;
+  const change = React.useCallback(next => { if (!controlled) setOwn(next); onOpenChange?.(next); }, [controlled, onOpenChange]);
+  const menu = React.useMemo(() => ({ open, change }), [open, change]);
+  return <MenuOpenContext.Provider value={menu}>
+    <DropdownMenuPrimitive.Root data-slot="dropdown-menu" open={open} onOpenChange={change} {...props} />
+  </MenuOpenContext.Provider>;
 }
 
 const DropdownMenuTrigger = React.forwardRef(/**
  * @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>} props
  * @param {React.ForwardedRef<React.ComponentRef<typeof DropdownMenuPrimitive.Trigger>>} ref
  */ function DropdownMenuTrigger({
+  onPointerDown,
+  onClick,
   ...props
 }, ref) {
-  return <DropdownMenuPrimitive.Trigger ref={ref} data-slot="dropdown-menu-trigger" {...props} />;
+  const menu = React.useContext(MenuOpenContext);
+  const finger = React.useRef(false);
+  // A mouse and a pen open the menu at the press (Radix's own). A finger opens it at its tap's click, as it opens a
+  // popover: a menu opened at a finger's press was shut again by what the rest of the tap sends on a phone (held
+  // until no click came, it stayed). The press is marked handled, which is how Radix is told to leave it.
+  return <DropdownMenuPrimitive.Trigger ref={ref} data-slot="dropdown-menu-trigger" {...props}
+    onPointerDown={event => {
+      onPointerDown?.(event);
+      finger.current = event.pointerType === "touch";
+      if (finger.current) event.preventDefault();
+    }}
+    onClick={event => {
+      onClick?.(event);
+      if (!finger.current) return;
+      finger.current = false;
+      if (!event.defaultPrevented) menu?.change(!menu.open);
+    }} />;
 });
 
 const DropdownMenuContent = React.forwardRef(/**

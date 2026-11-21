@@ -44,10 +44,10 @@ export function StartingView({ error, tabStore }: { error?: Error; tabStore: Tab
     home: <div className="flex h-full items-center justify-center bg-background px-4" data-starting-home="">
       <LoadingStep label={translateIn(locale, 'loading.preparingView')} /></div>,
   }), [record.settings.viewportBackground, locale]);
-  if (error) return <I18nProvider locale={locale}><div className="relative h-svh overflow-hidden bg-background">{isEngineGone(error)
+  if (error) return <I18nProvider locale={locale}><div className="fixed inset-0 overflow-hidden bg-background">{isEngineGone(error)
     ? <EngineStopped locale={locale} refused={isEngineRefused(error)} />
     : <EmptyState title={translateIn(locale, 'app.start.notAnswering')} description={error.message} />}</div></I18nProvider>;
-  return <div className="relative flex h-svh flex-col overflow-hidden" inert data-starting-view="">
+  return <div className="fixed inset-0 flex flex-col overflow-hidden" inert data-starting-view="">
     <div className="isolate min-h-0 flex-1">
       <FileViewer file={file} host={host as never} renderers={[]} state={{ renderers: record.files }} onStateChange={NOTHING}
         explorerFolder="/" presentation={presentation} />

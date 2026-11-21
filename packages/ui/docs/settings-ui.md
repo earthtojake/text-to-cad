@@ -1296,7 +1296,7 @@ Touch works for every tool: one finger orbits, two pan and
 zoom, a tap picks; a pinch, a cancelled pointer or a camera drag is never a
 pick. What a mouse says with a button a finger says with time, in ONE place for every 2D and 3D view
 (`kit/viewport/touchGestures.js`, on the view's frame), said back in the mouse's words so the view's own handlers stay
-the only ones: a **double tap** (two taps, each lifted within 350ms and moved 10px at most, the second within 300ms and
+the only ones: a **double tap** (two taps, each lifted within 350ms and moved 10px at most, the second within 400ms and
 24px of the first) is a **double-click** at that point, the same hit test and the same action (a part isolated or
 looked at, empty space fitted, a board's or a sheet's double-click), the browser's own double-click for it, where it
 sends one, dropped; a **long press** (one finger held 500ms, moved 10px at most) is a **right-click**: the view's menu
