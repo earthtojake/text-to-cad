@@ -32,11 +32,27 @@ const DropdownMenuContent = React.forwardRef(/**
   children,
   ...props
 }, ref) {
+  const contentRef = React.useRef(null);
+  const mergedRef = React.useCallback(node => {
+    contentRef.current = node;
+    if (typeof ref === "function") ref(node); else if (ref) ref.current = node;
+  }, [ref]);
   // A menu taller than the room it has scrolls in the chrome's one scroll region.
+  // Focus landing on the menu's own trigger is not focus leaving the menu. A menu opens on its trigger's pointerdown
+  // (Radix's), and Safari on iOS gives a tapped button focus only at the tap's click, after the menu has opened: a
+  // non-modal menu (`modal={false}`, the navbar's) took that for focus outside and shut at once, where a press held
+  // long enough to send no click kept it. A second press on the trigger still shuts it (its own toggle).
+  const onFocusOutside = event => {
+    props.onFocusOutside?.(event);
+    if (event.defaultPrevented) return;
+    const target = event.target;
+    const id = contentRef.current?.id;
+    if (id && target instanceof Element && target.closest("[aria-controls]")?.getAttribute("aria-controls") === id) event.preventDefault();
+  };
   return (
     <DropdownMenuPrimitive.Portal container={container}>
       <DropdownMenuPrimitive.Content
-        ref={ref}
+        ref={mergedRef}
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
@@ -44,6 +60,7 @@ const DropdownMenuContent = React.forwardRef(/**
           className
         )}
         {...props}
+        onFocusOutside={onFocusOutside}
       ><ScrollArea className="min-h-0 flex-1">{children}</ScrollArea></DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Portal>
   );
