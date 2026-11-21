@@ -12,8 +12,11 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
+from tests.python.support.agent_apps import a_home_of_its_own
 from tests.python.support.paths import add_sources
 
 add_sources()
@@ -77,17 +80,28 @@ class TheCommandTable(unittest.TestCase):
                 self.assertEqual(_run(argv)[0], 0, "unlisted, and parsed as ever")
 
     def test_the_switches_are_update_auto_and_the_old_spellings_are_gone(self) -> None:
-        """``cad update auto`` and ``cad plugin update [auto]``; ``cad auto-update``, ``cad plugin install`` and ``cad
-        plugin auto-update`` answer as commands that never existed (no release had them)."""
+        """``cad update auto``, ``cad plugin install`` and ``cad plugin update [auto]``; ``cad auto-update`` and ``cad
+        plugin auto-update`` answer as commands that never existed (no release had them), and ``cad plugin install``
+        takes no options. Only its help and its usage errors are asked here: the command itself changes the agent apps
+        of the computer it runs on (``tests/python/packages/cad_server/plugin`` runs it on a computer of its own). So
+        that a parser that one day took one of these lines would not run it on this one, they are asked in a home of
+        their own, with nothing on PATH."""
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        root = Path(scratch.name).resolve()
+        (root / "bin").mkdir()
+        a_home_of_its_own(self, root / "home", root / "bin")
         for argv, usage in ((["update", "--help"], "usage: cad update [-h] [--major]"),
                             (["update", "auto", "--help"], "usage: cad update auto [-h] [{status,on,off}]"),
+                            (["plugin", "install", "--help"], "usage: cad plugin install [-h]"),
                             (["plugin", "update", "--help"], "usage: cad plugin update [-h] [auto [{status,on,off}]]"),
                             (["plugin", "update", "auto", "--help"],
                              "usage: cad plugin update auto [-h] [{status,on,off}]")):
             with self.subTest(argv=argv):
                 code, said, _ = _run(argv)
                 self.assertEqual((code, said.splitlines()[0]), (0, usage))
-        for argv in (["auto-update"], ["auto-update", "on"], ["plugin", "install"], ["plugin", "auto-update", "on"],
+        for argv in (["auto-update"], ["auto-update", "on"], ["plugin", "install", "--force"],
+                     ["plugin", "install", "claude"], ["plugin", "auto-update", "on"],
                      ["update", "auto", "maybe"], ["update", "--major", "auto"], ["update", "auto", "--major"]):
             with self.subTest(argv=argv):
                 self.assertEqual(_run(argv)[0], 2)

@@ -85,7 +85,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "update": frozenset({"command", "auto", "major"}),
     # The install command run now (`update`), or (`update auto`) whether cad's automatic update runs it after it; and
     # the hidden --refresh the updater of 0.11.10 runs, which does nothing.
-    "plugin": frozenset({"command", "update", "refresh"}),
+    "plugin": frozenset({"command", "install", "update", "refresh"}),
     # The engine's verbs (cad_server.engine.cli): each type's operations, and its process control.
     # A document's export (a model's, an xbf's, a STEP's) meshes a GLB, an STL or a 3MF to a tolerance and an
     # angle, and takes a robot description's joints from a zero state; a mesh's, to the other mesh kinds, does
@@ -124,16 +124,17 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "cache": frozenset({"command", "dir", "prune", "clean"}),
     # The exact cad requirement for a Python of a program's own: its integrations, and --json.
     "requirement": frozenset({"integrations", "json"}),
+    # One read-only report of this cad.
+    "doctor": frozenset({"check", "json"}),
+    # The viewer launcher: the launch contract (reuse, replace or start on its one port, the --json announce
+    # line) is not a function signature to mirror.
+    "viewer": frozenset({"files", "host", "port", "json", "no_open", "dist", "api_only"}),
 }
 
-# Commands that own their parser outright and mirror no function.
+# Commands that own their command line outright and mirror no function.
 UNCLASSIFIED = {
-    "doctor",
     # uv run's options and a program's arguments, whatever they are: no parser of its own (uv judges them).
     "run",
-    # The viewer launcher owns its parser: the launch contract (reuse, replace or start on its
-    # one port, the --json announce line) is not a function signature to mirror.
-    "viewer",
     # The CAD app an agent app starts: MCP on stdin and stdout, which no function's signature describes.
     "mcp",
 }

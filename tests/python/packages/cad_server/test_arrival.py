@@ -79,7 +79,7 @@ class ArrivalTest(unittest.TestCase):
         self.assertEqual(len(self.kept()), 6)
         self.assertEqual(self.started, [self.settings] * 6, "a sender at once for each, none set to start later")
         [batch] = self.sent()
-        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (12, "cli", RELEASE))
+        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (13, "cli", RELEASE))
         self.assertNotIn("client", batch)
         self.assertEqual(batch["events"], [
             {"name": "arrival", "step": "handover", "route": "updater", "from": "0.11.10", "outcome": "failed",
@@ -171,7 +171,7 @@ class ArrivalTest(unittest.TestCase):
         self.assertEqual(self.started, [self.settings] * 5, "a sender at once for each, as an arrival's")
         self.assertTrue(analytics.arrival("setup", route="setup", earlier=None, outcome="ok"))
         [batch] = self.sent()
-        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (12, "cli", RELEASE))
+        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (13, "cli", RELEASE))
         self.assertEqual([event for event in batch["events"] if event["name"] == "update"], [
             {"name": "update", "from": "0.11.12", "outcome": "current", "tries": 2, "installer": "uv", "asked": False,
              "plugin": "none", "count": 1},
@@ -288,7 +288,7 @@ class WithNoServerTest(unittest.TestCase):
         await_(lambda: self.received, "the batch at the stand-in receiver")
         await_(lambda: not engine_daemon._alive(sender), "the sender to exit once it sent")
         [batch] = self.received
-        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (12, "cli", RELEASE))
+        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (13, "cli", RELEASE))
         self.assertEqual(batch["events"], [{"name": "arrival", "step": "setup", "route": "updater", "from": "0.11.10",
                                             "outcome": "failed", "reason": "network", "count": 1}])
         self.assertFalse(settings.with_name(analytics.ARRIVALS).exists())

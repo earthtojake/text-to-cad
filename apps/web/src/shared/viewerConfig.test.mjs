@@ -12,7 +12,7 @@ import {
   viewerGithubRepositoryUrl
 } from "./viewerConfig.mjs";
 
-test("normalizeViewerGithubUrl defaults to the CAD Viewer repository link", () => {
+test("normalizeViewerGithubUrl defaults to the viewer repository link", () => {
   assert.equal(normalizeViewerGithubUrl(""), DEFAULT_VIEWER_GITHUB_URL);
 });
 

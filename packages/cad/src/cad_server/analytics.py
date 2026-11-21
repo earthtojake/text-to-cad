@@ -24,7 +24,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
   naming no tool of cadgen's counted as ``cad_unknown``'s (``UNKNOWN_TOOL``), never by the name it sent;
 - ``tool_failure`` (the CAD app): how many of a tool's calls failed for each reason (``FAILURES``): one
   word cadgen chose where the call failed -- the caller named no file, or no view; a view that did not
-  answer; the CAD Viewer that did not start; cadgen's own bug -- never the failure's message;
+  answer; the viewer that did not start; cadgen's own bug -- never the failure's message;
 - ``view`` (the apps): how many times a CAD view was touched by a person or switched models --
   time spent looking at a model calls no tool, and is use all the same;
 - ``files`` (the apps): how many distinct models (kind ``model``) and files of each format (``xbf``,
@@ -78,7 +78,17 @@ exits, each batch under an id of its own and stamped with the time it was made:
   installed, current, failed, or failed and the release before put back), for a failure which step failed
   (``UPDATE_FAILURES``), its ``tries``, the ``installer`` that made the global install (``uv``, ``pipx``), whether it
   was typed (``asked``), and for a newer cad installed how the install command's run for it ended (``plugin``:
-  ``UPDATE_PLUGIN``; ``underway`` where a new attempt began before it ended).
+  ``UPDATE_PLUGIN``; ``underway`` where a new attempt began before it ended);
+- ``install`` (``install``): one run of ``cad plugin install`` (by either name) that ended, counted by the
+  command as it ends -- who began it (``INSTALL_BY``: a person, the hosted install command handing over, or cad's
+  server), how it ended (``INSTALL_OUTCOMES``: well, every app it found failed, its deadline stopped it before it was
+  done, or another run was going and this one ran nothing), what its terminal was shown (``INSTALL_LOGOS``,
+  ``INSTALL_COLOURS``), the whole seconds it took, and how many agent apps it found on the computer and how many of
+  those failed: counts, never which apps;
+- ``install_failure`` (``install``): each app where such a run failed, and only those -- which (``app``: cad's own key
+  for it in its table of apps, a word of ours, never a path or a version of the app's), why (``INSTALL_FAILURES``: a
+  word chosen where it failed, never its message), and the whole seconds it took. An app installed, updated, cleaned
+  up or skipped is never named: cad does not say which agent apps a computer has.
 
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
@@ -93,7 +103,10 @@ An arrival (``arrival``) waits for no other process: the step that counts it may
 on the computer -- a setup that failed, a server that never served. It is kept in a file of its own (``ARRIVALS``),
 which no earlier release's sender takes, and starts a sender at once, every time (``telemetry_send.start_now``), from
 whichever Python counted it: a version's own, uvx's, an updater's folder. An update (``update``) is kept and sent the
-same way: the server that counts it may be replaced by the next update within the minute.
+same way: the server that counts it may be replaced by the next update within the minute. So is a run of the plugin's
+install (``install``), in a file of its own again (``INSTALLS``), which no sender of 0.11.13 or earlier takes: the run
+may be the last thing cad does on the computer for a long while -- the hosted install command's hand-over on a computer
+where no server runs, a release run once from uv's cache.
 
 Never a path or a file name of the person's, a model, an argument, a message, a prompt or anything
 typed. A batch with nothing in it is never sent: a process the host started and nobody used counts
@@ -188,7 +201,9 @@ LOG = logging.getLogger("cad_server.analytics")
 OWN = frozenset({"cad", "cadgen", "cad_server"})
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
-# 12: a GSL model, a field the page draws, is a format of its own (``gsl``);
+# 13: a GSL model, a field the page draws, is a format of its own (``gsl``);
+# 12: each run of the plugin's install in the agent apps, which cad runs itself (``install``), and each app where one
+# failed (``install_failure``);
 # 11: where a batch comes from is one field, ``app`` (the agent app, detected), one batch per app; the channel of 10
 # and earlier (an app's name joined to where its copy came from) is no longer sent; how a computer got to a
 # version (``arrival``); and how each of cad's own updates ended (``update``);
@@ -200,7 +215,7 @@ PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
 # engine's documents (kind ``xbf``) and a command's sender (process ``cli``); 5: why builds and snapshots
 # failed, and each batch's id and time; 4: why tool calls failed; 3: the old build daemon's counts, and files as
 # numbers; 2: the install's channel replaced `source`
-SCHEMA = 12
+SCHEMA = 13
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
 # the answer: it lives in the state folder, which every release reads, not in its code. Neither schema 4, 5 nor 6 raised it
@@ -225,8 +240,13 @@ SCHEMA = 12
 # (every release reads the one settings file, and the id in it). No field of the person's, no new identity. Nor
 # schema 11's ``update``: whether cad's own update of itself went, and where it did not, which step, in a word of ours,
 # with the version before it (as ``arrival`` says it), the installer, a count of tries and whether it was typed --
-# cad failing or working, never a message, a path or anything of the person's, under the same ids. Nor
-# schema 12: one more format.
+# cad failing or working, never a message, a path or anything of the person's, under the same ids. Nor schema 12's
+# ``install`` and ``install_failure``: whether a command of cad's went, as ``update`` says of cad's own update, and
+# where it did not, in which of the agent apps cad puts the plugin in and why, in a word of ours -- an app named only
+# where its install failed, by cad's own key for it (the app running cad was named already, ``app``), never which
+# apps a computer has -- with a count of the apps found and failed, the run's seconds and what its terminal drew.
+# Never a path, a version of an app's, a message or anything typed, under the same ids. Nor
+# schema 13: one more format.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -337,6 +357,10 @@ KEPT = "telemetry-batches.jsonl"
 # Where a process keeps an arrival it counted (``arrival``), beside the settings, for the sender it starts: a file of
 # its own, which no earlier release's sender takes from the folder 0.11.11 and earlier share, capped as the spool is.
 ARRIVALS = "telemetry-arrivals.jsonl"
+# Where a run of the plugin's install is kept (``install``), each run one line with its failed apps alone, for the
+# sender it starts: a file of its own again, since a sender of 0.11.12 or 0.11.13 takes ``ARRIVALS`` whole and keeps
+# of it only what it knows, an arrival or an update; capped as the spool is.
+INSTALLS = "telemetry-installs.jsonl"
 HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take``)
 # The page's plumbing: a view's once-a-second sync, its viewer requests (the home's re-reads of its
 # library every couple of seconds among them) and its capture replies say nothing about use and would
@@ -374,7 +398,7 @@ OUTCOMES = frozenset({"ok", "failed", "crashed", "cancelled"})
 # (``no_view``); a view that shows its host's file alone (``wrong_view``); arguments the tool could not read, or a
 # call naming no tool of cadgen's (``bad_request``, as ``UNKNOWN_TOOL``'s). The view's: it
 # did not answer in time (``timeout``), answered with an error or without
-# an image (``view_error``), or with one too large for the host (``too_large``). The machine's: the CAD Viewer
+# an image (``view_error``), or with one too large for the host (``too_large``). The machine's: the viewer
 # did not start (``no_viewer``), or the engine could start no kernel process for the call -- no kernel environment,
 # a pool the system refused (``no_kernel``, schema 10's; earlier schemas counted it as ``other``; its crash, with its
 # ``cause``, is sent once per failure, ``cad_server.mcp.server``). cadgen's: anything else it raised (``bug``,
@@ -534,6 +558,27 @@ UPDATE_INSTALLERS = frozenset({"uv", "pipx"})
 # The install command's run for the cad an update installed: none ran for it, it ended well or failed, or it was still
 # underway when a new attempt took the record's place (``auto_update.report``).
 UPDATE_PLUGIN = frozenset({"none", "ok", "failed", "underway"})
+# One run of the plugin's install in the agent apps (``install``, schema 12's; ``cad plugin install`` and ``cad plugin
+# update``, which say what a run was: ``cad_server.cli.plugin``). Who began it: a person who typed the command, the
+# hosted install command handing over to it, or cad's server. How it ended: well (``ok``: with no app found, too);
+# every app it found failed (``failed``); its deadline stopped it before it was done (``stopped``: a run a server
+# began has one), whatever it had found by then; or another run was going and this one, a server's, ran nothing
+# (``busy``). Of a run that ended, ``failed`` says that every app found failed and nothing else, which is how the
+# receiver reads it (a row it cannot be true of is refused, with its whole batch). What its terminal was shown of the
+# logo -- built before its eyes, drawn still, none, or one that could not be drawn -- and in which colours.
+INSTALL_BY = frozenset({"person", "script", "server"})
+INSTALL_OUTCOMES = frozenset({"ok", "failed", "stopped", "busy"})
+INSTALL_LOGOS = frozenset({"played", "still", "none", "failed"})
+INSTALL_COLOURS = frozenset({"24bit", "256", "none"})
+# What was done in each app a run found (``run.Facts``): only the failures are named (``install_failure``), each with
+# why, a word chosen where it failed -- a command that did not answer in time, one that failed, no network, a mistake
+# of cad's own, anything else -- never its message. The rest are counted in the run's ``found``, never named.
+INSTALL_STATUSES = frozenset({"installed", "updated", "removed", "skipped", "failed"})
+INSTALL_FAILURES = frozenset({"timeout", "command", "network", "exception", "other"})
+# A run's seconds and an app's, whole, past this many counted as this many; and the most apps a run finds: cad's table
+# of them is shorter (a run that found more is not counted).
+MAX_INSTALL_SECONDS = 100_000
+MAX_INSTALL_APPS = 64
 # The version a computer came from: a release's or a development build's name (``places.VERSION``'s shape, at most
 # the 32 characters a batch's ``version`` takes), or ``none``.
 _EARLIER = re.compile(r"none|[0-9][0-9A-Za-z.+_-]{0,31}")
@@ -555,6 +600,10 @@ EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "arrival": (("step", "route", "from", "outcome", "reason", "attempts"), ("count",)),
     # ``reason`` only with ``failed`` or ``restored``.
     "update": (("from", "outcome", "reason", "tries", "installer", "asked", "plugin"), ("count",)),
+    # Whole seconds and numbers of apps are names here, not counts: runs alike in each are one row, counted.
+    "install": (("by", "outcome", "logo", "colour", "seconds", "found", "failed"), ("count",)),
+    # Only an app whose install failed: an app done well is counted in its run's ``found``, never named.
+    "install_failure": (("app", "reason", "seconds"), ("count",)),
 }
 MAX_EVENTS = 256  # a batch's most (the receiver's too, from schema 7): any more wait for the next batch
 # A crash (``signature``): where it happened -- a CAD tool's call, a viewer's route, another request a
@@ -1576,6 +1625,136 @@ def _update_event(earlier: Any, outcome: Any, reason: Any, tries: Any, installer
     return found
 
 
+def in_force() -> Any:
+    """Which answer is in force now (``_answer``), for a count that is made as something long ends (``install``'s
+    ``under``): read as it begins, so what began under another answer -- before the person was told, before a yes --
+    is never kept. Never raises: where it cannot be read, an answer nothing is kept under."""
+    try:
+        return list(_answer(_read(settings_path()) or {}))
+    except Exception:  # noqa: BLE001 - an answer that cannot be read is none to count under
+        LOG.debug("could not read the answer in force", exc_info=True)
+        return _UNREAD
+
+
+def install(*, by: str, busy: bool = False, stopped: bool = False, logo: str = "none", colour: str = "none",
+            seconds: float = 0.0, apps: Any = (), under: Any = None) -> bool:
+    """Count one run of the plugin's install in the agent apps that ended (``install``, and an ``install_failure``
+    for each app where it failed; ``cad_server.cli.plugin`` calls it once per run): begun by ``by`` (``INSTALL_BY``),
+    its terminal shown ``logo`` in ``colour`` (``INSTALL_LOGOS``, ``INSTALL_COLOURS``), after ``seconds``, with
+    ``apps`` the apps it found, each ``(app, status, reason, seconds)``: cad's key for the app, what was done there
+    (``INSTALL_STATUSES``), and for a failed one why (``INSTALL_FAILURES``: anything else is ``other``). Every app
+    found is counted (``found``, ``failed``); only a failed one is kept by name: which agent apps a computer has is
+    never sent. ``busy``: another run was going and this one ran nothing; it names no app. ``stopped``: its deadline
+    stopped it before it was done; its apps are those it had found by then. Whether a run that ended ended well is not
+    told but read from its apps (``_install_run``), so no run is counted as ended in a way its apps deny. A word
+    outside these, an app's key of another shape, more apps than ``MAX_INSTALL_APPS``, or a run both busy and stopped,
+    is not counted.
+
+    ``under``: the answer in force when the run began (``in_force``); under another now, nothing is kept.
+    Kept and sent as an arrival is (``arrival``), in a file of its own (``INSTALLS``): under the answer in force, only
+    while sharing is on, a sender started at once. Never the network, never raises. Whether it was kept."""
+    try:
+        found = _install_run(by, busy, stopped, logo, colour, seconds, apps)
+        if found is None or refused():
+            return False
+        path = settings_path()
+        if not status(path=path, probe=False)["sharing"]:
+            return False
+        answer = list(_answer(_read(path) or {}))
+        if under is not None and under != answer:
+            return False
+        if not _keep(path, INSTALLS, {"answer": answer, "at": round(time.time(), 3), "source": source(),
+                                      "install": found}):
+            return False
+        from cad_server._internal import telemetry_send
+
+        telemetry_send.start_now(path)
+        return True
+    except Exception:  # noqa: BLE001 - a run counted or not never fails the run
+        LOG.debug("could not count an install", exc_info=True)
+        return False
+
+
+def _whole_seconds(value: Any) -> int | None:
+    """Seconds as ``install`` counts them: whole, none past ``MAX_INSTALL_SECONDS``; None for what is no time."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        return None
+    return min(int(value), MAX_INSTALL_SECONDS)
+
+
+def _install_run(by: Any, busy: Any, stopped: Any, logo: Any, colour: Any, seconds: Any,
+                 apps: Any) -> dict[str, Any] | None:
+    """A run of the plugin's install as it is kept (``INSTALLS``, ``_install_event``): what its ``install`` event says
+    (``EVENTS``' names) and, as ``failures``, what each of its ``install_failure`` events says -- the failed apps
+    alone, so no app done well is ever named --; or None for one that is not counted. ``found`` and ``failed`` are
+    counted from every app in ``apps``, and ``outcome`` decided here and nowhere else: ``busy`` (which names no app:
+    one that does is not counted), ``stopped`` (whatever it found), else, for a run that ended, ``failed`` exactly
+    where it found an app and every one failed and ``ok`` anywhere else -- the one reading the receiver takes."""
+    took = _whole_seconds(seconds)
+    if type(busy) is not bool or type(stopped) is not bool or (busy and stopped):
+        return None
+    if took is None or not isinstance(apps, (list, tuple)) or len(apps) > (0 if busy else MAX_INSTALL_APPS):
+        return None
+    found, failures = 0, []
+    for each in apps:
+        if not isinstance(each, (list, tuple)) or len(each) != 4:
+            return None
+        app, did, reason, app_took = each
+        app_took = _whole_seconds(app_took)
+        if not (isinstance(app, str) and _APP.fullmatch(app)) or did not in INSTALL_STATUSES or app_took is None:
+            return None
+        found += 1
+        if did == "failed":
+            failures.append({"app": app, "reason": reason if isinstance(reason, str) and reason in INSTALL_FAILURES
+                             else "other", "seconds": app_took})
+    outcome = "busy" if busy else "stopped" if stopped else "failed" if found and len(failures) == found else "ok"
+    return _install_event({"by": by, "outcome": outcome, "logo": logo, "colour": colour, "seconds": took,
+                           "found": found, "failed": len(failures), "failures": failures})
+
+
+def _count_of(value: Any, most: int) -> bool:
+    """Whether ``value`` is a whole number, not a bool, from 0 to ``most``."""
+    return type(value) is int and 0 <= value <= most
+
+
+def _install_event(found: Any) -> dict[str, Any] | None:
+    """A run as it is kept (``_install_run``) where it is exactly one: ``by``, ``outcome``, ``logo``, ``colour``,
+    ``seconds``, ``found``, ``failed`` and ``failures`` (each ``{app, reason, seconds}``, one per failed app, so as many
+    as ``failed``), every word of its vocabulary and every number in range, and its outcome the one its counts allow
+    (the receiver's cross rules: ``busy`` found none; ``stopped`` any; else ``failed`` exactly where it found one and
+    every one failed); else None. A line changed on disk says nothing."""
+    names = ("by", "outcome", "logo", "colour", "seconds", "found", "failed", "failures")
+    if not isinstance(found, dict) or set(found) != set(names) or not isinstance(found["failures"], list):
+        return None
+    words = ((found["by"], INSTALL_BY), (found["outcome"], INSTALL_OUTCOMES), (found["logo"], INSTALL_LOGOS),
+             (found["colour"], INSTALL_COLOURS))
+    if not all(isinstance(word, str) and word in among for word, among in words):
+        return None
+    apps, failed, outcome = found["found"], found["failed"], found["outcome"]
+    if not (_count_of(found["seconds"], MAX_INSTALL_SECONDS) and _count_of(apps, MAX_INSTALL_APPS)
+            and _count_of(failed, apps) and len(found["failures"]) == failed):
+        return None
+    if outcome == "busy" and apps:
+        return None
+    if outcome in ("ok", "failed") and (outcome == "failed") != (apps >= 1 and failed == apps):
+        return None
+    for row in found["failures"]:
+        if not (isinstance(row, dict) and set(row) == {"app", "reason", "seconds"} and isinstance(row["app"], str)
+                and _APP.fullmatch(row["app"]) and isinstance(row["reason"], str) and row["reason"] in INSTALL_FAILURES
+                and _count_of(row["seconds"], MAX_INSTALL_SECONDS)):
+            return None
+    return {name: found[name] for name in names[:-1]} | {"failures": [dict(row) for row in found["failures"]]}
+
+
+def _install_kept(found: Any) -> dict[str, Any] | None:
+    """A kept run (``_install_run``) as it is taken to be sent: itself where it is exactly one ``install`` would
+    keep (``_install_event``), else None -- a line changed on disk says nothing."""
+    checked = _install_event(found)
+    if checked is None or json.dumps(checked, sort_keys=True) != json.dumps(found, sort_keys=True):
+        return None
+    return checked
+
+
 def _take_spool(path: Path, name: str = SPOOL, key: str | tuple[str, ...] = "counts") -> list[dict[str, Any]]:
     """What commands kept (``spool``), or exiting processes (``KEPT``, each line a ``batch``), taken whole
     by one process: moved aside under the state folder's one lock, so no line is taken twice or lost to a process
@@ -1621,7 +1800,7 @@ def _keep(path: Path, name: str, entry: dict[str, Any]) -> bool:
 def _drop_spool(path: Path) -> None:
     """A no: what commands and exiting processes kept for sending is deleted, not left to be dropped later."""
     with contextlib.suppress(OSError), state(path.parent):
-        for name in (SPOOL, ARRIVALS, KEPT):
+        for name in (SPOOL, ARRIVALS, INSTALLS, KEPT):
             path.with_name(name).unlink(missing_ok=True)
 
 
@@ -1647,7 +1826,7 @@ def _guarded(default: Callable[[], Any]):
 
 def _order(key: tuple[Any, ...]) -> tuple[str, ...]:
     """An event's key as batches order them: by its names as text, an arrival's unsent name (None) and its
-    attempts (a number) among them."""
+    attempts (a number) among them, and a run's seconds and numbers of apps."""
     return tuple("" if part is None else str(part) for part in key)
 
 
@@ -2054,6 +2233,17 @@ class Recorder:
         if checked is not None:
             self._note("update", tuple(checked.get(name) for name in EVENTS["update"][0]), {"count": 1})
 
+    @_guarded(lambda: None)
+    def installed(self, found: Any) -> None:
+        """One run of the plugin's install (``install``), as it was kept: noted, with each app where it failed
+        (``install_failure``; no other app is ever named), only if it is one ``install`` would keep."""
+        checked = _install_kept(found)
+        if checked is None:
+            return
+        self._note("install", tuple(checked[name] for name in EVENTS["install"][0]), {"count": 1})
+        for row in checked["failures"]:
+            self._note("install_failure", tuple(row[name] for name in EVENTS["install_failure"][0]), {"count": 1})
+
     def _arrived_or_updated(self, entry: dict[str, Any]) -> None:
         """A line of ``ARRIVALS``: an arrival's step, or an update."""
         if isinstance(entry.get("arrival"), dict):
@@ -2063,8 +2253,8 @@ class Recorder:
 
     @_guarded(lambda: None)
     def _drain(self) -> None:
-        """Take what commands and scripts kept for a sender (``spool``) and the arrivals and updates counted
-        (``ARRIVALS``) into
+        """Take what commands and scripts kept for a sender (``spool``), the arrivals and updates counted
+        (``ARRIVALS``) and the runs of the plugin's install (``INSTALLS``) into
         this ``cli`` recorder's tally: only what they counted under the answer in force now -- the rest was noted
         under another, and is dropped as this process's own would be. An app's or the viewer's recorder takes
         nothing: its ``cli`` recorder does (``_spooled``), so what was built never rides in a batch that names who
@@ -2074,7 +2264,8 @@ class Recorder:
         settings = self.path or settings_path()
         answer = None
         for name, key, take in ((SPOOL, "counts", lambda entry: self.take(entry["counts"])),
-                                (ARRIVALS, ("arrival", "update"), self._arrived_or_updated)):
+                                (ARRIVALS, ("arrival", "update"), self._arrived_or_updated),
+                                (INSTALLS, "install", lambda entry: self.installed(entry["install"]))):
             kept = _take_spool(settings, name, key)
             if kept and answer is None:
                 answer = list(_answer(_read(settings) or {}))

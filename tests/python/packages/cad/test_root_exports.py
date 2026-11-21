@@ -63,7 +63,10 @@ class RootExports(unittest.TestCase):
         self.assertIs(cad.stl.read, cad.engine.read_mesh)
         self.assertIs(cad.urdf.validate, cad.urdf.__dict__["validate"])
         self.assertIs(cad.kicad_pcb.read, cad.kicad_pcb.__dict__["read"])
-        self.assertTrue(cad.xbf.export.__doc__.endswith(api.export.__doc__))
+        # An operation's docstring ends with its verb's, without the indentation Python strips by itself only from 3.13.
+        import inspect
+
+        self.assertTrue(cad.xbf.export.__doc__.endswith(inspect.cleandoc(api.export.__doc__)))
 
     def test_what_the_root_says_of_its_types_is_what_it_has(self):
         """Every type is in the root's docstring and in the imports type checkers read, and no type that

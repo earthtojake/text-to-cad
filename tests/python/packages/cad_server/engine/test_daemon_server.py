@@ -588,6 +588,21 @@ class NoTimerTest(unittest.TestCase):
                 os.environ[daemon.TEND_ENV] = given
                 self.assertEqual(daemon.tend_seconds(), seconds, given)
 
+    def test_the_plugin_first_catches_up_a_minute_after_the_start_or_two_tendings_on_a_test_s_computer(self) -> None:
+        """The install command that updated cad restarted the server and goes on to the plugin in that minute
+        (``plugin_catch_up.START_SECONDS``); a test's computer, tending faster, waits as many of its tendings."""
+        from cad_server._internal import plugin_catch_up
+        from cad_server.engine import daemon
+
+        with mock.patch.dict(os.environ):
+            os.environ.pop(daemon.TEND_ENV, None)
+            self.assertEqual(daemon.catch_up_seconds(), plugin_catch_up.START_SECONDS)
+            self.assertEqual(plugin_catch_up.START_SECONDS, 60.0)
+            engine = daemon.Daemon(cap=1)
+            self.assertEqual((engine.catching.started, engine.catching.wait), (engine.began, 60.0))
+            os.environ[daemon.TEND_ENV] = "2"
+            self.assertEqual(daemon.catch_up_seconds(), 4.0)
+
 
 class BusyTest(unittest.TestCase):
     """What ``status`` says is in use, and an update's drain waits for: a request that serves, binding
