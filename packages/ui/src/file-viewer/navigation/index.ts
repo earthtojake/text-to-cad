@@ -13,6 +13,7 @@ export const FolderExplorer = runtime.FolderExplorer as typeof Contract.FolderEx
 export const folderTrail = runtime.folderTrail as typeof Contract.folderTrail;
 export const parentFolder = runtime.parentFolder as typeof Contract.parentFolder;
 export const EmptyState = runtime.EmptyState as typeof Contract.EmptyState;
+export const StatusAction = runtime.StatusAction as typeof Contract.StatusAction;
 export const fuzzyMatch = runtime.fuzzyMatch as typeof Contract.fuzzyMatch;
 export const ViewerNavbar = runtime.ViewerNavbar as typeof Contract.ViewerNavbar;
 export const AppMenu = runtime.AppMenu as typeof Contract.AppMenu;

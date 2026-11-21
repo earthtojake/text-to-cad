@@ -1,6 +1,5 @@
 import { PlugZap } from 'lucide-react';
-import { EmptyState } from '@cad/ui/navigation';
-import { Button } from '@cad/ui/primitives/button';
+import { EmptyState, StatusAction } from '@cad/ui/navigation';
 import { translateIn } from '@cad/ui/i18n';
 
 /**
@@ -17,6 +16,6 @@ export function EngineStopped({ locale, refused = false }: { locale: string; ref
   return <div role="alert" className="absolute inset-0 z-50 bg-background">
     <EmptyState icon={PlugZap} title={say(refused ? 'app.engine.linkReplaced' : 'app.engine.notRunning')}
       description={say(refused ? 'app.engine.openNewLink' : 'app.engine.startIt')} tone="warn"
-      action={refused ? null : <Button type="button" variant="outline" size="sm" onClick={() => window.location.reload()}>{say('app.engine.reload')}</Button>} />
+      action={refused ? null : <StatusAction onClick={() => window.location.reload()}>{say('app.engine.reload')}</StatusAction>} />
   </div>;
 }

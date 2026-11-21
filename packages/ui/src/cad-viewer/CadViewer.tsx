@@ -4,8 +4,7 @@ import { FileWarning } from 'lucide-react';
 import type { CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
-import { EmptyState } from '../file-viewer/navigation/index.js';
-import { Button } from '../primitives/button.jsx';
+import { EmptyState, StatusAction } from '../file-viewer/navigation/index.js';
 import type { AppSetting, ColorSchemeSetting, LanguageSetting, ViewerHistory } from '../file-viewer/types.js';
 import { I18nProvider, translator } from '../i18n/index.js';
 import type { ViewerHost } from '../host/types.js';
@@ -238,7 +237,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const layout = settings.library.layout;
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
   // A file that will not open says why, with the way home where the host has one.
-  const goHome = useMemo(() => homed ? <Button size="sm" variant="outline" onClick={home}>{t("file.goHome")}</Button> : null, [homed, home, t]);
+  const goHome = useMemo(() => homed ? <StatusAction onClick={home}>{t("file.goHome")}</StatusAction> : null, [homed, home, t]);
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture}
       fileActions={host.fileActions} /> : undefined,
