@@ -46,6 +46,12 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   live: LiveRegistry;
   /** The file on screen, by its absolute path, or a document the engine holds by its id alone (a model's); `''` is none: the home. */
   file: string;
+  /**
+   * The name of the document `file` names, where the host knows it before the catalog has it (the
+   * library's card it was opened from, a document shown before): the navbar's name until the
+   * catalog's row names it. Without either, a document named by its id has its name's place empty.
+   */
+  name?: string;
   /** Show another file (absolute), or the home (`''`). */
   onShow(file: string): void;
   /**
@@ -112,7 +118,7 @@ const reportError = (error: Error) => console.error(error);
  * time, and only a model whose display is already built — the home never starts a build. It never
  * navigates: showing a file, or the home, is the host's `onShow`.
  */
-export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, onShown,
+export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, name, onShow, onShown,
   library, onThumbnail, colorScheme, language, appSettings, notice, fullSize, history, chrome, whatsNew, onError = reportError }: CadViewerProps<Model>) {
   // The language the host names: the pages drawn here (the home, a file that will not open) read in it.
   const locale = host.environment.locale;
@@ -250,7 +256,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // out of sight does, which is outside it.
   return <I18nProvider locale={locale}>
     <ControlUsageProvider report={host.usage?.controls}>
-    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
+    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
     {whatsNew && onScreen ? <WhatsNewDialog entry={whatsNew.entry} onDismiss={whatsNew.onDismiss} /> : null}

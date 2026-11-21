@@ -10,6 +10,7 @@ import { createWebCadClient } from './host/cadClient.js';
 import { keepAddressLink } from './host/addressLink.js';
 import { reloadOnStaleBuild } from './host/staleBuild.js';
 import App from './App';
+import { readDocumentId } from './client/workbench/fileParam.js';
 import { EngineStopped } from './EngineStopped';
 import { sessionTabRecord } from './persistence/tabRecord';
 import faviconUrl from './client/assets/favicon.png';
@@ -63,6 +64,12 @@ function onPageHide(event: PageTransitionEvent) { if (!event.persisted) dispose(
 window.addEventListener('pagehide', onPageHide);
 if (import.meta.hot) import.meta.hot.dispose(dispose);
 root.render(<StartingView />);
+// The document the URL names is asked for beside the description, into the client's catalog, so its
+// page's first frame has its name where the server says it in time; the paint never waits for it
+// (a slow answer, a document that is gone): its name's place stays empty until the catalog answers.
+const opening = readDocumentId();
+// Unsignalled, so the catalog read the page starts with shares this request (`client.refresh`).
+if (opening) void client.resolveEntry(opening).catch(() => {});
 // The person's language comes with the server's description, so the page's first paint is in it.
 void Promise.all([client.serverInfo({ signal: controller.signal }),
   client.language().then(reply => reply.locale, () => null)]).then(([server, language]) => {

@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@cad/ui/primitives/tab
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { useI18n } from "@cad/ui/i18n";
+import { isDocumentId } from "@cad/core/lib/cadRefs.js";
 import { cn } from "@cad/ui/utils";
 
 import logo from "../../assets/logo-c.svg";
@@ -217,7 +218,9 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
   const [open, setOpen] = useState(false);
   const mobile = useViewerMobile();
   const usage = useControlUsage();
-  const name = given || path.split("/").pop() || path;
+  // Until the host knows it, a file is named by its path's last segment; a document named by its id
+  // is never named by the id: its name's place is empty until its name is known.
+  const name = given || (isDocumentId(path) ? "" : path.split("/").pop() || path);
   if (!explorer && !recent) return <span className="flex min-w-0 items-center gap-1 px-1" data-file-name=""><span className="truncate">{name}</span></span>;
   // Opened, the tab's filter has the keyboard (the explorer's, or the Models tab's), so typing
   // finds a document at once; Down takes it into the rows. A phone keeps its keyboard down, the menu
@@ -311,7 +314,7 @@ export function SidebarIcon(props) {
  */
 function PanelToggleButton({ toggle }) {
   return <ToolbarButton label={toggle.label} shortcut={toggle.shortcut || ""} tooltipSide="right" expandedTooltip
-    aria-expanded={toggle.open} onClick={toggle.toggle} {...(toggle.hover ?? null)}
+    aria-expanded={toggle.open} aria-disabled={toggle.disabled || undefined} onClick={toggle.disabled ? undefined : toggle.toggle} {...(toggle.hover ?? null)}
     className="size-7 shrink-0 rounded-md text-muted-foreground [&>svg]:size-4!" data-navbar-panel="left">
     <SidebarIcon />
   </ToolbarButton>;

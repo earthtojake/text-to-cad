@@ -1,7 +1,7 @@
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { FileText } from "lucide-react";
 import { isDocumentId } from "@cad/core/lib/cadRefs.js";
-import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { Button } from "../primitives/button.jsx";
 import { Spinner } from "../primitives/spinner.js";
@@ -14,7 +14,7 @@ import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { I18nProvider, translator } from "../i18n/index.js";
 import { mayTakeKeyboard } from "./takeKeyboard.js";
 import { FilePanelContext, filePanelOf, withFilePanel } from "./filePanel.js";
-import { PanelTogglesContext } from "./panelToggles.js";
+import { DEFAULT_PANEL_WIDTH, PanelFrameContext, PanelTogglesContext, sidebarCollapsed, sidebarWant } from "./panelToggles.js";
 import { NavbarSlotsContext, NavbarViewSlotContext } from "./navbarSlots.js";
 import type { PanelToggles } from "./panelToggles.js";
 
@@ -29,7 +29,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page", layout }: FileViewerProps) {
+export function FileViewer({ file, name, filePath = null, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page", layout }: FileViewerProps) {
   // The language the host names (`environment.locale`): this frame's own strings, and everything
   // drawn under it (`I18nProvider`), the nodes the host hands it included.
   const locale = host.environment.locale;
@@ -61,7 +61,12 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   const onPreviewChange = useCallback((on: boolean) => { if (currentKey.current === key) setPreviewing(on ? key : null); }, [key]);
   const [readiness, setReadiness] = useState<{ key: string; ready: boolean } | null>(null);
   // The view's two panel toggles, which its frame says (`panelToggles.js`) and the navbar draws.
-  const [panelToggles, setPanelToggles] = useState<PanelToggles | null>(null);
+  // Keyed by the file it is said for: until this file's view says its own (or none), the navbar draws the one it
+  // will have (`pendingToggles`, below).
+  const [saidToggles, setSaidToggles] = useState<{ key: string; toggles: PanelToggles | null } | null>(null);
+  const setPanelToggles = useCallback((toggles: PanelToggles | null) => setSaidToggles({ key, toggles }), [key]);
+  const framed = useRef<string | null>(null);
+  const frameSaid = useCallback(() => { framed.current = key; }, [key]);
   // Home's controls' places in the navbar (`navbarSlots.js`), once the navbar has drawn them.
   const [homeLeft, setHomeLeft] = useState<HTMLElement | null>(null);
   const [homeRight, setHomeRight] = useState<HTMLElement | null>(null);
@@ -110,16 +115,63 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   const rendererBody = useMemo(() => {
     if (!shown) return null;
     const Renderer = shown.prepared.Component;
-    return <RenderBoundary key={key} title={t("file.displayFailed")} onError={onError}><PanelTogglesContext.Provider value={setPanelToggles}><FilePanelContext.Provider value={filePanel}><Renderer notice={notice} key={key} file={shown.file} source={source}
+    return <RenderBoundary key={key} title={t("file.displayFailed")} onError={onError}><PanelTogglesContext.Provider value={setPanelToggles}><PanelFrameContext.Provider value={frameSaid}><FilePanelContext.Provider value={filePanel}><Renderer notice={notice} key={key} file={shown.file} source={source}
       onPreviewChange={onPreviewChange} onReady={onReady} onNavigationActionsChange={onNavigationActionsChange}
       onOpenFile={onOpenFile} appearance={appearance}
-      state={rendererState} onStateChange={setRendererState} reload={reload} /></FilePanelContext.Provider></PanelTogglesContext.Provider></RenderBoundary>;
+      state={rendererState} onStateChange={setRendererState} reload={reload} /></FilePanelContext.Provider></PanelFrameContext.Provider></PanelTogglesContext.Provider></RenderBoundary>;
   }, [shown, key, onError, notice, source, onPreviewChange, onReady,
-    onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, filePanel, reload, t]);
+    onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, filePanel, reload, t, setPanelToggles, frameSaid]);
+
+  // The panel before the view is up — the file read, or the view's chunk loading, or the view mounted but its toggle not
+  // said yet: the navbar has its toggle from the page's first frame, in the state the view will open it in (the
+  // file's choice for this session, else open where the model keeps 640px beside it: `sidebars.js`), drawn
+  // disabled: the view's own opening over a narrow width is its frame's and cannot be handed to it, so a press here
+  // could not be kept as it would be. Open, the panel's frame stands in its place, at its width, its body empty
+  // (`data-panel-loading`), so nothing moves as the view takes over. A file that will not open has neither.
+  const bodyBox = useRef<HTMLDivElement | null>(null);
+  const [bodyWidth, setBodyWidth] = useState(0);
+  const pending = Boolean(path) && (loaded.status === "loading" || (loaded.status === "ready" && saidToggles?.key !== key));
+  useLayoutEffect(() => {
+    const element = bodyBox.current;
+    if (!pending || !element) return undefined;
+    const measure = () => setBodyWidth(Math.round(element.getBoundingClientRect().width));
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [pending]);
+  // The file's view as the tab keeps it, by its own path (the host's `filePath` while a document named by its id is read).
+  const keptPanel = useMemo(() => {
+    if (!pending) return {};
+    const paths = new Set([path, filePath].filter(Boolean));
+    for (const [stateKey, record] of Object.entries(state.renderers ?? {})) {
+      let kept: unknown;
+      try { kept = JSON.parse(stateKey)?.[0]; } catch { kept = null; }
+      if (typeof kept === "string" && paths.has(kept)) return filePanelOf(record) as { open?: boolean; width?: number };
+    }
+    return {};
+  }, [pending, path, filePath, state.renderers]);
+  const pendingWidth = keptPanel.width ?? DEFAULT_PANEL_WIDTH;
+  const pendingOpen = pending && !mobile && sidebarWant(keptPanel.open) && !sidebarCollapsed(bodyWidth, pendingWidth);
+  const pendingToggles = useMemo<PanelToggles | null>(() => (pending ? { left: { open: pendingOpen, disabled: true,
+    label: t(pendingOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: appearance.platform === "darwin" ? "⌘\\" : "Ctrl+\\", toggle: () => {} } } : null),
+    [pending, pendingOpen, appearance.platform, t]);
+  const panelToggles = saidToggles?.key === key && loaded.status === "ready" ? saidToggles.toggles : pendingToggles;
+  // A view with no frame (none said it is one as it rendered: `PanelFrameContext`) has no toggle, from its first frame.
+  useLayoutEffect(() => {
+    if (loaded.status === "ready" && framed.current !== key) setSaidToggles(previous => (previous?.key === key ? previous : { key, toggles: null }));
+  }, [loaded.status, key]);
 
   let body: ReactNode;
   if (loaded.status === "empty") body = presentation?.home ?? null;
-  else if (loaded.status === "loading") body = presentation?.loading ?? <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground" role="status"><Spinner className="size-3.5" />{t("file.opening")}</div>;
+  else if (loaded.status === "loading") {
+    const loading = presentation?.loading ?? <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground" role="status"><Spinner className="size-3.5" />{t("file.opening")}</div>;
+    body = pendingOpen ? <div className="flex h-full min-h-0">
+      <aside aria-hidden="true" className="relative h-full shrink-0 border-r border-border bg-sidebar" style={{ width: pendingWidth }} data-panel-loading="" />
+      <div className="min-w-0 flex-1">{loading}</div>
+    </div> : loading;
+  }
   else if (loaded.status === "error") body = presentation?.error?.({ message: loaded.message, missing: loaded.missing, error: loaded.error, reload: reloadCurrent }) ?? <EmptyState icon={FileText} title={t("file.openFailed")} description={loaded.message} tone="warn" />;
   else body = rendererBody;
   const shownActions = navActions?.key === key && ready ? navActions.actions : [];
@@ -182,11 +234,11 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   const homeSlots = useMemo(() => (navbar && !path && home ? { left: homeLeft, right: homeRight } : null), [navbar, path, home, homeLeft, homeRight]);
   return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><NavbarSlotsContext.Provider value={homeSlots}><NavbarViewSlotContext.Provider value={navbar && path ? viewSlot : null}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={layout ? undefined : mobile ? "mobile" : "desktop"} data-viewer-pinned-layout={layout} tabIndex={-1}>
     {navbar ? (path
-      ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name} kind={model ? "model" : "file"} explorer={explorer} recent={recentMenu} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}
-        panels={shown ? panelToggles : null} viewSlot={setViewSlot} />
+      ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name || name} kind={model ? "model" : "file"} explorer={explorer} recent={recentMenu} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}
+        panels={panelToggles} viewSlot={setViewSlot} />
       : <ViewerNavbar menu={menu} history={history} actions={navbarActions} homeSlots={home ? homeSlotRefs : null} />) : null}
     <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-      <div className="min-w-0 flex-1 overflow-hidden">{body}</div>
+      <div ref={bodyBox} className="min-w-0 flex-1 overflow-hidden">{body}</div>
       {overlay}
     </div>
   </div></NavbarViewSlotContext.Provider></NavbarSlotsContext.Provider></ViewerElementContext.Provider></ViewerHostContext.Provider></ViewerMobileContext.Provider></I18nProvider>;
