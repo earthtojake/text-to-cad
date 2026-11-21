@@ -207,7 +207,8 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   added only for something an agent got wrong without it, with the evidence in the pull
   request. A change to what a skill tells agents to do is tested A/B
   (`scripts/bench/skill_ab.py`), and a rewrite is audited against the text it replaced
-  ([writing a skill](docs/contributing/writing-a-skill.md)).
+  ([writing a skill](docs/contributing/writing-a-skill.md)). A skill's Setup block is
+  changed only with a person's explicit approval.
 - Keep relevant Markdown docs current when changing behavior, commands, or repo
   layout, but do not bloat `AGENTS.md`; use it only for durable repo-level
   rules and pointers.

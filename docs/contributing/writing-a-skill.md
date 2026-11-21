@@ -205,6 +205,12 @@ for word, and tests keep the copies from drifting:
   0.11.11 wrote. cad updates itself, so the block never has the agent update it. No skill runs the
   install script, and no skill pre-approves a tool (`allowed-tools`). A new skill copies the block
   from one beside it.
+
+  **The block is changed only with a person's explicit approval**, asked for by name: never as part
+  of a rewrite, a tidy-up or a fix that happens to reach it. It is what every agent runs first, on
+  every computer, and it installs software: a wrong word in it breaks every skill at once, for
+  people whose cad may no longer be able to fetch the correction. The release's version stamp is the
+  one change made without asking.
 - **Commands that last** (no test holds this one): a command, an option or a spelling the skills
   stop using keeps working, hidden if need be, for 30 days after the release that stopped using it.
   Say so in the pull request that removes it.
@@ -221,7 +227,8 @@ for word, and tests keep the copies from drifting:
       longer says what was weighed.
 - [ ] A skill that makes something has "Check each change".
 - [ ] Every example was run, and every command in a code block parses.
-- [ ] The Setup and Show the model blocks are the shared text where they apply.
+- [ ] The Setup and Show the model blocks are the shared text where they apply, and the Setup block
+      is as it was, or a person approved its change by name.
 - [ ] A change to what agents are told was run A/B, with the table in the pull request, and a
       rewrite was audited against the text it replaced.
 - [ ] A command the skill stops using still works for 30 days.
