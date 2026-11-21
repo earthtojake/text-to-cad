@@ -36,21 +36,24 @@ const DropdownMenuTrigger = React.forwardRef(/**
   ...props
 }, ref) {
   const menu = React.useContext(MenuOpenContext);
-  const finger = React.useRef(false);
-  // A mouse and a pen open the menu at the press (Radix's own). A finger opens it at its tap's click, as it opens a
+  // A finger's press on the trigger, and whether the menu was open as it landed.
+  const finger = React.useRef(null);
+  // A mouse and a pen open the menu at the press (Radix's own). A finger toggles it at its tap's click, as it opens a
   // popover: a menu opened at a finger's press was shut again by what the rest of the tap sends on a phone (held
-  // until no click came, it stayed). The press is marked handled, which is how Radix is told to leave it.
+  // until no click came, it stayed). The press is marked handled, which is how Radix is told to leave it. The tap
+  // toggles what the menu was as the finger landed: an open menu also shuts itself on that tap (a press outside its
+  // content), and reading its state at the click would open it again.
   return <DropdownMenuPrimitive.Trigger ref={ref} data-slot="dropdown-menu-trigger" {...props}
     onPointerDown={event => {
       onPointerDown?.(event);
-      finger.current = event.pointerType === "touch";
+      finger.current = event.pointerType === "touch" ? { open: Boolean(menu?.open) } : null;
       if (finger.current) event.preventDefault();
     }}
     onClick={event => {
       onClick?.(event);
-      if (!finger.current) return;
-      finger.current = false;
-      if (!event.defaultPrevented) menu?.change(!menu.open);
+      const press = finger.current;
+      finger.current = null;
+      if (press && !event.defaultPrevented) menu?.change(!press.open);
     }} />;
 });
 
