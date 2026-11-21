@@ -357,7 +357,9 @@ renumbers the list and every citation in the same change.
     installs it), its app in the person's hands. So cad adds no command that only passes arguments on
     and no helper that renames a tool's function: a skill teaches the tool's way instead.
     *Pressure-test*: delete the helper and write what a skill would say in its place. If that is the
-    tool's own command or call and nothing is lost, the helper was a wrapper.
+    tool's own command or call and nothing is lost, the helper was a wrapper. `flat_pattern` and the
+    five helpers beside it were: each gave what build123d's own `Plane.to_local_coords`, `offset` and
+    `fuse` give, to the last digit.
 29. **A producer regenerates a file from code; an edit changes a native file in place.** *The
     package.* A producer is the engine's (law 25): a file decorator declares a persistent script's
     output, and the file is written again from the model whenever it runs. An edit is a native file's
@@ -426,7 +428,7 @@ src/cad/
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
-                         #   measurements of native geometry (_geometry), flat patterns (_flatten),
+                         #   measurements of native geometry (_geometry),
                          #   the manufacturing checks of exact geometry (_dfm_brep, the core; _dfm_cnc,
                          #   _dfm_sheet with unfold, _dfm_molding, _dfm_printing; _dfm_dxf, a cut file;
                          #   _dfm_check, the entry), the interference check's measuring

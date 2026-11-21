@@ -6,9 +6,9 @@ An MJCF is MuJoCo's own file and no document type: cad writes one and asks MuJoC
 reads or shows one itself. ``check`` compiles a model with MuJoCo's own compiler and answers a check's result
 -- what MuJoCo refused or warned of, in its words, the model-health checks, what the model collides as and
 its contact excludes (``_check``; ``cad mujoco check FILE`` is its command, the integration's one operation
-in ``cad.registry``). ``compile_model`` and ``compile_findings`` are the compile alone. ``cad run
-mujoco-studio --model FILE`` shows the person a model in Studio's web viewer (``_command``: the environment's
-own ``mujoco-studio``).
+in ``cad.registry``). The compile alone is MuJoCo's own (``mujoco.MjModel.from_xml_path``), and no name here
+repeats it. ``cad run mujoco-studio --model FILE`` shows the person a model in Studio's web viewer
+(``_command``: the environment's own ``mujoco-studio``).
 
 What it does for every document: ``spec`` makes one a ``mujoco.MjSpec`` (``_spec``): a model call's
 handle, a build123d shape, a STEP or an xbf described as a robot and written as the engine's MJCF
@@ -30,7 +30,7 @@ from pathlib import Path
 
 from cad.results import CheckResult
 
-__all__ = ["check", "collisions", "compile_findings", "compile_model", "decompose", "fit", "parts", "save", "spec"]
+__all__ = ["check", "collisions", "decompose", "fit", "parts", "save", "spec"]
 
 
 def check(path: Path, *, strict: bool = False, verbose: bool = False) -> CheckResult:
@@ -49,24 +49,6 @@ def check(path: Path, *, strict: bool = False, verbose: bool = False) -> CheckRe
     from cad.mujoco._check import check as _check
 
     return _check(path, strict=strict, verbose=verbose)
-
-
-def compile_model(path):
-    """The model at ``path`` compiled by MuJoCo (``mujoco.MjModel``), its compile warnings beside it, as
-    ``(model, warnings)``; MuJoCo's ``ValueError`` for a model it refuses."""
-    from cad.mujoco._compile import compile_model as _compile
-
-    return _compile(path)
-
-
-def compile_findings(path, *, mode="auto"):
-    """Compile the MJCF at ``path`` with MuJoCo and answer findings (``cad._internal.findings.FindingsReport``):
-    an error with MuJoCo's words for a model it refuses, a warning for each compile warning, an info saying the
-    compile passed or was skipped (``mode`` ``auto``, mujoco not installed here); ``required`` without mujoco
-    is an error naming the extra."""
-    from cad.mujoco._compile import compile_findings as _findings
-
-    return _findings(path, mode=mode)
 
 
 def spec(thing, *, assets=None, tolerance=None, zero=None):
@@ -127,3 +109,9 @@ def save(spec, path):
     from cad.mujoco._save import save as _save
 
     return _save(spec, path)
+
+
+def __getattr__(name: str):
+    from cad._internal.aliases import lookup
+
+    return lookup(__name__, name)
