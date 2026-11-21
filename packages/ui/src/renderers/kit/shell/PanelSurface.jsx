@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { cn } from "@cad/ui/utils";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
+// The surface's metrics, shared with the file viewer's stand-in drawn before the view is up (`file-viewer/FileViewer.tsx`).
+import { PANEL_HEAD_ROW_PX, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX } from "../../../file-viewer/panelToggles.js";
 
 // The surface the view's one panel is (`FlatPanel.jsx`, at the view's left): the chrome's colour, the navbar's (a step
 // off the canvas, so the frame reads apart from the picture), its 1px rule on its right side, its type scope
@@ -15,10 +17,9 @@ import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 // row's last action's glyph and every right-hand value. The body pads by it; a box drawn round what is read (a tab's
 // pill, a row's fill, the search box) hangs out past the line by its own padding: a row's by half the inset
 // (`--tree-row-hang`), the head's tabs and icon buttons by theirs (`headInsets`).
-// Vertically the panel is on one 8px step: 8px over the head's row (32px: the tabs, or the search box, and the 28px
-// buttons), 8px under it to its rule. A head that is one title (`headCompact`) is a list row's height instead (28px),
-// 8px over it and nothing under it, so its list starts the body's 4px under it.
-export const PANEL_SURFACE_PX = 8;
+// Vertically the panel is on one 8px step: 8px over the head's row (`PANEL_HEAD_ROW_PX`, 32px: the tabs, a lone title
+// or the search box, and the 28px buttons), 8px under it to its rule, whatever the row holds.
+export { PANEL_HEAD_ROW_PX, PANEL_SURFACE_PX };
 /** A peeking panel's elevation over the view: the floating chrome's shadow (`lib/floatingSurface.js`'s `shadow-md`). */
 export const PANEL_PEEK_ELEVATION_CLASS = "shadow-md";
 /**
@@ -44,11 +45,6 @@ const PEEK_CONTENT_STYLE = Object.freeze({ clipPath: `inset(${PANEL_PEEK_GAP_PX 
  */
 const PEEK_IN_CLASS = "animate-in slide-in-from-left duration-150 ease-out motion-reduce:animate-none";
 const PEEK_OUT_CLASS = "animate-out slide-out-to-left fill-mode-forwards duration-150 ease-in motion-reduce:animate-none";
-const HALF_INSET = "calc(var(--panel-inset) / 2)";
-// A row's fill hangs half the inset out past the line and its glyph stands half the inset into it; its last action's
-// glyph ends the inset from the panel's right (half the inset, less that button's own 2px).
-const PANEL_ROW_VARIABLES = Object.freeze({ "--tree-row-pad": HALF_INSET, "--tree-row-hang": HALF_INSET,
-  "--tree-row-actions-pad": "calc(var(--panel-inset) / 2 - 2px)" });
 const NO_HEAD_INSETS = Object.freeze({ start: 0, end: 0 });
 const KEY_NUDGE_PX = 16;
 
@@ -100,13 +96,11 @@ export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
 }
 
 /**
- * The panel itself: `<aside>` on the panel surface, its head (`head`, the row's contents, pinned; its rule under it unless
- * `headStack`: a head of two rows, one over the other (the view's panel's search over its tabs).
- * `headRule` is false: a head that is its body's own title, which flows straight into it; `headCompact`, that title a
- * list row's height with nothing under it; `null`, no pinned row), ONE scroller round `children`, and its grip (none on
- * a phone's page or a peek).
+ * The panel itself: `<aside>` on the panel surface, its head (`head`, the row's contents, pinned, the one block; its rule
+ * under it unless `headRule` is false; `null`, no pinned row), ONE scroller round `children`, and its grip (none on a
+ * phone's page or a peek).
  * @param {{ mode: "push" | "page", label: string, open: boolean, hidden?: boolean,
- *   width: number, grip: ReturnType<typeof usePanelWidth>["grip"] | null, gripLabel: string, head: import("react").ReactNode, headRule?: boolean, headCompact?: boolean,
+ *   width: number, grip: ReturnType<typeof usePanelWidth>["grip"] | null, gripLabel: string, head: import("react").ReactNode, headRule?: boolean,
  *   headRef?: import("react").Ref<HTMLDivElement>, headProps?: object, headInsets?: { start: number, end: number },
  *   scrollerRef?: import("react").Ref<HTMLElement>, scrollerProps?: object, onKeyDown?: (event: KeyboardEvent) => void,
  *   children?: import("react").ReactNode, peek?: boolean, asideRef?: import("react").Ref<HTMLElement> }} props
@@ -116,14 +110,14 @@ export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
  *   the docked panel's is, sliding in; `peekLeaving`, that peek sliding out (`data-panel-peek-leaving`), and
  *   `onPeekExited` once it is out. Other props (`data-*`, handlers) go on the `<aside>`.
  */
-export function PanelSurface({ mode, label, open, hidden = false, width, grip, gripLabel, head, headRule = true, headCompact = false, headStack = false, headRef, headProps = {},
+export function PanelSurface({ mode, label, open, hidden = false, width, grip, gripLabel, head, headRule = true, headRef, headProps = {},
   headInsets = NO_HEAD_INSETS, scrollerRef, scrollerProps = {}, onKeyDown, peek = false, peekLeaving = false, onPeekExited, asideRef, children, ...props }) {
   const page = mode === "page";
   const peeking = mode === "push" && peek;
-  const headNode = head === null ? null : <div ref={headRef} className={cn("box-content flex shrink-0 gap-1 border-b", headStack ? "flex-col items-stretch" : "items-center", headStack ? null : headCompact ? "h-7" : "h-8", headRule ? "border-border" : "border-transparent")}
-      style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: headCompact ? 0 : PANEL_SURFACE_PX,
+  const headNode = head === null ? null : <div ref={headRef} className={cn("box-content flex shrink-0 items-center gap-1 border-b", headRule ? "border-border" : "border-transparent")}
+      style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX, height: PANEL_HEAD_ROW_PX,
         paddingLeft: `calc(var(--panel-inset) - ${headInsets.start}px)`, paddingRight: `calc(var(--panel-inset) - ${headInsets.end}px)` }} data-panel-head="" data-rule={headRule ? "" : undefined}
-      data-compact={headCompact ? "" : undefined} {...headProps}>{head}</div>;
+      {...headProps}>{head}</div>;
   const scroll = <ScrollArea className="min-h-0 flex-1" viewportRef={scrollerRef} viewportProps={{ "data-panel-scroller": "", ...scrollerProps }}>
       {children}
     </ScrollArea>;

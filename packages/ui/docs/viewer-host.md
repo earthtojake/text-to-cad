@@ -537,7 +537,9 @@ not). Before the view is up (its file being read, its chunk loading, or its fram
 in `state.renderers`, by its own path or the host's `filePath`) at any width, else open where the model keeps 640px
 beside the default-width panel, closed on a phone; `aria-disabled` until the view takes it over, as a press is the
 view's to keep. Open, the panel's frame stands in its place at the width the view will draw (the kept one within the
-grip's bounds, `clampPanelWidth`), its body empty (`data-panel-loading`), so nothing moves as the view mounts; a view with no frame (none says so as it renders,
+grip's bounds, `clampPanelWidth`; `data-panel-loading`), drawn as the view's panel is while its file loads: the head's
+one block (a bar where a lone title's name will stand) over its rule, then the placeholder rows, busy, on the same lines
+(`panelToggles.js`'s metrics), so nothing moves as the view mounts; a view with no frame (none says so as it renders,
 `PanelFrameContext`) has none, and a file that will not open has neither. The view's own toggle comes with the pointer handlers the frame hands with it (`hover`): a mouse resting on it peeks the collapsed panel over
 the model as a floating card, pushing nothing, until the pointer leaves both (only the toggle's click, or ⌘\, pins it);
 otherwise a collapsed panel leaves nothing over the model.

@@ -11,6 +11,7 @@ import { ToolStackContext } from "../tools/ToolStack.jsx";
 import { FilePanelContext, hasLegacyFilePanel, legacyFilePanel, legacyFilePanelTab, readFilePanel, withoutLegacyFilePanel } from "../../../file-viewer/filePanel.js";
 import { PanelSurface, usePanelWidth } from "./PanelSurface.jsx";
 import { DEFAULT_PANEL_WIDTH, MAX_PANEL_WIDTH, MIN_PANEL_WIDTH, clampPanelWidth } from "./sidebars.js";
+import { PANEL_SURFACE_PX } from "../../../file-viewer/panelToggles.js";
 
 /**
  * The view's one panel, the sidebar (`ViewFrame.jsx`), docked at the view's left edge the way KiCad's Appearance
@@ -522,7 +523,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
       </div> : searchButton}
     </>}>
       <FlatPanelContext.Provider value={panel}>
-        <div ref={body} className="group/body flex flex-col px-(--panel-inset) py-2" data-flat-panel-body="">
+        <div ref={body} className="group/body flex flex-col px-(--panel-inset)" style={BODY_STYLE} data-flat-panel-body="">
           {sections ? <ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider> : tabs.map(entry => {
             // Searching several tabs, each that finds something is a group of the one list, under its name and count.
             const group = grouped && groups.includes(entry.id);
@@ -543,6 +544,8 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   return aside;
 }
 
+/** The body's 8px over its first row and under its last (`panelToggles.js`'s step), as the page's stand-in has it. */
+const BODY_STYLE = Object.freeze({ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX });
 /** A tab's pill's padding either side of its name (`px-1.5` in `TAB_CLASS`, and the one tab's title's): the same as above
  * and below its 16px line in the 28px pill, so the pill is as padded across as it is tall, and its box stands as far
  * from the panel's left edge as from its top (10px; 6px inside the peek card). */

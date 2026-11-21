@@ -756,7 +756,9 @@ panel nor its toggle comes in late and pushes the model aside, and it is open or
 is in; a load that fails has none. **While the file loads, a structure tab with no row yet shows placeholder rows**
 (`FlatPanel.jsx`'s `FlatPanelRowsLoading`, `primitives/tree-row.jsx`'s `TreeRowsLoading`, in the pinned panel, a peek
 and a phone's sheet alike): six of the rows' own 28px lines, the first where the tab's first row will stand (under
-the head's one block, 8px into the body), each a block the glyph's size on the inset and a bar where
+the head's one block, 8px into the body; the page's own stand-in for the panel before any view is up,
+`FileViewer`'s `data-panel-loading`, draws the same block, a bar where a lone title's name will stand, and the same rows
+on the same lines: `file-viewer/panelToggles.js`'s metrics), each a block the glyph's size on the inset and a bar where
 a name starts, of uneven widths, fading out downwards, in the muted ink, pulsing gently (still where less motion is
 asked for); its tabpanel `aria-busy`, and "Loading" said to assistive technology. No spinner and no words in the panel:
 the view's loading cover says what is loading. They go as the tab's first row is drawn (an engine document's tree
@@ -1506,7 +1508,10 @@ Light, `normalizeViewportBackground`). `@cad/core/lib/viewportTheme.js`
 writes the looks out once with the scene's own colours; `kit/look/useViewportTheme.js` resolves it for a view.
 **Everything drawn in the model area follows it, never the app's theme**: the scene (its background, lighting and
 environment, edges and outlines, the grid and its axes), the cube, the labels, chips and hover tip over the picture
-(the canvas box is a `.light` or `.dark` token scope, `ViewFrame.jsx`), the loading cover, the corner's bare buttons
+(the canvas box is a `.light` or `.dark` token scope, `ViewFrame.jsx`), the loading cover — the view's, and the page's
+own before any view is up (`file-viewer/presentation`'s `ViewerLoadingOverlay`, handed the tab's Background by
+`CadViewer`), on the viewport's canvas with its words, mark and bar in that scheme's ink, so a document page never
+flashes from one background to the other before its picture — the corner's bare buttons
 and their halo, a 2D view's paper and strokes (a drawing's, a board's, a schematic's), and Preview's studio, which
 takes the viewport's light or dark but keeps its own backdrop colour: Preview is a photographic render whose backdrop
 and floor are its own settings (Background colour, Floor), so it does not take the canvas's gradient. Chrome on a

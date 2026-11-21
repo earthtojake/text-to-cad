@@ -56,7 +56,7 @@ it('draws a single tab as a plain title in the tabs\' own block, the search an i
   expect([screen.queryAllByRole('tab').length, screen.queryByRole('tablist'), title.textContent]).toEqual([0, null, 'Model']);
   // Its name on the inset, as a tab's is: the title pads as a pill does (6px), the row the inset less that.
   expect([title.classList.contains('font-medium'), title.classList.contains('px-1.5'), title.classList.contains('h-7')]).toEqual([true, true, true]);
-  const block = () => [row().classList.contains('border-border'), row().hasAttribute('data-compact'), row().classList.contains('h-8'),
+  const block = () => [row().classList.contains('border-border'), row().hasAttribute('data-compact'), row().style.height === '32px',
     [row().style.paddingTop, row().style.paddingBottom, row().style.paddingLeft], document.querySelector('[data-flat-panel-body]')!.className];
   const one = block();
   expect(one.slice(0, 4)).toEqual([true, false, true, ['8px', '8px', 'calc(var(--panel-inset) - 6px)']]);
@@ -112,7 +112,7 @@ function Walk({ items, onPick = () => {} }: { items: string[], onPick?: (item: s
 const section = (id: string) => document.querySelector<HTMLElement>(`[data-flat-panel-section="${id}"]`)!;
 const shownSections = () => [...document.querySelectorAll<HTMLElement>('[data-flat-panel-section]')].filter(node => !node.hidden).map(node => node.getAttribute('data-flat-panel-section'));
 const cursorAt = () => [...document.querySelectorAll('[data-cursor]')].map(node => node.textContent);
-const headBox = () => ({ compact: row().hasAttribute('data-compact'), rule: row().classList.contains('border-border'), height: row().className.match(/\bh-[78]\b/)?.[0],
+const headBox = () => ({ compact: row().hasAttribute('data-compact'), rule: row().classList.contains('border-border'), height: row().style.height,
   padding: [row().style.paddingTop, row().style.paddingBottom, row().style.paddingLeft, row().style.paddingRight] });
 
 // The search's icon (or /) makes the head's row the search box: the same row, its padding, height and rule as they
@@ -170,7 +170,7 @@ it('searches the one tree from any tab and gives the open tab back as the query 
   render(<Panel tabs={[{ id: 'layers', label: 'Layers', content: <Walk items={['CUT', 'BEND']} /> }]} first="layers" />);
   const title = headBox();
   fireEvent.click(searchIcon()!);
-  expect([title.compact, title.rule, title.height, headBox(), row().querySelector('[data-flat-panel-heading]')]).toEqual([false, true, 'h-8', title, null]);
+  expect([title.compact, title.rule, title.height, headBox(), row().querySelector('[data-flat-panel-heading]')]).toEqual([false, true, '32px', title, null]);
 });
 
 // Where no tab is searchable (Parameters, Joints and Animation alone), there is no search icon, and / opens nothing.

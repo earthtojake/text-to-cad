@@ -14,7 +14,8 @@ import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { I18nProvider, translator } from "../i18n/index.js";
 import { mayTakeKeyboard } from "./takeKeyboard.js";
 import { FilePanelContext, filePanelOf, withFilePanel } from "./filePanel.js";
-import { PanelFrameContext, PanelTogglesContext, clampPanelWidth, sidebarLayout } from "./panelToggles.js";
+import { PANEL_HEAD_ROW_PX, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX, PanelFrameContext, PanelTogglesContext, clampPanelWidth, sidebarLayout } from "./panelToggles.js";
+import { TreeRowsLoading } from "../primitives/tree-row.jsx";
 import { NavbarSlotsContext, NavbarViewSlotContext } from "./navbarSlots.js";
 import type { PanelToggles } from "./panelToggles.js";
 
@@ -126,9 +127,11 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // said yet: the navbar has its toggle from the page's first frame, in the state the view will open it in (the one
   // rule, `sidebarLayout`: the person's choice on the file for this session at any width, else open where the model
   // keeps 640px beside the default-width panel), drawn disabled: a press is the view's to take and keep (its frame
-  // writes the choice to the file's entry), so one here does nothing. Open, the panel's frame stands in its place, at the width the
-  // view will draw (the kept one within its bounds, `clampPanelWidth`), its body empty (`data-panel-loading`), so
-  // nothing moves as the view takes over. A file that will not open has neither.
+  // writes the choice to the file's entry), so one here does nothing. Open, the panel's frame stands in its place, at the
+  // width the view will draw (the kept one within its bounds, `clampPanelWidth`; `data-panel-loading`), drawn as the
+  // view's own panel is while its file loads: the head's one block (a bar where a lone title's name will be: the tabs are
+  // not known yet) over its rule, and the placeholder rows (`TreeRowsLoading`) where the first rows will stand, on the
+  // same lines (`panelToggles.js`'s metrics), so nothing moves as the view takes over. A file that will not open has neither.
   const bodyBox = useRef<HTMLDivElement | null>(null);
   const [bodyWidth, setBodyWidth] = useState(0);
   const pending = Boolean(path) && (loaded.status === "loading" || (loaded.status === "ready" && saidToggles?.key !== key));
@@ -169,7 +172,14 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   else if (loaded.status === "loading") {
     const loading = presentation?.loading ?? <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground" role="status"><Spinner className="size-3.5" />{t("file.opening")}</div>;
     body = pendingOpen ? <div className="flex h-full min-h-0">
-      <aside aria-hidden="true" className="relative h-full shrink-0 border-r border-border bg-sidebar" style={{ width: pendingWidth }} data-panel-loading="" />
+      <aside aria-busy="true" className="relative flex h-full shrink-0 flex-col border-r border-border bg-sidebar text-ui" style={{ ...PANEL_ROW_VARIABLES, width: pendingWidth }}
+        data-panel-loading="">
+        <div aria-hidden="true" className="box-content flex shrink-0 items-center border-b border-border px-(--panel-inset)"
+          style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX, height: PANEL_HEAD_ROW_PX }} data-panel-head="">
+          <span className="block h-2 w-12 rounded-full bg-muted-foreground/20 motion-safe:animate-pulse" data-panel-loading-title="" />
+        </div>
+        <div className="flex flex-col px-(--panel-inset)" style={{ paddingTop: PANEL_SURFACE_PX }}><TreeRowsLoading label={t("spinner.loading")} /></div>
+      </aside>
       <div className="min-w-0 flex-1">{loading}</div>
     </div> : loading;
   }

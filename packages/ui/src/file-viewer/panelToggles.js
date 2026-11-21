@@ -93,3 +93,21 @@ export function sidebarLayout({ frameWidth, choice, has }) {
 /** A width as the panel draws it: the person's (or the default), within the fixed bounds, whatever was stored. */
 export const clampPanelWidth = (width, minWidth = MIN_PANEL_WIDTH) =>
   Math.round(Math.min(MAX_PANEL_WIDTH, Math.max(minWidth, Number(width) || DEFAULT_PANEL_WIDTH)));
+
+// The panel surface's metrics the file viewer's stand-in for it needs too (`renderers/kit/shell/PanelSurface.jsx` and
+// `FlatPanel.jsx` use these): drawn before any view is up, it stands exactly where the view's loading panel will.
+
+/** The panel's vertical step: 8px over the head's row, 8px under it to its rule, and 8px from the rule to the body's first row. */
+export const PANEL_SURFACE_PX = 8;
+/**
+ * The head's row: ONE block whatever it holds (a lone title, the tabs, the search box): 32px (the 28px pills and
+ * buttons and 4px), between its two 8px steps, over its 1px rule.
+ */
+export const PANEL_HEAD_ROW_PX = 32;
+/**
+ * The rows' horizontal geometry the panel sets (`primitives/tree-row.jsx` reads it): a row's fill hangs half the inset
+ * out past the line and its glyph stands half the inset into it; its last action's glyph ends the inset from the
+ * panel's right (half the inset, less that button's own 2px).
+ */
+export const PANEL_ROW_VARIABLES = Object.freeze({ "--tree-row-pad": "calc(var(--panel-inset) / 2)", "--tree-row-hang": "calc(var(--panel-inset) / 2)",
+  "--tree-row-actions-pad": "calc(var(--panel-inset) / 2 - 2px)" });
