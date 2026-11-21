@@ -602,6 +602,7 @@ class _Analysis:
         self.breaks: dict[int, float] = {}        # chamfers and rounds of a cut edge: face -> its depth along t
         self.break_skins: dict[int, set[int]] = {}  # each one's skins (the side it breaks)
         self.bend_breaks: dict[int, int] = {}     # the breaks of a bend's ends: face -> the bend face it breaks
+        self.bend_rounds: set[int] = set()        # those rounded whole, from one of its cylinders to the other
         self.formed: set[int] = set()             # cones, tori, freeform faces a thickness across: formed
         self.countersinks: dict[int, float] = {}
         self.wall_of: dict[int, int] = {}
@@ -1021,7 +1022,8 @@ class _Analysis:
         """The chamfers and rounds of a bend's ends (``bend_breaks``, and ``breaks`` with the skins' own): a
         cone or a torus about the bend's axis beside one of its cylinders, within the sheet and no deeper than
         it, at a cut edge or at a flange's break. A cut edge broken along a flange is broken round the bend
-        too."""
+        too, and one rounded whole round it (a full round, r = t/2: a torus from one cylinder to the other,
+        which touches both sides and so was read as a cut edge) is a break too (``bend_rounds``)."""
         t, tol = float(self.thickness), self.tolerance
         for c in sorted(self.bend_faces):
             cylinder = self.surfaces[c - 1]
@@ -1029,7 +1031,12 @@ class _Analysis:
             into = 1.0 if cylinder.concave else -1.0  # the sheet lies outside a bend's inside face
             for b in sorted(self.neighbors[c]):
                 surface = self.surfaces[b - 1]
-                if b in paired or b in self.countersinks or b in self.edge_set or b in self.breaks \
+                # a full round of the sheet's side run on round the bend: a torus about its axis, t/2 round,
+                # between its two cylinders
+                whole = b in self.edge_set and surface.kind == "torus" and \
+                    abs(float(surface.minor_radius or 0.0) - t / 2) <= tol and \
+                    bool(self.neighbors[b] & self.partners.get(c, set()))
+                if b in paired or b in self.countersinks or (b in self.edge_set and not whole) or b in self.breaks \
                         or surface.kind not in ("cone", "torus") or not self._coaxial(cylinder, surface, 1e-3) \
                         or float(surface.minor_radius or 0.0) > t + tol \
                         or not self.neighbors[b] & (self.edge_set | set(self.breaks)):
@@ -1040,6 +1047,9 @@ class _Analysis:
                     continue
                 self.breaks[b] = float(depth.max() - depth.min())
                 self.bend_breaks[b] = c
+                if whole:
+                    self.bend_rounds.add(b)
+                    self.edge_set.discard(b)
 
     def _full_rounds(self) -> None:
         """A cut edge rounded whole, from one skin to the other (a full round, r = t/2): a convex cylinder along
@@ -1267,6 +1277,15 @@ class _Analysis:
         if self._sheet_volume is None:
             cut = 0.0
             for a, c in self.bend_breaks.items():
+                if a in self.bend_rounds:
+                    # rounded whole, from one cylinder to the other: what it cut runs out to the outline's plane
+                    # square to the axis, where the round is widest (the prisms up to it, as up to a skin)
+                    surface = self.surfaces[a - 1]
+                    axis, centre = np.array(surface.axis, dtype=float), np.array(surface.origin, dtype=float)
+                    side = 1.0 if float(((self._boundary([a], per_edge=3) - centre) @ axis).mean()) > 0.0 else -1.0
+                    cut += _cut_below(self.faces[a - 1], [(centre + side * float(surface.minor_radius) * axis,
+                                                           side * axis)])
+                    continue
                 cylinder = self.surfaces[c - 1]
                 cut += _cut_about(self.faces[a - 1], np.array(cylinder.origin), np.array(cylinder.axis),
                                   float(cylinder.radius))
@@ -1442,8 +1461,8 @@ class _Analysis:
                 pieces.extend(self._strip(bend))
                 # its ends' breaks: the cylinder stops short of the cut as a skin does, so each is unrolled too
                 faces = {*bend.side_faces, *bend.other_faces}
-                broken.extend(piece for b, c in self.bend_breaks.items() if c in faces
-                              for piece in [self._unrolled(b, bend)] if piece is not None)
+                broken.extend(piece for b, c in self.bend_breaks.items() if c in faces for half in self._bend_halves(b)
+                              for piece in [self._unrolled(b, bend, half)] if piece is not None)
         if not pieces:
             return
         overlap = _overlap(pieces)
@@ -1596,11 +1615,32 @@ class _Analysis:
                                         sorted(self.neighbors[a] | {a})))
         return pieces
 
-    def _unrolled(self, ordinal: int, bend: _Bend) -> Any | None:
-        """A bend's end's break unrolled with its bend (its outline about the axis, as the strip's), or None."""
+    def _bend_halves(self, ordinal: int) -> list[Any]:
+        """A bend's end's break, as it is unrolled: a full round in its two halves, split where it is widest, at
+        the cylinder midway through the sheet (whole, its outline unrolls onto itself); any other whole."""
         import build123d as bd
 
-        face = self.faces[ordinal - 1]
+        face, surface = self.faces[ordinal - 1], self.surfaces[ordinal - 1]
+        if ordinal not in self.bend_rounds:
+            return [face]
+        t = float(self.thickness)
+        axis, origin = np.array(surface.axis, dtype=float), np.array(surface.origin, dtype=float)
+        reach = 4.0 * (float(surface.radius) + t)
+        try:
+            middle = bd.Solid.make_cylinder(float(surface.radius), 2 * reach,
+                                            bd.Plane(tuple(origin - reach * axis), z_dir=tuple(axis)))
+            wall = middle.faces().filter_by(bd.GeomType.CYLINDER)[0]
+            halves = [half for half in face.split(wall, keep=bd.Keep.ALL) if isinstance(half, bd.Face)]
+        except Exception:  # noqa: BLE001 - a round that does not split is unrolled whole
+            return [face]
+        return halves if len(halves) == 2 else [face]
+
+    def _unrolled(self, ordinal: int, bend: _Bend, face: Any = None) -> Any | None:
+        """A bend's end's break (or ``face``, a part of it) unrolled with its bend (its outline about the axis,
+        as the strip's), or None."""
+        import build123d as bd
+
+        face = self.faces[ordinal - 1] if face is None else face
         outer, _, _ = _wire_loop(face.outer_wire().wrapped, face.wrapped, self._unroll(bend))
         polygon = _simplify(outer.points)
         if len(polygon) < 3:
@@ -1719,6 +1759,8 @@ class _Analysis:
             if touched & set(self.breaks):
                 continue  # a hole with a broken edge: read back from the flat, at its cut size
             loop, points3, _ = _wire_loop(wire.wrapped, face.wrapped, mapping)
+            if len(loop.points) < 3:
+                continue  # a point the skin is touched at (a full round's corner): one degenerate edge, no hole
             self._hole(wire, face, loop, points3)
 
     def _hole(self, wire: Any, face: Any, loop: plane.Loop, points3: np.ndarray, in_bend: bool = False) -> None:

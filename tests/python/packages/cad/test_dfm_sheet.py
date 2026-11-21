@@ -1039,6 +1039,75 @@ class ModellingMistakeTest(unittest.TestCase):
                 self.assertEqual([f.code for f in result.findings if f.severity == "warning"], ["sheet.edge_break"])
                 self.assertEqual(len(sheet.unfold(part).faces()), 1)
 
+    def test_a_full_round_run_on_round_a_bend_is_unrolled_with_it(self) -> None:
+        # a bracket's side edges rounded whole along its flanges and round its bends: round a bend the round is
+        # a torus from one of its cylinders to the other, which was read as the cut edge, so the bend's strip
+        # stopped at the skins, a t/2 short of the round on each such side (48 mm of a 50 mm bend) and the
+        # flanges' rounds ran on past it (sheet.bend_relief_width, a relief 0 mm wide): FAILED. Where the whole
+        # outline is rounded, a corner's round touches the skin at a point, which the skin holds as a wire of
+        # one degenerate edge, and the holes were not measured (measurement_failed)
+        def centre(steps: list[tuple], t: float) -> bd.Wire:
+            """``profile``'s path a t/2 into the sheet (its bends turning left only), in XZ as ``bent`` places it."""
+            x, y, heading, edges = 0.0, 0.0, 0.0, []
+            for step in steps:
+                dx, dy = math.cos(heading), math.sin(heading)
+                if step[0] == "line":
+                    start = (x - t / 2 * dy, y + t / 2 * dx)
+                    edges.append(bd.Line(start, (start[0] + step[1] * dx, start[1] + step[1] * dy)))
+                    x, y = x + step[1] * dx, y + step[1] * dy
+                    continue
+                _, angle, inside = step
+                cx, cy = x - (inside + t) * dy, y + (inside + t) * dx
+                first = math.atan2(y - cy, x - cx)
+                edges.append(bd.CenterArc((cx, cy), inside + t / 2, math.degrees(first), angle))
+                x, y = cx + (inside + t) * math.cos(first + math.radians(angle)), \
+                    cy + (inside + t) * math.sin(first + math.radians(angle))
+                heading += math.radians(angle)
+            return bd.Plane.XZ * bd.Wire(edges)
+
+        def tube(path: bd.Wire, t: float) -> bd.Part:
+            edge = path.edges()[0]
+            ring = bd.Face(bd.Wire(bd.Edge.make_circle(t / 2, bd.Plane(edge @ 0, z_dir=edge % 0))))
+            return bd.sweep(ring, path=path, transition=bd.Transition.ROUND)
+
+        def rounded(steps: list[tuple], t: float, width: float, sides: int) -> bd.Part:
+            """The bracket ``width`` wide, ``sides`` of its sides rounded whole, or (3) its whole outline."""
+            if sides < 3:
+                part = bd.Pos(0, t / 2 * (sides - 1), 0) * bent(steps, t, width - t / 2 * sides)
+                for y in (width - t / 2, t / 2)[:sides]:
+                    part = part + tube(bd.Pos(0, y, 0) * centre(steps, t), t)
+                return part
+            inner = [("line", steps[0][1] - t / 2), *steps[1:-1], ("line", steps[-1][1] - t / 2)]
+            near, far = (bd.Pos(t / 2, y, 0) * centre(inner, t) for y in (t / 2, width - t / 2))
+            path = bd.Wire([*near.edges(), bd.Line(near @ 1, far @ 1), *reversed(far.edges()),
+                            bd.Line(far @ 0, near @ 0)])
+            return bd.Pos(t / 2, t / 2, 0) * bent(inner, t, width - t) + tube(path, t)
+
+        l_steps = [("line", 30), ("bend", 90, 2.0), ("line", 40)]
+        u_steps = [("line", 30), ("bend", 90, 2.0), ("line", 40), ("bend", 90, 2.0), ("line", 30)]
+        sixty = [("line", 30), ("bend", 60, 2.0), ("line", 40)]
+        cases = (("L bracket, both sides", l_steps, 2.0, 2), ("U bracket, one side", u_steps, 2.0, 1),
+                 ("60 degrees, both sides", sixty, 1.5, 2),
+                 ("60 degrees, its whole outline", sixty, 2.0, 3))  # (its unfolded skin holds such a wire)
+        for name, steps, t, sides in cases:
+            with self.subTest(part=name):
+                part, width = rounded(steps, t, 50.0, sides), 50.0
+                result = checked(part, k_factor=0.4)
+                want = checked(bent(steps, t, width), k_factor=0.4).measurements["parts"]["items"][0]
+                self.assertTrue(result.ok, [f.message for f in result.findings if f.severity in ("error", "warning")
+                                            and f.code != "sheet.edge_break"])
+                found = result.measurements["parts"]["items"][0]
+                for key in ("flat_length_mm", "flat_width_mm"):
+                    self.assertAlmostEqual(found[key], want[key], places=3)
+                # (the whole outline's corners are rounded a t/2 in the flat too)
+                corners = (4 - math.pi) * (t / 2) ** 2 if sides == 3 else 0.0
+                self.assertAlmostEqual(found["flat_area_mm2"], want["flat_area_mm2"] - corners, delta=0.05)
+                self.assertAlmostEqual(found["flat_material_fraction"], 1.0, places=3)
+                self.assertEqual([b["length_mm"] for b in result.measurements["bends"]["items"]],
+                                 [width] * (len(steps) // 2))
+                self.assertEqual([f.code for f in result.findings if f.severity == "warning"], ["sheet.edge_break"])
+                self.assertEqual(len(sheet.unfold(part, k_factor=0.4).faces()), 1)
+
     def test_an_s_jog_of_two_tangent_bends_unrolls_whole(self) -> None:
         # two bends meeting with no flat between them: a joggle, unrolled one strip after the other
         jog = bent([("line", 40), ("bend", 90, 1.5), ("bend", -90, 1.5), ("line", 40)], 1.5, 40, "jog")

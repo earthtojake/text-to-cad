@@ -905,10 +905,11 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   edge: its rays run across the plate and measure its width, never its thickness. A skin's rays that reach
   the other skin's break are short by that break, which is its own finding, not the skin's. A bend's end is broken by a cone or a torus
   about the bend's axis, beside one of its cylinders and a cut edge or a flange's break, within the sheet:
-  an `edge_break` too, and the bend's length runs to the cut. A cut edge rounded whole from one skin to the
-  other (a full round, r = t/2: a convex cylinder along the skins, a torus or sphere about their normal, and
-  the face that turns a corner of the outline between two) leaves no face of the cut square to the skins: it
-  is an `edge_break` of both, no cut edge. A cone, torus, sphere or freeform face whose
+  an `edge_break` too, and the bend's length runs to the cut; a full round run on round the bend is a torus
+  about its axis t/2 round, from one of its cylinders to the other, read the same. A cut edge rounded whole
+  from one skin to the other (a full round, r = t/2: a convex cylinder along the skins, a torus or sphere
+  about their normal, and the face that turns a corner of the outline between two) leaves no face of the cut
+  square to the skins: it is an `edge_break` of both, no cut edge. A cone, torus, sphere or freeform face whose
   rays cross `t` is `formed` (a cone between flanges is not a bend). A face square between two opposite planes that face away from each other,
   nearer each other than its own rays run, is the cut edge of a stretch off the thickness (a 3 mm wall's end
   cap): the stretch is judged on its skins, not on rays that run along it. Everything else, and any stretch
@@ -942,7 +943,8 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   the area its pieces share -- each two intersected, never their areas less the fused pattern's, which a
   STEP written as NURBS loses a little of -- is its overlap (`flat_overlap_mm2`);
   a hole of the fused flat no face's inner wire gave (one crossing a bend's tangent line, part of both
-  faces' outer wires) is read back from it, `in_bend` where it reaches a bend's strip. Where a chamfer or a
+  faces' outer wires) is read back from it, `in_bend` where it reaches a bend's strip (a skin's inner wire
+  of one degenerate edge, a point a full round's corner touches the skin at, is no hole). Where a chamfer or a
   round breaks the cut edge the skin stops short of the cut, so each flange's breaks are laid into its plane
   and fused on: the flat is the cut outline (an 80 x 40 x 3 plate chamfered 0.5 mm unfolds 80 x 40, not 79 x
   39), and a hole with a broken rim is read back from it at its cut size. A break's edge that is no line and
@@ -952,8 +954,9 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   breaks are unrolled with its strip, and every break is laid face up, as the flanges are (the far skin's
   project face down, and were left beside the flat as pieces of their own). A full round is laid in its two
   halves, split at the sheet's mid-plane where it is widest (laid whole, its outline folds back on itself to
-  a line): an 80 x 40 plate with full-round ends unfolds 80 x 40, not 78 x 40, and a hole with a full-round
-  rim is its narrowest.
+  a line), and round a bend at the cylinder midway through the sheet, each half unrolled: an 80 x 40 plate
+  with full-round ends unfolds 80 x 40, not 78 x 40, a 50 mm wide bracket with full-round sides is 50 mm
+  wide across its bends too, not 48, and a hole with a full-round rim is its narrowest.
   A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
   rim, the flat's the hole under it (a plate countersunk from both sides has one whichever side unfolds).
   `cad.build123d.unfold(shape, thickness=, k_factor=, material=, bend_lines=False)` returns it
@@ -965,9 +968,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   spline's alike (at most 720 points; 48 to a curve left an 80 x 40 ellipse 79.957 long). At K = 0.5 the flat area equals volume / t exactly (`neutral_area_ratio`); the flat's area
   with each strip widened to K = 0.5, over volume / t, is `flat_material_fraction`: 1 where the flat holds
   all of the part's material. The volume is the sheet's as cut and bent: the part's, and what its
-  countersinks and edge breaks cut from it afterwards (under each one's face, up to the skin it faces, or
-  for a bend's end the cylinder it breaks, on the face's triangulation), which the blank has and the flat's
-  area counts.
+  countersinks and edge breaks cut from it afterwards (under each one's face, up to the skin it faces, for
+  a bend's end the cylinder it breaks, or for a full round round a bend the outline's plane square to the
+  axis, where it is widest: it runs from one cylinder to the other; on the face's triangulation), which the
+  blank has and the flat's area counts.
 
 ### Families (each `{"items": [...], "count": n}`, items sorted worst first, capped at 300)
 
