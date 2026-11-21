@@ -203,6 +203,11 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   keeps a copy (`apps/docs/README.md`).
 - Keep root guidance short. Put domain workflows, CLI details, and validation
   policy in the relevant `skills/<skill>/SKILL.md` or `references/` file.
+- A skill teaches a tool and how to check work done with it, and stays short: a line is
+  added only for something an agent got wrong without it, with the evidence in the pull
+  request. A change to what a skill tells agents to do is tested A/B
+  (`scripts/bench/skill_ab.py`), and a rewrite is audited against the text it replaced
+  ([writing a skill](docs/contributing/writing-a-skill.md)).
 - Keep relevant Markdown docs current when changing behavior, commands, or repo
   layout, but do not bloat `AGENTS.md`; use it only for durable repo-level
   rules and pointers.
