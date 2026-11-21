@@ -1,7 +1,7 @@
 # cad.engine
 
 A **document** is what a person reviews. Its kind is either a file format the viewer reads (STEP, XBF, STL, GLB,
-3MF, DXF, URDF, SRDF, SDF) or something derived from code: a model, built by this engine. A document exists so that a
+3MF, DXF, URDF, SRDF) or something derived from code: a model, built by this engine. A document exists so that a
 person can review the subjective output of an agent, a design, and answer it through the viewer's tools:
 annotate, select, quick edit. Everything below is how the engine makes, holds and serves documents.
 
@@ -151,7 +151,7 @@ The background process is implemented in `daemon.py`; warm workers remain separa
 Every successful build registers its document by id and gives it a URL, `/<id>`; registration does not mesh it.
 A model's worker is a separate process, holding its memo and live kernel objects; the daemon holds
 structures and buffers, never live kernel objects (law 20).
-The daemon takes its HTTP application -- the CAD Viewer's and the CAD app's -- from the server's
+The daemon takes its HTTP application -- the viewer's and the CAD app's -- from the server's
 composition root (`daemon.HTTP_FACTORY`, `cad_server._internal.engine_host`); the library's engine imports
 no application module. Beside the library's own dependencies (numpy) it imports the `build123d`
 extra's -- OCP, build123d, bd_materials, threejs_materials, Pillow (the renderer's rasteriser) and
@@ -286,10 +286,10 @@ from) stops the server, runs the installer's upgrade bounded to that major (`uv 
 "cad>=<installed>,<<next major>"`), tried again on failure, and starts the server with whatever cad is there. A server that hands its start over exits
 `UPDATING`, and its starter waits for the next one; a `cad server start` that fails asks for the update before it
 gives up; a start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With
-`cad plugin update auto` on, the server, at its start and at each quiet tending, runs `cad plugin update` (the
-hosted install command, stopped with all it started after 15 minutes) once where its cad is newer than the release
-that command last ended well for, however it got newer (`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the
-helper and `cad update` run no install command. Where no server runs, a typed `cad update` begins the update itself
+`cad plugin update auto` on, the server, at its start and at each quiet tending, runs `cad plugin install` (which
+updates the plugin in each agent app with that app's own command, with 15 minutes at most) once where its cad is
+newer than the release that command last went well in every app for, however it got newer (`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the
+helper and `cad update` run none, and no update of cad begins while a run of it is going. Where no server runs, a typed `cad update` begins the update itself
 (`cli/update.py`), and its helper starts no server after it.
 
 The updaters of 0.10.0 to 0.11.11 are frozen on computers, though, and update by running a newer release's hidden
@@ -665,10 +665,10 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
 | `snapshot.py` | `cad <type> snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`), or a KiCad board or one sheet of a KiCad schematic drawn flat (`render/board.py`, `render/schematic.py`), into a PNG; a script's model drawn from its worker's memory |
-| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (the stills' view of the engine's one read of each, `urdf_source` and `sdf_source`: numpy frames, the shapes the stills draw, forward kinematics held to a golden), DXF (group codes, flattened as the viewer's pane draws it); a KiCad board (`kicad/`: its S-expressions read by the standard library alone into an index of parts, pads, tracks, vias, pours, holes, outline and nets, its references, and the plot payload the page and the flat still draw); a KiCad schematic (`kicad/schematic*.py`: its hierarchy read from its project's root into sheets, symbols and pins, wires, buses, labels, and the nets KiCad's connection graph makes of them, its references, and its plot payload, every sheet a page) |
-| `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way; a `package://` one in the ROS package the description is in (`package_file`) |
-| `robot_model.py` | the one articulation every reader of a robot description makes (`Articulation`: each link's rest frame, its `Visual`s, the `LinkJoint`s with their mimics and four-bars, the named poses, an SRDF's home, the facts as written) and the `Dialect` a consumer reads by where the viewer's payload and the stills have read a detail differently (its refusals' words by code, `degrees`, a nested model's canonical link); matrices as lists, the standard library alone |
-| `urdf_source.py`, `sdf_source.py` | a URDF (and an SRDF's group states over it) and an SDF (its frame graph by the SDFormat rules, nested models by scoped name), each read once into `robot_model`'s articulation: the stills (`formats/robot.py`) and the viewer's payload (the server's `robot_payload.py`) are two views of that read; the standard library alone |
+| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SRDF (the stills' view of the engine's one read of each, `urdf_source`: numpy frames, the shapes the stills draw, forward kinematics held to a golden), DXF (group codes, flattened as the viewer's pane draws it); a KiCad board (`kicad/`: its S-expressions read by the standard library alone into an index of parts, pads, tracks, vias, pours, holes, outline and nets, its references, and the plot payload the page and the flat still draw); a KiCad schematic (`kicad/schematic*.py`: its hierarchy read from its project's root into sheets, symbols and pins, wires, buses, labels, and the nets KiCad's connection graph makes of them, its references, and its plot payload, every sheet a page) |
+| `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF reader and validator, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way; a `package://` one in the ROS package the description is in (`package_file`) |
+| `robot_model.py` | the one articulation every reader of a robot description makes (`Articulation`: each link's rest frame, its `Visual`s, the `LinkJoint`s with their mimics and four-bars, the named poses, an SRDF's home, the facts as written) and the `Dialect` a consumer reads by where the viewer's payload and the stills have read a detail differently (its refusals' words by code, whether it reads the facts as written); matrices as lists, the standard library alone |
+| `urdf_source.py` | a URDF (and an SRDF's group states over it), read once into `robot_model`'s articulation: the stills (`formats/robot.py`) and the viewer's payload (the server's `robot_payload.py`) are two views of that read; the standard library alone |
 | `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); a KiCad board's flat still, painted with Pillow from its plot (`board.py`), and a schematic sheet's (`schematic.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
 | `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script and Python, at most one per core alive (`supervisor.py`), connect-or-start (an installation's engine, never one of the library's own environment), a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
 | `supervisor.py`, `services.py` | the server's one supervisor of every process the daemon starts (`Supervisor`, `Process`), and their declarations (`WORKER`, `RENDER`, `CHECKS`): **Services** |
@@ -734,7 +734,7 @@ cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF
                                              mesh, is refused, saying what shows it); Q summary (the default
                                              without REF), structure (the summary with nothing measured),
                                              closure, geometry (the default with REF) or build
-cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
+cad urdf|srdf validate FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
 cad mujoco check FILE [--strict] [--json]    a MuJoCo model's file (an MJCF: no document type, an
                                              integration's operation), compiled by MuJoCo: what it
@@ -1067,7 +1067,7 @@ runners) for `export`, `snapshot` and `inspect`, each with its source said as th
 without `--tolerance` or `--angle`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
 function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
 repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
-choices (`sdf.validate`'s `gz_check`, `dfm`'s `process`, `rules`, `units` and `technology`), so a value outside them is the
+choices (`dfm`'s `process`, `rules`, `units` and `technology`), so a value outside them is the
 parser's usage error, naming the flag; a value the function itself refuses by name raises the library's
 `ArgumentRefused` (`cad._internal.refused`), which the command says as the command line's
 (`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
@@ -1405,8 +1405,9 @@ cache); and with the machine. **No timer retires a worker either**: memory alone
 documents are saved to the cache, past the memory budget what no page watches leaves memory for it
 (**Document lifetime**), and past the workers' memory cap, or under the system's memory pressure,
 idle workers go (below). It holds a pool of warm workers, one per model script and Python (and one for
-the documents no worker built), each a process whose memo lives as long as it does, and one standby. Its rules are a standard pool's, and nothing else: no admission guess, no refusal;
-the operating system does the rest. (What the daemon itself holds, the documents and their
+the documents no worker built), each a process whose memo lives as long as it does, and one standby.
+Its rules are a standard pool's and one ceiling on a busy process (below): no admission guess, no
+refusal; the operating system does the rest. (What the daemon itself holds, the documents and their
 tessellations, is under one memory budget: **Document lifetime**.)
 
 - **A cap.** At most `CAD_ENGINE_WORKERS` workers are alive (default: the machine's
@@ -1452,6 +1453,18 @@ tessellations, is under one memory budget: **Document lifetime**.)
   measured; a test's seam, `Pressure.from_environment`). A busy process is never retired, and an idle worker under the cap lives as long as the
   engine. A worker alone over the cap after a build is retired at once: the report says so
   (`retired`), and once it has answered the daemon drains it and closes its stdin.
+- **A busy process has a ceiling.** Retiring never takes a busy process, and a build in native code
+  (an OCCT boolean that runs away, say) cannot stop itself, so a process past
+  `CAD_ENGINE_WORKER_CEILING_MB` (default: half the machine's memory, at least 4 GiB; `0` for none;
+  read when the engine starts) at two `Daemon.tend` rounds running, during one request, is killed
+  (`Supervisor.overrun`). Two readings, so a peak that comes back down is never taken for a runaway: a
+  runaway runs up to two rounds, a minute by default, past the ceiling. A reading under it, or another
+  request, starts the count again, and a process whose request ended while it was measured is never
+  killed: an idle worker is drained before it stops. Its memory is read from outside, as the system
+  counts it (`worker.footprint_mb`: compressed and swapped pages too), since a busy worker says its own
+  only when it answers; a platform that will not say has no ceiling. Its build fails as a build out of
+  memory (`MemoryError`, `daemon._overran`): the error says the engine stopped it, at what size and
+  past which setting; it is no crash of the engine's, and its page does not offer to report it.
 - **Collected when idle.** A worker builds with Python's cyclic collector off and collects once
   no request has come for half a second, so a script's calls one after another never wait on
   it. A worker over its memory cap collects before it measures again.
@@ -2152,7 +2165,7 @@ the xbf it declares among them: no run sends a file's page anything (**Document 
 
 ## The viewer and the snapshot
 
-The CAD Viewer and its document reads share the daemon's HTTP listener. The page
+The viewer and its document reads share the daemon's HTTP listener. The page
 reads its document's kind's routes (`/api/v1/documents/<kind>/<id>/structure`, `parts/<key>`) and
 waits on `/api/v1/documents/<id>/version`; dispatch calls the engine's own reads directly, in process
 (`/api/doc/<id>...`, `serve.py`'s, which binds no listener of its own: the engine's reads are served
@@ -2359,14 +2372,14 @@ per file (read again when a file it read changes) or with `daemon=False` in this
   IOR, transmission, clear coat, anisotropy, emissive strength) and its base colour texture,
   drawn on its texture coordinates in the lit looks. `--pose` is refused: a mesh has no
   mechanism.
-- **A robot** (`.urdf`, `.sdf`, `.srdf`) is its link visuals' meshes (STL, 3MF and GLB files, a
+- **A robot** (`.urdf`, `.srdf`) is its link visuals' meshes (STL, 3MF and GLB files, a
   `package://NAME/...` one in the ROS package the description is in: the nearest folder above it
   named NAME or holding a `package.xml` that names it, as the viewer finds it too; a
-  box, cylinder, sphere or capsule made and meshed by the kernel), each in its colour. Solid and
+  box, cylinder or sphere made and meshed by the kernel), each in its colour. Solid and
   Parts draw its faces alone, as the viewer draws a robot: a link mesh's edges are its triangles'
   folds, which along a thin curved part (a cable's wires, tessellated at the engine's angle) are
-  lines a pixel apart that hide its colour; the line modes draw them. A URDF (and an SRDF's group states over it) and an SDF are each read
-  once, in the engine (`urdf_source.py`, `sdf_source.py`, into the one
+  lines a pixel apart that hide its colour; the line modes draw them. A URDF (and an SRDF's group states over it) is read
+  once, in the engine (`urdf_source.py`, into the one
   articulation of `robot_model.py`: every link's frame at rest, its visuals, its joints with their
   mimics and four-bars, its named poses), and the viewer's payload (the server's
   `robot_payload.py`) and the stills (`formats/robot.py`) are two views of that read, each
@@ -3071,7 +3084,7 @@ MuJoCo has no slide equality. The MJCF writes each closure as a site on each bod
 (`<name>/1`, `<name>/2`) and `connect` equalities of them: one for a ball, two for a hinge (the
 second pair of sites `export.mjcf.AXIS_SPAN` along the axis), so the point and the axis's direction
 are held and the turn is free; its range is not enforced, and said; `contact` excludes its two
-bodies where they touch at rest. The URDF leaves a closure out and says so; the CAD Viewer's
+bodies where they touch at rest. The URDF leaves a closure out and says so; the viewer's
 `<tcad:four_bar>` is never generated. A mechanism state that moves a joint of a loop is left out of
 the description's poses, and `ranges` sweeps no joint of a loop.
 
@@ -3443,7 +3456,7 @@ A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and it
 board's geometry per layer and its index, read from the file on each request: `viewer/plots.py`),
 `source`; `kicad_sch` -- `plot` (every sheet of the hierarchy a page, and the schematic's index;
 `?sheet=<path>` that sheet's page alone, `index=0` without the index; the hierarchy parsed once per
-revision of its files, `viewer/plots.py`'s `SchematicAnswers`), `source`; `urdf`, `srdf`, `sdf` --
+revision of its files, `viewer/plots.py`'s `SchematicAnswers`), `source`; `urdf`, `srdf` --
 `structure`, `parts/<digest>`, `source`; `stl`, `glb`, `3mf` -- `source`. Each engine read is
 `serve.py`'s own, asked in process (`viewer/engine_app.py`): `structure` is its `/api/doc/<id>`,
 `parts/<key>` its `/part/<key>`, `measure` its `/volumes` -- the vocabulary the door's `read` speaks
@@ -3517,7 +3530,7 @@ starts from, the n-th element of its kind a feature made, and a step per feature
 made it out of another (`f:plate.body.3;M:plate.relief`: face 3 of the box, modified
 by the relief cut). A long derivation folds to its last feature and a digest
 (`f:plate.relief~5d1e0c2f9a3b`); the worker that built it spells it out. Every name is a
-reference the CAD Viewer's ref grammar parses (`cadRefs` in the bundled `@cad/core` runtime, mirrored as
+reference the viewer's ref grammar parses (`cadRefs` in the bundled `@cad/core` runtime, mirrored as
 `refs.py`'s `ELEMENT_NAME`, which the naming in `kernel/trace.py` reads and which loads no kernel): a feature name has at most one dot, every segment
 is an identifier, and an atom ends in a number or a digest. A name holds no line or file (law 9): a line is
 what the worker serves, now.
@@ -3618,7 +3631,7 @@ never a `FILE`: `<uuid>#face 1` names face 1 of the model whose id it is, read a
 it. A canonical ref -- what `inspect` answers --
 spells the element by its name (its ordinal only where it has none) under its part's label where
 that label names one occurrence, else under the occurrence's path from the root; in a document of
-one part, under the document's name. It is also what the CAD Viewer copies of an `.xbf`'s selection,
+one part, under the document's name. It is also what the viewer copies of an `.xbf`'s selection,
 the file's path first (`/work/XBF/kit.xbf#kit/hand/finger.2/face 7`), or a model's id first for a
 model the engine holds: the viewer's parser and speller
 of this grammar (`cadRefs` in the bundled runtime) are held to this module's, case for case, by a
@@ -4074,8 +4087,9 @@ last run again (**Parameters**). An id the engine no longer
 holds (unsaved, detached) is refused with its state and the command that builds it again
 (`cad run <the script that defines it>`; **Document lifetime**).
 `--query build` returns saved-file metadata/closure or live-build metadata; `--query closure` and
-`--query geometry` select the other queries explicitly. In the CAD Viewer a model's page is
-`/<id>`; it has no file of its own, so no file menu, and its name menu's Files lists the folder
+`--query geometry` select the other queries explicitly. In the viewer a model's page is
+`/<id>`; it has no file of its own, so its ⋯ menu acts on the document and on the script that builds it
+(Export among them), and its name menu's Files lists the folder
 the explorer was last in, else the person's home folder, never the script's.
 
 A shape with no function -- a REPL's, a notebook cell's -- is handed over instead: `model(shape,

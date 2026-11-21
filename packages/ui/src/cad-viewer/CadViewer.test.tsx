@@ -41,7 +41,7 @@ const ports = (client: ReturnType<typeof cadClient>, extra: object = {}) => ({ f
 const library = { list: async () => [], change: async () => [], thumbnail: async () => null, open: async () => {} };
 const props = () => viewer.props!;
 
-test('the CAD viewer shows one file by its absolute path, the home with none, and what the viewer asks for through the host', async () => {
+test('the viewer shows one file by its absolute path, the home with none, and what the viewer asks for through the host', async () => {
   const client = cadClient();
   const tabStore = createTabStore(memoryTabRecord());
   const shows: string[] = [], shown: (string | null)[] = [];

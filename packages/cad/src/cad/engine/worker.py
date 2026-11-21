@@ -211,6 +211,80 @@ def rss_cap_mb() -> float | None:
     return None if physical is None else max(physical / 4, 2048.0)
 
 
+def footprint_mb(pid: int) -> float | None:
+    """The memory the system charges process ``pid`` now, in MiB, its compressed and swapped pages
+    with it -- what Activity Monitor shows on macOS, resident and swapped on Linux, the private
+    commit on Windows; None where the platform will not say. Read from outside the process: a busy
+    one says its own memory only when it answers (``Supervisor.overrun``)."""
+    try:
+        if sys.platform == "darwin":
+            import ctypes
+
+            class Usage(ctypes.Structure):  # rusage_info_v0
+                _fields_ = [("uuid", ctypes.c_uint8 * 16),
+                            *((name, ctypes.c_uint64) for name in (
+                                "user_time", "system_time", "pkg_idle_wkups", "interrupt_wkups", "pageins",
+                                "wired_size", "resident_size", "phys_footprint", "proc_start_abstime",
+                                "proc_exit_abstime"))]
+
+            usage = Usage()
+            system = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+            if system.proc_pid_rusage(pid, 0, ctypes.byref(usage)) != 0:  # RUSAGE_INFO_V0
+                return None
+            return usage.phys_footprint / 2**20
+        if sys.platform.startswith("linux"):
+            with open(f"/proc/{pid}/status", encoding="ascii") as handle:
+                held = [line.split() for line in handle if line.startswith(("VmRSS:", "VmSwap:"))]
+            return sum(int(row[1]) for row in held) / 2**10 if held else None  # kB
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+
+            class Counters(ctypes.Structure):  # PROCESS_MEMORY_COUNTERS
+                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                            *((name, ctypes.c_size_t) for name in (
+                                "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
+                                "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage",
+                                "PagefileUsage", "PeakPagefileUsage"))]
+
+            kernel = ctypes.windll.kernel32
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return None
+            try:
+                counters = Counters()
+                counters.cb = ctypes.sizeof(Counters)
+                info = ctypes.windll.psapi.GetProcessMemoryInfo
+                info.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+                info.restype = wintypes.BOOL
+                return counters.PagefileUsage / 2**20 if info(handle, ctypes.byref(counters), counters.cb) else None
+            finally:
+                kernel.CloseHandle(handle)
+    except Exception:  # noqa: BLE001 - a platform that will not say has no ceiling
+        return None
+    return None
+
+
+def memory_ceiling_mb() -> float | None:
+    """The memory one busy process of the daemon may reach before the daemon stops its work
+    (``Supervisor.overrun``): a build runs in native code, which nothing of its own interrupts, and
+    left alone one that runs away takes the machine. ``CAD_ENGINE_WORKER_CEILING_MB`` (``0`` for
+    none), else half the machine's memory, at least 4 GiB. None: no ceiling."""
+    given = os.environ.get("CAD_ENGINE_WORKER_CEILING_MB", "").strip()
+    if given:
+        try:
+            value = float(given)
+        except ValueError:
+            value = -1.0
+        if value >= 0:
+            return value or None
+    physical = _physical_mb()
+    return None if physical is None else max(physical / 2, 4096.0)
+
+
 # --- a manufacturing check's limits ---------------------------------------------------------------
 
 # A manufacturing check measured this long is stopped (``check_limits``): ``CAD_ENGINE_CHECK_SECONDS``, by

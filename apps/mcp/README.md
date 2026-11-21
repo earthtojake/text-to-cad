@@ -74,7 +74,7 @@ to `host.presentation`, in one change.
 
 A Codex call made in a turn that shows no app (`x-codex-turn-metadata.turn_trigger: exec`, which the 0.163 app
 server's binary sends) never loads this page: its `cad_show` and `cad_open` open the model's page in this
-machine's CAD Viewer, `/<id>` (the file registered by its id, as a launch registers it), started if none runs
+machine's viewer, `/<id>` (the file registered by its id, as a launch registers it), started if none runs
 (`cad_server/mcp/browser.py`), in the person's browser through an owner-only redirect file
 (`cad_mcp/browser.py`), and answer with the page's URL for the agent to give the person: "opened in your
 browser at <url>". The host's stdio process (`cad mcp`) makes that open, in the agent's own environment (its
@@ -164,8 +164,8 @@ skills' `cad viewer` link, in the browser pane or the browser.
 
 | Host | CAD's server | Cards |
 | --- | --- | --- |
-| Claude Desktop (Chat and Code tabs) | none: nothing writes an entry in `claude_desktop_config.json`, and the install script (`scripts/install/install.py`'s `claude_desktop`) takes out the `mcpServers.cad` releases 0.7.6 through 0.11.11 wrote there (the rest of the file kept, a copy of the file as it was beside it) | none |
-| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone (the install script removes no `claude mcp add` server). claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.11 name one, which lists no tools when Claude Code starts it | none |
+| Claude Desktop (Chat and Code tabs) | none: nothing writes an entry in `claude_desktop_config.json`, and `cad plugin install` (`cad_server/plugin/apps.py`'s `claude_desktop`) takes out the `mcpServers.cad` releases 0.7.6 through 0.11.11 wrote there (the rest of the file kept, a copy of the file as it was beside it) | none |
+| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone (`cad plugin install` removes no `claude mcp add` server). claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.11 name one, which lists no tools when Claude Code starts it | none |
 | Claude Code in a terminal | none | it draws none |
 
 The server offers no tools to a Claude host that starts it (a config someone wrote by hand, or an
@@ -188,8 +188,8 @@ older entry until Claude Desktop next starts). What was measured of those hosts,
 A server a Claude host starts anyway is offered no tools, as every app's but Codex's. To give Claude Code a
 server again, once flag 1824765482 is on and its view is verified: `.claude-plugin/plugin.json` would name a
 server config of its own (claude.ai's directory's copy stays the skills alone: `scripts/release/plugin_branch.py`
-fails a server in it), and `host.presentation` would name its client. The install script takes Claude Desktop's
-old `cad` entry out (`scripts/install/install.py`'s `claude_desktop`); a server there and in the plugin would
+fails a server in it), and `host.presentation` would name its client. `cad plugin install` takes Claude Desktop's
+old `cad` entry out (`cad_server/plugin/apps.py`'s `claude_desktop`); a server there and in the plugin would
 list CAD twice in the Code tab.
 
 ## Cards: where the page's capability comes from
@@ -223,7 +223,7 @@ the launch's `_meta` first (`host/capability.ts`).
 - **One page, told what to show.** Every surface loads this one page. The tool
   that opened it returns a *launch* — `page` (`home` or `viewer`) and `model`, a
   file's absolute path, a model's document id, or none — and the page renders it: the shared
-  CAD viewer showing that document, or the home. Agents name a file by its absolute path and a
+  viewer showing that document, or the home. Agents name a file by its absolute path and a
   model by the id its script printed (a script is never a document), and
   nothing here branches on a surface's name but one: `surface: file` (below).
 - **A launch is enough to start.** It also carries what the server is — its
@@ -251,7 +251,7 @@ the launch's `_meta` first (`host/capability.ts`).
   again starts with one step. A file handler's view, which shows its file alone,
   keeps none.
 - **What's new is a tab's.** Once a release with notes is installed, a tab (the sidebar, a
-  thread's CAD tab, *Open with CAD*) shows them once, as the CAD Viewer does (`@cad/ui/whats-new`),
+  thread's CAD tab, *Open with CAD*) shows them once, as the viewer does (`@cad/ui/whats-new`),
   kept seen for every view. A card never does, and reads nothing for it: a few hundred pixels of a
   chat are no room for a dialog, and a chat keeps several cards at once.
 - ***Open with CAD* is the file alone.** `cad_file` (`surface: file`) shows the
@@ -289,7 +289,7 @@ the launch's `_meta` first (`host/capability.ts`).
   module or a chunk is folded into rolldown's map, each import's placeholder is as wide as the
   blob URL that replaces it, and the chunk's debug
   id is the one its edited text and map decide (`@cad/core/chunk-ids`), never the
-  id of the unedited chunk the CAD Viewer may ship. It is on by default once
+  id of the unedited chunk the viewer may ship. It is on by default once
   a `cad` command has said so, once, and nothing asks. The app menu's **Telemetry**
   switch (`appSettings`, through `/api/v1/settings`' `telemetry`) changes the answer, one answer for
   this app and the browser viewer. No tool of the agent's reads or changes it:
@@ -383,13 +383,16 @@ the launch's `_meta` first (`host/capability.ts`).
   that becomes a blob module only when something imports it, so a view parses
   what it shows rather than all of the app (`vite.config.mjs`). `dist/index.html` is the
   same app as one page, for development and the release's source maps.
+- **Both pages ask browsers not to translate the app** (`translate="no"`, `class="notranslate"` on `<html>`, and
+  `<meta name="google" content="notranslate">`, in `shell.html` and `index.html`): it speaks its own locales,
+  and a browser's page translation rewrites text nodes React owns, so React's next commit throws `NotFoundError`.
 - **Nothing waits unseen.** While the home's list is read, placeholder cards (or
   rows) stand where the models will be; a model being opened shows a spinner over
   its picture, and takes no second press, until the launch switches to the
   viewer, whose own progress takes over.
 - **A card says why it cannot work, in words a person can act on.** Three states, never
   confused, and never a host's or a transport's own error string (`host/channel.ts`,
-  `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`), and names the browser, never the CAD Viewer
+  `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`), and names the browser, never the viewer
   ([Naming the page](../../packages/ui/docs/settings-ui.md#naming-the-page)):
   - **No channel.** A host can draw the card and carry none of its calls back: the Claude
     app's **Code tab** (observed 2026-10-25) frames `cad_show`'s card as "Widget from
@@ -423,7 +426,7 @@ the launch's `_meta` first (`host/capability.ts`).
     connect to CAD's engine.", "The CAD plugin did not answer in time.", "The
     CAD plugin could not be reached.").
 - **No channel, then the engine directly.** Every launch a tool hands an inline card carries,
-  where the engine gives a page, `browser` (the CAD Viewer's page of what it shows, the same
+  where the engine gives a page, `browser` (the viewer's page of what it shows, the same
   link — a page URL's `?token=`, good until the token is rotated ([the web README](../web/README.md#launching))
   — a Codex whose launcher is unknown gives the agent with each show until a view calls back, loopback
   only) and `engine`

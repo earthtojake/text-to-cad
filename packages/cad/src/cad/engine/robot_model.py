@@ -1,6 +1,6 @@
 """A robot description as its readers articulate it: a tree of links, each placed at rest, with the
 visuals drawn on it and the joints between them -- what the engine's readers of a robot
-description make (``urdf_source``: a URDF and an SRDF's group states over it; ``sdf_source``: an SDF)
+description make (``urdf_source``: a URDF and an SRDF's group states over it)
 and what the viewer's payload (the server's ``robot_payload``) and the
 stills (``formats/robot.py``) each take a view of. A description is read once, here; the two views
 translate shapes and units, and decide what each can draw.
@@ -8,20 +8,19 @@ translate shapes and units, and decide what each can draw.
 **The articulation** (``Articulation``): each link's rest frame in the description's space (the
 description as written, every joint at zero), a 4x4 of lists in
 metres; each link's visuals (``Visual``: its placement in its link's frame, its shape -- ``("box",
-{"size"})``, ``("cylinder"|"capsule", {"radius", "length"})``, ``("sphere", {"radius"})`` in full
-sizes, ``("file", path, scale)`` for a mesh file, the path None where the reference names no local
-file -- its colour, the name a row calls it); the joints (``LinkJoint``: fixed, revolute, continuous
+{"size"})``, ``("cylinder", {"radius", "length"})``, ``("sphere", {"radius"})`` in full sizes,
+``("file", path, scale)`` for a mesh file, the path None where the reference names no local file,
+``("unknown",)`` for geometry that is none of these -- its colour, the name a row calls it); the joints (``LinkJoint``: fixed, revolute, continuous
 or prismatic, the anchor frame and the unit axis at rest, the range in radians or metres, the leader a
 mimic follows, a four-bar's numbers as written); the named poses in control units (degrees for a turn,
-metres for a slide) and an SRDF's ``home``. A URDF's and an SDF's links, joints, visuals and
+metres for a slide) and an SRDF's ``home``. A URDF's links, joints, visuals and
 collisions also carry their facts as written (``facts``: what the payload shows a person reading the
 description back), read when the reader's ``Dialect`` asks for them.
 
 **Dialects.** The viewer's payload and the stills read robots for years with readers of their own,
 and the two disagreed on a few details; each disagreement is kept here, named, rather than settled in
 passing: ``Dialect`` holds how one consumer words a refusal (``words``, by code: a word of None reads
-leniently what the other refuses), which words make a pose's ``degrees`` true, and whether a nested
-model with no link of its own is attached through its first nested model. The standard library alone
+leniently what the other refuses). The standard library alone
 (the validation family's rule, ``tests/python/global/test_robot_modules_stdlib_pure.py``): ElementTree
 and arithmetic on 4x4 matrices as lists, in one order of operations, so every view of a read is the
 same numbers.
@@ -43,7 +42,7 @@ Matrix = list[list[float]]
 MOVING = ("revolute", "continuous", "prismatic")
 ANGULAR = ("revolute", "continuous")
 
-#: Every refusal a reader of a URDF, an SRDF or an SDF makes, by code, in words of its own; a consumer's
+#: Every refusal a reader of a URDF or an SRDF makes, by code, in words of its own; a consumer's
 #: ``Dialect`` says any of them its own way. Each is formatted with the fields its refusal names, and
 #: ``file`` (the description as the dialect names it).
 WORDS: dict[str, str] = {
@@ -68,26 +67,6 @@ WORDS: dict[str, str] = {
     # SRDF
     "srdf_name": "{file} has no <robot name>, so its URDF cannot be found: {rule}",
     "srdf_pair": "{file}: {found} .urdf in {folder} declare <robot name={name!r}>: {rule}",
-    # SDF
-    "sdf_root": "{file}: an SDF's root element is <sdf>",
-    "sdf_models": "{file} must hold one <model>, or one <world> holding one <model>",
-    "sdf_worlds": "{file} must hold one <model>, or one <world> holding one <model>",
-    "sdf_world_models": "{file} must hold one <model>, or one <world> holding one <model>",
-    "rotation_format": "{where} pose is not euler_rpy, the one rotation format read",
-    "model_relative": "{file} model {model!r} pose is relative_to {relative!r}; a model is placed in the world",
-    "placement_frame": "{where} is placed by its placement_frame, which is not read; drop placement_frame and pose "
-                       "the model's own frame",
-    "frame_twice": "SDF model {model!r} names {key!r} twice",
-    "frame_unknown": "SDF model {model!r} refers to frame {key!r}, which it does not declare",
-    "frame_cycle": "SDF model {model!r}: its frames cycle at {key!r}",
-    "attached_unknown": "SDF model {model!r} refers to frame {key!r}, which it does not declare",
-    "attached_cycle": "SDF model {model!r}: its attached_to graph cycles at {key!r}",
-    "sdf_joint_type": "{file} joint {joint!r} is a {kind!r} joint; a robot's joints are fixed, revolute, continuous "
-                      "and prismatic",
-    "sdf_scale": "{where} scale must be 3 numbers, not {text!r}",
-    "joint_unattached": "{file} joint {joint!r} joins no two links",
-    "joint_same": "{file} joint {joint!r} joins no two links",
-    "multiple_parents": "{file} link {link!r} has multiple parents",
 }
 
 
@@ -108,14 +87,10 @@ def _name(path: Path) -> str:
 class Dialect:
     """How one consumer reads a description where the viewer's payload and the stills have read it
     differently: its refusals' ``words`` by code over ``WORDS`` (a word of None: not refused, what it
-    names read leniently), the words that make a pose's ``degrees`` true, whether a nested model with
-    no link of its own is attached through its first nested model, how a refusal names the file
-    (``display``), and whether the facts as written are read at all (``facts``: the payload shows
-    them; the stills draw no fact)."""
+    names read leniently), how a refusal names the file (``display``), and whether the facts as written
+    are read at all (``facts``: the payload shows them; the stills draw no fact)."""
 
     words: Mapping[str, str | None] = field(default_factory=dict)
-    degrees: frozenset[str] = frozenset({"1", "true", "yes", "on"})
-    canonical_model: bool = True
     display: Callable[[Path], str] = _name
     facts: bool = True
 
@@ -134,9 +109,9 @@ class Dialect:
 @dataclass
 class Visual:
     """A link's visual as the viewer and the stills take one: its placement in its link's frame, its shape --
-    ``("box"|"cylinder"|"sphere"|"capsule", dimensions)`` in full sizes or ``("file", path, scale)`` -- its
-    colour (``#rrggbb``), its alpha and the name a row calls it; a URDF's or an
-    SDF's mesh reference as written (``reference``), colour as written (``rgba``) and facts (``facts``)."""
+    ``("box"|"cylinder"|"sphere", dimensions)`` in full sizes, ``("file", path, scale)`` or ``("unknown",)`` -- its
+    colour (``#rrggbb``), its alpha and the name a row calls it; a URDF's mesh reference as written
+    (``reference``), colour as written (``rgba``) and facts (``facts``)."""
 
     id: str
     link: str
@@ -175,8 +150,7 @@ class LinkJoint:
 class Articulation:
     """The model as a tree of links: each link's rest frame, its visuals, the joints (as declared), the poses (in the viewer's control units: degrees for a turn, metres
     for a slide) and the inertials, by link; the description's ``name``, an SRDF's ``home`` state, each
-    link's collisions as written, an SDF's account of itself (``sdf``) and the description files read
-    (``sources``)."""
+    link's collisions as written and the description files read (``sources``)."""
 
     root: str
     links: dict[str, Matrix]
@@ -187,7 +161,6 @@ class Articulation:
     name: str = ""
     home: dict[str, float] = field(default_factory=dict)
     collisions: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
-    sdf: dict[str, Any] | None = None
     sources: list[Path] = field(default_factory=list)
 
 
@@ -220,17 +193,6 @@ def pose(xyz: Any, angles: Any) -> Matrix:
     return multiply(translation(*xyz), rpy(*angles))
 
 
-def invert_rigid(m: Matrix) -> Matrix:
-    r = [[m[i][j] for j in range(3)] for i in range(3)]
-    t = [m[0][3], m[1][3], m[2][3]]
-    return [
-        [r[0][0], r[1][0], r[2][0], -(r[0][0] * t[0] + r[1][0] * t[1] + r[2][0] * t[2])],
-        [r[0][1], r[1][1], r[2][1], -(r[0][1] * t[0] + r[1][1] * t[1] + r[2][1] * t[2])],
-        [r[0][2], r[1][2], r[2][2], -(r[0][2] * t[0] + r[1][2] * t[1] + r[2][2] * t[2])],
-        [0.0, 0.0, 0.0, 1.0],
-    ]
-
-
 def rotate(m: Matrix, v: Any) -> list[float]:
     return [m[i][0] * v[0] + m[i][1] * v[1] + m[i][2] * v[2] for i in range(3)]
 
@@ -257,11 +219,6 @@ def children(element: ET.Element | None, name: str) -> list[ET.Element]:
 def first(element: ET.Element | None, name: str) -> ET.Element | None:
     found = children(element, name)
     return found[0] if found else None
-
-
-def text(element: ET.Element | None, name: str) -> str:
-    found = first(element, name)
-    return str(found.text or "").strip() if found is not None else ""
 
 
 def parse(path: Path, dialect: Dialect) -> ET.Element:

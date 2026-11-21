@@ -5,7 +5,7 @@ DXF's pens and curves -- and each drawn as its golden picture.
 
 The fixtures are made here, small: a binary and an ASCII STL, a 3MF of colour groups, base
 materials and components, a GLB of a node tree, two materials and a base colour texture, a URDF
-of every joint kind (a mimic and a four-bar among them), an SRDF and an SDF over it, a DXF of
+of every joint kind (a mimic and a four-bar among them), an SRDF over it, a DXF of
 lines, arcs, bulges, a block, a solid and a hatch.
 
 `formats_golden/kinematics.json` is the viewer's own forward kinematics on `KINEMATICS`: each
@@ -91,22 +91,6 @@ SRDF = """<?xml version="1.0"?>
   <group_state name="home" group="arm"><joint name="spin" value="0.5"/><joint name="lift" value="0.3"/></group_state>
   <group_state name="tucked" group="arm"><joint name="lift" value="-1.0"/><joint name="reach" value="-0.02"/></group_state>
 </robot>
-"""
-
-# A link at 1 m along x and 0.5 m up, its frame turned 90 degrees about z, relative_to a frame of
-# the model; a hinge whose pose is its child's and whose axis is expressed in the model's frame.
-SDF = """<?xml version="1.0"?>
-<sdf version="1.9">
-  <model name="hinge">
-    <frame name="shelf"><pose>1 0 0.5 0 0 0</pose></frame>
-    <link name="post"><visual name="v"><geometry><box><size>0.1 0.1 0.1</size></box></geometry></visual></link>
-    <link name="door"><pose relative_to="shelf">0 0 0 0 0 1.5707963267948966</pose>
-      <visual name="v"><pose>0.2 0 0 0 0 0</pose><geometry><box><size>0.4 0.02 0.3</size></box></geometry>
-        <material><diffuse>0.8 0.2 0.1 1</diffuse></material></visual></link>
-    <joint name="swing" type="revolute"><parent>post</parent><child>door</child>
-      <axis><xyz expressed_in="__model__">0 0 1</xyz><limit><lower>-2</lower><upper>2</upper></limit></axis></joint>
-  </model>
-</sdf>
 """
 
 DXF = """0
@@ -774,16 +758,23 @@ class RobotTest(FixtureTest):
         self.assertNotEqual(srdf.structure["instances"][1]["matrix"], found.structure["instances"][1]["matrix"],
                             "the SRDF opens at its home state")
 
-    def test_an_sdf_places_its_links_by_their_frames(self) -> None:
-        path = self.folder / "hinge.sdf"
-        path.write_text(SDF, encoding="utf-8")
-        found = formats.read(path)
-        door = np.array(found.structure["instances"][1]["matrix"]).reshape(4, 4).T
-        np.testing.assert_allclose(door[:3, 3], (1000, 200, 500), atol=1e-6)  # its visual 0.2 m along the door's turned x
-        self.assertAlmostEqual(found.structure["prototypes"][1]["name"], "box")
-        swung = found.pose(found.structure, {"swing": 90})
-        door = np.array(swung["instances"][1]["matrix"]).reshape(4, 4).T
-        np.testing.assert_allclose(door[:3, 3], (800, 0, 500), atol=1e-6)  # turned about z through the joint: the door's frame
+    def test_an_srdf_s_urdf_visual_the_stills_cannot_draw_is_refused_in_the_urdf_s_words(self) -> None:
+        # An SRDF draws its paired URDF's visuals, so a visual is refused as a URDF's: a mesh by its filename,
+        # and a shape no URDF reader draws (a capsule) by the shapes the stills do draw.
+        from cad.engine.formats.robot import RobotError
+
+        for geometry, said in (("<mesh/>", "link 'base' visual 1 is a <mesh> with no filename$"),
+                               ('<capsule radius="0.1" length="0.5"/>',
+                                "link 'base' visual 1 uses geometry the stills cannot draw; give it a mesh, box, "
+                                "cylinder or sphere$")):
+            with self.subTest(geometry=geometry):
+                folder = self.folder / f"srdf-{len(geometry)}"
+                folder.mkdir()
+                (folder / "arm.urdf").write_text(f'<robot name="arm"><link name="base"><visual><geometry>{geometry}'
+                                                 "</geometry></visual></link></robot>", encoding="utf-8")
+                (folder / "arm.srdf").write_text('<robot name="arm"/>', encoding="utf-8")
+                with self.assertRaisesRegex(RobotError, said):
+                    formats.read(folder / "arm.srdf")
 
     def test_a_robot_job_leaves_out_the_visuals_its_view_hid(self) -> None:
         """A robot's view says what it hid as the viewer's visual ids (``selection.hide``: ``arm:v1``); each
@@ -897,15 +888,12 @@ class RobotTest(FixtureTest):
         NAME, or holding a ``package.xml`` that names it; no such folder, or a path out of it, is refused."""
         from cad.engine.formats.robot import RobotError
 
-        def described(package: Path, uri: str, kind: str = "urdf") -> Path:
-            path = package / kind / f"arm.{kind}"
+        def described(package: Path, uri: str) -> Path:
+            path = package / "urdf" / "arm.urdf"
             path.parent.mkdir(parents=True, exist_ok=True)
             mesh = f'<mesh filename="{uri}" scale="0.001 0.001 0.001"/>'
-            path.write_text(f'<robot name="arm"><link name="base"><visual><geometry>{mesh}</geometry></visual></link></robot>'
-                            if kind == "urdf" else
-                            f'<sdf version="1.9"><model name="arm"><link name="base"><visual name="shell"><geometry><mesh>'
-                            f'<uri>{uri}</uri><scale>0.001 0.001 0.001</scale></mesh></geometry></visual></link></model></sdf>',
-                            encoding="utf-8")
+            path.write_text(f'<robot name="arm"><link name="base"><visual><geometry>{mesh}</geometry></visual></link>'
+                            "</robot>", encoding="utf-8")
             return path
 
         workspace = self.folder / "ros_ws" / "src"
@@ -916,11 +904,10 @@ class RobotTest(FixtureTest):
             if manifest:
                 (package / "package.xml").write_text(f"<package format='3'><name>{manifest}</name></package>",
                                                      encoding="utf-8")
-            for kind in ("urdf", "sdf"):
-                with self.subTest(package=folder, kind=kind):
-                    found = formats.read(described(package, "package://arm_description/meshes/base.stl", kind))
-                    self.assertIn(str(mesh.resolve()), found.files)  # read there, and read again when it changes
-                    self.assertEqual([prototype["name"] for prototype in found.structure["prototypes"]], ["base"])
+            with self.subTest(package=folder):
+                found = formats.read(described(package, "package://arm_description/meshes/base.stl"))
+                self.assertIn(str(mesh.resolve()), found.files)  # read there, and read again when it changes
+                self.assertEqual([prototype["name"] for prototype in found.structure["prototypes"]], ["base"])
         lone = workspace / "loose"
         for uri, said in (("package://gripper/meshes/base.stl", "no folder named 'gripper'"),
                           ("package://arm_description/../../loose/base.stl", "climbs out of its package")):
@@ -934,14 +921,11 @@ class RobotTest(FixtureTest):
         mesh = write_stl(self.folder / "absolute" / "base.stl", box_soup((40, 20, 10))).resolve()
         spellings = (str(mesh), mesh.as_posix(), mesh.as_uri(), mesh.as_uri().replace("file://", "file://localhost", 1))
         for index, uri in enumerate(spellings):
-            for kind, text in (("urdf", f'<robot name="arm"><link name="base"><visual><geometry><mesh filename="{uri}"/>'
-                                        "</geometry></visual></link></robot>"),
-                               ("sdf", f'<sdf version="1.9"><model name="arm"><link name="base"><visual name="shell">'
-                                       f"<geometry><mesh><uri>{uri}</uri></mesh></geometry></visual></link></model></sdf>")):
-                with self.subTest(uri=uri, kind=kind):
-                    path = self.folder / "absolute" / f"arm{index}.{kind}"
-                    path.write_text(text, encoding="utf-8")
-                    self.assertIn(str(mesh), formats.read(path).files)
+            with self.subTest(uri=uri):
+                path = self.folder / "absolute" / f"arm{index}.urdf"
+                path.write_text(f'<robot name="arm"><link name="base"><visual><geometry><mesh filename="{uri}"/>'
+                                "</geometry></visual></link></robot>", encoding="utf-8")
+                self.assertIn(str(mesh), formats.read(path).files)
 
 
 # --- DXF -------------------------------------------------------------------------------------------

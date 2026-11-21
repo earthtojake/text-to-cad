@@ -1,6 +1,6 @@
 # w16 models
 
-`models/w16` on cadgen 0.8: a quad-turbo 8.0 L W16, a sectioned museum cutaway with
+`models/w16` on cad: a quad-turbo 8.0 L W16, a sectioned museum cutaway with
 working kinematics. `w16.py` is the one model (`@model`; a run writes nothing):
 
 | Script | Model | What it is |
@@ -8,11 +8,11 @@ working kinematics. `w16.py` is the one model (`@model`; a run writes nothing):
 | `w16.py` | `w16` | The engine: the thirteen systems below, its mechanism (180 joints that turn or slide with the crank), the `crank` motion and the `explode` and `running_reveal` GLB animations (clips of its GLB) |
 | `block.py` ... `ancillaries.py` (13) | nothing | One system each, a `@memo` stage the engine calls in its body |
 
-Build from this folder: `python w16.py`. The GLB is exported on demand
+Build from this folder: `cad run w16.py`. The GLB is exported on demand
 (`cad model export "$ID" GLB/w16.glb`, the id the run prints), its three clips baked.
 
 ```
-python w16.py
+cad run w16.py
 cad model snapshot "$ID" w16.png
 cad model export "$ID" STEP/w16.step
 ```
@@ -33,11 +33,22 @@ the pure kinematics; `geo.py`, `castings.py`, `fasteners.py`), unchanged but for
 - `palette.py`'s finishes, the original's `materials=` declaration, are
   `FinishedMaterial` values: each the catalogue's entry for the alloy, steel, rubber or
   composite in the finish's look (metallic, roughness, clear coat), with
-  explicit scalar PBR. Assignments restore the authored palette colour; Inconel 625 and the
-  heat wrap are the project's own. `apply_finishes` gives every part the finish
-  of its colour, as the original's `material_compound` grouped them by colour
-  (its `material_<finish>` groups, which existed for the old assignments, are
-  gone: each system is its parts).
+  explicit scalar PBR, or one of `cad.build123d.materials`' named finishes (black
+  oxide, red anodise, white ceramic). Inconel 625 and the heat wrap are the project's
+  own. `apply_finishes` gives every part the finish of its colour, as the original's
+  `material_compound` grouped them by colour (its `material_<finish>` groups, which
+  existed for the old assignments, are gone: each system is its parts), but for the
+  parts `LABEL_FINISHES` names, coloured as their neighbours: the four exhaust
+  collectors are Inconel and the spark-plug insulators ceramic. A finish with no colour
+  of its own wears the part's palette colour.
+- The looks are tuned for a physically based render (a GLB in Blender's Cycles):
+  every bare metal is metalness 1 and every paint, composite and carbon 0, since a
+  fractional metalness reads as grey paint under a milky film; the cast alloys (block,
+  heads, sump, intercooler tanks, runners) are raw metal in a lighter colour their
+  finish carries (`CAST_LOOK`, `CAST_DARK_LOOK`), not grey primer; the black-oxide steel
+  (cams, chains, studs, most fasteners) is `black_oxide()`; the turbine housings' heat
+  tint has no clear coat. The palette colours the systems use are unchanged, so no
+  `@memo` stage's key moves with a look.
 - `lib/kinematics.py` and `lib/explode.py` replace `lib/animgen.py` (the generator
   of the original's `ANIMATION_JS`): the mechanism as build123d joints and the
   `crank`, `explode` and `running_reveal` motions (below).
@@ -117,7 +128,7 @@ document keeps it as samples; the GLB carries it as the clip `crank`.
 
 ### The explode and the running cutaway
 
-The original's other two clips are GLB animations (`lib/explode.py`, `cad.gltf`): the
+The original's other two clips are GLB animations (`lib/explode.py`, `cad.build123d.animation`): the
 `crank` cycle posed throughout (every 0.02 s, 2.4 degrees of crank), and the original's
 tables of straight, eased translations played on top of it, each part or system moved
 after the pose, so a part moved clear still carries its own motion. A reference that

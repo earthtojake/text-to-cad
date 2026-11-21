@@ -93,11 +93,11 @@ are for reading and maintaining the contracts.
 | `BoardRendererOptions` (KiCad boards, drawn flat; declines camera and Display commands), `BoardLiveController`, `BoardLiveState` | [Board registration](../src/renderers/board/index.ts) | `@cad/ui/renderers/board` |
 | `GlbRendererOptions`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@cad/ui/renderers/glb` |
 | `MeshRendererOptions` (STL, 3MF), `LiveViewBinding`, `LiveViewController` | [Mesh registration](../src/renderers/mesh/index.ts) | `@cad/ui/renderers/mesh` |
-| `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@cad/ui/renderers/robot` |
+| `RobotRendererOptions` (URDF, SRDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@cad/ui/renderers/workspace` |
 | `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@cad/ui/host` |
 | `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail`, `ageLabel`, `lastActivity` (a host's home, under the navbar, the library alone: Recent and its count, the search and, where `pick` is given (a computer with a file chooser), Open in the navbar on the grid's column; a light 28px row over the grid, the type filter ("All ▾": All, Models, Files, where both are listed) at its left and the grid/list switch at its right — then the documents opened or built before, pinned first, then by last activity (the later of a row's `opened` and `updated`), as framed cards (the picture, the light viewport's on the model area's gradient, with its format's badge; its kind's glyph, its name, a file's `size` and its age with its verb) or as a table's rows (Name, Kind, Size, then `updated` and `created` as ages); every model a card and a row of its own, never tied to its script (the library's `script` is not read); on each a pin toggle and one ⋯ menu: Open, a file's Copy path and Reveal where `fileActions` can (a model has neither), Pin or Unpin, then Delete, which asks first (`change("delete")` for a model, `change("remove")` for a file) and takes the card off at once; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), and a spinner over the model being opened, which takes no second press until `open` settles) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@cad/ui/library` |
-| `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the six CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@cad/ui/cad-viewer` |
+| `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the six CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [viewer](../src/cad-viewer/CadViewer.tsx) | `@cad/ui/cad-viewer` |
 | `createCadFileSource` (a CAD client as a read-only `FileSource`: `stat` through the client's `resolveEntry`, `list` through `folder`, `search` through `search`), `createCadFileActions` (the file menu's Copy path, the absolute path, and Reveal, Open in's file manager), `normalizePath`, `baseName`, `joinPath`, `contentRevision` | [Catalog](../src/cad-viewer/catalog.ts) | `@cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the version, X, GitHub, Discord, where a new issue opens, and how a link is followed), `issueUrl` (a new issue filled in — its title, labels and body — its address kept under `ISSUE_URL_MAX`) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@cad/ui/links` |
 | `buildId` (for an app's Vite config: which build this is, "" for the release's own, whose environment names its version in `CAD_RELEASE`, else the checkout's commit) | [Build id](../scripts/build-id.mjs) | `@cad/ui/build-id` |
@@ -161,7 +161,7 @@ renderer's list adds a prop or a slot to those, never a row of its own
 Preview is the shared shell's own state (`previewing`); there is no host
 prop for it and a host cannot start or observe it. It is a 3D view's alone, and each
 renderer says whether its view is one: it declares `previewable` to the shell
-(`useRendererShell`), as an engine document (an `.xbf`, a STEP), GLB, STL/3MF and URDF/SRDF/SDF do. A view that does
+(`useRendererShell`), as an engine document (an `.xbf`, a STEP), GLB, STL/3MF and URDF/SRDF do. A view that does
 not — a DXF's 2D drawing, which draws its own surface without the shell — has no
 Preview at all, no control and not a disabled one, and nothing that asks for it
 (a link or a host request, should either come to) takes it there: it keeps
@@ -201,7 +201,7 @@ commands should read the current viewport through a ref, avoiding parent/child
 render loops. These actions use existing host capabilities for effects. What a
 person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 
-A renderer's controls for the view are the renderer's own: the CAD viewer's for a 3D view, under a file's navbar
+A renderer's controls for the view are the renderer's own: the viewer's for a 3D view, under a file's navbar
 portalled into its view slot (View ▾ and Preview; a phone's View and Preview), the cube's Home attached to the cube;
 without a navbar Preview at its strip's end and Display, Projection and Home stacked under the cube at the top-right;
 and in Preview its bar's Preview settings and Exit preview, the navbar hidden. The host draws none of them. The host's `captureRequest`

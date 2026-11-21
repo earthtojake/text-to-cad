@@ -58,7 +58,7 @@ These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
   id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`, `step`,
-  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
+  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
   and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
   engine's memory, addressed by its document id or the handle its call returns (`@model` declares one);
@@ -100,9 +100,9 @@ its operations and what writes it.
 
 **PURPOSE** — the engine and its command surface: models built in a warm worker whose memo
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
-materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
+materials, references to geometry, snapshots drawn by OCCT; the viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad mcp`: a stateless stdio peer of the engine’s
-HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
+HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF and SRDF checks; a MuJoCo model's
 check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); OrcaSlicer's
 presets written complete for its command line (`cad.orcaslicer`); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
@@ -138,7 +138,7 @@ technology, and its extra carries the same name.
 **DEPENDED ON BY** — the server and the `cad` command (`cad_server`), in the same distribution, and
 through them every skill that runs `cad`; the empty aliases `cad-server`, `cad-mcp` and `cadgen`,
 which install it at the same release.
-The CAD Viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
+The viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
 every STEP and `.xbf` a page opens on one authenticated listener, without a relay.
 
 ## The rest of the package's documentation
@@ -225,14 +225,18 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    installed; it imports nothing outside itself but its own dependencies, the standard library and
    each integration's extra, that extra only in that integration's environment (law 25; the kernel is
    the `build123d` extra's, which the engine's workers run in). The server -- what runs in the daemon
-   or a `cad` command: the daemon, the registry, the CAD Viewer's and the CAD app's servers, every
+   or a `cad` command: the daemon, the registry, the viewer's and the CAD app's servers, every
    verb, the environment makers, telemetry -- imports the library's kernel-free modules, and never
    the kernel or an integration's code (law 28). The shim (`cad_mcp`), the stdio transport
    an agent app starts, is the standard library, the engine's client, the server's MCP protocol and what cad's own
    update knows of the global `cad` (whose server it starts, and which it installs where the computer has none),
    and loads no kernel. The server reaches into the library, never the
    other way: its telemetry is an observer the engine calls with plain facts (`engine.api.observers`),
-   which the server's commands append.
+   which the server's commands append. Inside the server, two things are known in one place each: the
+   app that hosts cad, in its MCP adapter (`cad_server/mcp/`); and the agent apps, the plugin and its
+   skills, in `cad_server/plugin/` (the table of apps, how the plugin is installed and updated in each,
+   which older copies are ours to remove), which only the `cad plugin` command reaches. Nothing else in
+   cad names an app, a plugin or a skill, or imports either place.
 4. **A model's document is XCAF; files are explicit.** *Every document.* A model's document is
    XCAF: a live model holds an XCAF document; `@xbf` or `--xbf` serializes it as native BinXCAF.
    It holds: units in millimetres,
@@ -333,10 +337,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     **Tier 1: what an agent reads each session** -- the skills, the `cad` command's verbs and flags,
     the CAD tools' arguments, the wording of docs. cad moves to the newest release of its major on every
     computer while a store's copy of the skills may be weeks older, so a command, flag or tool the skills used
-    keeps working for 30 days after the release whose skills stopped using it, hidden if need be; CI
-    checks each release against the skill text released in the last 30 days. Past that window, hard
-    cutovers only, in any release: removing or renaming one is not a breaking change and needs no
-    migration guide. A retired surface does not exist: no alias, no shim, and no error that
+    keeps working for 30 days after the release whose skills stopped using it, hidden if need be. Past
+    that window, hard cutovers only, in any release: removing or renaming one is not a breaking change
+    and needs no migration guide. A retired surface does not exist: no alias, no shim, and no error that
     recognizes its old spelling to explain what replaced it. A removed command, flag, argument, key, module or name gets what the
     current contract's ordinary validation says -- an unknown command, an unrecognized argument, an
     unknown key, an `ImportError`, an `AttributeError`.
@@ -407,7 +410,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     background and fail silently: no start, command, build, request or tool call waits on them -- but three a
     person or an app asks for by name: `cad update`, typed to get the newest release of its major now (`--major`:
     the newest of all), which waits on PyPI (5 s at most) and the install, and says in one line when either fails;
-    `cad plugin update`, the hosted install command in the foreground; and `cad mcp` run from uv's cache on a
+    `cad plugin install`, which runs each agent app's own command and fetches the plugin from GitHub, in the
+    foreground; and `cad mcp` run from uv's cache on a
     computer with no global cad, which installs one first, the newest of its own major (four minutes at most).
     A global install of cad (`uv tool install cad`) updates itself unless the person turned it off (`cad
     update auto off`), and when asked (`cad update`): its server, at its start, after a failed start or once nothing
@@ -416,9 +420,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     bounded to that major (`uv tool install --upgrade "cad>=<installed>,<<next major>"`) and starts it again (where no
     server runs, `cad update` hands it over itself, and the helper starts none); a higher major only by `cad update
     --major` (`uv tool install --upgrade "cad>=<installed>"`). Where `cad plugin update auto` is on and cad is newer than the release
-    the install command last ended well for, however it got newer, its server runs `cad plugin update` once,
-    detached, stopped with all it started after 15 minutes. Nothing waits on the install but a start that would
-    otherwise start the release it replaces.
+    the plugin was last updated well for, however it got newer, its server runs `cad plugin install` once,
+    detached, a minute after it starts at the earliest and never while a run is going, with 15 minutes, and
+    ended for certain a minute past them; cad's own update begins none while such a run is going. Nothing waits on
+    the install but a start that would otherwise start the release it replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
@@ -430,7 +435,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     in a small file beside the settings (`analytics.spool`), which the CAD app's
     and the viewer's background sends take, and a command or the daemon that finds it has waited more
     than a window, with no other process sending, starts a sender detached that sends it and exits
-    (the server's `_internal/telemetry_send.py`). A process that exits sends nothing either: its last batch is
+    (the server's `_internal/telemetry_send.py`). Three counts start that sender at once, since whatever made
+    them may be the last of cad's processes on the computer for a long while: a step of a computer's arrival at a
+    release, one of cad's own updates, and a run of `cad plugin install`, counted as it
+    ends -- who began it, how it ended, how many agent apps it found and how many failed, and each app where it
+    failed, in words of cad's and whole numbers (an app is named only where its install failed). A process that exits sends nothing either: its last batch is
     kept beside the settings, and the next process that sends sends it, in the background -- each row saying the
     version and app that counted it, each kept batch under its own id, so a resend of a batch counts once. One
     wait remains, bounded: `cad telemetry off`, which waits for the deletion it asks for.
@@ -537,7 +546,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 24. **A document type is one object.** *The package.* `cad.<type>` is a `DocumentType`: the type's decorator where it
     has one (`@step("arm.step")`), its reader where it has one (`step.read`), its operations one to one
     with the CLI's, and the vocabulary the type's own standard defines where it takes no third-party
-    objects (`sdf.GZ_CHECK_MODES`). Its attributes load on first use: `import cad` imports no kernel. A
+    objects. Its attributes load on first use: `import cad` imports no kernel. A
     file of another type is refused by name before anything runs (`part.glb is a glb, not a stl`). A
     type's package (`cad/<type>/`) holds its reader, its operations' dispatch and its checks, and is
     neutral about producers: it imports no third-party library.
@@ -707,8 +716,8 @@ src/cad/
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
                          #   B-rep type's solve and ranges: model's, xbf's and step's)
-  urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
-                         #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
+  urdf/, srdf/           # the robot descriptions' types: `validate` and the checks behind it
+                         #   (_source.py, _validation.py)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
                          #   engine/formats/kicad, the standard library alone, and its flat
                          #   still engine/render/board.py); drc, export and edit (a with
@@ -1073,7 +1082,7 @@ result.ok, result.findings, result.measurements["safety_factor"], result.written
 
 With no study it is the study's setup: the document's parts, the pairs that touch within the contact
 tolerance a study bonds by (an overlapping pair a warning) and one part's faces, each with the engine's
-ref (`bracket/face 17`, the one the CAD Viewer copies) and a hint (`plane, normal -Z, largest`). With a
+ref (`bracket/face 17`, the one the viewer copies) and a hint (`plane, normal -Z, largest`). With a
 study (a JSON file, inline JSON or a dict) and `out`, a folder anywhere (made when missing), the solve,
 which writes its results there, each a standard file that stands on its own, and touches nothing else in
 the folder:
@@ -1087,7 +1096,7 @@ the folder:
 | `ccx.inp` | with `deck`, the input CalculiX solved |
 
 There is no document type for a result: the answer is the JSON, the pictures are for looking, the GLB
-opens in the CAD Viewer as any GLB does, and the VTU is for a program's own questions. An option of the
+opens in the viewer as any GLB does, and the VTU is for a program's own questions. An option of the
 other use is refused by name before anything is read. The study reads a file in its own process, as the
 engine reads one (`engine.document.load`), with no worker and no build, and resolves faces in the
 document's structure as `cad <type> inspect` does (`engine.refs`); a model is written to an `.xbf` in a

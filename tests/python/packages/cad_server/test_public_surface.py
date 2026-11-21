@@ -32,13 +32,11 @@ from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, NotDerivable
 PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
     "cad.urdf": ("validate",),
     "cad.srdf": ("validate",),
-    "cad.sdf": ("validate",),
 }
 
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
 # the parser has no independent existence.
 MIRRORS: dict[str, tuple[str, str]] = {
-    "sdf validate": ("cad.sdf", "validate"),
     # The mujoco integration's check of a MuJoCo model's file, which is no document type: run here, or where
     # mujoco is not installed, in cad[mujoco]'s environment (``cad_server.cli.integrations``).
     "mujoco check": ("cad.mujoco", "check"),
@@ -78,7 +76,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "update": frozenset({"command", "auto", "major"}),
     # The install command run now (`update`), or (`update auto`) whether cad's automatic update runs it after it; and
     # the hidden --refresh the updater of 0.11.10 runs, which does nothing.
-    "plugin": frozenset({"command", "update", "refresh"}),
+    "plugin": frozenset({"command", "install", "update", "refresh"}),
     # The engine's verbs (cad_server.engine.cli): each type's operations, and its process control.
     # A document's export (a model's, an xbf's, a STEP's) meshes a GLB, an STL or a 3MF to a tolerance and an
     # angle, and takes a robot description's joints from a zero state; a mesh's, to the other mesh kinds, does
@@ -88,7 +86,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     **{f"{document_type} export": frozenset({"source", "destinations", "json"})
        for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
-       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")},
+       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf")},
     # A model's parameters set in its script: NAME=VALUE repeats, a map no signature derives.
     "model set": frozenset({"document", "values"}),
     # A B-rep type's interference check: its poses and fits repeat, lists no signature derives.
@@ -119,16 +117,17 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "cache": frozenset({"command", "dir", "prune", "clean"}),
     # The exact cad requirement for a Python of a program's own: its integrations, and --json.
     "requirement": frozenset({"integrations", "json"}),
+    # One read-only report of this cad.
+    "doctor": frozenset({"check", "json"}),
+    # The viewer launcher: the launch contract (reuse, replace or start on its one port, the --json announce
+    # line) is not a function signature to mirror.
+    "viewer": frozenset({"files", "host", "port", "json", "no_open", "dist", "api_only"}),
 }
 
-# Commands that own their parser outright and mirror no function.
+# Commands that own their command line outright and mirror no function.
 UNCLASSIFIED = {
-    "doctor",
     # uv run's options and a program's arguments, whatever they are: no parser of its own (uv judges them).
     "run",
-    # The viewer launcher owns its parser: the launch contract (reuse, replace or start on its
-    # one port, the --json announce line) is not a function signature to mirror.
-    "viewer",
     # The CAD app an agent app starts: MCP on stdin and stdout, which no function's signature describes.
     "mcp",
 }
@@ -194,14 +193,16 @@ class Manifest(unittest.TestCase):
         for command in ("build", "step build", "step compile", "stl build", "3mf build", "3mf snapshot", "glb build",
                         "store", "daemon", "daemon status", "where", "install", "export", "snapshot", "inspect",
                         "urdf check", "sdf check", "srdf check", "stl check", "xbf check", "kicad_pcb check",
-                        "kicad_sch check", "pcb drc", "mjcf validate", "mjcf snapshot", "mjcf", "uninstall"):
+                        "kicad_sch check", "pcb drc", "mjcf validate", "mjcf snapshot", "mjcf", "uninstall",
+                        "sdf", "sdf validate", "sdf snapshot"):
             self.assertNotIn(command, _commands())
         for module in ("cad_server.cli.build", "cad.engine.shape_input", "cad_server.cli.step_build", "cad_server.cli.step_snapshot", "cad_server.cli.stl_build",
                        "cad_server.cli.where", "cad_server.cli.store", "cad_server.cli.daemon", "cad_server.cli.daemon_status", "cadgen.store", "cadgen.daemon",
                        "cad_server.cli.install", "cad_server.cli.mcp", "cad_server.cli.export", "cad_server.cli.snapshot",
                        "cad_server.cli.inspect", "cad_server.cli.urdf_validate", "cad_server.cli.sdf_validate",
                        "cad_server.cli.srdf_validate", "cad_server.kicad.schematic", "cad_server.cli.mjcf", "cad.mjcf",
-                       "cad.engine.mjcf_source", "cad_server.cli.retired", "cad_server._internal.leftovers"):
+                       "cad.engine.mjcf_source", "cad_server.cli.retired", "cad_server._internal.leftovers",
+                       "cad_server.cli.sdf", "cad.sdf", "cad.engine.sdf_source"):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError), warnings.catch_warnings():
                 warnings.simplefilter("ignore", FutureWarning)  # cadgen's deprecation, not this test's subject
                 importlib.import_module(module)

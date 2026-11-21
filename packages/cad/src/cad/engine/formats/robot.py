@@ -1,15 +1,14 @@
-"""A robot description -- a URDF, an SDF, or an SRDF with the URDF it plans for -- as the stills
+"""A robot description -- a URDF, or an SRDF with the URDF it plans for -- as the stills
 hold it: every link visual's mesh a part, placed where its link stands at the pose asked.
 
 **Reading** is the engine's, once for the stills and the viewer's payload alike: a URDF and an SRDF's
-group states over it by ``cad.engine.urdf_source``, an SDF by ``cad.engine.sdf_source``, each into
+group states over it by ``cad.engine.urdf_source``, into
 the one articulation (``cad.engine.robot_model``: every link's frame at rest in the robot's space, in
 metres -- the description as written, every joint at zero -- its visuals, its joints with their mimics
 and four-bars, its named poses), which the viewer's payload (``cad_server.robot_payload``) takes its own view of. This is the
 stills' view: numpy frames, each visual's shape as the stills draw it (``_drawn``), its colour, the
-joints the stills pose (fixed, revolute, continuous, prismatic), an SDF's links one tree (a joint to
-the world holds its child where it is), an SRDF's group states the poses and its ``home`` the
-opening. Where the stills have always read a detail differently from the payload, the stills'
+joints the stills pose (fixed, revolute, continuous, prismatic), an SRDF's group states the poses and its
+``home`` the opening. Where the stills have always read a detail differently from the payload, the stills'
 dialect keeps it (``_STILLS``).
 
 **Posing**: a control is a revolute or continuous joint (degrees) or a prismatic one (metres);
@@ -25,7 +24,7 @@ are refused by name.
 
 **Meshes**: a link mesh is an STL or a 3MF (its numbers as they are, which the description's
 mesh scale makes metres) or a GLB (metres), each drawn as the stills draw that file; a box,
-cylinder, sphere or capsule is made by the kernel and meshed as a part is (``mesh.py``). The
+cylinder or sphere is made by the kernel and meshed as a part is (``mesh.py``). The
 robot is drawn in millimetres, and a length of it -- where ``display.clip.at`` stands, a Quick Edit
 packet's camera, Measure's points, the ink -- is read in its metres, as the viewer reads and draws one
 (``millimetresPerUnit`` and ``millimetresPerSceneUnit`` 1000). A ``package://NAME/REST`` mesh is
@@ -44,7 +43,7 @@ from typing import Any
 
 import numpy as np
 
-from cad.engine import mesh_uri, sdf_source, urdf_source
+from cad.engine import mesh_uri, urdf_source
 from cad.engine.formats import Foreign, FormatError, Part, Placed, assemble, files_of
 from cad.engine.mesh_uri import package_root
 from cad.engine.robot_model import Dialect, SourceError
@@ -267,26 +266,16 @@ def _branch(four_bar: dict[str, Any]) -> int:
     return 0 if error(first) <= error(second) else 1
 
 
-# --- URDF, SDF and SRDF (the engine's readers, cad.engine.urdf_source and sdf_source) -----------------------
+# --- URDF and SRDF (the engine's reader, cad.engine.urdf_source) -----------------------------------------
 #
 # Where the stills and the viewer's payload have read a description differently, the stills read it as
-# they always have: their own words for a refusal, a pose's ``degrees`` true by "1" and "true" alone, a
-# nested model with no link of its own attached to nothing, a model's pose relative to anything read as
-# relative to the world, a model's ``placement_frame`` and an unknown frame a joint's parent is attached
-# to not refused (a joint on no link holds its child where it is), no fact read.
+# they always have: their own words for a refusal, no fact read.
 
 _STILLS = Dialect(
     words={
         "urdf_joint_type": "{file} joint {joint!r} is a {kind} joint; the stills pose fixed, revolute, continuous "
                            "and prismatic joints",
-        "sdf_joint_type": "{file} joint {joint!r} is a {kind!r} joint; the stills pose fixed, revolute, continuous "
-                          "and prismatic joints",
-        "rotation_format": "{where} pose is not euler_rpy, the one rotation format the stills read",
-        "model_relative": None, "placement_frame": None, "attached_unknown": None, "attached_cycle": None,
-        "multiple_parents": None,
     },
-    degrees=frozenset({"1", "true"}),
-    canonical_model=False,
     facts=False,
 )
 
@@ -311,15 +300,15 @@ def _read(reader: Any, path: Path, **options: Any) -> Any:
         raise RobotError(str(error)) from None
 
 
-def _drawn(visual: Any, base: Path, where: str, kind: str) -> tuple:
+def _drawn(visual: Any, base: Path, where: str) -> tuple:
     """A visual's shape as the stills draw it: ``("file", path, scale)`` -- an STL, 3MF or GLB that
-    is there -- ``("box", (x, y, z))``, ``("cylinder"|"capsule", (radius, length))`` or ``("sphere",
-    (radius,))``; refused by name where the stills cannot draw it."""
+    is there -- ``("box", (x, y, z))``, ``("cylinder", (radius, length))`` or ``("sphere", (radius,))``;
+    refused by name where the stills cannot draw it."""
     shape = visual.shape
     if shape[0] == "file":
         reference, found = visual.reference, shape[1]
         if not reference:
-            raise RobotError(f"{where} is a <mesh> with no {'filename' if kind == 'urdf' else '<uri>'}")
+            raise RobotError(f"{where} is a <mesh> with no filename")
         if mesh_uri.scheme(reference) == "package":
             found = package_file(reference, base, where)
         elif found is None:
@@ -334,14 +323,11 @@ def _drawn(visual: Any, base: Path, where: str, kind: str) -> tuple:
     dimensions = shape[1] if len(shape) > 1 else {}
     if shape[0] == "box":
         return ("box", tuple(float(value) for value in dimensions["size"]))
-    if shape[0] in ("cylinder", "capsule"):
-        return (shape[0], (float(dimensions.get("radius", 0.0)), float(dimensions.get("length", 0.0))))
+    if shape[0] == "cylinder":
+        return ("cylinder", (float(dimensions.get("radius", 0.0)), float(dimensions.get("length", 0.0))))
     if shape[0] == "sphere":
         return ("sphere", (float(dimensions.get("radius", 0.0)),))
-    if kind == "urdf":
-        raise RobotError(f"{where} uses geometry the stills cannot draw; give it a mesh, box, cylinder or sphere")
-    raise RobotError(f"{where} uses {'nothing' if shape[0] == 'missing' else shape[0]} geometry; the stills draw a mesh, "
-                     "box, cylinder, sphere or capsule")
+    raise RobotError(f"{where} uses geometry the stills cannot draw; give it a mesh, box, cylinder or sphere")
 
 
 def _robot(kind: str, path: Path, articulation: Any) -> Robot:
@@ -355,7 +341,7 @@ def _robot(kind: str, path: Path, articulation: Any) -> Robot:
     for link, found in articulation.visuals.items():
         visuals[link] = []
         for index, visual in enumerate(found, 1):
-            mesh = _drawn(visual, base, f"{file} link {link!r} visual {index}", kind)
+            mesh = _drawn(visual, base, f"{file} link {link!r} visual {index}")
             if mesh[0] == "file":
                 files.append(mesh[1])
             visuals[link].append(Visual(np.asarray(visual.local, float), mesh, _hex(visual.rgba) if visual.rgba else "",
@@ -387,18 +373,6 @@ def read_urdf(path: Path) -> Robot:
     return robot
 
 
-def read_sdf(path: Path) -> Robot:
-    path = Path(path)
-    robot = _robot("sdf", path, _read(sdf_source.read_sdf, path))
-    # A joint to the world holds its child where it is: the world is no link to move.
-    robot.joints = [joint for joint in robot.joints if joint.parent]
-    try:
-        robot.root = urdf_source.tree_root(path.name, list(robot.links), robot.joints, _STILLS)
-    except SourceError as error:
-        raise RobotError(str(error)) from None
-    return robot
-
-
 def read_srdf(path: Path) -> Robot:
     path = Path(path)
     articulation = _read(urdf_source.read_srdf, path)
@@ -418,18 +392,17 @@ def _followers(robot: Robot, name: str) -> None:
 
 def read_robot(path: Path) -> Robot:
     suffix = Path(path).suffix.lower()
-    return read_urdf(path) if suffix == ".urdf" else read_sdf(path) if suffix == ".sdf" else read_srdf(path)
+    return read_urdf(path) if suffix == ".urdf" else read_srdf(path)
 
 
 # --- meshes and the structure -------------------------------------------------------------------
 
 
 def _primitive(kind: str, dimensions: tuple, where: str) -> Any:
-    """A box, cylinder, sphere or capsule (metres) as a part, centred on its frame as URDF and SDF
-    centre them (a cylinder and a capsule along Z), in millimetres, meshed as a part is; its lines
+    """A box, cylinder or sphere (metres) as a part, centred on its frame as URDF centres them (a cylinder
+    along Z), in millimetres, meshed as a part is; its lines
     the edges where its faces fold (the viewer draws a primitive as a mesh: its rims, no seam and
     no tangent join)."""
-    from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
     from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox, BRepPrimAPI_MakeCylinder, BRepPrimAPI_MakeSphere
     from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt
 
@@ -445,9 +418,6 @@ def _primitive(kind: str, dimensions: tuple, where: str) -> Any:
     else:
         radius, length = size
         shape = BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, -length / 2), gp_Dir(0, 0, 1)), radius, length).Shape()
-        if kind == "capsule":
-            for z in (-length / 2, length / 2):
-                shape = BRepAlgoAPI_Fuse(shape, BRepPrimAPI_MakeSphere(gp_Pnt(0, 0, z), radius).Shape()).Shape()
     meshed = mesh_shape(shape, parallel=False)
     folds = ~np.isin(meshed.edges[:, 3], [SEAM, TANGENT])
     return Mesh(meshed.positions, meshed.normals, meshed.indices, meshed.faces, meshed.edges[folds],

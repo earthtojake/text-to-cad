@@ -8,7 +8,7 @@ import { fixtureGlb as glb, fixturePayload, fixtureRefusal } from './__tests__/r
 // is a stub) and the meshes that answer names, fetched as the page fetches them.
 const entry = (name: string, extra = {}) => ({ file: `/models/${name}`, kind: name.split('.').pop(), hash: name, url: `https://robot-assets.test/${name}`, ...extra });
 const client = (answer: (file: string) => unknown) => ({ robot: vi.fn(async (file: string) => answer(file)) });
-const swing = () => fixturePayload('swing.sdf');
+const linkage = () => fixturePayload('linkage.urdf');
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -19,44 +19,44 @@ it('reads the payload, then every mesh it names, counting them, and publishes th
   const fetch = vi.fn(async (url: string) => { await meshesArrive; return new Response(glb(url)); });
   vi.stubGlobal('fetch', fetch);
   const resources = createHttpCadResourceProvider();
-  const robot = client(() => swing());
-  const hook = renderHook(() => useRobotDocument({ entry: entry('swing.sdf'), client: robot, resources }));
-  expect(hook.result.current).toMatchObject({ robot: null, busy: true, progress: { label: 'Loading SDF', determinate: false } });
-  await waitFor(() => expect(hook.result.current.progress).toMatchObject({ label: 'Loading meshes', done: 0, total: 2, determinate: true }));
+  const robot = client(() => linkage());
+  const hook = renderHook(() => useRobotDocument({ entry: entry('linkage.urdf'), client: robot, resources }));
+  expect(hook.result.current).toMatchObject({ robot: null, busy: true, progress: { label: 'Loading URDF', determinate: false } });
+  await waitFor(() => expect(hook.result.current.progress).toMatchObject({ label: 'Loading meshes', done: 0, total: 3, determinate: true }));
   expect(hook.result.current.robot).toBeNull();
   deliverMeshes();
   await waitFor(() => expect(hook.result.current.robot).not.toBeNull());
   expect(hook.result.current).toMatchObject({ busy: false, progress: null, error: null });
-  expect(hook.result.current.robot).toMatchObject({ file: '/models/swing.sdf', kind: 'sdf', revision: 'swing.sdf' });
-  expect(hook.result.current.robot.robot.articulation.controls.map((control: any) => control.id)).toEqual(['hinge']);
-  expect(hook.result.current.robot.parts.map((part: any) => [part.id, part.link])).toEqual([['base:v1', 'base'], ['arm:v1', 'arm']]);
-  expect(robot.robot).toHaveBeenCalledWith('/models/swing.sdf', expect.anything());
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(hook.result.current.robot).toMatchObject({ file: '/models/linkage.urdf', kind: 'urdf', revision: 'linkage.urdf' });
+  expect(hook.result.current.robot.robot.articulation.controls.map((control: any) => control.id)).toEqual(['output_joint']);
+  expect(hook.result.current.robot.parts.map((part: any) => [part.id, part.link])).toEqual([['ground:v1', 'ground'], ['rocker:v1', 'rocker'], ['crank:v1', 'crank']]);
+  expect(robot.robot).toHaveBeenCalledWith('/models/linkage.urdf', expect.anything());
+  expect(fetch).toHaveBeenCalledTimes(3);
 });
 
 it('restores a complete cached robot on the first render, before any loading effect runs', async () => {
   const fetch = vi.fn(async (url: string) => new Response(glb(url)));
   vi.stubGlobal('fetch', fetch);
   const resources = createHttpCadResourceProvider();
-  const warm = entry('swing.sdf', { hash: 'warm-robot', url: 'https://robot-assets.test/warm.sdf' });
-  const first = renderHook(() => useRobotDocument({ entry: warm, client: client(() => swing()), resources }));
+  const warm = entry('linkage.urdf', { hash: 'warm-robot', url: 'https://robot-assets.test/warm.urdf' });
+  const first = renderHook(() => useRobotDocument({ entry: warm, client: client(() => linkage()), resources }));
   await waitFor(() => expect(first.result.current.robot).not.toBeNull());
   const { robot } = first.result.current.robot;
   first.unmount();
   const reopen = renderHook(() => useRobotDocument({ entry: warm, client: client(() => { throw new Error('a warm robot asks nothing'); }), resources }));
   expect(reopen.result.current.robot.robot).toBe(robot);
   expect(reopen.result.current).toMatchObject({ busy: false, progress: null });
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledTimes(3);
 });
 
 it('keeps the robot on screen while a new revision loads, and replaces it when that is whole', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(glb(url))));
   const resources = createHttpCadResourceProvider();
-  const live = entry('swing.sdf', { hash: 'live', url: 'https://robot-assets.test/live.sdf' });
-  const hook = renderHook(({ current }) => useRobotDocument({ entry: current, client: client(() => swing()), resources }), { initialProps: { current: live } });
+  const live = entry('linkage.urdf', { hash: 'live', url: 'https://robot-assets.test/live.urdf' });
+  const hook = renderHook(({ current }) => useRobotDocument({ entry: current, client: client(() => linkage()), resources }), { initialProps: { current: live } });
   await waitFor(() => expect(hook.result.current.robot).not.toBeNull());
   const before = hook.result.current.robot;
-  hook.rerender({ current: { ...live, hash: 'live-2', url: 'https://robot-assets.test/live.sdf?v=2' } });
+  hook.rerender({ current: { ...live, hash: 'live-2', url: 'https://robot-assets.test/live.urdf?v=2' } });
   expect(hook.result.current.robot).toBe(before);
   await waitFor(() => expect(hook.result.current.robot.revision).toBe('live-2'));
   expect(hook.result.current.busy).toBe(false);
@@ -65,9 +65,9 @@ it('keeps the robot on screen while a new revision loads, and replaces it when t
 it('a mesh that cannot be fetched fails the robot, and an SRDF cadgen could not pair says what it looked for', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404, statusText: 'Not Found' })));
   const resources = createHttpCadResourceProvider();
-  const payload = swing();
+  const payload = linkage();
   payload.visuals[0].mesh.url = '/meshes/absent.glb';
-  const gone = renderHook(() => useRobotDocument({ entry: entry('gone.sdf'), client: client(() => payload), resources }));
+  const gone = renderHook(() => useRobotDocument({ entry: entry('absent.urdf'), client: client(() => payload), resources }));
   await waitFor(() => expect(gone.result.current.error).not.toBeNull());
   expect(gone.result.current).toMatchObject({ robot: null, busy: false });
   expect(String(gone.result.current.error.message)).toMatch(/absent\.glb.*404/);

@@ -109,7 +109,7 @@ def _rotate(args: argparse.Namespace, prog: str) -> None:
 
     confirm("replacing the page token", "Replace the page token?", yes=bool(args.yes), as_json=False,
             command=retry(prog, ["--rotate-token", *(["--port", str(args.port)] if args.port is not None else [])]),
-            preview=[f"{prog} --rotate-token replaces the page token: every CAD Viewer link and browser session made "
+            preview=[f"{prog} --rotate-token replaces the page token: every viewer link and browser session made "
                      "with the one it has now stops working at once, in the server running too, and each page needs a "
                      "new link (cad viewer prints one). This cannot be undone."])
     try:

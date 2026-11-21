@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Every word the CAD Viewer and the CAD app show reads through the locale files
+// Every word the viewer and the CAD app show reads through the locale files
 // (`packages/ui/src/i18n/locales`, English first): a person reading Japanese never meets an
 // English label the code spelled itself. This check reads the three source trees that draw them
 // (packages/ui/src, apps/web/src, apps/mcp/src; tests and test harnesses aside) and refuses:
@@ -50,7 +50,7 @@ const TOASTS = /^toast(?:\.(?:success|error|warning|info|loading|message))?$/;
 // Not language: what reads the same in every locale.
 export const NON_LANGUAGE = new Set([
   // Formats and file kinds.
-  'STEP', 'STP', 'STL', '3MF', 'GLB', 'glTF', 'DXF', 'XBF', 'SDF', 'URDF', 'SRDF', 'PNG', 'SVG', 'JSON', 'PDF',
+  'STEP', 'STP', 'STL', '3MF', 'GLB', 'glTF', 'DXF', 'XBF', 'URDF', 'SRDF', 'PNG', 'SVG', 'JSON', 'PDF',
   // Brands and products.
   'CAD', 'GitHub', 'Discord', 'text-to-cad', 'cadgen', 'Codex', 'Claude', 'WebGL',
   // Units and symbols.

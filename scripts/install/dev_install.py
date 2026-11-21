@@ -2,11 +2,12 @@
 """Install this checkout into the agent apps, to test the plugin and cad locally; and go back.
 
     scripts/install/dev_install.py                 # this checkout, into every app found here
-    scripts/install/dev_install.py claude codex    # into these apps alone (install.py's APPS keys)
+    scripts/install/dev_install.py claude codex    # into these apps alone (the APPS keys of cad's table of apps)
     scripts/install/dev_install.py --release       # back to the published release, in every app
 
-It does what the install script does (scripts/install/install.py, whose table of apps it uses), with this
-checkout as the source instead of PyPI and GitHub:
+It does what the install command does, with this checkout as the source instead of PyPI and GitHub, by the same code:
+the cad step is scripts/install/install.py's, and the apps are cad's own table of them
+(packages/cad/src/cad_server/plugin, which ``cad plugin install`` runs), loaded here from this checkout's files:
 
 1. installs the checkout's cad as the ``cad`` uv tool, editable (``uv tool install --managed-python --python 3.14
    --editable packages/cad``; the cad command of 0.10.0-0.11.11 removed first, as install.py removes it), and
@@ -14,14 +15,14 @@ checkout as the source instead of PyPI and GitHub:
 2. writes the plugin from this checkout into ``tmp/dev-plugin/text-to-cad``: its manifests name the version
    ``<VERSION>-dev.<time>`` (so each app takes it as new), Codex's CAD server (the one app given one:
    ``codex.mcp.json``) runs ``cad mcp``, the editable tool's command, and its catalog is ``earthtojake-dev``;
-3. installs that folder in each app with the app's own command (install.py's ``local`` commands; an app that cannot
+3. installs that folder in each app with the app's own command (the table's ``local`` commands; an app that cannot
    install from a folder is skipped and says so), and only then removes the published copy of ours there.
 
 ``--release`` uninstalls the editable tool (only where the ``cad`` tool is one), then runs install.py as it is: the
-newest release of cad, every app moved back to the GitHub copy (the development copies, ``text-to-cad@earthtojake-dev``
-and the rest, are among the old copies it removes); then turns cad's automatic updates on again (``cad update
-auto on``), which install.py leaves as they are. Run it again after a change; restart an app's session to load it. Run
-``scripts/bundle/bundle.sh`` once first: the CAD Viewer's page comes from the bundle.
+newest release of cad, then that cad's own ``cad plugin install``, which moves every app back to the GitHub copy (the
+development copies, ``text-to-cad@earthtojake-dev`` and the rest, are among the old copies it removes); then turns
+cad's automatic updates on again (``cad update auto on``), which install.py leaves as they are. Run it again after a change; restart an app's session to load it. Run
+``scripts/bundle/bundle.sh`` once first: the viewer's page comes from the bundle.
 """
 
 from __future__ import annotations
@@ -49,7 +50,21 @@ def _install_module():
     return module
 
 
+def _plugin_package():
+    """cad's table of apps and what installs into them (``cad_server.plugin``), loaded from this checkout's files as a
+    package of its own, without cad: the modules it loads here are the standard library alone, and this script runs
+    where cad may not be installed. Its ``run`` module, which needs cad, is the ``cad plugin`` command's."""
+    folder = REPO_ROOT / "packages" / "cad" / "src" / "cad_server" / "plugin"
+    spec = importlib.util.spec_from_file_location("text_to_cad_plugin", folder / "__init__.py",
+                                                  submodule_search_locations=[str(folder)])
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # its modules import each other through it
+    spec.loader.exec_module(module)
+    return module
+
+
 install = _install_module()
+cad_plugin = _plugin_package()
 
 
 def uv_folder(uv: str, *bin_: str) -> Path:
@@ -117,7 +132,7 @@ def _json(data, name: str, release: str, version: str):
     if not isinstance(data, dict):
         return data
     if name.endswith("marketplace.json") and isinstance(data.get("name"), str):
-        data["name"] = install.DEV_CATALOG
+        data["name"] = cad_plugin.source.DEV_CATALOG
     if data.get("version") == release:
         data["version"] = version
     plugins = data.get("plugins") if isinstance(data.get("plugins"), list) else []
@@ -135,7 +150,7 @@ def _json(data, name: str, release: str, version: str):
 
 
 def main(argv=None) -> int:
-    keys = [app.key for app in install.APPS]
+    keys = [app.key for app in cad_plugin.apps.APPS]
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], epilog=__doc__.split("\n\n", 1)[1],
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("apps", nargs="*", metavar="APP", help=f"one of: {', '.join(keys)}")
@@ -163,10 +178,12 @@ def main(argv=None) -> int:
         return 1
     version = f"{(REPO_ROOT / 'VERSION').read_text(encoding='utf-8').strip()}-dev.{time.strftime('%Y%m%d%H%M%S')}"
     assemble(PLUGIN_DIR, version)
-    source = install.Source(folder=PLUGIN_DIR, catalog=install.DEV_CATALOG, skills_dir=PLUGIN_DIR / "skills")
-    apps = [app for app in install.APPS if not args.apps or app.key in args.apps]
+    source = cad_plugin.source.Source(folder=PLUGIN_DIR, catalog=cad_plugin.source.DEV_CATALOG,
+                                  skills_dir=PLUGIN_DIR / "skills")
+    apps = [app for app in cad_plugin.apps.APPS if not args.apps or app.key in args.apps]
     print(f"This checkout's plugin is text-to-cad {version}; `cad` runs this checkout.")
-    report = install.install_apps(install.Here(), source, apps)  # each app's line printed as it finishes
+    # Each app's line is printed as it finishes.
+    report = cad_plugin.apps.install_apps(cad_plugin.computer.Here(), source, apps)
     if report.changed:
         print("Start a new session in each app to use it.")
     print("To go back: scripts/install/dev_install.py --release")

@@ -63,7 +63,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
     "update": ("cad_server.cli.update", "update cad now to the newest release of its major version (`--major`: of "
                                      "all); `update auto`: whether it does so itself"),
-    "plugin": ("cad_server.cli.plugin", "the plugin: `update` it now; `update auto`: whether cad's updates do"),
+    "plugin": ("cad_server.cli.plugin", "the plugin in your agent apps: `install` puts it in or updates it; "
+                                        "`update auto`: whether cad's updates update it too"),
 }
 # Run, never listed. Only for releases 0.10.0 to 0.11.11 -- their skill text (`cad status`, `cad stop`) and their
 # updaters (`cad setup`) -- and gone with the bridge. And commands for programs, not people: `serve` (a document served
@@ -341,7 +342,8 @@ def _report(error: Exception) -> None:
 _ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache", "update", "plugin"})
 # Commands that never carry the analytics notice: the engine's server and `mcp`, writing nowhere a person reads;
 # `telemetry`, which says it its own way; `setup`, which an updater of 0.11.11 and earlier runs with no person to read
-# it, and `plugin`, which cad's own update runs with none, its output in a log; `run`, which is only the python it runs,
+# it, and `plugin`, which cad's own update runs with none, its output in a log, and which says it itself before a run
+# of `install` a person reads (``cad_server.cli.plugin._tell``); `run`, which is only the python it runs,
 # as the `cad` command's `run` is; and `requirement`, whose output a program reads.
 _UNTOLD = frozenset({"server", "mcp", "telemetry", "setup", "plugin", "run", "requirement"})
 # Commands that only report, and so write nothing a command's run writes (``_tell``).

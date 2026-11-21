@@ -355,7 +355,7 @@ re-runs the body that read it:
   given its material as the file has them, each element keeping the name the file gives
   it. An xbf's joints, mechanism states, sequences and animations are not imported: a part is a
   part. A STEP that names other files as its parts (an external reference, written by a
-  CAD tool's multi-file export) is refused by name, here and in the CAD Viewer and
+  CAD tool's multi-file export) is refused by name, here and in the viewer and
   `cad <type> export`: export it again from its CAD tool as one file.
 - **A read tree's parts, placed**: `leaves(tree)` (`cad.build123d`) gives each leaf
   where it stands in the file's frame, out of the tree and on the same B-rep, with its
@@ -459,7 +459,10 @@ it again.
   data); `cad server stop` stops the server and any older one still running. At most
   `CAD_ENGINE_WORKERS` workers live (default: the machine's cores); a worker is retired only
   when the workers' memory is over `CAD_ENGINE_WORKER_RSS_MB`, never for idleness,
-  and its script's next run starts cold. `CAD_ENGINE_DIR` moves the
+  and its script's next run starts cold. A build whose worker stays past
+  `CAD_ENGINE_WORKER_CEILING_MB` (default: half the machine's memory) for two of the
+  server's checks, half a minute apart, is stopped, and its error says so; the server reads
+  the setting when it starts. `CAD_ENGINE_DIR` moves the
   server's door and lock (one server per folder).
 
 ## Progress and the report

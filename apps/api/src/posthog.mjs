@@ -11,23 +11,30 @@
  * background, so what "deleted" means is "queued for deletion". Retention is PostHog's: events go after the
  * period its plan keeps them.
  *
+ * A report of a failed install (`install.mjs`) is one PostHog event too (`INSTALL_FAILED`), under its run's id: an id
+ * made for that run alone, so the event makes no person (`$process_person_profile`), and there is nothing to forget.
+ *
  * Its settings are the host's (api/v1.js): the project's API key, which captures; a personal API key with
  * `person:write`, which deletes, and `project:read`, which checks the project is there; the project's id; and
- * its region, `us` or `eu`. `fetch` is handed in, so the tests need no network.
+ * its region, `us` or `eu`. A failed install is captured in that same project, under the same key. `fetch` is
+ * handed in, so the tests need no network.
  */
 
 import { FIELDS, OUR_FRAMES } from './events.mjs';
+import { FIELDS as INSTALL_FIELDS } from './install.mjs';
 
 // PostHog's name for each kind of row, as a product reads them.
 export const EVENTS = {
   tool: 'tool_used', view: 'view_used', files: 'files_shown', build: 'models_built', snapshot: 'snapshots_rendered',
   feature: 'feature_used', health: 'daemon_health', exception: '$exception', tool_failure: 'tool_failed',
   build_failure: 'build_failed', snapshot_failure: 'snapshot_failed', control: 'control_used', arrival: 'version_arrival',
-  update: 'cad_updated',
+  update: 'cad_updated', install: 'plugin_installed', install_failure: 'plugin_app_failed',
 };
+// And for a report of a failed install (`install.mjs`), which is no row of a batch.
+export const INSTALL_FAILED = 'install_failed';
 // Frames that name no file of ours: never in the app, whatever the code around them.
 const NOT_OURS = new Set(['<user>', '<?>', '<frozen>']);
-// A page's chunk of a third-party package, as the CAD Viewer's build names them (apps/web/vite.config.mjs puts
+// A page's chunk of a third-party package, as the viewer's build names them (apps/web/vite.config.mjs puts
 // three, react, radix and lucide in chunks named `vendor-<package>`, each `vendor-<package>-<hash>.js`, named by
 // the file alone in a frame, or under `assets/`): a frame there is a library's, never the page's own.
 const VENDOR = /(?:^|\/)vendor-[^/]*$/;
@@ -112,6 +119,19 @@ export function eventOf(row, country) {
 }
 
 /**
+ * A report of a failed install (`install.mjs`: `reportOf`) as one PostHog event: its run's id as the distinct id,
+ * what it says of the run and the country as properties, PostHog's own location lookup off, and no person made of
+ * it (`$process_person_profile`): a run's id is never seen again. Sent under the report's own id and at its own
+ * time, so one sent again is the same event.
+ */
+export function installEventOf(report, country) {
+  const properties = { distinct_id: report.run, $process_person_profile: false, $geoip_disable: true };
+  for (const key of INSTALL_FIELDS) if (report[key] !== undefined) properties[key] = report[key];
+  if (country) properties.country = country;
+  return { event: INSTALL_FAILED, properties, uuid: report.id, timestamp: new Date(report.at * 1000).toISOString() };
+}
+
+/**
  * @param {{ region: string, projectKey: string, personalKey: string, projectId: string }} settings
  * @param {{ fetch?: typeof fetch, now?: () => number }} [options] `now`: the clock health's answer is kept by.
  */
@@ -144,6 +164,13 @@ export function posthogStore({ region, projectKey, personalKey, projectId }, { f
       const batch = rows.map(row => eventOf(row, country));
       await call(`${capture}/batch/`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ api_key: projectKey, batch }),
+      });
+    },
+    /** @param {object} report @param {{ country?: string | null }} [context] */
+    async report(report, { country = null } = {}) {
+      await call(`${capture}/batch/`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ api_key: projectKey, batch: [installEventOf(report, country)] }),
       });
     },
     async forget(install) {

@@ -191,14 +191,14 @@ export interface CadParametersPreview {
  */
 export interface CadParametersRefusal extends Error { code: string; hint: string; reason?: string; detail?: string }
 /**
- * What `GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure` answers: a URDF, SDF or SRDF resolved by the server into the articulation
+ * What `GET /api/v1/documents/<urdf|srdf>/<id>/structure` answers: a URDF or an SRDF resolved by the server into the articulation
  * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
  * with its colour and the URL of the mesh it draws), and what the description says about its
  * links and joints, as written. See `packages/cad/src/cad_server/robot_payload.py`.
  */
 export interface CadRobotPayload {
   schemaVersion: number;
-  kind: 'urdf' | 'sdf' | 'srdf';
+  kind: 'urdf' | 'srdf';
   name: string;
   root: string;
   articulation: Record<string, unknown>;
@@ -206,7 +206,8 @@ export interface CadRobotPayload {
   joints: Record<string, unknown>[];
   visuals: { id: string; link: string; label: string; placement: number[]; color: string; mesh: { format: string; url: string } }[];
   srdf: Record<string, unknown> | null;
-  sdf: Record<string, unknown> | null;
+  /** Always null: schema 2 names it, and the document type it described is gone. */
+  sdf: null;
   [key: string]: unknown;
 }
 /** Byte tickets own their buffer exclusively: workers may detach it. URL tickets are approved by the provider. */

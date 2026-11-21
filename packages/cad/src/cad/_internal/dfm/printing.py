@@ -469,7 +469,7 @@ def machine_volume(resolved: dict[str, Any]) -> dict[str, Any]:
     if resolved.get("build_volume") is not None:
         printer = resolved.get("printer")
         origin = "given" if not isinstance(printer, dict) or "build_volume" not in printer["supplied"] else (
-            f"printer {printer['name']} ({printer['file']})")
+            f"printer {printer['name']} ({printer['file']}, bed bounding box)")
         return {"volume_mm": list(build_volume(resolved["build_volume"])), "origin": origin}
     volume, source = BUILD_VOLUMES[resolved["technology"]]
     return {"volume_mm": [float(value) for value in volume], "origin": f"assumed ({SOURCES[source].url})",
@@ -498,7 +498,8 @@ def validate(resolved: dict[str, Any], document_type: str) -> None:
     if resolved.get("printer") is not None:
         if technology != "fdm":
             raise ArgumentRefused(f"--printer is FDM's (a filament printer's settings file), not {technology}'s")
-        _take_printer(resolved)
+        if not isinstance(resolved["printer"], dict):
+            apply_printer(resolved, printer_settings(resolved["printer"]))
     for name in ("layer_height", "nozzle"):
         if resolved.get(name) is not None and not float(resolved[name]) > 0:
             raise ArgumentRefused(f"--{name.replace('_', '-')} is a length in millimetres above 0, not {resolved[name]}")
@@ -584,13 +585,10 @@ def _listed(value: Any) -> list[str]:
     return [str(part).strip() for part in parts if str(part).strip()]
 
 
-def _take_printer(resolved: dict[str, Any]) -> None:
-    """``printer`` (a path) read once into ``resolved``: its volume and nozzle where none is given -- they are
-    then the printer's, judged as ``--build-volume`` and ``--nozzle`` are -- and ``printer`` the plain facts
+def apply_printer(resolved: dict[str, Any], printer: dict[str, Any]) -> None:
+    """Apply the settings already read into ``resolved``: the printer's volume and nozzle where none is given,
+    judged as ``--build-volume`` and ``--nozzle`` are, and ``printer`` the plain facts
     (name, file, what it supplied) for the report to name it by."""
-    if isinstance(resolved["printer"], dict):
-        return
-    printer = printer_settings(resolved["printer"])
     supplied = []
     if resolved.get("build_volume") is None:
         resolved["build_volume"] = "x".join(f"{value:g}" for value in printer["volume_mm"])

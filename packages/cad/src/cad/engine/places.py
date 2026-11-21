@@ -30,6 +30,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -417,7 +418,7 @@ def lock(path: Path | None = None) -> Any:
     if refusal is not None:
         raise PermissionError(refusal)
     while True:
-        handle = open(path, "a+")
+        handle = _opened(path)
         try:
             if WINDOWS:
                 import msvcrt
@@ -436,6 +437,22 @@ def lock(path: Path | None = None) -> Any:
         if names(handle, path):
             return handle
         handle.close()  # taken as its last holder removed it: the name is another file's, or none
+
+
+def _opened(path: Path) -> Any:
+    """The lock file opened, to take the lock on. Windows refuses to open a file (EACCES) while it is being
+    removed -- its last holder letting it go (``daemon.let_go``, ``client.sweep``) as another start opens it
+    -- so there that refusal waits out the ladder a rename's does (``atomic_replace``) before it is the
+    system's: starts at the same moment end with one server, none of them refused."""
+    if WINDOWS:
+        from cad.engine.atomic_replace import RETRY_DELAYS_SECONDS
+
+        for delay in RETRY_DELAYS_SECONDS:
+            try:
+                return open(path, "a+")
+            except PermissionError:
+                time.sleep(delay)
+    return open(path, "a+")
 
 
 def names(handle: Any, path: Path) -> bool:

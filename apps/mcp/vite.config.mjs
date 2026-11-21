@@ -60,7 +60,7 @@ function inlineWorkers() {
 // its positions kept (magic-string) and folded into rolldown's map, and a placeholder is as wide as
 // the blob URL that replaces it (`WIDTH`, padded with spaces a URL's parser drops), so swapping it
 // moves no code. The id is the one that text and its map decide (@cad/core/chunk-ids), never
-// rolldown's: rolldown names the code before these edits, which the CAD Viewer may ship unedited
+// rolldown's: rolldown names the code before these edits, which the viewer may ship unedited
 // under the same id.
 const CHUNK = 'cad-chunk:';
 const WIDTH = 192;

@@ -197,7 +197,7 @@ export interface FileViewerProps {
   navbarActions?: ReactNode;
   /**
    * The host's own items at the end of the file's ⋯ menu, after Copy path and Open in: menu items or
-   * submenus (`DropdownMenuItem`, `DropdownMenuSub`), the CAD viewer's Export. Over a document only.
+   * submenus (`DropdownMenuItem`, `DropdownMenuSub`), the viewer's Export. Over a document only.
    */
   fileMenuItems?: ReactNode;
   overlay?: ReactNode;

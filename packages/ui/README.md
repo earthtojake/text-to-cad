@@ -5,7 +5,7 @@ one file by its absolute path (`/a/b.step`, `C:/a/b.step`, `/`-separated in ever
 app), or the host's home with none, under a navbar — the logo that opens the app's
 menu, the file's name and the name menu it opens (Models and Files), the file menu — with the file's
 content and the loading and error states ([FileViewer](docs/file-viewer.md)).
-`CadViewer` (`@cad/ui/cad-viewer`) is the CAD viewer every app shows:
+`CadViewer` (`@cad/ui/cad-viewer`) is the viewer every app shows:
 FileViewer over a CAD client, with the six CAD renderers, the home (the model
 library) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.
@@ -110,7 +110,7 @@ src/
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
     xbf/            an engine document (.xbf) and a STEP: model tree, Position
-    robot/          URDF, SRDF and SDF: Position and Links
+    robot/          URDF and SRDF: Position and Links
     glb/, mesh/     GLB, and STL/3MF triangle meshes
     dxf/            2D drawings
     workspace/      a viewer file's catalog entry and document load
@@ -284,7 +284,7 @@ the drawing tools' colour, stroke width, placement and history; Measure's chips.
 Clip's slider rows open in a popover from their tiles, taking up no tool.
 The view's one panel, docked at the left, whatever the tool
 (`kit/shell/FlatPanel.jsx`): one head row, as Figma's Layers panel's — a tab per part of the file's structure (a STEP's or
-an .xbf's Model, a robot's Links, an SDF's metadata; a board's Parts, Nets and Layers, a
+an .xbf's Model, a robot's Links; a board's Parts, Nets and Layers, a
 schematic's Parts, Nets and Hierarchy, a drawing's Layers), then, only where the file has them, its Parameters, Joints and
 Animation (`ToolPanel`s; their rows `kit/inspector/panelRows.jsx`), then Search, an icon that opens the one search box in
 the tabs' place (one tab is a plain title, a row high, its list right under it) — its lists at its full height, in one

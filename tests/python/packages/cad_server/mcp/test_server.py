@@ -701,7 +701,7 @@ class InlineServerTest(_Session):
         # The engine gives no page: the launch goes without one, and the card still mounts.
 
         def refuse(_model=None) -> str:
-            raise ViewerUnavailable("CAD Viewer client is not built")
+            raise ViewerUnavailable("The viewer client is not built")
 
         self.server._viewer_url = refuse
         launch = self.launch("cad_show", {"source": self.bracket})
@@ -752,10 +752,10 @@ class InlineServerTest(_Session):
             self.assertEqual((status, "no browser" in answer["error"]), (503, True))
 
             def refuse(_model=None) -> str:
-                raise ViewerUnavailable("CAD Viewer client is not built")
+                raise ViewerUnavailable("The viewer client is not built")
 
             self.server._viewer_url = refuse
-            self.assertEqual(self.http("POST", route, {}), (503, {"error": "CAD Viewer client is not built"}))
+            self.assertEqual(self.http("POST", route, {}), (503, {"error": "The viewer client is not built"}))
         with mock.patch.object(browser_open, "display_refusal", return_value="there is no display to open a browser on"):
             self.assertEqual(self.http("POST", route, {}), (503, {"error": "there is no display to open a browser on"}))
 
@@ -843,8 +843,8 @@ class InlineServerTest(_Session):
     def test_a_step_and_an_engine_document_are_shown_and_the_agent_is_told_so(self) -> None:
         # The page draws both from what the cadgen engine serves of them (``cad_server.viewer.xbf``).
         tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
-        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, SDF, KiCad PCB, KiCad schematic)", tools["cad_show"]["description"])
-        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, SDF, KiCad PCB, KiCad schematic)", self.initialized["instructions"])
+        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, KiCad PCB, KiCad schematic)", tools["cad_show"]["description"])
+        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, KiCad PCB, KiCad schematic)", self.initialized["instructions"])
         for name in ("arm.xbf", "arm.step", "ARM.STP"):
             model = self.workspace / "parts" / name
             model.write_bytes(b"\0")

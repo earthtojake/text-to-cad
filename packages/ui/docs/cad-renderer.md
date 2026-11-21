@@ -1,6 +1,6 @@
 # CAD renderer
 
-The CAD viewer is the viewport, the floating tool strip and the tool in hand's
+The viewer is the viewport, the floating tool strip and the tool in hand's
 sub-toolbar under it, the view's panel, reference interactions, measurement and annotation
 tools, animation, loading artwork and alerts, in `@cad/ui`. The rules of its
 chrome — which tools a file has, how they take and give back the pointer, the view's panel,
@@ -20,7 +20,7 @@ renderer composes, none of which asks what it is showing. There is one renderer
 per file family, each a vertical slice over the kit: `src/renderers/board` (a KiCad board),
 `src/renderers/dxf` ([DXF renderer](#dxf-renderer)), `src/renderers/glb` ([GLB renderer](#glb-renderer)),
 `src/renderers/mesh` (STL and 3MF, [Mesh renderer](#mesh-renderer)),
-`src/renderers/robot` (URDF, SRDF and SDF, [Robot renderer](#robot-renderer)) and
+`src/renderers/robot` (URDF and SRDF, [Robot renderer](#robot-renderer)) and
 `src/renderers/xbf` (an `.xbf`, a STEP and an STP, [Engine document renderer](#engine-document-renderer)). The kit imports itself, shared UI
 (`primitives`, `lib`, `drawing`) and the format-blind half of `@cad/core`
 (`lib/viewer/*`, `lib/perspective.js`, `common/viewSettings.js`,
@@ -137,7 +137,7 @@ not: the camera fit, the studio set up per output, and PNG encoding.
 | --- | --- | --- | --- |
 | GLB | `lib/render/glbScene.js` `createGlbScene`, over `loadRenderGlbDocument` | `glb/useGlbScene.js` | `GLB_FAMILY` |
 | STL, 3MF | `lib/render/meshScene.js` `buildMeshScene`, over `loadRenderMeshByUrl` | `mesh/useMeshScene.js` | `MESH_FAMILY` |
-| URDF, SRDF, SDF | `lib/urdf/robotScene.js` `createRobotScene` over `robotParts.js`, loaded by `lib/urdf/loadRobot.js` | `robot/RobotRenderer.jsx`, `robot/useRobotDocument.js` | `ROBOT_FAMILY` |
+| URDF, SRDF | `lib/urdf/robotScene.js` `createRobotScene` over `robotParts.js`, loaded by `lib/urdf/loadRobot.js` | `robot/RobotRenderer.jsx`, `robot/useRobotDocument.js` | `ROBOT_FAMILY` |
 | an engine document (`.xbf`, STEP) | `lib/xbf/xbfScene.js` `createXbfScene`, over `loadXbfDocument` | `xbf/useXbfScene.js` | `XBF_FAMILY` |
 
 Both callers dress a scene the same way: the look from `resolveSceneSurfaceLook`, shadows
@@ -218,7 +218,7 @@ A CAD renderer's controls are the shell's chrome: its `tools` on the strip, the 
 hand's `subToolbar` (`kit/tools/SubToolbar.jsx`) under it, and its `sidebar`, the file's
 sections in the view's panel docked at the left (`kit/shell/FlatPanel.jsx`, a board's and a
 drawing's too), each a `ToolPanel` drawn as a tab by its name, whatever the tool: an engine
-document's Model and Position, a robot's Links, an SDF's metadata and Position. A section draws
+document's Model and Position, a robot's Links and Position. A section draws
 no heading in its tab and pads nothing: the panel's body stands its rows on the panel's lines
 (`docs/settings-ui.md`); the panel's one search searches the trees. The panel's width, whether it is
 collapsed and the tab shown are kept in the tool stack's layout (`panels.flat`, `collapsed.flat`,
@@ -570,15 +570,13 @@ or a `.3mf` as what it is: triangles, and in a 3MF a colour per object.
 ## Robot renderer
 
 `createRobotRenderer` (`@cad/ui/renderers/robot`, id `robot`) shows a
-`.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, one payload: the engine
+`.urdf` or `.srdf` as its kinematic tree. One renderer, one payload: the engine
 resolves the description (its document's `structure`, `cad_server.robot_payload`) into the
 articulation the page plays, played by core's `common/articulation.js`, the visuals it
-draws (each mesh at its rest placement: a link's mesh file, or a box, cylinder, sphere or
-capsule the engine meshed, held by its digest) and the facts a person reads back. An SRDF is its paired URDF with the SRDF's
-semantics on it (group states as named poses, end effectors, planning groups), an SDF a
-robot with one more section (a model nested in its model is part of it, its links and
-joints named by scope: `arm::elbow`). The page parses nothing: a description the engine refuses (its
-validators' findings, a mesh the page cannot draw, a `package://` or remote mesh, an SRDF
+draws (each mesh at its rest placement: a link's mesh file, or a box, cylinder or sphere
+the engine meshed, held by its digest) and the facts a person reads back. An SRDF is its paired URDF with the SRDF's
+semantics on it (group states as named poses, end effectors, planning groups). The page parses nothing: a
+description the engine refuses (its validators' findings, a mesh the page cannot draw, a `package://` or remote mesh, an SRDF
 with no single URDF beside it) is refused at the door, in the engine's words. Nothing below
 the loader asks which format it was.
 
@@ -619,7 +617,7 @@ the loader asks which format it was.
   Render the studio's. Colour, in order: the colour the description gives the
   visual; else the colours the mesh brought (per vertex, graded as a material
   colour is); else the named object's own; else the viewer's surface colour.
-  A colour the description gives a visual (a URDF `<material>`, an SDF `<diffuse>`)
+  A colour the description gives a visual (a URDF `<material>`)
   WINS over the colours its mesh file carries: this is deliberate, and a snapshot wears
   it too, because it draws the robot with this same scene.
   Materials are double-sided, so a mirrored `<mesh scale>` cannot turn a link
@@ -660,8 +658,8 @@ the loader asks which format it was.
   the highlight ink a STEP part wears; hover is not React state. A robot has no
   viewport menu and so no framing items; opening the file again fits it afresh.
 - **Panel**: the view's panel's tabs, whatever the tool: **Links**
-  ([Robot links](#robot-links): headed by its filter), **SDF** for an `.sdf`
-  (`SdfSection.jsx`), then **Joints** where a control can be driven. No tool panels.
+  ([Robot links](#robot-links): headed by its filter), then **Joints** where a control can be
+  driven. No tool panels.
   `PositionControls.jsx` is the Joints tab's body (`RobotRenderer.jsx`) — the `Pose`
   label and dropdown (`Default`, which puts the joints back, the SRDF group states, and
   `Custom` for a hand-moved pose), then the slider control (`kit/inspector/SliderField.jsx`) per
@@ -732,7 +730,7 @@ A GLB, a 3MF, an STL and a robot have the kit's tools as their matrix allows the
 
 | | Select | Draw | Measure | Clip | Explode |
 | --- | --- | --- | --- | --- | --- |
-| URDF, SRDF, SDF | links (and named mesh objects) | yes | metres, approximate | yes | no: a robot is posed |
+| URDF, SRDF | links (and named mesh objects) | yes | metres, approximate | yes | no: a robot is posed |
 | GLB | nodes, `n<index>` | yes | metres, approximate | yes | where it has several rigid nodes that draw |
 | 3MF | objects, `o<item>[.<component>]` | yes | its declared unit, approximate | yes | no |
 | STL | no: one mesh, the whole file | yes | no: the format names no unit | yes | no |
@@ -1344,7 +1342,7 @@ section's layout is [the design system's](settings-ui.md#position-and-references
 
 Position's knobs (its filter kind's glyph lucide `Spline`) drag a model's joints by handles
 in the viewport, under Select while its filter ticks Position. They exist where
-something can be driven: a robot (URDF, SRDF, SDF) with a revolute, continuous
+something can be driven: a robot (URDF, SRDF) with a revolute, continuous
 or prismatic joint that is not a mimic follower, and an engine document whose mechanism
 has a pair that turns or slides. Robots and engine documents
 open in Select with every Filter box ticked: the tool in hand is never stored, and a reload
@@ -1665,9 +1663,9 @@ renderer (core's `createCadWebGlRenderer`). Read-only seam: `window.__cadGpuDevi
 
 ### Robot links
 
-A URDF, SRDF or SDF opens in Select, with **Links** the view's panel's first tab (searched by the
-panel's search box), an `.sdf`'s **SDF** tab after it, then
-**Joints** where a joint can be driven (`LinksSection`, `SdfSection`, `PositionControls`),
+A URDF or SRDF opens in Select, with **Links** the view's panel's first tab (searched by the
+panel's search box), then
+**Joints** where a joint can be driven (`LinksSection`, `PositionControls`),
 whatever the tool. Links is always present: it is the description's kinematic tree, not an
 inventory of mesh names. `robot/robotTree.js` builds it as plain data.
 Links are the rows, carrying no icon; a child link sits under its parent link
@@ -1727,8 +1725,7 @@ a press selecting it; "Root link" for the root) — never its geometry, inertia 
 (the Links tree is the hierarchy). The engine keeps every fact as the description wrote them, in the payload's
 `links` and `joints` (`joints[].origin`, `limit`, `mimic`; `links[].inertial` with
 `origin` and `inertia`, `visuals` and `collisions`, each mesh file with the host path
-the engine resolved for it), beside the articulation it renders from. An SDF model
-reports only what the engine records of it. A named object shows its link and size.
+the engine resolved for it), beside the articulation it renders from. A named object shows its link and size.
 
 What names something else can be followed. A mesh path is a link that opens
 that file, by its absolute path, through the host's `onOpenFile`: the renderer resolves

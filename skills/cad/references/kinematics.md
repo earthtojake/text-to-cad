@@ -416,7 +416,7 @@ assembly lacks fails the run.
 - **A sequence costs nothing outside a GLB**: STEP, STL and 3MF carry no motion.
 - Every GLB exported from the model carries each sequence as a glTF animation of its
   name, keyed within 1e-3 of the model's size of the true motion. Blender, three.js and
-  the CAD Viewer play it, repeating.
+  the viewer play it, repeating.
 
 A configuration sequence moves joints only. What the mechanism does not do (parts flying
 apart, a cover vanishing, a part spinning for show) is an animation of the GLB:

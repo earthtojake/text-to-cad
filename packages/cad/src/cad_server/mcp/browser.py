@@ -1,4 +1,4 @@
-"""The CAD Viewer's page for a call that shows no view (a ``codex exec`` turn's), and the words the stdio transport
+"""The viewer's page for a call that shows no view (a ``codex exec`` turn's), and the words the stdio transport
 and the server say of it.
 
 Such a ``cad_show`` opens the model's page in the person's browser, but never from the server: the

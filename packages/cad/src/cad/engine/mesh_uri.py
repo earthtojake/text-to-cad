@@ -1,9 +1,9 @@
 """A robot description's mesh reference: the URI scheme it is spelled with, and the local file it names.
 
-URDF and SDF name a link's mesh by a path or a URI (``meshes/base.stl``, ``/opt/robot/base.stl``,
+A URDF names a link's mesh by a path or a URI (``meshes/base.stl``, ``/opt/robot/base.stl``,
 ``C:\\robot\\base.stl``, ``file:///C:/robot/base.stl``, ``package://arm/meshes/base.stl``,
-``model://arm/meshes/base.stl``, ``https://...``). Every reader of one -- the URDF and SDF readers and
-validators, the viewer's robot payload, the stills (``formats.robot``) -- turns it into a file here, so
+``model://arm/meshes/base.stl``, ``https://...``). Every reader of one -- the URDF reader and
+validator, the viewer's robot payload, the stills (``formats.robot``) -- turns it into a file here, so
 the same reference names the same file in each. The standard library only: the validators that use
 it run without the CAD stack.
 
@@ -16,8 +16,8 @@ path can name, so there it names no local file (it is not silently read as ``/sh
 
 A ``package://NAME/REST`` reference is REST in the ROS package the description is in: the nearest
 folder at or above it named NAME, or holding a ``package.xml`` that names it (``package_file``), as
-every reader of a robot description finds it (the engine's ``urdf_source`` and ``sdf_source``, and
-through them the stills and the viewer's payload).
+every reader of a robot description finds it (the engine's ``urdf_source``, and through it the stills
+and the viewer's payload).
 """
 from __future__ import annotations
 

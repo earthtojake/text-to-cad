@@ -155,7 +155,7 @@ def _update_identity_digest(digest, base_dir, *, suffix: str = "") -> None:
 
 
 # What a page's address answers where no client is built (``_serve_dist``): the sentence ``cad viewer`` says.
-NOT_BUILT = "CAD Viewer client is not built; build apps/web or install the cad wheel"
+NOT_BUILT = "The viewer client is not built; build apps/web or install the cad wheel"
 
 
 def identity_token(dist_dir: str) -> str:
@@ -1028,7 +1028,7 @@ class CadApp:
         starts meshing its parts, which a page reads next. Documents are the engine's: an
         application with none under it serves none."""
         raise ApiError(404, "documents are served by the installation's engine",
-                       "open the document in the CAD Viewer: `cad viewer <file>`")
+                       "open the document in the viewer: `cad viewer <file>`")
 
     def _relay(self, request, response, route: str, query=()) -> None:
         """The engine's answer to ``route``, sent on: its error, a JSON object, gains a ``hint``
@@ -1468,7 +1468,7 @@ class CadApp:
         response.send_json(status, body)
 
     def _handle_robot(self, request, response, path, mesh, api):
-        """``GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure``: the robot description resolved
+        """``GET /api/v1/documents/<urdf|srdf>/<id>/structure``: the robot description resolved
         for the page, or ``.../parts/<digest>`` one of the primitive meshes cadgen made for it
         (``robots.py`` owns both rules; ``api`` is where the document's reads are). Real work on a
         miss -- the validators, the frame graph, meshing a shape -- so it is counted, as the drawing

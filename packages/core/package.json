@@ -1,9 +1,9 @@
 {
   "name": "@cad/core",
-  "version": "0.11.13",
+  "version": "0.11.15",
   "private": true,
   "type": "module",
-  "description": "Reusable CAD render/viewer runtime for docs, CAD Viewer, and generated snapshot browser assets.",
+  "description": "Reusable CAD render/viewer runtime for docs, the viewer, and generated snapshot browser assets.",
   "exports": {
     "./client": {
       "types": "./dist/client/index.d.ts",

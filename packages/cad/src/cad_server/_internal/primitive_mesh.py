@@ -1,6 +1,6 @@
-"""The meshes of a robot description's primitive shapes: box, cylinder, sphere, capsule.
+"""The meshes of a robot description's primitive shapes: box, cylinder, sphere.
 
-A URDF or SDF visual may be a shape rather than a mesh file. The server meshes it for the CAD
+A URDF visual may be a shape rather than a mesh file. The server meshes it for the CAD
 Viewer's robot view at one tolerance (``CHORD``, ``ANGLE``): a round shape takes as many
 segments as the chord criterion (relative to the shape's bounding diagonal) and the angle
 criterion between them allow. A box is twelve triangles whatever the tolerance.
@@ -31,8 +31,8 @@ ANGLE = 0.35
 
 GLB_MAGIC, GLB_VERSION, GLB_JSON_CHUNK, GLB_BIN_CHUNK = 0x46546C67, 2, 0x4E4F534A, 0x004E4942
 
-#: The shapes meshed here, by the name URDF and SDF give them.
-PRIMITIVE_SHAPES = ("box", "cylinder", "sphere", "capsule")
+#: The shapes meshed here, by the name URDF gives them.
+PRIMITIVE_SHAPES = ("box", "cylinder", "sphere")
 
 # A circle is never coarser than an octagon nor finer than this, whatever the tolerances
 # and the radius say: the tolerance is a display policy, not a licence for a million triangles.
@@ -158,24 +158,6 @@ def _sphere(radius: float) -> _Mesh:
     return mesh
 
 
-def _capsule(radius: float, length: float) -> _Mesh:
-    half = length / 2.0
-    segments = primitive_segments(radius, math.sqrt(2 * (2 * radius) ** 2 + (length + 2 * radius) ** 2))
-    rings = max(2, int(math.ceil(segments / 4)))
-    mesh = _Mesh()
-    north = mesh.vertex((0.0, 0.0, half + radius), (0.0, 0.0, 1.0))
-    south = mesh.vertex((0.0, 0.0, -half - radius), (0.0, 0.0, -1.0))
-    # The top dome from just under its pole down to the equator at +half, the bottom dome
-    # from the equator at -half down to just above its pole; the wall joins the equators.
-    upper = [mesh.ring(segments, radius, (math.pi / 2.0) * (1.0 - ring / rings), half) for ring in range(1, rings + 1)]
-    lower = [mesh.ring(segments, radius, -(math.pi / 2.0) * (ring / rings), -half) for ring in range(0, rings)]
-    mesh.fan(upper[0], north, segments, top=True)
-    for above, below in zip(upper + lower, (upper + lower)[1:]):
-        mesh.join(above, below, segments)
-    mesh.fan(lower[-1], south, segments, top=False)
-    return mesh
-
-
 def _build(shape: str, dimensions: dict) -> _Mesh:
     if shape == "box":
         size = dimensions["size"]
@@ -184,8 +166,6 @@ def _build(shape: str, dimensions: dict) -> _Mesh:
         return _cylinder(float(dimensions["radius"]), float(dimensions["length"]))
     if shape == "sphere":
         return _sphere(float(dimensions["radius"]))
-    if shape == "capsule":
-        return _capsule(float(dimensions["radius"]), float(dimensions["length"]))
     raise ValueError(f"not a primitive shape this meshes: {shape!r} (one of {', '.join(PRIMITIVE_SHAPES)})")
 
 
@@ -195,9 +175,9 @@ def _y_up(values: np.ndarray) -> np.ndarray:
 
 
 def primitive_glb(shape: str, dimensions: dict) -> bytes:
-    """The GLB of one primitive at its metres: ``box`` (``size``), ``cylinder`` and
-    ``capsule`` (``radius``, ``length``, along Z), ``sphere`` (``radius``), each centred on
-    its own origin as URDF and SDF place them."""
+    """The GLB of one primitive at its metres: ``box`` (``size``), ``cylinder`` (``radius``,
+    ``length``, along Z), ``sphere`` (``radius``), each centred on its own origin as URDF places
+    them."""
     positions, normals, indices = _build(shape, dimensions).arrays()
     y_up = _y_up(positions)
     position_bytes = y_up.tobytes()

@@ -272,7 +272,7 @@ export function robotComponents(meshData) {
  * @returns {{ parts: object[], components: ReturnType<typeof robotComponents> }}
  */
 export function buildRobotParts(robot, meshesByUrl) {
-  // What the DESCRIPTION says a visual's colour is (a URDF <material>, an SDF <diffuse>), kept
+  // What the DESCRIPTION says a visual's colour is (a URDF <material>), kept
   // apart from the colour a named object of its mesh brings: the description's wins over both.
   const visuals = { parts: robotVisualParts(robot, meshesByUrl).map(part => ({ ...part, descriptionColor: String(part.color || "").trim() })) };
   let geometry = visuals;

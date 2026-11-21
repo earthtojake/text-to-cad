@@ -43,7 +43,7 @@ guide in a release that must break nothing: a patch below 1.0, a patch or a mino
 guide may be corrected in any release). Which releases install themselves is a second rule: cad installs
 every newer release of its own major by itself, so below 1.0 a minor that breaks too (this is a beta); a
 new major never arrives by itself, only by `cad update --major` ([decisions](docs/contributing/decisions.md)). A command
-the skills used keeps working for 30 days after they stop using it, which CI checks; otherwise a
+the skills used keeps working for 30 days after they stop using it, hidden if need be; otherwise a
 command, option or tool may change or go in any release. What breaks is law 15's tiers and the short
 list of what must stay the same
 ([CONTRIBUTING.md, "Which number a release bumps"](CONTRIBUTING.md#which-number-a-release-bumps)).
@@ -62,25 +62,32 @@ the docs site, tags `v<VERSION>` and publishes the GitHub Release. A run that
 stopped partway is finished by dispatching `Publish Release` on `main`;
 `build-test` is the rehearsal branch, used only when the user asks to test the
 pipeline; the standalone `Deploy Docs` workflow redeploys the docs site from a
-ref without a release. The full flow, the resume path, the rehearsal and the
+ref without a release (to production only while PyPI's newest cad has `cad plugin
+install`, which the install command the site serves hands over to). The full flow, the resume path, the rehearsal and the
 local fallbacks are [CONTRIBUTING.md's Releases](CONTRIBUTING.md#releases).
 
 People install text-to-cad with one command, `curl -fsSL https://texttocad.dev/install.sh | sh`
 (Windows: `irm https://www.texttocad.dev/install.ps1 | iex`). It takes no options, carries no
-version and has one behaviour, whoever runs it: the bootstrap in `scripts/install/` makes sure uv is
-there and runs `install.py`, which installs cad as a uv tool only where none is installed or the one
-there does not start, installs the plugin from `latest` in each agent app it finds with that app's own
-command (its `APPS` table is the one list of apps), removes our own older copies, puts cad's folder on
-the PATH with `uv tool update-shell`, and turns on `cad plugin update auto`, keeping its release as the one
-it is up to date for only where it ends well. It never starts the server. cad alone is installed by one
-promised line, `uv tool install cad`, which is what every skill's Setup block runs; no skill runs the install
-command. A global install updates itself to every newer release of its own major version, on by default
-(`cad update auto`), never to a higher major; `cad update` updates it now inside its major, and `cad update
---major` to the newest of all. Where `cad plugin update auto` is on and
-cad is newer than the release the install command last ended well for, however it got newer, cad's
-server runs `cad plugin update` (the install command) once. A
-store updates its own copy. cad knows no app or skill, and of plugins only `cad plugin`
-([decisions](docs/contributing/decisions.md)).
+version and knows no agent app: the bootstrap in `scripts/install/` makes sure uv is there and runs
+`install.py`, which installs cad as a uv tool only where none is installed or the one there does not
+start (putting its folder on the PATH with `uv tool update-shell`), brings a cad that was there up to
+date with its own `cad update` where a person ran it, and hands over to that cad's `cad plugin install`
+(the newest release's, `uv tool run cad@latest`, where that cad has no such command), then turns on
+`cad plugin update auto` with that cad's own command. `cad plugin install`, the one command that installs
+the plugin, installs it from `latest` in each agent app it finds with that app's own command (its `APPS`
+table, in `cad_server/plugin/`, is the one list of apps) and removes our own older copies, and nothing else:
+it keeps its release as the one the plugin is up to date for only where every app it found went well and it is
+the computer's global install, and never changes the switch. Neither starts the server, and no path loops: the install
+command never runs `cad plugin update` (on 0.11.12 and 0.11.13 it runs the install command) but as the
+switch, and `cad plugin install` runs no install command and no `cad update`. cad alone is installed by one promised line, `uv tool install cad`,
+which is what every skill's Setup block runs; no skill runs the install command. A global install updates
+itself to every newer release of its own major version, on by default (`cad update auto`), never to a
+higher major; `cad update` updates it now inside its major, and `cad update --major` to the newest of all.
+Where `cad plugin update auto` is on and cad is newer than the release the plugin is up to date for,
+however it got newer, cad's server runs `cad plugin install` once: cad's own code, never the hosted
+script (`cad plugin update`, with no `auto`, is its hidden second name). One such run goes at a time, and cad's update holds while one is
+going. A store updates its own copy. cad names agent apps, skills and plugins in one place,
+`cad_server/plugin/`, reached only by `cad plugin` ([decisions](docs/contributing/decisions.md)).
 
 text-to-cad is one Python distribution, `cad`, at one `VERSION`: the library (import `cad`, the CAD
 kernel as its `build123d` extra), the server and the `cad` command (import `cad_server`: the engine
@@ -114,17 +121,17 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   (pinned `@codex`), which `scripts/release/plugin_branch.py` builds at each release.
 - `models/` ([README](models/README.md)): the corpus of models, plain files, each
   built with `python model.py`; nothing installs it.
-- `docs/install.md`: the install command, installing by hand app by app, updating and removing;
+- `docs/install.md`: the install command and what it sends, installing by hand app by app, updating and removing;
   `docs/contributing/`: [decisions](docs/contributing/decisions.md) (why install and updates work
   as they do), [testing](docs/contributing/testing.md) (the rules, adding a test or a CI
   job, a red run), [writing a skill](docs/contributing/writing-a-skill.md),
   [adding a document type](docs/contributing/adding-a-document-type.md) and
   [adding an integration](docs/contributing/adding-an-integration.md);
   `docs/migrations/`: the hand-migration guides between releases
-  ([0.10 to 0.11](docs/migrations/migrating-0.10-to-next.md),
+  ([0.10 to 0.11](docs/migrations/migrating-0.10-to-0.11.md),
   [0.8 to 0.10](docs/migrations/migrating-0.8-to-0.10.md),
   [0.7 to 0.8](docs/migrations/migrating-0.7-to-0.8.md), 0.4 to 0.5).
-- `apps/web/` ([README](apps/web/README.md)): the CAD Viewer's React client (the server
+- `apps/web/` ([README](apps/web/README.md)): the viewer's React client (the server
   hosts `cad_server.viewer`'s HTTP app).
 - `apps/mcp/` ([README](apps/mcp/README.md)): the CAD app the Codex app renders as tabs, the one
   host given it (started by `cad mcp`); its cards are reached only by a development switch.
@@ -133,15 +140,18 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   (`src/cad`: models built into documents and the files written from them, the worker every build
   runs in, exports, the OCCT stills, the client every command reaches the server by, the formats and
   validators), the server ([README](packages/cad/src/cad_server/README.md): the daemon and its
-  registry, the `cad` command line, the viewer server, the CAD app's server half, and the JS assets
-  they serve in `_runtime`, built by `scripts/bundle/cadgen-runtime.sh`) and the transport
+  registry, the `cad` command line, the viewer server, the CAD app's server half, the plugin's install
+  in the agent apps (`plugin/`), and the JS assets they serve in `_runtime`, built by
+  `scripts/bundle/cadgen-runtime.sh`) and the transport
   ([README](packages/cad/src/cad_mcp/README.md)). `packages/aliases/` holds the three empty aliases.
   `packages/core` ([README](packages/core/README.md)) is `@cad/core`, shared
   CAD/runtime/client code without React; `packages/ui` ([README](packages/ui/README.md))
   is `@cad/ui`, the shared FileViewer, renderers, controls and styles.
-- `apps/docs/` ([README](apps/docs/README.md)): documentation site.
+- `apps/docs/` ([README](apps/docs/README.md)): the site, texttocad.dev: the homepage and the
+  documentation under `/docs`, which shows the install and migration guides of `docs/` as they are
+  and its own pages (`apps/docs/content/`: a page per skill, the `cad` command, contributing).
 - `apps/api/` ([README](apps/api/README.md)): `api.texttocad.dev`, its own Vercel project:
-  the version feed (read from PyPI) and the CAD app's consented analytics.
+  the version feed (read from PyPI), the consented analytics and a failed install's one report.
 - `tests/`: root-owned test suites for skills, packages, viewer services, and
   repo-wide policy.
 - `scripts/` ([README](scripts/README.md)): durable repo commands grouped by purpose.
@@ -189,7 +199,8 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
 - The README and the docs site's homepage (its copy: `apps/docs/src/lib/content.ts`)
   share their structure, install commands, summary, the apps they name (those `docs/install.md`
   lists), the link to `docs/install.md` and Contributing: change them together. The per-app installs, updates and reinstalls live in
-  `docs/install.md` alone, never in the docs app (`apps/docs/README.md`).
+  `docs/install.md` alone: the docs app shows that file as it is, at `/docs/install`, and never
+  keeps a copy (`apps/docs/README.md`).
 - Keep root guidance short. Put domain workflows, CLI details, and validation
   policy in the relevant `skills/<skill>/SKILL.md` or `references/` file.
 - Keep relevant Markdown docs current when changing behavior, commands, or repo
@@ -201,21 +212,21 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   repository-root module, and must not add `skills/`, the repository root, or a
   sibling skill directory to `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any other
   runtime lookup path. Skills are independent of each other, not of everything.
-- cad knows no app or skill: it never names, installs, removes, updates or carries them (the MCP
-  server may read which app connected). Of plugins it knows one command, `cad plugin`, which runs
-  the hosted install command (`cad plugin update`, and once where cad is newer than the release it
-  last ended well for and `cad plugin update auto` is on). Knowledge of the apps lives in the plugin and
-  `scripts/install/install.py`.
+- cad names agent apps, skills and the plugin in exactly one place, `cad_server/plugin/` (the table
+  of apps, how the plugin is installed and updated in each, which older copies are ours to remove),
+  reached only by the `cad plugin` command; nothing else in cad names them or imports it (the MCP
+  server may read which app connected), and cad carries no skill. A correction to an app is one row
+  there and ships in a release of cad; `scripts/install/install.py` knows no app.
 - Shared runtime comes from the **`cad` distribution**. A skill that uses it runs plain `cad`
   commands, with no version, and says how to get cad in its SKILL.md's Setup block (the same in
   each); no skill installs cad any other way (no `requirements.txt` naming it), because a second
   installation is one the Setup block never names, and no skill names or runs the install command. A command the skills used keeps working for 30
-  days after they stop using it (`tests/python/global/test_released_commands_still_parse.py`).
+  days after they stop using it, hidden if need be.
   Skills do not vendor cad, and ship no scripts (claude.ai's plugin
   directory refuses a program): what a skill would script is a `cad` command whose parser
   and behaviour live in `cad_server.cli` (print3d's presets are `cad orcaslicer`). The
   server draws every snapshot with OCCT, so no skill has a browser step. The server carries
-  the JavaScript it serves too (the CAD Viewer client, the CAD app page), so a skill ships no
+  the JavaScript it serves too (the viewer client, the CAD app page), so a skill ships no
   runtime of its own. Every skill runs `cad` today; one that never invokes it carries no
   setup block.
 - Keep samples and manual CAD/robot-description validation artifacts under
@@ -269,7 +280,7 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   Code preserves them, and Codex `plugin add` drops them with no error, shipping
   a skill with missing files. The shipping contract (Git, below) enforces this;
   do not relax it.
-- The CAD Viewer is `cad viewer`: the server hosts `cad_server.viewer` (Python, in
+- The viewer is `cad viewer`: the server hosts `cad_server.viewer` (Python, in
   `packages/cad`), the React client's source is `apps/web/` and its build
   ships in the server's wheel at `cad_server/_runtime/viewer` (built, never committed; a
   checkout serves `apps/web/dist`). Every skill that shows a model (CAD, PCB, robot simulation) documents that verb directly.
@@ -335,12 +346,12 @@ when touching shared surfaces or before handoff:
   job is added, renamed or sharded without a branch-protection change.
 - Canonical release version: `scripts/release/check-version.sh`
 - Packaged runtime builds and is complete: `scripts/bundle/bundle.sh --check`
-- CAD Viewer or shared packages: build exports with `npm run build:packages`,
+- Viewer or shared packages: build exports with `npm run build:packages`,
   then `npm --prefix packages/core test`, `npm --prefix packages/ui test`,
   `npm --prefix apps/web run typecheck`, `npm --prefix apps/web run test`,
   `npm --prefix apps/web run build` (`scripts/test/test-js.sh` runs all but the web build,
   which `scripts/bundle/bundle.sh` runs).
-  The Viewer is two languages and `npm run test` covers only the client — the
+  The viewer is two languages and `npm run test` covers only the client — the
   backend's suite is `tests/python/packages/cad_server/viewer`, run by
   `scripts/test/test-python.sh`. Touching `cad_server/viewer/` means running that.
 - Docs site: `npm --prefix apps/docs run check`
@@ -354,14 +365,14 @@ and confirm the change lands in the built runtime. There is nothing to commit:
 `_runtime/` is gitignored end to end, so what a reviewer reads is the source and
 what a user gets is the wheel the release builds from it.
 
-## CAD Viewer
+## Viewer
 
 The app-facing playbook lives in [`apps/web/README.md`](apps/web/README.md): launcher contract
 (reuse, ports, `/<id>` pages), dev vs prod, and the catalog/link-verification
 gotchas. The repo-side half — the lightweight-worktree recipe and
 root workspace dependencies — lives in [CONTRIBUTING.md under "Viewer Development
 In This Repo"](CONTRIBUTING.md#viewer-development-in-this-repo). Read them before starting,
-stopping, or debugging a Viewer. Never stop an instance you did not start;
+stopping, or debugging a viewer. Never stop an instance you did not start;
 packaged-runtime checks go through `scripts/bundle/bundle.sh`.
 
 ## Git

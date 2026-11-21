@@ -16,11 +16,11 @@ import { createHarnessRenderer } from '@cad/ui/renderers/shell-harness';
 import type { ViewerHost } from '@cad/ui/host';
 import type { LiveViewController } from '@cad/ui/renderers/xbf';
 import type { ViewerCommands as CadCommands } from '@cad/ui/renderers/workspace';
-// The module the built renderers publish their export view through (the CAD Viewer's ExportControls
+// The module the built renderers publish their export view through (the viewer's ExportControls
 // provides it): the same built file, so this harness's provider is the one they reach.
 import { ExportContext } from '../../../dist/export/context.js';
 
-// The one file both panes open, by its absolute path, as a CAD Viewer names files: a fixture server
+// The one file both panes open, by its absolute path, as a viewer names files: a fixture server
 // lists each of its files under `/models`, so `?file=arm.urdf` (for a test whose fixture is not the
 // default mesh) is `/models/arm.urdf`.
 const requested = new URLSearchParams(location.search).get('file') || 'part.stl';

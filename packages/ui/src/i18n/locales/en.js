@@ -849,7 +849,7 @@ export default {
   "drawing.reading": "Reading drawing",
   "drawing.updating": "Updating drawing…",
 
-  // The trees, their rows and menus, and the details panels (a robot's, an SDF's, a drawing's).
+  // The trees, their rows and menus, and the details panels (a robot's, a drawing's).
   "tree.collapse": "Collapse {name}",
   "tree.expand": "Expand {name}",
   "tree.select": "Select {name}",
@@ -952,23 +952,6 @@ export default {
   "robot.noMatch": "No link matches “{query}”",
   "robot.noLinks": "This description has no links.",
   "robot.loadingLinks": "Loading links…",
-  "sdf.more": "{count} more",
-  "sdf.document": "Document",
-  "sdf.version": "Version",
-  "sdf.unknown": "unknown",
-  "sdf.world": "World",
-  "sdf.model": "Model",
-  "sdf.counts": "Counts",
-  "sdf.joints": "Joints",
-  "sdf.frames": "Frames",
-  "sdf.includes": "Includes",
-  "sdf.plugins": "Plugins",
-  "sdf.sensors": "Sensors",
-  "sdf.lights": "Lights",
-  "sdf.physics": "Physics",
-  "sdf.nestedModels": "Nested models",
-  "sdf.unsupportedGeometry": "Unsupported geom.",
-  "sdf.metadata": "Metadata",
 
   // The CAD app's and the web page's own notices, outside the viewer.
   "cad.unreachable.openModel": "This chat can't connect to CAD's engine. Open the model in your browser instead.",

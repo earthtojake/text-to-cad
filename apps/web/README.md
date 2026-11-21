@@ -1,4 +1,4 @@
-# CAD Viewer
+# Viewer
 
 A local-filesystem CAD review app. This directory is the React CLIENT; the
 backend is the installation's engine, hosting the `cad_server.viewer` HTTP app.
@@ -185,6 +185,10 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
   Inactive WebGL scenes are released, and a file's view (its camera, Display
   settings and pose) lasts only while it is the file on screen: a refresh brings it
   back, and leaving the file drops it.
+- **The page asks browsers not to translate it** (`translate="no"` and `class="notranslate"` on `<html>`, and
+  `<meta name="google" content="notranslate">`, in `index.html`): the viewer speaks its own locales, and a
+  browser's page translation rewrites text nodes React owns, so React's next commit throws `NotFoundError` and
+  the page can go blank. The CAD app's two pages say the same. Only `classList` touches `<html>`'s class.
 - **Vite's transform cache can outlive HMR and hard reloads.** If a source
   edit does not show up, restart the dev server and delete
   `node_modules/.vite`.
@@ -245,7 +249,7 @@ This app exports no components. Other hosts use `@cad/ui/file-viewer` with
 registered renderers and explicit services. Viewer content is registered through
 `@cad/ui/renderers/xbf` for `.step`, `.stp` and `.xbf`, for `.dxf` `@cad/ui/renderers/dxf`, for `.glb`
 `@cad/ui/renderers/glb`, for `.stl` and `.3mf` `@cad/ui/renderers/mesh`, and
-for `.urdf`, `.srdf` and `.sdf` `@cad/ui/renderers/robot`, for `.kicad_pcb` `@cad/ui/renderers/board`, and for
+for `.urdf` and `.srdf` `@cad/ui/renderers/robot`, for `.kicad_pcb` `@cad/ui/renderers/board`, and for
 `.kicad_sch` `@cad/ui/renderers/schematic` (`CadViewer` registers all seven with the same client and preferences,
 as it does for the MCP app); all loading,
 selection, panel and tool behavior is shared. Public declarations, styles and worker assets are built in that
@@ -311,8 +315,8 @@ specification.
 The web host owns URL/history, the tab's persistence, appearance, version links
 and native service adapters. Shared renderers own all model interaction. STEP and
 robots open in Select, its selection filter the chevron after its button; the tool in hand's
-controls are one row under the strip. An assembly's Model (Links for a robot), Position
-and an SDF's metadata are tabs of the view's panel, docked at the left, whatever the tool. The
+controls are one row under the strip. An assembly's Model (Links for a robot) and Position
+are tabs of the view's panel, docked at the left, whatever the tool. The
 file's name in the navbar opens its name menu: Models and Files (the explorer).
 Every file's tools are on a strip at the top centre (each format's are the
 [design system's table](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle)).
@@ -426,7 +430,8 @@ that is not there shows "File does not exist".
 A file is opened by its path (the name menu, the home) and shown by its id: the page asks the
 server for the file's envelope (`GET /api/v1/documents?path=<abs>`), whose row carries the document's `id`,
 and moves to `/<id>`. Rows join by that id (`client.entryOf`), so a symlinked or case-variant
-spelling of one file is one row. A model (a document with no file of its own) has no file menu;
+spelling of one file is one row. A model (a document with no file of its own) has no file to browse from: its ⋯ menu
+acts on the document and on the script that builds it ([Export and job status](#export-and-job-status)), and
 its Files lists the folder the explorer was last in this tab, else the person's home folder
 (`home` in the server's info); a file's its own folder.
 
@@ -528,7 +533,8 @@ composer has no camera action: its note to the agent is Quick Edit.
 
 A model's page is `/<id>`, its document's id, which `cad run SCRIPT.py` prints (`view:`). The
 page reads the document the engine holds, by id (`GET /api/v1/documents/<id>`); it never builds or
-imports a script, and no folder lists one. A model has no file of its own: no file menu; its
+imports a script, and no folder lists one. A model has no file of its own: its ⋯ menu has the
+document's actions and its script's ([Export and job status](#export-and-job-status)); its
 name menu opens on Models, and its Files lists the folder the explorer was last in this tab
 (the tab's settings), else the person's home folder (the server's `home`): never the folder
 of the script that built it. It is in the
