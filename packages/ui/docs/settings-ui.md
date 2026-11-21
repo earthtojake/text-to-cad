@@ -1329,7 +1329,7 @@ table does not have is a new token, in both scales at once, with its row here. T
 (a card's equal inset, the panel's inset, the strip's 5px), scaled by the tokens. What stays a phone's alone is layout:
 the panel as a sheet, the strip's More, Quick Edit across the view, no peek, no tooltips, rows' actions always shown
 (nothing hovers). A card (Display's, Preview's Settings) is the default sidebar's 224px on a desktop, growing to fit its values; on a
-phone it spans the view less its 4px gaps (`--cad-card-min`), as a phone's sheets do; nothing truncates. `RendererShell.browser.test.mjs` walks the page on a phone and on a
+phone it is a phone popover's 320px (`--cad-card-min`), never past the view less its 4px gaps; nothing truncates. `RendererShell.browser.test.mjs` walks the page on a phone and on a
 desktop and fails on a control or a text off its scale.
 
 ### A board in 3D

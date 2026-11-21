@@ -118,9 +118,9 @@
   --cad-switch-h: 20px;
   --cad-switch-w: 36px;
   --cad-chip: 28px;
-  /* A floating card (Display, Preview's Settings) spans the view less its 4px gaps: a phone's sheet, not the
-     desktop sidebar's width. */
-  --cad-card-min: calc(100vw - 8px);
+  /* A floating card (Display, Preview's Settings) on a phone: a phone popover's 320px (wider than the desktop
+     sidebar's 224, for a phone's type), never past the view less its 4px gaps. */
+  --cad-card-min: min(320px, calc(100vw - 8px));
   --cad-thumb: 20px;
   --cad-check: 20px;
 }
