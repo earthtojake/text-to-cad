@@ -1,44 +1,55 @@
-# SRDF Validation and Verification
+# SRDF checks
 
-Every created or modified `.srdf` runs this recipe before the task is reported complete.
+Read this when a `.srdf` or the URDF beside it changed, or a check's result has to be read.
+[Check each change](../SKILL.md#check-each-change) has the commands; this is what
+`cad srdf validate` covers and what a clean result leaves open.
 
-## Recipe
+## The validator
 
-1. **Bundled validator** (always): `cad srdf validate path/to/robot.srdf`. It runs in two phases — the SRDF's own structure, then everything cross-checked against the paired URDF — and collects all findings of a phase in one pass (severity, code, XML path). A structural error stops the cross-file phase, so a short first report is not a short list of problems: fix and re-run until clean. Use `--strict` to fail on warnings and `--json` for machine-readable output.
-2. **Viewer review** (open it as in [Show the model](../SKILL.md#show-the-model)): load the SRDF, confirm the paired URDF resolves and renders, and exercise named group states. Review planning groups, named states and joints; a snapshot draws a named state with `--pose group/name` ([snapshots.md](snapshots.md)).
-3. **MoveIt smoke test** (when a MoveIt environment is available): load the URDF+SRDF pair in MoveIt Setup Assistant or a project launch; solve IK for the primary group; plan to a named state. Report as skipped when unavailable.
+```bash
+cad srdf validate path/to/robot.srdf --strict
+```
 
-## What the Bundled Validator Checks
+```text
+OK robot.srdf: robot 'example_arm', urdf example_arm.urdf, 2 groups, 1 end effectors, 1 group states, 1 disabled collision pairs, 1 virtual joints
+```
 
-Structure and linkage:
+- **Two phases.** The SRDF alone first (its XML, names, duplicates, numeric state values, a reason
+  on every pair), then every name, chain, state and pair against the URDF. An error in the first
+  stops the second, so a short first report is not a short list of problems: fix and run again.
+- **The URDF** is the one beside it with the same robot name, or the one `--urdf` names
+  ([pairing](srdf-authoring.md#urdf-pairing)). A URDF with an error of its own is
+  `invalid_paired_urdf`, with the first of its errors: run `cad urdf validate` for the rest.
+- **A URDF that is not one rooted tree** is only a warning, `paired_urdf_not_a_tree`, and every
+  check against it is skipped: the SRDF passes on its own structure. Fix the URDF and run again
+  before trusting that result.
+- **Errors against the URDF**: a name it does not hold, a chain that is not a parent-to-child path,
+  a cycle of subgroups, no group or an empty one, an end effector that breaks its rules
+  ([srdf-authoring.md](srdf-authoring.md#end-effectors)), and a state that sets a fixed, mimic or passive
+  joint, a joint outside its group, or a value past the URDF's limits.
+- **Warnings**, which pass unless `--strict`: a state that leaves out joints of its group, which
+  MoveIt fills from wherever the robot is; a pair whose reason is not borne out
+  ([srdf-authoring.md](srdf-authoring.md#disabled-collisions)); a virtual joint that takes a URDF
+  joint's name; and an unknown element under `<robot>` or `<group>`, a misspelled tag that MoveIt
+  ignores silently.
+- **A group or a state that names a virtual joint** is reported as a missing name, since group
+  joints are looked up in the URDF alone. MoveIt reads a virtual joint as a joint of the robot, and a
+  mobile base's group lists one: report it as the check's limit, not the file's fault.
 
-- root is `<robot>` with a non-empty name;
-- a paired URDF resolves: exactly one `.urdf` in the same folder declares the SRDF's robot name (`no_paired_urdf` / `ambiguous_paired_urdf` errors otherwise), and that URDF is itself valid (`invalid_paired_urdf` otherwise — fix the URDF first). Nothing inside the SRDF names the URDF; namespaced elements are passed through untouched;
-- unique group, end-effector, group-state, and collision-pair identities.
+## What a clean result leaves open
 
-Against the paired URDF:
+- **Whether the group suits the task**: the right arm and not the left, the right tip.
+- **Whether the TCP link is the tool point.**
+- **Whether a disabled pair is safe** in every pose the robot can reach. Only sampling approaches
+  that.
+- **Whether a state is collision-free or useful.** A value typed in degrees is caught only where it
+  passes a limit.
+- **That a picture means a valid file.** `cad srdf snapshot` runs no validation and draws SRDFs the
+  validator fails (a chain that is no path, a state past a limit). The viewer does not: its page
+  refuses one, with the validator's errors.
+- **That MoveIt plans with it.** Where MoveIt is at hand, load the pair (Setup Assistant, or the
+  project's launch), solve IK for the primary group, plan to a pose and to a named state, and run a
+  collision check. Where it is not, report that as skipped.
 
-- every group joint/link/subgroup name exists (joints in the URDF, links in the URDF, subgroups in the SRDF);
-- every chain `base_link`/`tip_link` exists **and** the chain is a real parent→child path in the URDF tree;
-- subgroup references contain no cycles;
-- at least one planning group is defined;
-- virtual joints: valid type (`fixed`/`floating`/`planar`), non-empty `parent_frame`, `child_link` exists in the URDF (name collisions with URDF joints warn);
-- passive joints exist in the URDF and are never set by group states;
-- end effectors: group exists, parent group exists when named, parent link exists, no link overlap between EE group and parent group, parent link in parent group or adjacent to the EE group;
-- group states: group exists, each joint exists and belongs to the group, no fixed/mimic/passive joints, values within URDF revolute/prismatic limits; states that omit group joints warn (MoveIt fills them from the current state);
-- disabled collisions: both links exist, distinct, non-empty reason, no (reversed) duplicates; pairs claiming reason `Adjacent` that are not actually joined by a URDF joint warn; warns when 25+ pairs are manually reasoned;
-- unknown elements under `<robot>` or `<group>` warn — misspelled elements are otherwise silently ignored by MoveIt;
-- a paired URDF that is not a single-rooted tree warns (`paired_urdf_not_a_tree`) and **every cross-file check above is skipped** — the SRDF then passes on structure alone, so fix the URDF and re-run before trusting a clean result.
-
-## What Validation Cannot Prove
-
-- That the planning group matches the user's task intent (right arm vs left arm).
-- That the TCP/target link is the physically correct tool point.
-- That disabled pairs are safe at every reachable configuration — only sampling (Setup Assistant) approaches that.
-- That group-state poses are collision-free or useful.
-
-These are semantic decisions: document them in the ledger and verify interactively in the viewer or MoveIt when confidence matters. Visual rendering review alone cannot prove planning correctness.
-
-## Failure Handling
-
-When validation fails against the URDF, decide which side is wrong before editing: a missing name may mean a typo in the SRDF **or** a rename in the URDF that invalidated existing semantics. Fix the owning file (the URDF for structure), then re-run the validator on the pair. Any URDF edit re-runs this recipe on the SRDF beside it ([interoperability.md](interoperability.md#when-the-urdf-changes)).
+When a name is missing, decide which file is wrong before editing: a typo in the SRDF, or a rename
+in the URDF that the SRDF never followed.
