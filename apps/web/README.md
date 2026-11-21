@@ -517,6 +517,11 @@ supplies the links (`src/host/viewerLinks.js`): its version (with its build's id
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
 links open in a new tab. The page never tells of a newer release: cad updates itself, and the agent the rest.
 The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
+A document's id is never its name, in the navbar or the title: the page asks for the document its URL names
+beside the server's description (`main.tsx`), into the client's catalog, so its first frame has its name where the
+server says it in time; the paint never waits for it, and until the catalog answers the name's place is empty and the
+title "text-to-cad". Moving between documents, the name is the home's card's, or the one a document had when it
+was shown before, until the catalog's; a file opened by its path and not found is named by its path's last segment.
 Appearance (System, Light, Dark) is the app menu's Theme row, the tab's choice (`colorScheme`,
 over a file and on the home); the page has no light/dark button of its own. The original animated mark remains the shared LoadingIcon
 for loading states. The C and CAD marks are the UI package's; the favicons are this

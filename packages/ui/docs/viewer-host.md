@@ -228,7 +228,9 @@ agent's shows and the person's moves alike); the web hands none, its page having
 browser's, where the home is a step too. `onShown(path | null, id | null)` says which file the
 catalog has on screen, by its own path (a model by its id), and its document's id (null for the
 home, or a file still resolving or missing), for a host that names its page after it or records
-it. `CadViewer` joins the catalog's rows by that id (`client.entryOf`), not by the path the host
+it. The navbar names a file by its catalog row's name (`CadViewerProps.name`, `FileViewerProps.name`: the host's
+name for it where it knows one first) while it opens, then by the name its source read; a file with none, by its
+path's last segment; a document named by its id, never by the id: its name's place is empty until a name is known. `CadViewer` joins the catalog's rows by that id (`client.entryOf`), not by the path the host
 asked for, so a symlinked or case-variant spelling of one file is one row. The host decides what
 showing a file means, because only the host knows which view shows it: the web viewer is one
 page per engine and addresses every document by path, `/<id>` (a file opened by its path is asked
@@ -528,7 +530,13 @@ no navbar at all, over a file or a page that will not open, and what a host stil
 viewport's top-right (`notice`); no host hands it today, since the navbar holds the panel's toggle. **The view's
 panel toggle is the navbar's** (`file-viewer/panelToggles.js`): the view's frame says it (`usePanelToggles`), and the
 navbar draws it first, before the logo, the same neutral button open or shut (`aria-expanded` says which, pinned or
-not), with the pointer handlers the frame hands with it (`hover`): a mouse resting on it peeks the collapsed panel over
+not). Before the view is up (its file being read, its chunk loading, or its frame mounted but its toggle not said yet)
+`FileViewer` draws the toggle the view will have, from a document page's first frame: the file's choice kept for this
+session (its view in `state.renderers`, by its own path or the host's `filePath`), else open where the model keeps
+640px beside it (`sidebars.js`), closed on a phone; `aria-disabled` until the view takes it over, as the view's own
+opening over a narrow width cannot be handed to it. Open, the panel's frame stands in its place at its width, its body
+empty (`data-panel-loading`), so nothing moves as the view mounts; a view with no frame (none says so as it renders,
+`PanelFrameContext`) has none, and a file that will not open has neither. The view's own toggle comes with the pointer handlers the frame hands with it (`hover`): a mouse resting on it peeks the collapsed panel over
 the model as a floating card, pushing nothing, until the pointer leaves both (only the toggle's click, or ⌘\, pins it);
 otherwise a collapsed panel leaves nothing over the model.
 In Preview, in

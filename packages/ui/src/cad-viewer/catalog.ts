@@ -57,7 +57,8 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEn
       // moved or deleted, a file gone) is `sourceMissing`: its menu draws what acts on it disabled.
       const byId = entry.sourcePath === null;
       const file = byId ? entry.file : normalizePath(entry.file);
-      const name = entry.name || baseName(file);
+      // A document known by its id alone is never named by its id.
+      const name = entry.name || (byId ? '' : baseName(file));
       const script = byId && typeof entry.script === 'string' && entry.script ? normalizePath(entry.script) : null;
       return { path: file, name, ...(byId ? { navigationPath: null } : {}), ...(script ? { sourceFile: script } : {}),
         ...(entry.sourcePresent === false ? { sourceMissing: true } : {}), kind: 'file', size: Number(entry.bytes || 0),

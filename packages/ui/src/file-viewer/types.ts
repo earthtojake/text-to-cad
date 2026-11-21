@@ -203,6 +203,18 @@ export interface FileViewerProps {
   overlay?: ReactNode;
   /** The file on screen, by its absolute path; null shows the host's home. */
   file: string | null;
+  /**
+   * The file's name where the host knows it before the file is read (a CAD host's catalog row): the
+   * navbar's name while the file opens. Without it a file is named by its path's last segment, and a
+   * document named by its id is never named by the id: the name's place is empty until it is known.
+   */
+  name?: string;
+  /**
+   * The file's own path where the host knows it before the file is read (a document named by its id: the path its
+   * catalog row gives, or the id of a model's): where the tab keeps its view, read for the panel's toggle until the
+   * view is up.
+   */
+  filePath?: string | null;
   host: ViewerHost;
   renderers: readonly RendererRegistration[];
   state: FileViewerState;

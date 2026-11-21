@@ -32,6 +32,47 @@ const navbar = () => document.querySelector('[data-viewer-navbar]');
 const fileName = () => document.querySelector<HTMLElement>('[data-file-name]')!;
 const labels = (selector = '[data-viewer-navbar]') => [...document.querySelectorAll(`${selector} a, ${selector} button`)].map(node => node.getAttribute('aria-label'));
 
+it('never names a document by its id: while it opens, the name the host hands, else none; once read, its own', async () => {
+  const ID = '906f6bff-80e7-5331-b842-dd377b720a7b';
+  let answer = (_name: string) => {};
+  const slow = { ...host, files: { id: 'slow', stat: (path: string) => new Promise(resolve => {
+    answer = name => resolve({ path, name, kind: 'file', extension: 'xbf', size: 1, navigationPath: null }); }) } };
+  const view = open({ host: slow, file: ID });
+  expect(fileName().textContent).toBe('');
+  view.rerender(<FileViewer file={ID} name="qdd_actuator" host={slow as any} renderers={[renderer]} state={{}} onStateChange={() => {}} />);
+  expect(fileName().textContent).toBe('qdd_actuator');
+  await act(async () => answer('qdd actuator'));
+  await screen.findByText('shown');
+  expect(fileName().textContent).toBe('qdd actuator');
+});
+
+it('has the panel\'s toggle from a document page\'s first frame, in the state its view opens with, and its frame where it is open', async () => {
+  const ID = '906f6bff-80e7-5331-b842-dd377b720a7b';
+  let answer = () => {};
+  const slow = { ...host, files: { id: 'slow', stat: (path: string) => new Promise(resolve => {
+    answer = () => resolve({ path, name: 'qdd_actuator', kind: 'file', extension: 'xbf', size: 1, navigationPath: null }); }) } };
+  // A view with a frame says its toggle, open, as the frame would: the panel open by default.
+  const framed = defineFileRenderer({ id: 'framed', priority: 1, matches: () => true, prepare: async () => ({ data: null }),
+    load: async () => ({ default: () => { usePanelToggles(React.useMemo(() => ({ left: { open: true, label: 'Hide panel', toggle() {} } }), [])); return <p>shown</p>; } }) });
+  const toggle = () => document.querySelector<HTMLElement>('[data-navbar-panel="left"]');
+  const look = () => [toggle()?.getAttribute('aria-expanded'), toggle()?.getAttribute('aria-disabled'), Boolean(document.querySelector('aside[data-panel-loading]')), fileName().textContent];
+  const view = render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{}} onStateChange={() => {}} />);
+  // The first frame: the toggle, open and not pressable yet, the panel's frame in its place, and no id for a name.
+  expect(look()).toEqual(['true', 'true', true, '']);
+  await act(async () => answer());
+  await screen.findByText('shown');
+  expect(look()).toEqual(['true', null, false, 'qdd_actuator']);
+  view.unmount();
+  // The file's choice for this session, closed: the toggle says so, and no frame is drawn.
+  render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{ renderers: { [JSON.stringify([ID, 'framed'])]: { panel: { open: false } } } }} onStateChange={() => {}} />);
+  expect(look()).toEqual(['false', 'true', false, '']);
+  cleanup();
+  // A file that will not open has neither.
+  render(<FileViewer file={ID} host={{ ...host, files: { id: 'gone', stat: async () => { throw new Error('gone'); } } } as any} renderers={[framed]} state={{}} onStateChange={() => {}} />);
+  await screen.findByText('gone');
+  expect(toggle()).toBeNull();
+});
+
 it('draws the navbar over every file, named by its name, and over the home with only its menu, Back and Forward, the host\'s actions; never over a view shown small', async () => {
   open({});
   await screen.findByText('shown');

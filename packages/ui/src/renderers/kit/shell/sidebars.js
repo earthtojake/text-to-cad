@@ -15,24 +15,10 @@
 //
 // Importing this module has no environmental effects.
 
-/** The least width the model's area keeps with the panel open beside it; narrower, the panel starts collapsed. */
-export const MIN_MODEL_WIDTH = 640;
-/**
- * The panel's width where none is given (`FlatPanel.jsx`'s `FLAT_PANEL_DEFAULT_WIDTH`): one fixed number, never the
- * view's or the tabs', budgeted for three tabs: the least width on the 8px grid where every three tabs a file can have
- * (a model's Model and two of Params, Joints and Motion; a board's Parts, Nets and Layers; a schematic's Parts, Nets and
- * Hierarchy) stand in English beside the search's icon with no ⋯ (the widest, Model, Params and Motion, needs 225px). A
- * fourth tab is ⋯'s.
- */
-export const DEFAULT_PANEL_WIDTH = 232;
+// Where the panel starts open, the one rule the file viewer's toggle before the view is up shares (`file-viewer/panelToggles.js`).
+import { DEFAULT_PANEL_WIDTH, MIN_MODEL_WIDTH, sidebarCollapsed, sidebarWant } from "../../../file-viewer/panelToggles.js";
 
-/**
- * Whether the view's width collapses the panel on its own: open, it would leave the model under `MIN_MODEL_WIDTH`
- * (a `frameWidth` of 0, not measured yet, does not).
- */
-export function sidebarCollapsed(frameWidth, panelWidth = DEFAULT_PANEL_WIDTH) {
-  return frameWidth > 0 && frameWidth - panelWidth < MIN_MODEL_WIDTH;
-}
+export { DEFAULT_PANEL_WIDTH, MIN_MODEL_WIDTH, sidebarCollapsed, sidebarWant };
 
 /**
  * Where the panel is: `"push"` (beside the model, the model narrower for it) or `"closed"`; and whether it is
@@ -60,6 +46,3 @@ export function toggleSidebar(state) {
   if (sidebarLayout(state).mode === "push") return { want: false, opened: false, kept: true };
   return { want: true, opened: sidebarCollapsed(state.frameWidth, state.panelWidth), kept: !state.want };
 }
-
-/** The person's choice as the file's entry keeps it (`filePanel.js`'s `open`): open (true) or closed (false), absent for the default, open. */
-export const sidebarWant = kept => kept !== false;
