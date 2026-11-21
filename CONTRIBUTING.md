@@ -189,10 +189,13 @@ platform's place for state), it keeps one record per model or opened file
 (`documents/<uuid>/document.json`: the script and function that build it, or the file's path; never
 geometry). In the cache folder (`CAD_CACHE_DIR`, else the platform's: `~/.cache/cad`) it keeps each
 model document's bytes as last built, `documents/<uuid>/document.xbf`, regenerable and wiped at no
-loss, so a restart reopens every document without a build, under `pycache/` the bytecode the daemon
+loss, so a restart reopens every document without a build, under `checks/` the manufacturing checks'
+measurements, kept by what was measured (so the same parts checked the same way are measured once,
+whatever file or model they are in), under `pycache/` the bytecode the daemon
 and its workers compile of the libraries they load (`PYTHONPYCACHEPREFIX`), and under `homes/` the
 private settings folders `cad run` hands Blender's module in place of a person's own; it touches
-nothing else in that folder but the environments it makes (`base/`). `cad cache dir|prune|clean`
+nothing else in that folder but the environments it makes (`base/`) and what its kernel processes keep,
+each by what it was made of (`interference/`, `hulls/`, `mjcf/`). `cad cache dir|prune|clean`
 manages that folder; nothing else of cad deletes a past release's files. Releases before 0.10 kept theirs in `~/.cache/cadgen`, which no build reads. Tests point both folders at temporary ones
 (`scripts/test/unittest_files.py` does).
 

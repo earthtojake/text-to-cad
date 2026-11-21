@@ -2,9 +2,11 @@
 measure it (``checks_runner.Runner``, ``worker._check``): a STEP's and an xbf's from its file, a model's from
 the bytes the engine holds of it. It equals the one the same document gets read from a file in a process of its
 own, for every process, with no process given and ranking candidates; the same check of an unchanged document
-is the engine's kept result (``checks``), measuring nothing, in memory and on disk across a restart; an edit,
-other options or another file's bytes -- even ones of the same size and time -- are measured again. On an
-engine, a state and a cache folder of this file's own."""
+is the measurement the engine kept (``measurements``), measuring nothing, in memory and on disk across a
+restart; an edit, an option its measurement reads or another file's bytes -- even ones of the same size and time
+-- are measured again. On an engine, a state and a cache folder of this file's own, which its tests share: a
+measurement is kept by what was measured, so a part a test means to see measured is one no other test checks
+the same way."""
 
 from __future__ import annotations
 
@@ -100,21 +102,25 @@ class SameResultTest(unittest.TestCase):
         before = _restarted()  # its worker gone: the restarted engine answers from the result it kept on disk
         self.assertEqual(_plain(cad.model.dfm(block)), _plain(today))
         self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"], before["restored"] + 1))
-        # Other checks: measured by the restarted engine from the bytes its cache holds, read once for both.
+        # Other checks. The process it declares, given: the measurement kept of it, whatever material judges it.
+        # Another process: measured by the restarted engine from the bytes its cache holds.
         for process in ("cnc", "sheet"):
             with self.subTest(process=process):
                 self.assertEqual(_plain(cad.model.dfm(block, process=process, material="steel")),
                                  _plain(_today("model", exported, Path(block), process, material="steel")))
-        self.assertEqual((_counts()["measured"], _counts()["read"]), (before["measured"] + 2, before["read"] + 1))
+        self.assertEqual((_counts()["measured"], _counts()["read"]), (before["measured"] + 1, before["read"] + 1))
 
 
 class KeptResultTest(unittest.TestCase):
     """The same check of the same document version is the engine's kept result: no process measures it."""
 
     def test_rewritten_printer_settings_change_the_engine_check_key(self) -> None:
+        """A printer's settings file is read by the caller, where it is named, and reaches the measurement's key
+        through what it resolves to: given a process, in the options resolved; given none, as the snapshot the
+        engine resolves the declared process's options with."""
         from cad._internal import manufacturing
+        from cad._internal.dfm import kept
         from cad.engine import api
-        from cad_server.engine.checks import Checks
 
         with tempfile.TemporaryDirectory() as folder, mock.patch.object(api, "check", return_value=None) as check:
             printer = Path(folder) / "printer.json"
@@ -127,9 +133,17 @@ class KeptResultTest(unittest.TestCase):
                 for process in (None, "printing"):
                     manufacturing.through_engine("xbf", source, process, given, False)
             before, explicit_before, after, explicit_after = (call.args[1] for call in check.call_args_list)
-            self.assertNotEqual(Checks.key(before, "test"), Checks.key(after, "test"))
-            self.assertNotEqual(Checks.key(explicit_before, "test"), Checks.key(explicit_after, "test"))
-            printer.unlink()  # The measuring process does not need the caller's file.
+            printer.unlink()  # Neither the engine nor the measuring process needs the caller's file.
+
+            def key(asked: dict) -> str:
+                resolved = asked["resolved"] if asked["process"] else manufacturing.options(
+                    "xbf", "printing", asked["given"], printer_snapshot=asked["printer_settings"])
+                return kept.measure_key("xbf", "printing", False, resolved, "code")
+
+            self.assertNotEqual(key(before), key(after))
+            self.assertNotEqual(key(explicit_before), key(explicit_after))
+            self.assertEqual((key(before), key(after)), (key(explicit_before), key(explicit_after)),
+                             "the process declared or given: one measurement")
             options = manufacturing.options("xbf", "printing", after["given"], printer_snapshot=after["printer_settings"])
             self.assertEqual(options["build_volume"], "250x200x200")
 
@@ -138,7 +152,7 @@ class KeptResultTest(unittest.TestCase):
 
         import cad
 
-        fixture = Fixture(self, MODELS)
+        fixture = Fixture(self, MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(41, 30, 10)"))
         plate = fixture.ids[0]
         first = cad.model.dfm(plate, process="cnc", material="aluminum")
         # The runner answers a check's caller and then lets the check go: asked again before it has, the same
@@ -149,14 +163,17 @@ class KeptResultTest(unittest.TestCase):
         self.assertEqual(_plain(again), _plain(first))
         self.assertEqual((_counts()["measured"], _counts()["reused"]), (before["measured"], before["reused"] + 1))
 
-        cad.model.dfm(plate, process="cnc", material="steel")  # other options: measured
+        steel = cad.model.dfm(plate, process="cnc", material="steel")  # an option its rules alone read: judged again
+        self.assertEqual((_counts()["measured"], _counts()["reused"]), (before["measured"], before["reused"] + 2))
+        self.assertNotEqual(steel.measurements["rules"], first.measurements["rules"])
+        cad.model.dfm(plate, process="cnc", material="aluminum", tools="5")  # one its measurement reads: measured
         self.assertEqual(_counts()["measured"], before["measured"] + 1)
 
         fixture.build()  # the same code run again in the worker that holds it: the same version, kept
         cad.model.dfm(plate, process="cnc", material="aluminum")
         self.assertEqual(_counts()["measured"], before["measured"] + 1)
 
-        fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(44, 30, 10)"))  # an edit: a new version
+        fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(45, 30, 10)"))  # an edit: a new version
         edited = cad.model.dfm(plate, process="cnc", material="aluminum")
         self.assertEqual(_counts()["measured"], before["measured"] + 2)
         self.assertNotEqual(edited.measurements["bodies"][0]["bbox_mm"], first.measurements["bodies"][0]["bbox_mm"])
@@ -164,27 +181,27 @@ class KeptResultTest(unittest.TestCase):
         # Two boxes' STEPs of one size (spaces after the end), the second written over the first at its time:
         # its digest, not its stat, says it changed.
         step, other = fixture.folder / "part.step", fixture.folder / "other.step"
-        bd.export_step(bd.Box(30, 20, 6), str(step))
-        bd.export_step(bd.Box(30, 20, 9), str(other))
+        bd.export_step(bd.Box(32, 20, 6), str(step))
+        bd.export_step(bd.Box(32, 20, 9), str(other))
         thin, thick = step.read_bytes(), other.read_bytes()
         width = max(len(thin), len(thick)) + 8
         step.write_bytes(thin + b" " * (width - len(thin)))
         cad.step.dfm(step, process="printing")
         cad.step.dfm(step, process="printing")
-        self.assertEqual(_counts()["measured"], before["measured"] + 3, "an unchanged file is not read again")
+        self.assertEqual(_counts()["measured"], before["measured"] + 3, "an unchanged file is not measured again")
         stat = step.stat()
         step.write_bytes(thick + b" " * (width - len(thick)))
         os.utime(step, ns=(stat.st_atime_ns, stat.st_mtime_ns))
         self.assertEqual((step.stat().st_size, step.stat().st_mtime_ns), (stat.st_size, stat.st_mtime_ns))
         changed = cad.step.dfm(step, process="printing")
         self.assertEqual(_counts()["measured"], before["measured"] + 4)
-        self.assertAlmostEqual(changed.measurements["bodies"][0]["volume_mm3"], 5400.0, delta=1e-6)
+        self.assertAlmostEqual(changed.measurements["bodies"][0]["volume_mm3"], 5760.0, delta=1e-6)
 
-    def test_a_file_is_read_once_across_checks_and_only_a_clean_result_is_kept(self) -> None:
+    def test_a_file_is_read_once_across_checks_and_a_measurement_is_kept_unless_it_is_transient(self) -> None:
         import build123d as bd
 
         import cad
-        from cad_server.engine.checks_runner import _clean
+        from cad_server.engine.checks_runner import _keepable
 
         folder = Path(tempfile.mkdtemp(prefix="engine-dfm-read-"))
         self.addCleanup(shutil.rmtree, folder, True)
@@ -197,11 +214,12 @@ class KeptResultTest(unittest.TestCase):
         bd.export_step(bd.Box(30, 20, 9), str(step))
         cad.step.dfm(step, process="printing", technology="fdm")
         self.assertEqual(_counts()["read"], before + 2, "other bytes are read")
-        self.assertTrue(_clean({"measured": {"report": {"partial": False}}}))
+        for kept in ({"measured": {"report": {"partial": False}}},
+                     {"measured": {"report": {"partial": True, "partial_sections": ["holes"]}}}):
+            self.assertTrue(_keepable(kept), "a report, a family not measured or none: what its code makes of the parts")
         for unkept in ({"unmeasured": {"code": "c", "message": "m"}}, {"refused": "no"},
-                       {"measured": {"report": {"partial": True}}},
-                       {"measured": {"report": {"partial_sections": ["holes"]}}}):
-            self.assertFalse(_clean(unkept), unkept)
+                       {"measured": {"report": {"partial": True}}, "transient": True}):
+            self.assertFalse(_keepable(unkept), unkept)
 
     def test_a_model_is_read_once_per_version_for_every_process(self) -> None:
         """A model's bytes are read once per version by the checks process that measures it (``worker._document``):
@@ -228,24 +246,31 @@ class KeptResultTest(unittest.TestCase):
         fixture = Fixture(self, MODELS)
         plate = fixture.ids[0]
         step = fixture.folder / "kept.step"
-        bd.export_step(bd.Box(30, 20, 6), str(step))
+        bd.export_step(bd.Box(33, 20, 6), str(step))
         first = cad.step.dfm(step, process="printing")
         model = cad.model.dfm(plate, process="cnc", tools="11")
+        cache = Path(os.environ["CAD_CACHE_DIR"])
+        # What a release before this one kept of a check, by its document's version: never read again, and removed.
+        earlier = cache / "documents" / plate / "checks" / "0123456789abcdef0123-0123456789abcdef0123.json"
+        earlier.parent.mkdir(parents=True, exist_ok=True)
+        earlier.write_text('{"format":1,"version":"r","check":"c","result":{"measured":{}},"by":{}}', encoding="utf-8")
         before = _restarted()
         self.assertEqual(_plain(cad.step.dfm(step, process="printing")), _plain(first))
         self.assertEqual(_plain(cad.model.dfm(plate, process="cnc", tools="11")), _plain(model))
         self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"], before["restored"] + 2),
                          "the restarted engine measured none")
+        self.assertFalse(earlier.parent.exists(), "an earlier release's kept result went as the engine first checked")
 
-        kept = list((Path(os.environ["CAD_CACHE_DIR"]) / "documents" / plate / "checks").glob("*.json"))
+        kept = [path for path in (cache / "checks" / "results").glob("*/*.json")
+                if json.loads(json.loads(path.read_text(encoding="utf-8"))["measure"])["options"].get("tools") == "11"]
         self.assertEqual(len(kept), 1)
         kept[0].write_bytes(b"{not json")
         before = _restarted()
         self.assertEqual(_plain(cad.model.dfm(plate, process="cnc", tools="11")), _plain(model))
         self.assertEqual(_counts()["measured"], before["measured"] + 1, "an entry that does not read is measured again")
-        self.assertEqual(json.loads(kept[0].read_text(encoding="utf-8"))["result"]["measured"]["process"], "cnc")
+        self.assertEqual(set(json.loads(kept[0].read_text(encoding="utf-8"))["result"]), {"report"})
 
-        bd.export_step(bd.Box(30, 20, 9), str(step))
+        bd.export_step(bd.Box(33, 20, 9), str(step))
         fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(46, 30, 10)"))
         before = _restarted()
         cad.step.dfm(step, process="printing")
@@ -272,11 +297,23 @@ class KeptResultTest(unittest.TestCase):
         self.assertEqual((store.status()["held"], store.get(a, "r2", "cnc")), (2, None), "the least recently used went")
         self.assertEqual(folder.names(f"documents/{a}"), [], "its checks/ folder, empty, went with its last result")
         (place,) = folder.names(f"documents/{c}/checks")
-        folder.write(f"documents/{c}/checks/{place}", json.dumps({"format": 1, "version": "other", "check": "cnc",
+        folder.write(f"documents/{c}/checks/{place}", json.dumps({"format": 2, "version": "other", "check": "cnc",
                                                                    "result": {}, "by": {}}).encode())
         self.assertIsNone(store.get(c, "r", "cnc"))
         self.assertEqual(folder.names(f"documents/{c}"), [], "never served, and removed")
         self.assertIsNone(Disk(lambda: None).get(a, "r", "cnc"), "no cache folder: nothing on disk")
+        # A file of the format before this one -- a manufacturing check's result, kept by what was measured now --
+        # is removed as the store is listed, and never read, by its name or otherwise.
+        (place,) = folder.names(f"documents/{b}/checks")
+        earlier = json.dumps({"format": 1, "version": "r", "check": "cnc", "result": {"x": 4}, "by": {}},
+                             separators=(",", ":")).encode()
+        folder.write(f"documents/{b}/checks/{place}", earlier)
+        folder.write(f"documents/{a}/checks/{place}", earlier)
+        self.assertIsNone(store.get(b, "r", "cnc"), "asked by its name: another format's")
+        fresh = Disk(lambda: folder)
+        fresh.listed()
+        self.assertEqual((fresh.status()["held"], folder.names(f"documents/{a}"), folder.names(f"documents/{b}")),
+                         (0, [], []))
 
     def test_the_store_is_bounded_and_holds_one_version_of_a_document(self) -> None:
         from cad_server.engine.checks import Checks

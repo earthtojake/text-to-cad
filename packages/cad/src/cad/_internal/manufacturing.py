@@ -45,8 +45,10 @@ processes it can be checked for (``processes_for``: a mesh printing, a DXF sheet
 a mesh asked for another is refused with the reason and the fix (``_MESH_REFUSED``: check the STEP or the model). The standard library alone: the server's command resolves the options here before it starts
 an environment that holds the integration. An xbf or a model given no process is checked for the one its
 parts declare (``part.material = metals.aluminum(process=machined())``): the options every process shares
-are checked here, and the integration reads the document, takes the declared process and resolves the rest
-(``declared``) before it measures. A STEP keeps no process, so one given none is refused here.
+are checked here, and the declared process is taken and the rest resolved for it (``declared``) once the
+document is read -- by the engine, from the record of what its parts declare (``dfm.kept.asked``), or by the
+integration that reads it where the engine measures nothing for this caller. A STEP keeps no process, so one
+given none is refused here.
 """
 
 from __future__ import annotations
@@ -724,8 +726,9 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
           given: dict[str, Any] | None, label: Path, *, local: bool = True, strict: bool = False) -> CheckResult | None:
     """A B-rep's check through the engine (``cad.engine.api.check``): measured in memory in one of the
     engine's checks processes -- a model's from the bytes the engine holds of it, a STEP's or an xbf's from its
-    file, each read once -- or answered from the result the engine kept for an unchanged document, then
-    finished here.
+    file, each read once -- or answered from the measurement the engine kept of the same parts measured the
+    same way, whatever document they were measured of, then finished here: the rules and the verdict are this
+    call's, never kept.
 
     None -- measured by this caller instead (``_here``), as before the engine measured checks -- for a file when no
     engine can be reached, when the engine is of a release that measures no check in memory, or when another
@@ -742,7 +745,8 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
     if process is None and (printer := check["given"].get("printer")) is not None:
         from cad._internal.dfm.printing import printer_settings
 
-        # The engine's cache key must include the settings its worker will use.
+        # The printer's settings as this caller reads them, where the file is named: the engine resolves the
+        # declared process's options with them (``kept.asked``), and so keeps the check by what they resolve to.
         check["printer_settings"] = printer_settings(printer)
     is_file = isinstance(source, (str, os.PathLike)) and label.is_absolute()
     try:

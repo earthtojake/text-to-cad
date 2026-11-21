@@ -54,7 +54,7 @@ from cad._internal.dfm.molding import (BROAD_WALLS, BUMP_OFF_MM, DEFAULT_PULL, D
                                        better_pull, dominates)
 from cad.build123d import _dfm_brep
 
-__all__ = ["measure"]
+__all__ = ["measure", "transient"]
 
 #: Points sampled per part, spread over its faces by area (each face at least ``_LEAST_PER_FACE``).
 _SAMPLES = 2400
@@ -145,10 +145,23 @@ class _Fast:
         return float(self._kernel.WParameter(hit))
 
 
+#: Whether a release search of the measurement last begun here (``measure``) was cut short for its seconds with
+#: rays still to spend (``_Budget``): what it left unsearched depends on how busy the machine was, so the report
+#: is not the part's alone (``transient``). Its rays are counted, and run out the same on any machine.
+_SPENT = {"seconds": False}
+
+
+def transient() -> bool:
+    """Whether the report ``measure`` last made here could differ on a machine less busy: a release search ran
+    out of its seconds, rays left, and said less than it would have (``_dfm_check.held`` says so beside the
+    report, and a report so made is kept by no one)."""
+    return _SPENT["seconds"]
+
+
 class _Budget:
     """What a release search may still spend (``_RELEASE_RAYS``, ``_RELEASE_SECONDS``): true while some is left.
     Its seconds run only while a search does (``searching``): finding what is trapped, which no budget cuts
-    short, is none of them."""
+    short, is none of them. One found spent by its seconds alone says so (``_SPENT``)."""
 
     def __init__(self) -> None:
         self.rays = _RELEASE_RAYS
@@ -162,6 +175,8 @@ class _Budget:
 
     def __bool__(self) -> bool:
         spent = time.monotonic() - self._since if self._since is not None else 0.0
+        if self.rays > 0 and self.seconds - spent <= 0.0:
+            _SPENT["seconds"] = True
         return self.rays > 0 and self.seconds - spent > 0.0
 
 
@@ -2835,6 +2850,7 @@ def measure(document: _dfm_brep.Document, options: dict[str, Any], candidates: b
     (or the default), unless one of the part's own directions does better for it (``_own_pull``; said in
     ``pulls`` and by a finding), so a part that lies differently in the assembly is judged as it would be
     molded, not failed for how it is assembled."""
+    _SPENT["seconds"] = False
     wall_limit, zero_tol = float(options["wall_limit"]), float(options["zero_tol"])
     geos = [_Geometry(part, budget=_CANDIDATE_SAMPLES if candidates else _SAMPLES) for part in document.parts]
     if candidates:

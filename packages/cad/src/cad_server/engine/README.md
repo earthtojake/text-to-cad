@@ -671,7 +671,7 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); a KiCad board's flat still, painted with Pillow from its plot (`board.py`), and a schematic sheet's (`schematic.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
 | `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script and Python, at most one per core alive (`supervisor.py`), connect-or-start (an installation's engine, never one of the library's own environment), a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
 | `supervisor.py`, `services.py` | the server's one supervisor of every process the daemon starts (`Supervisor`, `Process`), and their declarations (`WORKER`, `RENDER`, `CHECKS`): **Services** |
-| `checks.py`, `checks_runner.py` | the manufacturing checks the engine measures: their kept results (`Checks`, `Disk`) and the pool of checks processes (`Pool`); a check's life, from asked to answered or stopped (`Runner`): **Document types and integrations** |
+| `checks.py`, `measurements.py`, `checks_runner.py` | the checks the engine measures: a manufacturing process's kept measurements, by what was measured, with what each version of a document holds (`Measurements`); the interference check's kept results, by its document's version (`Checks`, `Disk`); the pool of checks processes (`Pool`); a check's life, from asked to answered or stopped (`Runner`): **Document types and integrations** |
 | `renders.py` | the server's side of the render processes: a served document's picture, its version sent first, the process leased from the supervisor |
 | `display.py` | the engine's X display on Linux, which a render process is started with (`Service.draws`) and a worker told with an export that draws: the daemon's own `DISPLAY`, else an Xvfb it starts at the first picture and stops with it, else none |
 | `frames.py` | the frames every process of the engine's speaks to the daemon, read and written: the library's, the standard library alone (**Services**, the protocol) |
@@ -683,7 +683,7 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `door.py` | how a client reaches the daemon on POSIX: the door, a named pipe, and a pair of pipes per connection (**The door**) |
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
 | `atomic_replace.py` | the one rename every written file is moved into place with: the library's bounded Windows retry, kept in the engine |
-| `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`; a file document's derived views, a board's, and a document's kept checks beside it), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
+| `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`; a file document's derived views, a board's, and a document's kept interference checks beside it), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
 | `registry.py` | the registry of documents in the state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), the engine's record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); the server's, on the records' shape (`records`), of the folders `places` names (`FACTORY`: a test's other registry) |
 | `identity.py` | identity beyond the formula, on records and file names alone (no kernel, no XBF read): an explicit name's claim in its folder (`claimed`), a shape refused a declared model's id (`handed`), a moved script's record re-attached (`reattach`, `repoint`, `relocated`), and the startup identity migration (`migrate`) |
 | `cli.py` | the verbs as commands, the server's: the operations `export`, `snapshot` and `inspect` (each type's, `cad <type> <operation>`), and `serve`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cad_server.engine VERB`), each said in `said`'s words |
@@ -1097,8 +1097,9 @@ its parts declare, its process's options refused once the document is read.
 in any Python) resolves the options and asks the engine (`api.check`): an `export` request carrying a
 `check`, its own release (`caller`), what measures in it (`measures`, `contract.measuring`: the digest of the
 library's code, every source file of the cad package -- a `.py`, or the `.pyc` an install of bytecode alone holds
-in its place -- and the versions of the libraries a B-rep check measures with -- build123d, OCP, bd_materials,
-numpy -- taken once, when the caller first asks a check, and at once as a checks process starts, before
+in its place -- the digest of the files that measure each manufacturing process alone (`dfm`, `_measuring.DFM`:
+what a kept measurement is found by), and the versions of the libraries a B-rep check measures with -- build123d,
+OCP, bd_materials, numpy -- taken once, when the caller first asks a check, and at once as a checks process starts, before
 anything a check measures with loads; never as `cad.engine` is imported, which costs nothing for it. It is the code
 as the process loaded it: a source file changed since the library began to load there (`cad._LOADED_NS`) makes it
 a code no other process has, so no process measures for it. A process with no kernel, the `cad` command's, names
@@ -1167,11 +1168,23 @@ one that can take none says so to its caller on stderr at once ("waiting for ano
 processes; one over the memory cap after a check drops what it read (`worker.shed`) and, still over it, is
 retired.
 
-The process measures in memory (`worker._check`, `cad.build123d._dfm_check.held`) -- nothing exported or
-written -- each part on a copy that shares nothing with the document read, and answers the report (`checked`,
-with the release that measured it, and whether it read the document anew: `read`), which the caller finishes
-into its result; every finding's location is a ref `inspect` resolves, and the result equals the one the same
-document gets read from its file.
+A checks process is asked one of two things of a document (`worker._check`), each in memory, nothing exported or
+written. To **describe** it (`cad.build123d._dfm_check.described`): it reads the document and answers what a
+measurement would read of it, its content record (`_dfm_brep.content`: each part's geometry key, names, how its
+occurrences stand, the token of any mesh it was read with, its declared material's physics and process; never
+its bytes, its path or its look), measuring nothing. To **measure** it (`held`): for the process the check
+names and with the options that process's measurement reads alone (`cad._internal.dfm.kept.measuring`: each
+process declares them, `MEASURES`, and a read of any other fails the check), each part on a copy that shares
+nothing with the document read. It answers the report (`checked`, with the release that measured it and whether
+it read the document anew: `read`), the key of the record of the very parts it measured (`content_key`), and
+`transient` beside a report the next measurement could make otherwise (`_dfm_check._transient`: molding's
+release search out of its seconds; a family that failed for memory; a table of the report that says of itself
+`repeatable: false`, wherever it lies -- a CNC report's `holes.recognition`, where the holes' recognition fell
+back for a reason the next check may not meet: its helper's environment not made yet, an answer that timed out
+-- while one that says true, or nothing of it, is repeatable). The caller finishes the report into its result; every finding's
+location is a ref `inspect` resolves, and the result equals the one the same document gets read from its file.
+Neither entry point knows which process runs it, nor does a key: a checks process is where the runner sends
+them today.
 
 Each asked check is in one state (`checks_runner.State`): asked, waiting for a slot, starting its process,
 measuring, answered -- or stopped by the engine, which stops only a check that has not ended and kills only the
@@ -1186,7 +1199,7 @@ that fails its rules:
 - `cancelled`: every caller of it had gone -- its own and each attached since, each connection watched for its
   end of file (`daemon._watched`) -- while a check whose caller is there could take no slot, so its process is
   that one's (`Runner.reap`: one for each such waiter, the oldest first). Otherwise a check outlives its caller,
-  as a build does, and its clean result is kept; a check someone waits for is never cut short so; and a waiter
+  as a build does, and its measurement is kept; a check someone waits for is never cut short so; and a waiter
   whose own callers have gone leaves a free slot to one someone waits for;
 - `over_time`, `over_memory`: past a check's own limits -- `CAD_ENGINE_CHECK_SECONDS` measuring (half an hour by
   default) or `CAD_ENGINE_CHECK_RSS_MB` resident in its process (by default the engine's memory cap), `0` for no
@@ -1210,50 +1223,94 @@ that fails its rules:
 A request that is no check -- a process the type has none of, options not resolved -- is refused in one line
 before anything is read. The same check asked while it runs waits for it (`Runner.running`, by document, version
 and check), says so ("waiting for the same manufacturing check, started 21 s ago") and answers with its answer
--- its result, or its failure -- so it is measured once.
+-- its result, or its failure -- so it is measured once. Two checks that read one measurement and differ beside
+(another material, another path) are not the same check there: asked at once, each waits for a process of its
+own, and each looks once more, as it gets its process, for what the other described and kept meanwhile -- so
+with one process free they measure once, and with two they may measure twice, the second in the first's place.
 
-**The kept results** (`checks.py`): each result by the document's version -- a model's generation (the
-token its record keeps across a run that changed nothing in the worker that holds it), a file's bytes'
-digest -- and the check (type, process, resolved options, candidates, the options given with no process, the
-measuring library's release, which is the caller's, and its code's digest, `contract.measuring`'s `code`: so a
-result of other code at the same release is never served). What measured it -- that code and its libraries'
-versions -- is kept with the result, which is served to a caller that process measures for: a caller of another
-library's version (a kernel environment made again with other libraries) is measured again, the new result in the
-old one's place, and a caller with no kernel, which names no library, is served whatever its code measured -- so
-who asks, and a restarted engine that has heard from no process yet, never decide whether it is found. A file is
-keyed by its device and inode, so its hard links and the spellings of its case share one key in memory and while it runs
-(`checks_runner.file_key`; by its real path, its case folded where the file system says it folds it, where the system
-gives no inode); on disk each name keeps its own, under its document id. The same
-check of the same version is answered from the
-store, with no process asked and no bytes asked of a worker (`reused`) -- a model's looked for by the version its
-record says before any of its document's bytes are read; a version that differs after the check
-keeps nothing, and only a clean result is kept: never a document that did not read, a refused check or a family not
-measured. A document holds one version's results, so none outlives the document it describes. In memory the store
-holds 128 results and 64 MB at most, least recently used first; each is written beside the engine's cache too
-(`checks.Disk`: `<cache>/documents/<id>/checks/`, a file's under its document id, so deleting a document removes its
-results with it), under the version that outlives the engine -- a model's revision, its build closure's key, the
-key its cache file is kept by (a build with no key keeps nothing on disk), a file's digest -- so a restarted engine
-answers the same check of the same document without measuring, and a model built again from the same code and
-inputs is the same document there. Each is written whole, a document keeps one version's, the store holds 1024
-results and 256 MB at most, least recently used (by its time on disk, set again by a read) first, and an entry that
-does not read -- not the JSON written, another version's or check's under its name -- is removed, never served,
-and a document's `checks/` folder left empty goes with its last. The files are listed once, at the store's first
-use, the half-written ones a stopped engine left swept then; one gone since (its folder wiped, or removed with its
-document's unreadable cache file) leaves the list as it is asked for; and a cache folder that cannot be written
-keeps nothing there, each result trying its own write. Each is written under the registry's lock of its
-document, which its deletion holds (`Registry.lock`, `FORGOTTEN`): a deleted document's results leave memory and
-the index, and a check of it that began before keeps nothing.
+**What is kept of a manufacturing check** ([measurements.py](measurements.py), whose docstring is the store):
+its measurement, by what was measured and not by which document it was measured of. The rules and the verdict
+are never kept: the caller judges the report each time (`manufacturing.finish`). A check's try
+(`Runner._content`) goes:
+
+1. **The version.** A model's generation, read before its bytes and again after; the digest of a file's bytes.
+2. **What the version holds**, its content record: the one kept for it (its *alias*), else the one a checks
+   process says of it, asked to describe it under the check's lease, kept from then on. A model's alias is by
+   its id and its revision, its build closure's key (a build with no key by its generation, in memory alone);
+   a file's by its bytes' digest with its name's stem and suffix, which are all of its path a read takes (an
+   unnamed root is named by the stem), so the same bytes under the same name anywhere are known with no process
+   asked. An alias is kept with the code and libraries that described it, and is served to a caller that process
+   would describe for: after an edit to the library, or a release, a version is read once more.
+3. **What the check asks**, from the record alone, in the daemon, with no kernel (`kept.asked`): the process
+   named, or for a check given none the one the parts declare and its options resolved for it
+   (`manufacturing.declared`, with the finding that says so); a record of no part is `document_empty`, and
+   what `declared` refuses is the check's refusal, each answered from the record.
+4. **The measurement** that check reads (`kept.measure_key`): the document's type, the process, whether it
+   ranks candidates, the options its measurement reads as resolved, and the digest of the code that measures
+   that process. The report kept under the record's key and that key is the answer (`reused`), with no process
+   asked and none of the document's bytes read.
+5. **Else it is measured**, in the process that described it where one did, for the process named, and kept --
+   whole or with a family not measured, which its code makes of those parts each time; never one its measurer
+   says is `transient` (out of its seconds or its memory, or holding a table that says it is not repeatable:
+   answered, and measured again by the next check), a document that did not read, or one with no part a
+   process makes.
+
+Either way the answer is the asking check's own: its process, its options as resolved, and after the report's
+findings the one that says a process was declared (`process_declared`), where one was -- byte for byte what a
+measurement of that check answers. So none of these measures anything: another value of an option its rules
+alone read (a CNC part's material; a sheet's material sets its K-factor, which its measurement reads, so there
+it is measured again); the same bytes at another path; a process declared and the same one given; a model built
+again with another colour (read once, to learn it holds the same); an edit made and undone; a restarted engine;
+a release that changed none of that process's measuring code.
+
+A result is kept with what measured it -- the digest of its process's measuring code and the libraries'
+versions -- and is served to a caller whose own digest for that process and libraries are those
+(`contract.measures_for` over the two): a caller of another library's version is measured again, the new result
+in the old one's place, and a caller with no kernel, which names no library, is served whatever its code
+measured. The live handshake is unchanged: a process measures, and describes, only for a caller of its own
+release, whole code and libraries. A report is kept under the key of the record its measurer says it measured;
+where that is not the record the check was resolved from -- the alias told wrong, the file was rewritten between
+its describing and its measuring -- nothing of it is kept or answered, the alias is forgotten and the check is
+asked again, as of a document that changed. A version that differs after the check keeps nothing either.
+
+In memory the store holds 1024 aliases and 32 MB of them, 128 results and 64 MB, least recently used first. On
+disk it is under `<cache>/checks/`: `checks/models/<id>/<revision's digest>.json`, a model's aliases, the 8 most
+recently used; `checks/files/<xx>/<token's digest>.json`, the files' aliases, 4096 and 32 MB at most; and
+`checks/results/<xx>/<record's key>-<measurement's digest>.json`, 1024 and 256 MB at most, each written whole,
+the least recently used (by its time on disk, set again by a read) going first. An entry that does not read as
+what its name says -- not the JSON written, another format, another token's or measurement's under its name,
+a record whose key is not its own -- is removed, never served. The files' aliases and the results are listed
+once each, at their first use, the half-written ones a stopped engine left swept then; one gone since leaves
+the list as it is asked for; and a cache folder that cannot be written keeps nothing there. Deleting a document
+(`Registry.delete`, `FORGOTTEN`) removes its own aliases, in memory and `checks/models/<id>/`, written under the
+registry's lock of the document, so a check of it that began before names none; the results are no document's,
+and go by their bounds or with the cache (`cad cache clean`).
+
+**What is kept of an interference check** (`checks.py`), which keeps each pair's answer by the two parts'
+geometries itself: its result whole, by the document's version -- a model's generation, a file's bytes' digest
+-- and the check (type, resolved options, the library's release and its code's digest), served to a caller the
+process that measured it measures for, and only a result with no pair left unmeasured. A file is keyed by its
+device and inode, so its hard links and the spellings of its case share one key in memory and while it runs
+(`checks_runner.file_key`; by its real path, its case folded where the file system says it folds it, where the
+system gives no inode). A document holds one version's results. In memory 128 results and 64 MB at most; on disk
+under the version that outlives the engine (a model's revision; a build with no key keeps nothing there),
+`<cache>/documents/<id>/checks/` (`checks.Disk`), so deleting a document removes them with it, 1024 results and
+256 MB at most, least recently used first, an entry that does not read removed, never served, written under the
+registry's lock of its document. A file there of the format before this one, which held a manufacturing check's
+result too, is removed as the store is listed, which the first check asked of an engine does: none is read again.
+
 `cad server status` lists each check asked and not ended: its process, its document or file, where it measures or that it
-waits, for how long and whether its caller is gone; and `cad server status --json` counts the store (`checks`: held,
-bytes, measured, reused, restored: those reused from disk; read: the documents a process read for a check;
-waited: those that waited for the same check; asked: those not ended; disk: held and bytes on disk, once listed;
+waits, for how long and whether its caller is gone; and `cad server status --json` counts both stores as one (`checks`: held,
+bytes, measured, reused, restored: those reused from disk; described: the documents a process described; read: the
+documents a process read for a check; aliases: the versions whose record is held in memory;
+waited: those that waited for the same check; asked: those not ended; disk: held, bytes and the files' aliases on disk, once listed;
 pool: its size, how many are busy, each checks process, and the line said where `CAD_ENGINE_CHECKS` was held to its
 bounds; limits: a check's, in seconds and MB; running: each check asked and not ended -- type, process, document
 or file, its `state`, `where` it measures (None, and `waiting`, while it has no process), since, seconds, whether
 a caller is attached and how many are: `callers`, a caller gone never counted).
 
 A part an edit left untouched is
-measured again with its document: a check is the document's whole. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
+measured again with its document: a measurement is of a document's parts together, as its record says them. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
 the library's readers), by its caller, in a process of its own the caller holds to a check's limits
 (`cad._internal.manufacturing._watched`: the engine's, `worker.check_limits`). The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
 the type side judges the report against the process's rules (`cad._internal.dfm.rules.evaluate`: general
@@ -1896,9 +1953,12 @@ compiled animations), the engine's own file always: a declared `@xbf` or an expo
 author's, never used as the cache nor pointed at by it. A file's document has no bytes there, but the views
 derived from its bytes go under it, keyed by them: a KiCad board's plot, refilled pours, DRC and kept exports,
 `documents/<id>/kicad/<key>/` (`formats/kicad/poured.folder`), regenerable, and removed with the document
-(`Registry.delete` removes `documents/<id>` whole); so are a manufacturing check's kept results, a model's and a
-file's (`documents/<id>/checks/`, `checks.Disk`). The folder is shared with any 0.7 install's
-store: the engine's cache reads, writes, sizes and removes only under `documents/` (its processes'
+(`Registry.delete` removes `documents/<id>` whole); so are an interference check's kept results
+(`documents/<id>/checks/`, `checks.Disk`). A manufacturing check's kept measurements are no document's: they are
+beside `documents/`, under `checks/` ([measurements.py](measurements.py)), by what was measured and held to
+bounds, with what each version of a model holds under `checks/models/<id>/`, which goes with the document. The
+folder is shared with any 0.7 install's
+store: the engine's cache reads, writes, sizes and removes only under `documents/` and `checks/` (its processes'
 bytecode is under `pycache/`), and lists, counts and removes nothing else there (0.7's store among
 it, which nothing removes but the person; `cad cache clean` neither). It is written never on the run path:
 

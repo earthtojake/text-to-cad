@@ -30,7 +30,9 @@ caller's release), which answers the report, which the caller finishes into its 
   files at most), or a document the engine holds, a model's, from its bytes, read once per version. They are a
   small pool of warm kernels of their own, never a model's worker, so checks of different documents run at once,
   a build or an inspection of a model waits for no check of it, and a long check or its crash costs no document
-  anything.
+  anything. The process is handed the process to measure for and the options its measurement reads, and nothing
+  else of the check (below): the engine reads the declared process from what the document holds, not the
+  measuring process.
 - Otherwise it is another library's check, answered at once with no report. A file is then measured by its
   caller (in a process of its own, held to a check's limits: below), a model's document exported by the engine
   and read back there; a command whose environment holds no kernel sends either to the base's environment. So is
@@ -38,11 +40,44 @@ caller's release), which answers the report, which the caller finishes into its 
   measured again each time.
 
 Each part is measured on a copy that shares nothing with the document read (`_dfm_brep.of_source`), its result
-equal to the same document's read from its file. The engine keeps each clean result by the version it measured -- a model's generation, a file's bytes'
-digest -- with the check's type, process, options and the measuring library's release (128 results and 64 MB at
-most in the engine's memory, and written beside its cache, under a model's revision, so a restarted engine finds
-them), so the same check of an unchanged document measures nothing; a document holds one version's results. A
-document that did not read, a refused check or a family not measured is not kept.
+equal to the same document's read from its file.
+
+**What a measurement depends on, and what is kept of it** (`kept.py`). A report is a function of three things,
+and the engine keeps it by them, never by which document, path or version it came from:
+
+- **What it reads of the document**: the parts as the reader made them, said as plain data, the document's
+  content record (`_dfm_brep.content`: each part's geometry key, its names, how its occurrences stand, the token
+  of any mesh it was read with, and its declared material's physics and process -- not its colour or look, not
+  the file's bytes or path). A checks process describes a document once per version, measuring nothing, and the
+  engine remembers what each version holds: a model by its build closure's key, a file by its bytes with its
+  name's stem and suffix (an unnamed root takes its name from the stem).
+- **The options its measurement reads.** Each process's module declares them beside its `OPTIONS`, as
+  `MEASURES`: `cnc` reads `axes`, `turning`, `tools` and `stock`; `sheet` `thickness`, `k_factor` and
+  `material` (the material's K-factor is what a bend is unfolded with); `molding` `pull`, `wall_limit` and
+  `zero_tol`; `printing` `technology`, `angle_limit`, `layer_height`, `samples`, `nozzle`, `build_volume` and
+  `printer`. Every other option is the rules' alone: it changes the verdict and no figure (a CNC, molded or
+  printed part's material, a sheet's size, kerf and bend radius, a mold's cavities). The measurement is handed
+  the declared ones alone, as a table that refuses any other name (`kept.Measuring`), and a read it does not
+  declare fails the check, even where the family that read it caught the refusal: so the list cannot drift
+  from the code. An option moves between the two by being added to or taken from `MEASURES`.
+- **The code that measures**: the digest of the files that measure that process (`cad.engine._measuring.DFM`:
+  the check's own steps, the parts' measures, the process's module on each side), with the versions of the
+  libraries it measures with. An edit anywhere else -- the server, a document type, another process, a release
+  that touched none of them -- leaves a kept measurement standing.
+
+So a check that reads the same parts the same way measures nothing (`kept.measure_key`; the engine's README,
+**What is kept of a manufacturing check**): another material on a CNC check, the same STEP at another path, a
+model's declared process against the same one given, a rebuild that changed a colour, an edit made and undone.
+The answer is always the asking check's own -- its process, its options as resolved, its `process_declared`
+finding -- and its rules are run again each time: no verdict is kept. A report is kept whole or with a family
+not measured (the same code makes the same of the same parts); never a document that did not read, one with no
+part a process makes, nor a report its measurer says the next measurement could make otherwise (`transient`:
+molding's release search out of its seconds, a family that failed for memory, or a table of the report that
+says of itself `repeatable: false` -- a CNC report's `holes.recognition` where the holes' recognition fell back
+for a reason the next check may not meet; such a report is answered and measured again the next time, and a
+table that says true, or nothing of it, is repeatable). 128 results and 64 MB at most are held in
+the engine's memory, and they are written under `checks/` in its cache folder, bounded, so a restarted engine
+finds them.
 
 A check outlives its caller, as a build does: a shell's time limit cutting its caller off leaves it running, its
 result kept, so the same check asked again finds it; asked while it still runs, it waits for that check and
@@ -155,10 +190,12 @@ the command calls the same function with `_command=True`, a keyword of its own i
 
 The options resolve in two steps when the process comes from the parts. `manufacturing.options(type, None,
 ...)`, the type side, refuses what holds for every process before anything is read -- each option's kind, a
-units, a material, a pull beside `--candidates` -- and answers None; the command
-then starts the integration's environment, which reads the document (`_dfm_brep.read`), takes the declared
-process (`manufacturing.declared`) and resolves the options for it, refusing there an option of another
-process (`--pull` on a machined part) with the declared route named. A refusal there comes back to the
+units, a material, a pull beside `--candidates` -- and answers None. The declared process is then taken and
+the options resolved for it (`manufacturing.declared`), an option of another process (`--pull` on a machined
+part) refused there with the declared route named: by the engine, from the record of what the document's parts
+declare (`kept.asked`, the standard library alone, so a document it knows is refused or answered with no
+process asked); and where the engine measures nothing for the caller, by the integration's environment the
+command starts, which reads the document (`_dfm_brep.read`) first. A refusal there comes back to the
 command with its reason (`cad._internal.operation`'s answer carries `reason`: `invalid_argument` for an
 argument refused by name, `not_found` for a document the engine does not hold), so it exits 2 as the same
 refusal does in the command's own process. Given `--process`, every option is resolved and refused before
@@ -1550,7 +1587,9 @@ shop's limit; the table holds no row that cannot apply (`_general.add` refuses a
 `--printer FILE` names the printer's settings: a 3MF a slicer saved (OrcaSlicer, Bambu Studio: its
 `Metadata/project_settings.config`) or a JSON of a complete machine preset (or those project settings). `options`
 reads it once, in the calling process (the path made absolute against the caller's working directory, also where
-the options go on to the engine unresolved), and `resolved` carries plain values: `printable_area`'s bounding box by
+the options go on to the engine unresolved, with the settings as the caller read them, which the engine resolves
+the declared process's options with: a kept measurement is found by what they resolve to, never by the file),
+and `resolved` carries plain values: `printable_area`'s bounding box by
 `printable_height` as `build_volume`, the first `nozzle_diameter` as `nozzle` -- each only where its own option is
 not given -- and `printer` as `{name, file, supplied}`, the name `printer_settings_id`, else `name`, else the file's.
 The volume is then the printer's own, judged as `--build-volume` is (`volume_origin` names the printer and the

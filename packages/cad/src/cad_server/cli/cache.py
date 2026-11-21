@@ -3,9 +3,10 @@
 The cache is what cad makes again when it needs it, in its cache folder (``places.cache_dir``: ``CAD_CACHE_DIR``,
 else ``~/.cache/cad``): the CAD kernel environment and the environments ``cad run`` makes (``base/``, one per release
 and set of integrations, ``cad_server._internal.base``), the engine's bytecode, hulls, MJCF assets, integrations'
-homes and kept interference measurements (``OWN``). Data is never in it: the documents the engine keeps there
-(``documents/``, which a document's record points at and only that document's deletion removes) stay, as do the
-records, Recents and settings in the state folder, and anything else in the folder, which may be another program's.
+homes, kept interference measurements and the manufacturing checks' kept measurements (``OWN``). Data is never in
+it: the documents the engine keeps there (``documents/``, which a document's record points at and only that
+document's deletion removes) stay, as do the records, Recents and settings in the state folder, and anything else
+in the folder, which may be another program's.
 
 - ``dir``: the cache folder.
 - ``prune``: what this release of cad cannot use: the environments made for another release (their marker names it,
@@ -28,7 +29,7 @@ from pathlib import Path
 DEFAULT_PROG = "cad cache"
 COMMANDS = ("dir", "prune", "clean")
 # What cad keeps in its cache folder, each made again on demand (the module): ``documents/`` is data, and stays.
-OWN = ("base", "pycache", "hulls", "mjcf", "homes", "interference")
+OWN = ("base", "pycache", "hulls", "mjcf", "homes", "interference", "checks")
 
 
 def build_parser(prog: str = DEFAULT_PROG):

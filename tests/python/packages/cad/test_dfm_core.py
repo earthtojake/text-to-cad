@@ -606,6 +606,19 @@ def _described(source: dict, payload: bytes | None = None) -> dict:
                           "check": {"describe": True, "type": "xbf", "measures": measuring()}})["checked"]
 
 
+def _checked(source: dict, process: str | None, payload: bytes | None = None, **resolved: object) -> dict:
+    """What a checks process answers a check of ``source`` for ``process`` (``worker._check``), handed the options
+    its measurement reads alone, as the engine hands them."""
+    from cad._internal.dfm import kept
+    from cad.engine import worker
+    from cad.engine.contract import measuring
+
+    options = manufacturing.options("xbf", process, resolved) if process is not None else None
+    return worker._check({"source": source, "payload": payload, "check": {
+        "type": "xbf", "process": process, "candidates": False, "measures": measuring(),
+        "resolved": kept.measuring(process, options) if process is not None else None}})["checked"]
+
+
 class ContentTest(unittest.TestCase):
     """What a measurement reads of a document (``_dfm_brep.content``), answered by a checks process asked to
     describe it: a model's document and its xbf alike, changed by what a measurement reads and by nothing else."""
@@ -658,6 +671,56 @@ class ContentTest(unittest.TestCase):
                 self.assertNotEqual(self._content(result)["key"], content["key"])
         self.assertEqual(_described({"path": str(self.folder / "missing.xbf")})["unmeasured"]["code"],
                          "document_unreadable")
+
+    def test_a_check_says_the_key_of_the_parts_it_measured_and_measures_for_the_process_it_is_given(self) -> None:
+        """A report is kept under the record of the very parts it was measured of, which its measurer says
+        (``content_key``): the one a describing of the same document says. And a check is measured for a process
+        named: the one the parts declare is read from the record by whoever asks."""
+        path, payload = _saved(self.folder, self._block(), "block")
+        content = _described({"path": str(path)})["content"]
+        held = {"document": "block-id", "name": "block", "version": "1"}
+        for source, bytes_of in (({"path": str(path)}, None), (held, payload)):
+            with self.subTest(source=sorted(source)):
+                checked = _checked(source, "cnc", bytes_of)
+                self.assertEqual((checked["content_key"], checked["measured"]["process"]), (content["key"], "cnc"))
+                self.assertEqual(set(checked["measured"]["resolved"]), {"axes", "turning", "tools", "stock"})
+        with self.assertRaisesRegex(ValueError, "the process it names"):
+            _checked({"path": str(path)}, None)
+
+    def test_a_report_a_busier_machine_makes_otherwise_is_said_transient_beside_it(self) -> None:
+        """Molding's release search spends rays, which run out alike on any machine, and seconds, which do not:
+        a report it cut short for its seconds says less than the part's own, and is said ``transient`` beside
+        it, as is one a family failed for memory in, and one a table of which says it is not repeatable (a
+        recognition that fell back for a reason the next run may not meet), whatever made the table. A report
+        whole, cut short for its rays, with a family that failed otherwise or with a table that says it is
+        repeatable, or nothing of it, is the part's each time, and says nothing."""
+        from unittest import mock
+
+        from cad.build123d import _dfm_check
+        from cad.build123d import _dfm_molding as molding
+
+        part = bd.Box(30, 20, 10) - bd.Rot(0, 90, 0) * bd.Cylinder(3, 40)  # a hole across the pull: an undercut
+        part.label = "block"
+        path, _ = _saved(self.folder, part, "block")
+        with mock.patch.object(molding, "_RELEASE_SECONDS", 0.0):
+            cut = _checked({"path": str(path)}, "molding")
+        self.assertEqual((cut.get("transient"), cut["measured"]["report"]["undercuts"]["unsearched_count"]), (True, 1))
+        with mock.patch.object(molding, "_RELEASE_RAYS", 0):
+            spent = _checked({"path": str(path)}, "molding")
+        self.assertEqual(("transient" in spent, spent["measured"]["report"]["undercuts"]["unsearched_count"]),
+                         (False, 1), "out of rays: the same on any machine")
+        whole = _checked({"path": str(path)}, "molding")
+        self.assertEqual(("transient" in whole, whole["measured"]["report"]["undercuts"]["unsearched_count"]), (False, 0))
+        for said, report in ((True, {"holes": {"error": "block: MemoryError: "}}),
+                             (True, {"pulls": [{"walls": {"error": "MemoryError: 2 GiB"}}]}),
+                             (True, {"holes": {"items": [], "count": 0, "recognition": {"repeatable": False}}}),
+                             (False, {"holes": {"items": [], "count": 0, "recognition": {"repeatable": True}}}),
+                             (False, {"holes": {"items": [], "count": 0, "recognition": {"repeatable": None}}}),
+                             (False, {"holes": {"items": [], "count": 0, "recognition": {"mode": "own"}}}),
+                             (False, {"holes": {"error": "block: ValueError: no axis"}, "partial": True}),
+                             (False, {"holes": {"items": [], "count": 0}, "partial": False})):
+            with self.subTest(report=report):
+                self.assertEqual(_dfm_check._transient("cnc", report), said)
 
     def test_a_triangulation_a_part_was_read_with_is_in_its_content(self) -> None:
         """A measurement keeps a mesh fine enough where it finds one, so the mesh a part was read with is read."""

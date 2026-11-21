@@ -718,10 +718,12 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
     STEP's or an xbf's path, read once while its bytes stay as they were, or a document the engine holds (its
     handle or id), from the bytes it holds of it -- never in a model's worker, so nothing of that model waits
     for its check. ``check`` is ``{"type", "process", "resolved", "candidates", "given"}``, its options resolved
-    by the caller (``manufacturing.options``). The same check of an unchanged document is answered from the
-    results the engine keeps (``reused``: true), measuring nothing, and one asked while the same one runs waits
-    for it, which is said on stderr; a check runs to its end even if its caller goes, so asking again finds its
-    result. The answer says the release whose library measured it (``release``) and where
+    by the caller (``manufacturing.options``); given no process, the engine takes the one the document's parts
+    declare and resolves ``given`` for it. A check that reads the same parts the same way as one measured before
+    -- whatever document, path or version they were in, and whatever its rules alone read -- is answered from
+    the measurement the engine kept (``reused``: true), measuring nothing, and one asked while the same one runs
+    waits for it, which is said on stderr; a check runs to its end even if its caller goes, so asking again
+    finds its result. The answer says the release whose library measured it (``release``) and where
     (``measured_in``: ``IN_ENGINE``).
 
     Plain data, which ``manufacturing.measure`` finishes: ``{"measured": {"process", "resolved",

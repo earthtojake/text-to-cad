@@ -9,6 +9,7 @@ Importing this puts the packages' sources on ``sys.path``."""
 from __future__ import annotations
 
 import dataclasses
+import itertools
 import json
 import os
 import shutil
@@ -85,7 +86,19 @@ def _plain(result: Any) -> Any:
 
 
 # What measures in a process (``contract.measuring``), as a test's callers and its checks processes say it.
-MEASURES = {"code": "c0de", "libraries": {"build123d": "0.13.0", "OCP": "8.0.1", "numpy": "2.0.0"}}
+MEASURES = {"code": "c0de", "dfm": {process: f"c0de-{process}" for process in ("cnc", "sheet", "molding", "printing")},
+            "libraries": {"build123d": "0.13.0", "OCP": "8.0.1", "numpy": "2.0.0"}}
+
+
+def record(name: str = "plate", geometry: str = "g1", material: Any = None) -> dict[str, Any]:
+    """A content record of one part of geometry ``geometry``, keyed as a checks process keys it
+    (``cad.build123d._dfm_brep.content``)."""
+    from cad._internal.dfm import kept
+
+    content = {"name": name, "empty": [], "parts": [{
+        "key": geometry, "name": name, "owner": "", "paths": [name], "matrix": [1.0, 0.0, 0.0, 0.0] * 4,
+        "placements": [[0.0, 0.0, 0.0]], "occurrences": 1, "material": material, "mesh": ""}]}
+    return {**content, "key": kept.content_key(content)}
 
 
 def _counts() -> dict[str, int]:
@@ -180,15 +193,22 @@ def held_check(case: unittest.TestCase, hold: Path, check: Any) -> tuple["Checki
     return thread, int(reached.read_text(encoding="utf-8"))
 
 
+# How many times ``box`` was called: each call's boxes are of a width of their own.
+_BOXES = itertools.count()
+
+
 def box(case: unittest.TestCase, *heights: float) -> list[Path]:
-    """A STEP of a box of each height, in a folder of the test's own."""
+    """A STEP of a box of each height, in a folder of the test's own, of a width no other call's boxes have: the
+    engine keeps a measurement by what was measured, whatever file it was in, so a box a test means to see
+    measured is one no test before it measured."""
     import build123d as bd
 
     folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-dfm-box-")))
     case.addCleanup(shutil.rmtree, folder, True)
+    width = 30 + next(_BOXES)
     steps = [folder / f"part{index}.step" for index in range(len(heights))]
     for height, step in zip(heights, steps):
-        bd.export_step(bd.Box(30, 20, height), str(step))
+        bd.export_step(bd.Box(width, 20, height), str(step))
     return steps
 
 

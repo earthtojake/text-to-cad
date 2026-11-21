@@ -86,7 +86,7 @@ def pictures(record: dict[str, Any] | None) -> set[str]:
 # Told of every record written (one that changed), after it is on disk; never waited on for more.
 OBSERVERS: list[Callable[[dict[str, Any]], None]] = []
 # Told of every document id deleted (``Registry.delete``), under its lock, its folders gone: what the engine
-# keeps of it elsewhere goes too (``checks.Checks.deleted``).
+# keeps of it elsewhere goes too (``checks.Checks.deleted``, ``measurements.Measurements.deleted``).
 FORGOTTEN: list[Callable[[str], None]] = []
 # Makes the registry another way than of the user's state and cache folders (``current``): a test's seam.
 FACTORY: Callable[[], "Registry"] | None = None
