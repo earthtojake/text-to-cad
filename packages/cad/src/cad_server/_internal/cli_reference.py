@@ -216,7 +216,7 @@ def as_docs() -> dict[str, Any]:
         "usage": f"cad {name} <operation> FILE [options]",
         "operations": [operation(INTEGRATIONS[name], op, integrations.build_parser(name, op), name)
                        for op in integrations.operations_of(name)],
-    } for name in cli.INTEGRATION_COMMANDS]
+    } for name in cli.INTEGRATION_COMMANDS if not INTEGRATIONS[name].deprecated]  # as `cad --help` lists them
     commands = []
     # The dispatcher's own table, in its --help order, without the commands its --help never lists.
     for name in sorted(set(cli._COMMANDS) - cli._UNLISTED):  # noqa: SLF001

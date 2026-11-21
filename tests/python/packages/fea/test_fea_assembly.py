@@ -731,7 +731,7 @@ class SolveAssemblyTest(unittest.TestCase):
 
     def test_solve_picks_no_part_and_sizes_no_mesh(self):
         # A part on its own is its own model, and the mesh's size is the study's: no option sizes a mesh,
-        # refused as any argument the command never had (law 15), and the setup's --occurrence, which lists one
+        # refused as any argument the command never had (law 14), and the setup's --occurrence, which lists one
         # part's faces, is refused beside a study by name, before anything is read.
         from cad_server.cli.step import main
 

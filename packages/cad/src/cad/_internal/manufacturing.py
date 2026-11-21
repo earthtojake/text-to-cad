@@ -40,7 +40,7 @@ was not checked: an error found is the part's whatever else was not judged. ``ok
 
 Each option belongs to a process (``dfm.<process>.OPTIONS``) or to all (``dfm.COMMON``), and one given to
 another process is refused by name before anything is read, as an option the check does not take would be
-(law 16), and so is a value of another kind (``KINDS``: never coerced, law 17). Each type's ``dfm`` takes the
+(law 15), and so is a value of another kind (``KINDS``: never coerced, law 16). Each type's ``dfm`` takes the
 processes it can be checked for (``processes_for``: a mesh printing, a DXF sheet) and their options alone;
 a mesh asked for another is refused with the reason and the fix (``_MESH_REFUSED``: check the STEP or the model). The standard library alone: the server's command resolves the options here before it starts
 an environment that holds the integration. An xbf or a model given no process is checked for the one its

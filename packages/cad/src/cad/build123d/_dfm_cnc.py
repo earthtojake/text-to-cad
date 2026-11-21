@@ -13,7 +13,9 @@ the machine frame's. The families, and how each is measured:
 - ``holes`` (``_dfm_cnc_holes``): concave cylinders and their coaxial neighbours; diameter, depth (the drilled
   length below any counterbore; ``overall_depth_mm`` the whole), blind or through by an exact ray along the
   axis, the floor (drill point and its angle, or flat), counterbores (each with its own depth to diameter),
-  countersinks, the standard drill each diameter is. A hole the rays read through is blind where quiddity's
+  countersinks, the standard drill each diameter is; and its mouth (``mouths``, once the threads are known):
+  whole, or cut by a wall that rises along the hole's axis -- a cavity's, a step's, the part's side --, with
+  how far the hole reaches past it (a partial hole). A hole the rays read through is blind where quiddity's
   record of that same hole says it is closed and the kernel bears it out (``_dfm_cnc_recognised``: quiddity
   asked once for every part measured itself; a floor that is no face of the hole's own is no floor to the rays);
   nothing else of a hole is quiddity's, and a record the kernel contradicts changes nothing.
@@ -132,6 +134,7 @@ from cad._internal.dfm import cnc as rules_side
 from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG
 from cad.build123d import _dfm_brep as brep
 from cad.build123d import _dfm_cnc_recognised as recognised
+from cad.build123d._dfm_cnc_holes import mouths as find_mouths
 from cad.build123d._dfm_cnc_holes import threads as find_threads
 from cad.build123d._dfm_cnc_model import (LIFT, RUNS_UP, SAME, WORLD, Model, Stations, about, directions_for,
                                           edge_normals, framed, machine_frame, nearest_world, stations, stations_at,
@@ -678,6 +681,7 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
     threads, thread_faces = found_threads if found_threads else ([], set())
     families.setdefault("threads", []).extend(threads)
     state["thread_faces"] = thread_faces
+    run("holes", lambda: find_mouths(model, holes, thread_faces))
     voids = run("voids", lambda: _voids(model)) or []
     # a modelled thread's flanks are a tap's or a thread mill's, not the end mill's: no rule of reach, walls
     # or gaps reads them (the threads family does)
@@ -3051,7 +3055,7 @@ _RAN = {"holes": ("holes", "counterbores"), "access": ("access", "setups"),
 _FAMILIES = ("holes", "counterbores", "threads", "pockets", "internal_corners", "sharp_edges", "knife_edges", "walls", "gaps",
              "access", "setups", "voids", "stock", "small_features")
 _ORDER: dict[str, Callable[[dict[str, Any]], Any]] = {
-    "holes": lambda item: -(item["depth_to_diameter"] or 0),
+    "holes": lambda item: (-item["past_wall_mm"], -(item["depth_to_diameter"] or 0)),
     "counterbores": lambda item: -(item["depth_to_diameter"] or 0),
     "pockets": lambda item: -(item["depth_to_width"] or 0),
     "internal_corners": lambda item: item["radius_mm"],

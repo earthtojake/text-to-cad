@@ -7,7 +7,7 @@ shares (the result in full, a shop's own limits, the review, a redesign) is
 ## Design it
 
 The numbers are Protolabs Network's (Hubs) CNC design guide's, and those marked *own* are
-text-to-cad's where the guide states none. `--tools` puts the shop's end mills in place of the tool
+text-to-cad's where the guide states none (a partial hole is Fictiv's guide's). `--tools` puts the shop's end mills in place of the tool
 sizes here.
 
 - **Setups.** Put the features on as few sides as can be: each side a tool must face is a setup,
@@ -34,7 +34,11 @@ sizes here.
   fractional, number or letter drill; own tolerance), 1 mm or more (smaller is micro-drilled, a
   warning; under 0.05 mm an error) and at most 4 diameters deep (a warning; 40 is the error, and a
   micro drill's 25 to 40, own). A counterbore, and a stepped bore's larger step, is judged over its
-  own diameter. Model a thread as its tap-drill hole with a callout, not as a thread.
+  own diameter. Model a thread as its tap-drill hole with a callout, not as a thread. Keep a drilled
+  hole's mouth a whole circle on one face: one that straddles a pocket's wall, a step, a rib or the
+  part's side is a partial hole (`cnc.partial_hole`, a warning: the drill wanders, and the wall keeps
+  the hole's scallop). Move it back by the finding's `value`, its reach past the wall, or widen the
+  pocket to take it whole. A slot that runs into a hole (a clamp's slit, a keyway) is not one.
 - **Walls and gaps.** Walls 0.8 mm or more in metal and 1.5 mm in plastic (0.5 and 1.0 are the
   errors); gaps 2.5 mm or wider, and never narrower than the smallest tool. A wall, rib, pin or
   boss standing over 4 times its thickness chatters as it is cut (`cnc.tall_feature`, a warning,
@@ -83,6 +87,8 @@ The result is read as [every process's](manufacturing-review.md#read-the-result)
 `knife_edges`, `walls`, `gaps`, `access`, `setups`, `voids`, `stock`, `small_features`; with
 `--turning`, `turning`, `turned_diameters`, `bores`, `grooves` and `live_tooling`.
 
+- `holes` carry `mouth` (`whole`, `slotted`, `stepped` or `open`), `past_wall_mm` and `cut_by`: what
+  a wall across a hole's mouth makes of it. `cnc.partial_hole` judges the drilled ones.
 - `internal_corners` are a pocket's corners along the tool's axis; `reach_ratio` is the depth over
   the largest tool that fits. A round corner's finding is at its own face (`refs[0]`, the fillet to
   edit), the cavity's floor after it (`pocket`); a sharp one's is at its edge.

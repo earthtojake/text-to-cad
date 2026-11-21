@@ -10,7 +10,7 @@ import { MAX_ITEMS, WHATS_NEW, whatsNewEntry, whatsNewNotes } from "./notes.js";
 
 const TABLES = { en, ja, ko, "zh-CN": zhCN, "zh-TW": zhTW };
 
-// The policy for a release's notes (CONTRIBUTING.md, Releases): user-facing features only, at most
+// The policy for a release's notes (docs/contributing/releases.md): user-facing features only, at most
 // three items, each a bold title and one or two sentences, in every locale.
 test("every release's notes are one to three items, each a title and a body of a sentence or two, in every locale", () => {
   for (const [release, items] of Object.entries(WHATS_NEW)) {

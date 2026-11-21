@@ -73,7 +73,12 @@ def ranges_for(document_type: str) -> Any:
         parts touching already as built (a horn on its servo) meet only when their contact grows there or one is
         pushed into the other (a part resting on its parent, turned into it, stops where it lies), parts near
         as built (apart, within the clearance) only where their gap halves, and each joint's finding names them with
-        their gap as built and at each stop. A pair touching as built on a surface about the joint's axis (a plate
+        their gap as built and at each stop. In a turn a point counts either way only where its gap is also under a
+        tenth of its distance from the joint's axis (within 5.7 degrees of turning from touching), which decides
+        nearer the axis than ten times the clearance: a lid hinged on its edge is near its box all along the hinge
+        line long before it folds back onto it, and meets it where that little turning is left. Within 3 mm of the
+        axis a contact grown is as much less surface as it is nearer the axis (5 mm^2 at 1 mm).
+        A pair touching as built on a surface about the joint's axis (a plate
         bolted to a motor's output, the output drawn as one solid with the motor's case) turns on it: neither that
         face nor what of the output lies within its reach (a boss, a pin, a bolt's seat) stops the joint, and the
         finding says the pair (turns on). A clash (anything the joint moves meeting another link, the other joints as
@@ -89,7 +94,9 @@ def ranges_for(document_type: str) -> Any:
           the handle its call returns.
         step: the sweep's step: degrees for a turning joint, millimetres for a sliding one; default 1.
         clearance: how near two parts' surfaces come before they count as touching, in millimetres; default 0.3,
-          the least (where they all but touch): a larger one stops each joint where its parts first come that near.
+          the least (where they all but touch): a larger one stops each joint where its parts first come that near;
+          in a turn, a point nearer the axis than ten times the clearance counts as touching only within a tenth of
+          its distance from the axis.
         joint: sweep this joint alone (repeat it for several); default every joint a person moves. A name the
           document has no such joint by is refused, naming its joints.
         verbose: say on stderr each step as it starts (reading the document, sampling its surfaces, each joint)

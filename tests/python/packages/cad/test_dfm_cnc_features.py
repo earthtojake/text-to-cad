@@ -188,6 +188,178 @@ class CountersinkAngleTest(unittest.TestCase):
         self.assertEqual([sink["angle_deg"] for hole in holes for sink in hole["countersinks"]], [82.0])
 
 
+class HoleMouthTest(unittest.TestCase):
+    """A wall that cuts a hole's mouth -- a pocket's, a step's, a boss's, the part's side -- makes a partial hole,
+    said with how far the hole reaches past it; a whole mouth, an opening below it and a slot that runs into the
+    hole are none."""
+
+    @staticmethod
+    def _plate(*holes: tuple[float, float]) -> Any:
+        """An 80 x 60 x 10 plate (z 0 .. 10) with a 40 x 30 pocket 5 deep, R2 corners, and a 4.5 mm hole through
+        it at each of ``holes``."""
+        part = bd.Box(80, 60, 10, align=(A.CENTER, A.CENTER, A.MIN)) - _pocket(40, 30, 5, 2.0, 10)
+        for x, y in holes:
+            part -= bd.Pos(x, y, 0) * bd.Cylinder(2.25, 10, align=(A.CENTER, A.CENTER, A.MIN))
+        return part
+
+    @staticmethod
+    def _holes(result: Any, diameter: float) -> list[dict[str, Any]]:
+        return [hole for hole in result.measurements["holes"]["items"] if hole["diameter_mm"] == diameter]
+
+    def test_a_hole_that_straddles_a_pocket_s_wall_is_a_partial_hole(self) -> None:
+        # a motor mount: a 22 mm bore in the pocket's floor and four M4 clearance holes on a 31 mm square, each
+        # centre 0.5 mm behind a long wall of the pocket (y = +-15): 1.75 mm of it lies over the pocket, 5 mm deep
+        plate = self._plate(*((x, y) for x in (-15.5, 15.5) for y in (-15.5, 15.5))) \
+            - bd.Cylinder(11, 10, align=(A.CENTER, A.CENTER, A.MIN))
+        result = cnc(_part(plate), material="aluminum", tools="3,6,10")
+        self.assertTrue(result.ok)  # a warning: it is made, drilled before the pocket is milled
+        self.assertEqual(_judged(result), {"cnc.partial_hole"})
+        found = [f for f in result.findings if f.code == "cnc.partial_hole"]
+        holes = self._holes(result, 4.5)
+        # one finding a hole, at the hole's own face, the wall that cuts it among its refs
+        self.assertEqual(sorted(f.location for f in found), sorted(hole["location"] for hole in holes))
+        self.assertEqual(len({f.location for f in found}), 4)
+        walls = set(result.measurements["pockets"]["items"][0]["faces"])
+        for hole in holes:
+            self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["open_mm"]), ("stepped", 1.75, 5.0))
+            self.assertAlmostEqual(hole["open_deg"], 2 * math.degrees(math.acos(0.5 / 2.25)), places=3)
+            self.assertIn(hole["cut_by"], walls)
+            finding = next(f for f in found if f.location == hole["location"])
+            self.assertIn(hole["cut_by"], finding.refs)
+        for finding in found:
+            self.assertEqual((finding.severity, finding.value, finding.limit, finding.unit, finding.op),
+                             ("warning", 1.75, 0.0, "mm", "max"))
+            self.assertEqual(finding.source, "Fictiv, CNC machining design guide")
+            self.assertIn("partial hole (a wall cuts its mouth): reach past the wall 1.75 mm is over the 0 mm "
+                          "recommended maximum", finding.message)
+            self.assertIn("opens 154 degrees of the hole's wall for 5 mm from its mouth", finding.message)
+            self.assertIn("move the hole back from that wall by its reach past it or more", finding.hint)
+            self.assertIn("drill it before the wall is cut", finding.hint)
+        self.assertEqual(sum("cnc.partial_hole, 4 place(s)" in line for line in result.human_lines()), 1)
+        # the bore lies whole in the pocket's floor: no wall cuts it
+        [bore] = self._holes(result, 22.0)
+        self.assertEqual((bore["mouth"], bore["past_wall_mm"], bore["cut_by"]), ("whole", 0.0, None))
+        # the part is the same however it is turned
+        turned = cnc(_part(bd.Pos(13, -7, 5) * bd.Rot(17, 23, 41) * plate), material="aluminum", tools="3,6,10")
+        self.assertEqual(sorted((hole["mouth"], hole["past_wall_mm"], hole["open_mm"])
+                                for hole in turned.measurements["holes"]["items"]),
+                         [("stepped", 1.75, 5.0)] * 4 + [("whole", 0.0, 0.0)])
+        self.assertEqual(_judged(turned), {"cnc.partial_hole"})
+
+    def test_a_whole_mouth_is_no_partial_hole(self) -> None:
+        # in the pocket's floor, clear of the pocket, counterbored, countersunk, and two holes that cross below
+        # their mouths (the cross hole reads as two, one each side of the hole it crosses): each mouth is a whole
+        # circle
+        part = self._plate((0, 0), (30, 20), (-30, 20), (-30, -20), (30, -20))
+        part -= bd.Pos(-30, 20, 10.5) * bd.Cylinder(4, 5, align=(A.CENTER, A.CENTER, A.MAX))
+        part -= bd.Pos(-30, -20, 10.25) * bd.Cone(2.25, 4.75, 2.5, align=(A.CENTER, A.CENTER, A.MAX))
+        part -= bd.Pos(40, -20, 5) * bd.Rot(0, 90, 0) * bd.Cylinder(1.5, 30)
+        # a hole square into a round shaft, and one down into a face inclined 45 degrees: an end on a face that
+        # does not rise along the hole is no wall across it
+        shaft = bd.Cylinder(15, 40) - bd.Rot(0, 90, 0) * bd.Cylinder(2, 40)
+        ramp = bd.Box(40, 30, 20, align=(A.CENTER, A.CENTER, A.MIN)) \
+            - bd.Pos(0, 0, 20) * bd.Rot(0, 45, 0) * bd.Box(80, 80, 20, align=(A.CENTER, A.CENTER, A.MIN)) \
+            - bd.Cylinder(3, 60)
+        for shape, count in ((part, 7), (shaft, 1), (ramp, 1)):
+            result = cnc(_part(shape), material="aluminum")
+            holes = result.measurements["holes"]["items"]
+            self.assertEqual([(hole["mouth"], hole["past_wall_mm"]) for hole in holes], [("whole", 0.0)] * count)
+            self.assertNotIn("cnc.partial_hole", _codes(result))
+            [outcome] = [o for o in result.measurements["rules"]["outcomes"] if o["rule"] == "cnc.partial_hole"]
+            self.assertEqual((outcome["status"], outcome["evaluated"]),
+                             ("passed", sum(hole["drilled"] for hole in holes)))
+
+    def test_the_reach_past_a_round_wall_is_exact(self) -> None:
+        # a hole 0.5 mm outside a 22 mm round pocket 5 deep, and one 1 mm inside the side of a 20 mm boss that
+        # stands 5 mm: each straddles a cylinder along its own axis
+        part = bd.Box(100, 60, 10, align=(A.CENTER, A.CENTER, A.MIN))
+        part += bd.Pos(30, 0, 10) * bd.Cylinder(10, 5, align=(A.CENTER, A.CENTER, A.MIN))
+        part -= bd.Pos(-30, 0, 5) * bd.Cylinder(11, 5.01, align=(A.CENTER, A.CENTER, A.MIN))
+        part -= bd.Pos(-18.5, 0, 0) * bd.Cylinder(2.25, 10, align=(A.CENTER, A.CENTER, A.MIN))
+        part -= bd.Pos(39, 0, 0) * bd.Cylinder(2.25, 15, align=(A.CENTER, A.CENTER, A.MIN))
+        result = cnc(_part(part), material="aluminum")
+        by_x = {round(hole["xyz"][0], 1): hole for hole in self._holes(result, 4.5)}
+        self.assertEqual({x: (hole["mouth"], hole["past_wall_mm"], hole["open_mm"]) for x, hole in by_x.items()},
+                         {-18.5: ("stepped", 1.75, 5.0), 39.0: ("stepped", 1.25, 5.0)})
+        self.assertEqual(sorted(f.value for f in result.findings if f.code == "cnc.partial_hole"), [1.25, 1.75])
+
+    def test_a_blind_hole_is_read_at_its_opening_and_a_milled_one_is_not_judged(self) -> None:
+        # a pocket with a 0.5 mm chamfer round its rim and a 1 mm fillet round its floor; a blind drilled hole
+        # and a flat-bottomed one, an end mill's, each straddling a long wall
+        cut = bd.fillet(bd.Box(40, 30, 6, align=(A.CENTER, A.CENTER, A.MIN)).edges().filter_by(bd.Axis.Z), 2.0)
+        part = bd.Box(80, 60, 20, align=(A.CENTER, A.CENTER, A.MIN)) \
+            - bd.Pos(0, 0, 15) * bd.fillet(cut.edges().group_by(bd.Axis.Z)[0], 1.0)
+        rim = [edge for edge in part.edges() if abs(edge.center().Z - 20) < 1e-6 and abs(edge.center().X) < 20.1
+               and abs(edge.center().Y) < 15.1]
+        part = bd.chamfer(rim, 0.5)
+        part -= bd.Pos(10, 15.5, 20) * _drill(4.5, 12)
+        part -= bd.Pos(-10, 15.5, 20) * bd.Cylinder(2.25, 12, align=(A.CENTER, A.CENTER, A.MAX))
+        result = cnc(_part(part), material="aluminum")
+        drilled, milled = sorted(self._holes(result, 4.5), key=lambda hole: -hole["xyz"][0])
+        self.assertEqual((drilled["drilled"], drilled["bottom"], milled["drilled"], milled["bottom"]),
+                         (True, "drill_point", False, "flat"))
+        # the wall's edges stop at the rim's chamfer and at the floor's fillet: the opening runs from the mouth
+        # to the floor all the same
+        for hole in (drilled, milled):
+            self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["open_mm"]), ("stepped", 1.75, 5.0))
+        self.assertEqual([f.location for f in result.findings if f.code == "cnc.partial_hole"], [drilled["location"]])
+
+    def test_a_hole_that_breaks_out_of_the_part_s_side_is_open_along_its_length(self) -> None:
+        def side(inside: float) -> Any:  # a 4.5 mm hole whose axis is ``inside`` the part's side
+            return _part(bd.Box(40, 30, 10) - bd.Pos(0, 15 - inside, 0) * bd.Cylinder(2.25, 20))
+
+        result = cnc(side(2.0), material="aluminum")
+        [hole] = result.measurements["holes"]["items"]
+        self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["open_mm"]), ("open", 0.25, 10.0))
+        [said] = [f for f in result.findings if f.code == "cnc.partial_hole"]
+        self.assertIn("partial hole (a wall cuts it along its whole length): reach past the wall 0.25 mm",
+                      said.message)
+        self.assertIn("move the hole back into the material by its reach past the wall or more", said.hint)
+        # its two feather edges are knife edges besides, as they were
+        self.assertEqual(_judged(result), {"cnc.partial_hole", "cnc.knife_edge"})
+        # less than 300 degrees of its wall left, it is a notch of the outline and no hole: nothing to say
+        notch = cnc(side(1.0), material="aluminum")
+        self.assertEqual((notch.measurements["holes"]["count"], _judged(notch)), (0, set()))
+
+    def test_a_slot_that_runs_into_a_hole_is_the_slot_s(self) -> None:
+        # a clamp's 8 mm bore with a 1 mm slit out of one side, and a 6 mm hole with a 3 mm channel 4 deep
+        # leaving it: each opening lies between the slot's two walls, which face each other
+        part = bd.Box(60, 40, 10, align=(A.CENTER, A.CENTER, A.MIN))
+        part -= bd.Pos(-15, 0, 0) * bd.Cylinder(4, 10, align=(A.CENTER, A.CENTER, A.MIN))
+        part -= bd.Pos(-15, -10, 0) * bd.Box(1, 20.01, 10, align=(A.CENTER, A.CENTER, A.MIN))
+        part -= bd.Pos(15, 0, 0) * bd.Cylinder(3, 10, align=(A.CENTER, A.CENTER, A.MIN))
+        part -= bd.Pos(15, 10, 6) * bd.Box(3, 20.01, 4.01, align=(A.CENTER, A.CENTER, A.MIN))
+        result = cnc(_part(part), material="aluminum")
+        self.assertEqual(sorted((hole["diameter_mm"], hole["mouth"], hole["past_wall_mm"])
+                                for hole in result.measurements["holes"]["items"]),
+                         [(6.0, "slotted", 0.0), (8.0, "slotted", 0.0)])
+        self.assertNotIn("cnc.partial_hole", _codes(result))
+        # a hole that cuts one wall of a slot narrower than itself straddles that wall, its axis over the slot
+        across = bd.Box(60, 40, 10, align=(A.CENTER, A.CENTER, A.MIN)) \
+            - bd.Pos(0, 1.5, 6) * bd.Box(60.01, 3, 4.01, align=(A.CENTER, A.CENTER, A.MIN)) \
+            - bd.Pos(0, 2.5, 0) * bd.Cylinder(2.25, 10, align=(A.CENTER, A.CENTER, A.MIN))
+        [hole] = cnc(_part(across), material="aluminum").measurements["holes"]["items"]
+        self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["open_mm"]), ("stepped", 2.75, 4.0))
+        # and a rib thinner than the hole that stands across its mouth cuts it with both its faces, back to
+        # back: no slot's two walls, which face each other
+        ribbed = bd.Box(40, 30, 10, align=(A.CENTER, A.CENTER, A.MIN)) \
+            + bd.Pos(0, 7.5, 10) * bd.Box(2, 15, 3, align=(A.CENTER, A.CENTER, A.MIN)) \
+            - bd.Cylinder(3, 40)
+        [hole] = cnc(_part(ribbed), material="aluminum").measurements["holes"]["items"]
+        self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["open_mm"], len(hole["cut_faces"])),
+                         ("stepped", 2.0, 3.0, 2))
+
+    def test_an_opening_below_the_mouth_is_no_cut(self) -> None:
+        # a channel milled through from the side across the middle of a 10 mm hole's length, its wall cutting a
+        # chord off the hole: an opening in the hole's side, as a cross hole's is, both mouths whole
+        part = bd.Box(40, 40, 30, align=(A.CENTER, A.CENTER, A.MIN)) - bd.Cylinder(5, 60) \
+            - bd.Pos(0, 12, 10) * bd.Box(40.02, 16.01, 10, align=(A.CENTER, A.CENTER, A.MIN))
+        result = cnc(_part(part), material="aluminum")
+        [hole] = result.measurements["holes"]["items"]
+        self.assertEqual((hole["mouth"], hole["past_wall_mm"]), ("whole", 0.0))
+        self.assertNotIn("cnc.partial_hole", _codes(result))
+
+
 class PocketsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -645,6 +817,9 @@ class ThreadsTest(unittest.TestCase):
         self.assertAlmostEqual(found[0]["pitch_mm"], 1.0, places=3)
         self.assertEqual(result.measurements["access"]["items"], [])
         self.assertEqual(result.measurements["sharp_edges"]["items"], [])
+        # its groove runs out at the hole's mouth: a tap's, no wall across the mouth
+        self.assertEqual([hole["mouth"] for hole in result.measurements["holes"]["items"]], ["whole"])
+        self.assertNotIn("cnc.partial_hole", _codes(result))
 
 
     def test_a_revolved_round_is_no_thread(self) -> None:

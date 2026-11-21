@@ -14,7 +14,7 @@ two uses:
   deformed surface coloured by stress, the fields as attributes), ``result.vtu`` (the volume and its fields),
   ``stress.png`` and ``displacement.png``, and with ``deck`` CalculiX's input, ``ccx.inp``.
 
-An option of the other use is refused by name before anything is read (law 16): an ``ArgumentRefused``
+An option of the other use is refused by name before anything is read (law 15): an ``ArgumentRefused``
 (``cad._internal.refused``), which the server's command says as the command line's mistake, exit 2. The
 standard library alone at import: the server's command resolves the options here before it starts an
 environment that holds the integrations.
