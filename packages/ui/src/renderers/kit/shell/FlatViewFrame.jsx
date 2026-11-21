@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { english, useI18n } from "@cad/ui/i18n";
 import { MousePointer2 } from "lucide-react";
 import { AnnotationToolbar, drawStripTool } from "../../../annotation/toolbar.jsx";
@@ -10,18 +9,16 @@ import { TOOL_SHORTCUTS } from "../tools/toolShortcuts.js";
 import { FLAT_TOOL } from "./useFlatView.js";
 import ViewFrame from "./ViewFrame.jsx";
 import ZoomPill, { zoomViewControl } from "./ZoomControl.jsx";
-import ViewCornerStack from "./ViewCornerStack.jsx";
 import NavbarViewControls, { useNavbarViewControls } from "./NavbarViewControls.jsx";
-import { ViewMenu } from "./ViewSettingsMenu.jsx";
+import { StripViewMenu, ViewMenu } from "./ViewSettingsMenu.jsx";
 
 /**
  * A FLAT view's frame — a picture on a canvas, head on (a board, a schematic, a drawing) — which is
  * every view's (`ViewFrame.jsx`) with what a flat view puts in it: its strip (`flatViewTools`), ended
- * after its rule by the view's own controls (`views`' `tile`s, where they have no place in the corner), its
- * update under the strip, Quick Edit (`useFlatHandover`'s `quickEdit`), its panel's tabs (`panel`), and
- * its corner, at the top-right: the zoom pill (`ZoomControl.jsx`) and under it the corner's stack (a board's Display, side and 2D/3D),
- * the same corner while the picture is shown in 3D, whose zoom the pill then is (Home then in the stack too). On a phone the view's controls are rows of the strip's More, with the
- * zoom. The renderer brings the picture (its canvases and layers, `children`, in the box the canvas
+ * where the host has no navbar by View (`viewGroups`), its update under the strip, Quick Edit (`useFlatHandover`'s
+ * `quickEdit`), its panel's tabs (`panel`), and its corner, at the top-right: the zoom (`ZoomControl.jsx`) alone, the
+ * same corner while the picture is shown in 3D, whose zoom it then is. On a phone with no navbar the view's controls are
+ * rows of the strip's More (`views`), with the zoom. The renderer brings the picture (its canvases and layers, `children`, in the box the canvas
  * view measures: `containerRef`).
  *
  * The panel, the strip at the view's centre, the measure, the loading cover and the card are the
@@ -75,43 +72,36 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, se
  *   `surface`: the frame's own data attributes, which say what is drawn (`{ "data-drawing-surface": "" }`).
  *   `quickEdit`: null for a view whose picture has nothing a note could carry.
  *   `inspect`: what is picked and how the view describes it: the frame's Selected pane and hover tip (`ViewFrame.jsx`).
- *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's pill, at the top-right where a 3D view's cube stands,
- *   and the zoom's keys either way; while the picture is shown in 3D, the 3D view's (`viewportZoom`).
- *   `views`: the view's own controls (`FloatingToolBar.js`'s `ViewportViewControl`s), left to right at the strip's end; one
- *   with a `cornerTile` stands in the corner's stack instead on a desktop (`ViewCornerStack.jsx`).
- *   `viewGroups`: the view's settings as the navbar's View draws them (`ViewSettingsMenu.jsx`: a board's Side, Mode, Display and
- *   Background, a drawing's Background), under a file's navbar in place of `views`' corner tiles; `onResetView`, a
- *   phone's View menu's Reset view (a fit, or a board's 3D Home).
+ *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's one control, at the top-right where a 3D view's cube
+ *   stands, and the zoom's keys either way; while the picture is shown in 3D, the 3D view's (`viewportZoom`).
+ *   `viewGroups`: the view's settings as View draws them (`ViewSettingsMenu.jsx`: a board's Side, Mode, Display, in 3D
+ *   Projection, and Background, a drawing's Background): the navbar's View, or, with no navbar, View at the strip's end.
+ *   `views`: the view's own controls as a phone's More rows (`FloatingToolBar.js`'s `ViewportViewControl`s), where the
+ *   host has no navbar. `onResetView`: View's Reset view on a phone (a fit, or a board's 3D Home); `cameraReset`, its
+ *   Reset view on a desktop too, where the view has a camera to bring back (a board in 3D: what its Home was).
  *   `contextMenuItems`: the view's menu on a secondary tap over its canvas (`canvasRef`), every view's
  *   (`ViewportContextMenu.jsx`, its entries `viewMenu.js`'s); a right drag still pans.
  */
 export default function FlatViewFrame({ surface, containerRef, busy, children, file, mobile, compact, chromeHidden, failed = undefined, loading, loadingLabel,
   updating, updateStatus, tools, toolRow = null, views = undefined, panel = null, panelControl = null, toolStack, onToolStackChange, notice = null, quickEdit,
   alert, cardAlert, alertDismissal, shown, onReload, canvasRef = null, contextMenuItems = null, zoom = null, inspect = null, viewport = null,
-  viewGroups = null, onResetView = null }) {
+  viewGroups = null, onResetView = null, cameraReset = null }) {
   const { t } = useI18n();
   // The picture catching up: said as every view says it (`ViewFrame.jsx`'s status). A flat view's update
   // has nothing of its own to retry: one that fails is the card's, whose Retry reloads the file.
   const status = { update: updating ? updateStatus : null };
-  // The view's corner: its zoom pill, the same whether the picture is drawn flat or in 3D. A phone's zoom is More's.
-  // Under it, the corner's stack (`ViewCornerStack.jsx`), as a 3D view's stands under its cube: the view's controls that
-  // have a `cornerTile` (a board's Display, side, 2D/3D, and in 3D Home), by `cornerRank`. A phone keeps them as rows
-  // of the strip's More. The rest end the strip.
-  // Under a file's navbar they are the navbar's instead (`NavbarViewControls.jsx`): View ▾, the same menu on a desktop
-  // and a phone (`ViewSettingsMenu.jsx`), and the zoom stands alone in the corner (a phone's none: gestures, and the
-  // menu's Reset view). A camera control (a board's 3D Home) stays on a desktop's picture, beside the zoom.
+  // The view's settings are View's (`ViewSettingsMenu.jsx`), the navbar's one button, the same menu on a desktop and a
+  // phone, Reset view last where there is a way back (a phone's fit, a board's 3D Home). With no navbar View ends the
+  // strip, and a phone keeps the view's controls as rows of its More, with the zoom. The corner holds the zoom alone,
+  // the same whether the picture is drawn flat or in 3D (a phone's none: gestures, and View's Reset view).
   const inNavbar = useNavbarViewControls() && Boolean(viewGroups);
-  const cornerViews = mobile ? [] : (views || []).filter(view => view.cornerTile).sort((a, b) => (a.cornerRank ?? 0) - (b.cornerRank ?? 0));
-  const stripViews = inNavbar ? [] : mobile ? views || [] : (views || []).filter(view => !view.cornerTile);
-  const cameraViews = cornerViews.filter(view => view.cornerCamera);
+  const reset = mobile ? onResetView : cameraReset;
+  const stripViews = inNavbar ? [] : mobile ? views || []
+    : viewGroups?.length ? [{ id: "view", label: t("view.menu"), tile: <StripViewMenu groups={viewGroups} onReset={reset} /> }] : [];
   const navbarNode = shown && inNavbar ? <NavbarViewControls>
-    <ViewMenu groups={viewGroups} onReset={onResetView} />
+    <ViewMenu groups={viewGroups} onReset={reset} />
   </NavbarViewControls> : null;
-  const cornerNode = !shown ? null : <>
-    {zoom ? <ZoomPill zoom={zoom} /> : null}
-    {inNavbar ? cameraViews.length ? <ViewCornerStack under="pillHome">{place => cameraViews.map(view => <Fragment key={view.id}>{view.cornerTile(place)}</Fragment>)}</ViewCornerStack> : null
-      : cornerViews.length ? <ViewCornerStack under={zoom ? "pill" : "cube"}>{place => cornerViews.map(view => <Fragment key={view.id}>{view.cornerTile(place)}</Fragment>)}</ViewCornerStack> : null}
-  </>;
+  const cornerNode = shown && zoom ? <ZoomPill zoom={zoom} /> : null;
   return (
     <ViewFrame surface={surface} viewport={viewport} canvasBoxRef={containerRef} busy={busy} file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed}
       selecting={!tools.length || tools.some(tool => tool.id === FLAT_TOOL.SELECT && tool.active)} inspect={inspect}

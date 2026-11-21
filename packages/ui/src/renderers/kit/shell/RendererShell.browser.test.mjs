@@ -98,10 +98,9 @@ test('a phone\'s tools centre on the viewport as space runs out; its View and Pr
       return Math.abs(tools.left - expected) < 1 && tools.right <= view.right - 7;
     }, width);
   }
-  // At 599 every tool fits, the navbar's right end is Preview alone, and View the corner's tile: no More, no cube, no zoom.
+  // At 599 every tool fits, and the navbar's right end is View and Preview alone: no More, no cube, no zoom.
   assert.equal(await pane.getByRole('button', { name: 'More tools', exact: true }).count(), 0);
-  assert.deepEqual(await pane.locator('[data-navbar-view] [data-navbar-view-controls] > *').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['Preview']);
-  assert.equal(await pane.locator('[data-view-corner-tile] [data-view-menu]').count(), 1, 'View, the corner\'s tile');
+  assert.deepEqual(await pane.locator('[data-navbar-view] [data-navbar-view-controls] > *').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['View', 'Preview']);
   assert.deepEqual([await pane.locator('[data-view-cube]').count(), await pane.locator('[data-zoom-pill]').count()], [0, 0]);
   assert.deepEqual(errors, []);
 });
@@ -287,8 +286,7 @@ test('a toolbar button under the pointer is seen on its surface in the dark, ove
   // A tool with a menu (this harness's has none; `FloatingToolBar.test.tsx` holds its classes) is the strip's fill round both.
   if (await pane.locator('[data-navbar-panel="left"][aria-expanded="false"]').count()) await pane.locator('[data-navbar-panel="left"]').click();
   await seen('the panel head', pane.locator('[data-flat-panel-head]').getByRole('tab', { selected: false }).first());
-  assert.ok(await pane.locator('[data-view-corner-stack] button').count(), 'the harness has the corner\'s stack');
-  await seen('the corner', pane.locator('[data-view-corner-stack] button').first());
+  await seen('View', pane.locator('[data-navbar-view-controls] [data-view-menu]'));
   assert.deepEqual(errors, []);
 });
 
@@ -663,8 +661,8 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   const snapped = await page.evaluate(() => window.__cadCamera());
   snapped.target.forEach((value, index) => assert.ok(Math.abs(value - beforeSnap.target[index]) < 1e-8));
   assert.equal(snapped.zoom, beforeSnap.zoom);
-  // Home, the row's under the cube (the view the file opened with: `ShellChrome.test.tsx` presses it).
-  assert.equal(await pane.locator('[data-view-cube-row] [data-view-home]').count(), 1, 'Home under the cube');
+  // Reset view, View's last row (the view the file opened with: `ShellChrome.test.tsx` presses it); no Home on the picture.
+  assert.equal(await pane.locator('[data-view-home]').count(), 0, 'no Home on the picture');
   await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
   const recovered = await settleInk(ink => ink > 0.05, 'Zoom to Fit frames the plate after panning away');
   assert.ok(recovered > lost * 5);
@@ -846,9 +844,9 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.equal(await card.count(), 0, 'and raises nothing');
 
   // THE CUBE IS THE TOP-RIGHT CORNER'S: its 68px box (square: one uniform scale) 12px off the top and 12px from the
-  // right, and the bottom row is Quick Edit's alone: the tool stack stops clear of it. Home stands beside the cube's box,
-  // 4px outside it at its top-left, never over it; Display, Projection and Preview are the navbar's, at its right end,
-  // Preview last; the strip is the tools alone, no rule. The bottom middle is the host's (a composer, on some).
+  // right, and the bottom row is Quick Edit's alone: the tool stack stops clear of it. The cube stands alone in its
+  // corner; View and Preview are the navbar's, at its right end, View left of Preview; the strip is the tools alone, no
+  // rule. The bottom middle is the host's (a composer, on some).
   const frameBox = await canvasElement.boundingBox();
   const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
   const stackBox = await pane.locator('[data-cad-tool-groups]').boundingBox();
@@ -860,27 +858,10 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.ok(stackBox.y + stackBox.height <= frameBox.y + frameBox.height - 68 - 16 + 0.5, 'the tool stack stops clear of Quick Edit\'s row');
   assert.equal(await pane.locator('[data-cad-toolbar] [data-view-controls]').count(), 0, 'nothing of the view on the strip');
   assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Preview'], 'Preview alone, the navbar\'s');
-  // Home and View, 24px each, 4px apart, in one row 4px under the cube's box, centred on the cube as drawn (from the view
-  // the file opened with, inset in its box); View's menu opens under it and never over the cube.
-  const row = pane.locator('[data-view-cube-row]');
-  const [homeBox, viewBox, rowBox] = [await row.locator('[data-view-home]').boundingBox(), await row.locator('[data-view-menu]').boundingBox(), await row.boundingBox()];
-  const ink = await pane.locator('[data-view-cube] svg').evaluate(svg => {
-    const boxes = [...svg.querySelectorAll('g > polygon')].map(polygon => polygon.getBoundingClientRect());
-    return { left: Math.min(...boxes.map(box => box.left)), right: Math.max(...boxes.map(box => box.right)) };
-  });
-  assert.deepEqual([homeBox.width, viewBox.width, Math.round(viewBox.x - homeBox.x - homeBox.width), Math.round(rowBox.y - cubeBox.y - cubeBox.height),
-    Math.round(rowBox.x + rowBox.width / 2 - (ink.left + ink.right) / 2)], [24, 24, 4, 4, 0], `the row under the drawn cube: ${JSON.stringify({ rowBox, ink })}`);
-  await row.locator('[data-view-menu]').click();
-  // Measured once its opening animation (a zoom in) has finished.
-  const viewMenu = page.locator('[role=menu][aria-label="View"]');
-  await viewMenu.evaluate(menu => Promise.all(menu.getAnimations({ subtree: true }).map(animation => animation.finished)));
-  const menuBox = await viewMenu.boundingBox();
-  const overlaps = menuBox.x < cubeBox.x + cubeBox.width && cubeBox.x < menuBox.x + menuBox.width && menuBox.y < cubeBox.y + cubeBox.height && cubeBox.y < menuBox.y + menuBox.height;
-  assert.ok(!overlaps && menuBox.y >= rowBox.y + rowBox.height && menuBox.x + menuBox.width <= cubeBox.x + cubeBox.width + 0.5,
-    `View's menu under the row, its end at the cube box's at most, off the cube: ${JSON.stringify({ menuBox, cubeBox })}`);
-  await page.keyboard.press('Escape');
-  await page.locator('[role=menu][aria-label="View"]').waitFor({ state: 'detached' });
+    ['View', 'Preview'], 'View and Preview, the navbar\'s');
+  const [viewBox, previewBox] = [await pane.locator('[data-navbar-view-controls] [data-view-menu]').boundingBox(), await pane.locator('[data-view-preview]').boundingBox()];
+  assert.ok(viewBox.x + viewBox.width <= previewBox.x && Math.abs(viewBox.y - previewBox.y) < 0.5, `View left of Preview, on its line: ${JSON.stringify({ viewBox, previewBox })}`);
+  assert.equal(await pane.locator('[data-view-corner] *').count(), 0, 'the corner holds the cube alone');
   assert.equal(await pane.locator('[data-cad-toolbar] [data-strip-rule]').count(), 0, 'no rule on the strip');
 
   // FINDING: the wait before the file is even located covers the viewport, and says

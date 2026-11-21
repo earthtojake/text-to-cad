@@ -109,18 +109,15 @@ it('preview puts the editor tools and their hints away', () => {
 });
 
 // In the dark a toolbar's fills are its own: the base Button's ghost hover (`dark:hover:bg-accent/50`, which outranks a
-// plain `hover:` and matched the surface) never reaches a toolbar button, a split tool's or a corner's.
-it("a toolbar button's fills win over the base Button's ghost hover in the dark: a tile, a split tool's button and the corner's", async () => {
-  const { CORNER_BUTTON_CLASS } = await import('../../dist/renderers/kit/shell/ViewCornerStack.js');
+// plain `hover:` and matched the surface) never reaches a toolbar button or a split tool's.
+it("a toolbar button's fills win over the base Button's ghost hover in the dark: a tile and a split tool's button", async () => {
   const classes = (element: Element) => element.className.split(/\s+/);
   const { container, unmount } = render(<>
     <ToolbarButton label="Tile" tooltip={false} />
-    <ToolbarButton label="Corner" tooltip={false} className={CORNER_BUTTON_CLASS} />
     <FloatingToolBar tools={[{ id: 'select', label: 'Select', icon: null, onSelect() {}, menu: 'MENU' }]} />
   </>);
-  const [tile, corner] = ['Tile', 'Corner'].map(name => classes(container.querySelector(`[aria-label="${name}"]`)!));
+  const tile = classes(container.querySelector('[aria-label="Tile"]')!);
   expect([tile.includes('dark:hover:bg-accent/50'), tile.includes('dark:hover:bg-foreground/10'), tile.includes('dark:data-[variant=secondary]:bg-foreground/16')]).toEqual([false, true, true]);
-  expect([corner.includes('dark:hover:bg-accent/50'), corner.includes('dark:hover:bg-foreground/9')]).toEqual([false, true]);
   const split = container.querySelector('[data-tool-split]')!;
   const inner = classes(split.querySelector('button')!);
   expect([classes(split).includes('dark:hover:bg-foreground/10'), inner.includes('dark:hover:bg-transparent'), inner.includes('dark:hover:bg-foreground/10'), inner.includes('dark:hover:bg-accent/50')])

@@ -1,14 +1,12 @@
 import { createContext, useContext } from "react";
 
 /**
- * The view's corner, at the TOP-right (the bottom row is Quick Edit's), where the picture is looked at from: a 3D
- * view's cube (`camera/ViewPlaneControl.js`, the viewport's), a flat view's zoom pill (`ZoomControl.jsx`), and under
- * either the corner's stack (`ViewCornerStack.jsx`): how the view is looked at — Display, Projection and Home, a
- * board's Display, side and 2D/3D.
+ * The view's corner, at the TOP-right (the bottom row is Quick Edit's), where the picture is looked at from, its one
+ * control the camera's own: a 3D view's cube (`camera/ViewPlaneControl.js`, the viewport's), a flat view's zoom
+ * (`ZoomControl.jsx`). How the view is looked at is View's, in the navbar (`ViewSettingsMenu.jsx`).
  *
  * A host may anchor the cube at the top-left (`--cad-viewport-corner-left`, `viewer-host.md`): then
- * the corner stands there, mirrored as one group (`viewCornerLayout`): the pill at the left, tooltips and menus
- * to the right. The frame reads the side (`viewCornerSide`) and says it to everything in the corner
+ * the corner stands there, mirrored (`viewCornerLayout`): the zoom at the left, its menu opening to the right. The frame reads the side (`viewCornerSide`) and says it to everything in the corner
  * (`ViewCornerSideProvider`, `useViewCornerSide`).
  */
 
@@ -26,9 +24,4 @@ export function viewCornerSide(element) {
   if (!element || typeof getComputedStyle !== "function") return "right";
   const left = getComputedStyle(element).getPropertyValue("--cad-viewport-corner-left").trim();
   return left && left !== "auto" ? "left" : "right";
-}
-/** Which way a corner control's tooltip and menu open, away from the corner's edge, and how a menu aligns on it: its
- * top on its button's, as the corner is at the view's top. */
-export function viewCornerAway(side) {
-  return side === "left" ? { side: "right", align: "start" } : { side: "left", align: "start" };
 }

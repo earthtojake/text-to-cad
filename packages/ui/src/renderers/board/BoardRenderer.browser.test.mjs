@@ -118,6 +118,11 @@ async function chooseView(pane, id, value) {
   await page.mouse.click(option.x + option.width / 2, option.y + option.height / 2);
   await menu.waitFor({ state: 'detached' });
 }
+// A step in, from the zoom's menu (the zoom has no + of its own).
+async function zoomIn(pane) {
+  await pane.locator('[data-zoom-pill] [data-zoom-control]').click();
+  await pane.page().getByRole('menu', { name: 'Zoom' }).getByRole('menuitem', { name: /^Zoom in/ }).click();
+}
 const toggleView = async (pane, id) => chooseView(pane, id, OTHER[await viewValue(pane, id)]);
 
 test('a board opens fitted on its own background, its track in KiCad’s red, and a press on a pad picks it and lights it', async (t) => {
@@ -177,39 +182,41 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
   await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
   const pane = page.getByTestId('one');
   await frame(pane);
-  // In 2D the corner, at the top-right (the bottom row is Quick Edit's): the zoom, a row of bare buttons touching, 88 x 24,
-  // 12px in from the pane's right and top edges; the view's settings are the navbar's View ▾.
+  // In 2D the corner, at the top-right (the bottom row is Quick Edit's): the zoom, ONE control 28px tall, its right edge
+  // 12px in from the pane's (on the cube box's line), its middle on the tool strip's; the view's settings are the navbar's View.
   const controls = () => pane.evaluate(element => [...element.querySelectorAll('[data-navbar-view-controls] button'), ...element.querySelectorAll('[data-zoom-pill]')]
     .map(control => { const { x, y, width, height } = control.getBoundingClientRect(); return { x, y, width, height }; }));
   const flat = await controls();
   const pill = flat.at(-1);
   const stage = await pane.locator('[data-cad-canvas]').first().boundingBox();
-  assert.equal(flat.length, 2, 'the zoom in the corner, and View ▾ in the navbar');
-  assert.deepEqual([pill.width, pill.height, stage.x + stage.width - pill.x - pill.width, pill.y - stage.y],
-    [88, 24, 12, 12], 'the zoom: a row of bare buttons touching, 88 x 24, 12px in from the top-right corner');
-  // View ▾: the navbar's 28px button, over the view, not on it.
+  const strip = await pane.getByRole('group', { name: 'Interaction tools' }).boundingBox();
+  assert.equal(flat.length, 2, 'the zoom in the corner, and View in the navbar');
+  assert.deepEqual([pill.height, stage.x + stage.width - pill.x - pill.width, Math.round(pill.y + pill.height / 2 - (strip.y + strip.height / 2))],
+    [28, 12, 0], `the zoom: one control 28px tall, 12px in from the right, on the strip's middle line: ${JSON.stringify({ pill, strip })}`);
+  assert.deepEqual(await pane.locator('[data-zoom-pill] button').evaluateAll(buttons => buttons.map(button => button.textContent)), ['100%'], 'no − or +');
+  // View: the navbar's 28px button, over the view, not on it.
   assert.deepEqual(flat.slice(0, 1).map(button => [button.height, button.y + button.height <= stage.y]), [[28, true]], 'the view settings the navbar\'s');
-  // The percentage opens the zoom's menu under the pill: the side the menu was placed on, collisions weighed.
+  // The percentage opens the zoom's menu under it, the zoom's commands alone.
   await pane.locator('[data-zoom-pill] [data-zoom-control]').click();
-  assert.equal(await page.getByRole('menu', { name: 'Zoom' }).getAttribute('data-side'), 'bottom', 'the zoom\'s menu under the pill');
+  const zoomMenu = page.getByRole('menu', { name: 'Zoom' });
+  assert.equal(await zoomMenu.getAttribute('data-side'), 'bottom', 'the zoom\'s menu under it');
+  assert.deepEqual(await zoomMenu.getByRole('menuitem').evaluateAll(items => items.map(item => item.firstChild.textContent)),
+    ['Zoom in', 'Zoom out', 'Zoom to 100%', 'Zoom to fit', 'Zoom to selection'], 'the zoom\'s commands alone');
   await page.keyboard.press('Escape');
   await page.getByRole('menu', { name: 'Zoom' }).waitFor({ state: 'detached' });
   await toggleView(pane, 'dimension');
   await page.waitForFunction(() => document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible'));
   // Toggled to 3D on a board just opened: the board in 3D, never the view's "Could not display that file".
   assert.equal(await page.getByText('Could not display that file').count(), 0, 'the board in 3D, not the error card');
-  // In 3D, Home stands beside the zoom pill (the board's 3D view has no cube), 4px left of it; the pill unmoved, and
-  // Display, the side and 2D/3D in the navbar where they stood.
+  // In 3D the zoom alone in the corner, where it stood, and View in the navbar where it stood: no Home on the picture.
   const solid = await controls();
-  assert.deepEqual(solid.at(-1), pill, 'the pill where it stood');
-  assert.deepEqual(solid.slice(0, 1), flat.slice(0, 1), 'View ▾ where it stood');
-  const home = await pane.locator('[data-view-corner-home] [data-view-home]').boundingBox();
-  assert.deepEqual([solid.length, home.width, Math.round(pill.x - home.x - home.width), Math.round(home.y - pill.y)], [1 + 1, 24, 4, 0], 'Home beside the pill');
+  assert.deepEqual(solid, flat, 'the zoom and View where they stood');
+  assert.equal(await pane.locator('[data-view-home]').count(), 0, 'no Home: its way back is View\'s Reset view');
   // The pill is the 3D camera's zoom: a step in (half again), and it reads the camera's new percentage.
   const settled = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
   await settled();
   const before = (await page.evaluate(() => window.__cadCamera())).zoomPercent;
-  await pane.locator('[data-zoom-pill]').getByRole('button', { name: 'Zoom in' }).click();
+  await zoomIn(pane);
   await page.waitForFunction(before => {
     const { zoomPercent } = window.__cadCamera();
     return Math.abs(zoomPercent / before - 1.5) < 0.01
@@ -259,7 +266,7 @@ test('2D to 3D and back: every frame shows the board, and the 2D view comes back
   const fitted = await frame(pane);
   // R1 pad 2 picked, so it is lit where it is drawn, in a view zoomed a step and panned off the fit.
   await page.evaluate(() => window.cadHarness.a.controller.select('#R1.2'));
-  await pane.locator('[data-zoom-pill]').getByRole('button', { name: 'Zoom in' }).click();
+  await zoomIn(pane);
   const canvas = await canvasOf(pane).boundingBox();
   await page.mouse.move(canvas.x + 400, canvas.y + 250);
   await page.mouse.down({ button: 'right' });
@@ -361,7 +368,7 @@ test('in 3D Flip turns the camera over and its icon is the side the camera is on
     .map(control => { const { x, y, width, height } = control.getBoundingClientRect(); return { x, y, width, height }; }));
   await toggleView(pane, 'dimension');
   await page.waitForFunction(() => document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible'));
-  // The corner as 3D stands it (Home nearest the zoom), which no turn of the camera moves.
+  // The corner as 3D stands it (the zoom alone), which no turn of the camera moves.
   const boxes = await controls();
   // At rest, the side the camera looks at (`boardFrame.js`'s `sideSeenAlong`) and what Flip says: its side, its name, its fill.
   const rest = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; })

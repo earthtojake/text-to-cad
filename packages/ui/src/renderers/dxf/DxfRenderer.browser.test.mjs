@@ -97,7 +97,7 @@ async function frame(pane, before = null) {
     // and neither is the hover tip, which shows by the pointer once it has rested a moment over an entity
     // (`HOVER_TIP_DELAY_MS`): a frame slow to come to rest after a wheel over the drawing caught it, its box
     // read as ink below the pointer.
-    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill], [data-view-corner-stack], [data-flat-panel-pill], [data-inspector-pill], [data-hover-tip] { visibility: hidden !important; }' });
+    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill], [data-flat-panel-pill], [data-inspector-pill], [data-hover-tip] { visibility: hidden !important; }' });
     if (last?.equals(shot) && !before?.shot.equals(shot)) return Object.assign(PNG.sync.read(shot), { shot });
     last = shot;
   }

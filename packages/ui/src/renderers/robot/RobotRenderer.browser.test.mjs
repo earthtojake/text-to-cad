@@ -196,12 +196,11 @@ async function open(t, file, { panel = true } = {}) {
     },
     // A selection is React state: it is on screen a render after whatever changed it.
     waitPressed: count => page.waitForFunction(wanted => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === wanted, count),
-    // The view's controls: the row under the cube (Home, View), then the navbar's (Preview).
-    viewControls: async () => [...await pane.locator('[data-view-cube-row] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-      ...await pane.locator('[data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label').split(':')[0]))],
-    // View: the row's second tile, its menu (Projection, Display, Background, Grid), a dropdown over the view.
+    // The view's controls: the navbar's (View, Preview).
+    viewControls: () => pane.locator('[data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label').split(':')[0])),
+    // View: the navbar's, its menu (Projection, Display, Background, Show grid, Reset view), a dropdown over the view.
     async openDisplay() {
-      await pane.locator('[data-view-cube-row] [data-view-menu]').click();
+      await pane.locator('[data-navbar-view-controls] [data-view-menu]').click();
       await robot.displayPanel().waitFor();
     },
     displayPanel: () => page.locator('[role=menu][aria-label="View"]'),
@@ -279,8 +278,8 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   await robot.openPosition();
   assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: Position']);
   assert.equal(await robot.tool('Explode').count(), 0, 'a robot is posed, never exploded');
-  // Home attached to the cube, then the navbar's View ▾ and Preview, for a robot as for any 3D file; no rule.
-  assert.deepEqual(await robot.viewControls(), ['Home', 'View', 'Preview']);
+  // The navbar's View and Preview, for a robot as for any 3D file; no rule.
+  assert.deepEqual(await robot.viewControls(), ['View', 'Preview']);
   assert.equal(await tools.locator('[data-strip-rule]').count(), 0, 'no rule');
   assert.equal(await tools.locator('[data-view-controls]').count(), 0, 'the strip ends at Clip: the view\'s settings are the navbar\'s');
   // Display's menu is shut as the file opens: nothing is over the model.
