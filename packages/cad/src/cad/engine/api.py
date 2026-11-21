@@ -1476,8 +1476,9 @@ def _model(report: dict[str, Any]) -> dict[str, Any]:
 def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: dict[str, Any]) -> dict[str, Any] | None:
     """Why a verb failed: the first failed report's error -- a body's (the model's frames, ``build``), or
     a file the engine could not write (``trace``, the engine's) -- else what the verb raised: the worker's
-    own error as it answered it, a worker that died under the work (``worker["died"]``), a refusal, or an
-    error raised here."""
+    own error as it answered it, a worker that died under the work (``worker["died"]``) -- not one the engine
+    stopped itself, which its answer names by a type (past the ceiling on one process, ``MemoryError``) --, a
+    refusal, or an error raised here."""
     told = {"engine": True, "refused": False, "here": False}
     failed = next((report for report in reports if not report.get("ok")), None)
     if failed is not None:
@@ -1489,7 +1490,7 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
 
         text = str(error).partition(WORKER_STDERR)[0]
         died = _DIED.search(text)
-        if died:
+        if died and not error.raised:
             worker["died"] = int(died["status"])
             return {"type": None, "frames": [], **told}
         if _TRACEBACK in text:

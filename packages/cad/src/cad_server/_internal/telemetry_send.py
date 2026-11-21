@@ -3,11 +3,11 @@
 A command sends nothing itself: it keeps what it counted in the spool beside the settings
 (``analytics.spool``), which the CAD app's and the viewer's background sends take every window
 (``analytics.FLUSH_SECONDS``), each as a ``cli`` batch of its own (``Recorder._spooled``). With neither
-running, nothing would. So a command that finds the spool's (or the arrivals') oldest line older than a window, and
-no sender started within one (the time of the state folder's one lock, ``file_lock.STATE_LOCK``, which only a sender's
-start changes, as in 0.11.10), starts this module detached (``start_if_due``): no window, a process group or session
-of its own, its output nowhere, the telemetry switches of the command's environment not inherited
-(``analytics.for_others``: it goes by the person's settings) -- and goes on without waiting for it.
+running, nothing would. So a command that finds the spool's (or the arrivals', or the installs') oldest line older
+than a window, and no sender started within one (the time of the state folder's one lock, ``file_lock.STATE_LOCK``,
+which only a sender's start changes, as in 0.11.10), starts this module detached (``start_if_due``): no window, a
+process group or session of its own, its output nowhere, the telemetry switches of the command's environment not
+inherited (``analytics.for_others``: it goes by the person's settings) -- and goes on without waiting for it.
 
 An arrival (``analytics.arrival``) waits for nothing: the step that counted it may be the last of its version on the
 computer. Each one starts this module at once (``start_now``), whatever the lock's time says -- a version's data
@@ -15,10 +15,11 @@ folder, made as its setup imports, has a lock made a moment ago, which says noth
 lock's time, so no command starts one more that window for what this one takes. Two senders at once are safe: each
 takes what is kept under the lock, so nothing is sent twice. It runs on the Python that counted the arrival -- the
 version's own, uvx's, an updater's folder of an earlier release's layout -- so a version whose own environment could
-not be made is still heard from.
+not be made is still heard from. An update (``analytics.update``) and a run of ``cad plugin install`` or ``cad plugin
+update`` (``analytics.install``) start it the same way.
 
-It sends as the process ``cli`` (``send``): the spool, the arrivals, the batches exiting processes kept, a batch at a
-time until nothing is left or the receiver takes no more; what it could not send is kept for the next
+It sends as the process ``cli`` (``send``): the spool, the arrivals, the installs, the batches exiting processes kept,
+a batch at a time until nothing is left or the receiver takes no more; what it could not send is kept for the next
 sender (``Recorder.close``), and it exits. Nothing waits on it.
 """
 
@@ -35,20 +36,20 @@ ROUNDS = 8  # the most batches one sender sends: a spool past ``analytics.MAX_EV
 
 def start_if_due(path: Path | None = None, *, now: float | None = None,
                  spawn: Callable[[Path], Any] | None = None) -> bool:
-    """Start the sender when the spool (or the arrivals) has waited longer than a window and none was started
-    within one; whether it was. Under the state folder's one lock, whose time is when the last sender was started:
-    so two commands at once start one, and a sender a window old -- done or stuck -- is followed by the next. Never
-    raises, never waits on it."""
+    """Start the sender when the spool (or the arrivals, or the installs) has waited longer than a window and none
+    was started within one; whether it was. Under the state folder's one lock, whose time is when the last sender was
+    started: so two commands at once start one, and a sender a window old -- done or stuck -- is followed by the next.
+    Never raises, never waits on it."""
     try:
         import time
 
-        from cad_server.analytics import ARRIVALS, FLUSH_SECONDS, SPOOL
+        from cad_server.analytics import ARRIVALS, FLUSH_SECONDS, INSTALLS, SPOOL
         from cad_server._internal.file_lock import STATE_LOCK, state
         from cad_server.settings import settings_path
 
         settings = Path(path or settings_path())
         now = time.time() if now is None else now
-        waiting = [at for at in (_oldest(settings.with_name(SPOOL)), _oldest(settings.with_name(ARRIVALS)))
+        waiting = [at for at in (_oldest(settings.with_name(name)) for name in (SPOOL, ARRIVALS, INSTALLS))
                    if at is not None]
         if not waiting or now - min(waiting) <= FLUSH_SECONDS:  # the common answer, read without the lock
             return False

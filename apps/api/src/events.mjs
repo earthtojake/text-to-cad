@@ -44,6 +44,15 @@
  *             whether it was typed (`asked`), and for a newer cad installed how the install command's run for it
  *             ended (`plugin`, `UPDATE_PLUGIN`: `underway` where a new attempt began before it ended; `none` for any
  *             other outcome).
+ *   install   one run of the plugin's install in the agent apps (schema 12's; `cad plugin install`, `cad plugin
+ *             update`): who began it (`INSTALL_BY`), how it ended (`INSTALL_OUTCOMES`), what its terminal showed
+ *             (`INSTALL_LOGOS`, `INSTALL_COLOURS`), the whole seconds it took, how many apps it found and how many
+ *             of those failed: counts, never which apps.
+ *   install_failure
+ *             one app where such a run failed (schema 12's), and only such an app: cad names no app it installed in,
+ *             updated or skipped, so which agent apps a computer has is never sent. Which (`app`, the install's own
+ *             key for it, checked by its shape), why (`INSTALL_FAILURES`), a word cad chose, and the whole seconds it
+ *             took. Its row names the app `plugin_app`: a row's `app` is the batch's, the agent app running cad.
  *
  * cadgen 0.7.7 to 0.7.15 (schemas 1 and 2) send `tool`, `view` and `file`: one distinct file, once a day,
  * by a salted code. Its code goes no further: a batch's are read as `files`, one of each format they name.
@@ -79,6 +88,10 @@
  * Schema 11 adds `arrival`, which no schema before it sends: whether a computer's update or install reached the
  * version, step by step, so a computer stuck on its way to one is counted; and `update`, which no schema before it
  * sends either: whether each of cad's own updates of itself went, and where one did not, which step failed.
+ *
+ * Schema 12 is schema 11 with `install` and `install_failure`, which no schema before it sends: cad installs the
+ * plugin in the agent apps itself (`cad plugin install`), so it counts each run and names each app where one failed,
+ * where before the install command did that work and counted nothing.
  */
 
 import { createHash } from 'node:crypto';
@@ -98,8 +111,8 @@ const FRAME_FILE = /^(?:<user>|<\?>|<frozen>|(?!\.\.?(?:\/|$))[A-Za-z0-9_.+-]{1,
 // A frame in our own code: the library's (`cad/`) and the server's (`cad_server/`), and, from releases before
 // 0.10, the one package they were (`cadgen/`).
 export const OUR_FRAMES = /^(?:cad|cad_server|cadgen)\//;
-const FUNCTION = /^(?:<user>|<\?>|[A-Za-z_$<][A-Za-z0-9_$.<>]{0,79})$/;
-const TYPE = /^(?:<user>|<\?>|[A-Za-z_][A-Za-z0-9_.]{0,127})$/;
+export const FUNCTION = /^(?:<user>|<\?>|[A-Za-z_$<][A-Za-z0-9_$.<>]{0,79})$/;
+export const TYPE = /^(?:<user>|<\?>|[A-Za-z_][A-Za-z0-9_.]{0,127})$/;
 export const MAX_BYTES = 64 * 1024;
 
 const SHARED = new Set(['schema', 'install', 'session', 'version', 'platform', 'arch', 'client', 'presentation', 'events']);
@@ -131,7 +144,7 @@ const LEGACY_APPS = [[/^claude-desktop$/, 'claude-desktop'], [/^claude-/, 'claud
 // Who sends, and the formats an event counts: each schema's own (`SCHEMAS`), the later a superset.
 const PROCESSES = new Set(['app', 'viewer', 'daemon']);
 const PROCESSES_6 = new Set([...PROCESSES, 'cli']);
-const PLATFORMS = new Set(['darwin', 'linux', 'win32', 'other']);
+export const PLATFORMS = new Set(['darwin', 'linux', 'win32', 'other']);
 const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
 const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
@@ -252,8 +265,21 @@ const UPDATE_OUTCOMES = new Set(['installed', 'current', 'failed', 'restored']);
 const UPDATE_FAILURES = { failed: new Set(['upgrade', 'older', 'put_back']), restored: new Set(['upgrade', 'older']) };
 const UPDATE_INSTALLERS = new Set(['uv', 'pipx']);
 const UPDATE_PLUGIN = new Set(['none', 'ok', 'failed', 'underway']);
+// One run of the plugin's install in the agent apps, schema 12's (`cad_server/analytics.py`): who began it -- a person
+// who typed the command, the install command handing over, or cad's server; how it ended -- well, every app found
+// failed, its deadline stopped it before it was done (a run the server began has one), or another run held the lock
+// and this one left at once; what its terminal showed -- the logo built, the logo still, none, or one that failed, in
+// which colours; and each app where it failed -- why, a word cad chose where it failed (an app done well is counted,
+// never named). A run and a failed app each take whole seconds, and a run finds so many apps at most.
+const INSTALL_BY = new Set(['person', 'script', 'server']);
+const INSTALL_OUTCOMES = new Set(['ok', 'failed', 'stopped', 'busy']);
+const INSTALL_LOGOS = new Set(['played', 'still', 'none', 'failed']);
+const INSTALL_COLOURS = new Set(['24bit', '256', 'none']);
+const INSTALL_FAILURES = new Set(['timeout', 'command', 'network', 'exception', 'other']);
+const MAX_INSTALL_SECONDS = 100_000;
+const MAX_INSTALL_APPS = 64;
 // A batch's time, in whole seconds since 1970: any a clock can say (a wrong one included), never a fraction.
-const MAX_AT = 100_000_000_000;
+export const MAX_AT = 100_000_000_000;
 // Ours: the namespace every row's id is made in (`idOf`).
 const ROWS = 'a67b62d4-a188-43d2-bebc-29fd3ae2cb82';
 
@@ -273,6 +299,9 @@ export const FIELDS = {
   exception: ['where', 'tool', 'type', 'handled', 'status', 'frames', 'count'],
   arrival: ['step', 'route', 'from', 'outcome', 'reason', 'attempts', 'count'], // `reason`, `attempts` where they apply
   update: ['from', 'outcome', 'reason', 'tries', 'installer', 'asked', 'plugin', 'count'], // `reason` for a failure
+  install: ['by', 'outcome', 'logo', 'colour', 'seconds', 'found', 'failed', 'count'],
+  // `plugin_app`: the event's `app`, the app where the plugin's install failed (a row's `app` is the batch's)
+  install_failure: ['plugin_app', 'reason', 'seconds', 'count'],
 };
 
 export class Invalid extends Error {}
@@ -284,15 +313,15 @@ export class Invalid extends Error {}
 export class Later extends Error {}
 
 const fail = message => { throw new Invalid(message); };
-const token = (value, name, limit = 64) =>
+export const token = (value, name, limit = 64) =>
   typeof value === 'string' && value.length <= limit && TOKEN.test(value) ? value : fail(`${name} is not a short token`);
-const oneOf = (value, allowed, name) => (allowed.has(value) ? value : fail(`${name} is not one of ${[...allowed].join(', ')}`));
+export const oneOf = (value, allowed, name) => (allowed.has(value) ? value : fail(`${name} is not one of ${[...allowed].join(', ')}`));
 const count = (value, name) => (Number.isInteger(value) && value >= 0 && value <= MAX_COUNT ? value : fail(`${name} is not a count`));
 const some = (value, name) => (count(value, name) > 0 ? value : fail(`${name} counts nothing`));
 // A process's exit status: an exit code or a signal (-N), or on Windows the exception code a fault ended it
 // with (an NTSTATUS error, 0xC0000000 and up).
 const exitStatus = value => Number.isInteger(value) && (Math.abs(value) < 512 || (value >= 0xC0000000 && value <= 0xFFFFFFFF));
-const matches = (value, pattern, name) => (typeof value === 'string' && pattern.test(value) ? value : fail(`${name} is not one`));
+export const matches = (value, pattern, name) => (typeof value === 'string' && pattern.test(value) ? value : fail(`${name} is not one`));
 const frameOf = (frame, name) => {
   if (!frame || typeof frame !== 'object' || Array.isArray(frame)) fail(`${name} is not a frame`);
   only(frame, ['file', 'function', 'line', 'column', 'chunk_id'], name);
@@ -308,7 +337,12 @@ const frameOf = (frame, name) => {
 };
 const seconds = (value, name) =>
   (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= MAX_SECONDS ? value : fail(`${name} is not seconds`));
-const only = (object, keys, name) => {
+// How long a run of the plugin's install, or one failed app of it, took (whole seconds), and how many apps a run found.
+const installSeconds = (value, name) =>
+  (Number.isInteger(value) && value >= 0 && value <= MAX_INSTALL_SECONDS ? value : fail(`${name} is not whole seconds`));
+const installApps = (value, name) =>
+  (Number.isInteger(value) && value >= 0 && value <= MAX_INSTALL_APPS ? value : fail(`${name} is not a number of apps`));
+export const only = (object, keys, name) => {
   for (const key of Object.keys(object)) if (!keys.includes(key)) fail(`${name} has an unknown field ${key}`);
 };
 // An event's fields, every one of them there and no other.
@@ -467,6 +501,36 @@ const READERS = {
     return { key: `update ${JSON.stringify([from, outcome, reason, tries, installer, event.asked, plugin])}`,
       fields: { from, outcome, reason, tries, installer, asked: event.asked, plugin, count } };
   },
+  // A run that ended failed where every app it found failed, and nowhere else; one that found the lock held looked
+  // for none; one its deadline stopped says what it had found by then, whatever that was.
+  install(event, at) {
+    exactly(event, FIELDS.install, at);
+    const by = oneOf(event.by, INSTALL_BY, `${at}.by`);
+    const outcome = oneOf(event.outcome, INSTALL_OUTCOMES, `${at}.outcome`);
+    const logo = oneOf(event.logo, INSTALL_LOGOS, `${at}.logo`);
+    const colour = oneOf(event.colour, INSTALL_COLOURS, `${at}.colour`);
+    const took = installSeconds(event.seconds, `${at}.seconds`);
+    const [found, failed] = ['found', 'failed'].map(name => installApps(event[name], `${at}.${name}`));
+    if (failed > found) fail(`${at} counts more failures than apps found`);
+    if (outcome === 'busy' && found) fail(`${at}.found: a busy run looked for no app`);
+    if ((outcome === 'ok' || outcome === 'failed') && (outcome === 'failed') !== (found > 0 && failed === found)) {
+      fail(`${at}.outcome: a run failed where every app found failed, and nowhere else`);
+    }
+    const count = some(event.count, `${at}.count`);
+    return { key: `install ${JSON.stringify([by, outcome, logo, colour, took, found, failed])}`,
+      fields: { by, outcome, logo, colour, seconds: took, found, failed, count } };
+  },
+  // An app where the install failed, by the install's own key for it, never the batch's `app`, and why: every field
+  // there, and no other (no `status`: it is always a failure).
+  install_failure(event, at) {
+    exactly(event, ['app', 'reason', 'seconds', 'count'], at);
+    const app = matches(event.app, APP, `${at}.app`);
+    const reason = oneOf(event.reason, INSTALL_FAILURES, `${at}.reason`);
+    const took = installSeconds(event.seconds, `${at}.seconds`);
+    const count = some(event.count, `${at}.count`);
+    return { key: `install_failure ${JSON.stringify([app, reason, took])}`,
+      fields: { plugin_app: app, reason, seconds: took, count } };
+  },
 };
 
 // Before schema 3 only the apps sent, and the browser viewer said so by how it shows CAD.
@@ -518,6 +582,13 @@ const SCHEMAS = new Map([
   // carries none (`null`, which no store is sent). Every earlier schema's batch is translated (`translated`). And how a
   // computer got to the version, and how each of cad's own updates went.
   [11, { fields: ['app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control', 'arrival', 'update']), kinds: KINDS_8,
+    origin: batch => ({ channel: null, app: matches(batch.app, APP, 'app'),
+      legacy_channel: null, source: null, process: oneOf(batch.process, PROCESSES_6, 'process') }),
+    current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,
+    snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
+  // Schema 11 with the plugin's install in the agent apps, which cad runs itself: each run of it, and each app where one
+  // failed.
+  [12, { fields: ['app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control', 'arrival', 'update', 'install', 'install_failure']), kinds: KINDS_8,
     origin: batch => ({ channel: null, app: matches(batch.app, APP, 'app'),
       legacy_channel: null, source: null, process: oneOf(batch.process, PROCESSES_6, 'process') }),
     current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,

@@ -117,21 +117,35 @@ and nothing asked:
   installer from `astral.sh`.
 - `install.py`, downloaded from texttocad.dev and run with uv's Python. Where no
   `cad` is installed, or the one there does not start, it installs PyPI's newest
-  release of `cad` with `uv tool install`; a `cad` that is installed and starts is
-  left as it is. Where cad's folder is not on the PATH, it runs uv's own
-  `uv tool update-shell`, which adds it to your shell profile (on Windows, your
-  user PATH); `UV_NO_MODIFY_PATH` stops that. cad sets it whenever cad itself runs
-  the install command (`cad plugin update`, and when cad has been updated), so only
-  a person's own run changes the PATH.
-- The plugin, from this repository's `latest` branch on GitHub, installed in each
-  agent app it finds with that app's own command. It removes what earlier releases
-  left there, among them the CAD server they wrote into Claude Desktop's config
-  (keeping a `.bak`).
-- Where cad is there, `cad plugin update auto on`, so that each time cad is newer
-  than the release the install command last ended well for, however it got newer
-  (below), cad runs the install command again, once; a run that ends badly says so
-  to cad, which then keeps no release as up to date. `cad plugin update` runs it
-  too.
+  release of `cad` with `uv tool install`, and where cad's folder is then not on the
+  PATH, it runs uv's own `uv tool update-shell`, which adds it to your shell profile
+  (on Windows, your user PATH); `UV_NO_MODIFY_PATH` stops that, and a cad that runs
+  the command sets it. A `cad` that is installed and starts is brought up to date
+  where a person ran the command, by that cad's own `cad update`: PyPI's newest
+  release of its major version, at once, under neither the version feed's hour nor a
+  hold (below). Where cad ran the command, cad is left as it is.
+- `cad plugin install`, run by the cad that is now installed: code from the `cad`
+  package on PyPI, not from texttocad.dev. Where that cad has no such command (0.11.12
+  and 0.11.13), or cad could not be installed, `install.py` runs the newest release's
+  instead, which uv downloads from PyPI and runs without installing it (`uv tool run
+  ... cad@latest plugin install`). Then, last, the installed cad's own `cad plugin
+  update auto on`, which turns the plugin's automatic updates on (below) and runs
+  nothing. `install.py` never runs `cad plugin update` otherwise, nor `cad setup`.
+- What `cad plugin install` does: it takes the plugin from this repository's `latest`
+  branch on GitHub and, in each agent app it finds, runs that app's own command-line
+  program (`claude`, `codex`, `gemini` and the rest) to install or update it there,
+  or copies the skills into the agent's own skills folder. Those programs run as you,
+  with everything they can do. It removes what earlier releases left there, among
+  them the CAD server they wrote into Claude Desktop's config (keeping a `.bak`).
+  It changes nothing else: `cad plugin update auto`, which `install.py` turns on, is
+  what makes cad, each time it is newer than the release the plugin is up to date
+  for, however it got newer (below), run `cad plugin install`, the same code, again,
+  once; a run that did not go well in every app it found keeps no release as up to date.
+- One report, only where the run fails with no working cad: the stage that failed,
+  an exit status, the operating system and processor type and uv's version, sent to
+  `api.texttocad.dev` under a random id made for that run and kept nowhere.
+  `DO_NOT_TRACK=1` turns it off, and a run cad started sends one only where cad had
+  told the person what it sends ([docs/install.md](docs/install.md#what-it-sends)).
 
 It starts no server. To read the scripts first, take the copies attached to a
 release on GitHub and check them against the release's `SHA256SUMS`; they install
@@ -153,25 +167,34 @@ release that ran. A typed `cad update` asks PyPI which release of its major is n
 and runs the same upgrade; `cad update --major` runs `uv tool install --upgrade
 "cad>=<installed>"`, PyPI's newest of all. Then, where `cad plugin update auto` is on, the
 server of the newer cad (however it got newer: by itself, by `cad update`, or by an
-upgrade by hand) downloads and runs the hosted install command once, unattended: it
-fetches `install.sh` or `install.ps1` and `install.py` from texttocad.dev, and the
-plugin from GitHub; a run that fails is tried again an hour or more later, at most
-three runs for one release, and one still running after 15 minutes is stopped. So
-with automatic updates on, whoever
-controls `api.texttocad.dev` (which decides only when), `texttocad.dev`, the `cad`
-project on PyPI or this repository's `latest` branch can run code as you.
+upgrade by hand) runs its own `cad plugin install` once, unattended: code of the cad
+just installed, which fetches the plugin from GitHub and runs each agent app's own
+command-line program, as a typed `cad plugin install` does (above). It downloads no script
+and runs nothing from texttocad.dev. A run that fails is tried again an hour or more
+later, at most three runs for one release, and one still running after 15 minutes is
+stopped, by its own thread a minute later where a step of it never came back. One such
+run goes at a time, and cad's own update begins none while one is
+going. So with automatic updates on, whoever controls `api.texttocad.dev` (which
+decides only when), the `cad` project on PyPI or this repository's `latest` branch
+can run code as you.
 
 **What else installs by itself.** The CAD app's server line in Codex's plugin
 (`uvx ... cad@<release> mcp`) runs `uv tool install` for PyPI's newest `cad` of that
 release's major where the computer has no global cad, and never over a `cad` of a higher
-major. A computer that the updater of 0.10.0 to 0.11.11 brought to this release runs the
-hosted install command, unattended, where our install command or an earlier release's
-update had put our plugin there, and otherwise installs cad itself the same bounded way.
-cad's own update never crosses a major, but the hosted install command, which cad runs by
-itself there and after an update, is not bounded by major: it installs the newest plugin
-of all, and, where cad is missing or does not start, PyPI's newest `cad` of all. No higher
-major exists today, and the command, fetched at every run, is to keep a computer inside
-its major before one ships.
+major. The hosted install command is still downloaded from texttocad.dev and run
+unattended in two places. Releases 0.11.12 and 0.11.13 run it as their `cad plugin
+update`, which their server runs once after cad got newer, where `cad plugin update
+auto` is on: nothing shipped later can change that, and it ends when that cad has
+updated. And a computer that the updater of 0.10.0 to 0.11.11 brought to this release
+runs it where our install command or an earlier release's update had put our plugin
+there, and otherwise installs cad itself the same bounded way. On those computers,
+whoever controls `texttocad.dev` can run code as you too. Run that way the command
+updates no cad that works, but it is not bounded by major: where cad is missing or
+does not start it installs PyPI's newest `cad` of all, where the cad there has no
+`cad plugin install` it runs PyPI's newest `cad` of all from uv's cache for that one
+step, and the plugin it installs, like the one `cad plugin install` installs, is
+`latest`, the newest of all. No higher major exists today, and both are to keep a
+computer inside its major before one ships.
 
 ### What we treat as a vulnerability
 
@@ -187,7 +210,8 @@ its major before one ships.
   `codex-plugin`) other than a merged release, or to change what texttocad.dev
   serves as the install scripts.
 - A way to make cad install, by itself, anything but a release of `cad` from
-  PyPI, or to make it move to an older release than the one that ran.
+  PyPI and the plugin from this repository's `latest` branch, or to make it move
+  to an older release than the one that ran.
 - `api.texttocad.dev`: anything beyond its documented behaviour (version feed,
   consented analytics), including a way to make the feed name a release it should
   not.

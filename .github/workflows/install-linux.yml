@@ -5,7 +5,8 @@ name: Linux installer rehearsal
 # and no uv. uv comes from its own installer. The wheels are written again as a release no index holds, this
 # tree's major and minor with a patch far above PyPI's newest (scripts/test/real_computer.py stamp and publish),
 # and offered to uv (UV_FIND_LINKS), so the install command's `uv tool install cad`, which installs the newest
-# release uv is offered, takes them and never an index's. The checks: cad a uv tool at that release in
+# release uv is offered, takes them and never an index's; the cad it then hands the agent apps to (`cad plugin
+# install`) is this tree's. The checks: cad a uv tool at that release in
 # ~/.local/bin, cad's automatic updates on and the plugin's turned on by the install, no server started by the
 # install; then `cad server start`, a model built by `cad run` (which makes the CAD kernel's environment), and
 # `cad doctor`. The Windows rehearsal goes further (install-windows.yml); the release smoke

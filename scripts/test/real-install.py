@@ -6,7 +6,8 @@ uv tools and folders, the real command-line programs of Claude Code (``claude``)
 The command runs the way a person runs it (macOS and Linux: ``install.sh`` piped to ``sh``; Windows: ``install.ps1``
 handed to ``Invoke-Expression`` by Windows PowerShell 5.1), with this tree's ``install.py`` (``CAD_INSTALL_PY``), this
 tree's wheels written again as a release no index holds, above PyPI's newest, and offered to uv (``UV_FIND_LINKS``):
-uv installs the newest release it is offered, which is that one. The apps are looked for on PATH alone
+uv installs the newest release it is offered, which is that one, and that cad's own ``cad plugin install`` is what
+install.py hands the apps to. The apps are looked for on PATH alone
 (``CAD_INSTALL_PATH_ONLY``). The plugin comes from this
 tree through each program's own GitHub route: the ``latest`` copy built as Publish Release builds it, in a local
 repository the computer's git reads for every address of ours on GitHub. Gemini CLI asks GitHub's API for a release
@@ -14,12 +15,13 @@ named ``latest`` before it clones (there is none: it clones); that one request r
 
 1. install: exit 0 and every line the app phase prints; cad installed as a uv tool at this run's release, its command
    in uv's bin folder; ``cad --version``; cad's automatic updates on (``cad update auto``) and the plugin's turned on
-   by the install (``cad plugin update auto``); no server started by the install; each program holds our plugin (``text-to-cad@earthtojake``; Gemini CLI: the extension ``text-to-cad`` from
+   by the install command's last step (``cad plugin update auto``); no server started by the install; each program holds our plugin (``text-to-cad@earthtojake``; Gemini CLI: the extension ``text-to-cad`` from
    GitHub at ``latest``) exactly once, copied from the local repository.
 2. cad: ``cad server start``; a box built by ``cad run`` and its page link answering with its token, refused without;
    a file shown by ``cad viewer`` the same way; ``cad doctor`` exit 0.
-3. again: the local repository moved on as a release moves it; the command again: cad "installed already" and left
-   alone, each app ``updated``, one copy each, the new commit's.
+3. again: the local repository moved on as a release moves it; the command again: cad found ("Updating cad"), nothing
+   newer for it (a person's run asks it, ``cad update``) and no install, each app ``updated``, one copy each, the new
+   commit's.
 4. migrate: each program left as 0.11.10's installer left it (``<state>/plugin`` made from the v0.11.10 tree by that
    release's own ``plugin.tree``, added as the catalog ``text-to-cad`` and ``text-to-cad@text-to-cad`` installed from
    it; Gemini CLI: the folder linked); the command again: each app ends with the new plugin alone.
@@ -71,7 +73,8 @@ PLUGIN_VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 OLD = "v0.11.10"
 CATALOG, OLD_CATALOG, PLUGIN = "earthtojake", "text-to-cad", "text-to-cad"
 OURS, OLD_OURS = f"{PLUGIN}@{CATALOG}", f"{PLUGIN}@{OLD_CATALOG}"
-# What `cad plugin update auto on` and `status` print, the install command passing it on.
+# What the install command's `cad plugin update auto on` prints as it turns the switch on, and `cad plugin update auto
+# status` after it.
 PLUGIN_SWITCH = "plugin update auto: on"
 GITHUB = f"https://github.com/{rc.REPOSITORY}"
 CI = rc.CI
@@ -100,13 +103,17 @@ def echo(line: str) -> None:
     print(f"  | {line}", flush=True)
 
 
-def load_installer():
-    """``install.py``'s table of apps: the commands it looks for."""
-    spec = importlib.util.spec_from_file_location("install_py", REPO_ROOT / "scripts" / "install" / "install.py")
+def load_apps():
+    """cad's table of agent apps (``cad_server.plugin``, which ``cad plugin install`` runs): the commands it looks
+    for. Loaded from this tree's files as a package of its own, without cad: these modules are the standard library
+    alone."""
+    folder = REPO_ROOT / "packages" / "cad" / "src" / "cad_server" / "plugin"
+    spec = importlib.util.spec_from_file_location("text_to_cad_plugin", folder / "__init__.py",
+                                                  submodule_search_locations=[str(folder)])
     module = importlib.util.module_from_spec(spec)
-    sys.modules["install_py"] = module
+    sys.modules[spec.name] = module  # its modules import each other through it
     spec.loader.exec_module(module)
-    return module
+    return module.apps.APPS
 
 
 class Run:
@@ -167,7 +174,8 @@ class Run:
                       or line == "Start a new session in each app to use it."):
                 unexpected.append(line)
         missing = sorted(set(expected) - seen)
-        if unexpected or missing or phase[-1:] != ["Start a new session in each app to use it."]:
+        # cad's step ends in its last line; then the install command's own last step, the switch turned on.
+        if unexpected or missing or phase[-2:] != ["Start a new session in each app to use it.", PLUGIN_SWITCH]:
             raise rc.Failed(f"the install script ({label}) said what it should not: unexpected {unexpected}, "
                             f"no line for {missing}")
         say(f"ok    the install script ({label}): exit 0, " + "; ".join(line for line in phase
@@ -464,13 +472,14 @@ def steps(run: Run, migrate: bool = True) -> None:
     major, minor, patch = PLUGIN_VERSION.split(".")[:3]
     c.advance(PLUGIN_VERSION, f"{major}.{minor}.{int(patch) + 1}")
     ran = run.script("again")
-    if f"cad {VERSION} is installed already: it is left as it is, and updates itself." not in ran.lines():
+    # A person's run: cad is asked for a newer one (its own `cad update`), and no release is newer than this run's.
+    if f"Updating cad {VERSION} to the newest release..." not in ran.lines():
         raise rc.Failed(f"the install command again did not find cad {VERSION} installed already")
     if any(line.startswith("Installing cad") for line in ran.lines()) or run.tool()["version"] != VERSION:
         raise rc.Failed(f"the install command again changed cad: {run.tool()}")
     run.app_lines(ran, "again", {name: rf"{re.escape(rc.PROGRAMS[name].name)}: updated" for name in names})
     run.ours_alone("again")
-    say(f"ok    the install command again: cad {VERSION} is installed already, left alone")
+    say(f"ok    the install command again: cad {VERSION} is installed already, and nothing is newer")
 
     if not migrate:
         say(f"skip  migrate: the tag {OLD} is not in this checkout (git fetch --depth 1 origin tag {OLD})")
@@ -576,8 +585,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     run = Run(computer, wheels, args.install_py.resolve())
     try:
-        installer = load_installer()
-        computer.check_path([app.command for app in installer.APPS if app.command] + ["cursor-agent"])
+        computer.check_path([app.command for app in load_apps() if app.command] + ["cursor-agent"])
         steps(run, migrate=tagged)
     except (rc.Failed, OSError, ValueError, KeyError) as failure:
         failed = f"{type(failure).__name__}: {failure}" if not isinstance(failure, rc.Failed) else str(failure)

@@ -7,8 +7,8 @@ name: Real install
 # holds, above PyPI's newest, and offered to uv), cad's automatic updates on and the plugin's turned on by the
 # install, no server started; `cad server start`, a model built by `cad run`, a file shown by `cad viewer`,
 # `cad doctor`; the plugin from this tree's `latest` copy through each program's own GitHub route (a local
-# repository the computer's git reads in GitHub's place). Then the command again (cad installed already and left
-# alone, each program's copy updated), and each program migrated from the state 0.11.10's installer left. The
+# repository the computer's git reads in GitHub's place). Then the command again (cad installed already and nothing
+# newer for it, each program's copy updated), and each program migrated from the state 0.11.10's installer left. The
 # desktop apps are not here: they need a person. test.yml calls it with the installer rehearsals, on a full run (so before a release ships),
 # nightly, and on a change to the installers or the runner: the selector's `installer` flag
 # (scripts/github-workflows/select_checks.py).

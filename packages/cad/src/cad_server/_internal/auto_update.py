@@ -31,13 +31,15 @@ uv's is the one ``installed_tool`` finds.
 whether cad updates itself, ON where nothing is kept -- but OFF where 0.10.0 to 0.11.11 kept the person's own off
 (``updates.automatic: false``, the same file: every release reads the one state folder) and ``auto_update.on`` was
 never chosen, so a choice made before the update to this cad stands; ``cad update auto on`` then writes ``true``, which
-wins, and the earlier key is only read --; and ``plugin.auto_update``, whether the server runs the install
-command (``cad plugin update``) once where cad is newer than the release that command is up to date for
+wins, and the earlier key is only read --; and ``plugin.auto_update``, whether the server runs the plugin's install
+(``cad plugin install``) once where cad is newer than the release the plugin is up to date for
 (``plugin_catch_up``), OFF where nothing is kept. ``cad update auto`` and ``cad plugin update auto`` change them.
 
 **The check** (``due``): switch on, the check not turned off for this process (``updates.checking``:
 ``CAD_UPDATE_CHECK=0``, CI), this cad a global install whose installer is found, no attempt underway, of whatever
-release (``underway``: begun less than ``RETRY_SECONDS`` ago and not ended), and an update the version feed calls for
+release (``underway``: begun less than ``RETRY_SECONDS`` ago and not ended), no run of ``cad plugin install`` going
+(``_installing``: its lock is held, and an update would replace this environment's files under
+it; asked again as an update begins, ``_start``), and an update the version feed calls for
 (``choose``): the newest release of this cad's major its ``lines`` names, where it is newer than this cad; where the
 feed names none of this major, its ``latest`` where that is of this major and newer, or, where ``latest`` is of a
 higher major, the bounded upgrade all the same with no release named (whatever it gets of this major), so a feed
@@ -97,7 +99,8 @@ line (``MAJOR_LINE``). ``cad update --major`` (``major``): PyPI's newest release
 command. The switch, ``TRIES`` and ``RETRY_SECONDS`` do not apply (a typed update always updates); where PyPI cannot be
 reached, the upgrade runs all the same, and says what it got; the update begun as soon as nothing is in flight, not
 after the idle minute, or joined where one is underway. Counted in the record as any attempt is, so the automatic tries
-stay bounded. It never runs the install command itself, and says nothing of it.
+stay bounded. It never runs the install command itself, and says nothing of it; while a run of ``cad plugin install``
+is going it is refused in one line (``INSTALLING``).
 
 Imports the standard library alone; what it asks of cad it imports as it asks: ``cad.engine.places`` (the folders),
 ``cad_server.updates`` (the feed, PyPI), ``cad._internal.atomic_replace`` (the attempt kept),
@@ -125,7 +128,7 @@ from typing import Any
 SECTION = "auto_update"
 PLUGIN_SECTION = "plugin"
 RECORD = "auto-update.json"  # the last attempt, in the state folder
-INSTALL_LOG = "install-command.log"  # the output of the last `cad plugin update` the server ran (``plugin_catch_up``)
+INSTALL_LOG = "install-command.log"  # the output of the last `cad plugin install` the server ran (``plugin_catch_up``)
 IDLE_SECONDS = 60.0
 TRIES = 2  # how many times one release is tried: once, and once more at a later check
 RETRY_SECONDS = 60 * 60.0  # how long after an attempt (underway, or ended) its release may be tried again
@@ -256,16 +259,17 @@ def change(on: bool) -> dict[str, Any]:
 
 
 def plugin_switch(path: Path | None = None) -> bool:
-    """Whether the server runs ``cad plugin update`` once where cad is newer than the release it is up to date for
+    """Whether the server runs ``cad plugin install`` once where cad is newer than the release it is up to date for
     (``plugin_catch_up``): off unless ``true`` is kept."""
     return _section(PLUGIN_SECTION, path).get("auto_update") is True
 
 
 def change_plugin(on: bool, release: str | None = None, *, note: bool = True) -> bool:
-    """``plugin.auto_update`` changed under the state folder's lock; turned on, the install command is taken as up to
-    date for ``release``, the cad that turned it on (this one's by default: ``plugin_catch_up.noted``) -- unless
-    ``note`` is false: turned on by the install command's run that is ending badly (``plugin_catch_up.FAILED_ENV``),
-    which takes nothing as up to date. ``OSError`` where it cannot be written."""
+    """``plugin.auto_update`` changed under the state folder's lock; turned on, the plugin is taken as up to date for
+    ``release``, the cad that turned it on (this one's by default: ``plugin_catch_up.noted``) -- unless ``note`` is
+    false: turned on by the hosted install command whose plugin step did not go well for every app it found (it ended
+    non-zero, or an app failed: ``plugin_catch_up.FAILED_ENV``), or by a cad that is no global install, which takes
+    nothing as up to date. ``OSError`` where it cannot be written."""
     from cad_server.settings import update_section
 
     update_section(PLUGIN_SECTION, lambda kept: {**kept, "auto_update": on})
@@ -616,11 +620,19 @@ def due(*, fetch: bool = False, now: float | None = None) -> Due | None:
             return None
         chosen = choose(updates.feed(fetch=fetch), _version())
         now = time.time() if now is None else now
-        if chosen is None or underway(now) is not None or _tried(chosen.wanted, now):
+        if chosen is None or underway(now) is not None or _tried(chosen.wanted, now) or _installing():
             return None
         return chosen
     except Exception:  # noqa: BLE001 - a check that cannot be made is no update
         return None
+
+
+def _installing() -> bool:
+    """Whether a run of ``cad plugin install`` is going now (``plugin_catch_up.running``: its
+    lock is held): no update begins under it, which would replace this environment's files as it runs."""
+    from cad_server._internal import plugin_catch_up
+
+    return plugin_catch_up.running()
 
 
 def helper_command(target: str | None, *, now: float, version: str, prefix: str | None = None, uv: str = "uv",
@@ -707,6 +719,8 @@ def _start(target: str | None, *, automatic: bool, start: bool, major: bool,
     inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
     if os.path.normcase(os.path.realpath(python)).startswith(inside):
         return "", {}  # no Python outside this environment to run it with
+    if _installing():
+        return "", {}  # asked again as the update begins: a run may have begun since the check
     said, kept = _claim(release=named, wanted=wanted or named, version=version, installer=found.installer.name,
                         automatic=automatic, major=major)
     if said != BEGUN:
@@ -787,6 +801,8 @@ NOT_THE_TOOL = ("the cad server running is not a global install of cad: run `cad
                 "start`, then `cad update` again")
 CHECK_OFF = ("this cad server does not look for updates (CAD_UPDATE_CHECK=0, CI, or a development build), so it does "
              "not update cad")
+INSTALLING = ("an install into the agent apps is running now, and cad is not updated under it: run `cad update` again "
+              "once it has ended")
 
 
 def no_installer(name: str) -> str:
@@ -815,6 +831,8 @@ def asked(*, major: bool = False, pypi: Callable[[], dict[str, Any] | None] | No
             return {"failed": no_installer(found.installer.name)}
         if release(version) is None:
             return {"failed": f"cad {version} is no release, so it does not update itself"}
+        if _installing():
+            return {"failed": INSTALLING}
         known = (pypi or updates.pypi)()
         if major:
             target = known.get("latest") if known else None

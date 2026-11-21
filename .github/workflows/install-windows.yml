@@ -4,9 +4,11 @@ name: Windows installer rehearsal
 # form, against the wheels this tree builds, written again as a release no index holds, this tree's major and
 # minor with a patch far above PyPI's newest (scripts/test/real_computer.py stamp and publish), and offered to uv
 # (UV_FIND_LINKS): the install command's `uv tool install cad`, which installs the newest release uv is offered,
-# takes them, never an index's. uv installed by its own installer when the image has none; cad a uv tool, its
+# takes them, never an index's; the cad it then hands the agent apps to (`cad plugin install`) is this tree's. uv
+# installed by its own installer when the image has none; cad a uv tool, its
 # cad.exe in ~\.local\bin, cad's automatic updates on and the plugin's turned on by the install, no server
-# started; the doctor; the command again, in a PowerShell that has been used ("installed already"); then models
+# started; the doctor; the command again, in a PowerShell that has been used (cad found at its release, "Updating
+# cad <release> to the newest release...", and nothing installed); then models
 # built on it (a box, a box with a hand-made wheel through `--with`, by a version range on the command line,
 # through a script's header, from a venv of the user's own with the library installed, and the page link's
 # token), arguments cmd would have parsed, a state folder named with accents and a non-Latin script, and
@@ -149,7 +151,7 @@ jobs:
 
       # cad at the stamped release, both switches on (cad's own by default, the plugin's by the install), no server
       # started by the install, the doctor's verdict, then the command again: quick and harmless, cad is installed
-      # already.
+      # already, and its own `cad update`, which a person's run asks for, has nothing to install.
       - name: The cad command, its switches, the doctor and the install command again
         shell: pwsh
         run: |
@@ -169,7 +171,10 @@ jobs:
           $again = (powershell -NoProfile -ExecutionPolicy Bypass -Command "cmd /c ver | Select-Object -First 1 | Out-Null; $env:CAD_PIPED | Invoke-Expression" 2>&1 | ForEach-Object { "$_" }) -join "`n"
           Write-Host $again
           if ($LASTEXITCODE) { throw "the install command again exited $LASTEXITCODE" }
-          if ($again -notmatch "cad $([regex]::Escape($env:CAD_RELEASE)) is installed already") { throw "the install command again did not find cad installed" }
+          # A person's run: the cad there found at its release and kept, asked for a newer one (one line, whatever
+          # that update came to: on a runner cad looks for no update), and nothing installed.
+          if ($again -notmatch "(?m)^Updating cad $([regex]::Escape($env:CAD_RELEASE)) to the newest release\.\.\.") { throw "the install command again did not find cad $env:CAD_RELEASE installed" }
+          if ($again -match '(?m)^(Installing cad with uv\. |cad: (failed|not installed)|cad \S+ is installed but does not start)') { throw "the install command again installed cad" }
 
       # What the model steps share: run a program and keep its stdout and stderr together (Windows
       # PowerShell 5.1 turns a native command's stderr lines into error records, so they are

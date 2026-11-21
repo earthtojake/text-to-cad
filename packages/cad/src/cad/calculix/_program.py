@@ -15,6 +15,7 @@ the ``cad_ccx`` package is read when a study looks for the program, never at imp
 from __future__ import annotations
 
 import contextvars
+import os
 import re
 import shutil
 import subprocess
@@ -55,7 +56,7 @@ def install_hint() -> str:
 
 @dataclass(frozen=True)
 class Ccx:
-    """A ``ccx`` program that runs: its path and the version it reports ("2.23")."""
+    """A located ``ccx`` program and its CalculiX version ("2.23")."""
 
     path: str
     version: str
@@ -82,8 +83,6 @@ def carried() -> bool:
     """Whether this process can run CalculiX itself: ``CAD_CCX`` names one, or the ``cad-ccx`` package is installed here.
     Else a study runs in the environment of ``cad[calculix]``."""
     import importlib.util
-    import os
-
     return bool(os.environ.get(CCX_ENV, "").strip()) or importlib.util.find_spec("cad_ccx") is not None
 
 
@@ -103,12 +102,26 @@ def find_ccx() -> Ccx:
     :class:`CalculixMissingError` naming why and how to install it."""
     try:
         path = programs.find(CCX).absolute()  # relative, it would be read in the folder a solve runs in
-        version = _version(path)
-        if version is None:
-            version = _packaged_version(path)
+        if os.environ.get(CCX_ENV, "").strip() and not _is_packaged(path):
+            version = _version(path)
+        else:
+            # The wheel knows which CalculiX it carries. The Windows binary can print its
+            # version to a console yet leave a pipe empty (#871).
+            import cad_ccx
+
+            version = cad_ccx.version()
         return Ccx(path=str(path), version=programs.check_version(CCX, path, version))
     except programs.ProgramMissing as error:
         raise CalculixMissingError(str(error)) from None
+
+
+def _is_packaged(path: Path) -> bool:
+    """Whether ``path`` is the ``cad-ccx`` package's own ``ccx``, the same file however ``CAD_CCX`` spells it: that one
+    takes the version the package states, as when nothing is named. Any other program is asked, never assumed."""
+    def real(found: Path) -> str:
+        return os.path.normcase(os.path.realpath(found))
+
+    return any(real(found) == real(path) for found in _installed())
 
 
 def _version(path: Path) -> str | None:
@@ -122,18 +135,6 @@ def _version(path: Path) -> str | None:
             raise programs.ProgramMissing(f"{path} does not run ({error}): {install_hint()}") from error
     found = re.search(r"Version\s+(\d+\.\d+)", said)
     return found.group(1) if found else None
-
-
-def _packaged_version(path: Path) -> str | None:
-    """The CalculiX version of the ``cad-ccx`` package's own ``ccx``, as the package states it (``cad_ccx.version()``,
-    which runs nothing), where ``path`` is that program and it said none. The Windows build prints its version to a
-    console and nothing into a pipe (it ends through Fortran's ``stop`` with its output unflushed), so ``ccx -v`` says
-    nothing there (#871). ``None`` for any other program: one ``CAD_CCX`` names is asked, never assumed."""
-    if all(Path(found).absolute() != path for found in _installed()):
-        return None
-    import cad_ccx
-
-    return cad_ccx.version()
 
 
 def _on_one_thread(env: dict[str, str]) -> dict[str, str]:
@@ -167,6 +168,8 @@ def run(ccx: Ccx, write) -> str:
         except subprocess.TimeoutExpired as error:
             raise RuntimeError(f"CalculiX did not finish in {TIMEOUT_S:.0f} s and was stopped; a coarser mesh "
                                "(mesh.size_mm) solves sooner") from error
+        except OSError as error:
+            raise RuntimeError(f"{ccx.path} could not start ({error}): {install_hint()}") from error
         said = (done.stdout or "") + (done.stderr or "")
         errors = [line.strip() for line in said.splitlines() if "*ERROR" in line]
         dat = folder / f"{_JOB}.dat"
