@@ -172,9 +172,12 @@ blender = [
 # library with a Python wheel, Apache-2.0, no dependency of its own), which reads one part's STEP and says its
 # holes, pockets, slots and the rest, with a place for every face (cad.quiddity). Imported only by the recogniser's
 # own process (cad.quiddity._recogniser): the library has no time limit, no way to stop a run and no bound on its
-# memory, and a process that can be stopped is what gives a check all three. Pinned exactly, as kicode is: which
-# faces a record names and what its fields mean are a function of quiddity's release, the mapping to our face
-# ordinals was measured at this one, and a result says the release it came from. One abi3 wheel (CPython 3.11 and
+# memory, and a process of its own is what a check can hold to a time for each part, stop with whatever asked it,
+# and stop where its resident memory, read from outside every quarter second, is over a cap (no hard bound: it
+# can grow between two readings, and a system that does not say a process's memory bounds none). Pinned exactly,
+# as kicode is: which faces a record names and what its fields mean are a function of quiddity's release, the
+# mapping to our face ordinals was measured at this one, and a result says the release it came from. One abi3
+# wheel (CPython 3.11 and
 # newer), 8-9.4 MB, for macOS arm64 and x86_64, Linux x86_64 and aarch64 (manylinux_2_28: glibc 2.28 or newer) and
 # Windows x86_64, so the extra installs it only there: on Windows on ARM it installs nothing, and on a musl Linux,
 # which no marker tells apart, uv has only quiddity's sdist, a Rust build. Where no environment holds it, a part's

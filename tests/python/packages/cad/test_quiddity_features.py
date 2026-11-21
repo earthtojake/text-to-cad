@@ -149,8 +149,8 @@ class PlateTest(unittest.TestCase):
         again = quiddity.features(part_of(plate()))
         self.assertEqual(again, self.result)
         self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(self.result, sort_keys=True))
-        # The bytes handed over are a function of the shape too, whatever the process wrote before.
-        self.assertEqual(shape_bytes(self.part.shape), shape_bytes(self.part.shape))
+        # (the bytes handed over are a function of the shape too, whatever the process wrote before and however:
+        # ``test_step_shape_bytes``)
 
     def test_a_part_is_read_where_it_stands(self) -> None:
         moved = part_of(bd.Pos(100, 50, 20) * bd.Rot(0, 90, 0) * plate())
@@ -317,11 +317,67 @@ class AbsenceTest(StandIn):
 
     def test_a_part_quiddity_never_finishes_is_timed_out_and_the_next_is_still_read(self) -> None:
         self.stand_in(STAND_IN.replace('bytes(step).split()[0]', 'b"hang" if b"CONICAL_SURFACE" in step else b"ok"'))
-        results = quiddity.features_of([plate(), bd.Box(1, 2, 3)], timeout_s=0.5)
+        hand, frame = _process._Child.hand, _process._Child.frame
+
+        def handed(child: Any, step: bytes) -> bool:
+            child.never = b"CONICAL_SURFACE" in step
+            return hand(child, step)
+
+        def awaited(child: Any, timeout_s: float, rss_mb: Any = None) -> Any:
+            # the part that is never answered is given up at once; every other answer is awaited as long as it may take
+            return frame(child, 0.05 if getattr(child, "never", False) else timeout_s, rss_mb)
+
+        with mock.patch.object(_process._Child, "hand", handed), mock.patch.object(_process._Child, "frame", awaited):
+            results = quiddity.features_of([plate(), bd.Box(1, 2, 3)])
         self.assertEqual([(result["available"], result["reason"]) for result in results],
                          [(False, "timed_out"), (False, "unknown_schema")])
         self.assertEqual(results[1]["detail"], "quiddity 0.0.0 answered 'stand-in', and this reads "
                                                "'quiddity-rust/recognition/6'")
+
+    def test_an_answer_this_does_not_read_is_that_part_s_alone(self) -> None:
+        """Another release's recogniser may give a reason this code does not know, or no reason and no document:
+        that part is ``unreadable``, and the parts after it are read."""
+        self.stand_in(STAND_IN)
+        asked = _process.Recogniser.ask
+
+        def odd(recogniser: Any, step: bytes) -> dict[str, Any]:
+            if b"CONICAL_SURFACE" in step:
+                return {"reason": "moonphase", "detail": "waxing", "quiddity": "0.0.0"}
+            if b"SPHERICAL_SURFACE" in step:
+                return {"quiddity": "0.0.0"}
+            return asked(recogniser, b"ok")
+
+        with mock.patch.object(_process.Recogniser, "ask", odd):
+            results = quiddity.features_of([plate(), bd.Sphere(3), bd.Box(1, 2, 3)])
+        self.assertEqual([(result["reason"], result["quiddity"]) for result in results],
+                         [("unreadable", "0.0.0"), ("unreadable", "0.0.0"), ("unknown_schema", "0.0.0")])
+        self.assertEqual([result["detail"] for result in results[:2]],
+                         ["quiddity's process answered 'moonphase', which this does not read: waxing",
+                          "quiddity's process answered neither a document nor a reason"])
+
+    def test_a_part_of_more_faces_than_are_handed_over_is_not_asked_about(self) -> None:
+        self.stand_in(STAND_IN)
+        started: list[Any] = []
+        child = _process._Child
+
+        def counted(*given: Any) -> Any:
+            started.append(given)
+            return child(*given)
+
+        with mock.patch.object(_features, "FACES", 6), mock.patch.object(_process, "_Child", counted):
+            (large,) = quiddity.features_of([plate()])
+            self.assertEqual(started, [], "no process is started for it")
+            (small,) = quiddity.features_of([bd.Box(1, 2, 3)])
+        self.assertEqual((large["available"], large["reason"], large["quiddity"]), (False, "too_many_faces", None))
+        self.assertEqual(large["detail"], "the part holds 14 faces, over the 6 of a part handed to quiddity")
+        self.assertEqual((small["reason"], len(started)), ("unknown_schema", 1), "a box's six faces are within it")
+        self.assertEqual(_features.FACES, 300)
+
+    def test_a_time_that_is_no_positive_finite_number_is_refused_before_any_part_is_read(self) -> None:
+        for given in (float("nan"), float("inf"), -2, 0):
+            with self.subTest(given=given), self.assertRaisesRegex(
+                    ValueError, r"^timeout_s is a positive, finite number of seconds, not "):
+                quiddity.features_of([bd.Box(1, 2, 3)], timeout_s=given)
 
 
 class WhereItRunsTest(unittest.TestCase):
@@ -341,6 +397,11 @@ class WhereItRunsTest(unittest.TestCase):
             results = quiddity.features_of([plate(), bd.Box(1, 2, 3)])
         self.assertEqual([result["available"] for result in results], [True, True])
         self.assertEqual(asked, ["asked"], "once for them all")
+
+    def test_nothing_of_it_is_a_person_s_to_call(self) -> None:
+        # it backs the CNC check's holes: its functions are the library's own, in no public list
+        self.assertEqual(quiddity.__all__, [])
+        self.assertTrue(callable(quiddity.features) and callable(quiddity.features_of))
 
     def test_importing_the_namespace_loads_neither_quiddity_nor_the_kernel(self) -> None:
         code = ("import json, sys\nimport cad.quiddity\nfrom cad.quiddity import _features, _frames, _process\n"

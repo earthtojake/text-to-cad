@@ -46,9 +46,10 @@ DFM_COMMON: tuple[str, ...] = (
 DFM: dict[str, tuple[str, ...]] = {
     "cnc": ("build123d/_dfm_cnc.py", "build123d/_dfm_cnc_holes.py", "build123d/_dfm_cnc_model.py",
             "build123d/_dfm_cnc_turning.py", "_internal/dfm/cnc.py",
-            # its holes are read by quiddity where it is available: what takes its records (and names the one
-            # release of it whose records are taken, so the digest says which quiddity read), the integration
-            # that asks it, and the STEP each part is handed over as
+            # what closes its holes is read by quiddity where it is available: what takes its records (and names
+            # the one release of it whose records are taken, so the digest says which quiddity read), the
+            # integration that asks it (its face budget and its limits among it), and the STEP each part is
+            # handed over as
             "build123d/_dfm_cnc_recognised.py", "quiddity/__init__.py", "quiddity/_features.py",
             "quiddity/_frames.py", "quiddity/_process.py", "quiddity/_recogniser.py", "engine/export/step.py"),
     "sheet": ("build123d/_dfm_sheet.py", "_internal/sheet_plane.py", "_internal/dfm/sheet.py"),
@@ -58,13 +59,14 @@ DFM: dict[str, tuple[str, ...]] = {
 #: What the files of ``DFM`` import of the library and no digest holds: the reader, whose parts, names, placements
 #: and materials a measurement is of (said by what it read, not by its code), and the plain data, refusals and
 #: option resolving of the type side, which change no figure. And, of cnc's recogniser: where its process runs
-#: (the engine's places and its door, by which the environment that holds quiddity is found: where quiddity
-#: answers, never what), and what a document's STEP is written with that one shape's bytes are not (its tree and
-#: its styles).
+#: and how it is watched (the engine's places and its door, by which the environment that holds quiddity is found,
+#: and the worker's reading of a process's memory from outside: where quiddity answers and whether it is let to,
+#: never what), and what a document's STEP is written with that one shape's bytes are not (its tree and its
+#: styles).
 BOUNDARY: tuple[str, ...] = ("cad.engine.document", "cad.engine.refs", "cad.results", "cad._internal.refused",
                              "cad._internal.manufacturing",
-                             "cad.engine.places", "cad.engine.client", "cad.engine.export.tree",
-                             "cad.engine.step_style")
+                             "cad.engine.places", "cad.engine.client", "cad.engine.worker",
+                             "cad.engine.export.tree", "cad.engine.step_style")
 
 # Each digest, by the stat of the source files it was taken of (``_digest``): the same files at the same sizes and
 # times are not read again. The whole package's by its folder, each process's by its folder and its name.

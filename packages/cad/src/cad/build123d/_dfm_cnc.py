@@ -13,11 +13,12 @@ the machine frame's. The families, and how each is measured:
 - ``holes`` (``_dfm_cnc_holes``): concave cylinders and their coaxial neighbours; diameter, depth (the drilled
   length below any counterbore; ``overall_depth_mm`` the whole), blind or through by an exact ray along the
   axis, the floor (drill point and its angle, or flat), counterbores (each with its own depth to diameter),
-  countersinks, the standard drill each diameter is. Which faces are one hole, its bore, and what closes it
-  are quiddity's where its features are available for the part (``_dfm_cnc_recognised``: asked once for every
-  part measured itself, each hole still measured by this detector, which keeps the holes quiddity does not
-  claim and every hole of a part it is not available for); ``recognised_by`` says which read each, and the
-  family's ``recognition`` what answered, what fell back and where the two differ.
+  countersinks, the standard drill each diameter is. A hole the rays read through is blind where quiddity's
+  record of that same hole says it is closed and the kernel bears it out (``_dfm_cnc_recognised``: quiddity
+  asked once for every part measured itself; a floor that is no face of the hole's own is no floor to the rays);
+  nothing else of a hole is quiddity's, and a record the kernel contradicts changes nothing.
+  ``recognised_by`` says whose reading each hole is, and the family's ``recognition`` what answered, what fell
+  back, which records were declined and where the two differ.
 - ``pockets``: one cavity model (``_pockets``). Every planar face that meets, by a concave edge (or through
   a concave root fillet), a face that rises from it is a pocket's floor; a face rises where it lies along the
   floor's normal or is drafted back from it (``Model.rises``, ``DRAFT_MAX_DEG``), so a drafted, lofted or

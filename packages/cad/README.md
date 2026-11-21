@@ -429,9 +429,13 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     ended for certain a minute past them; cad's own update begins none while such a run is going. Nothing waits on
     the install but a start that would otherwise start the release it replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
-    `cad[coacd]`'s, for a MuJoCo function's `decompose`; `cad[quiddity]`'s, for a part's features) is fetched
+    `cad[coacd]`'s, for a MuJoCo function's `decompose`; `cad[quiddity]`'s, for a CNC check's holes) is fetched
     once, the first time a command needs it, from uv's cache and the network, and works offline after that; a
-    first-need fetch that cannot reach the network says so in a line, and nothing else waits on it.
+    first-need fetch that cannot reach the network says so in a line, and nothing else waits on it. A CNC
+    check does not wait on that fetch at all: it waits six seconds at most for quiddity's environment (one made
+    from uv's cache is there in a second or two), reads its holes with its own detector where it has not come,
+    saying so, and asks for it again a minute later at the earliest (`cad.quiddity._process`), so a computer
+    offline with nothing cached pays those seconds once a minute at most, in the checks processes that ask.
     A command sends nothing itself: what it counted -- an engine verb's export or snapshot
     (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a crash --
     and each model build the daemon answered, counted there after its answer, for the person who
@@ -556,9 +560,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     *The signature rule* decides where a helper goes: one taking only paths, plain values or our own types
     goes under the document type; one taking a third-party library's objects goes under that integration.
     A tool that has no objects of its own (quiddity: a STEP's bytes in, JSON out) is asked about another
-    integration's: the helper that asks goes under the tool it asks (`cad.quiddity.features` takes a part's
-    shape, build123d's), reaches the other integration through the library's own modules, and still imports
-    no dependency but its own extra's.
+    integration's: the code that asks goes under the tool it asks (`cad.quiddity.features` takes a part's
+    shape, build123d's) and imports no third-party module itself. What it needs of the other integration it
+    takes through the library's own modules (`cad.build123d._dfm_brep`, the engine's STEP writer), which import
+    the kernel: so it runs only in a process whose environment holds that integration, and the tool's own
+    environment (`cad[quiddity]`) runs the tool's process alone, never that code.
 
 26. **A decorator works out its producer from what the function returns.** *The package.* A file decorator declares a
     persistent script's output; the registry's producers -- each a type, a matcher, the code that writes

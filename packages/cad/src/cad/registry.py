@@ -478,12 +478,16 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                                           "command line: every parent merged in, the printer named as compatible",
                               "orcaslicer"))),
     "quiddity": Integration(
-        "quiddity", "quiddity, the feature recogniser for a STEP part: cad.quiddity.features hands it one part of a "
-                    "document and answers its holes and its other features, each face by its ordinal on the part "
-                    "and checked against the kernel, always in a process of its own that is stopped past a time "
-                    "limit (quiddity has none), and says so plainly where nothing could be measured",
+        "quiddity", "quiddity, the feature recogniser for a STEP part: it backs the CNC check's holes, and nothing "
+                    "of it is a person's to call. The check hands it one part of a document at a time and reads "
+                    "what closes each hole, each face by its ordinal on the part and checked against the kernel, "
+                    "always in a process of its own that is stopped past a time or a memory limit (quiddity has "
+                    "neither), and says so plainly where nothing could be measured",
         extra="quiddity", process="separate",
         modules=("quiddity",), distributions=("quiddity",), identity=("quiddity",),
+        # No ``alongside``: that names what an integration's own environment must hold, and quiddity's holds the
+        # recogniser alone. The code that asks it (cad.quiddity.features) runs in the process that holds the part,
+        # in the kernel's integration's environment, never in this one.
         # quiddity publishes one abi3 wheel for five platforms and none for Windows on ARM: the extra's marker says
         # the same (packages/cad/pyproject.toml), and a test holds the two together.
         platforms=("macOS arm64", "macOS x86-64", "Linux x86-64", "Linux arm64", "Windows x86-64"),

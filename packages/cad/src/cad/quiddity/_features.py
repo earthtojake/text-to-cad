@@ -28,7 +28,8 @@ import math
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
-__all__ = ["ANCHOR_MM", "GATE_MM", "GROUPS", "PARALLEL", "REASONS", "SCHEMA", "VERSION", "features_of", "unavailable"]
+__all__ = ["ANCHOR_MM", "FACES", "GATE_MM", "GROUPS", "PARALLEL", "REASONS", "SCHEMA", "VERSION", "features_of",
+           "unavailable"]
 
 #: The result's own shape: raised when a key changes its meaning or goes.
 VERSION = 1
@@ -40,16 +41,30 @@ GROUPS = ("feature", "body", "supporting", "refused", "unexplained")
 #: Why a part has no features (``unavailable``), a closed set.
 REASONS = (
     "no_wheel",        # quiddity publishes no wheel for this platform
-    "not_installed",   # no environment holds quiddity, and none could be made
+    "not_installed",   # no environment holds quiddity, and none could be made, or made in time
     "no_faces",        # the part holds no face
+    "too_many_faces",  # the part holds more faces than are handed to quiddity (``FACES``)
     "unwritten",       # the kernel could not write the part's STEP
     "refused",         # quiddity refused the STEP, in its words
     "failed",          # quiddity raised (a panic in its Rust among them)
     "stopped",         # quiddity's process ended while it had the part
     "timed_out",       # quiddity did not finish the part in time and was stopped
+    "over_memory",     # quiddity's process held more memory than it may with the part and was stopped
+    "unreadable",      # quiddity's process answered what this code does not read (another release's recogniser)
     "unknown_schema",  # quiddity answered a document this mapping was not written for
     "unverified",      # the gate: quiddity's faces could not be shown to be the part's
 )
+#: The most faces a part handed to quiddity holds: one of more is not asked about (``too_many_faces``), on any
+#: computer, so whether a part is read is its own, not the speed of whatever reads it. quiddity's time grows
+#: faster than a part's faces, and by what they are. Measured on four cores of a Linux machine, quiddity 0.5.5,
+#: seconds and the process's peak memory: a filleted plate of drilled holes, 266 faces 2.0 s and 123 MiB, 410
+#: faces 3.8 s, 586 faces 7.1 s, 910 faces 16 s, 1306 faces 40 s and 519 MiB; a bar of filleted pockets, the
+#: slowest kind found, 186 faces 4.4 s, 276 faces 8.7 s, 366 faces 14 s, 546 faces 31 s; a finned shaft, the one
+#: that held most, 244 faces 3.4 s and 222 MiB, 484 faces 4.4 s and 383 MiB. At this bound the slowest kind takes
+#: about 10 s, a third of the time a part may take (``_process.TIMEOUT_S``), which a computer three times slower
+#: still meets; free-form faces cost by what they are, not by their count (four swept grooves, 18 faces, 2.7 s),
+#: and are what the time limit is still for.
+FACES = 300
 #: A point quiddity proves on a face lies on the kernel's face within this (mm): the two read the same numbers,
 #: so they differ by rounding alone; a neighbouring face is a feature's size away.
 ANCHOR_MM = 1e-4
@@ -93,6 +108,10 @@ def features_of(parts: Iterable[Any], timeout_s: float) -> list[dict[str, Any]]:
             part = given if isinstance(given, brep.Part) else brep.Part(name="", owner="", shape=_shape(given))
             try:
                 faces = part.faces()
+                if len(faces) > FACES:
+                    results.append(unavailable("too_many_faces", f"the part holds {len(faces)} faces, over the "
+                                                                 f"{FACES} of a part handed to quiddity"))
+                    continue
                 step = shape_bytes(part.shape) if faces else b""
             except Exception as error:  # noqa: BLE001 -- a shape the kernel does not write is this part's answer
                 results.append(unavailable("unwritten", f"the kernel could not write the part's STEP: {error}"))
@@ -102,8 +121,14 @@ def features_of(parts: Iterable[Any], timeout_s: float) -> list[dict[str, Any]]:
                 continue
             answer = ask(step)
             version = answer.get("quiddity")
-            if "reason" in answer:
-                results.append(unavailable(str(answer["reason"]), str(answer.get("detail") or ""), version))
+            if "reason" in answer or not ("document" in answer and "anchors" in answer):
+                # (a reason this code does not know, or no answer it reads: another release's recogniser's)
+                reason, detail = str(answer.get("reason")), str(answer.get("detail") or "")
+                if reason not in REASONS:
+                    reason, detail = "unreadable", (f"quiddity's process answered {reason!r}, which this does not "
+                                                    f"read: {detail}" if "reason" in answer else
+                                                    "quiddity's process answered neither a document nor a reason")
+                results.append(unavailable(reason, detail, version))
                 continue
             try:
                 results.append(_mapped(answer["document"], answer["anchors"], str(version), faces, brep.surface))

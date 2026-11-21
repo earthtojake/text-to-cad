@@ -2,9 +2,11 @@
 
 """quiddity's own process (``cad.quiddity._process``, ``_recogniser``): each part handed over a pipe and answered
 in turn, whatever the part before it did -- refused, failed, never finished (given up and the process stopped),
-ended the process -- and the next part read by a new one; an import that fails said once; where quiddity is: this
-environment, else the one the engine makes on first need, else the reason no environment holds it; and where
-quiddity publishes wheels, which the extra's marker and the registry say alike.
+ended the process, held more memory than it may -- and the next part read by a new one; an import that fails
+said once; a time for a part that is no positive, finite number refused by name; where quiddity is: this
+environment, else the one the engine makes on first need, else the reason no environment holds it; an
+environment that does not come in time, or cannot be made, not waited for and not asked for again until an
+interval is over; and where quiddity publishes wheels, which the extra's marker and the registry say alike.
 
 No kernel and no quiddity: the recogniser's process and its frames are the real ones, and what it imports as
 quiddity is a stand-in (``tests/python/support/quiddity_stand_in.py``).
@@ -12,8 +14,11 @@ quiddity is a stand-in (``tests/python/support/quiddity_stand_in.py``).
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import sys
+import threading
+import time
 import tomllib
 import unittest
 from typing import Any
@@ -29,8 +34,13 @@ from tests.python.support.quiddity_stand_in import STAND_IN, UNIMPORTABLE, Stand
 class ProcessTest(StandIn):
     def test_each_part_is_answered_whatever_the_one_before_it_did(self) -> None:
         self.stand_in(STAND_IN)
-        with _process.Recogniser(timeout_s=0.5) as ask:
-            answered = [ask(step) for step in (b"ok 1", b"refuse", b"panic", b"hang", b"ok 2", b"die", b"ok 3", b"")]
+        recogniser = _process.Recogniser()
+        answered = []
+        with recogniser as ask:
+            for step in (b"ok 1", b"refuse", b"panic", b"hang", b"ok 2", b"die", b"ok 3", b""):
+                # an answer is awaited as long as a part may take; the part that never answers is given up at once
+                recogniser.timeout_s = 0.05 if step == b"hang" else _process.TIMEOUT_S
+                answered.append(ask(step))
         good = {"document": {"schema_version": "stand-in"}, "anchors": [], "quiddity": "0.0.0"}
         self.assertEqual(answered[0], good)
         # quiddity's own refusal and its failure are answers: the process goes on.
@@ -39,13 +49,31 @@ class ProcessTest(StandIn):
                                        "quiddity": "0.0.0"})
         # A part it never finishes is given up and the process stopped; the next part has a new one.
         self.assertEqual(answered[3], {"reason": "timed_out", "quiddity": "0.0.0",
-                                       "detail": "quiddity did not finish the part in 0.5 s and was stopped"})
+                                       "detail": "quiddity did not finish the part in 0.05 s and was stopped"})
         self.assertEqual(answered[4], good)
         # A process that ends with a part says so, and how it ended.
         self.assertEqual((answered[5]["reason"], answered[5]["quiddity"]), ("stopped", "0.0.0"))
         self.assertRegex(answered[5]["detail"], r"^quiddity's process ended while it had the part \(exit 7\)")
         self.assertEqual(answered[6], good)
         self.assertEqual(answered[7], {"reason": "refused", "detail": "an empty STEP", "quiddity": "0.0.0"})
+
+    def test_a_process_that_holds_more_memory_than_it_may_is_stopped_and_the_next_part_has_a_new_one(self) -> None:
+        self.stand_in(STAND_IN)
+        # the stand-in holds 256 MiB with the part and never answers; a recogniser's own process holds a tenth
+        with mock.patch.object(_process, "RSS_MB", 128.0), mock.patch.object(_process, "WATCH_S", 0.02), \
+                _process.Recogniser() as ask:
+            answered = [ask(b"ok 1"), ask(b"hog"), ask(b"ok 2")]
+        good = {"document": {"schema_version": "stand-in"}, "anchors": [], "quiddity": "0.0.0"}
+        self.assertEqual(answered, [good, {"reason": "over_memory", "quiddity": "0.0.0",
+                                           "detail": "quiddity's process held more than 128 MiB with the part and "
+                                                     "was stopped"}, good])
+
+    def test_a_time_for_a_part_that_is_no_positive_finite_number_is_refused_by_name(self) -> None:
+        for given in (float("inf"), float("nan"), -1.0, 0, "3", True, None):
+            with self.subTest(given=given), self.assertRaisesRegex(
+                    ValueError, r"^timeout_s is a positive, finite number of seconds, not "):
+                _process.Recogniser(timeout_s=given)
+        self.assertEqual(_process.Recogniser(timeout_s=2).timeout_s, 2.0)
 
     def test_a_recogniser_ends_with_its_asker_in_the_middle_of_a_part_too(self) -> None:
         self.stand_in(STAND_IN)
@@ -78,8 +106,65 @@ class ProcessTest(StandIn):
 
 class WhereQuiddityIsTest(unittest.TestCase):
     def without_quiddity(self) -> Any:
+        """An environment that holds no quiddity, in a process that has asked for none yet."""
         real = importlib.util.find_spec
-        return mock.patch("importlib.util.find_spec", lambda name, *rest: None if name == "quiddity" else real(name, *rest))
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch("importlib.util.find_spec",
+                                       lambda name, *rest: None if name == "quiddity" else real(name, *rest)))
+        stack.enter_context(mock.patch.object(_process, "_REFUSED", None))
+        return stack
+
+    def test_an_environment_that_does_not_come_in_time_is_not_waited_for_nor_asked_for_again_at_once(self) -> None:
+        asked: list[str] = []
+        released = threading.Event()
+        self.addCleanup(released.set)
+
+        def never(_told: Any) -> None:
+            asked.append("asked")
+            released.wait()
+
+        with self.without_quiddity(), mock.patch.object(_process, "published", return_value=True), \
+                mock.patch.object(_process, "PROVIDE", never), mock.patch.object(_process, "ENVIRONMENT_S", 0.05):
+            with _process.Recogniser() as ask:
+                first = [ask(b"a part"), ask(b"another")]
+            with _process.Recogniser() as ask:
+                second = ask(b"a part")
+            self.assertEqual((first[0]["reason"], first[0]["quiddity"]), ("not_installed", None))
+            self.assertRegex(first[0]["detail"], r"^cad\[quiddity\]'s environment was not ready in 0\.05 s \(the engine "
+                                                 r"goes on making it\): it is asked for again in 60 s")
+            self.assertEqual((first[1], second), (first[0], first[0]))
+            self.assertEqual(asked, ["asked"], "one wait, for every part and every call until the interval is over")
+            # the interval over, it is asked for again
+            until, failed = _process._REFUSED
+            self.assertGreater(until, time.monotonic())
+            _process._REFUSED = (time.monotonic() - 1.0, failed)
+            with _process.Recogniser() as ask:
+                ask(b"a part")
+            self.assertEqual(asked, ["asked", "asked"])
+
+    def test_a_making_that_fails_is_paid_for_once_until_the_interval_is_over(self) -> None:
+        asked: list[str] = []
+
+        def offline(_told: Any) -> str:
+            asked.append("asked")
+            raise _process.Unavailable("not_installed", "the engine could not make cad[quiddity]'s environment: uv "
+                                                        "cannot reach the network")
+
+        with self.without_quiddity(), mock.patch.object(_process, "published", return_value=True), \
+                mock.patch.object(_process, "PROVIDE", offline):
+            answers = []
+            for _call in range(3):
+                with _process.Recogniser() as ask:
+                    answers.append(ask(b"a part"))
+            self.assertEqual(answers, [{"reason": "not_installed", "quiddity": None,
+                                        "detail": "the engine could not make cad[quiddity]'s environment: uv cannot "
+                                                  "reach the network"}] * 3)
+            self.assertEqual(asked, ["asked"])
+            # an environment that comes is remembered as no failure
+            _process._REFUSED = (time.monotonic() - 1.0, _process._REFUSED[1])
+            with mock.patch.object(_process, "PROVIDE", lambda _told: sys.executable):
+                self.assertEqual(_process._provided(), sys.executable)
+            self.assertIsNone(_process._REFUSED)
 
     def test_where_no_environment_holds_quiddity_the_result_says_why(self) -> None:
         prefix = r"^quiddity comes with cad's quiddity integration, cad\[quiddity\], "

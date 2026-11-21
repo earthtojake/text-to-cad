@@ -8,9 +8,14 @@ and must outlive whatever a part's geometry does to a recogniser. So the process
 imports quiddity: the recogniser is a child interpreter (``python -m cad.quiddity._recogniser``, which imports
 quiddity alone), handed each part's STEP over a pipe and answering each in turn, nothing written to disk. A part
 it has not answered ``timeout_s`` after it was asked is given up: the child is stopped, that part says
-``timed_out``, and the parts after it go to a new child. A child that ends while a part is with it says
-``stopped``, with the end of what it printed, and the rest go to a new one likewise. A child ends with its
-input: one whose asker has gone, however it went, stops in the middle of whatever part it has.
+``timed_out``, and the parts after it go to a new child. While a part is with it the child's resident memory is
+read from outside every ``WATCH_S`` (``cad.engine.worker.resident_of``, as a check's own process is held to its
+limit), and a child that holds more than ``RSS_MB`` is stopped the same way: that part says ``over_memory``.
+That is the only bound on its memory: between two readings it can grow by what it allocates in a quarter of a
+second, and where the system does not say a process's memory (``resident_of`` None) there is none. A child
+that ends while a part is with it says ``stopped``, with the end of what it printed, and the rest go to a new
+one likewise. A child ends with its input: one whose asker has gone, however it went, stops in the middle of
+whatever part it has.
 
 **Where quiddity is.** An integration runs where its extra is installed: the child is this interpreter where this
 environment holds quiddity (one installed with ``cad[quiddity]``, a checkout's development environment), else the
@@ -23,24 +28,35 @@ base. ``Unavailable`` says why no environment can hold it: quiddity publishes no
 (``PLATFORMS``: none for Windows on ARM, a musl Linux or a glibc before 2.28), no engine answers to make it (a
 program's own process with none running), or its making failed (uv's words). ``PROVIDE`` stands in for the engine
 (a test's provisioner).
+
+**No part waits on the network.** The engine is waited for ``ENVIRONMENT_S`` at most: an environment that is
+made answers in milliseconds, and one made from uv's cache in a second or two, so the first part that needs it
+has it; a making that needs the network takes longer than that, goes on in the engine with nobody waiting, and
+is there for a later call. A part whose environment did not come in time, or could not be made, has no features
+(``not_installed``), and this process asks for none again for ``ASK_AGAIN_S``: every part until then is
+answered the same at once, so a making that fails -- a computer offline with nothing cached -- costs one wait,
+never one a part or one a check.
 """
 
 from __future__ import annotations
 
 import collections
 import json
+import math
 import os
 import queue
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from cad.quiddity._frames import HEAD, read
 
-__all__ = ["EXTRA", "PLATFORMS", "PROVIDE", "READY_S", "TIMEOUT_S", "Recogniser", "Unavailable", "published"]
+__all__ = ["ASK_AGAIN_S", "ENVIRONMENT_S", "EXTRA", "PLATFORMS", "PROVIDE", "READY_S", "RSS_MB", "TIMEOUT_S", "WATCH_S",
+           "Recogniser", "Unavailable", "published", "seconds"]
 
 EXTRA = "cad[quiddity]"
 #: The quiddity integration's recogniser, run as a module in the child (quiddity is never imported here).
@@ -61,6 +77,19 @@ TIMEOUT_S = 30.0
 READY_S = 60.0
 #: The longest a child told to end may take before it is stopped (s).
 GOODBYE_S = 5.0
+#: The longest the engine is waited for to answer with the integration's environment (s): one that is made answers
+#: in milliseconds and one made from uv's cache in about a second (0.9 s measured for uv's part of it), so several
+#: times that; a making that needs the network is not waited for (the module's **No part waits on the network**).
+ENVIRONMENT_S = 6.0
+#: After an environment that did not come in ``ENVIRONMENT_S`` or could not be made, the seconds this process asks
+#: for none: long enough that a making which fails is paid for once a minute at most, short enough that one which
+#: was only slow (the network, tens of megabytes of the library's own dependencies) is found soon after it is made.
+ASK_AGAIN_S = 60.0
+#: The most resident memory a child may hold while a part is with it (MiB), read every ``WATCH_S`` seconds: about
+#: four times the most a part within the faces handed over took where it was measured (``_features.FACES``: under
+#: 0.3 GiB), and a fraction of what a check's own process may hold.
+RSS_MB = 1024.0
+WATCH_S = 0.25
 #: The lines of the child's own output kept, to say why it stopped where it stops.
 TAIL = 6
 
@@ -107,12 +136,18 @@ class _Child:
         except (OSError, ValueError):
             pass
 
-    def frame(self, timeout_s: float) -> dict[str, Any] | None | bool:
-        """The child's next frame; None where it ended first; False where none came in ``timeout_s``."""
-        try:
-            return self.frames.get(timeout=timeout_s)
-        except queue.Empty:
-            return False
+    def frame(self, timeout_s: float, rss_mb: float | None = None) -> dict[str, Any] | None | bool:
+        """The child's next frame; None where it ended first; False where none came in ``timeout_s``; True where,
+        before one came, the child held more resident memory than ``rss_mb`` (read every ``WATCH_S``: None reads
+        none)."""
+        deadline = time.monotonic() + timeout_s
+        while (left := deadline - time.monotonic()) > 0:
+            try:
+                return self.frames.get(timeout=left if rss_mb is None else min(left, WATCH_S))
+            except queue.Empty:
+                if rss_mb is not None and (_resident_mb(self.process.pid) or 0.0) > rss_mb:
+                    return True
+        return False
 
     def hand(self, step: bytes) -> bool:
         """One part's STEP handed over; False where the child no longer reads."""
@@ -162,7 +197,7 @@ class Recogniser:
     The child starts with the first part asked and ends with the block."""
 
     def __init__(self, timeout_s: float = TIMEOUT_S) -> None:
-        self.timeout_s = float(timeout_s)
+        self.timeout_s = seconds(timeout_s)
         self._child: _Child | None = None
         self._version: str | None = None
         self._python: tuple[str, bool] | None = None
@@ -215,7 +250,7 @@ class Recogniser:
                 return {**failed, "quiddity": self._version}
         child = self._child
         assert child is not None
-        answer = child.frame(self.timeout_s) if child.hand(step) else None
+        answer = child.frame(self.timeout_s, RSS_MB) if child.hand(step) else None
         if isinstance(answer, dict):
             return {**answer, "quiddity": self._version}
         self._child = None
@@ -223,9 +258,30 @@ class Recogniser:
             child.end(kill=True)
             return {"reason": "timed_out", "quiddity": self._version,
                     "detail": f"quiddity did not finish the part in {self.timeout_s:g} s and was stopped"}
+        if answer is True:
+            child.end(kill=True)
+            return {"reason": "over_memory", "quiddity": self._version,
+                    "detail": f"quiddity's process held more than {RSS_MB:g} MiB with the part and was stopped"}
         child.end()
         return {"reason": "stopped", "quiddity": self._version,
                 "detail": f"quiddity's process ended while it had the part ({child.stopped()})"}
+
+
+def seconds(timeout_s: Any) -> float:
+    """``timeout_s`` as the seconds one part may take: a positive, finite number, or ``ValueError`` by its name
+    (an infinite one would never give a part up, and no clock waits a negative or an undefined time)."""
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(timeout_s) \
+            or timeout_s <= 0:
+        raise ValueError(f"timeout_s is a positive, finite number of seconds, not {timeout_s!r}")
+    return float(timeout_s)
+
+
+def _resident_mb(pid: int) -> float | None:
+    """The resident memory of process ``pid`` now (MiB), read from outside it as a check's own process's is
+    (``cad.engine.worker.resident_of``); None where the system does not say."""
+    from cad.engine.worker import resident_of
+
+    return resident_of(pid)
 
 
 def published(system: str | None = None, machine: str | None = None, glibc: tuple[int, int] | None | bool = True) -> bool:
@@ -277,13 +333,54 @@ def _python() -> tuple[str, bool]:
         raise Unavailable("no_wheel", f"quiddity comes with cad's quiddity integration, {EXTRA}, which installs it only "
                                       f"where quiddity publishes wheels, {PLATFORMS}, and this is {platform.system()} "
                                       f"{platform.machine()}")
-    python = (PROVIDE or _engine)(_told)
-    if python is None:
-        raise Unavailable("not_installed", f"quiddity comes with cad's quiddity integration, {EXTRA}, which this "
-                                           "environment does not hold, and no engine answered to make its "
-                                           "environment: run the script with cad run, whose engine makes it on first "
-                                           f"need, or install {EXTRA} here")
-    return python, False
+    return _provided(), False
+
+
+# Why this process asks for no environment, and until when (``time.monotonic``): the last asking's failure.
+_REFUSED: tuple[float, Unavailable] | None = None
+_ASKING = threading.Lock()
+
+
+def _provided() -> str:
+    """The Python of the integration's environment as the engine (``PROVIDE``) answers it, waited for
+    ``ENVIRONMENT_S`` at most; ``Unavailable`` (``not_installed``) where it does not come in time, cannot be
+    made, or nothing answers to make it -- and then again, at once and unasked, for ``ASK_AGAIN_S`` (the
+    module's **No part waits on the network**)."""
+    global _REFUSED
+
+    with _ASKING:
+        if _REFUSED is not None and time.monotonic() < _REFUSED[0]:
+            raise _REFUSED[1]
+        answered: list[tuple[bool, Any]] = []
+
+        def ask() -> None:
+            try:
+                answered.append((True, (PROVIDE or _engine)(_told)))
+            except BaseException as error:  # noqa: BLE001 -- raised again by whoever waits, where it still waits
+                answered.append((False, error))
+
+        asking = threading.Thread(target=ask, name="cad-quiddity-environment", daemon=True)
+        asking.start()
+        asking.join(ENVIRONMENT_S)
+        if not answered:
+            failed = Unavailable("not_installed", f"{EXTRA}'s environment was not ready in {ENVIRONMENT_S:g} s (the "
+                                                  "engine goes on making it): it is asked for again in "
+                                                  f"{ASK_AGAIN_S:g} s, and until then no part is read with quiddity")
+        elif not answered[0][0]:
+            error = answered[0][1]
+            if not isinstance(error, Unavailable):
+                raise error
+            failed = error
+        elif answered[0][1] is None:
+            failed = Unavailable("not_installed", f"quiddity comes with cad's quiddity integration, {EXTRA}, which this "
+                                                  "environment does not hold, and no engine answered to make its "
+                                                  "environment: run the script with cad run, whose engine makes it on "
+                                                  f"first need, or install {EXTRA} here")
+        else:
+            _REFUSED = None
+            return answered[0][1]
+        _REFUSED = (time.monotonic() + ASK_AGAIN_S, failed)
+        raise failed
 
 
 def _told(line: str) -> None:

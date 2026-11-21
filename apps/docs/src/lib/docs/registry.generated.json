@@ -938,7 +938,7 @@
     },
     {
       "name": "quiddity",
-      "summary": "quiddity, the feature recogniser for a STEP part: cad.quiddity.features hands it one part of a document and answers its holes and its other features, each face by its ordinal on the part and checked against the kernel, always in a process of its own that is stopped past a time limit (quiddity has none), and says so plainly where nothing could be measured",
+      "summary": "quiddity, the feature recogniser for a STEP part: it backs the CNC check's holes, and nothing of it is a person's to call. The check hands it one part of a document at a time and reads what closes each hole, each face by its ordinal on the part and checked against the kernel, always in a process of its own that is stopped past a time or a memory limit (quiddity has neither), and says so plainly where nothing could be measured",
       "extra": "quiddity",
       "process": "separate",
       "operations": [],

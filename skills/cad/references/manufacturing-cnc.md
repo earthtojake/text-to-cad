@@ -83,10 +83,6 @@ The result is read as [every process's](manufacturing-review.md#read-the-result)
 `knife_edges`, `walls`, `gaps`, `access`, `setups`, `voids`, `stock`, `small_features`; with
 `--turning`, `turning`, `turned_diameters`, `bores`, `grooves` and `live_tooling`.
 
-- A hole's `recognised_by` says what read it: `quiddity`, the feature recogniser, or `cad`, cad's
-  own detector, which reads what quiddity does not claim and every hole of a part quiddity was not
-  available for. `holes.recognition` lists those parts with the reason (`fallbacks`) and each hole
-  the two read differently, with both readings (`disagreements`). Neither is a finding.
 - `internal_corners` are a pocket's corners along the tool's axis; `reach_ratio` is the depth over
   the largest tool that fits. A round corner's finding is at its own face (`refs[0]`, the fillet to
   edit), the cavity's floor after it (`pocket`); a sharp one's is at its edge.

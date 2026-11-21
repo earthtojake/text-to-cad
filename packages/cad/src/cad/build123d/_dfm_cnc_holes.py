@@ -22,9 +22,9 @@ leaves its point, so such a hole is not ``drilled``, whatever its diameter.
 diameter within 0.005 mm of one is that drill. **Tap drills** (ISO 262 coarse pitches, tap drill = nominal
 minus pitch): a hole at one is reported as that thread's candidate, a fact, not a verdict.
 
-This is the detector. Where a recogniser reads a part's holes (``_dfm_cnc_recognised``: quiddity's records), each
-is still described here, on the faces and about the bore its record names (``_described``), with what closes it
-as the record says in place of the rays' reading.
+This is the detector. Where a recogniser's record says a hole the rays read through is closed, and the kernel
+bears it out (``_dfm_cnc_recognised``), the same faces are described again here with that floor (``_describe``'s
+``said``); nothing else of a hole is another's to say.
 """
 
 from __future__ import annotations
@@ -190,26 +190,20 @@ def holes(model: Model) -> tuple[list[dict[str, Any]], set[int]]:
         full = sorted(radius for radius, span in by_radius.items() if span >= FULL_ROUND)
         if not full or _cored(model, group, full[0]):
             continue
-        hole = _described(model, group, full[0])
-        holed |= set(hole["_faces"])
-        found.append(hole)
+        hole = _describe(model, group, full[0])
+        if hole is not None:
+            grooves, walls = _grooves(model, group, hole)
+            if walls:
+                # an internal groove is no counterbore: no drill or counterbore tool comes to it along the axis
+                # past the narrower bore; its faces are left to the families that judge a recess (a keyseat
+                # cutter's, ``_dfm_cnc._way``) and the hole is described without them
+                group = group - walls
+                hole = _describe(model, group, full[0]) or hole
+                hole["grooves"] = grooves
+        holed |= group
+        if hole is not None:
+            found.append(hole)
     return found, holed
-
-
-def _described(model: Model, group: set[int], radius: float, said: dict[str, Any] | None = None,
-               kept: frozenset[int] = frozenset()) -> dict[str, Any]:
-    """The hole ``group`` is, about its cylinders of ``radius`` (``_describe``), less its internal grooves
-    (``_grooves``; a cylinder of ``kept`` is never one), which ``grooves`` lists."""
-    hole = _describe(model, group, radius, said)
-    grooves, walls, wide = _grooves(model, group, hole, kept)
-    if walls:
-        # an internal groove is no counterbore: no drill or counterbore tool comes to it along the axis
-        # past the narrower bore; its faces are left to the families that judge a recess (a keyseat
-        # cutter's, ``_dfm_cnc._way``) and the hole is described without them
-        hole = _describe(model, group - walls, radius, said)
-        hole["grooves"] = grooves
-        hole["_grooves"] = wide
-    return hole
 
 
 #: Places along a hole's axis, shares of its narrowest cylinder's run, where a core is looked for (``_cored``).
@@ -248,21 +242,18 @@ def _cored(model: Model, group: set[int], radius: float) -> bool:
                for hit in model.first_all(starts_a[void], ways_a[void]))
 
 
-def _grooves(model: Model, group: set[int], hole: dict[str, Any],
-             kept: frozenset[int] = frozenset()) -> tuple[list[dict[str, Any]], set[int], list[int]]:
+def _grooves(model: Model, group: set[int], hole: dict[str, Any]) -> tuple[list[dict[str, Any]], set[int]]:
     """The internal grooves of a hole: a wider cylinder that a narrower one of the hole lies beyond toward the
     hole's opening (either way along a through hole), with the planes of the hole beside it (its walls). Each
-    ``diameter_mm``, ``width_mm`` (its extent along the axis), ``location``; every face of them; and each
-    groove's cylinder, by its ordinal. A cylinder of ``kept`` is none (one a recognised hole's record names as
-    its bore or a step of it)."""
+    ``diameter_mm``, ``width_mm`` (its extent along the axis), ``location``; and every face of them."""
     a = unit(hole["_axis"])
     cylinders = [i for i in group if model.surface(i).kind == "cylinder"]
     least = min(float(model.surface(i).radius) for i in cylinders)
     opening = np.asarray(hole["opening"], dtype=float) if hole.get("opening") is not None else None
-    found, walls, wide = [], set(), []
+    found, walls = [], set()
     for i in cylinders:
         radius = float(model.surface(i).radius)
-        if radius <= least + 1e-6 or i in kept:
+        if radius <= least + 1e-6:
             continue
         low, high = model.extent(i, a)
         beyond = {1: False, -1: False}
@@ -281,19 +272,17 @@ def _grooves(model: Model, group: set[int], hole: dict[str, Any],
             continue
         sides = {other for _, other in model.neighbours(i) if other in group and model.surface(other).kind == "plane"}
         walls |= {i} | sides
-        wide.append(i)
         found.append({"diameter_mm": round(2 * radius, 4), "width_mm": round(high - low, 4), "location": model.ref(i)})
-    return found, walls, wide
+    return found, walls
 
 
 def _describe(model: Model, group: set[int], radius: float, said: dict[str, Any] | None = None) -> dict[str, Any]:
     """The hole the faces of ``group`` are about their cylinders of ``radius``, its bore (the module's **A hole**).
-    ``said``: what closes it as a recognised hole's record reads it (``_dfm_cnc_recognised``) -- ``bottom``
-    (``through``, ``flat`` or ``drill_point``) and, of a blind one, ``into`` (the way along the axis from its
-    opening into it) -- in place of the rays' reading of through or blind, which takes a floor that is no face of
-    the hole's own (a plane wider than the bore, one a round joins to the wall) for no floor at all. The floor is
-    then the face a ray into the hole meets, whose ever it is: a drill point's angle is that cone's, and a floor
-    said flat that is neither a plane nor a cone is ``other``."""
+    ``said``: the floor of a hole the rays read no floor of -- one that is no face of the hole's own: a plane
+    wider than the bore, one a round joins to the wall -- as a recogniser's record says it and the kernel bears
+    out (``_dfm_cnc_recognised``): ``sign`` (the way along the bore's axis into the hole), ``floor`` (the face a
+    ray that way meets) and ``bottom`` (``flat``, ``drill_point`` or ``other``). The hole is then blind, opening
+    the other way, and every other figure is as the rays' hole has it."""
     narrow = [i for i in group if model.surface(i).kind == "cylinder"
               and abs(float(model.surface(i).radius) - radius) < 1e-6]
     s = model.surface(narrow[0])
@@ -307,18 +296,13 @@ def _describe(model: Model, group: set[int], radius: float, said: dict[str, Any]
     centre = o + a * (middle - float(o @ a))
     seed = np.array([1.0, 0.0, 0.0]) if abs(a[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
     aside = centre + unit(np.cross(a, seed)) * 0.3 * radius  # off the axis: a drill point's apex is no face
-    if said is None:
-        ways: tuple[int, ...] = (1, -1)
-    elif said["bottom"] == "through":
-        ways = ()
-    else:
-        ways = (1 if float(np.asarray(said["into"], dtype=float) @ a) > 0 else -1,)
     ends: dict[int, int | None] = {}
-    for sign in ways:
+    for sign in (1, -1) if said is None else ():
         hit = model.first(aside, a * sign, skip=1e-6)
-        # the hole's own floor, to the rays; to a record that says the hole is closed, whatever face closes it
-        ends[sign] = hit.face if hit is not None and (hit.face in group or said is not None) else None
-    blind = [sign for sign, face in ends.items() if face is not None or said is not None]
+        ends[sign] = hit.face if hit is not None and hit.face in group else None
+    if said is not None:
+        ends[said["sign"]] = said["floor"]
+    blind = [sign for sign, face in ends.items() if face is not None]
     through = not blind
     bottom = "through"
     point_angle = None
@@ -327,15 +311,14 @@ def _describe(model: Model, group: set[int], radius: float, said: dict[str, Any]
         sign = blind[0]
         floor = ends[sign]
         opening = (-a * sign)
-        fs = model.surface(floor) if floor is not None else None
-        if fs is not None and fs.kind == "cone" and (said is None or said["bottom"] == "drill_point"):
+        fs = model.surface(floor)
+        if said is not None:
+            bottom = said["bottom"]
+            if bottom == "drill_point":
+                point_angle = 2.0 * abs(float(fs.half_angle_deg))
+        elif fs.kind == "cone":
             bottom = "drill_point"
             point_angle = 2.0 * abs(float(fs.half_angle_deg))  # the kernel signs it by the axis's way
-        elif said is not None:
-            # the record's word, but a floor it calls flat that is neither a plane nor a cone (a ball nose's
-            # sphere, a rounded floor): flat is a plane here, an end mill's floor
-            bottom = "other" if said["bottom"] == "flat" and fs is not None and fs.kind not in ("plane", "cone") \
-                else said["bottom"]
         elif fs.kind == "plane":
             bottom = "flat"
         else:
@@ -358,8 +341,8 @@ def _describe(model: Model, group: set[int], radius: float, said: dict[str, Any]
     countersinks = []
     for i in group:
         cs = model.surface(i)
-        if cs.kind != "cone" or ((bottom == "drill_point" or said is not None) and i == ends.get(blind[0] if blind else 0)):
-            continue  # the cone that closes it is its point, no seat
+        if cs.kind != "cone" or (bottom == "drill_point" and i == ends.get(blind[0] if blind else 0)):
+            continue
         points = model.outline(i)
         radial = points - o - np.outer((points - o) @ a, a)
         countersinks.append({"diameter_mm": round(2 * float(np.linalg.norm(radial, axis=1).max()), 4),
@@ -402,8 +385,10 @@ def _describe(model: Model, group: set[int], radius: float, said: dict[str, Any]
         bore["hole"] = hole["location"]
     hole["_counterbores"] = bores
     hole["_faces"] = sorted(group)
+    # what describes it again, with a floor said (``said``): the very set, its bore's radius, where its rays start
     hole["_group"] = group
     hole["_radius"] = radius
+    hole["_aside"] = aside
     hole["_axis"] = a
     hole["_origin"] = o
     return hole
