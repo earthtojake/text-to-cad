@@ -110,12 +110,12 @@ test('a phone\'s scale: the primitives read the tokens (36px controls, 15/20 tex
   });
   assert.deepEqual(await drawn('[data-testid="one"] [aria-label="Interaction tools"] button'), [36, '15px/20px'], 'a strip tile');
   await pane.locator('[data-viewer-navbar] [data-testid="file-actions"]').tap();
-  assert.deepEqual(await drawn('[role=menu] [role=menuitem]'), [36, '15px/20px'], 'a menu item');
+  assert.deepEqual(await drawn('[role=menu] [role=menuitem]'), [36, '14px/20px'], 'a menu item');
   await page.keyboard.press('Escape');
   await page.locator('[role=menu]').waitFor({ state: 'detached' });
   await pane.locator('[data-navbar-panel="left"]').tap();
   await page.locator('[data-panel-sheet] [role=tab]').first().waitFor();
-  assert.deepEqual(await drawn('[data-panel-sheet] [role=tab]'), [36, '15px/20px'], 'a panel tab');
+  assert.deepEqual(await drawn('[data-panel-sheet] [role=tab]'), [36, '14px/20px'], 'a panel tab');
   await pane.locator('[data-navbar-panel="left"]').tap();
   await page.locator('[data-panel-sheet]').waitFor({ state: 'detached' });
   const marks = selector => pane.locator(`[data-viewer-navbar] ${selector}`).evaluate(element => {
@@ -201,12 +201,12 @@ for (const phone of [true, false]) {
     await page.locator('[data-settings-card-slide="in"] [data-preview-settings-panel]').waitFor();
     await walk('Preview\'s Settings');
     // The scale's sizes: its tokens, a chip's 20px tile, and a note's field (2rem at least: the control on a phone).
-    const heights = new Set([scale.control, scale.iconButton, scale.row, scale.rowSm, scale.glyph, scale.glyphSm, scale.switchH, scale.thumb, scale.check, 20, Math.max(32, scale.control)]);
+    const heights = new Set([scale.control, scale.iconButton, scale.row, scale.rowSm, scale.glyph, scale.glyphSm, scale.switchH, scale.thumb, scale.check, scale.chip, Math.max(32, scale.control)]);
     const off = [...found.heights].filter(([value]) => !heights.has(value));
     assert.deepEqual(off, [], `controls off the ${phone ? 'phone' : 'desktop'} scale (height, first seen): ${JSON.stringify(off)}`);
     const texts = [...found.texts].filter(([value]) => !scale.text.includes(value));
     assert.deepEqual(texts, [], `text off the ${phone ? 'phone' : 'desktop'} scale (size, first seen): ${JSON.stringify(texts)}`);
-    if (phone) assert.deepEqual([...found.heights.keys()].filter(value => value > 20).sort(), [scale.control], 'every control on a phone the one control height');
+    if (phone) assert.deepEqual([...found.heights.keys()].filter(value => value > 20 && value !== scale.chip).sort(), [scale.control], 'every control on a phone the one control height');
   });
 }
 
@@ -1644,8 +1644,8 @@ test('three tabs and the search fit the 232px panel with no ⋯; a fourth is ⋯
   await settle(page);
   const phone = await geometry();
   // The same components and the same rules, at a phone's scale (settings-ui.md's "A phone's scale"): a tab the control
-  // (36px) at 15px text, its padding the desktop's; a row's gaps, glyph and actions the desktop's.
-  assert.deepEqual([phone.row, phone.tab], [desktop.row, [36, desktop.tab[1], '15px']], `the phone's rows and tabs are the desktop's at its scale: ${JSON.stringify({ desktop, phone })}`);
+  // (36px) at 14px text (the desktop's 12px, two steps up as every text is), its padding the desktop's; a row's gaps, glyph and actions the desktop's.
+  assert.deepEqual([phone.row, phone.tab], [desktop.row, [36, desktop.tab[1], '14px']], `the phone's rows and tabs are the desktop's at its scale: ${JSON.stringify({ desktop, phone })}`);
   assert.deepEqual([desktop.height, phone.height, desktop.row.between, desktop.tabs, desktop.more, phone.tabs, phone.more], [28, 36, 2, 4, false, 4, false]);
   assert.equal(await page.locator('[data-panel-sheet] [data-flat-panel-head] button:not([role=tab]):not([data-flat-panel-search-open])').count(), 0, 'the sheet\'s head is the tabs and the search alone: no Back');
   assert.deepEqual(errors, []);

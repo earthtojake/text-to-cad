@@ -37,6 +37,7 @@
   --cad-icon-button: 24px;
   --cad-row: 28px;
   --cad-row-sm: 24px;
+  --cad-chip: 20px;
   --cad-hit: 0px;
   --cad-glyph: 16px;
   --cad-glyph-sm: 14px;
@@ -94,12 +95,12 @@
  * read, so Home's type never jumps while its cards get pictures. A field keeps 15px: the page's viewport, not a 16px
  * font, stops a phone zooming in on it. */
 :root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) {
-  --cad-text-tiny: 14px;
-  --cad-text-xs: 15px;
+  --cad-text-tiny: 13px;
+  --cad-text-xs: 14px;
   --cad-text-ui: 15px;
   --cad-text-heading: 17px;
-  --cad-text-panel: 15px;
-  --cad-leading-tiny: 20px;
+  --cad-text-panel: 14px;
+  --cad-leading-tiny: 18px;
   --cad-leading-xs: 20px;
   --cad-leading-ui: 20px;
   --cad-leading-heading: 22px;
@@ -116,6 +117,10 @@
   --cad-radius-control: 6px;
   --cad-switch-h: 20px;
   --cad-switch-w: 36px;
+  --cad-chip: 28px;
+  /* A floating card (Display, Preview's Settings) spans the view less its 4px gaps: a phone's sheet, not the
+     desktop sidebar's width. */
+  --cad-card-min: calc(100vw - 8px);
   --cad-thumb: 20px;
   --cad-check: 20px;
 }

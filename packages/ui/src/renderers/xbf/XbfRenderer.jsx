@@ -574,14 +574,15 @@ function XbfSurface({ view, data }) {
     const node = nodeOf(hit);
     if (node && (!selectableIds || selectableIds.has(node))) setChosen(now => pickNode(now, node, multiSelect));
   }, [ensureSelect, nodeOf, selectableIds]);
-  // Whether a pick would take the selection away rather than select what was pressed: the thing selected pressed
-  // again (let go of), or empty space with something selected. Such a pick waits the double-click window
-  // (`clickActivation.js`), so a double-click never shows the selection going before it acts.
+  // Whether a pick would let go of what was pressed: the thing selected pressed again. Such a pick waits the
+  // double-click window (`clickActivation.js`), so a double-click on a selected part never shows it going before it
+  // acts. A press on empty space clears at once: what a double-click there does (fit, leave isolation) needs no
+  // selection, so nothing is lost by not waiting.
   const pickTakesAway = useCallback((found, modifiers) => {
     const hit = found?.press || null;
     const multiSelect = Boolean(modifiers?.multiSelect);
     const now = selectedRef.current;
-    if (!hit) return !multiSelect && now.length > 0;
+    if (!hit) return false;
     const pressed = hit.kind ? [hit.id] : [nodeOf(hit)].flat().filter(Boolean);
     if (!pressed.length) return false;
     const next = hit.kind ? pickElements(now, pressed, multiSelect) : pickNode(now, pressed, multiSelect);

@@ -109,8 +109,8 @@ const CLOSE_DELAY_MS = 150;
 // A chip is the design system's Badge (`primitives/badge.jsx`, its secondary look: the filled tile, its radius, text and
 // 8px sides), given an edge so it stands off the bar's surface. Its two parts are buttons: the label (the badge's
 // padding is the label's, so the whole tile left of the x is the press) and the x, at the badge's 12px glyph.
-const CHIP_CLASS = cn(badgeVariants({ variant: "secondary" }), "h-5 min-w-0 max-w-full justify-start gap-0 border-border p-0 font-medium");
-const CHIP_LABEL_CLASS = "-my-px min-w-0 truncate rounded-md py-0 pr-1 pl-2 leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
+const CHIP_CLASS = cn(badgeVariants({ variant: "secondary" }), "h-chip min-w-0 max-w-full justify-start gap-0 border-border p-0 font-medium");
+const CHIP_LABEL_CLASS = "-my-px flex h-chip min-w-0 items-center truncate rounded-md py-0 pr-1 pl-2 leading-(--cad-leading-xs) outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 const CHIP_REMOVE_CLASS = "cad-hit mr-1 flex size-glyph-sm shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 const POPOVER_CLASS = cn(FLOATING_SURFACE_CLASS, "p-0 text-xs data-[state=closed]:animate-none!");
 const LIST_STYLE = { maxHeight: "calc(var(--radix-popover-content-available-height, 32rem) - 0.5rem)" };

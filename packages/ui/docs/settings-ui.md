@@ -1289,7 +1289,7 @@ Touch works for every tool: one finger orbits, two pan and
 zoom, a tap picks; a pinch, a cancelled pointer or a camera drag is never a
 pick. What a mouse says with a button a finger says with time, in ONE place for every 2D and 3D view
 (`kit/viewport/touchGestures.js`, on the view's frame), said back in the mouse's words so the view's own handlers stay
-the only ones: a **double tap** (two taps, each lifted within 350ms and moved 10px at most, the second within 400ms and
+the only ones: a **double tap** (two taps, each lifted within 350ms and moved 10px at most, the second within 300ms and
 24px of the first) is a **double-click** at that point, the same hit test and the same action (a part isolated or
 looked at, empty space fitted, a board's or a sheet's double-click), the browser's own double-click for it, where it
 sends one, dropped; a **long press** (one finger held 500ms, moved 10px at most) is a **right-click**: the view's menu
@@ -1311,10 +1311,11 @@ values are today's. Script that must count pixels (a virtual list's row height, 
 
 | Token | Tailwind | Desktop | Phone | What uses it |
 | --- | --- | --- | --- | --- |
-| `--cad-text-*`, `--cad-leading-*` | `text-tiny`, `text-xs`, `text-ui`, `text-heading` | tiny 11/16, xs 12/16, ui 13/20, the panel 12/16, heading 15/20 | 15/20 for every control, label, row, menu item and field (xs, ui, the panel); secondary text (tiny, where a desktop steps down) 14/20; heading 17/22 | all text |
+| `--cad-text-*`, `--cad-leading-*` | `text-tiny`, `text-xs`, `text-ui`, `text-heading` | tiny 11/16, xs 12/16, ui 13/20, the panel 12/16, heading 15/20 | each step two up, so a phone keeps the desktop's hierarchy: tiny 13/18, xs 14/20 (menus, the panel, labels, chips), ui 15/20 (controls' values, fields, the navbar), heading 17/22 | every text |
 | `--cad-control` | `h-control`, `size-control` | 28px | 36px | the strip's and a sub-toolbar's tiles; the navbar's and Preview's bar's buttons (their row the control and 12px: 40, 48); the panel's tabs and buttons and its head's row (the control and 4px); Quick Edit's buttons; a tool's chevron (half as wide); fields |
 | `--cad-icon-button` | `size-icon-button`, `h-icon-button` | 24px | 36px | a small icon button (a card's close, the playbar's, `TOOLBAR_ICON_BUTTON_CLASS`); [a dropdown](#dropdowns) in a card |
 | `--cad-row`, `--cad-row-sm` | `min-h-row`, `h-row-sm` | 28, 24px | 36px | a menu's, a dropdown's and a context menu's items, the panel's tree rows; the explorer's rows |
+| `--cad-chip` | `h-chip` | 20px | 28px | a chip (Quick Edit's attachments: the Badge, its label at xs) |
 | `--cad-glyph`, `--cad-glyph-sm` | `size-glyph`, `size-glyph-sm` | 16, 14px | 18, 16px | a tile's icon, a small button's; a row's actions (the glyph and 4px tall), a chip's x |
 | `--cad-pad`, `--cad-step`, `--cad-radius-control` | `px-pad`, `gap-step`, `rounded-control` | 8, 4, 4px | 10, 4, 6px | a control's horizontal padding, the gap between neighbours, a control's corners (a bar's are its own and 6) |
 | `--cad-switch-h`, `--cad-switch-w` | | 14 x 24px | 20 x 36px, level with the controls | a switch (its thumb the track less 2px) |
@@ -1327,8 +1328,8 @@ mark smaller than a control (a chip's x, a row's action, a crumb) keeps its draw
 table does not have is a new token, in both scales at once, with its row here. The same padding rules hold at both scales
 (a card's equal inset, the panel's inset, the strip's 5px), scaled by the tokens. What stays a phone's alone is layout:
 the panel as a sheet, the strip's More, Quick Edit across the view, no peek, no tooltips, rows' actions always shown
-(nothing hovers). A card (Display's, Preview's Settings) grows past its 224px to fit its values at a phone's text, never
-past the view less its gaps; nothing truncates. `RendererShell.browser.test.mjs` walks the page on a phone and on a
+(nothing hovers). A card (Display's, Preview's Settings) is the default sidebar's 224px on a desktop, growing to fit its values; on a
+phone it spans the view less its 4px gaps (`--cad-card-min`), as a phone's sheets do; nothing truncates. `RendererShell.browser.test.mjs` walks the page on a phone and on a
 desktop and fails on a control or a text off its scale.
 
 ### A board in 3D
@@ -1593,7 +1594,7 @@ Three interface sizes and one heading, each on a fixed line height, as Figma's U
 | App chrome: the navbar and the file's name, dialogs (What's new), the Home's body, the text a person types in Quick Edit's note (and its placeholder), floating or docked, and the loading indicator's step line | 13 / 20, regular | `text-ui` (`text-sm`, `text-base`) |
 | The one heading: the CAD app's notice title (the Home's **Recent** is the navbar's, 13/20 at 500) | 15 / 20, semibold | `text-heading` |
 
-A phone's sizes are [the two scales](#two-scales)': 15/20 for every step, the secondary 14/20, the heading 17/22. There is no 10px step. A menu item is its text's line in 6px of
+A phone's sizes are [the two scales](#two-scales)': every step two up from a desktop's (tiny 13/18, xs 14/20, ui 15/20), the heading 17/22. There is no 10px step. A menu item is its text's line in 6px of
 padding, at least the row tall (`min-h-row`: `dropdown-menu.jsx`, `context-menu.jsx`; `tooltip.jsx` the
 tiny step's line), and no menu brings
 a size of its own (the viewport's context menu, the zoom's and the view menus take the primitives').
@@ -1669,7 +1670,10 @@ display rows, the home's type filter. Its trigger shows the chosen option (its i
 chevron), bordered as a field, the control tall ([the two scales](#two-scales)); its list is the options with the
 chosen one checked (radio items: a disabled option drawn off, a `fallback` label where no option is the value),
 `align`ed, named, each option carrying its own data attributes; `fixedWidth` makes the trigger as wide as its widest
-option, so a card's dropdowns keep one width whatever is chosen. It is built on the one `DropdownMenu` primitive, so
+option, so a card's dropdowns keep one width whatever is chosen. **Its width, by one rule**: half the row's width
+(the label takes the other half), growing only where its value would not fit there (its widest option, with
+`fixedWidth`); a dropdown set to fill its row (`bare`, a row with no label) is the row's width. Never as wide as its
+value alone, never wider than half for no reason. It is built on the one `DropdownMenu` primitive, so
 there is ONE popup, ONE keyboard and ONE touch rule, the trigger's (`DropdownMenuTrigger`): a mouse or a pen opens a menu
 at its press; a finger toggles it at its tap's click, from the state the menu had as the finger landed (a second tap on
 the trigger shuts it). There is no other select: no Radix Select, no native one. A menu of actions (⋯, the app menu, a

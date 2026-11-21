@@ -30,6 +30,7 @@
   --spacing-icon-button: var(--cad-icon-button);
   --spacing-row: var(--cad-row);
   --spacing-row-sm: var(--cad-row-sm);
+  --spacing-chip: var(--cad-chip);
   --spacing-glyph: var(--cad-glyph);
   --spacing-glyph-sm: var(--cad-glyph-sm);
   --spacing-pad: var(--cad-pad);

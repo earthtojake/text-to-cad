@@ -21,7 +21,7 @@ import { useEffect } from "react";
 
 export const TAP_SLOP_PX = 10;
 export const TAP_MAX_MS = 350;
-export const DOUBLE_TAP_MS = 400;
+export const DOUBLE_TAP_MS = 300;
 export const DOUBLE_TAP_SLOP_PX = 24;
 export const LONG_PRESS_MS = 500;
 /** The long press's event, on the canvas pressed: `{ detail: { clientX, clientY } }`, bubbling. */

@@ -96,7 +96,7 @@ it("the Animation section holds the same controls playing and paused, its scrubb
   expect([bar().querySelector('[data-animation-play]')!.className, bar().querySelector('[data-animation-reset]')!.className]).toEqual([expect.stringContaining('size-control'), expect.stringContaining('size-control')]);
   // The clip row is labelled as Speed's is, the same row: its label and the dropdown.
   expect([clipMenu.classList.contains('w-full'), clipMenu.closest('[data-panel-select-row]')!.children.length, clipMenu.closest('[data-panel-select-row]')!.firstElementChild!.textContent,
-    speed.closest('[data-panel-select-row]')!.className]).toEqual([false, 2, 'Animation', clipMenu.closest('[data-panel-select-row]')!.className]);
+    speed.closest('[data-panel-select-row]')!.className]).toEqual([true, 2, 'Animation', clipMenu.closest('[data-panel-select-row]')!.className]);
   expect(['loop', 'autoplay'].map(id => { const row = bar().querySelector(`[data-animation-${id}]`)!; return [row.hasAttribute('data-panel-switch-row'), row.querySelector('svg'), Boolean(row.querySelector('[role=switch]'))]; }))
     .toEqual([[true, null, true], [true, null, true]]);
   expect(screen.getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuetext')).toBe('3.00s of 8.00s');

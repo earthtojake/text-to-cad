@@ -59,7 +59,7 @@ const CARD_VARIABLES = Object.freeze({
   "--card-inset": `calc(var(--panel-inset) - ${PANEL_PEEK_GAP_PX}px)`,
   // At least the sidebar's width, and wider where its values need it (a phone's 14px ones), never past the view less
   // its gaps: nothing in it truncates.
-  width: "max-content", minWidth: SETTINGS_CARD_WIDTH_PX, maxWidth: "calc(100vw - 16px)", borderRadius: PANEL_PEEK_RADIUS_PX
+  width: "max-content", minWidth: `var(--cad-card-min, ${SETTINGS_CARD_WIDTH_PX}px)`, maxWidth: "calc(100vw - 8px)", borderRadius: PANEL_PEEK_RADIUS_PX
 });
 const PAD = px => `calc(var(--card-inset) - ${px}px)`;
 // The rows' grid: labels, then the controls' column, ONE width for the card's dropdowns: half the content, or the

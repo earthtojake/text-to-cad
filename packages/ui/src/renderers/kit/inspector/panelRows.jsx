@@ -25,10 +25,10 @@ export function PanelSelectRow({ label, value, options, onChange, disabled = fal
   labelProps = null, triggerProps = null, optionProps = null, bare = false }) {
   const active = options.find(option => option.value === value) || null;
   const shown = active?.label ?? fallback;
-  return <div className={cn("grid h-control min-w-0 items-center gap-2", bare ? "grid-cols-1" : "grid-cols-[4rem_minmax(0,1fr)]", className)} data-panel-select-row="" {...rowProps}>
+  return <div className={cn("grid h-control min-w-0 items-center gap-2", bare ? "grid-cols-1" : "grid-cols-[minmax(max-content,1fr)_minmax(50%,max-content)]", className)} data-panel-select-row="" {...rowProps}>
     {bare ? null : <FieldLabel className="leading-(--cad-leading-xs)" {...labelProps}>{label}</FieldLabel>}
     <ValueDropdown value={value} options={options} onChange={onChange} disabled={disabled} fallback={fallback} label={label}
-      className={cn(bare && "w-full justify-self-stretch")}
+      className="w-full justify-self-stretch"
       triggerProps={{ "aria-label": triggerLabel || `${label}: ${shown}`, title: bare ? label : undefined, "data-panel-dropdown": "", ...triggerProps }}
       optionProps={optionProps} />
   </div>;
