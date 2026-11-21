@@ -9,7 +9,8 @@ says closed where a ray leaves the part, through where the ray meets the hole's 
 no cone, is declined -- each with the detector's report exactly as it was and the disagreement said. What
 quiddity does not claim is the detector's still; a part quiddity is not available for keeps the detector's
 holes, the report as it was but for the note that says so, repeatable only where the reason is the part's own;
-and one recogniser is asked once for a document's every part.
+and one recogniser is asked once for a document's every part. A hole's mouth is read of the hole as its record
+leaves it: at the one end a closed hole opens by.
 """
 
 from __future__ import annotations
@@ -161,6 +162,52 @@ class RecognisedHolesTest(unittest.TestCase):
         (hole,) = _measure(_part(nosed))["holes"]["items"]
         self.assertEqual((hole["through"], hole["bottom"], hole["floor_tool"], hole["recognised_by"]),
                          (False, "other", None, "quiddity"))
+
+    def test_a_hole_a_record_closes_has_its_mouth_at_the_end_it_opens_by(self) -> None:
+        """A 40 mm recess 3 deep in a block's top, a 5 mm hole through its floor off its axis: through to the
+        detector's ray, which then looks for a wall across a mouth at both its ends; blind by its record, opening
+        by the top alone."""
+        def recess() -> Any:
+            part = bd.Box(120, 60, 20) - bd.Pos(25, 0, 10) * bd.Cylinder(20, 3, align=DOWN)
+            return part - bd.Pos(25, 12, 0) * bd.Cylinder(2.5, 40)
+
+        def mouth(hole: dict[str, Any]) -> tuple[Any, ...]:
+            return hole["mouth"], hole["past_wall_mm"], hole["open_mm"], len(hole["cut_faces"])
+
+        closing = {"through", "bottom", "opening", "drilled", "floor_tool", "recognised_by"}
+        # the top is 1.5 mm lower past x = 37, 8 mm inside the recess's circle: a wall across its mouth, which
+        # each reads the same
+        stepped = _part(recess() - bd.Pos(37, 0, 10) * bd.Box(60, 80, 1.5, align=(A.MIN, A.CENTER, A.MAX)))
+        alone, read = _holes(_measure(stepped, recognise=False))[40.0], _holes(_measure(stepped))[40.0]
+        self.assertEqual((alone["through"], mouth(alone)), (True, ("stepped", 8.0, 1.5, 2)))
+        self.assertEqual((read["through"], read["opening"], mouth(read)),
+                         (False, [0.0, 0.0, 1.0], ("stepped", 8.0, 1.5, 2)))
+        self.assertEqual({key for key in read if read[key] != alone.get(key)}, closing)
+        # a slot 1.5 mm tall along the block's side, on the level of the recess's floor, opens the recess's wall
+        # there for 5 mm: a cut mouth at the far end of the detector's through hole, an opening below the mouth
+        # of the hole its record closes
+        undercut = _part(recess() - bd.Pos(0, -15, 7) * bd.Box(200, 40, 1.5, align=(A.CENTER, A.MAX, A.MIN)))
+        was, now = _measure(undercut, recognise=False), _measure(undercut)
+        alone, read = _holes(was)[40.0], _holes(now)[40.0]
+        self.assertEqual((alone["through"], mouth(alone)), (True, ("stepped", 5.0, 1.5, 2)))
+        self.assertEqual((read["through"], read["opening"], mouth(read), read["cut_by"], read["open_deg"]),
+                         (False, [0.0, 0.0, 1.0], ("whole", 0.0, 0.0, 0), None, 0.0))
+        self.assertEqual({key for key in read if read[key] != alone.get(key)},
+                         closing | {"mouth", "past_wall_mm", "open_deg", "open_mm", "cut_by", "cut_faces"})
+        # the family lists first the hole that reaches furthest past a wall: the recess alone, neither read
+        self.assertEqual([[hole["diameter_mm"] for hole in report["holes"]["items"]] for report in (was, now)],
+                         [[40.0, 5.0], [5.0, 40.0]])
+        self.assertEqual({name: now[name] for name in now if name != "holes"},
+                         {name: was[name] for name in was if name != "holes"})
+        # a hole that breaks out of the part's side with 300 degrees or more of its wall left is a hole whose
+        # mouth is open, and its record is taken: the open a record is declined by is a bore that does not go round
+        broken = _part(bd.Box(60, 40, 10) - bd.Pos(0, 15.25, 0) * bd.Cylinder(5, 30))
+        was, now = _measure(broken, recognise=False), _measure(broken)
+        (hole,) = now["holes"]["items"]
+        self.assertEqual((hole["recognised_by"], mouth(hole)), ("quiddity", ("open", 0.25, 10.0, 2)))
+        self.assertEqual((now["holes"]["recognition"]["declined"], now["holes"]["recognition"]["disagreements"]),
+                         ([], []))
+        self.assertEqual(_as_it_was(now), was)
 
     def test_what_quiddity_does_not_claim_is_still_the_detector_s(self) -> None:
         block = bd.Box(60, 40, 20)

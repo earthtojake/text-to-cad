@@ -593,7 +593,13 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
     comes in from, `bottom` `flat` where the record says flat and the face met is a plane, `drill_point` (with
     `point_angle_deg`, that cone's) where it says a point and the face is a cone, `other` where it says flat and
     the face is neither (a ball nose: quiddity has no other word for it, and flat is a plane here, an end mill's
-    floor); `drilled` and `floor_tool` follow. No other field of the item changes, and none of any other hole:
+    floor); `drilled` and `floor_tool` follow, and so does its mouth, which is read after: closed at one end
+    the hole opens by the other alone, so a wall is looked for across that mouth and no other, where the
+    detector's through hole has two and takes an opening its wall has at the far one (an undercut on its
+    floor) for a cut mouth (`mouth`, `past_wall_mm`, `open_deg`, `open_mm`, `cut_by`, `cut_faces`; the family
+    lists first the holes that reach furthest past a wall, so its order can follow).
+    A hole a record closes flat is an end mill's, which `cnc.partial_hole` does not judge. No other field of
+    the item changes, and none of any other hole:
     a counterbore is the detector's, a countersink is the detector's (quiddity's small chamfer of a mouth, which
     it keeps apart from a seat, is a countersink here as every cone of a hole is), the depth is the detector's
     (quiddity's own is its bore cylinder's extent), `xyz` stays the middle of the bore (quiddity's point is the
@@ -605,7 +611,8 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
     as it was, and the record is said declined (`declined`, each `location`, `record` and `reason`):
     `unproved` (its evidence is not verified); `superseded` (quiddity itself names an annular groove for those
     walls); `open` (no hole of the detector's is there, and its bore does not go round: quiddity calls a channel
-    open along its side a hole), `cored` (something stands inside its bore) or else `unmatched`; `spans` (its
+    open along its side a hole; a hole whose `mouth` is `open` goes round 300 degrees or more, is the
+    detector's, and its record is taken as any other's), `cored` (something stands inside its bore) or else `unmatched`; `spans` (its
     faces lie in several of the detector's holes: the two stretches of a hole that another hole crosses are two
     holes here, each as deep as a drill goes in it, where quiddity makes one of them as long as both);
     `beyond` (it names a face the detector's hole does not hold); `shared` (another record, taken or not, names

@@ -40,7 +40,9 @@ minus pitch): a hole at one is reported as that thread's candidate, a fact, not 
 
 This is the detector. Where a recogniser's record says a hole the rays read through is closed, and the kernel
 bears it out (``_dfm_cnc_recognised``), the same faces are described again here with that floor (``_describe``'s
-``said``); nothing else of a hole is another's to say.
+``said``); nothing else of a hole is another's to say. Its mouth is read after that, of the hole as it is then
+described (``mouths``): closed at one end, it opens by the other alone, and a wall is looked for across that
+mouth and no other.
 """
 
 from __future__ import annotations

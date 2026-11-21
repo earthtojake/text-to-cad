@@ -15,6 +15,14 @@ diameter, its depths, counterbores, countersinks and grooves are the detector's,
 they were. ``recognised_by`` says ``quiddity`` for a hole whose record was taken, corrected or not, and ``cad``
 for one the detector reads alone.
 
+**Its mouth follows.** What a wall that cuts a hole's mouth makes of it (``_dfm_cnc_holes.mouths``) is read after
+this, of each hole as it stands here, at the ends it opens by. A hole the rays read through opens by both, and an
+opening its wall has at the far one -- an undercut on its floor -- is a cut mouth to them; closed by its record
+it opens by one end, so a wall is looked for across that mouth alone, and the other is an opening below the
+mouth, no cut. The family lists first the holes that reach furthest past a wall, so its order can follow too.
+An ``open`` mouth is a hole's whose wall goes round ``FULL_ROUND`` or more, its record taken as any other's; the
+``open`` a record is declined by is a bore that does not go round, no hole here.
+
 **Which records are taken.** One the kernel's own geometry does not contradict, and no other; where it is not
 taken the detector's reading of those faces stands, exactly as it was, and the record is said declined with the
 reason (``DECLINED``):

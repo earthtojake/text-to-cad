@@ -18,7 +18,8 @@ the machine frame's. The families, and how each is measured:
   how far the hole reaches past it (a partial hole). A hole the rays read through is blind where quiddity's
   record of that same hole says it is closed and the kernel bears it out (``_dfm_cnc_recognised``: quiddity
   asked once for every part measured itself; a floor that is no face of the hole's own is no floor to the rays);
-  nothing else of a hole is quiddity's, and a record the kernel contradicts changes nothing.
+  nothing else of a hole is quiddity's, and a record the kernel contradicts changes nothing. Its mouth is read
+  of the hole as it then stands: one a record closes opens by one end, and has a mouth there alone.
   ``recognised_by`` says whose reading each hole is, and the family's ``recognition`` what answered, what fell
   back, which records were declined and where the two differ.
 - ``pockets``: one cavity model (``_pockets``). Every planar face that meets, by a concave edge (or through
