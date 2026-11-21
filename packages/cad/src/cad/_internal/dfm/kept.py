@@ -5,11 +5,15 @@ reads, what it reads of the document, and the code that measures.
 report (CNC's tools decide which corners a tool reaches, sheet's K-factor where a bend's flat pattern ends), and
 those its rules alone read, which change only the verdict (a material's limits, a sheet's size, a mold's
 cavities). Each process's module declares the first beside its ``OPTIONS`` (``MEASURES``), and the integration's
-``measure(document, options, candidates)`` is handed those alone (``measuring``), as a ``Measuring``: a dict of
-the declared names that refuses any other (``KeyError``) and keeps each such name (``undeclared``), so a read the
-module does not declare fails the check that made it even where the family that read it caught the refusal
-(``cad.build123d._dfm_check``). So the report of one document is a function of these options alone, and the same
-report stands for every check that resolves them alike.
+``measure(document, options, candidates)`` is handed those alone (``measuring``), as a ``Measuring``: a dict that
+holds the declared names and no other, so the report of one document is a function of these options alone, and
+the same report stands for every check that resolves them alike. A read by name of an option the module does not
+declare is refused (``KeyError``) and its name kept (``undeclared``), so it fails the check that made it even where
+the family that read it caught the refusal (``cad.build123d._dfm_check``): the list is told it lacks a name. A
+copy of the view, or a walk over it, refuses nothing -- it holds the declared names alone, and a module that
+looked for another through one would read it as not given, in silence -- so that the list holds what the code
+reads is a test's to say, not the view's: each process's module, run on every option with those its rules alone
+read given other values, makes the report it makes of its declared options alone (``test_dfm_core.py``).
 
 **What it reads of the document.** A measurement reads the parts as the engine's reader made them, and not the
 document's bytes: its content record (``cad.build123d._dfm_brep.content``, made in a checks process from the parts
@@ -48,10 +52,12 @@ def measuring(process: str, resolved: dict[str, Any]) -> dict[str, Any]:
 
 
 class Measuring(dict):
-    """The options a process's measurement is handed (``measuring``): a dict whose lookups -- ``[]``, ``get``,
-    ``in``, ``setdefault``, ``pop`` -- of a name its process does not declare (``MEASURES``) raise ``KeyError``
-    and keep the name in ``undeclared``, which the caller reads once the measurement is done. A declared name it
-    does not hold reads as any dict's does."""
+    """The options a process's measurement is handed (``measuring``): a dict of the names its process declares
+    (``MEASURES``) and no other, whose lookups by name -- ``[]``, ``get``, ``in``, ``setdefault``, ``pop`` -- of
+    a name not declared raise ``KeyError`` and keep the name in ``undeclared``, which the caller reads once the
+    measurement is done. A declared name it does not hold reads as any dict's does. A copy of it (``dict(m)``,
+    ``{**m}``, ``m.copy()``) and a walk over it (``items``) are plain: the declared names alone, nothing refused
+    and nothing kept (the module's docstring says what holds the list then)."""
 
     def __init__(self, process: str, resolved: dict[str, Any]) -> None:
         super().__init__(measuring(process, resolved))

@@ -57,12 +57,17 @@ and the engine keeps it by them, never by which document, path or version it cam
   `zero_tol`; `printing` `technology`, `angle_limit`, `layer_height`, `samples`, `nozzle`, `build_volume` and
   `printer`. Every other option is the rules' alone: it changes the verdict and no figure (a CNC, molded or
   printed part's material, a sheet's size, kerf and bend radius, a mold's cavities). The measurement is handed
-  the declared ones alone, as a table that refuses any other name (`kept.Measuring`), and a read it does not
-  declare fails the check, even where the family that read it caught the refusal: so the list cannot drift
-  from the code. An option moves between the two by being added to or taken from `MEASURES`.
+  the declared ones alone (`kept.Measuring`): a table that holds no other name, so no report can depend on one.
+  A read by name of an option it does not hold is refused and fails the check, even where the family that read
+  it caught the refusal; a read through a copy of the table, or a walk over it, is not refused -- it finds the
+  declared names alone, and reads any other as not given. What holds the list to the code is therefore tested,
+  not only refused: each process's measurement, run on every option with those its rules alone read given other
+  values, must make the report it makes of its declared options alone. An option moves between the two by
+  being added to or taken from `MEASURES`.
 - **The code that measures**: the digest of the files that measure that process (`cad.engine._measuring.DFM`:
   the check's own steps, the parts' measures, the process's module on each side), with the versions of the
-  libraries it measures with. An edit anywhere else -- the server, a document type, another process, a release
+  libraries it measures with (`_measuring.MEASURING`: build123d, OCP, bd_materials, numpy and scipy, which a
+  print's hulls are read with -- every library those files import). An edit anywhere else -- the server, a document type, another process, a release
   that touched none of them -- leaves a kept measurement standing.
 
 So a check that reads the same parts the same way measures nothing (`kept.measure_key`; the engine's README,
@@ -72,10 +77,12 @@ The answer is always the asking check's own -- its process, its options as resol
 finding -- and its rules are run again each time: no verdict is kept. A report is kept whole or with a family
 not measured (the same code makes the same of the same parts); never a document that did not read, one with no
 part a process makes, nor a report its measurer says the next measurement could make otherwise (`transient`:
-molding's release search out of its seconds, a family that failed for memory, or a table of the report that
-says of itself `repeatable: false` -- a CNC report's `holes.recognition` where the holes' recognition fell back
-for a reason the next check may not meet; such a report is answered and measured again the next time, and a
-table that says true, or nothing of it, is repeatable). 128 results and 64 MB at most are held in
+molding's release search out of its seconds; a family that failed for want of memory, by any of the names it
+goes by; a print's hull that took its other way for want of memory; the kernel's validity check raising on a
+part, which leaves the report silent on what it would have said; or a table of the report that says of itself
+`repeatable: false` -- a CNC report's `holes.recognition` where the holes' recognition fell back for a reason
+the next check may not meet; such a report is answered and measured again the next time, and a table that says
+true, or nothing of it, is repeatable). 128 results and 64 MB at most are held in
 the engine's memory, and they are written under `checks/` in its cache folder, bounded, so a restarted engine
 finds them.
 

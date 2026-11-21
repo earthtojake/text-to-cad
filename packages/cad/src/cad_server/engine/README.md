@@ -1099,7 +1099,7 @@ in any Python) resolves the options and asks the engine (`api.check`): an `expor
 library's code, every source file of the cad package -- a `.py`, or the `.pyc` an install of bytecode alone holds
 in its place -- the digest of the files that measure each manufacturing process alone (`dfm`, `_measuring.DFM`:
 what a kept measurement is found by), and the versions of the libraries a B-rep check measures with -- build123d,
-OCP, bd_materials, numpy -- taken once, when the caller first asks a check, and at once as a checks process starts, before
+OCP, bd_materials, numpy, scipy: every library the measuring files import -- taken once, when the caller first asks a check, and at once as a checks process starts, before
 anything a check measures with loads; never as `cad.engine` is imported, which costs nothing for it. It is the code
 as the process loaded it: a source file changed since the library began to load there (`cad._LOADED_NS`) makes it
 a code no other process has, so no process measures for it. A process with no kernel, the `cad` command's, names
@@ -1174,11 +1174,13 @@ measurement would read of it, its content record (`_dfm_brep.content`: each part
 occurrences stand, the token of any mesh it was read with, its declared material's physics and process; never
 its bytes, its path or its look), measuring nothing. To **measure** it (`held`): for the process the check
 names and with the options that process's measurement reads alone (`cad._internal.dfm.kept.measuring`: each
-process declares them, `MEASURES`, and a read of any other fails the check), each part on a copy that shares
+process declares them, `MEASURES`, and is handed a table of those and no other), each part on a copy that shares
 nothing with the document read. It answers the report (`checked`, with the release that measured it and whether
 it read the document anew: `read`), the key of the record of the very parts it measured (`content_key`), and
 `transient` beside a report the next measurement could make otherwise (`_dfm_check._transient`: molding's
-release search out of its seconds; a family that failed for memory; a table of the report that says of itself
+release search out of its seconds; a family that failed for want of memory, by any of its names, and a print's
+hull that took its other way for it; the kernel's validity check raising on a part, which leaves the report
+silent on what it would have said; a table of the report that says of itself
 `repeatable: false`, wherever it lies -- a CNC report's `holes.recognition`, where the holes' recognition fell
 back for a reason the next check may not meet: its helper's environment not made yet, an answer that timed out
 -- while one that says true, or nothing of it, is repeatable). The caller finishes the report into its result; every finding's
@@ -1223,7 +1225,9 @@ that fails its rules:
 A request that is no check -- a process the type has none of, options not resolved -- is refused in one line
 before anything is read. The same check asked while it runs waits for it (`Runner.running`, by document, version
 and check), says so ("waiting for the same manufacturing check, started 21 s ago") and answers with its answer
--- its result, or its failure -- so it is measured once. Two checks that read one measurement and differ beside
+-- its result, or its failure -- so it is measured once. A manufacturing check of a file is the same only under
+the name its alias is by: a hard link under another name is one file to the pool and, where the document's root
+has no name and takes the file's, another document, so it is described and answered as itself. Two checks that read one measurement and differ beside
 (another material, another path) are not the same check there: asked at once, each waits for a process of its
 own, and each looks once more, as it gets its process, for what the other described and kept meanwhile -- so
 with one process free they measure once, and with two they may measure twice, the second in the first's place.
@@ -1236,11 +1240,19 @@ are never kept: the caller judges the report each time (`manufacturing.finish`).
 1. **The version.** A model's generation, read before its bytes and again after; the digest of a file's bytes.
 2. **What the version holds**, its content record: the one kept for it (its *alias*), else the one a checks
    process says of it, asked to describe it under the check's lease, kept from then on. A model's alias is by
-   its id and its revision, its build closure's key (a build with no key by its generation, in memory alone);
+   its id, its revision (its build closure's key) and a digest of the build's facts as the engine holds them
+   (`Daemon._check_built`; a build with no key, or none known of, by its generation, in memory alone);
    a file's by its bytes' digest with its name's stem and suffix, which are all of its path a read takes (an
    unnamed root is named by the stem), so the same bytes under the same name anywhere are known with no process
    asked. An alias is kept with the code and libraries that described it, and is served to a caller that process
-   would describe for: after an edit to the library, or a release, a version is read once more.
+   would describe for: after an edit to the library, or a release, a version is read once more. The facts are
+   in a model's alias because a build is not always a function of its closure: one that reads its environment,
+   an argument or a clock can make other parts at a revision the model had before (after an edit undone, or a
+   deletion), and a check answered from what was kept asks no process to notice. By its facts -- its parts'
+   geometry keys and counts, their looks and materials, its bounds and joints -- such a build is another
+   version, and is read again; and a deleted document's aliases go with it. Two builds at one revision that
+   agree in all of those are taken for one document: a part renamed, or moved within the same bounds, by what
+   no closure holds is not seen until a process is asked.
 3. **What the check asks**, from the record alone, in the daemon, with no kernel (`kept.asked`): the process
    named, or for a check given none the one the parts declare and its options resolved for it
    (`manufacturing.declared`, with the finding that says so); a record of no part is `document_empty`, and
@@ -1266,25 +1278,32 @@ a release that changed none of that process's measuring code.
 A result is kept with what measured it -- the digest of its process's measuring code and the libraries'
 versions -- and is served to a caller whose own digest for that process and libraries are those
 (`contract.measures_for` over the two): a caller of another library's version is measured again, the new result
-in the old one's place, and a caller with no kernel, which names no library, is served whatever its code
-measured. The live handshake is unchanged: a process measures, and describes, only for a caller of its own
+in the old one's place. A caller with no kernel, the `cad` command's, names no library: it is answered by what
+the checks processes measure with now, where the pool knows it (`Pool.known`), so after the base is made again
+with another library an alias or a result of the one before is not served to it either; where the pool does
+not know yet -- no checks process has started since the engine did -- whatever its code measured serves it.
+The live handshake is unchanged: a process measures, and describes, only for a caller of its own
 release, whole code and libraries. A report is kept under the key of the record its measurer says it measured;
 where that is not the record the check was resolved from -- the alias told wrong, the file was rewritten between
-its describing and its measuring -- nothing of it is kept or answered, the alias is forgotten and the check is
-asked again, as of a document that changed. A version that differs after the check keeps nothing either.
+its describing and its measuring -- nothing of it is answered, the alias is forgotten, the report is kept
+under the key it said, and the check is asked again, as of a document that changed, where it finds it. A version
+that differs after the check keeps nothing.
 
 In memory the store holds 1024 aliases and 32 MB of them, 128 results and 64 MB, least recently used first. On
 disk it is under `<cache>/checks/`: `checks/models/<id>/<revision's digest>.json`, a model's aliases, the 8 most
-recently used; `checks/files/<xx>/<token's digest>.json`, the files' aliases, 4096 and 32 MB at most; and
+recently used, and the models' together 4096 and 32 MB at most; `checks/files/<xx>/<token's digest>.json`, the
+files' aliases, 4096 and 32 MB at most; and
 `checks/results/<xx>/<record's key>-<measurement's digest>.json`, 1024 and 256 MB at most, each written whole,
 the least recently used (by its time on disk, set again by a read) going first. An entry that does not read as
 what its name says -- not the JSON written, another format, another token's or measurement's under its name,
-a record whose key is not its own -- is removed, never served. The files' aliases and the results are listed
-once each, at their first use, the half-written ones a stopped engine left swept then; one gone since leaves
+a record whose key is not its own -- is removed, never served. Each of the three is listed
+once, at its first use, the half-written files a stopped engine left swept then; one gone since leaves
 the list as it is asked for; and a cache folder that cannot be written keeps nothing there. Deleting a document
-(`Registry.delete`, `FORGOTTEN`) removes its own aliases, in memory and `checks/models/<id>/`, written under the
-registry's lock of the document, so a check of it that began before names none; the results are no document's,
-and go by their bounds or with the cache (`cad cache clean`).
+removes its own aliases: `checks/models/<id>/` goes with the document's other folders, removed by the registry
+itself (`Registry.delete`), so by `cad delete` with no server running as by an engine; an engine that runs is
+told (`FORGOTTEN`) and drops what it holds of them in memory. They are read and written under the registry's
+lock of the document, so a check of it that began before neither names an alias nor takes one from disk into
+memory. The results are no document's, and go by their bounds or with the cache (`cad cache clean`).
 
 **What is kept of an interference check** (`checks.py`), which keeps each pair's answer by the two parts'
 geometries itself: its result whole, by the document's version -- a model's generation, a file's bytes' digest
@@ -3991,6 +4010,12 @@ Why that holds, checked:
   `test_memo_marker.py` holds the same for a cold build, a replay and a second cold build.
 - **`verify=True` reads it as `same`.** A leaf whose BRep differs only in order measures alike
   (**Memo functions**): a verification reports it `same`, never `differs`.
+
+One more is accepted of a file no engine wrote. An xbf made by hand that claims, for several prototypes, a
+geometry key one of them does not reproduce is read with one combined key for all of them
+(`document._checked_keys`): two such files that differ only by which mis-claimed geometry is which part's read as
+one content record, and so as one manufacturing measurement. No xbf the engine writes claims a key its geometry
+does not reproduce.
 
 The snapshot's part listing (0.7's `--mode list`) is gone by decision: `xbf.read` and `step.read`
 (a document's tree) and `cad xbf inspect DOC REF` (what a ref names) are the facts route.
