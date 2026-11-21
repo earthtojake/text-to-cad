@@ -106,7 +106,10 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   the logo's mark centred in its tile, and the name's button as tall, sized by its text, its text and chevron 10px in
   from its edges as an icon is in its tile. A fill comes only under a pointer that hovers (Tailwind's `hover:`, inside
   `@media (hover: hover)`) or while a control's menu is open, and the ring only for keyboard focus (`:focus-visible`),
-  so a finger's tap leaves neither behind. Right,
+  so a finger's tap leaves neither behind. A tap opens a menu (the logo's, the ⋯, View) and it stays open: a menu opens
+  on its button's press, and focus then landing on that button (iOS gives a tapped button focus at the tap's click,
+  after the menu has opened) is not focus leaving the menu (`primitives/dropdown-menu.jsx`); a second tap on it shuts
+  it. Right,
   only what a host or a file adds, in this order: first, while
   a person has put an alert card away, the card's own icon (a circle
   with an exclamation mark, red for an error and amber for a warning, named and hinted by
@@ -1293,7 +1296,16 @@ Quick Edit is the same bar across the view's bottom, above the safe area (see
 1rem. The shortcut hint is hidden.
 Touch works for every tool: one finger orbits, two pan and
 zoom, a tap picks; a pinch, a cancelled pointer or a camera drag is never a
-pick.
+pick. What a mouse says with a button a finger says with time, in ONE place for every 2D and 3D view
+(`kit/viewport/touchGestures.js`, on the view's frame), said back in the mouse's words so the view's own handlers stay
+the only ones: a **double tap** (two taps, each lifted within 350ms and moved 10px at most, the second within 300ms and
+24px of the first) is a **double-click** at that point, the same hit test and the same action (a part isolated or
+looked at, empty space fitted, a board's or a sheet's double-click), the browser's own double-click for it, where it
+sends one, dropped; a **long press** (one finger held 500ms, moved 10px at most) is a **right-click**: the view's menu
+at the finger, what the press started on the canvas (an orbit, a box) cancelled and its lift and click reaching
+nothing (a browser's own `contextmenu` for it opens nothing more). A second finger, or a move past the slop, makes
+either nothing: a pinch is never a double tap. The picture's canvases take no iOS callout and select no text
+(`globals.css`).
 
 ### A board in 3D
 
@@ -2112,7 +2124,10 @@ name's halo the backdrop's too; Preview's settings panel, on a surface of its ow
 video player's controls do (`usePreviewIdle`): up as Preview opens, gone after two seconds with no
 pointer movement over the view (counted from the frame that shows them, ending at a frame, so a slow
 GPU's long frame is never idle time; each says `data-state="visible"` or `"hidden"`), and at once when the pointer leaves the view or the window
-(`pointerleave`/`mouseleave` on the view, `blur` of the window), back on the next movement or a tap, and on keyboard focus of
+(`pointerleave`/`mouseleave` on the view, `blur` of the window: a mouse's or a pen's; a finger's lift, which browsers
+send as a leave, and iOS's emulated `mouseleave` after it are no leaving), back on the next movement or a tap (on a
+phone a tap anywhere on the picture shows them for the same two seconds, and a tap while they show starts the count
+again), and on keyboard focus of
 anything in either; they stay while the pointer is on either, while something in one has the
 focus (a menu of theirs open among them) and while the settings are open. Gone, they let presses
 through to the model, and hiding never touches the routine. Under the bar's right end, docked at

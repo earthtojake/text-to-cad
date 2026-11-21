@@ -16,6 +16,7 @@ import { Sheet, SheetContent, SheetTitle } from "@cad/ui/primitives/sheet";
 import { usePhoneSheetPlace } from "./usePhoneSheetPlace.js";
 import { sidebarLayout, toggleSidebar } from "./sidebars.js";
 import { PanelPeekContext, usePanelPeek } from "./usePanelPeek.js";
+import { useTouchGestures } from "../viewport/touchGestures.js";
 import { hasOpenPopup } from "../../../lib/popups.js";
 import { ViewCornerSideProvider, viewCornerSide } from "./ViewCorner.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
@@ -120,6 +121,8 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   </div>;
   const ownRoot = useRef(null);
   const root = rootRef ?? ownRoot;
+  // A finger's double tap and long press on the picture, said as a double-click and a right-click (`touchGestures.js`).
+  useTouchGestures(root);
   const stageRef = useRef(null);
   const topControls = useRef(null);
   const [cornerSide, setCornerSide] = useState("right");

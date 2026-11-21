@@ -56,7 +56,10 @@ async function serve(t, route = () => false) {
     else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  t.after(() => new Promise(resolve => server.close(resolve)));
+  // Closed with its connections: a test's after-hooks run in the order they were added, so this runs before the
+  // page's close, and a request the page still has open (a held or long one) kept `close` waiting for ever: the spec
+  // stalled between tests, idle.
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
   return `http://127.0.0.1:${server.address().port}`;
 }
 
@@ -112,6 +115,103 @@ test('a phone\'s navbar starts regular: 36px controls 4px apart from the row\'s 
       .every(animation => animation.playState === 'finished'), selector);
     assert.deepEqual(await marks(selector), { fill: 'rgba(0, 0, 0, 0)', ring: false }, `${selector}: no fill or ring after a tap`);
   }
+});
+
+// A finger on a phone (`viewport/touchGestures.js`, the navbar's menus, Preview's idle chrome): each navbar menu a tap
+// opens stays open as the tapped button takes focus (iOS gives it focus at the tap's click, after the menu opened on
+// its pointerdown); a held press on the picture opens the viewport's menu at the finger, and a drag opens none; a
+// double tap is a double-click (empty space: Zoom to fit), and the pinch before it is none; in Preview a tap brings the hidden bar back, and the
+// finger's lift does not take it away.
+test('a finger on a phone: the navbar\'s menus stay open, a held press opens the view\'s menu, a double tap fits, a tap shows Preview\'s bar', async (t) => {
+  const origin = await serve(t);
+  const context = await browser.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true, isMobile: true });
+  t.after(() => context.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`${origin}/?file=panel.harness&home=1`);
+  await page.addStyleTag({ content: '#root > div { width: 390px !important; height: 700px !important; }' });
+  const pane = page.getByTestId('one');
+  await pane.locator('[data-viewer-navbar] [data-testid="file-actions"]').waitFor();
+  for (const [selector, name] of [['[data-navbar-menu]', 'app menu'], ['[data-testid="file-actions"]', '⋯'], ['[data-view-menu]', 'View']]) {
+    const trigger = pane.locator(`[data-viewer-navbar] ${selector}`);
+    await trigger.tap();
+    await page.locator('[role=menu]').first().waitFor();
+    // What iOS does next: the tapped button takes focus, at the tap's click.
+    await trigger.evaluate(element => element.focus());
+    await settle(page);
+    assert.equal(await trigger.getAttribute('data-state'), 'open', `${name}: still open once its button has focus`);
+    await page.keyboard.press('Escape');
+    await page.locator('[role=menu]').waitFor({ state: 'detached' });
+  }
+  const canvas = pane.locator('[data-cad-canvas] canvas').first();
+  await canvas.waitFor();
+  const box = await canvas.boundingBox();
+  const cdp = await context.newCDPSession(page);
+  const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([x, y]) => ({ x, y })) });
+  const menu = page.getByRole('menuitem', { name: 'Note the press', exact: true });
+  // A drag: moved past the slop before the long press's time, it is the camera's and opens nothing, however long held.
+  const [x0, y0] = [box.x + 60, box.y + 120];
+  await touch('touchStart', [[x0, y0]]);
+  await touch('touchMove', [[x0 + 40, y0 + 10]]);
+  const moved = await page.evaluate(() => performance.now());
+  // Past the long press's time (500ms) and more, measured on the page's own clock.
+  await page.waitForFunction(at => performance.now() - at > 800, moved);
+  assert.equal(await menu.count(), 0, 'a drag opens no menu');
+  await touch('touchEnd', []);
+  // A held press: the menu at the finger, open while the finger is still down.
+  await touch('touchStart', [[x0, y0]]);
+  await menu.waitFor();
+  const anchor = await page.locator('[role=menu]').boundingBox();
+  assert.ok(Math.abs(anchor.x - x0) <= 12 && anchor.y >= y0 - 1, `the menu at the finger: ${JSON.stringify({ anchor, x0, y0 })}`);
+  await touch('touchEnd', []);
+  await settle(page);
+  assert.equal(await menu.count(), 1, 'still open as the finger lifts');
+  await page.keyboard.press('Escape');
+  await page.locator('[role=menu]').waitFor({ state: 'detached' });
+  // A double tap on empty space fits, as a double-click does: a camera moved away comes back to where it opened.
+  const atRest = () => page.waitForFunction(() => new Promise(resolve => {
+    let still = 0, last = null;
+    const step = () => { const c = window.__cadCamera(); const now = JSON.stringify([c.position, c.target, c.zoom]); still = now === last ? still + 1 : 0; last = now; if (still >= 5) resolve(true); else requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }));
+  await atRest();
+  const pose = () => page.evaluate(() => { const c = window.__cadCamera(); return [...c.position, ...c.target, c.zoom]; });
+  const opened = await pose();
+  await page.evaluate(() => window.__cadDoubleClicks = 0);
+  await canvas.evaluate(element => element.addEventListener('dblclick', () => { window.__cadDoubleClicks += 1; }));
+  // Moved away: a two-finger pinch out, zooming in.
+  const [mx, my] = [box.x + box.width / 2, box.y + box.height / 2];
+  await touch('touchStart', [[mx - 20, my], [mx + 20, my]]);
+  for (const step of [20, 40, 60, 80]) await touch('touchMove', [[mx - 20 - step, my], [mx + 20 + step, my]]);
+  await touch('touchEnd', []);
+  await atRest();
+  const turned = await pose();
+  assert.ok(turned.some((value, index) => Math.abs(value - opened[index]) > 1e-3), 'the view moved');
+  const [cx, cy] = [box.x + 20, box.y + box.height - 20];
+  await page.touchscreen.tap(cx, cy);
+  await page.touchscreen.tap(cx, cy);
+  await page.waitForFunction(() => window.__cadDoubleClicks >= 1);
+  await atRest();
+  assert.equal(await page.evaluate(() => window.__cadDoubleClicks), 1, 'one double-click');
+  const fitted = await pose();
+  // Fitted again: the zoom the view opened at (from the direction it is looked at now, as Zoom to fit does).
+  assert.ok(Math.abs(turned[6] - opened[6]) > 1e-3 && Math.abs(fitted[6] - opened[6]) < 1e-3, `the double tap fitted the view again: ${JSON.stringify({ opened, turned, fitted })}`);
+  // Preview: its bar goes when idle; a tap brings it back, and the lift of that finger leaves it up.
+  await pane.locator('[data-view-preview]').tap();
+  const bar = pane.locator('[data-preview-bar]');
+  await bar.waitFor();
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-preview-bar]')?.getAttribute('data-state') === 'hidden');
+  const view = await pane.locator('[data-cad-canvas] canvas').first().boundingBox();
+  await page.touchscreen.tap(view.x + view.width / 2, view.y + view.height / 2);
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-preview-bar]').getAttribute('data-state') === 'visible');
+  await settle(page);
+  await settle(page);
+  assert.equal(await bar.getAttribute('data-state'), 'visible', 'up after the finger lifts');
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-preview-bar]').getAttribute('data-state') === 'hidden');
+  assert.deepEqual(errors, []);
 });
 
 test('a phone\'s tools centre on the viewport as space runs out; its View and Preview are the navbar\'s', async (t) => {

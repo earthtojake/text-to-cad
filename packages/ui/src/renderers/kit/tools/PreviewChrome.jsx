@@ -34,6 +34,9 @@ const cancelFrame = handle => (typeof cancelAnimationFrame === "function" ? canc
 // Focus the keyboard gave (`:focus-visible`), or any where the browser cannot say.
 const keyboardFocus = element => { try { return element.matches(":focus-visible"); } catch { return true; } };
 
+// How long after a finger's press the browser's mouse events for it (iOS's emulated `mouseleave`) are the finger's.
+const TOUCH_MOUSE_MS = 1000;
+
 export function createPreviewIdle() {
   let shown = true, active = false, held = false, root = null, timer, leaving, counting;
   const holders = new Set();
@@ -55,7 +58,12 @@ export function createPreviewIdle() {
   // The pointer gone from the view or the window: down at once, unless something holds it (its
   // settings, the keyboard's focus, or the pointer on a menu of theirs, whose portal is outside the
   // view: the pointer reaches it after leaving, so the check waits for the events of the one move).
-  const leave = () => {
+  // A finger's lift is no leaving: after a touch the browser sends the pointer's (and, on iOS, the mouse's) leave as
+  // the finger goes up, which hid the chrome a tap had just brought up. A finger leaves nothing: its chrome stays its
+  // `PREVIEW_IDLE_MS`, a tap shows it and a tap while it shows starts the count again.
+  let touched = -Infinity;
+  const leave = event => {
+    if (event?.pointerType === "touch" || (event?.type === "mouseleave" && event.timeStamp - touched < TOUCH_MOUSE_MS)) return;
     clearTimeout(leaving);
     leaving = setTimeout(() => { if (active && !holding()) { still(); set(false); } });
   };
@@ -63,11 +71,12 @@ export function createPreviewIdle() {
     if (!element) return;
     const method = on ? "addEventListener" : "removeEventListener";
     element[method]("pointermove", wake);
-    element[method]("pointerdown", wake);
+    element[method]("pointerdown", press);
     element[method]("pointerleave", leave);
     element[method]("mouseleave", leave);
     if (typeof window !== "undefined") window[method]("blur", leave);
   };
+  function press(event) { if (event.pointerType === "touch") touched = event.timeStamp; wake(); }
   const hold = (key, on) => {
     if (holders.has(key) === on) return;
     if (on) holders.add(key); else holders.delete(key);

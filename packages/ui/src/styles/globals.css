@@ -88,6 +88,8 @@
    its toggle shuts the sheet, and a press on View, Preview or the name closes it and does what it does
    (`usePhoneSheetPlace.js`). */
 :root:has([data-panel-sheet]) [data-viewer-navbar] { pointer-events: auto; }
+/* A finger held on a view's picture is a long press (its menu, `touchGestures.js`): no iOS callout, no text selected. */
+[data-slot="cad-file-view"] canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 [data-viewer-layout="mobile"] [data-select-trigger], [data-viewer-layout="mobile"] [data-slot="select-trigger"] { min-height: 36px; }
 /* A slider anywhere on a phone (the slider control, in the panel or a tool's row, and the scrubber):
  * a 36px band to press in — the band takes the finger, so the thumb need only be seen: 16px. The selected ink's
