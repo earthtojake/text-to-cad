@@ -13,6 +13,8 @@ import { createContext, useContext, useEffect } from "react";
  * @property {string} label  Its name now ("Hide panel", "Show panel").
  * @property {string} [shortcut]  Its key, for the tooltip ("⌘\\").
  * @property {() => void} toggle
+ * @property {object | null} [hover]  Its pointer handlers (`onPointerEnter`, `onPointerLeave`, `onPointerDown`): a mouse
+ *   resting on it peeks the collapsed panel (`renderers/kit/shell/usePanelPeek.js`).
  *
  * @typedef {{ left?: PanelToggle | null }} PanelToggles  The panel's toggle (`left`: the panel is the left sidebar).
  */

@@ -305,11 +305,13 @@ export function SidebarIcon(props) {
 /**
  * The panel's toggle, the row's first control: the strip's 28px tile, the same neutral button whether its panel is
  * open or shut (no pressed fill: the panel beside the model says which), its state said to assistive technology
- * (`aria-expanded`), its tooltip its name ("Hide panel", "Show panel") and its key.
+ * (`aria-expanded`, the panel pinned open or not; a peek is not said), its tooltip its name ("Hide panel", "Show panel")
+ * and its key, at its right, on the navbar's row, so it never stands over the panel peeking under it. A mouse resting
+ * on it peeks the collapsed panel (`toggle.hover`, the frame's `usePanelPeek.js`).
  */
 function PanelToggleButton({ toggle }) {
-  return <ToolbarButton label={toggle.label} shortcut={toggle.shortcut || ""} tooltipSide="bottom" expandedTooltip
-    aria-expanded={toggle.open} onClick={toggle.toggle}
+  return <ToolbarButton label={toggle.label} shortcut={toggle.shortcut || ""} tooltipSide="right" expandedTooltip
+    aria-expanded={toggle.open} onClick={toggle.toggle} {...(toggle.hover ?? null)}
     className="size-7 shrink-0 rounded-md text-muted-foreground [&>svg]:size-4!" data-navbar-panel="left">
     <SidebarIcon />
   </ToolbarButton>;
@@ -336,7 +338,7 @@ function PanelToggleButton({ toggle }) {
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
  * @param {{ left(element: HTMLElement | null): void, right(element: HTMLElement | null): void } | null} [props.homeSlots]
  *   Over the home: where its controls go (`../navbarSlots.js`), two slots on the grid's column.
- * @param {{ left?: { open: boolean, label: string, shortcut?: string, toggle(): void } | null } | null} [props.panels]
+ * @param {{ left?: { open: boolean, label: string, shortcut?: string, toggle(): void, hover?: object | null } | null } | null} [props.panels]
  *   The view's panel toggle, where it has a panel (`../panelToggles.js`).
  * @param {((element: HTMLElement | null) => void) | null} [props.viewSlot] Over a file: where its view puts its view settings
  *   (`../navbarSlots.js`'s `NavbarViewSlotContext`).

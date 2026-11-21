@@ -143,7 +143,7 @@ DXF's are its own canvas's. Nothing a renderer does opens or closes the explorer
 file's name opens that). The layout a person gives the tool stack's panels is one
 of the tab's settings (`settings.toolStack` of the tab record, `@cad/ui/tab-store`),
 beside the appearance and the home's layout; the panel — open or collapsed by the person (a collapse the
-view's width made is not kept), its width and its tab — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
+view's width made is not kept, nor a peek), its width and its tab — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
 into the renderer's record by `FileViewer`).
 The model area is drawn in **the viewport's theme**, not the host's `colorScheme`: the person's Background
 (`settings.viewportBackground` of the tab record: Light by default, Dark, Theme), resolved by
@@ -525,8 +525,9 @@ default, the web viewer's, and every view of the CAD app's: its sidebar, tabs, c
 no navbar at all, over a file or a page that will not open, and what a host still adds is its own, as its notice at the
 viewport's top-right (`notice`); no host hands it today, since the navbar holds the panel's toggle. **The view's
 panel toggle is the navbar's** (`file-viewer/panelToggles.js`): the view's frame says it (`usePanelToggles`), and the
-navbar draws it first, before the logo, the same neutral button open or shut (`aria-expanded` says which); a collapsed
-panel leaves nothing over the model.
+navbar draws it first, before the logo, the same neutral button open or shut (`aria-expanded` says which, pinned or
+not), with the pointer handlers the frame hands with it (`hover`): a mouse resting on it peeks the collapsed panel over
+the model, pushing nothing, until the pointer leaves both; otherwise a collapsed panel leaves nothing over the model.
 In Preview, in
 every host, the navbar steps aside for Preview's own bar. Over the home the navbar has the logo and its menu (no Back
 to home), Back and Forward where the host hands a `history`, then the home's own controls on the grid's column —
@@ -620,8 +621,9 @@ not open that file" and the reason otherwise, each with a Go home button where t
 
 The viewport's edges and corners are the shell's, never the host's: the tool strip at the
 top centre of the window, ending in Preview (a 3D view's), the tool in hand's sub-toolbar under it, the one panel
-(the file's structure, then its Parameters, Joints and Animation, as tabs) docked at the left, always pushing the model
-aside (collapsed on its own under 700px of view), Quick Edit's bar at the bottom centred on the window as the strip is
+(the file's structure, then its Parameters, Joints and Animation, as tabs) docked at the left, pinned open always pushing
+the model aside (collapsed on its own where it would leave the model under 640px; a mouse resting on its toggle peeks
+it over the model, pushing nothing), Quick Edit's bar at the bottom centred on the window as the strip is
 (the panel never moves either; where they meet it they sit above it), the bottom row Quick Edit's alone, and at the
 top-right the view cube (a 68px box at the corner's 12px inset) with its Home attached to the drawn cube, or a flat
 view's zoom pill. Under a file's navbar the view's settings are the navbar's right end — **View ▾**, one menu of every

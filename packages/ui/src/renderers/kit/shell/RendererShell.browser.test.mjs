@@ -1086,6 +1086,35 @@ test('the panel always pushes, and starts collapsed where the model would keep u
   await pane.locator('[data-navbar-panel="left"]').click();
   assert.equal(await mode(), 'closed');
   assert.ok(/"open":false/.test(await kept()));
+  // A mouse resting on the toggle peeks it: over the view, the canvas the size it was and the camera where it was;
+  // a click then pins it, and the canvas narrows by the panel's width, as it always has.
+  const view = () => page.evaluate(() => {
+    const pane = document.querySelector('[data-testid="one"]');
+    const stage = pane.querySelector('[data-cad-canvas]').getBoundingClientRect(), canvas = pane.querySelector('canvas').getBoundingClientRect();
+    const aside = pane.querySelector('aside[data-flat-panel]'), box = aside.hidden ? null : aside.getBoundingClientRect();
+    // The camera to a millionth: a float's last digit may come out of a fresh read alone.
+    const camera = window.__cadCamera(), round = value => Math.round(value * 1e6) / 1e6;
+    return { stage: [stage.left, stage.width], canvas: [canvas.width, canvas.height],
+      camera: camera && [...camera.position, ...(camera.target || []), camera.zoom, camera.aspect].map(round),
+      over: Boolean(box && box.right > stage.left + 1 && document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.closest('aside[data-flat-panel]')) };
+  });
+  await page.mouse.move(700, 400);
+  await settle(page);
+  const before = await view();
+  await pane.locator('[data-navbar-panel="left"]').hover();
+  await pane.locator('aside[data-panel-peek]').waitFor();
+  await settle(page);
+  await settle(page);
+  const peeked = await view();
+  assert.deepEqual([peeked.stage, peeked.canvas, peeked.camera, peeked.over, await mode()], [before.stage, before.canvas, before.camera, true, 'closed'],
+    `a peek pushes nothing: ${JSON.stringify({ before, peeked })}`);
+  assert.ok(!/"open":true/.test(await kept()), 'a peek is kept nowhere');
+  await pane.locator('[data-navbar-panel="left"]').click();
+  await waitMode('push');
+  await settle(page);
+  const pinned = await view();
+  assert.deepEqual([pinned.stage[0] - before.stage[0], before.canvas[0] - pinned.canvas[0], pinned.over], [256, 256, false], `pinned, it pushes: ${JSON.stringify(pinned)}`);
+  assert.ok(/"open":true/.test(await kept()));
   assert.deepEqual(errors, []);
 });
 

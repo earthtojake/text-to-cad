@@ -3,8 +3,9 @@
 // Animation). How it shares the view, as design and CAD tools do (Figma, Sketch, VS Code, KiCad):
 //
 // - Its toggle is the navbar's, and its key ⌘\ (Ctrl+\ elsewhere).
-// - It always pushes: open, it takes its width beside the model, the model's area the narrower for it (the model
-//   centred in what is left); nothing overlays the model at any width.
+// - Pinned open, it always pushes: it takes its width beside the model, the model's area the narrower for it (the
+//   model centred in what is left). The one thing that overlays the model is a peek of the collapsed panel, a mouse
+//   resting on its toggle (`usePanelPeek.js`), which this module never sees: it pushes nothing and is kept nowhere.
 // - It starts open only where the model keeps `MIN_MODEL_WIDTH` beside it (the view at least that and the panel's width:
 //   896px with the 256px panel), and collapsed below. That collapse is the width's, never
 //   written, so widening the view brings back the person's choice. Opened over it by the person, it pushes (kept for

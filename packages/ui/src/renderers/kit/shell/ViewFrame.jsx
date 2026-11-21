@@ -1,4 +1,4 @@
-import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
 import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
@@ -14,6 +14,8 @@ import { usePanelToggles } from "../../../file-viewer/panelToggles.js";
 import { ViewerElementContext, ViewerHostContext } from "../../../host/context.js";
 import { Sheet, SheetContent, SheetTitle } from "@cad/ui/primitives/sheet";
 import { sidebarLayout, sidebarWant, toggleSidebar } from "./sidebars.js";
+import { usePanelPeek } from "./usePanelPeek.js";
+import { hasOpenPopup } from "../../../lib/popups.js";
 import { ViewCornerSideProvider, viewCornerSide } from "./ViewCorner.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 import { ViewportTopRight } from "./ViewportTopRight.jsx";
@@ -27,9 +29,11 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *
  * - **The panel** (`sidebars.js`), the one sidebar, at the left (`FlatPanel.jsx`, `panel`; its width and tab the
  *   file's, `filePanel.js`): the file's structure, then the file's own settings (Parameters, Joints, Animation), as
- *   its tabs. It always pushes the model aside (a view that would leave the model under 640px beside it starts it collapsed, unwritten:
+ *   its tabs. Open, it always pushes the model aside (a view that would leave the model under 640px beside it starts it collapsed, unwritten:
  *   `sidebars.js`); ⌘\ (Ctrl+\) toggles it (`panelControl`). Its toggle is the
- *   navbar's (`file-viewer/panelToggles.js`), its first control: a collapsed panel leaves nothing over the model. On a
+ *   navbar's (`file-viewer/panelToggles.js`), its first control: a collapsed panel leaves nothing over the model but
+ *   while a mouse rests on that toggle, when it peeks over the view, pushing nothing (`usePanelPeek.js`), until the
+ *   pointer has left both, Escape, a press on the model, or a click on the toggle (or ⌘\) pins it. On a
  *   phone the same toggle opens it as a sheet from the left (shadcn's Sheet), over the model with a scrim, starting
  *   closed each time: a tap outside it, a swipe back to the left, Escape or its Back put it away. Preview keeps the
  *   docked panel mounted, out of sight, so a tree keeps its state.
@@ -141,14 +145,31 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   stateRef.current = sidebarState;
   // A choice the person made is kept, for the file; a collapse the width made never is.
   const change = flat.change;
+  // A peek (`usePanelPeek.js`): the collapsed panel over the view while a mouse rests on its toggle; never kept.
+  const peek = usePanelPeek({ enabled: has && !mobile && !previewing && mode === "closed" });
+  const closePeek = peek.close;
   const toggle = useCallback(() => {
     const current = stateRef.current;
     if (current.mobile) { if (current.phoneHas) setSheetOpen(open => !open); return; }
     if (!current.has) return;
+    // A click (or ⌘\) while it peeks pins it: the panel opens as a click on a collapsed one always has.
+    closePeek();
     const next = toggleSidebar(current);
     if (next.kept) change({ open: next.want });
     setOpened(next.opened);
-  }, [change]);
+  }, [change, closePeek]);
+  // Escape puts a peek away, before anything else of the view's (the tool in hand, the selection: the view's ladder
+  // leaves it to the peek, `lib/popups.js`), after a popup or the search box in it has spent its own.
+  useEffect(() => {
+    if (!peek.peeking) return undefined;
+    const onKeyDown = event => {
+      if (event.key !== "Escape" || event.defaultPrevented || hasOpenPopup(peek.panelRef.current)) return;
+      event.preventDefault();
+      closePeek();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [peek.peeking, peek.panelRef, closePeek]);
   if (panelControl) panelControl.current = previewing ? null : {
     toggle,
     search: () => {
@@ -159,7 +180,8 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
       return true;
     }
   };
-  const panelNode = has && !mobile ? <FlatPanel mode="docked" open={mode !== "closed"} hidden={previewing} onClose={toggle}
+  const panelNode = has && !mobile ? <FlatPanel mode="docked" open={mode !== "closed" || peek.peeking} peek={mode === "closed" && peek.peeking}
+    surfaceRef={peek.panelRef} surfaceProps={peek.panelHandlers} hidden={previewing} onClose={toggle}
     label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab}
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
   // A phone's: the same panel, its tabs, search and every tab's content, the same components at the same sizes (a tree
@@ -179,8 +201,9 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   const panelOpen = mobile ? sheetOpen : mode === "push";
   const showToggle = has && !previewing;
   const toggles = useMemo(() => (!showToggle ? null : {
-    left: { open: panelOpen, label: t(panelOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: flatPanelShortcut(platform), toggle }
-  }), [showToggle, panelOpen, platform, toggle, t]);
+    left: { open: panelOpen, label: t(panelOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: flatPanelShortcut(platform), toggle,
+      hover: mobile ? null : peek.toggleHandlers }
+  }), [showToggle, panelOpen, platform, toggle, t, mobile, peek.toggleHandlers]);
   // Leaving a phone's width (or Preview) puts its sheet away.
   useLayoutEffect(() => { if (!mobile || previewing) setSheetOpen(false); }, [mobile, previewing]);
   usePanelToggles(toggles);
@@ -249,10 +272,12 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     <InspectContext.Provider value={inspect}>
     <div ref={root} className={cn("relative flex h-full min-h-0 flex-row overflow-hidden bg-canvas text-foreground", className)}
       style={{ ...(viewport?.canvas ? { "--canvas": viewport.canvas } : {}), "--cad-host-corner-right": "var(--cad-viewport-corner-right, 2px)", "--cad-host-corner-left": "var(--cad-viewport-corner-left, 0px)" }}
-      data-viewport-scheme={scheme ?? undefined} data-sidebar={mode}
+      data-viewport-scheme={scheme ?? undefined} data-sidebar={mode} data-sidebar-peek={peek.peeking ? "" : undefined}
       data-slot="cad-file-view" data-cad-surface="" data-cad-selecting={selecting ? "" : undefined} {...surface} tabIndex={-1} {...rootHandlers}
       onPointerDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest("canvas")) return;
+        // A press on the model puts a peek away.
+        closePeek();
         event.currentTarget.focus({ preventScroll: true });
         onCanvasPress?.(event);
       }}>

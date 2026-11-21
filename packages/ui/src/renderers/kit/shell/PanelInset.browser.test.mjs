@@ -241,6 +241,17 @@ for (const file of Object.keys(FILES)) {
       return icon.left - document.querySelector('[data-testid="one"] [data-flat-panel]').getBoundingClientRect().left;
     });
     assert.ok(Math.abs(toggle - INSET) <= 0.5, `${file}: the navbar's toggle's icon at ${toggle}px`);
+    // The collapsed panel peeking over the view (a mouse resting on its toggle) is the same panel, on the same lines.
+    if (file === 'hinge.step') {
+      // Closed by a click, the pointer still on the toggle: it peeks only once the pointer comes to rest on it again.
+      await pane.locator('[data-navbar-panel="left"]').click();
+      await page.mouse.move(900, 600);
+      await pane.locator('[data-navbar-panel="left"]').hover();
+      await pane.locator('aside[data-panel-peek]').waitFor();
+      await settle(page);
+      const peeked = await page.evaluate(measurePanel);
+      assert.deepEqual([peeked.clientWidth, offInset(peeked)], [255, []], 'the peeked panel on the inset');
+    }
     assert.deepEqual(errors, []);
   });
 }
