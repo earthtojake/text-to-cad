@@ -401,10 +401,13 @@ it('a board has its panel from the first frame, open as it stays once the board 
   const toggle = () => loading.pane.querySelector('[data-viewer-navbar] [data-navbar-panel]')?.getAttribute('aria-expanded') ?? null;
   const aside = loading.pane.querySelector<HTMLElement>('aside[data-flat-panel]');
   const first = toggle();
-  expect([first, aside?.querySelector('[data-flat-panel-heading]')?.textContent, within(loading.pane).queryByRole('group', { name: 'Interaction tools' })])
-    .toEqual(['true', 'Parts', null]);
+  // While it loads, the Parts' placeholder rows in a busy tabpanel; gone as the parts arrive.
+  const placeholders = () => aside?.querySelectorAll('[role="tabpanel"][aria-busy="true"] [data-tree-row-placeholder]').length ?? 0;
+  expect([first, aside?.querySelector('[data-flat-panel-heading]')?.textContent, within(loading.pane).queryByRole('group', { name: 'Interaction tools' }), placeholders()])
+    .toEqual(['true', 'Parts', null, 6]);
   await act(async () => { answer!(json(BOARD)); });
   await opened(loading.pane);
+  await waitFor(() => expect(placeholders()).toBe(0));
   expect(toggle()).toBe(first);
   loading.dispose();
   cleanup();

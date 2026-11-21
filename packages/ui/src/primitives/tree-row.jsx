@@ -168,3 +168,27 @@ export function TreeRowGuides({ depth, inset = 0, column = 12 }) {
   return Array.from({ length: depth }, (_, level) => <span key={level} aria-hidden='true' data-tree-guide=''
     className='pointer-events-none absolute inset-y-0 w-px bg-border' style={{ left: inset + level * TREE_INDENT_PX + column / 2 - 0.5 }} />);
 }
+
+// The names' widths of the loading rows, as shares of the room after the glyph: uneven, so they read as a list.
+const LOADING_NAME_WIDTHS = Object.freeze([62, 44, 74, 36, 56, 30]);
+
+/**
+ * Where a tree's rows will stand while its file is still loading and it has none to show: placeholder rows in the
+ * rows' own geometry (`TreeRowSurface`'s height, padding and hang, so each glyph block stands where a row's glyph does
+ * and each bar where its name starts), a block the glyph's size and a bar for the name, of a few widths, fading out
+ * downwards, in the muted ink, pulsing gently where motion is welcome and still where it is not. Nothing in it is a row
+ * (`data-tree-row`): it is drawn only until rows arrive. `label`: what assistive technology hears instead ("Loading").
+ * @param {{ label: string, rows?: number }} props
+ */
+export function TreeRowsLoading({ label, rows = LOADING_NAME_WIDTHS.length }) {
+  const height = useTreeRowHeight();
+  return <div role='status' className='motion-safe:animate-pulse' data-tree-rows-loading=''>
+    <span className='sr-only'>{label}</span>
+    {LOADING_NAME_WIDTHS.slice(0, rows).map((width, at) => <div key={at} aria-hidden='true' data-tree-row-placeholder=''
+      className='relative flex min-w-0 items-center gap-1'
+      style={{ height, paddingLeft: PAD, marginInline: `calc(${HANG} * -1)`, width: `calc(100% + 2 * ${HANG})`, opacity: 1 - at * 0.16 }}>
+      <span className={SLOT_CLASS}><span className='block rounded-[3px] bg-muted-foreground/20' style={{ width: GLYPH, height: GLYPH }} data-tree-row-placeholder-glyph='' /></span>
+      <span className='block h-2 rounded-full bg-muted-foreground/20' style={{ width: `${width}%` }} data-tree-row-placeholder-name='' />
+    </div>)}
+  </div>;
+}

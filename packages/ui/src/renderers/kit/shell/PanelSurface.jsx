@@ -37,6 +37,13 @@ const PEEK_CARD_STYLE = Object.freeze({ inset: `${PANEL_PEEK_GAP_PX}px ${PANEL_P
 // The content, clipped to the card's inside (within its 1px border): the head's rule, a scrolled row and the sticky
 // actions foot end inside the card, never past its rounded corners.
 const PEEK_CONTENT_STYLE = Object.freeze({ clipPath: `inset(${PANEL_PEEK_GAP_PX + 1}px ${PANEL_PEEK_GAP_PX}px ${PANEL_PEEK_GAP_PX + 1}px ${PANEL_PEEK_GAP_PX + 1}px round ${PANEL_PEEK_RADIUS_PX - 1}px)` });
+/**
+ * A peek arrives sliding in from the window's left edge and goes sliding back out, the card and all it holds moving as
+ * one (a transform: nothing is laid out again, the view under it untouched), at the chrome's menus' pace (tw-animate's
+ * 150ms, eased out coming in and in going out). Where motion is not welcome it appears and goes (`motion-reduce`).
+ */
+const PEEK_IN_CLASS = "animate-in slide-in-from-left duration-150 ease-out motion-reduce:animate-none";
+const PEEK_OUT_CLASS = "animate-out slide-out-to-left fill-mode-forwards duration-150 ease-in motion-reduce:animate-none";
 const HALF_INSET = "calc(var(--panel-inset) / 2)";
 // A row's fill hangs half the inset out past the line and its glyph stands half the inset into it; its last action's
 // glyph ends the inset from the panel's right (half the inset, less that button's own 2px).
@@ -107,10 +114,11 @@ export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
  *   `headInsets`: how far the head's first and last boxes hang out past the inset (their own padding: a tab's pill's,
  *   an icon button's), so what they hold stands on it. `peek`: a collapsed panel shown over the view, at its docked
  *   place and width, taking no room (`data-panel-peek`): a card inside that box (`PANEL_PEEK_GAP_PX`), its content where
- *   the docked panel's is. Other props (`data-*`, handlers) go on the `<aside>`.
+ *   the docked panel's is, sliding in; `peekLeaving`, that peek sliding out (`data-panel-peek-leaving`), and
+ *   `onPeekExited` once it is out. Other props (`data-*`, handlers) go on the `<aside>`.
  */
 export function PanelSurface({ mode, label, open, hidden = false, width, grip, gripLabel, head, headRule = true, headCompact = false, headStack = false, headRef, headProps = {},
-  headInsets = NO_HEAD_INSETS, scrollerRef, scrollerProps = {}, onKeyDown, peek = false, asideRef, children, ...props }) {
+  headInsets = NO_HEAD_INSETS, scrollerRef, scrollerProps = {}, onKeyDown, peek = false, peekLeaving = false, onPeekExited, asideRef, children, ...props }) {
   const page = mode === "page";
   const peeking = mode === "push" && peek;
   const headNode = head === null ? null : <div ref={headRef} className={cn("box-content flex shrink-0 gap-1 border-b", headStack ? "flex-col items-stretch" : "items-center", headStack ? null : headCompact ? "h-7" : "h-8", headRule ? "border-border" : "border-transparent")}
@@ -121,10 +129,11 @@ export function PanelSurface({ mode, label, open, hidden = false, width, grip, g
       {children}
     </ScrollArea>;
   return <aside ref={asideRef} aria-label={label} data-panel-surface={page ? "page" : "docked"} data-open={open ? "" : undefined} hidden={!open || hidden}
-    data-panel-peek={peek && open && !hidden ? "" : undefined} onKeyDown={onKeyDown} {...props}
+    data-panel-peek={peek && open && !hidden ? "" : undefined} data-panel-peek-leaving={peeking && peekLeaving ? "" : undefined} onKeyDown={onKeyDown} {...props}
+    onAnimationEnd={peeking && peekLeaving ? event => { if (event.target === event.currentTarget) onPeekExited?.(); } : undefined}
     className={cn("flex min-h-0 flex-col text-ui text-foreground", !peeking && "bg-sidebar",
       mode === "push" && !peek && "relative h-full shrink-0 border-r border-border",
-      peeking && "absolute inset-y-0 left-0 z-40 border-r border-transparent",
+      peeking && "absolute inset-y-0 left-0 z-40 border-r border-transparent", peeking && (peekLeaving ? PEEK_OUT_CLASS : PEEK_IN_CLASS),
       page && "absolute inset-0 z-50")}
     style={page ? PANEL_ROW_VARIABLES : { ...PANEL_ROW_VARIABLES, width }}>
     {peeking ? <>

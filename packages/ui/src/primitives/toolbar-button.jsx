@@ -28,7 +28,8 @@ export function ToolbarTooltipScope({ enabled = true, children }) {
  * design tool's tooltips show it, and is the button's `aria-keyshortcuts`. `active`: the tool in hand,
  * in the strip's pressed fill (neutral), its icon in the brand's icon colour (`--brand-icon`), with no tooltip (it is chosen already).
  * An expanded button (`aria-expanded`, a menu's trigger with its menu open) has no tooltip either, unless what it expands
- * is not over it (`expandedTooltip`: the navbar's panel toggle, whose panel opens beside the model).
+ * is not over it (`expandedTooltip`: the navbar's panel toggle, whose panel opens beside the model). `tooltipHidden`
+ * closes its tooltip and keeps it closed (the panel toggle's while its panel peeks: the tip has done its job).
  * @param {{ label: string, active?: boolean, tooltip?: boolean | string, tooltipSide?: "top" | "right" | "bottom" | "left",
  *   className?: string, shortcut?: string, children?: import("react").ReactNode } & import("react").ButtonHTMLAttributes<HTMLButtonElement>} props
  */
@@ -39,12 +40,13 @@ export function ToolbarButton({
   tooltipSide = "bottom",
   shortcut = "",
   expandedTooltip = false,
+  tooltipHidden = false,
   className,
   children,
   ...props
 }) {
   const tipsVisible = useContext(ToolbarTooltipVisibility);
-  const tipEnabled = tipsVisible && tooltip && !active && !props.disabled && (expandedTooltip || props["aria-expanded"] !== true);
+  const tipEnabled = tipsVisible && tooltip && !tooltipHidden && !active && !props.disabled && (expandedTooltip || props["aria-expanded"] !== true);
   const button = (
     <Button
       type="button"

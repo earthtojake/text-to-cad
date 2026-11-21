@@ -310,10 +310,11 @@ export function SidebarIcon(props) {
  * open or shut (no pressed fill: the panel beside the model says which), its state said to assistive technology
  * (`aria-expanded`, the panel pinned open or not; a peek is not said), its tooltip its name ("Hide panel", "Show panel")
  * and its key, at its right, on the navbar's row, so it never stands over the panel peeking under it. A mouse resting
- * on it peeks the collapsed panel (`toggle.hover`, the frame's `usePanelPeek.js`).
+ * on it peeks the collapsed panel (`toggle.hover`, the frame's `usePanelPeek.js`); once the peek is up its tooltip goes,
+ * and stays away while it is (`toggle.peeking`): the panel is showing, which is what the tip offered.
  */
 function PanelToggleButton({ toggle }) {
-  return <ToolbarButton label={toggle.label} shortcut={toggle.shortcut || ""} tooltipSide="right" expandedTooltip
+  return <ToolbarButton label={toggle.label} shortcut={toggle.shortcut || ""} tooltipSide="right" expandedTooltip tooltipHidden={toggle.peeking === true}
     aria-expanded={toggle.open} aria-disabled={toggle.disabled || undefined} onClick={toggle.disabled ? undefined : toggle.toggle} {...(toggle.hover ?? null)}
     className="size-7 shrink-0 rounded-md text-muted-foreground [&>svg]:size-4!" data-navbar-panel="left">
     <SidebarIcon />

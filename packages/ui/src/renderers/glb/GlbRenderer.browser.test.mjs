@@ -507,6 +507,9 @@ test('a GLB\'s tools: Select picks a node into Quick Edit, Measure reads metres 
   assert.deepEqual(errors, []);
 });
 
+// While the file loads, a structure tab with no row shows the panel's placeholder rows, its tabpanel busy.
+const loadingRows = scope => scope.locator('aside[data-flat-panel] [role="tabpanel"][aria-busy="true"] [data-tree-row-placeholder]');
+
 test('a GLB has its Model tab from the first frame, open as it stays once the file is in; one with no node lists the file', async (t) => {
   // Wide enough that the panel starts open beside the model (it keeps 640px).
   const release = hold('bare.glb');
@@ -517,13 +520,14 @@ test('a GLB has its Model tab from the first frame, open as it stays once the fi
   const first = await toggle.getAttribute('aria-expanded');
   // Past the update status's delay: a first load is the loading cover's to say, never "Updating view…".
   await page.clock.runFor(1000);
-  assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await panel.locator('[data-scene-node]').count(),
-    await pane.locator('[data-view-update-status]').count()], ['true', true, 0, 0], 'open, the file still loading, its list empty, no update status');
+  assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await panel.locator('[data-scene-node]').count(), await loadingRows(pane).count(),
+    await pane.locator('[data-view-update-status]').count()], ['true', true, 0, 6, 0], 'open, the file still loading, its placeholder rows, no update status');
   release();
   await ready(pane);
   const row = panel.locator('[data-scene-node="file"]');
   await row.waitFor();
-  assert.deepEqual([await row.innerText(), await row.locator('button[aria-pressed]').count()], ['bare.glb', 0], 'the file\'s one row, which picks nothing');
+  assert.deepEqual([await row.innerText(), await row.locator('button[aria-pressed]').count(), await loadingRows(pane).count()], ['bare.glb', 0, 0],
+    'the file\'s one row, which picks nothing, in the placeholders\' place');
   assert.equal(await toggle.getAttribute('aria-expanded'), first, 'the panel as it was at the first frame');
   assert.deepEqual(errors, []);
 });

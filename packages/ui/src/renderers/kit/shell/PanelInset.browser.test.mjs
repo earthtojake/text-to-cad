@@ -31,6 +31,8 @@ const DRAWING = readFileSync(new URL('../../dxf/__fixtures__/layered.drawing.jso
 const MESH = readFileSync(join(GLB, 'pair.slide.glb'));
 const FILES = { 'hinge.step': 'step', 'blinky.kicad_pcb': 'kicad_pcb', 'layered.dxf': 'dxf', 'pair.glb': 'glb' };
 const INSET = 16;
+// A drawing's answer held back while a test looks at the panel as the file loads (`held`, released by the test).
+let held = null;
 
 let server, browser;
 before(async () => {
@@ -74,7 +76,7 @@ before(async () => {
     if (rest.endsWith('/version')) return json(response, { version: HINGE.version, patch: null });
     if (rest.endsWith('/structure')) return json(response, STRUCTURE);
     if (rest.endsWith('/plot')) return json(response, BOARD);
-    if (rest.endsWith('/drawing')) return json(response, DRAWING);
+    if (rest.endsWith('/drawing')) return Promise.resolve(held).then(() => json(response, DRAWING));
     if (/\/parts\/[0-9a-f]+\/groups$/.test(rest)) return json(response, { faces: {}, edges: {} });
     const part = /\/parts\/([0-9a-f]+)$/.exec(rest);
     if (part) { try { return send(response, 'application/octet-stream', readFileSync(join(XBF, 'hinge', `${part[1]}.xbm`))); } catch { /* not a part */ } }
@@ -262,6 +264,8 @@ for (const file of Object.keys(FILES)) {
       await page.mouse.move(900, 600);
       await pane.locator('[data-navbar-panel="left"]').hover();
       await pane.locator('aside[data-panel-peek]').waitFor();
+      // Measured where it comes to rest: once its slide in is over.
+      await page.waitForFunction(() => document.querySelector('[data-testid="one"] aside[data-panel-peek]').getAnimations().every(animation => animation.playState === 'finished'));
       await settle(page);
       const peeked = await page.evaluate(measurePanel);
       assert.deepEqual([peeked.clientWidth, offInset(peeked)], [231, []], 'the peeked panel on the inset');
@@ -273,3 +277,26 @@ for (const file of Object.keys(FILES)) {
     assert.deepEqual(errors, []);
   });
 }
+
+// While a file loads, a structure tab with no row shows placeholder rows on the rows' own lines: each glyph block on the
+// inset, each name's bar where a name starts (16px after the glyph's line), none past the right inset.
+test('a loading tab\'s placeholder rows stand on the inset', async t => {
+  let release;
+  held = new Promise(resolve => { release = resolve; });
+  t.after(() => { release(); held = null; });
+  const { page, pane, errors } = await open(t, 'layered.dxf');
+  await pane.locator('[data-flat-panel] [data-tree-row-placeholder]').first().waitFor();
+  const placed = await page.evaluate(() => {
+    const panel = document.querySelector('[data-testid="one"] [data-flat-panel]'), left = panel.getBoundingClientRect().left;
+    const edges = selector => [...panel.querySelectorAll(selector)].map(node => node.getBoundingClientRect()).map(rect => [rect.left - left, rect.right - left]);
+    return { clientWidth: panel.clientWidth, glyphs: edges('[data-tree-row-placeholder-glyph]'), names: edges('[data-tree-row-placeholder-name]') };
+  });
+  assert.equal(placed.glyphs.length, 6, 'six placeholder rows');
+  const right = placed.clientWidth - INSET;
+  assert.deepEqual(placed.glyphs.filter(([left, end]) => Math.abs(left - INSET) > 0.5 || end > right), [], 'every glyph block on the inset');
+  assert.deepEqual(placed.names.filter(([left, end]) => Math.abs(left - INSET - 16) > 0.5 || end > right + 0.5), [], 'every name bar where a name starts');
+  release();
+  await pane.locator('[data-flat-panel] [data-layer-row]').first().waitFor();
+  assert.equal(await pane.locator('[data-flat-panel] [data-tree-row-placeholder]').count(), 0, 'gone as the layers arrive');
+  assert.deepEqual(errors, []);
+});

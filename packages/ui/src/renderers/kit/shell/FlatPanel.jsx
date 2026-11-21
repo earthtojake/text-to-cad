@@ -3,6 +3,7 @@ import { Boxes, Clapperboard, Cpu, Layers, ListTree, Move3d, MoreHorizontal, Sea
 import { useI18n } from "@cad/ui/i18n";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
 import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
+import { TreeRowsLoading } from "@cad/ui/primitives/tree-row";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { ChangedDot } from "../tools/ChangedDot.jsx";
@@ -210,17 +211,33 @@ export function FlatPanelSectionScope({ id, children }) {
   return <FlatPanelTab panel={panel} id={id} shown={stack.activeSection === id}>{children}</FlatPanelTab>;
 }
 
+/** A structure tab's placeholder rows while its file loads and it has none (`TreeRowsLoading`), said as loading. */
+export function FlatPanelRowsLoading() {
+  const { t } = useI18n();
+  return <TreeRowsLoading label={t("spinner.loading")} />;
+}
+const NO_TABS = new Set();
+/** The structure tabs of a panel's `body` with no row drawn yet: each a tabpanel (`data-flat-panel-section`) holding no
+ * `data-tree-row`, of the tabs the search covers (`searchable`). */
+function rowlessTabs(body, searchable) {
+  return [...body.querySelectorAll("[data-flat-panel-section]")].map(section => section.getAttribute("data-flat-panel-section"))
+    .filter(id => searchable.has(id) && !body.querySelector(`[data-flat-panel-section="${CSS.escape(id)}"] [data-tree-row]`));
+}
+
 /**
  * @param {{ mode: "docked" | "page", open: boolean, onClose(): void, label: string,
  *   searchLabel: string, tabs: { id: string, label: string, content: import("react").ReactNode, search?: boolean, icon?: import("react").ComponentType }[],
  *   tab: string, onTabChange(id: string): void, width: number, maxWidth: number, onWidthChange(width: number): void,
- *   focusSearch: number, peek?: boolean, surfaceRef?: import("react").Ref<HTMLElement>, surfaceProps?: object | null }} props
+ *   focusSearch: number, peek?: boolean, peekLeaving?: boolean, onPeekExited?: () => void, surfaceRef?: import("react").Ref<HTMLElement>,
+ *   surfaceProps?: object | null, loading?: boolean }} props
  *   `focusSearch`: a count; each new value opens the search with the keyboard in its box (/). `peek`: the collapsed
  *   panel shown over the view on a rest on its toggle (`usePanelPeek.js`), its surface `surfaceRef` and its pointer
- *   handlers `surfaceProps`.
+ *   handlers `surfaceProps`; `peekLeaving`, that peek sliding out, `onPeekExited` once it has. `loading`: the view's file
+ *   is still loading: a structure tab with no row yet shows placeholder rows (`FlatPanelRowsLoading`), busy, until its
+ *   rows arrive.
  */
 export default function FlatPanel({ mode, open, onClose, label, searchLabel, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, hidden = false,
-  peek = false, surfaceRef, surfaceProps = null }) {
+  peek = false, peekLeaving = false, onPeekExited, surfaceRef, surfaceProps = null, loading = false }) {
   const { t } = useI18n();
   const page = mode === "page";
   const [searchOpen, setSearchOpen] = useState(false);
@@ -268,6 +285,21 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   const sectionMatches = useMemo(() => (sections ? count => report("tree", count) : null), [Boolean(sections), report]);
   const panel = useMemo(() => ({ query, searching, page, shown: onScreen, registerKeys, picked, searchable, report, matches: sectionMatches, setChanged }),
     [query, searching, page, onScreen, registerKeys, picked, searchable, report, sectionMatches, setChanged]);
+  // While the file loads, the structure tabs with no row to show yet: their placeholders, until a row is drawn in them
+  // (the body watched while it loads, so a tree that fills before the model is drawn — an engine document's — drops
+  // them as its rows arrive). Not while a query is typed: the search says what it finds.
+  const [rowless, setRowless] = useState(NO_TABS);
+  useLayoutEffect(() => {
+    const element = body.current;
+    const settle = next => setRowless(current => (current.size === next.length && next.every(id => current.has(id)) ? current : next.length ? new Set(next) : NO_TABS));
+    if (!loading || searching || !element) { settle([]); return undefined; }
+    const measure = () => settle(rowlessTabs(element, searchable));
+    measure();
+    if (typeof MutationObserver === "undefined") return undefined;
+    const observer = new MutationObserver(measure);
+    observer.observe(element, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [loading, searching, searchable]);
 
   // Each tab keeps its own scroll.
   const scroller = useRef(null), scrolls = useRef(new Map());
@@ -376,7 +408,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   const visible = fitted ? fitted.visible.filter(id => ids.includes(id)) : ids;
   const hiddenTabs = fitted ? tabs.filter(entry => fitted.hidden.includes(entry.id)) : [];
 
-  const tabbed = useMemo(() => ({ tabbed: true, activeSection: active, searching, register }), [active, searching, register]);
+  const tabbed = useMemo(() => ({ tabbed: true, activeSection: active, searching, register, loadingTabs: rowless }), [active, searching, register, rowless]);
   const ids_ = id => ({ tab: `flat-panel-tab-${id}`, panel: `flat-panel-body-${id}` });
   const tabName = (entry, on, ruled = false) => {
     const count = countOf(entry.id);
@@ -451,7 +483,8 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
     inputRef={input} dense onDismiss={closeSearch} dismissLabel={t("flatPanel.closeSearch")} className="min-w-0 flex-1 px-0 shadow-none" data-flat-panel-search=""
     style={SEARCH_BOX_HANG} /> : null;
   const activeCount = searching && searchable.has(active) ? counts[active] : null;
-  const aside = <PanelSurface mode={page ? "page" : "push"} label={label} open={open} hidden={hidden} peek={peek} asideRef={surfaceRef} {...surfaceProps}
+  const aside = <PanelSurface mode={page ? "page" : "push"} label={label} open={open} hidden={hidden} peek={peek} peekLeaving={peekLeaving} onPeekExited={onPeekExited}
+    asideRef={surfaceRef} {...surfaceProps}
     width={drawnWidth} grip={page ? null : grip} gripLabel={t("flatPanel.resize")} onKeyDown={onPanelKeyDown} data-flat-panel={mode} headRule={!single || searchOpen} headCompact={compactHead}
     headStack={searchOpen && !single} headRef={head} headInsets={HEAD_INSETS} headProps={{ "data-flat-panel-head": "", "data-searching": searchOpen ? "" : undefined }} scrollerRef={scroller}
     scrollerProps={{ "data-flat-panel-scroller": "" }}
@@ -474,8 +507,9 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
           {sections ? <ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider> : tabs.map(entry => {
             const shown = entry.id === active;
             return <section key={entry.id} role="tabpanel" id={ids_(entry.id).panel} aria-label={entry.label}
-              aria-labelledby={ids_(entry.id).tab} hidden={!shown} data-flat-panel-section={entry.id}>
+              aria-labelledby={ids_(entry.id).tab} hidden={!shown} aria-busy={rowless.has(entry.id) || undefined} data-flat-panel-section={entry.id}>
               <FlatPanelTab panel={panel} id={entry.id} shown={shown}>{entry.content}</FlatPanelTab>
+              {rowless.has(entry.id) ? <FlatPanelRowsLoading /> : null}
             </section>;
           })}
           {activeCount === 0 ? <p className="py-6 text-center text-muted-foreground" data-flat-panel-empty="">{t("flatPanel.nothingMatches", { query: query.trim() })}</p> : null}
