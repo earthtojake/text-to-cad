@@ -41,7 +41,7 @@ from cad._internal import meshops_printing as mo
 from cad._internal.dfm import printing as rules
 from cad.build123d import _dfm_brep as brep
 
-__all__ = ["measure", "measure_each"]
+__all__ = ["measure", "measure_each", "transient"]
 
 #: Items a family lists, at most (worst first); the rest are counted.
 CAP = 300
@@ -1821,12 +1821,20 @@ FIXED = frozenset({"solid", "scale", "gaps", "holes", "pins", "details", "cleara
                    "sections"})
 
 
+def transient() -> bool:
+    """Whether the report ``measure`` last made here could differ the next time: a hull its fit was read from
+    took its other way for want of memory (``meshops_printing.FELL_BACK``), which ``_dfm_check.held`` says
+    beside the report, and a report so made is kept by no one."""
+    return bool(mo.FELL_BACK["memory"])
+
+
 def measure(document: brep.Document, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
     """The printing report of ``document``: facts alone, every family's ``items`` at a ref."""
     from cad._internal.dfm import Unmeasured
 
     if not document.parts:
         raise Unmeasured("document_empty", "the document has no parts to print")
+    mo.FELL_BACK["memory"] = False
     return _report(Context(document, options), candidates, {})
 
 

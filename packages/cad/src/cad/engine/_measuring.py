@@ -21,12 +21,14 @@ __all__ = ["BOUNDARY", "DFM", "DFM_COMMON", "MEASURING", "measure", "measuring"]
 
 # The libraries a manufacturing check measures with, by the distribution that carries each (the first of
 # them installed): their versions name the measuring side with the library's code (``measuring``). A check the
-# engine measures is a B-rep check -- build123d's, on OCP, a part's material read with bd_materials and its
-# arrays numpy's; a mesh's check (trimesh's) is measured in its caller's own process, never asked of the engine
-# (``api.check``), so its libraries name nothing here.
+# engine measures is a B-rep check -- build123d's, on OCP, a part's material read with bd_materials, its
+# arrays numpy's and a print's hulls scipy's: every library a file of ``DFM`` imports, at its top or in a
+# function, is named here, or a kept measurement would stand for one made with another release of it. A mesh's
+# check (trimesh's) is measured in its caller's own process, never asked of the engine (``api.check``), so its
+# libraries name nothing here.
 MEASURING: dict[str, tuple[str, ...]] = {
     "build123d": ("build123d",), "OCP": ("cadquery-ocp-novtk", "cadquery-ocp"), "bd_materials": ("bd_materials",),
-    "numpy": ("numpy",)}
+    "numpy": ("numpy",), "scipy": ("scipy",)}
 # What a code edited since this process loaded it is said as (``measuring``): no other process's.
 EDITED = "+edited"
 

@@ -4,14 +4,15 @@ measurement's own findings."""
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 from cad._internal.refused import ArgumentRefused
 from cad.results import CheckFinding
 
 __all__ = ["ANGLE_EPS", "KNIFE_DEG", "UNITS_LARGE_MM", "UNITS_SMALL_MM", "first_error", "mm", "not_applicable",
-           "occurrence_count", "occurrences", "partial_findings", "require", "require_bool", "require_finite",
-           "require_int", "require_text", "scale_findings", "units_doubt", "where"]
+           "occurrence_count", "occurrences", "out_of_memory", "partial_findings", "require", "require_bool",
+           "require_finite", "require_int", "require_text", "scale_findings", "units_doubt", "where"]
 
 #: Every process's: a convex edge whose material angle is under this many degrees is a **knife edge**, not a
 #: corner (printing's and CNC's ``knife_edges``). The
@@ -108,6 +109,22 @@ def occurrences(report: dict[str, Any]) -> dict[str, int]:
 def occurrence_count(report: dict[str, Any]) -> int:
     """The parts as made: every occurrence of every part measured."""
     return sum(occurrences(report).values())
+
+
+#: How a failure for want of memory names itself, whoever raised it: Python's ``MemoryError``, the kernel's
+#: ``Standard_OutOfMemory``, a C++ ``bad_alloc``, a system's or a library's own words for it.
+_OUT_OF_MEMORY = re.compile(r"memoryerror|out\s*of\s*memory|bad_alloc|(cannot allocate|not enough|insufficient) memory",
+                            re.IGNORECASE)
+
+
+def out_of_memory(failure: Any) -> bool:
+    """Whether ``failure`` -- an exception, or the words one was said in (a family's ``error``: its type and its
+    words) -- is a failure for want of memory, by any of its names (``_OUT_OF_MEMORY``). What failed so may not
+    fail the next time: nothing measured through it is the part's alone."""
+    if isinstance(failure, MemoryError):
+        return True
+    said = f"{type(failure).__name__}: {failure}" if isinstance(failure, BaseException) else str(failure)
+    return _OUT_OF_MEMORY.search(said) is not None
 
 
 def first_error(value: Any) -> str | None:

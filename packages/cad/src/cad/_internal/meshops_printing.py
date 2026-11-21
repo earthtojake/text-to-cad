@@ -29,6 +29,7 @@ from typing import Any, Callable
 import numpy as np
 
 from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG  # every process's: a knife edge, an angle at its limit
+from cad._internal.dfm._common import out_of_memory
 
 
 __all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG",
@@ -1441,6 +1442,13 @@ TURN_STEP_DEG = 0.25
 FIT_EPS = 1e-6
 
 
+#: Whether a hull made since this was last cleared took its other way for want of memory (``_outline``,
+#: ``hull``): the same points give scipy's hull on a machine with room for it, so a fit read from the other is
+#: not the part's alone. Whoever keeps a report by what was measured clears it before measuring and reads it
+#: after (``cad.build123d._dfm_printing.transient``); nothing else reads it, and no figure depends on it.
+FELL_BACK = {"memory": False}
+
+
 def _outline(flat: np.ndarray) -> np.ndarray:
     """The corners of the convex outline of the 2D points ``flat``, in order round it: scipy's where it is
     installed and the points have one (a sphere's 165 000 hull corners a pass each took 25 s in ``_hull``'s
@@ -1451,7 +1459,8 @@ def _outline(flat: np.ndarray) -> np.ndarray:
         from scipy.spatial import ConvexHull
 
         return flat[ConvexHull(flat).vertices]
-    except Exception:  # noqa: BLE001 - no scipy, or points on one line: qhull refuses them
+    except Exception as error:  # noqa: BLE001 - no scipy, or points on one line: qhull refuses them
+        FELL_BACK["memory"] = FELL_BACK["memory"] or out_of_memory(error)
         return _hull(flat)
 
 
@@ -1475,7 +1484,8 @@ def hull(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         from scipy.spatial import ConvexHull
 
         found = ConvexHull(points)
-    except Exception:  # noqa: BLE001 - no scipy, or points in one plane: qhull refuses them
+    except Exception as error:  # noqa: BLE001 - no scipy, or points in one plane: qhull refuses them
+        FELL_BACK["memory"] = FELL_BACK["memory"] or out_of_memory(error)
         some = points if len(points) <= 20000 else points[np.linspace(0, len(points) - 1, 20000).round().astype(int)]
         return some, np.zeros((0, 3))
     corners = points[found.simplices]

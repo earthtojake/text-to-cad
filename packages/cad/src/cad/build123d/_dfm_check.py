@@ -21,6 +21,7 @@ from typing import Any
 
 import numpy as np
 
+from cad._internal.dfm._common import out_of_memory
 from cad.build123d import _dfm_brep
 
 __all__ = ["checked", "described", "dfm", "held", "measure", "measure_declared"]
@@ -51,6 +52,11 @@ def _closed_solids(part: _dfm_brep.Part) -> tuple[list[Any], list[Any], int]:
         in_solids += len(solid.faces())
     return closed, opened, max(0, len(part.faces()) - in_solids)
 
+
+#: Whether the integrity of the document last measured here (``_measured``) was cut short: the kernel's validity
+#: check raised on a part, so its ``not_sound`` was not looked for and the report does not say so; or a pair of
+#: solids could not be compared for want of memory. Such a report is not one to keep (``_transient``).
+_CUT_SHORT = {"integrity": False}
 
 #: Solids of one part share volume where their common is over this share of the smaller's volume.
 _OVERLAP = 1e-6
@@ -95,7 +101,8 @@ def _several(part: _dfm_brep.Part, name: str, closed: list[Any], process: str) -
     for i, j in pairs[:_PAIRS]:
         try:
             common = float(_geometry.overlap_volume(closed[i], closed[j]))
-        except Exception:  # noqa: BLE001 - a boolean the kernel cannot finish is no verdict on the pair
+        except Exception as error:  # noqa: BLE001 - a boolean the kernel cannot finish is no verdict on the pair
+            _CUT_SHORT["integrity"] = _CUT_SHORT["integrity"] or out_of_memory(error)
             unknown += 1
             continue
         if common > _OVERLAP * min(abs(float(closed[i].volume)), abs(float(closed[j].volume))):
@@ -152,6 +159,7 @@ def _integrity(document: _dfm_brep.Document, process: str) -> list[dict[str, Any
         try:
             issues = sorted({issue.code for issue in _geometry.topology_errors(part.shape)})
         except Exception:  # noqa: BLE001 - a check the kernel cannot finish is no verdict
+            _CUT_SHORT["integrity"] = True  # and says nothing in the report: it is not one to keep (``_transient``)
             continue
         if issues:
             found.append({"severity": "error", "code": "not_sound", "location": where,
@@ -193,6 +201,7 @@ def _measured(document: _dfm_brep.Document, document_type: str, process: str, op
 
     if not document.parts:
         raise Unmeasured("document_empty", "the document holds no part with a face to measure")
+    _CUT_SHORT["integrity"] = False
     doubt = _integrity(document, process)
     module = importlib.import_module(f"cad.build123d._dfm_{process}")
     measuring = kept.Measuring(process, options)
@@ -285,20 +294,22 @@ def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]
 def _transient(process: str, report: dict[str, Any]) -> bool:
     """Whether a report just measured here is one the same parts, options and code could measure otherwise the
     next time, so no one keeps it in a measurement's place: its process's module says so of the measurement it
-    last made (``transient()``: a search that ran out of its seconds, molding's release search); a family
-    failed for memory (its ``error`` names ``MemoryError``); or a table of the report says of itself that it is
-    not repeatable (``"repeatable": False``, wherever it lies and whatever made it: what it holds came of
+    last made (``transient()``: molding's release search out of its seconds, a hull printing's fit took another
+    way for want of memory); its integrity was cut short (``_CUT_SHORT``: the kernel's validity check raised,
+    so the report is silent on what it would have said); a family failed for want of memory, by any of its
+    names (its ``error``: ``_common.out_of_memory``); or a table of the report says of itself that it is not
+    repeatable (``"repeatable": False``, wherever it lies and whatever made it: what it holds came of
     something the next run may not meet -- a helper not ready yet, an answer that timed out; one that says
     true, or nothing, is repeatable). Every other report, with a family not measured or none, is what its code
     makes of those parts each time."""
     said = getattr(importlib.import_module(f"cad.build123d._dfm_{process}"), "transient", None)
-    if callable(said) and said():
+    if (callable(said) and said()) or _CUT_SHORT["integrity"]:
         return True
 
     def says_so(value: Any) -> bool:
         if isinstance(value, dict):
             error = value.get("error")
-            return ((isinstance(error, str) and "MemoryError" in error) or value.get("repeatable") is False
+            return ((isinstance(error, str) and out_of_memory(error)) or value.get("repeatable") is False
                     or any(says_so(item) for item in value.values()))
         return isinstance(value, list) and any(says_so(item) for item in value)
 

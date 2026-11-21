@@ -501,24 +501,41 @@ class MeasuresTest(unittest.TestCase):
             _dfm_check._measured(brep.parts_of(_pocketed()), "step", "cnc", manufacturing.options("step", "cnc", {}),
                                  False)
 
-    def test_an_option_the_rules_alone_read_leaves_the_report_as_it_was(self) -> None:
-        from cad.build123d import _dfm_check
+    def test_a_measurement_handed_every_option_makes_the_report_it_makes_of_those_it_declares(self) -> None:
+        """What holds ``MEASURES`` to the code. The view a measurement is handed refuses a read by name of an
+        option it does not declare, but a copy of it, or a walk over it, holds the declared names alone and
+        refuses nothing. So each process's module is run here as no check runs it, on a plain table of every
+        option with each one its rules alone read given another value, and must make the report it makes of the
+        declared options alone: a module that reads one of them, by any route, makes another."""
+        import importlib
+
+        from cad._internal.dfm import kept
 
         for process, other in self.RULES_ALONE.items():
             made = _bracket if process == "sheet" else _pocketed
+            module = importlib.import_module(f"cad.build123d._dfm_{process}")
+            every = manufacturing.options("step", process, other)
+            declared = kept.measuring(process, manufacturing.options("step", process, {}))
+            self.assertEqual({name: every[name] for name in declared}, declared, "the options it reads, unchanged")
+            self.assertLess(set(declared), set(every))
             with self.subTest(process=process):
                 # each measured on a shape of its own: a measurement meshes the shape it measures
-                reports = [_dfm_check._measured(brep.parts_of(made()), "step", process,
-                                                manufacturing.options("step", process, given), False)
-                           for given in ({}, other)]
+                reports = [module.measure(brep.parts_of(made()), options, False) for options in (dict(declared), every)]
                 self.assertEqual(reports[0], reports[1])
                 self.assertNotIn("partial_sections", {key for key, value in reports[0].items() if value})
+        handed = kept.Measuring("cnc", {"axes": 5, "material": "steel"})
+        for copied in (dict(handed), {**handed}, handed | {}, handed.copy(), dict(handed.items())):
+            self.assertEqual((copied, copied.get("material")), ({"axes": 5}, None), "the declared names alone")
+        self.assertEqual(handed.undeclared, set(), "and nothing refused: what the test above is for")
 
     def test_each_process_s_measuring_code_holds_every_module_its_measurement_imports(self) -> None:
         """A process's measuring code (``_measuring.DFM``) holds every module of the library its files import, but
         the declared boundary (``_measuring.BOUNDARY``), and every B-rep measurement (``cad.build123d._dfm_*``, a
-        cut file's ``_dfm_dxf`` apart) is a process's: an edit to what measures changes that process's digest."""
+        cut file's ``_dfm_dxf`` apart) is a process's: an edit to what measures changes that process's digest.
+        And every other library those files import, at their top or inside a function, is one whose version a
+        kept measurement is found by (``_measuring.MEASURING``), or one said another way, with why."""
         import ast
+        import sys
 
         from cad.engine import _measuring
 
@@ -543,15 +560,29 @@ class MeasuresTest(unittest.TestCase):
                                     ) if node.level else str(node.module)
                     found.update(f"{base}.{alias.name}" if is_module(f"{base}.{alias.name}") else base
                                  for alias in node.names)
-            return {name for name in found if name == "cad" or name.startswith("cad.")}
+            return found
 
+        def ours(names: set[str]) -> set[str]:
+            return {name for name in names if name == "cad" or name.startswith("cad.")}
+
+        def theirs(names: set[str]) -> set[str]:
+            """The libraries among ``names`` that are neither this one's nor Python's own."""
+            tops = {name.split(".")[0] for name in names}
+            return {top for top in tops if top not in sys.stdlib_module_names and top not in ("cad", "__future__")}
+
+        # A library a measuring file imports whose release no version in ``MEASURING`` says, and what says it.
+        said_otherwise = {"quiddity": "it reads in a process of its own, and the one release of it whose records "
+                                      "are taken is named in the cnc measuring code, so the digest says which"}
         for process, own in _measuring.DFM.items():
             places = (*_measuring.DFM_COMMON, *own)
             held = {module(place) for place in places} | set(_measuring.BOUNDARY)
             for place in places:
                 with self.subTest(process=process, place=place):
                     self.assertTrue((root / place).is_file())
-                    self.assertEqual(imported(place) - held, set(), "imported, and neither measuring code nor boundary")
+                    self.assertEqual(ours(imported(place)) - held, set(), "imported, and neither measuring code nor boundary")
+                    self.assertEqual(theirs(imported(place)) - set(_measuring.MEASURING) - set(said_otherwise), set(),
+                                     "a library it measures with whose version names no kept measurement")
+        self.assertIn("scipy", _measuring.MEASURING, "a print's hulls are scipy's (meshops_printing)")
         listed = {*_measuring.DFM_COMMON, *(place for own in _measuring.DFM.values() for place in own)}
         measurers = {f"build123d/{path.name}" for path in (root / "build123d").glob("_dfm_*.py")}
         self.assertEqual(measurers - listed, {"build123d/_dfm_dxf.py"})
@@ -711,8 +742,29 @@ class ContentTest(unittest.TestCase):
                          (False, 1), "out of rays: the same on any machine")
         whole = _checked({"path": str(path)}, "molding")
         self.assertEqual(("transient" in whole, whole["measured"]["report"]["undercuts"]["unsearched_count"]), (False, 0))
+        # A family that really fails, as each process's families catch their own: for want of memory by the
+        # kernel's name for it, transient; any other way, the part's each time.
+        class Standard_OutOfMemory(Exception):  # noqa: N801 - the kernel's name
+            pass
+
+        for raised, transient in ((Standard_OutOfMemory("no room for the solid"), True), (ValueError("no axis"), False)):
+            with self.subTest(raised=raised), mock.patch.object(molding, "_envelope", side_effect=raised):
+                failed = _checked({"path": str(path)}, "molding")
+                self.assertEqual(("transient" in failed, failed["measured"]["report"]["partial_sections"]),
+                                 (transient, ["envelope"]))
+        # The kernel's validity check raising on a part: the report is the one it is without it, silent on what
+        # the check would have said, and so not one to keep.
+        from cad.build123d import _geometry
+
+        with mock.patch.object(_geometry, "topology_errors", side_effect=RuntimeError("the kernel gave up")):
+            unsound = _checked({"path": str(path)}, "molding")
+        self.assertEqual((unsound.get("transient"), unsound["measured"]), (True, whole["measured"]))
+        self.assertNotIn("transient", _checked({"path": str(path)}, "molding"), "and the next one whole is")
         for said, report in ((True, {"holes": {"error": "block: MemoryError: "}}),
                              (True, {"pulls": [{"walls": {"error": "MemoryError: 2 GiB"}}]}),
+                             (True, {"walls": {"error": "block: Standard_OutOfMemory: "}}),
+                             (True, {"walls": {"error": "RuntimeError: std::bad_alloc"}}),
+                             (True, {"walls": {"error": "OSError: [Errno 12] Cannot allocate memory"}}),
                              (True, {"holes": {"items": [], "count": 0, "recognition": {"repeatable": False}}}),
                              (False, {"holes": {"items": [], "count": 0, "recognition": {"repeatable": True}}}),
                              (False, {"holes": {"items": [], "count": 0, "recognition": {"repeatable": None}}}),
@@ -721,6 +773,31 @@ class ContentTest(unittest.TestCase):
                              (False, {"holes": {"items": [], "count": 0}, "partial": False})):
             with self.subTest(report=report):
                 self.assertEqual(_dfm_check._transient("cnc", report), said)
+
+    def test_a_hull_that_took_its_other_way_for_want_of_memory_makes_a_print_s_report_transient(self) -> None:
+        """A print's fit is read from scipy's hull, else from the points themselves: the same figures either way
+        today, but which way was taken for want of memory is the machine's, not the part's, so the measurement
+        says so; points with no hull (in one plane) take the other way on any machine, and say nothing."""
+        from unittest import mock
+
+        import scipy.spatial
+
+        from cad._internal import meshops_printing as mo
+        from cad.build123d import _dfm_printing
+
+        cube = np.array([[x, y, z] for x in (0.0, 1.0) for y in (0.0, 1.0) for z in (0.0, 1.0)])
+        with mock.patch.dict(mo.FELL_BACK, {"memory": False}):
+            self.assertEqual((len(mo.hull(cube)[0]), len(mo.hull(cube[:4])[0]), _dfm_printing.transient()), (8, 4, False))
+            for failed in (MemoryError(), scipy.spatial.QhullError("QH6082 qhull error (qh_memalloc): insufficient "
+                                                                   "memory to allocate 4096 bytes")):
+                mo.FELL_BACK["memory"] = False
+                with self.subTest(failed=failed), mock.patch.object(scipy.spatial, "ConvexHull", side_effect=failed):
+                    corners, sides = mo.hull(cube)
+                    self.assertEqual((len(corners), len(sides), _dfm_printing.transient()), (8, 0, True))
+            mo.FELL_BACK["memory"] = False
+            with mock.patch.object(scipy.spatial, "ConvexHull", side_effect=MemoryError()):
+                self.assertEqual(len(mo._outline(cube[:, :2])), 4)
+            self.assertTrue(_dfm_printing.transient())
 
     def test_a_triangulation_a_part_was_read_with_is_in_its_content(self) -> None:
         """A measurement keeps a mesh fine enough where it finds one, so the mesh a part was read with is read."""

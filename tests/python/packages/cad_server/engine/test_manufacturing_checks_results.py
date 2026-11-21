@@ -434,7 +434,7 @@ class KeptResultTest(unittest.TestCase):
         self.assertEqual({process for process, code in said["dfm"].items() if code.endswith(_measuring.EDITED)},
                          {"sheet"}, "one process's files edited since: its code alone is no other's")
         self.assertFalse(said["code"].endswith(_measuring.EDITED))
-        self.assertEqual(set(contract.measure()["libraries"]), {"build123d", "OCP", "bd_materials", "numpy"})
+        self.assertEqual(set(contract.measure()["libraries"]), {"build123d", "OCP", "bd_materials", "numpy", "scipy"})
         with mock.patch.object(importlib.metadata, "version", side_effect=AssertionError("the long way")):
             self.assertEqual(_measuring._version("OCP", _measuring.MEASURING["OCP"], {"cadquery_ocp": "8.0.1"}),
                              "8.0.1", "cadquery-ocp as well as its -novtk, from the listings")
