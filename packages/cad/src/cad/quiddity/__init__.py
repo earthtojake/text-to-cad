@@ -5,7 +5,12 @@ of its own, Apache-2.0).
 quiddity reads a STEP and says the features it finds -- holes, pockets, slots, fillets and the rest -- each with
 the faces it is made of, and where every face went: into a feature, into the body's own stock, into a refusal,
 or unexplained. That is quiddity's, and stays quiddity's: a script that wants it imports ``quiddity`` and reads
-its documentation. What is missing without us is the tie to a document, and four things come of it:
+its documentation. What is missing without us is the tie to a document, and four things come of it. Nothing
+here is a person's to call (``__all__`` is empty): it backs the CNC check's holes
+(``cad.build123d._dfm_cnc_recognised``), as the coacd integration backs ``cad.mujoco.decompose``. And it runs in
+two places: ``features`` in the process that holds the part, whose environment holds the kernel's integration
+(it reads the part through ``cad.build123d._dfm_brep`` and writes its STEP with the engine's writer, the
+kernel's), and the recogniser in quiddity's own environment, which holds quiddity and no kernel.
 
 - **A part, not a file.** ``features(part)`` takes one part as the library holds it (a build123d shape), writes
   its STEP in memory and hands quiddity that part alone: quiddity reads every face of a file together, so a
@@ -69,7 +74,10 @@ from typing import Any
 from cad.quiddity._features import GROUPS, REASONS, SCHEMA, VERSION
 from cad.quiddity._process import TIMEOUT_S
 
-__all__ = ["GROUPS", "REASONS", "SCHEMA", "TIMEOUT_S", "VERSION", "features", "features_of"]
+#: Nothing here is public: this is the library's own, for its manufacturing check's holes
+#: (``cad.build123d._dfm_cnc_recognised``), as the coacd integration backs ``cad.mujoco.decompose``. Its names
+#: may change in any release.
+__all__: list[str] = []
 
 
 def features(part: Any, *, timeout_s: float = TIMEOUT_S) -> dict[str, Any]:

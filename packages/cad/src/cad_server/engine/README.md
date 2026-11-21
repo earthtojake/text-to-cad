@@ -1369,7 +1369,8 @@ hold quiddity -- the base, `cad[build123d]`, which the engine's kernel processes
 `cad[quiddity]`'s environment on first need over its door (`{"op": "integration", "integration": "quiddity"}`,
 `integration_env.made`) and the child runs there, so the base is as it was. `cad[quiddity]` is one wheel, about
 9 MB, for macOS, Linux x86-64 and aarch64 (glibc 2.28 or newer) and Windows x86-64; anywhere else a part's features
-are unavailable (`no_wheel`). No command runs it and no check reads it yet.
+are unavailable (`no_wheel`). No command runs it; the CNC check reads it, for what closes a part's holes
+(`cad.build123d._dfm_cnc_recognised`).
 
 **A GLB in Blender's scene.** `cad.blender.load` is the `blender` integration's one helper, for a script that
 renders with bpy (Blender as a Python module, its extra `cad[blender]`), run by `cad run` in the environment

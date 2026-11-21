@@ -551,9 +551,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     *The signature rule* decides where a helper goes: one taking only paths, plain values or our own types
     goes under the document type; one taking a third-party library's objects goes under that integration.
     A tool that has no objects of its own (quiddity: a STEP's bytes in, JSON out) is asked about another
-    integration's: the helper that asks goes under the tool it asks (`cad.quiddity.features` takes a part's
-    shape, build123d's), reaches the other integration through the library's own modules, and still imports
-    no dependency but its own extra's.
+    integration's: the code that asks goes under the tool it asks (`cad.quiddity.features` takes a part's
+    shape, build123d's) and imports no third-party module itself. What it needs of the other integration it
+    takes through the library's own modules (`cad.build123d._dfm_brep`, the engine's STEP writer), which import
+    the kernel: so it runs only in a process whose environment holds that integration, and the tool's own
+    environment (`cad[quiddity]`) runs the tool's process alone, never that code.
 
 26. **A decorator works out its producer from what the function returns.** *The package.* A file decorator declares a
     persistent script's output; the registry's producers -- each a type, a matcher, the code that writes

@@ -398,6 +398,11 @@ class WhereItRunsTest(unittest.TestCase):
         self.assertEqual([result["available"] for result in results], [True, True])
         self.assertEqual(asked, ["asked"], "once for them all")
 
+    def test_nothing_of_it_is_a_person_s_to_call(self) -> None:
+        # it backs the CNC check's holes: its functions are the library's own, in no public list
+        self.assertEqual(quiddity.__all__, [])
+        self.assertTrue(callable(quiddity.features) and callable(quiddity.features_of))
+
     def test_importing_the_namespace_loads_neither_quiddity_nor_the_kernel(self) -> None:
         code = ("import json, sys\nimport cad.quiddity\nfrom cad.quiddity import _features, _frames, _process\n"
                 "print(json.dumps(sorted(name for name in sys.modules if name.partition('.')[0] in "
