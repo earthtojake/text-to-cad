@@ -14,28 +14,9 @@ def box_limits(box) -> tuple[float, float, float, float, float, float]:
 
 
 def optimal_box(shape):
-    """Measure the shape without the OCP 8 spline-grid extrema heuristic.
-
-    OCCT #1604 can miss a spline's extremum when its grid refinement test ties.
-    For a free-form surface, distances to six exterior support planes give the
-    extrema directly, including trimmed faces. Nothing meshes or changes the
-    input shape. Analytic surfaces and edges retain the native fast path.
-    """
+    """Measure the shape using OCCT's AddOptimal_s."""
     from OCP.Bnd import Bnd_Box
-    from OCP.BRepAdaptor import BRepAdaptor_Surface
     from OCP.BRepBndLib import BRepBndLib
-    from OCP.GeomAbs import (GeomAbs_Cone, GeomAbs_Cylinder, GeomAbs_Plane,
-                             GeomAbs_Sphere, GeomAbs_Torus)
-    from OCP.TopAbs import TopAbs_FACE
-    from OCP.TopExp import TopExp_Explorer
-    from OCP.TopoDS import TopoDS
-
-    analytic = (GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone, GeomAbs_Sphere, GeomAbs_Torus)
-    faces = TopExp_Explorer(shape, TopAbs_FACE)
-    while faces.More():
-        if BRepAdaptor_Surface(TopoDS.Face(faces.Current()), False).GetType() not in analytic:
-            return _support_box(shape)
-        faces.Next()
     box = Bnd_Box()
     BRepBndLib.AddOptimal_s(shape, box, False, False)
     return box
