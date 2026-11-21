@@ -392,6 +392,10 @@ class EngineTelemetryTest(unittest.TestCase):
             (({"failed": "the worker for secret_model.py exited (-11) during the build"}, True, -11),
              {"outcome": "crashed", "cached": False}, {"health": {"workers": 1, "crashes": 1},
                                                        "crashes": [analytics.died(-11)]}),
+            # One the engine stopped past the ceiling on one process: out of memory, the machine's; no crash.
+            (({"failed": "the worker for secret_model.py exited (-9) during the build: the engine stopped it at "
+                         "9.0 GiB of memory, over the 8.0 GiB one process may hold", "type": "MemoryError"}, False, None),
+             {"outcome": "failed", "cached": False, "reason": "memory"}, {}),
         ]
         for (answer, fresh, died), build, extra in cases:
             with self.subTest(build=build, extra=extra):

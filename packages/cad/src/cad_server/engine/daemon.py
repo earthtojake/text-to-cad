@@ -32,9 +32,10 @@ declarations rank them, least recently used first within a rank: the standby, th
 then the workers no page watches, and a watched one only when no other is left. A process that says,
 answering, that it alone is over the cap (``retire``: ``worker.retirement``) is retired once its
 request is done. A busy one is never retired, but one whose memory, as the system counts it, is past
-the ceiling on one process (``CAD_ENGINE_WORKER_CEILING_MB``, ``worker.memory_ceiling_mb``) is killed
-at the next ``tend``, and its request fails saying why (``Supervisor.overrun``): a build in native
-code cannot stop itself, and one that runs away would take the machine. Before a worker is stopped,
+the ceiling on one process (``CAD_ENGINE_WORKER_CEILING_MB``, ``worker.memory_ceiling_mb``) at two
+``tend`` rounds running, during one request, is killed, and its request fails saying why, as a build
+out of memory (``Supervisor.overrun``, ``_overran``): a build in native code cannot stop itself, and
+one that runs away would take the machine. Before a worker is stopped,
 every document of it the server does not hold is taken from it (``models.Models.drain``): a document
 outlives its worker. A retired script's next build is a
 fresh worker's, a restart. Each such document is also kept in the engine's cache once it is idle, at
@@ -901,8 +902,10 @@ class Daemon:
                         "progress": frame}
         if "failed" in answer:
             frame = worker.progress or {}
-            # The worker itself failed -- it died, or answered no report: cadgen's to fix, to report.
-            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "reportable": True,
+            # The worker itself failed -- it died, or answered no report: cadgen's to fix, to report; but one the
+            # engine stopped past the ceiling on one process, whose model is the one to change (``_overran``).
+            reportable = not getattr(worker, "overran", None)
+            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "reportable": reportable,
                                "progress": frame}
                         for path in [*outcomes, *self.models.paths(worker, frame.get("job"))]}
         if outcomes:
@@ -1357,7 +1360,7 @@ class Daemon:
                 except Gone as error:
                     # One that exited mid-request is not asked again, nor one that never said it was ready.
                     if attempt == 2 or error.during or error.unready:
-                        failed = {"failed": self._where(error, worker), **_unstarted(error)}
+                        failed = {"failed": self._where(error, worker), **_unstarted(error), **_overran(worker)}
                         if worker is not None and not request.get("expected"):
                             self._built(worker, failed, verb=True)
                         send(failed)
@@ -1628,13 +1631,15 @@ class Daemon:
                         # A build is never run twice, nor waited for twice on a worker that never said
                         # it was ready: refused in that one line.
                         if attempt == 2 or error.during or error.unready:
-                            failed = {"failed": self._where(error, worker), **_unstarted(error)}
+                            stopped = _overran(worker)
+                            failed = {"failed": self._where(error, worker), **_unstarted(error), **stopped}
                             if worker is not None:
                                 self._built(worker, failed)
                             # A worker that died under the build: its exit status, where the system said one.
+                            # One the engine stopped past the ceiling did not die: its build ran out of memory.
                             told.update(answer=failed, fresh=fresh, seconds=time.monotonic() - began,
-                                        died=(error.code if error.code is not None else True) if error.during
-                                        else None)
+                                        died=(error.code if error.code is not None else True)
+                                        if error.during and not stopped else None)
                             send(failed)
                             return
                     except RuntimeError as error:
@@ -2049,6 +2054,14 @@ def _unstarted(error: Gone) -> dict[str, str]:
     in, which its caller counts as that (``no_kernel``), never as a refusal. One gone during the work (it died under
     it) is said in its words alone, which say its exit status."""
     return {} if error.during else failed_type(error)
+
+
+def _overran(worker: Process | None) -> dict[str, str]:
+    """A worker the engine stopped past the ceiling on one process (``Supervisor.overrun``) answered by a type, a
+    build out of memory's (``MemoryError``): a limit on the machine's memory reached, which telemetry counts as that
+    (``memory``) and its page does not offer to report -- never a worker that died under the work, nor a mistake
+    in cadgen's code. Nothing for any other worker."""
+    return {"type": "MemoryError"} if worker is not None and getattr(worker, "overran", None) else {}
 
 
 def _no_kernel(error: BaseException) -> bool:

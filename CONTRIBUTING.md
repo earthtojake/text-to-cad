@@ -171,8 +171,9 @@ itself.
 The engine's switches are environment variables, never script options (the
 engine's README, **The engine server and its workers** and **Body retention**):
 `CAD_ENGINE_WORKERS`, `CAD_ENGINE_WORKER_RSS_MB` (the workers' memory cap, together; no timer
-retires a worker), `CAD_ENGINE_WORKER_CEILING_MB` (the most one busy process may hold before the engine
-kills it: half the machine's memory by default; `0` for none), `CAD_ENGINE_CHECKS` (how many checks processes measure manufacturing checks at once:
+retires a worker), `CAD_ENGINE_WORKER_CEILING_MB` (the most one busy process may hold, at two of the
+engine's tendings running during one request, before the engine kills it: half the machine's memory by default;
+`0` for none), `CAD_ENGINE_CHECKS` (how many checks processes measure manufacturing checks at once:
 by default half the cores, one to four; a value is held to one to the cores, and the engine says so in `cad
 server status`), `CAD_ENGINE_CHECK_SECONDS` and `CAD_ENGINE_CHECK_RSS_MB` (what one check may take before the engine
 stops it: half an hour, and the workers' memory cap, by default; `0` for no limit),

@@ -52,6 +52,7 @@ class Fake:
         self.cwd, self.standby = cwd, standby
         self.pid, self.requests, self.rss, self.started = next(_PIDS), 0, rss, time.time()
         self.leased, self.since, self.used, self.retired, self.stopped = False, 0.0, time.monotonic(), False, False
+        self.began, self.over, self.overran = None, None, None
         said.append(("launch", label))
 
     def alive(self) -> bool:
@@ -61,7 +62,7 @@ class Fake:
         self.said.append(("stop", self.label))
         self.stopped = True
 
-    def kill(self) -> None:
+    def kill(self, wait: bool = True) -> None:
         self.said.append(("kill", self.label))
         self.stopped = True
 
@@ -204,16 +205,52 @@ class SchedulingTest(unittest.TestCase):
         idle = self.used(supervisor, "worker", "idle.py")[0]
         busy = supervisor.lease("worker", "busy.py", {})
         calm = supervisor.lease("worker", "calm.py", {})
+        busy.began = calm.began = 1.0
         held = {idle.pid: 90_000.0, busy.pid: 30_000.0, calm.pid: 2_000.0}
         supervisor.measure = held.get
         self.assertEqual(supervisor.overrun(), [], "no ceiling: nothing is killed")
         supervisor.ceiling = lambda: 24_576.0
+        self.assertEqual(supervisor.overrun(), [], "one reading past it kills nothing")
         self.assertEqual(supervisor.overrun(), [busy], "an idle one is shed's; a busy one under it goes on")
-        self.assertIn("stopped it at 29.3 GB of memory, over the 24.0 GB", busy.overran)
+        self.assertIn("stopped it at 29.3 GiB of memory, over the 24.0 GiB", busy.overran)
+        self.assertIn("(CAD_ENGINE_WORKER_CEILING_MB, read when the engine starts)", busy.overran)
         self.assertIn(("kill", "busy.py"), self.said)
         self.assertFalse(calm.stopped or idle.stopped)
         supervisor.measure = lambda _pid: None
         self.assertEqual(supervisor.overrun(), [], "a process the platform will not measure is never killed")
+
+    def test_two_readings_past_the_ceiling_during_one_request_kill_and_nothing_less(self) -> None:
+        supervisor = self.supervisor(8)
+        supervisor.ceiling = lambda: 1_000.0
+        busy = supervisor.lease("worker", "busy.py", {})
+        busy.began = 1.0
+        readings = iter([2_000.0, 500.0, 2_000.0])
+        supervisor.measure = lambda _pid: next(readings)
+        self.assertEqual([supervisor.overrun() for _ in range(3)], [[], [], []], "over, under, over: a peak")
+        busy.requests, busy.began = 1, 2.0  # its request answered, and another begun
+        supervisor.measure = lambda _pid: 2_000.0
+        self.assertEqual(supervisor.overrun(), [], "a reading in another request starts the count again")
+        self.assertNotIn(("kill", "busy.py"), self.said)
+        self.assertEqual(supervisor.overrun(), [busy], "two running, in one request")
+        self.assertIn(("kill", "busy.py"), self.said)
+
+    def test_a_process_let_go_while_it_was_measured_is_not_killed(self) -> None:
+        supervisor = self.supervisor(8)
+        supervisor.ceiling = lambda: 1_000.0
+        busy = supervisor.lease("worker", "busy.py", {})
+        busy.began = 1.0
+        supervisor.measure = lambda _pid: 2_000.0
+        self.assertEqual(supervisor.overrun(), [])
+
+        def answered(_pid: int) -> float:
+            busy.requests, busy.began = 1, None  # its request answers as it is read, and its lease lets it go
+            supervisor.release(busy)
+            return 2_000.0
+
+        supervisor.measure = answered
+        self.assertEqual(supervisor.overrun(), [])
+        self.assertFalse(busy.stopped, "idle now: not killed, its documents never drained")
+        self.assertEqual(supervisor.processes("worker"), [busy])
 
     def test_the_ceiling_is_its_setting_none_at_zero_else_half_the_machine(self) -> None:
         from cad.engine import worker
@@ -596,12 +633,14 @@ class ProtocolTest(unittest.TestCase):
         asking = threading.Thread(target=slow, daemon=True)
         asking.start()
         await_(lambda: process.op == "slow", "the slow request to run")
+        self.assertEqual(supervisor.overrun(), [], "a first reading past it")
         self.assertEqual(supervisor.overrun(), [process])
         asking.join(30)
         self.assertEqual(len(failed), 1, "the request failed")
         self.assertTrue(failed[0].during)
         self.assertIn("the child doc.xbf exited (", str(failed[0]), "said as a child gone mid-request is")
-        self.assertIn("one process may hold (CAD_ENGINE_WORKER_CEILING_MB)", str(failed[0]))
+        self.assertIn("one process may hold (CAD_ENGINE_WORKER_CEILING_MB, read when the engine starts)",
+                      str(failed[0]), "the request's error says why")
         supervisor.release(process)
 
     def test_an_answer_that_says_retire_retires_its_process_once_let_go(self) -> None:
