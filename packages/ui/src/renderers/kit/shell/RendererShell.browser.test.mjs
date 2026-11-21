@@ -190,7 +190,8 @@ test('a finger on a phone: the navbar\'s menus stay open, a held press opens the
   await atRest();
   const turned = await pose();
   assert.ok(turned.some((value, index) => Math.abs(value - opened[index]) > 1e-3), 'the view moved');
-  const [cx, cy] = [box.x + 20, box.y + box.height - 20];
+  // Empty space under the strip: the picture's bottom is Quick Edit's bar on a phone.
+  const [cx, cy] = [box.x + 20, box.y + 140];
   await page.touchscreen.tap(cx, cy);
   await page.touchscreen.tap(cx, cy);
   await page.waitForFunction(() => window.__cadDoubleClicks >= 1);
