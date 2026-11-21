@@ -12,10 +12,12 @@
  * changed before it isolates, leaves isolation or looks at a face or edge — the gesture ends as it did when
  * every click waited.
  *
- * The one tap that still waits is a tap under a tool a pick would leave (Explode, Clip: a pick
- * there takes up Select). It is held for the double-click window (`tap(..., { wait: true })`),
- * so a double-click under such a tool isolates and stays in the tool, the tool never having
- * changed hands; a lone click switches to Select once the window has passed, as it always has.
+ * Two taps still wait the double-click window (`tap(..., { wait: true, waitMs })`), because what
+ * they do would have to be undone: a tap under a tool a pick would leave (Explode, Clip: a pick
+ * there takes up Select), so a double-click under such a tool isolates and stays in the tool; and a
+ * tap that would take a selection away (the thing selected pressed again, or empty space with
+ * something selected), so a double-click never shows the selection going and coming back. A lone
+ * such click acts once the window has passed. A finger's window is its double tap's.
  *
  * `tap(clickCount, referenceId, options, { wait })`: a press released within the tap slop;
  * `miss(clickCount)`: a press that was not one (a drag, a cancel, a chord), which for a fresh
@@ -49,7 +51,7 @@ export function createClickActivation({
   }
 
   return {
-    tap(clickCount, referenceId, options, { wait = false } = {}) {
+    tap(clickCount, referenceId, options, { wait = false, waitMs = VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS } = {}) {
       drop();
       if (!doubleClick) {
         activated = true;
@@ -57,7 +59,7 @@ export function createClickActivation({
         return;
       }
       if (wait) {
-        hold(referenceId, options, VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS);
+        hold(referenceId, options, waitMs);
         return;
       }
       if (!(clickCount >= 2)) {
