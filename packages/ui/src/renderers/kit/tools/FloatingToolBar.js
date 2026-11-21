@@ -6,6 +6,7 @@ import {
 } from "@cad/ui/primitives/dropdown-menu";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { cn } from "@cad/ui/utils";
+import { PHONE_SCALE } from "../../../lib/scale.js";
 import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { STRIP_SHAPE_CLASS, StripTouchProvider, TOP_STRIP_BUTTON_CLASS, TOP_STRIP_SHAPE_CLASS, TOUCH_STRIP_BUTTON_CLASS } from "./stripTouch.js";
 import { ChangedDot } from "./ChangedDot.jsx";
@@ -63,7 +64,7 @@ export { STRIP_BUTTON_CLASS, StripTouchProvider, TOP_STRIP_BUTTON_CLASS, TOUCH_S
 // read as two buttons side by side.
 // A tool with a menu is one fill round its button and chevron: the wrapper's, in the toolbar's fills (the dark's the
 // foreground over the surface, as `TOOLBAR_ICON_BUTTON_CLASS`'s), its button's own put away in both themes.
-const SPLIT_CLASS = ["group/split inline-flex items-center rounded-[4px] transition hover:bg-sidebar-accent data-[active]:bg-sidebar-accent has-[[aria-expanded=true]]:bg-sidebar-accent",
+const SPLIT_CLASS = ["group/split inline-flex items-center rounded-control transition hover:bg-sidebar-accent data-[active]:bg-sidebar-accent has-[[aria-expanded=true]]:bg-sidebar-accent",
   "dark:hover:bg-foreground/10 dark:data-[active]:bg-foreground/16 dark:has-[[aria-expanded=true]]:bg-foreground/16"].join(" ");
 const SPLIT_BUTTON_CLASS = ["rounded-r-none hover:bg-transparent data-[variant=secondary]:bg-transparent data-[variant=secondary]:hover:bg-transparent group-hover/split:text-sidebar-accent-foreground",
   "dark:hover:bg-transparent dark:data-[variant=secondary]:bg-transparent dark:data-[variant=secondary]:hover:bg-transparent"].join(" ");
@@ -78,7 +79,7 @@ function toolButton(tool, className = TOP_STRIP_BUTTON_CLASS, touch = false) {
     {tool.changed ? <ChangedDot /> : null}
   </ToolbarButton>;
   if (!tool.menu) return button;
-  return <span className={cn(SPLIT_CLASS, touch && "rounded-md")} data-tool-split="" data-active={active ? "" : undefined}>{button}{tool.menu}</span>;
+  return <span className={SPLIT_CLASS} data-tool-split="" data-active={active ? "" : undefined}>{button}{tool.menu}</span>;
 }
 
 // The strip: Figma's toolbar's proportions on a desktop (40px, `TOP_STRIP_SHAPE_CLASS`), the touch strip's on a phone.
@@ -113,9 +114,9 @@ export default function FloatingToolBar({ tools = [], views = [], touch = false 
   </div>);
 }
 
-// The touch strip's geometry, as its classes draw it: 36px tiles 4px apart (`gap-1`), a tool's
-// chevron 20px and touching its button, and 4px of padding inside a 1px border. No rule parts anything.
-const TILE_PX = 36, CHEVRON_PX = 20, GAP_PX = 4, FRAME_PX = 10;
+// The touch strip's geometry, as its classes draw it at a phone's scale (`lib/scale.js`): its tiles the control,
+// the step apart, a tool's chevron half a tile and touching its button, and 5px of padding inside a 1px border.
+const TILE_PX = PHONE_SCALE.control, CHEVRON_PX = PHONE_SCALE.control / 2, GAP_PX = PHONE_SCALE.step, FRAME_PX = 12;
 
 /**
  * How many of the strip's entries (its tools, then its view controls) fit, in order, in `room`
@@ -174,7 +175,7 @@ function TouchStrip({ tools, views }) {
   const heldInMore = hidden.some(entry => !entry.view && entry.tool.active === true);
   return <StripTouchProvider value={true}>
     <div ref={root} className="relative z-20 flex max-w-full shrink-0 flex-col items-end gap-1" data-cad-toolbar="tools" data-touch-strip="">
-      <div role="group" aria-label={t("toolbar.tools")} className={cn(GROUP_CLASS, STRIP_SHAPE_CLASS, "flex-nowrap")}>
+      <div role="group" aria-label={t("toolbar.tools")} className={cn(GROUP_CLASS, TOP_STRIP_SHAPE_CLASS, "flex-nowrap")}>
         {shownTools.map(({ tool }) => <Fragment key={tool.id}>{toolButton(tool, TOUCH_STRIP_BUTTON_CLASS, true)}</Fragment>)}
         {shownViews.length ? <span className="inline-flex items-center gap-1" data-view-controls="">
           {shownViews.map(({ control }) => <Fragment key={control.id}>{control.tile}</Fragment>)}

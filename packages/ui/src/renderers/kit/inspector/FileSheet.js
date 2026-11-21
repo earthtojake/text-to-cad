@@ -14,23 +14,18 @@ export const FILE_SHEET_ROW_STACK_CLASSES = "space-y-3";
 // values and status alike, a heading told apart from its rows by colour (labels muted, values and headings
 // the foreground), never by size; a value badge, small metadata, 11/16.
 export const FILE_SHEET_SECTION_TITLE_CLASSES = "text-xs text-sidebar-foreground";
-export const FILE_SHEET_STATUS_TEXT_CLASSES = "text-xs leading-4 text-muted-foreground";
+export const FILE_SHEET_STATUS_TEXT_CLASSES = "text-xs leading-(--cad-leading-xs) text-muted-foreground";
 
-// A trigger must clip and ellipsize its own value: the Radix trigger only sets
-// whitespace-nowrap, so without this a long option pushes its chevron out
-// through the border instead of truncating.
-const FILE_SHEET_SELECT_TRIGGER_BASE_CLASSES = "!h-7 px-2 !text-xs overflow-hidden [&_svg]:size-3.5 [&>span]:min-w-0 [&>span]:truncate";
-export const FILE_SHEET_SELECT_TRIGGER_CLASSES = `${FILE_SHEET_SELECT_TRIGGER_BASE_CLASSES} w-full`;
 export const FILE_SHEET_VALUE_BADGE_CLASSES = "shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-tiny leading-none tabular-nums text-foreground";
 export const FILE_SHEET_VALUE_BADGE_INPUT_CLASSES = [
-  "h-7 w-20 shrink-0 rounded-md border border-input bg-transparent px-2 py-1 text-right text-xs leading-none tabular-nums text-foreground shadow-xs outline-none",
+  "h-control w-20 shrink-0 rounded-md border border-input bg-transparent px-2 py-1 text-right text-xs leading-none tabular-nums text-foreground shadow-xs outline-none",
   "m-0 box-border min-w-0 theme-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground",
   "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30"
 ].join(" ");
-export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-7 px-2 text-xs !text-foreground";
+export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-control px-2 text-xs !text-foreground";
 
 /** A section heading: 24px, regular 12px, never a disclosure (`docs/settings-ui.md`). */
-export const FILE_SHEET_SECTION_HEADING_CLASSES = "flex h-6 min-w-0 items-center gap-2 text-xs font-normal leading-4 text-foreground";
+export const FILE_SHEET_SECTION_HEADING_CLASSES = "flex h-icon-button min-w-0 items-center gap-2 text-xs font-normal leading-(--cad-leading-xs) text-foreground";
 
 /**
  * One settings section: a heading and its rows, a rule above it when another section precedes
@@ -60,8 +55,8 @@ export function FileSheetSettingsSection({ title, children, enabled, onEnabledCh
  * under Grid); the control keeps the full accessible name.
  */
 export function FileSheetSettingRow({ label, children, disabled = false, className }) {
-  return <div className={cn("grid h-6 min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-center gap-2", className)}>
-    <TooltipHint content={label} overflowOnly><FieldLabel className="leading-4">{label}</FieldLabel></TooltipHint>
+  return <div className={cn("grid h-icon-button min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-center gap-2", className)}>
+    <TooltipHint content={label} overflowOnly><FieldLabel className="leading-(--cad-leading-xs)">{label}</FieldLabel></TooltipHint>
     <div className="flex min-w-0 items-center gap-1">{children}</div>
   </div>;
 }
@@ -72,11 +67,11 @@ export function FileSheetSettingRow({ label, children, disabled = false, classNa
 export function FileSheetNumberProperty({ label, Icon, value, onValueCommit, disabled = false, className }) {
   const { t } = useI18n();
   return (
-    <TooltipHint content={label}><div className={cn("flex h-7 min-w-0 items-center gap-1 rounded-md border border-input bg-muted/30 px-2 focus-within:ring-1 focus-within:ring-ring",
+    <TooltipHint content={label}><div className={cn("flex h-control min-w-0 items-center gap-1 rounded-md border border-input bg-muted/30 px-2 focus-within:ring-1 focus-within:ring-ring",
       disabled && "cursor-not-allowed opacity-50 [&_input]:cursor-not-allowed", className)}>
       {Icon ? <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
       <FileSheetValueInput ariaLabel={t("field.value", { name: label })} value={value} onValueCommit={onValueCommit} disabled={disabled}
-        className="h-6 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-left shadow-none focus-visible:ring-0 dark:bg-transparent" />
+        className="h-icon-button min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-left shadow-none focus-visible:ring-0 dark:bg-transparent" />
     </div></TooltipHint>
   );
 }
@@ -85,7 +80,7 @@ export function FileSheetColorProperty({ label, value, onChange, opacity, onOpac
   const withOpacity = typeof onOpacityChange === "function";
   return (
     <div className={cn("min-w-0", className)}>
-      <TooltipHint content={label}><div className="flex h-7 min-w-0 items-center overflow-hidden rounded-md border border-input bg-muted/30">
+      <TooltipHint content={label}><div className="flex h-control min-w-0 items-center overflow-hidden rounded-md border border-input bg-muted/30">
         <FileSheetColorPicker value={value} onChange={onChange} opacity={opacity} onOpacityChange={onOpacityChange}
           showOpacity={withOpacity} aria-label={label}
           className="min-w-0 flex-1 rounded-none border-0 bg-transparent shadow-none dark:bg-transparent" />
@@ -119,7 +114,7 @@ export function FileSheetSubsection({ title, children, contentClassName }) {
             hasRows && "pb-3"
           )}
         >
-          <span className={cn("min-w-0 truncate leading-4", FILE_SHEET_SECTION_TITLE_CLASSES)}>{title}</span>
+          <span className={cn("min-w-0 truncate leading-(--cad-leading-xs)", FILE_SHEET_SECTION_TITLE_CLASSES)}>{title}</span>
         </div>
       ) : null}
       {hasRows ? <div className={cn(FILE_SHEET_ROW_STACK_CLASSES, contentClassName)}>{children}</div> : null}
@@ -139,11 +134,11 @@ export function FileSheetControlRow({ label, value, trailing, children, classNam
         <div
           className={cn(
             "flex items-center justify-between gap-2",
-            hasContent ? "min-h-4" : "min-h-7"
+            hasContent ? "min-h-4" : "min-h-control"
           )}
         >
           {label != null ? (
-            <FieldLabel className="leading-4">{label}</FieldLabel>
+            <FieldLabel className="leading-(--cad-leading-xs)">{label}</FieldLabel>
           ) : <span />}
           {trailing != null ? trailing : value != null ? (
             <span className={FILE_SHEET_VALUE_BADGE_CLASSES}>{value}</span>
@@ -314,9 +309,9 @@ export function FileSheetValueField({ label, value }) {
   const displayValue = String(value ?? "");
   return (
     <div className="block min-w-0">
-      <FieldLabel className="leading-4">{label}</FieldLabel>
+      <FieldLabel className="leading-(--cad-leading-xs)">{label}</FieldLabel>
       <TooltipHint content={displayValue} overflowOnly><div
-        className="mt-1 min-h-7 truncate rounded-md border border-border/70 bg-muted/25 px-2 py-1 text-xs leading-4 text-foreground">
+        className="mt-1 min-h-control truncate rounded-md border border-border/70 bg-muted/25 px-2 py-1 text-xs leading-(--cad-leading-xs) text-foreground">
         {displayValue}
       </div></TooltipHint>
     </div>

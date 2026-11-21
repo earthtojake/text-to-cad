@@ -37,5 +37,5 @@ export function EmptyState({ title, description, action, className }) {
  * @param {import("react").ButtonHTMLAttributes<HTMLButtonElement>} props
  */
 export function StatusAction({ className, ...props }) {
-  return <Button type="button" variant="outline" size="xs" className={cn("h-7 px-2.5 text-ui font-normal shadow-none", className)} {...props} />;
+  return <Button type="button" variant="outline" size="xs" className={cn("h-control px-2.5 text-ui font-normal shadow-none", className)} {...props} />;
 }

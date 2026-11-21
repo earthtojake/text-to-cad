@@ -106,6 +106,8 @@ export const PANEL_SURFACE_PX = 8;
  * buttons and 4px), between its two 8px steps, over its 1px rule.
  */
 export const PANEL_HEAD_ROW_PX = 32;
+/** The head's row as drawn, at THE scale (`globals.css`): the control and 4px (32px on a desktop, 40 on a phone). */
+export const PANEL_HEAD_ROW = "calc(var(--cad-control) + 4px)";
 /**
  * The rows' horizontal geometry the panel sets (`primitives/tree-row.jsx` reads it): a row's fill hangs half the inset
  * out past the line and its glyph stands half the inset into it; its last action's glyph ends the inset from the

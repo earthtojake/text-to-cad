@@ -56,7 +56,7 @@ it("the zoom is one dropdown, the percentage and a chevron on a faint surface, c
   for (const name of FLOATING_CHROME_SURFACE_CLASS.split(' ')) expect(pill.classList.contains(name), name).toBe(false);
   const button = pill.querySelector<HTMLElement>('[data-zoom-control]')!;
   expect([[...pill.querySelectorAll('button')].map(node => node.getAttribute('aria-label')), Boolean(button.querySelector('.lucide-chevron-down')),
-    ['h-7', 'bg-foreground/6'].every(name => button.classList.contains(name))]).toEqual([['Zoom 100%'], true, true]);
+    ['h-control', 'bg-foreground/6'].every(name => button.classList.contains(name))]).toEqual([['Zoom 100%'], true, true]);
   expect([pill.style.right, pill.style.top, pill.style.bottom]).toEqual(['calc(var(--cad-viewport-corner-right, 2px) + 10px)', 'calc(14px + var(--cad-viewport-corner-top, 0px))', '']);
 });
 

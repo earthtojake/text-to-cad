@@ -77,8 +77,8 @@ const GUTTER = 16;
  * a warning and a success in their colours, so a failed update reads as one.
  */
 const TOAST_CLASSES = {
-  toast: 'gap-1.5! px-2.5! py-1.5! text-xs! leading-4! min-[601px]:w-max! min-[601px]:max-w-[min(30rem,calc(100vw-2rem))]!',
-  title: 'font-normal! leading-4! whitespace-normal! break-words!',
+  toast: 'gap-1.5! px-2.5! py-1.5! text-xs! leading-(--cad-leading-xs)! min-[601px]:w-max! min-[601px]:max-w-[min(30rem,calc(100vw-2rem))]!',
+  title: 'font-normal! leading-(--cad-leading-xs)! whitespace-normal! break-words!',
   icon: 'size-3.5! [&_svg]:size-3.5!',
 };
 

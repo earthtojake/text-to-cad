@@ -254,11 +254,11 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   // The note's buttons at its right, on its last line: Copy Prompt in words where it is the only one, at the bar's full
   // 400px too (its 8px sides and 4px gap keep the words and the icon beside a note of at least 12rem), an icon alone only
   // where the window makes the bar narrower than that (`@container`: its content under 24rem, the bar under 396px); else an icon each, the last the
-  // primary. 28px, the toolbar's tiles; a phone's 36px.
-  const size = docked ? "size-9" : "size-7";
-  const glyph = docked ? "size-4" : "size-3.5";
+  // primary. The control, the toolbar's tiles (THE scale, `globals.css`: a phone's the same class at its tokens).
+  const size = "size-control";
+  const glyph = "size-glyph-sm";
   const ctas = () => actions.length === 1
-    ? <Button type="button" variant="default" size="sm" className={cn("gap-1 text-xs @max-[24rem]/quick-edit:w-7 @max-[24rem]/quick-edit:px-0", docked ? "h-9 px-3 @max-[24rem]/quick-edit:w-9" : "h-7 px-2")}
+    ? <Button type="button" variant="default" size="sm" className="h-control gap-1 px-pad text-xs @max-[24rem]/quick-edit:w-control @max-[24rem]/quick-edit:px-0"
       aria-label={copied ? t("quickEdit.promptCopied") : t("quickEdit.copyPrompt")} aria-busy={pending === "copy" || undefined} disabled={!actionReady("copy")} onClick={() => run("copy")} data-quick-edit-action="copy">
       {copied ? <Check className={glyph} aria-hidden="true" /> : <Copy className={glyph} aria-hidden="true" />}
       <span className="whitespace-nowrap @max-[24rem]/quick-edit:hidden">{copied ? t("chip.copied") : t("quickEdit.copyPrompt")}</span>
@@ -350,17 +350,17 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
       // The bar: the toolbar's surface and shape, a chat's input — what goes with the note on its first row, the note
       // under it with its buttons at its right. It comes in from below in 150ms, animate-in's own.
       className={cn("@container/quick-edit pointer-events-auto relative flex w-full flex-col gap-1 text-xs animate-in fade-in-0 slide-in-from-bottom-1",
-        FLOATING_CHROME_SURFACE_CLASS, docked ? "rounded-[14px] p-1.5" : "rounded-[10px] p-[5px]",
+        FLOATING_CHROME_SURFACE_CLASS, "rounded-[calc(var(--cad-radius-control)+6px)] p-[5px]",
         "transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20")}
       data-docked={docked ? "" : undefined}>
       {/* Its context: the chips (the annotation's, the picks'), one a kind ("5 parts", or a single pick's name), one row,
           the rest under "+N more"; the X at the row's end. */}
-      <div className={cn("flex min-w-0 items-center gap-1.5 pl-1", docked ? "min-h-8" : "min-h-6")} data-quick-edit-context="">
+      <div className="flex min-h-icon-button min-w-0 items-center gap-1.5 pl-1" data-quick-edit-context="">
         {shownChips.length ? <ReferenceChips chips={shownChips} rows={1} grouped className="min-w-0 flex-1" /> : <span className="flex-1" />}
         <TooltipHint content={t("quickEdit.close")} side="top">
           <Button type="button" variant="ghost" size="icon-xs" aria-label={t("quickEdit.close")} onClick={dismiss}
-            className={cn("ml-auto shrink-0 text-muted-foreground hover:text-foreground", docked ? "size-8" : "size-6")} data-quick-edit-close="">
-            <X className={docked ? "size-4" : "size-3.5"} aria-hidden="true" />
+            className="ml-auto size-icon-button shrink-0 text-muted-foreground hover:text-foreground" data-quick-edit-close="">
+            <X className="size-glyph-sm" aria-hidden="true" />
           </Button>
         </TooltipHint>
       </div>
@@ -374,7 +374,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
             className={cn("w-full whitespace-pre-wrap break-words px-1.5 py-1.5 text-foreground outline-none empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]",
               // What a person types (and its placeholder) at the chrome's UI size, as a field's text is, docked or floating;
               // the size before the 20px lines: cn() lets a later font size drop an earlier leading.
-              "text-ui leading-5", docked ? "min-h-9" : "min-h-8")}
+              "min-h-[max(2rem,var(--cad-control))] text-ui leading-5")}
             onInput={event => readNote(event.currentTarget)} onKeyDown={onKeyDown} onPaste={onPaste} onMouseDown={onNoteMouseDown} />
         </ScrollArea>
         <div className="flex shrink-0 items-center gap-1" data-quick-edit-actions="">{ctas()}</div>

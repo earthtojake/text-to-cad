@@ -186,7 +186,7 @@ const cardSections = (pane: HTMLElement) => {
   const sections: string[][][] = [[]];
   for (const node of openCard(pane).querySelector('[data-settings-card-body]')!.children) {
     if (node.hasAttribute('data-settings-rule')) { sections.push([]); continue; }
-    sections.at(-1)!.push([node.getAttribute('data-settings-row')!, node.querySelector('[data-settings-value-label]')!.textContent!]);
+    sections.at(-1)!.push([node.getAttribute('data-settings-row')!, node.querySelector('[data-field-value]')!.textContent!]);
   }
   return sections;
 };
@@ -197,11 +197,11 @@ const ROW_OF: Record<string, string> = { 'data-board-side-option': 'side', 'data
 const viewSub = (pane: HTMLElement, id: string) => {
   const trigger = openCard(pane).querySelector<HTMLElement>(`[data-settings-select="${id}"]`);
   if (!trigger) return null;
-  if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
-  return document.querySelector<HTMLElement>('[role=listbox]');
+  if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' });
+  return document.querySelector<HTMLElement>('[role=menu]');
 };
 // The open list put away, as Escape puts it away.
-const closeSub = () => { const list = document.querySelector('[role=listbox]'); if (list) fireEvent.keyDown(list, { key: 'Escape' }); };
+const closeSub = () => { const list = document.querySelector('[role=menu]'); if (list) fireEvent.keyDown(list, { key: 'Escape' }); };
 // A choice of Display's, made as a person makes it: its dropdown opened, the option chosen.
 const pickView = (pane: HTMLElement, attribute: string, value: string) =>
   fireEvent.click(viewSub(pane, ROW_OF[attribute])!.querySelector<HTMLElement>(`[${attribute}="${value}"]`)!);
@@ -236,11 +236,11 @@ const displayMenu = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLE
 };
 /** A choice of Display's, by its accessible name: its Select opened, the option pressed. */
 const choose = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement, name: string, option: string) => {
-  await user.click(within(await displayMenu(user, pane)).getByRole('combobox', { name }));
-  await user.click(await screen.findByRole('option', { name: option }));
+  await user.click(within(await displayMenu(user, pane)).getByRole('button', { name }));
+  await user.click(await screen.findByRole('menuitemradio', { name: option }));
 };
 const choice = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement, name: string) =>
-  within(await displayMenu(user, pane)).getByRole('combobox', { name }).textContent;
+  within(await displayMenu(user, pane)).getByRole('button', { name }).textContent;
 // Display's Style: its presets (each its name, whether it is chosen and whether it has its icon); a preset picked from it;
 // the one chosen (Custom while the eyes have left the preset's set).
 const presets = async (pane: HTMLElement) => viewRows(pane, 'data-display-mode-option');
@@ -297,7 +297,7 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   // nothing of the view is on the strip, which has no rule.
   expect([viewButtons(pane), displayButton(pane).querySelector('.lucide-chevron-down')]).toEqual([['Display', 'Preview'], null]);
   expect([viewValue(pane, 'side'), viewValue(pane, 'dimension'), viewValue(pane, 'display')]).toEqual(['top', '2d', 'board']);
-  for (const button of cornerStack(pane)!.querySelectorAll('button')) expect(button.className.includes('size-7')).toBe(true);
+  for (const button of cornerStack(pane)!.querySelectorAll('button')) expect(button.className.includes('size-control')).toBe(true);
   expect([cornerStack(pane)!.closest('[data-viewer-navbar]') !== null, pane.querySelector('[data-view-corner-stack]')]).toEqual([true, null]);
   // Each dropdown shows its choice with its icon; its options each theirs, the one on screen chosen. In 2D there is no
   // Projection; Reset is off while the board is as it opened for the first time.
@@ -330,7 +330,7 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   // 8px over the tabs and under them; at its sides the panel's inset less what the pills (6px) and the search's button
   // (7px) hang out by, so the tabs' names and the search's icon stand on the inset (`--panel-inset`).
   expect([head.style.paddingTop, head.style.paddingBottom, head.style.paddingLeft, head.style.paddingRight])
-    .toEqual(['8px', '8px', 'calc(var(--panel-inset) - 6px)', 'calc(var(--panel-inset) - 7px)']);
+    .toEqual(['8px', '8px', 'calc(var(--panel-inset) - 6px)', 'calc(var(--panel-inset) - calc((var(--cad-control) - 14px) / 2))']);
   expect(within(aside).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Parts', 'true'], ['Nets', 'false'], ['Layers', 'false']]);
   expect(aside.querySelector('[role=tab] svg')).toBeNull();
   // The search's box takes the tabs' row; Escape gives it back.
@@ -341,7 +341,7 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   expect(tabBody(pane, 'nets').hidden).toBe(true);
   expect(tabBody(pane, 'layers').hidden).toBe(true);
   // The Layers tab is the layer list alone.
-  expect(within(tabBody(pane, 'layers')).queryAllByRole('combobox')).toEqual([]);
+  expect(within(tabBody(pane, 'layers')).queryAllByRole('button').filter(node => node.hasAttribute('data-value-dropdown'))).toEqual([]);
   // Nothing is picked yet: no Quick Edit.
   expect(box(pane)).toBeNull();
 
@@ -809,7 +809,7 @@ it("the Layers tab holds KiCad's layer display options — the others, the pours
   const menu = await displayMenu(user, pane);
   // The preset is the strip's Display, not the tab's: the tab has the layers and their display.
   expect([...menu.querySelectorAll('[data-settings-section]')].map(section => section.getAttribute('data-settings-section'))).toEqual(['board-layer-display']);
-  expect(within(menu).getAllByRole('combobox').map(select => [select.getAttribute('aria-label'), select.textContent]))
+  expect(within(menu).getAllByRole('button').filter(node => node.hasAttribute('data-value-dropdown')).map(select => [select.getAttribute('aria-label'), select.textContent]))
     .toEqual([['Other layers', 'Shown']]);
   expect(within(menu).getByRole('slider', { name: 'Zone opacity' }).getAttribute('aria-valuenow')).toBe('0.6');
   expect((within(menu).getByRole('textbox', { name: 'Track opacity value' }) as HTMLInputElement).value).toBe('100');
@@ -1177,7 +1177,7 @@ it("2D/3D is one view: the strip, its view controls, the panel and the corner st
   expect(viewValue(pane, 'dimension')).toBe('3d');
   // The corner is the one it was: the zoom (the 3D camera's now), and no cube, Home or Projection of a 3D view's.
   expect(viewport3d.props.viewCube).toBe(false);
-  expect([within(pane).queryByRole('button', { name: /^Projection/ }), pane.querySelector('[data-view-home]')]).toEqual([null, null]);
+  expect([within(pane).queryAllByRole('button', { name: /^Projection/ }).filter(button => !button.hasAttribute('data-value-dropdown')), pane.querySelector('[data-view-home]')]).toEqual([[], null]);
   // The pick and the measurement are where they were; a camera is the 3D view's to pose.
   expect(selected(controller)).toEqual(['#R1.2']);
   fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Measure' }));

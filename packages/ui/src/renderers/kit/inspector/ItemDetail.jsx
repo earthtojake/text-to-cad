@@ -19,10 +19,10 @@ function Head({ item, data, copy }) {
   const label = <span className="min-w-0 truncate">{item.title}</span>;
   return copyable ? <button type="button" aria-label={t("chip.copyReference", { name: item.title })} data-copied={flash.copied ? "" : undefined}
     onClick={() => void flash.copy(copyText(copy))} {...marks} data-detail-head=""
-    className="group/title flex h-7 w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-sm text-left font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/45">
+    className="group/title flex h-control w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-sm text-left font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/45">
     {label}
     <Icon className={cn("size-3 shrink-0", flash.copied ? "text-foreground" : "text-muted-foreground group-hover/title:text-foreground")} aria-hidden="true" />
-  </button> : <h3 className="flex h-7 min-w-0 items-center font-medium text-foreground" {...marks} data-detail-head="">{label}</h3>;
+  </button> : <h3 className="flex h-control min-w-0 items-center font-medium text-foreground" {...marks} data-detail-head="">{label}</h3>;
 }
 
 /**

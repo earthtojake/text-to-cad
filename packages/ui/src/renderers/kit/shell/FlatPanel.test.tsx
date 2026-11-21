@@ -33,12 +33,12 @@ it('draws its tabs as pills, the open one filled, foreground and medium, the oth
   render(<Panel tabs={[{ id: 'parts', label: 'Parts', content: <p>Parts</p> }, { id: 'nets', label: 'Nets', content: <p>Nets</p> }]} first="nets" />);
   const tabs = screen.getAllByRole('tab');
   expect(tabs.map(tab => [tab.getAttribute('aria-selected'), tab.classList.contains('bg-accent'), tab.classList.contains('text-foreground'),
-    tab.classList.contains('text-muted-foreground'), Boolean(tab.querySelector('[data-flat-panel-tab-name].font-medium')), tab.classList.contains('h-7'), tab.classList.contains('px-1.5')]))
+    tab.classList.contains('text-muted-foreground'), Boolean(tab.querySelector('[data-flat-panel-tab-name].font-medium')), tab.classList.contains('h-control'), tab.classList.contains('px-1.5')]))
     .toEqual([['false', false, false, true, false, true, true], ['true', true, true, false, true, true, true]]);
   // 8px over and under the row; at its sides the inset (`--panel-inset`) less what its first and last boxes hang out by
-  // (a pill's 6px, an icon button's 7px), so a tab's name and the search's icon stand on the inset.
+  // (a pill's 6px, an icon button's: its 14px glyph centred in the control, 7px on a desktop), so a tab's name and the search's icon stand on the inset.
   expect([row().style.paddingTop, row().style.paddingBottom, row().style.paddingLeft, row().style.paddingRight])
-    .toEqual(['8px', '8px', 'calc(var(--panel-inset) - 6px)', 'calc(var(--panel-inset) - 7px)']);
+    .toEqual(['8px', '8px', 'calc(var(--panel-inset) - 6px)', 'calc(var(--panel-inset) - calc((var(--cad-control) - 14px) / 2))']);
   expect([row().classList.contains('border-border'), row().hasAttribute('data-rule')]).toEqual([true, true]);
   // The row: the tab row (its tablist taking the room), then the search's icon, last; no ⋯, no search box.
   const line = row().firstElementChild as HTMLElement;
@@ -55,8 +55,8 @@ it('draws a single tab as a plain title in the tabs\' own block, the search an i
   const title = row().querySelector<HTMLElement>('[data-flat-panel-heading]')!;
   expect([screen.queryAllByRole('tab').length, screen.queryByRole('tablist'), title.textContent]).toEqual([0, null, 'Model']);
   // Its name on the inset, as a tab's is: the title pads as a pill does (6px), the row the inset less that.
-  expect([title.classList.contains('font-medium'), title.classList.contains('px-1.5'), title.classList.contains('h-7')]).toEqual([true, true, true]);
-  const block = () => [row().classList.contains('border-border'), row().hasAttribute('data-compact'), row().style.height === '32px',
+  expect([title.classList.contains('font-medium'), title.classList.contains('px-1.5'), title.classList.contains('h-control')]).toEqual([true, true, true]);
+  const block = () => [row().classList.contains('border-border'), row().hasAttribute('data-compact'), row().style.height === 'calc(var(--cad-control) + 4px)',
     [row().style.paddingTop, row().style.paddingBottom, row().style.paddingLeft], document.querySelector('[data-flat-panel-body]')!.className];
   const one = block();
   expect(one.slice(0, 4)).toEqual([true, false, true, ['8px', '8px', 'calc(var(--panel-inset) - 6px)']]);
@@ -170,7 +170,7 @@ it('searches the one tree from any tab and gives the open tab back as the query 
   render(<Panel tabs={[{ id: 'layers', label: 'Layers', content: <Walk items={['CUT', 'BEND']} /> }]} first="layers" />);
   const title = headBox();
   fireEvent.click(searchIcon()!);
-  expect([title.compact, title.rule, title.height, headBox(), row().querySelector('[data-flat-panel-heading]')]).toEqual([false, true, '32px', title, null]);
+  expect([title.compact, title.rule, title.height, headBox(), row().querySelector('[data-flat-panel-heading]')]).toEqual([false, true, 'calc(var(--cad-control) + 4px)', title, null]);
 });
 
 // Where no tab is searchable (Parameters, Joints and Animation alone), there is no search icon, and / opens nothing.

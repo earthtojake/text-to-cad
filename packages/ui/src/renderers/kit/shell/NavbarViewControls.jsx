@@ -14,7 +14,7 @@ import { useNavbarViewSlot } from "../../../file-viewer/navbarSlots.js";
  */
 
 /** A navbar view button: the navbar's 28px, its 16px glyph, muted until under the pointer or open (`aria-expanded`). */
-export const NAVBAR_VIEW_BUTTON_CLASS = "size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground [&>svg]:size-4!";
+export const NAVBAR_VIEW_BUTTON_CLASS = "size-control shrink-0 rounded-md text-muted-foreground hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground [&>svg]:size-4!";
 
 /** What each control needs to stand in the navbar: its class, and its tooltip and menu under it, a menu's end on its button's. */
 export const NAVBAR_VIEW_PLACE = Object.freeze({ className: NAVBAR_VIEW_BUTTON_CLASS, tooltipSide: "bottom", side: "bottom", align: "end" });

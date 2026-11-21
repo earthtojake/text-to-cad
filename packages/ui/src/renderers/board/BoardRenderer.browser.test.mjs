@@ -114,7 +114,7 @@ async function chooseView(pane, id, value) {
   // Each group is a dropdown of the card: it opens its list, its options in it. The card is put away after, by its X,
   // so it stands over nothing the next step presses (the corner's zoom).
   await card.locator(`[data-settings-select="${id}"]`).click();
-  await page.getByRole('listbox').locator(`[${OPTION[id]}="${value}"]`).click();
+  await page.getByRole('menu').locator(`[${OPTION[id]}="${value}"]`).click();
   await card.getByRole('button', { name: 'Close display settings', exact: true }).click();
   await card.waitFor({ state: 'detached' });
 }

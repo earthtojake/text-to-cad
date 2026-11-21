@@ -37,7 +37,7 @@ function IsolateEye({ node, on, onToggle, data }) {
   return <TreeRowActions persistent={on}>
     <TooltipHint content={action}>
       <Button type="button" variant="ghost" size="icon-xs" aria-label={t(on ? "tree.exitIsolateNamed" : "tree.isolateNamed", { name: node.label })} aria-pressed={on}
-        className={cn("h-5 w-4", on ? "text-foreground" : "text-muted-foreground")} {...{ [`data-${data}-isolate`]: node.id }}
+        className={cn("cad-hit h-[calc(var(--cad-glyph)+4px)] w-glyph", on ? "text-foreground" : "text-muted-foreground")} {...{ [`data-${data}-isolate`]: node.id }}
         onClick={event => { event.stopPropagation(); onToggle(node.pick); }}>
         <Eye className="size-3" aria-hidden="true" />
       </Button>

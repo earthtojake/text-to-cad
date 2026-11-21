@@ -124,7 +124,7 @@ function measurePanel() {
     path: [element.closest('[data-tree-row]') ? 'row' : '', element.closest('[data-flat-panel-tab]') ? 'tab' : ''].filter(Boolean).join(','),
     // Inside a button or a box: what its box holds, the box's edge the one on the line (a tab's name, Save's word, a
     // dropdown's choice).
-    held: Boolean(element.closest('button, [role=combobox], [aria-haspopup]')) });
+    held: Boolean(element.closest('button, [aria-haspopup]')) });
   const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const text = node.textContent;
@@ -144,7 +144,7 @@ function measurePanel() {
     const left = Math.min(...rects.map(rect => rect.left)), right = Math.min(clip, Math.max(...rects.map(rect => rect.right)));
     push(node.parentElement, { left, right, top: rects[0].top }, 'text', text.trim());
   }
-  const BOX = '[data-flat-panel-body] :is([role=combobox], [aria-haspopup=menu], [data-slot=checkbox])';
+  const BOX = '[data-flat-panel-body] :is([data-value-dropdown], [aria-haspopup=menu], [data-slot=checkbox])';
   // The search's field is no box (no border, fill or ring): its magnifier and its X are what stand on the insets.
   for (const element of panel.querySelectorAll(`svg, input:not([type=hidden]):not([type=range]):not([data-flat-panel-search] input), [role=switch], [data-slider-field-track], ${BOX}`)) {
     if (element.closest('svg') !== element && element.tagName.toLowerCase() !== 'svg' && element.closest('svg')) continue;

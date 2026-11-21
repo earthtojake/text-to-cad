@@ -39,7 +39,7 @@ const commitOf = ({ value, onChange, min, max, step, scale, format }) => draft =
 function Palette({ colors, onChange, t }) {
   const iconButton = (label, Icon, disabled, onClick) => <TooltipHint content={label}>
     <Button type="button" variant="ghost" size="icon-xs" aria-label={label} disabled={disabled} onClick={onClick}
-      className="size-5 text-muted-foreground hover:text-foreground"><Icon className="size-3.5" aria-hidden="true" /></Button>
+      className="cad-hit size-5 text-muted-foreground hover:text-foreground"><Icon className="size-3.5" aria-hidden="true" /></Button>
   </TooltipHint>;
   return <div className="flex flex-wrap justify-end gap-1 py-0.5">
     {colors.map((value, index) => <FileSheetColorPicker key={index} aria-label={t("render.partColourN", { n: index + 1 })} value={value} showValue={false}

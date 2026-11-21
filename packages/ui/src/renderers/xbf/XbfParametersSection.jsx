@@ -503,7 +503,7 @@ export default function XbfParametersSection({ parameters: model }) {
         {...(own ? {} : marks)} />;
       return own ? <Explained key={name} reason={own} {...marks}>{control}</Explained> : control;
     }
-    const control = <FileSheetSettingRow label={name} disabled={off} className={`h-7 ${ROW_COLUMNS}`}>
+    const control = <FileSheetSettingRow label={name} disabled={off} className={`h-control ${ROW_COLUMNS}`}>
       <FileSheetNumberProperty label={name} value={text} disabled={off} onValueCommit={typed} className="w-full" />
     </FileSheetSettingRow>;
     // 8px under it, as under a slider, before the next control or the foot.
@@ -515,7 +515,7 @@ export default function XbfParametersSection({ parameters: model }) {
   // off — and the hint of a button it holds off. Save off for another reason says why in its own hint, on the wrapper
   // that takes the pointer for it.
   const actions = (editable || documentReason) && shown.length ? <PanelActions footProps={FOOT_MARKS} className="flex-col items-end gap-1" data-parameters-actions="">
-    <span role="status" className={cn("max-w-full text-right leading-4 text-muted-foreground empty:hidden", blocked ? "line-clamp-2" : "truncate")} data-parameters-status=""
+    <span role="status" className={cn("max-w-full text-right leading-(--cad-leading-xs) text-muted-foreground empty:hidden", blocked ? "line-clamp-2" : "truncate")} data-parameters-status=""
       data-parameters-status-reason={blockedBy || undefined}>{status}</span>
     <div className="flex items-center justify-end gap-2" data-parameters-buttons="">
     <Explained reason={blocked && !(saving || !model.dirty) ? "" : blocked} className="shrink-0">

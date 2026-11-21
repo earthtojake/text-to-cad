@@ -219,12 +219,12 @@ it("a DXF's strip is Select (in hand), Draw and Measure, its zoom the corner's p
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   await user.click(inPane.getByRole('button', { name: 'Display' }));
   const card = document.querySelector<HTMLElement>('[data-display-settings-card]')!;
-  expect([[...card.querySelectorAll('[data-settings-row]')].map(row => [row.getAttribute('data-settings-row'), row.querySelector('[data-settings-value-label]')!.textContent]),
+  expect([[...card.querySelectorAll('[data-settings-row]')].map(row => [row.getAttribute('data-settings-row'), row.querySelector('[data-field-value]')!.textContent]),
     card.querySelectorAll('[data-settings-rule]').length, within(card).queryByRole('button', { name: 'Reset' })]).toEqual([[['background', 'Light']], 0, null]);
   // Its dropdown opened as a tap opens it, Dark chosen.
-  fireEvent.click(within(card).getByRole('combobox', { name: 'Background' }));
-  expect(screen.getAllByRole('option').map(option => [option.textContent, option.getAttribute('data-state')])).toEqual([['Light', 'checked'], ['Dark', 'unchecked']]);
-  fireEvent.click(screen.getByRole('option', { name: 'Dark' }));
+  fireEvent.pointerDown(within(card).getByRole('button', { name: 'Background' }), { button: 0, ctrlKey: false, pointerType: 'mouse' });
+  expect(screen.getAllByRole('menuitemradio').map(option => [option.textContent, option.getAttribute('data-state')])).toEqual([['Light', 'checked'], ['Dark', 'unchecked']]);
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
   await waitFor(() => expect(inPane.getByRole('button', { name: 'Display' }).getAttribute('data-view-background')).toBe('dark'));
   // A drawing always has its Layers (open, or its pill where the view starts it collapsed), one layer its one row.
   expect(pane.querySelector('[data-flat-panel], [data-flat-panel-pill]')).not.toBeNull();

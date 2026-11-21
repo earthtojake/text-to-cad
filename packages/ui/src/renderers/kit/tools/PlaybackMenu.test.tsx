@@ -93,7 +93,7 @@ it("the Animation section holds the same controls playing and paused, its scrubb
   // switch rows, a label and its switch, no icon.
   const clipMenu = bar().querySelector<HTMLElement>('[data-animation-clip-menu]')!, speed = bar().querySelector<HTMLElement>('[data-animation-speed]')!;
   expect([clipMenu.hasAttribute('data-panel-dropdown'), speed.hasAttribute('data-panel-dropdown'), clipMenu.textContent, speed.textContent]).toEqual([true, true, 'Turn', '1×']);
-  expect([bar().querySelector('[data-animation-play]')!.className, bar().querySelector('[data-animation-reset]')!.className]).toEqual([expect.stringContaining('size-7'), expect.stringContaining('size-7')]);
+  expect([bar().querySelector('[data-animation-play]')!.className, bar().querySelector('[data-animation-reset]')!.className]).toEqual([expect.stringContaining('size-control'), expect.stringContaining('size-control')]);
   // The clip row is labelled as Speed's is, the same row: its label and the dropdown.
   expect([clipMenu.classList.contains('w-full'), clipMenu.closest('[data-panel-select-row]')!.children.length, clipMenu.closest('[data-panel-select-row]')!.firstElementChild!.textContent,
     speed.closest('[data-panel-select-row]')!.className]).toEqual([false, 2, 'Animation', clipMenu.closest('[data-panel-select-row]')!.className]);

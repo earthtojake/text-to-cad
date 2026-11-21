@@ -42,7 +42,7 @@ it("has Preview's lighting, background and a floor that folds while off, each se
   expect(store.renderScene().view.lighting.exposure).toBeCloseTo(0.1);
   await user.click(screen.getByRole('switch', { name: 'Floor', exact: true }));
   expect(screen.queryByRole('button', { name: 'Floor colour' })).toBeNull();
-  for (const label of ['Placement', 'Finish']) expect(screen.queryByRole('combobox', { name: label })).toBeNull();
+  for (const label of ['Placement', 'Finish']) expect(screen.queryByRole('button', { name: label })).toBeNull();
   expect(screen.queryByRole('textbox', { name: 'Floor opacity value' })).toBeNull();
   expect(store.getSnapshot().display).toEqual({ mode: 'xray', grid: true });
   await user.click(screen.getByRole('button', { name: 'Reset' }));
@@ -72,14 +72,14 @@ it('keeps sparse defaults when a value field is only focused, and the precision 
 it('edits the full By-part palette, and nested popups own Escape and give the focus back', async () => {
   const user = userEvent.setup({ skipHover: true });
   render(<Harness />);
-  const source = screen.getByRole('combobox', { name: 'Colour source' });
+  const source = screen.getByRole('button', { name: 'Colour source' });
   await user.click(source);
-  act(() => screen.getByRole('option', { name: 'Original', exact: true }).focus());
+  act(() => screen.getByRole('menuitemradio', { name: 'Original', exact: true }).focus());
   await user.keyboard('{Escape}');
   expect(screen.queryByRole('listbox')).toBeNull();
   await waitFor(() => expect(document.activeElement).toBe(source));
   await user.click(source);
-  await user.click(screen.getByRole('option', { name: 'By part' }));
+  await user.click(screen.getByRole('menuitemradio', { name: 'By part' }));
   const initial = screen.getAllByRole('button', { name: /^Part colour \d+$/ }).length;
   await user.click(screen.getByRole('button', { name: 'Add colour' }));
   expect(store.getSnapshot().preview.parts.colors.length).toBe(initial + 1);

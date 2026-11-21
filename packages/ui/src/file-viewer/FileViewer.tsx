@@ -13,7 +13,7 @@ import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { I18nProvider, translator } from "../i18n/index.js";
 import { mayTakeKeyboard } from "./takeKeyboard.js";
 import { FilePanelContext, filePanelOf, withFilePanel } from "./filePanel.js";
-import { PANEL_HEAD_ROW_PX, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX, PanelFrameContext, PanelTogglesContext, clampPanelWidth, sidebarLayout } from "./panelToggles.js";
+import { PANEL_HEAD_ROW, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX, PanelFrameContext, PanelTogglesContext, clampPanelWidth, sidebarLayout } from "./panelToggles.js";
 import { TreeRowsLoading } from "../primitives/tree-row.jsx";
 import { NavbarSlotsContext, NavbarViewSlotContext } from "./navbarSlots.js";
 import type { PanelToggles } from "./panelToggles.js";
@@ -212,7 +212,7 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     const loading = presentation?.loading ?? <div className="flex h-full items-center justify-center px-4"><LoadingStep label={t("file.opening")} /></div>;
     const standIn = <>
       <div aria-hidden="true" className="box-content flex shrink-0 items-center border-b border-border px-(--panel-inset)"
-        style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX, height: PANEL_HEAD_ROW_PX }} data-panel-head="">
+        style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX, height: PANEL_HEAD_ROW }} data-panel-head="">
         <span className="block h-2 w-12 rounded-full bg-muted-foreground/20 motion-safe:animate-pulse" data-panel-loading-title="" />
       </div>
       <div className="flex flex-col px-(--panel-inset)" style={{ paddingTop: PANEL_SURFACE_PX }}><TreeRowsLoading label={t("spinner.loading")} /></div>
@@ -238,7 +238,7 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   else body = rendererBody;
   const shownActions = navActions?.key === key && ready ? navActions.actions : [];
   const trailing = shownActions.length ? <>
-    {shownActions.map(({ id, label, hint, icon: Icon, disabled, active, onInvoke }) => <TooltipHint key={id} content={hint ?? label}><Button type="button" variant="ghost" size="icon-xs" className="size-6 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground" aria-label={label} disabled={disabled} aria-pressed={active} onClick={() => { try { void Promise.resolve(onInvoke()).catch(error => onError?.(error)); } catch (error) { onError?.(error instanceof Error ? error : new Error(String(error))); } }}><Icon className="size-3.5" aria-hidden="true" /></Button></TooltipHint>)}
+    {shownActions.map(({ id, label, hint, icon: Icon, disabled, active, onInvoke }) => <TooltipHint key={id} content={hint ?? label}><Button type="button" variant="ghost" size="icon-xs" className="size-icon-button text-muted-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground" aria-label={label} disabled={disabled} aria-pressed={active} onClick={() => { try { void Promise.resolve(onInvoke()).catch(error => onError?.(error)); } catch (error) { onError?.(error instanceof Error ? error : new Error(String(error))); } }}><Icon className="size-3.5" aria-hidden="true" /></Button></TooltipHint>)}
   </> : null;
   // The on-disk file the view browses from and acts on: the file's own path, or none for a document
   // with no file of its own (a model's, by its id): it has no file menu, and its Files tab starts

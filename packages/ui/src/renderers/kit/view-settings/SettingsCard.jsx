@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import { X } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { FieldLabel } from "@cad/ui/primitives/field-label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@cad/ui/primitives/select";
+import { ValueDropdown } from "@cad/ui/primitives/value-dropdown";
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { Switch } from "@cad/ui/primitives/switch";
 import { cn } from "@cad/ui/utils";
@@ -10,7 +10,7 @@ import { hasOpenPopup } from "../../../lib/popups.js";
 import { DEFAULT_PANEL_WIDTH } from "../shell/sidebars.js";
 import { PANEL_PEEK_ELEVATION_CLASS, PANEL_PEEK_GAP_PX, PANEL_PEEK_IN_RIGHT_CLASS, PANEL_PEEK_OUT_RIGHT_CLASS, PANEL_PEEK_RADIUS_PX, useSlidingCard }
   from "../../../file-viewer/panelPeek.js";
-import { FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetColorPicker } from "../inspector/FileSheet.js";
+import { FileSheetColorPicker } from "../inspector/FileSheet.js";
 import { PANEL_ACTION_CLASS } from "../inspector/PanelActions.jsx";
 import { SliderField } from "../inspector/SliderField.jsx";
 
@@ -57,7 +57,9 @@ export const SETTINGS_CARD_LAYER_CLASS = "z-50";
 // past the line at the right (its padding) and stands so its text's baseline is on the line at the bottom.
 const CARD_VARIABLES = Object.freeze({
   "--card-inset": `calc(var(--panel-inset) - ${PANEL_PEEK_GAP_PX}px)`,
-  width: SETTINGS_CARD_WIDTH_PX, borderRadius: PANEL_PEEK_RADIUS_PX
+  // At least the sidebar's width, and wider where its values need it (a phone's 14px ones), never past the view less
+  // its gaps: nothing in it truncates.
+  width: "max-content", minWidth: SETTINGS_CARD_WIDTH_PX, maxWidth: "calc(100vw - 16px)", borderRadius: PANEL_PEEK_RADIUS_PX
 });
 const PAD = px => `calc(var(--card-inset) - ${px}px)`;
 // The rows' grid: labels, then the controls' column, ONE width for the card's dropdowns: half the content, or the
@@ -69,7 +71,7 @@ const ROW_CLASS = "contents";
 // A dropdown: today's panel dropdown at 24px, its padding and gap the design system's tightest (`Toggle`'s sm, the
 // colour field's) and its chevron the panel dropdown's 12px (`panelRows.jsx`), so a card's widest value fits beside its
 // widest label.
-const TRIGGER_CLASS = cn(FILE_SHEET_SELECT_TRIGGER_CLASSES, "!h-6 min-w-0 gap-1 px-1.5 [&>svg]:size-3");
+const TRIGGER_CLASS = "!h-icon-button w-full min-w-0 justify-self-stretch gap-1 px-1.5 py-2 text-xs";
 // What a row's first and last visible edge are, below and above its box: a 14px switch is centred in its 24px row,
 // a heading's capitals stand 4px into its 16px line. The rule keeps 12px from them on either side (8px is the gap).
 const INK_TOP = Object.freeze({ switch: 5, heading: 4 });
@@ -93,42 +95,23 @@ export function SettingsCardDock({ open, className = "", style = undefined, chil
 }
 
 function Choice({ row }) {
-  const current = row.options.find(option => option.value === row.value);
-  return <Select value={String(row.value)} onValueChange={next => {
-    const option = row.options.find(entry => String(entry.value) === next);
-    if (option && option.value !== row.value) row.onChange(option.value);
-  }}>
-    <SelectTrigger aria-label={row.name ?? row.label} size="sm" className={TRIGGER_CLASS} data-settings-select={row.id}>
-      {/* Every option's value is laid in the one cell, the chosen one seen: the trigger is as wide as its widest option, so
-          the card's dropdowns keep their width whatever is chosen. */}
-      <SelectValue>
-        <span className="grid min-w-0" data-settings-value="">
-          {row.options.map(option => <span key={String(option.value)} aria-hidden={option === current ? undefined : true}
-            className={cn("col-start-1 row-start-1 flex min-w-0 items-center gap-1", option === current ? null : "invisible")}>
-            {option.Icon ? <option.Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
-            <span className="min-w-0 truncate" data-settings-value-label={option === current ? "" : undefined}>{option.label}</span>
-          </span>)}
-        </span>
-      </SelectValue>
-    </SelectTrigger>
-    <SelectContent align="end">
-      {row.options.map(option => <SelectItem key={String(option.value)} value={String(option.value)} disabled={option.disabled === true}
-        icon={option.Icon ? <option.Icon className="size-3.5" /> : null} {...(row.data ? { [row.data]: option.value } : {})}>{option.label}</SelectItem>)}
-    </SelectContent>
-  </Select>;
+  // The one value dropdown, as wide as its widest option, so the card's dropdowns keep their width whatever is chosen.
+  return <ValueDropdown value={row.value} options={row.options} onChange={row.onChange} label={row.name ?? row.label} fixedWidth
+    iconClassName="size-3.5" className={TRIGGER_CLASS} triggerProps={{ "aria-label": row.name ?? row.label, "data-settings-select": row.id }}
+    optionProps={row.data ? option => ({ [row.data]: option.value }) : null} />;
 }
 
 function Label({ row, head = false }) {
-  return <span className="flex min-h-6 min-w-0 items-center">
-    {head ? <span className="min-w-0 truncate text-xs leading-4 font-medium text-foreground" data-settings-label="" data-settings-heading="">{row.label}</span>
-      : <FieldLabel className="leading-4" data-settings-label="">{row.label}</FieldLabel>}
+  return <span className="flex min-h-icon-button min-w-0 items-center">
+    {head ? <span className="min-w-0 truncate text-xs leading-(--cad-leading-xs) font-medium text-foreground" data-settings-label="" data-settings-heading="">{row.label}</span>
+      : <FieldLabel className="leading-(--cad-leading-xs)" data-settings-label="">{row.label}</FieldLabel>}
   </span>;
 }
 
 function Row({ row }) {
   const props = { "data-settings-row": row.id };
   if (row.kind === "heading") {
-    return <h4 className="col-span-2 flex h-4 min-w-0 items-center text-xs leading-4 font-medium text-foreground" data-settings-heading="" {...props}>
+    return <h4 className="col-span-2 flex h-(--cad-leading-xs) min-w-0 items-center text-xs leading-(--cad-leading-xs) font-medium text-foreground" data-settings-heading="" {...props}>
       <span className="min-w-0 truncate">{row.label}</span>
     </h4>;
   }
@@ -146,7 +129,7 @@ function Row({ row }) {
     <Label row={row} />
     {row.kind === "select" ? <Choice row={row} />
       : row.kind === "color" ? <FileSheetColorPicker aria-label={row.name ?? row.label} value={row.value} onChange={row.onChange} disabled={row.disabled === true}
-        className="!h-6 w-fit self-center justify-self-end" />
+        className="!h-icon-button w-fit self-center justify-self-end" />
       : <div className="self-center justify-self-end">{row.node}</div>}
   </div>;
 }
@@ -178,10 +161,10 @@ export function SettingsCard({ title, closeLabel, onClose, sections, resetLabel 
       onClose();
     }}>
     <div className="flex shrink-0 items-start" style={{ paddingTop: PAD(5), paddingLeft: PAD(1), paddingRight: 40 }} data-settings-card-head="">
-      <h3 className="min-w-0 flex-1 truncate text-xs leading-4 font-medium text-foreground" data-settings-title="">{title}</h3>
+      <h3 className="min-w-0 flex-1 truncate text-xs leading-(--cad-leading-xs) font-medium text-foreground" data-settings-title="">{title}</h3>
     </div>
     <button type="button" aria-label={closeLabel} onClick={onClose} data-settings-close=""
-      className="absolute flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
+      className="absolute flex size-icon-button items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
       style={{ top: PAD(9), right: PAD(7) }}>
       <X className="size-3" aria-hidden="true" />
     </button>

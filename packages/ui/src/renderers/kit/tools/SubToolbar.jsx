@@ -22,21 +22,18 @@ export function rowsOf(element) {
 // On a phone a row's buttons are the strip's 36px tiles, their icons 18px, and its slider is as tall,
 // its thumb big enough to take with a finger.
 // A chip in the row (Measure's measurements, `ReferenceChips.jsx`) keeps its own size.
-// On a desktop, the strip's own proportions (`stripTouch.js`'s `TOP_STRIP_*`, Figma's toolbar's): a 40px row with
-// its border, 10px corners and 5px in, its buttons 28px with 4px corners and 16px icons (a word button keeps its
-// width, at the row's height). A chip keeps its own size here too.
-const DESKTOP_CLASS = [
-  "min-h-10 rounded-[10px] p-[5px]",
-  "[&_button:not([data-quick-edit-refs]_*)]:h-7 [&_button:not([data-quick-edit-refs]_*)]:min-w-7 [&_button:not([data-quick-edit-refs]_*)]:rounded-[4px] [&_button:not([data-quick-edit-refs]_*)_svg]:size-4!"
-].join(" ");
-const TOUCH_CLASS = [
-  "[&_button:not([data-quick-edit-refs]_*)]:h-9 [&_button:not([data-quick-edit-refs]_*)]:min-w-9 [&_button:not([data-quick-edit-refs]_*)]:rounded-md [&_button:not([data-quick-edit-refs]_*)_svg]:size-4.5!",
-  "[&_[data-slot=slider]]:h-9 [&_[data-slot=slider-thumb]]:size-4!"
+// The strip's own proportions (`stripTouch.js`'s `TOP_STRIP_*`, Figma's toolbar's), at THE scale (`globals.css`): a row
+// the control and 12px tall with its border, its corners the control's and 6, 5px in, its buttons the control with the
+// control's corners and the glyph for icons (a word button keeps its width, at the row's height); a phone's the same
+// class at a phone's tokens. A chip keeps its own size here too.
+const ROW_CLASS = [
+  "min-h-[calc(var(--cad-control)+12px)] rounded-[calc(var(--cad-radius-control)+6px)] p-[5px]",
+  "[&_button:not([data-quick-edit-refs]_*)]:h-control [&_button:not([data-quick-edit-refs]_*)]:min-w-control [&_button:not([data-quick-edit-refs]_*)]:rounded-control [&_button:not([data-quick-edit-refs]_*)_svg]:size-glyph!"
 ].join(" ");
 
 /**
  * A tool's own controls while it is in hand: one row hung under the strip, on the strip's surface,
- * at the strip's proportions (a 40px row, 28px buttons, 16px icons; a phone's 36px tiles), its groups — what the tool does, how
+ * at the strip's proportions (a 40px row, 28px buttons, 16px icons; a phone's 48px row of 36px tiles, its scale), its groups — what the tool does, how
  * it looks, what it can undo — parted by a thin rule (`SubToolbarSeparator`), as a design tool's
  * options bar is. It stays up for as long as its tool does. On a phone a row wider than the view
  * wraps (Shapes' at 375px), its groups then one under another: the rule between them, drawn for
@@ -66,7 +63,7 @@ export default function SubToolbar({ label, className, children, ...props }) {
   return <Wrapped.Provider value={touch && wrapped}>
     <div ref={root} role="toolbar" aria-label={label} data-cad-sub-toolbar="" data-touch={touch ? "" : undefined} data-wrapped={touch && wrapped ? "" : undefined} {...props}
       className={cn("pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-1", FLOATING_CHROME_SURFACE_CLASS,
-        touch ? cn("min-h-8 rounded-md p-1", TOUCH_CLASS) : DESKTOP_CLASS, className)}>
+        ROW_CLASS, className)}>
       {children}
     </div>
   </Wrapped.Provider>;

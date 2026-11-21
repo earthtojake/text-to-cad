@@ -166,11 +166,11 @@ async function displayMenu(pane) {
   // A choice is a dropdown of the card (Style, Background), its options in its list; Grid a switch of the card's.
   const choices = async (id, attribute) => {
     await card.locator(`[data-settings-select="${id}"]`).click();
-    const options = page.getByRole('listbox').locator(`[${attribute}]`);
+    const options = page.getByRole('menu').locator(`[${attribute}]`);
     await options.first().waitFor();
     const values = await options.evaluateAll((items, name) => items.map(item => item.getAttribute(name)), attribute);
     await page.keyboard.press('Escape');
-    await page.getByRole('listbox').waitFor({ state: 'detached' });
+    await page.getByRole('menu').waitFor({ state: 'detached' });
     return values;
   };
   const rows = { modes: await choices('display', 'data-display-mode-option'), grid: await card.getByRole('switch', { name: 'Show grid', exact: true }).count() === 1,

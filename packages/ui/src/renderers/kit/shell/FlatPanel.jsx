@@ -446,8 +446,8 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
       </span>
     </>;
   };
-  const TAB_CLASS = "flex h-7 shrink-0 items-center whitespace-nowrap rounded-md px-1.5 text-ui transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
-  const ICON_BUTTON_CLASS = "grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 aria-expanded:bg-accent aria-expanded:text-foreground [&_svg]:size-3.5";
+  const TAB_CLASS = "flex h-control shrink-0 items-center whitespace-nowrap rounded-md px-1.5 text-ui transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
+  const ICON_BUTTON_CLASS = "grid size-control shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 aria-expanded:bg-accent aria-expanded:text-foreground [&_svg]:size-3.5";
   const tabButton = entry => {
     const on = entry.id === active;
     return <button key={entry.id} type="button" role="tab" id={ids_(entry.id).tab} aria-controls={ids_(entry.id).panel} aria-selected={on} tabIndex={on ? 0 : -1}
@@ -514,7 +514,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
         width, ⋯ where some do not fit, and the search's icon at its right end; its rule 8px under it, a lone
         title's as the tabs' (one block). With the search open the row IS its box, the X in the icon's place: no tabs, no title. */}
       {searchOpen ? searchBox : null}
-      {single && !searchOpen ? <h2 id={ids_(single.id).tab} className="flex h-7 min-w-0 flex-1 items-center truncate px-1.5 text-ui font-medium text-foreground" data-flat-panel-heading=""
+      {single && !searchOpen ? <h2 id={ids_(single.id).tab} className="flex h-control min-w-0 flex-1 items-center truncate px-1.5 text-ui font-medium text-foreground" data-flat-panel-heading=""
         aria-label={changed[single.id] ? t("flatPanel.tabChanged", { name: single.label }) : undefined} data-changed={changed[single.id] ? "" : undefined}>
         <span className="relative min-w-0 truncate">{single.label}{changed[single.id] ? <ChangedDot className="-right-[5px] -top-px" /> : null}</span></h2> : null}
       {searchOpen ? null : !single ? <div className="flex min-w-0 flex-1 items-center gap-1">
@@ -554,12 +554,14 @@ const TAB_PAD_PX = 6;
 const TAB_GAP_PX = 4;
 /** How far the head's boxes hang out past the panel's inset (`--panel-inset`), so what they hold stands on it: a tab's
  * pill (and the one tab's title in its place) by its own padding (`TAB_PAD_PX`), the
- * icon buttons at the row's end (⋯, the search) by theirs (a 14px glyph in a 28px button: 7px). */
-const HEAD_INSETS = Object.freeze({ start: TAB_PAD_PX, end: 7 });
+ * icon buttons at the row's end (⋯, the search) by theirs (a 14px glyph centred in the control: 7px on a desktop, 11 on a
+ * phone, THE scale). */
+const HEAD_END_INSET = "calc((var(--cad-control) - 14px) / 2)";
+const HEAD_INSETS = Object.freeze({ start: TAB_PAD_PX, end: HEAD_END_INSET });
 /** Where the open search box's icon and its X's glyph stand in from its edges (`TreeFilterInput`, dense: its 12px icon
  * 7px in; its X's 12px glyph centred in a 16px button 6px from the right: 8px). */
 const SEARCH_INSETS = Object.freeze({ start: 7, end: 8 });
 /** The box hangs out past the head's padding by the difference, so its icon starts, and its X ends, on the inset. */
-const SEARCH_BOX_HANG = Object.freeze({ marginLeft: HEAD_INSETS.start - SEARCH_INSETS.start, marginRight: HEAD_INSETS.end - SEARCH_INSETS.end });
+const SEARCH_BOX_HANG = Object.freeze({ marginLeft: HEAD_INSETS.start - SEARCH_INSETS.start, marginRight: `calc(${HEAD_END_INSET} - ${SEARCH_INSETS.end}px)` });
 /** The room between the head row's icons (⋯ and the search) and before them: Tailwind's gap-1. */
 const ICON_GAP_PX = 4;

@@ -9,7 +9,7 @@ import { cn } from "@cad/ui/utils";
 // outranks a plain `hover:` and was all but invisible on a dark surface). In the dark they are the foreground laid
 // over whatever the surface shows (10% under the pointer, 16% pressed), so they read on the floating surface over a
 // dark canvas and over a light viewport alike, where the opaque #444 matched the surface it stood on.
-export const TOOLBAR_ICON_BUTTON_CLASS = ["size-6 rounded-sm text-sidebar-foreground/70 shadow-none transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/45",
+export const TOOLBAR_ICON_BUTTON_CLASS = ["size-icon-button rounded-sm text-sidebar-foreground/70 shadow-none transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/45",
   "data-[variant=secondary]:bg-sidebar-accent data-[variant=secondary]:text-sidebar-accent-foreground data-[variant=secondary]:hover:bg-sidebar-accent data-[variant=secondary]:[&>svg]:text-brand-icon",
   "dark:hover:bg-foreground/10 dark:data-[variant=secondary]:bg-foreground/16 dark:data-[variant=secondary]:hover:bg-foreground/16"].join(" ");
 

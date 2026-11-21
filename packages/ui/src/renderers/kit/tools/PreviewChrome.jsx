@@ -171,20 +171,20 @@ export default function PreviewChrome({ active, name = "", controls = null, pane
       <PreviewBar name={name} controls={controls} idle={idle} scheme={scheme} />
       {/* `panel`, the bar's height and the card's gap under the view's top edge, as tall as its content up to the room
           under it. */}
-      {panel ? <SettingsCardDock open={panelOpen} className="z-30" style={{ top: `calc(var(--preview-bar-height, 2.5rem) + ${SETTINGS_CARD_GAP_PX}px)` }}
+      {panel ? <SettingsCardDock open={panelOpen} className="z-30" style={{ top: `calc(var(--preview-bar-height, calc(var(--cad-control) + 12px)) + ${SETTINGS_CARD_GAP_PX}px)` }}
         data-preview-panel="">{panel}</SettingsCardDock> : null}
     </ToolbarTooltipScope> : null}
   </>;
 }
 
-// The navbar's row (`h-10`, a phone's 48px in `globals.css`) with no surface under it: the only part of
+// The navbar's row (the control and 12px: 40px, a phone's 48px, THE scale in `globals.css`) with no surface under it: the only part of
 // the frame that redraws as it comes and goes. The name is muted, as its controls are.
 function PreviewBar({ name, controls, idle, scheme }) {
   const shown = usePreviewShown(idle);
   const reach = shown ? "pointer-events-auto" : "pointer-events-none";
   return <div data-preview-bar="" data-state={shown ? "visible" : "hidden"} {...idle?.hold("bar")}
     data-scheme={scheme ?? undefined}
-    className={cn("pointer-events-none absolute inset-x-0 top-0 z-30 flex h-10 items-center justify-between gap-2 px-2", scheme, PREVIEW_FADE_CLASS,
+    className={cn("pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(var(--cad-control)+12px)] items-center justify-between gap-2 px-2", scheme, PREVIEW_FADE_CLASS,
       shown ? "opacity-100" : "opacity-0")}>
     <span data-preview-name="" className={cn("min-w-0 truncate px-1 text-sm text-muted-foreground [text-shadow:0_0_6px_var(--background)]", reach)}>{name}</span>
     {/* Its controls stand where the navbar's view buttons stood (`NavbarViewControls.jsx`): 2px apart, so Preview

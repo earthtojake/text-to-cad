@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Box, ChevronDown, Ellipsis, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
+import { Box, Ellipsis, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
 import { Button } from "../primitives/button.jsx";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../primitives/alert-dialog.jsx";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../primitives/dropdown-menu.jsx";
+import { ValueDropdown } from "../primitives/value-dropdown.jsx";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../primitives/dropdown-menu.jsx";
 import { Input } from "../primitives/input.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
 import { useI18n } from "../i18n/index.js";
@@ -400,35 +401,29 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       </div>
     </li>)}</ul>;
   // Open, the host's chooser: neutral, as every control of the row is (never a filled primary).
-  const openButton = (label: string) => <Button variant="outline" size="xs" className="cad-library-pick h-7 gap-1.5 px-2.5 text-ui" onClick={pick ?? undefined}>
+  const openButton = (label: string) => <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" onClick={pick ?? undefined}>
     <FolderOpen className="size-4" aria-hidden="true" />{label}</Button>;
   const heading = <h1 className="cad-library-heading" data-library-heading={slots ? "navbar" : "page"}>{t("home.recentFiles")}{items !== null && shown.length ? <span className="cad-library-count">{shown.length}</span> : null}</h1>;
-  const kindMenu: ReactNode = kinds ? <DropdownMenu modal={false}>
-    <DropdownMenuTrigger asChild>
-      <Button variant="ghost" size="xs" className="cad-library-kind h-7 text-ui" aria-label={t("home.kindAria", { kind: t(`home.kind.${kind}`) })}>
-        {t(`home.kind.${kind}`)}<ChevronDown aria-hidden="true" />
-      </Button>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align={slots ? "start" : "end"} className="min-w-32">
-      <DropdownMenuRadioGroup aria-label={t("home.kindsAria")} value={kind} onValueChange={(value: string) => { if (kind !== value) usage.used(`home_filter_${value as LibraryKind}`); setKind(value as LibraryKind); }}>
-        {(["all", "models", "files"] as const).map(value => <DropdownMenuRadioItem key={value} value={value} className="">{t(`home.kind.${value}`)}</DropdownMenuRadioItem>)}
-      </DropdownMenuRadioGroup>
-    </DropdownMenuContent>
-  </DropdownMenu> : null;
+  // The type filter: the one value dropdown (`primitives/value-dropdown.jsx`), drawn as the row's ghost control.
+  const kindMenu: ReactNode = kinds ? <ValueDropdown value={kind} label={t("home.kindsAria")} align={slots ? "start" : "end"}
+    options={(["all", "models", "files"] as const).map(value => ({ value, label: t(`home.kind.${value}`) }))}
+    onChange={value => { if (kind !== value) usage.used(`home_filter_${value as LibraryKind}`); setKind(value as LibraryKind); }}
+    className="cad-library-kind min-w-0 w-auto gap-1 border-0 bg-transparent px-2 shadow-none hover:bg-accent dark:bg-transparent"
+    triggerProps={{ "aria-label": t("home.kindAria", { kind: t(`home.kind.${kind}`) }) }} /> : null;
   // The search: in a narrow navbar its icon alone until it is pressed (it opens with the keyboard in it), and it goes
   // back to its icon when it is left empty.
   const search = <div className="cad-home-search" data-open={searchOpen || query ? "" : undefined}>
-    {slots ? <Button variant="ghost" size="icon-xs" className="cad-home-search-button size-7" aria-label={t("home.searchAria")} aria-expanded={false}
+    {slots ? <Button variant="ghost" size="icon-xs" className="cad-home-search-button size-control" aria-label={t("home.searchAria")} aria-expanded={false}
       onClick={event => { const box = event.currentTarget.parentElement; setSearchOpen(true); requestAnimationFrame(() => box?.querySelector("input")?.focus()); }}><Search className="size-4" aria-hidden="true" /></Button> : null}
     <div className="cad-library-search">
       <Search aria-hidden="true" />
-      <Input className="h-7 text-ui" type="search" aria-label={t("home.searchAria")} placeholder={t("home.searchPlaceholder")} value={query}
+      <Input className="h-control text-ui" type="search" aria-label={t("home.searchAria")} placeholder={t("home.searchPlaceholder")} value={query}
         onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} onBlur={() => { if (!query) setSearchOpen(false); }} />
     </div>
   </div>;
   const layoutSwitch = onLayoutChange ? <div className="cad-library-layout" role="group" aria-label={t("home.layout")}>
-    <Button variant="ghost" size="icon-xs" className="size-7" aria-label={t("home.grid")} aria-pressed={layout === "grid"} onClick={() => { usage.used("home_layout_grid"); onLayoutChange("grid"); }}><LayoutGrid className="size-4" aria-hidden="true" /></Button>
-    <Button variant="ghost" size="icon-xs" className="size-7" aria-label={t("home.list")} aria-pressed={layout === "list"} onClick={() => { usage.used("home_layout_list"); onLayoutChange("list"); }}><List className="size-4" aria-hidden="true" /></Button>
+    <Button variant="ghost" size="icon-xs" className="size-control" aria-label={t("home.grid")} aria-pressed={layout === "grid"} onClick={() => { usage.used("home_layout_grid"); onLayoutChange("grid"); }}><LayoutGrid className="size-4" aria-hidden="true" /></Button>
+    <Button variant="ghost" size="icon-xs" className="size-control" aria-label={t("home.list")} aria-pressed={layout === "list"} onClick={() => { usage.used("home_layout_list"); onLayoutChange("list"); }}><List className="size-4" aria-hidden="true" /></Button>
   </div> : null;
   // A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits.
   return <div className="cad-library h-full overflow-y-auto text-ui" data-library-layout={layout}>

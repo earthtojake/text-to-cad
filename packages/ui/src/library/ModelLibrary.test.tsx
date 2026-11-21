@@ -39,10 +39,10 @@ it('starts with its control row: Recent at the left, the search and the grid/lis
   const row = main.firstElementChild!;
   expect(row.querySelector('h1')?.textContent).toBe('Recent');
   expect([...row.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Search models', 'Grid', 'List']);
-  // The search keeps its placeholder; every control is the row's 28px, its icons 16px.
+  // The search keeps its placeholder; every control is the scale's control (28px), its icons 16px.
   expect(screen.getByRole('searchbox', { name: 'Search models' }).getAttribute('placeholder')).toBe('Search');
-  expect(screen.getByRole('searchbox', { name: 'Search models' }).className).toContain('h-7');
-  expect(['Grid', 'List'].map(name => [screen.getByRole('button', { name }).className.includes('size-7'),
+  expect(screen.getByRole('searchbox', { name: 'Search models' }).className).toContain('h-control');
+  expect(['Grid', 'List'].map(name => [screen.getByRole('button', { name }).className.includes('size-control'),
     screen.getByRole('button', { name }).querySelector('svg')?.getAttribute('class')?.includes('size-4')])).toEqual([[true, true], [true, true]]);
   // No count with nothing listed; the one picture is the welcome's C mark.
   expect(row.querySelector('.cad-library-count')).toBeNull();
@@ -60,7 +60,7 @@ it('ends its control row in Open where the host has a chooser, counted, and none
   // Last of the row, after the grid/list switch: the folder icon, "Open", 28px as its neighbours, neutral (never a filled primary).
   expect([...row.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label') ?? node.textContent)).toEqual(['Search models', 'Grid', 'List', 'Open']);
   const open = screen.getByRole('button', { name: 'Open', exact: true });
-  expect([open.getAttribute('data-variant'), open.className.includes('h-7'), Boolean(open.querySelector('svg.lucide-folder-open'))]).toEqual(['outline', true, true]);
+  expect([open.getAttribute('data-variant'), open.className.includes('h-control'), Boolean(open.querySelector('svg.lucide-folder-open'))]).toEqual(['outline', true, true]);
   await act(async () => { fireEvent.click(open); });
   expect(pick).toHaveBeenCalledTimes(1);
   // With nothing opened yet, the welcome's Open file is the same chooser.
@@ -243,7 +243,7 @@ it('marks each card with its kind\'s glyph, and the type filter ("All ▾") show
   expect(screen.getByRole('button', { name: 'Open bracket.step' }).querySelector('[data-glyph]')?.getAttribute('data-glyph')).toBe('file');
   // A stock dropdown at the right of the control row, before the search, in the row's 28px.
   const trigger = screen.getByRole('button', { name: 'Show All' });
-  expect([trigger.textContent, trigger.className.includes('h-7'), trigger.nextElementSibling?.querySelector('input')?.getAttribute('aria-label')]).toEqual(['All', true, 'Search models']);
+  expect([trigger.textContent, trigger.className.includes('h-control'), trigger.nextElementSibling?.querySelector('input')?.getAttribute('aria-label')]).toEqual(['All', true, 'Search models']);
   expect(names()).toEqual(['Open bracket.step', 'Open arm']);
   await choose('Models');
   expect(names()).toEqual(['Open arm']);

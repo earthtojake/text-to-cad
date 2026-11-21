@@ -80,9 +80,10 @@ const settle = page => page.evaluate(() => new Promise(resolve => requestAnimati
 // temporary harness.
 const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 20 0 0\nvertex 0 20 0\nendloop\nendfacet\nendsolid triangle\n';
 
-// A phone's navbar, its left end (`ViewerNavbar.jsx`): the toggle, the logo, the name and its ⋯, each 36px tall on one
-// line, the first on the row's 8px inset, 4px between neighbours; a finger's tap leaves no fill or ring behind.
-test('a phone\'s navbar starts regular: 36px controls 4px apart from the row\'s inset, and a tap leaves no fill or ring', async (t) => {
+// A phone's scale (`globals.css`, settings-ui.md's "A phone's scale"): the primitives read the tokens, so at the phone
+// breakpoint every control is 36px and every text 15/20, from the navbar to the strip, a menu and the panel's tabs;
+// the navbar's left end edge to edge on the row's inset; a finger's tap leaves no fill or ring behind.
+test('a phone\'s scale: the primitives read the tokens (36px controls, 15/20 text), and a tap leaves no fill or ring', async (t) => {
   const origin = await serve(t);
   const context = await browser.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true, isMobile: true });
   t.after(() => context.close());
@@ -100,7 +101,23 @@ test('a phone\'s navbar starts regular: 36px controls 4px apart from the row\'s 
       gaps: boxes.slice(1).map((box, at) => Math.round(box.left - boxes[at].right)), centred: boxes.every(box => Math.abs(box.top + box.height / 2 - (top.top + top.height / 2)) < 1) };
   }, SELECTORS);
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-viewer-navbar]').getBoundingClientRect().height === 48);
-  assert.deepEqual(await row(), { left: 8, heights: [36, 36, 36, 36], widths: [36, 36, 36], gaps: [4, 4, 4], centred: true }, 'the left end, regular');
+  assert.deepEqual(await row(), { left: 10, heights: [36, 36, 36, 36], widths: [36, 36, 36], gaps: [0, 0, 0], centred: true }, 'the left end, regular');
+  // What each primitive draws at, read off the page: [height, font size / line height].
+  const drawn = selector => page.locator(selector).first().evaluate(element => {
+    const style = getComputedStyle(element);
+    // Its laid-out height (an opening menu's zoom does not count).
+    return [element.offsetHeight, `${style.fontSize}/${style.lineHeight}`];
+  });
+  assert.deepEqual(await drawn('[data-testid="one"] [aria-label="Interaction tools"] button'), [36, '15px/20px'], 'a strip tile');
+  await pane.locator('[data-viewer-navbar] [data-testid="file-actions"]').tap();
+  assert.deepEqual(await drawn('[role=menu] [role=menuitem]'), [36, '15px/20px'], 'a menu item');
+  await page.keyboard.press('Escape');
+  await page.locator('[role=menu]').waitFor({ state: 'detached' });
+  await pane.locator('[data-navbar-panel="left"]').tap();
+  await page.locator('[data-panel-sheet] [role=tab]').first().waitFor();
+  assert.deepEqual(await drawn('[data-panel-sheet] [role=tab]'), [36, '15px/20px'], 'a panel tab');
+  await pane.locator('[data-navbar-panel="left"]').tap();
+  await page.locator('[data-panel-sheet]').waitFor({ state: 'detached' });
   const marks = selector => pane.locator(`[data-viewer-navbar] ${selector}`).evaluate(element => {
     const style = getComputedStyle(element);
     return { fill: style.backgroundColor, ring: element.matches(':focus-visible') };
@@ -115,6 +132,142 @@ test('a phone\'s navbar starts regular: 36px controls 4px apart from the row\'s 
       .every(animation => animation.playState === 'finished'), selector);
     assert.deepEqual(await marks(selector), { fill: 'rgba(0, 0, 0, 0)', ring: false }, `${selector}: no fill or ring after a tap`);
   }
+});
+
+// THE two scales (settings-ui.md's "Two scales", `lib/scale.js`): on a phone and on a desktop, every interactive control
+// on every surface a person reaches (the view, the Display card, the panel's tabs, Preview's Settings, Quick Edit, an
+// open menu) is one of its scale's sizes, and every text one of its scale's text sizes: nothing sized outside the
+// tokens. A walk of the page, in phone emulation and at a desktop's width.
+const SCALE_CONTROLS = 'button, [role=tab], [role=menuitem], [role=menuitemradio], [role=menuitemcheckbox], input, textarea, [role=switch], [role=slider], [role=checkbox], [data-tree-row], [contenteditable]';
+for (const phone of [true, false]) {
+  test(`${phone ? 'a phone' : 'a desktop'}: every control and every text on the walk is its scale's`, async (t) => {
+    const { PHONE_SCALE, DESKTOP_SCALE } = await import('../../../../dist/lib/scale.js');
+    const scale = phone ? PHONE_SCALE : DESKTOP_SCALE;
+    const origin = await serve(t);
+    const context = await browser.newContext(phone ? { viewport: { width: 390, height: 760 }, hasTouch: true, isMobile: true } : { viewport: { width: 1280, height: 800 } });
+    t.after(() => context.close());
+    const page = await context.newPage();
+    page.setDefaultTimeout(15000);
+    await page.addInitScript(() => { window.Worker = undefined; window.__cadPromptDestination = 'clipboard'; });
+    await page.goto(`${origin}/?file=panel.harness&home=1`);
+    const [width, height] = phone ? [390, 760] : [1280, 800];
+    await page.addStyleTag({ content: `#root > div { width: ${width}px !important; height: ${height}px !important; }` });
+    const pane = page.getByTestId('one');
+    await pane.locator('[data-viewer-navbar] [data-testid="file-actions"]').waitFor();
+    const press = locator => phone ? locator.tap() : locator.click();
+    const found = { heights: new Map(), texts: new Map() };
+    const walk = async where => {
+      const read = await page.evaluate(selector => [...document.querySelectorAll(selector)].filter(element => {
+        const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+        return box.width > 1 && box.height > 1 && style.visibility !== 'hidden' && !element.closest('[hidden], [inert], [aria-hidden=true]');
+      }).map(element => ({ name: (element.getAttribute('aria-label') || element.textContent || element.tagName).trim().slice(0, 24), height: element.offsetHeight || Math.round(element.getBoundingClientRect().height),
+        text: parseFloat(getComputedStyle(element).fontSize), shown: Boolean((element.textContent || '').trim()) })), SCALE_CONTROLS);
+      for (const { name, height, text, shown } of read) {
+        if (!found.heights.has(height)) found.heights.set(height, `${where}: ${name}`);
+        if (shown && !found.texts.has(text)) found.texts.set(text, `${where}: ${name}`);
+      }
+    };
+    await walk('the view');
+    await press(pane.locator('[data-navbar-view-controls] button').first());
+    await page.locator('[data-settings-card-slide="in"] [data-settings-card]').waitFor();
+    await walk('the Display card');
+    await press(pane.locator('[data-navbar-view-controls] button').first());
+    await page.locator('[data-settings-card-slide="in"]').waitFor({ state: 'detached' });
+    if (phone) { await press(pane.locator('[data-navbar-panel="left"]')); await page.locator('[data-panel-sheet]').waitFor(); }
+    for (const tab of await page.locator(phone ? '[data-panel-sheet] [role=tab]' : '[data-testid="one"] aside[data-flat-panel] [role=tab]').all()) {
+      await press(tab);
+      await walk(`the panel's ${(await tab.textContent()).trim()}`);
+    }
+    if (phone) { await press(pane.locator('[data-navbar-panel="left"]')); await page.locator('[data-panel-sheet]').waitFor({ state: 'detached' }); }
+    await press(pane.locator('[data-viewer-navbar] [data-testid="file-actions"]'));
+    await page.locator('[role=menu]').waitFor();
+    await walk('a menu');
+    await page.keyboard.press('Escape');
+    await page.locator('[role=menu]').waitFor({ state: 'detached' });
+    await pane.locator('[data-cad-canvas]').first().click({ button: 'right', position: { x: 120, y: 200 } });
+    await page.getByRole('menuitem', { name: 'Note the press', exact: true }).click();
+    await pane.locator('[data-quick-edit-box]').waitFor();
+    await walk('Quick Edit');
+    await press(pane.locator('[data-view-preview]'));
+    await pane.locator('[data-preview-bar]').waitFor();
+    const view = await pane.locator('[data-cad-canvas] canvas').first().boundingBox();
+    if (phone) await page.touchscreen.tap(view.x + view.width / 2, view.y + view.height / 2); else await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
+    await pane.locator('[data-preview-bar][data-state="visible"]').waitFor();
+    const settings = await pane.locator('[data-preview-settings]').boundingBox();
+    if (phone) await page.touchscreen.tap(settings.x + settings.width / 2, settings.y + settings.height / 2); else await page.mouse.click(settings.x + settings.width / 2, settings.y + settings.height / 2);
+    await page.locator('[data-settings-card-slide="in"] [data-preview-settings-panel]').waitFor();
+    await walk('Preview\'s Settings');
+    // The scale's sizes: its tokens, a chip's 20px tile, and a note's field (2rem at least: the control on a phone).
+    const heights = new Set([scale.control, scale.iconButton, scale.row, scale.rowSm, scale.glyph, scale.glyphSm, scale.switchH, scale.thumb, scale.check, 20, Math.max(32, scale.control)]);
+    const off = [...found.heights].filter(([value]) => !heights.has(value));
+    assert.deepEqual(off, [], `controls off the ${phone ? 'phone' : 'desktop'} scale (height, first seen): ${JSON.stringify(off)}`);
+    const texts = [...found.texts].filter(([value]) => !scale.text.includes(value));
+    assert.deepEqual(texts, [], `text off the ${phone ? 'phone' : 'desktop'} scale (size, first seen): ${JSON.stringify(texts)}`);
+    if (phone) assert.deepEqual([...found.heights.keys()].filter(value => value > 20).sort(), [scale.control], 'every control on a phone the one control height');
+  });
+}
+
+// Every popup trigger a finger reaches on a phone (settings-ui.md's "Dropdowns": ONE touch rule, the trigger's): on the
+// view (the navbar, the strip), in the Display card, in the sidebar sheet and in Preview's Settings, a tap opens its
+// popup and a second tap on the same trigger shuts it.
+test('a phone: every popup trigger opens on one tap and shuts on a second tap on it', async (t) => {
+  const origin = await serve(t);
+  const context = await browser.newContext({ viewport: { width: 390, height: 760 }, hasTouch: true, isMobile: true });
+  t.after(() => context.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`${origin}/?file=panel.harness&home=1`);
+  await page.addStyleTag({ content: '#root > div { width: 390px !important; height: 760px !important; }' });
+  const pane = page.getByTestId('one');
+  await pane.locator('[data-viewer-navbar] [data-testid="file-actions"]').waitFor();
+  const tried = [];
+  // Each visible popup trigger inside `scope`, tapped where it stands: open, then shut by a second tap on it.
+  const sweep = async (where, scope, { some = true } = {}) => {
+    // Where the card or the sheet has come to rest: its slide done.
+    await page.waitForFunction(scope => [...document.querySelectorAll(scope)].every(element => element.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')), scope);
+    const triggers = await page.locator(`${scope} [aria-haspopup=menu]:visible`).all();
+    if (some) assert.ok(triggers.length > 0, `${where}: a trigger to try`);
+    for (const trigger of triggers) {
+      const name = `${where}: ${await trigger.getAttribute('aria-label') ?? (await trigger.textContent()).trim()}`;
+      if (await trigger.isDisabled()) continue;
+      await trigger.scrollIntoViewIfNeeded();
+      const box = await trigger.boundingBox();
+      const tap = () => page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await tap();
+      await page.waitForFunction(element => element.getAttribute('aria-expanded') === 'true' && document.querySelector('[role=menu]'), await trigger.elementHandle()).catch(() => {});
+      assert.equal(await trigger.getAttribute('aria-expanded'), 'true', `${name}: open after one tap`);
+      await tap();
+      await page.waitForFunction(element => element.getAttribute('aria-expanded') === 'false' && !document.querySelector('[role=menu]'), await trigger.elementHandle()).catch(() => {});
+      assert.equal(await trigger.getAttribute('aria-expanded'), 'false', `${name}: shut by a second tap on it`);
+      tried.push(name);
+    }
+  };
+  await sweep('the view', '[data-testid="one"] :is([data-viewer-navbar], [data-cad-tool-groups])');
+  await pane.locator('[data-navbar-view-controls] button').first().tap();
+  await page.locator('[data-settings-card-slide="in"] [data-settings-card]').waitFor();
+  await sweep('the Display card', '[data-settings-card-slide="in"]');
+  await pane.locator('[data-navbar-view-controls] button').first().tap();
+  await page.locator('[data-settings-card-slide="in"]').waitFor({ state: 'detached' });
+  await pane.locator('[data-navbar-panel="left"]').tap();
+  await page.locator('[data-panel-sheet]').waitFor();
+  // Each of the sheet's tabs, and what each holds.
+  for (const tab of await page.locator('[data-panel-sheet] [role=tab]').all()) {
+    await tab.tap();
+    await sweep(`the sheet's ${(await tab.textContent()).trim()}`, '[data-panel-sheet]', { some: false });
+  }
+  await pane.locator('[data-navbar-panel="left"]').tap();
+  await page.locator('[data-panel-sheet]').waitFor({ state: 'detached' });
+  await pane.locator('[data-view-preview]').tap();
+  // Its bar, brought up by a tap on the picture if it has gone, then its Settings.
+  const view = await pane.locator('[data-cad-canvas] canvas').first().boundingBox();
+  await page.touchscreen.tap(view.x + view.width / 2, view.y + view.height / 2);
+  await pane.locator('[data-preview-bar][data-state="visible"]').waitFor();
+  const settings = await pane.locator('[data-preview-settings]').boundingBox();
+  await page.touchscreen.tap(settings.x + settings.width / 2, settings.y + settings.height / 2);
+  await page.locator('[data-settings-card-slide="in"] [data-preview-settings-panel]').waitFor();
+  await sweep('Preview\'s Settings', '[data-settings-card-slide="in"]');
+  assert.ok(tried.length >= 8, `the triggers tried: ${JSON.stringify(tried)}`);
 });
 
 // A finger on a phone (`viewport/touchGestures.js`, the navbar's menus, Preview's idle chrome): each navbar menu a tap
@@ -570,9 +723,10 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   assert.deepEqual(await display.locator('[data-settings-row]').evaluateAll(rows => rows.map(row => row.getAttribute('data-settings-row'))),
     ['projection', 'display', 'background', 'grid'], 'the card\'s rows: Projection, Style, Background, Grid');
   await display.locator('[data-settings-select="display"]').click();
-  assert.deepEqual(await page.getByRole('listbox').locator('[data-display-mode-option]').allInnerTexts(), ['Solid'], 'an STL of one mesh: Solid alone');
+  await page.getByRole('menu').locator('[data-display-mode-option]').first().waitFor();
+  assert.deepEqual(await page.getByRole('menu').locator('[data-display-mode-option]').allInnerTexts(), ['Solid'], 'an STL of one mesh: Solid alone');
   await page.keyboard.press('Escape');
-  await page.getByRole('listbox').waitFor({ state: 'detached' });
+  await page.getByRole('menu').waitFor({ state: 'detached' });
   assert.equal(await first.locator('[data-viewer-navbar] [data-navbar-panel]').count(), 1, 'an STL has its panel (its Model tab, its one body), so its toggle');
   const grid = display.getByRole('switch', { name: 'Show grid', exact: true });
   await grid.click();
@@ -1455,7 +1609,9 @@ test('three tabs and the search fit the 232px panel with no ⋯; a fourth is ⋯
   await page.locator('[data-panel-sheet] [data-tree-row]').first().waitFor();
   await settle(page);
   const phone = await geometry();
-  assert.deepEqual([phone.row, phone.tab], [desktop.row, desktop.tab], `the phone's rows and tabs are the desktop's: ${JSON.stringify({ desktop, phone })}`);
+  // The same components and the same rules, at a phone's scale (settings-ui.md's "A phone's scale"): a tab the control
+  // (36px) at 15px text, its padding the desktop's; a row's gaps, glyph and actions the desktop's.
+  assert.deepEqual([phone.row, phone.tab], [desktop.row, [36, desktop.tab[1], '15px']], `the phone's rows and tabs are the desktop's at its scale: ${JSON.stringify({ desktop, phone })}`);
   assert.deepEqual([desktop.height, phone.height, desktop.row.between, desktop.tabs, desktop.more, phone.tabs, phone.more], [28, 36, 2, 4, false, 4, false]);
   assert.equal(await page.locator('[data-panel-sheet] [data-flat-panel-head] button:not([role=tab]):not([data-flat-panel-search-open])').count(), 0, 'the sheet\'s head is the tabs and the search alone: no Back');
   assert.deepEqual(errors, []);
@@ -1493,7 +1649,7 @@ test('Display\'s card is the peek card\'s mirror at the view\'s right edge, over
       right: Math.max(...ink.map(r => r.right)), bottom: Math.max(...ink.map(r => r.bottom)) };
     const points = [[0.5, 0.5], [0, 0], [1, 0], [0, 1], [1, 1]].map(([x, y]) =>
       [drawn.left + 1 + x * (drawn.right - drawn.left - 2), drawn.top + 1 + y * (drawn.bottom - drawn.top - 2)]);
-    const cut = [...card.querySelectorAll('[data-settings-label], [data-settings-value-label], [data-settings-title]')]
+    const cut = [...card.querySelectorAll('[data-settings-label], [data-field-value], [data-settings-title]')]
       .filter(element => element.scrollWidth > element.clientWidth).map(element => element.textContent);
     return { card: [box.left, box.top, box.width], right: view.right - box.right, peek: [peek.left - view.left, peek.top, peek.width],
       inset: firstLabel.left - box.left, peekInset: peekLabel.left - peek.left,

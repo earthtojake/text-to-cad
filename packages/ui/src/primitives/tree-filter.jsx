@@ -24,14 +24,14 @@ export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown
   return <div {...props} data-slot="tree-filter" className={cn('group/filter flex shrink-0 items-center gap-1',
     // Dense, the separator is an inset line rather than a border, so the row's full 28px centre its
     // buttons (a border would take a pixel from under them).
-    dense ? 'h-7 px-1 shadow-[inset_0_-1px_0_var(--border)]' : 'h-9 border-b px-1', className)}>
+    dense ? 'h-control px-1 shadow-[inset_0_-1px_0_var(--border)]' : 'h-9 border-b px-1', className)}>
     <div className={cn('relative flex min-w-0 flex-1 items-center', dense && 'h-full')}>
       <Search data-tree-filter-icon='' className={cn('pointer-events-none absolute text-muted-foreground', dense ? 'left-[7px] size-3' : 'left-[5px] size-3')} />
       <input
         ref={inputRef}
         aria-label={label}
         className={cn('w-full min-w-0 rounded-md bg-transparent pr-5 outline-none placeholder:text-muted-foreground',
-          dense ? 'h-full pl-[23px] text-ui' : 'h-6 pl-[21px] text-xs focus:bg-background/70')}
+          dense ? 'h-full pl-[23px] text-ui' : 'h-icon-button pl-[21px] text-xs focus:bg-background/70')}
         onChange={event => onChange(event.target.value)}
         onKeyDown={onKeyDown}
         placeholder={placeholder}

@@ -49,7 +49,7 @@ export function InfoRow({ label, children, title, copy }) {
     <div className="contents" data-info-row="">
       <TooltipHint content={title}><FieldLabel as="dt" className="leading-7">{label}</FieldLabel></TooltipHint>
       <dd onClick={onClick} data-copied={copied ? "" : undefined}
-        className={cn("relative flex min-h-7 min-w-0 items-center text-left text-foreground [overflow-wrap:anywhere]",
+        className={cn("relative flex min-h-control min-w-0 items-center text-left text-foreground [overflow-wrap:anywhere]",
           copyable && "cursor-pointer rounded-sm transition-colors hover:text-foreground")}>
         <div ref={value} className={copied ? "invisible" : undefined}>{children}</div>
         {copied ? <span className="absolute inset-y-0 left-0 inline-flex items-center gap-1 whitespace-nowrap text-foreground">

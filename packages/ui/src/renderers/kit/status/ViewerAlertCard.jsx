@@ -117,7 +117,7 @@ function AlertDetails({ details, clipboard }) {
       {canCopy ? (
         <TooltipHint content={copied ? t("alert.copied") : t("alert.copy")} side="bottom">
           <Button type="button" variant="ghost" size="icon-xs" aria-label={copied ? t("alert.detailsCopied") : t("alert.copyDetails")}
-            className="absolute right-1 top-1 size-6 text-muted-foreground hover:bg-background hover:text-foreground"
+            className="absolute right-1 top-1 size-icon-button text-muted-foreground hover:bg-background hover:text-foreground"
             onClick={write} data-alert-details-copy="">
             {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
           </Button>

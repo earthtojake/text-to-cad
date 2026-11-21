@@ -72,7 +72,7 @@ function AnimationTab({ runtime, kind = "animation", disabled = false, autoplay,
       {/* The transport: Play/Pause and Reset at its left (the strip's 28px tiles and icons), the scrubber the rest of the
           row; the time is the scrubber's own value, read out to assistive technology. Play's tile hangs out past the
           panel's inset by its own 6px, so its icon stands on the inset; the scrubber ends on the right one. */}
-      <div className="-ml-1.5 flex h-7 min-w-0 items-center gap-1" data-animation-transport="">
+      <div className="-ml-1.5 flex h-control min-w-0 items-center gap-1" data-animation-transport="">
         <ToolbarButton tooltip={false} disabled={disabled} label={playing ? words.pause : words.play} onClick={() => runtime.onPlayToggle?.()}
           className={TOP_STRIP_BUTTON_CLASS} data-animation-play="">
           {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}

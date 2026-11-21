@@ -268,10 +268,10 @@ function ColorMenu({ value, colors, onChange, disabled }) {
         <div className="grid grid-cols-3 gap-1">
           {colors.map(option => <DropdownMenuItem key={option.value} aria-label={option.key ? t(option.key) : option.label} data-color={option.value}
             data-checked={option.value === value ? '' : undefined} onSelect={() => onChange(option.value)}
-            className="size-7 justify-center rounded-md p-0 data-[checked]:bg-accent">
+            className="size-control justify-center rounded-md p-0 data-[checked]:bg-accent">
             <span className="size-4 rounded-full" style={swatch(option.value)} aria-hidden="true" />
           </DropdownMenuItem>)}
-          <DropdownMenuItem aria-label={t('annotate.customColour')} data-color="custom" onSelect={pick} className="size-7 justify-center rounded-md p-0">
+          <DropdownMenuItem aria-label={t('annotate.customColour')} data-color="custom" onSelect={pick} className="size-control justify-center rounded-md p-0">
             <span className="size-4 rounded-full" style={WHEEL} aria-hidden="true" />
           </DropdownMenuItem>
         </div>

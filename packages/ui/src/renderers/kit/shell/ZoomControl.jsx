@@ -20,7 +20,7 @@ export { ZOOM_FACTOR };
 // the digits tabular and as wide as their widest reading, so it never shifts as the zoom changes, haloed in the
 // theme's background as the cube's glyphs are.
 const PILL_CLASS = "pointer-events-auto absolute z-20 inline-flex shrink-0 items-center";
-const ZOOM_BUTTON_CLASS = cn("h-7 w-auto gap-0.5 rounded-md bg-foreground/6 px-2 text-tiny font-medium tabular-nums text-foreground/72 shadow-none",
+const ZOOM_BUTTON_CLASS = cn("h-control w-auto gap-0.5 rounded-md bg-foreground/6 px-2 text-tiny font-medium tabular-nums text-foreground/72 shadow-none",
   "hover:bg-foreground/10 hover:text-foreground dark:hover:bg-foreground/10 aria-expanded:bg-foreground/14 aria-expanded:text-foreground",
   "[text-shadow:0_0_1px_var(--background),0_0_2px_var(--background)] [&>svg]:size-3!");
 

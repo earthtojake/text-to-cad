@@ -336,12 +336,12 @@ it('keeps its note through a reload of the view: out of sight while it loads, an
   expect(note()).toBe('Thicker here.');
 });
 
-it('docked on a phone it is the same bar, at a finger\'s sizes, and a pick leaves the keyboard down', () => {
+it('docked on a phone it is the same bar, at the scale\'s sizes (its tokens: a phone\'s from the one switch), and a pick leaves the keyboard down', () => {
   const { update } = mount(testHost(), { docked: true });
   press();
   update({ references: [face] });
   expect([box()!.hasAttribute('data-docked'), document.querySelector('[data-quick-edit-sheet]'), document.activeElement === field()]).toEqual([true, null, false]);
-  expect(within(box()!).getByRole('button', { name: 'Copy Prompt' }).className).toMatch(/\bh-9\b/);
+  expect(within(box()!).getByRole('button', { name: 'Copy Prompt' }).className).toMatch(/\bh-control\b/);
 });
 
 it('Copy needs no note: with nothing written it copies what is picked, while Queue and Send wait for one', async () => {

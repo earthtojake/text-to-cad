@@ -394,17 +394,17 @@ async function openDisplay(user: ReturnType<typeof userEvent.setup>) {
 }
 // A card's dropdown, by its name: an option chosen from its list.
 async function choose(user: ReturnType<typeof userEvent.setup>, card: HTMLElement, name: string, option: string) {
-  await user.click(within(card).getByRole('combobox', { name }));
-  await user.click(screen.getByRole('option', { name: option }));
+  await user.click(within(card).getByRole('button', { name }));
+  await user.click(screen.getByRole('menuitemradio', { name: option }));
 }
 // A card's rows, section by section (the hairline between them): each row's id and what it shows.
 const cardSections = (card: HTMLElement) => {
   const sections: string[][][] = [[]];
   for (const node of card.querySelector('[data-settings-card-body]')!.children) {
     if (node.hasAttribute('data-settings-rule')) { sections.push([]); continue; }
-    const control = node.querySelector('[role=combobox], [role=switch]')!;
+    const control = node.querySelector('[data-value-dropdown], [role=switch]')!;
     sections.at(-1)!.push([node.getAttribute('data-settings-row')!, control.getAttribute('role') === 'switch' ? control.getAttribute('aria-checked')!
-      : control.querySelector('[data-settings-value-label]')!.textContent!]);
+      : control.querySelector('[data-field-value]')!.textContent!]);
   }
   return sections;
 };
@@ -499,7 +499,7 @@ it("a 3D view's Display is the navbar's toggle, left of Preview: its card Projec
   let card = await openDisplay(user);
   expect([pressed(), card.getAttribute('aria-label'), within(card).getByRole('heading', { level: 3 }).textContent]).toEqual([['true', 'true'], 'Display', 'Display']);
   expect(cardSections(card)).toEqual([[['projection', 'Orthographic']], [['display', 'Solid'], ['background', 'Light'], ['grid', 'false']]]);
-  expect(within(card).getAllByRole('combobox').map(box => box.getAttribute('aria-label'))).toEqual(['Projection', 'Style', 'Background']);
+  expect(within(card).getAllByRole('button').filter(node => node.hasAttribute('data-value-dropdown')).map(box => box.getAttribute('aria-label'))).toEqual(['Projection', 'Style', 'Background']);
   // It slides in from the view's right edge, as the sidebar's peek does from the left: the peek's own motion.
   expect(card.closest('[data-settings-card-slide]')!.className).toContain(PANEL_PEEK_IN_RIGHT_CLASS);
   expect(reset().hasAttribute('disabled')).toBe(true);
@@ -513,7 +513,7 @@ it("a 3D view's Display is the navbar's toggle, left of Preview: its card Projec
   expect(cardSections(displayCard()!)).toEqual([[['projection', 'Orthographic']], [['display', 'Solid'], ['background', 'Dark'], ['grid', 'false']]]);
   expect(reset().hasAttribute('disabled')).toBe(true);
   // Escape in it closes it and hands the keyboard back to the button; the button and the X close it too.
-  act(() => within(displayCard()!).getByRole('combobox', { name: 'Style' }).focus());
+  act(() => within(displayCard()!).getByRole('button', { name: 'Style' }).focus());
   await user.keyboard('{Escape}');
   expect([displayCard(), pressed(), document.activeElement]).toEqual([null, ['false', 'false'], displayButton()]);
   await user.click(displayButton());
@@ -694,7 +694,7 @@ it("Preview is in Render: the strip, the view's controls, the stack and the pane
   expect(screen.queryByRole('toolbar', { name: 'Animation playback' })).toBeNull();
   // Its bar, along the view's top edge: the file's name, then its settings and the way out, an X.
   expect([previewBar()!.querySelector('[data-preview-name]')!.textContent, cornerButtons()]).toEqual(['panel.harness', ['Preview settings', 'Exit preview']]);
-  expect(previewBar()!.className).toMatch(/\bh-10\b/);
+  expect(previewBar()!.className).toMatch(/h-\[calc\(var\(--cad-control\)\+12px\)\]/);
   const corner = previewBar()!;
   expect(within(corner).getByRole('button', { name: 'Exit preview' }).querySelector('svg.lucide-x')).not.toBeNull();
   expect(within(corner).getByRole('button', { name: 'Preview settings' }).querySelector('svg')!.innerHTML).toBe(cube);
@@ -970,9 +970,9 @@ it("the model area follows the viewport's Background, not the app's theme: Light
   expect([viewportProps.current.themeSettings.background.type, viewportProps.current.themeSettings.background.solidColor]).toEqual(['linear', '#dfe2e5']);
   // Display's Background: Dark, then Light again, each the person's, kept in the tab's settings; Light and Dark alone.
   const card = await openDisplay(user);
-  await user.click(within(card).getByRole('combobox', { name: 'Background' }));
-  expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Light', 'Dark']);
-  await user.click(screen.getByRole('option', { name: 'Dark' }));
+  await user.click(within(card).getByRole('button', { name: 'Background' }));
+  expect(screen.getAllByRole('menuitemradio').map(option => option.textContent)).toEqual(['Light', 'Dark']);
+  await user.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
   await waitFor(() => expect(viewportProps.current.appearance).toBe('dark'));
   expect([preferences.getSnapshot().viewportBackground, box().classList.contains('dark'), viewportProps.current.themeSettings.background]).toEqual(['dark', true,
     expect.objectContaining({ type: 'solid', solidColor: '#1e1e1e' })]);

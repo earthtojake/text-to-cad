@@ -43,7 +43,7 @@ const AXIS_OPTIONS = Object.freeze(AXES.map(value => ({ value, label: value.toUp
 
 // An axis's button: the app menu's Theme buttons (24px square, its radius, the menu's type), the axis in
 // hand in the accent a highlighted item wears, the others in the item's own colour.
-const AXIS_ITEM_CLASS = "grid size-6 cursor-default place-items-center rounded-sm text-xs leading-4 text-foreground outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground";
+const AXIS_ITEM_CLASS = "grid size-icon-button cursor-default place-items-center rounded-sm text-xs leading-(--cad-leading-xs) text-foreground outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground";
 
 // A press in this menu keeps it open: an axis as each setting does, so several change in one go.
 const keepOpen = event => event.preventDefault();
@@ -85,7 +85,7 @@ function ClipAxisSelect({ viewSettings, onViewSettingsPatch, bounds }) {
       className={cn(FLOATING_SURFACE_CLASS, "w-max min-w-0 data-[state=closed]:animate-none!")}>
       {/* As narrow as its settings: first the axes, a compact group of the Theme row's buttons in a row
           as tall as an item; a rule; then the settings, Display's checkbox items, with no glyphs. */}
-      <div className="flex min-h-7 items-center px-1 py-0.5" data-clip-axis-row="">
+      <div className="flex min-h-control items-center px-1 py-0.5" data-clip-axis-row="">
         <MenuPrimitive.RadioGroup value={clip.axis} onValueChange={choose} aria-label={t("clip.axis")} className="flex items-center gap-0.5">
           {AXIS_OPTIONS.map(option => <MenuPrimitive.RadioItem key={option.value} value={option.value} onSelect={keepOpen}
             className={AXIS_ITEM_CLASS} data-clip-axis-option={option.value}>{option.label}</MenuPrimitive.RadioItem>)}

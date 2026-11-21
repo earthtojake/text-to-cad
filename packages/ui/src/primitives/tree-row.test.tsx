@@ -7,7 +7,7 @@ it('a row a level down keeps its glyph slot when it has no glyph, is padded a le
   const row = container.querySelector<HTMLElement>('[data-tree-row]')!;
   const slot = row.firstElementChild!;
   expect([slot.hasAttribute('data-tree-row-glyph'), slot.childElementCount, row.style.paddingLeft, row.querySelectorAll('[data-tree-guide]').length, row.style.height])
-    .toEqual([true, 0, 'calc(var(--tree-row-pad, 5px) + 10px)', 1, '28px']);
+    .toEqual([true, 0, 'calc(var(--tree-row-pad, 5px) + 10px)', 1, 'var(--cad-row)']);
 });
 
 it('a branch\'s chevron and a leaf\'s icon take the same one slot, so the names of a level start on one column', () => {
@@ -34,7 +34,7 @@ it('a heading over rows is the panel\'s 28px muted line, in the element asked fo
   const { container } = render(<ul><TreeRowHeading as='li' aria-hidden='true'>Front</TreeRowHeading></ul>);
   const heading = container.querySelector<HTMLElement>('[data-tree-heading]')!;
   expect([heading.tagName, heading.textContent, heading.getAttribute('aria-hidden')]).toEqual(['LI', 'Front', 'true']);
-  expect(heading.className.split(' ')).toEqual(expect.arrayContaining(['h-7', 'text-ui', 'text-muted-foreground']));
+  expect(heading.className.split(' ')).toEqual(expect.arrayContaining(['h-control', 'text-ui', 'text-muted-foreground']));
   // It pads nothing: the panel's body puts its words on the panel's inset (`--panel-inset`), as every line of text.
   expect(heading.className).not.toMatch(/(^|\s)p[xlr]?-/);
 });

@@ -19,6 +19,13 @@ import type { ViewerCommands as CadCommands } from '@cad/ui/renderers/workspace'
 // The module the built renderers publish their export view through (the viewer's ExportControls
 // provides it): the same built file, so this harness's provider is the one they reach.
 import { ExportContext } from '../../../dist/export/context.js';
+import { ModelLibrary } from '@cad/ui/library';
+// `?file=home`: no file, the host's home (the library), as the web viewer's is, for a look at the home page.
+const showHome = new URLSearchParams(location.search).get('file') === 'home';
+const HOME_MODELS = ['bracket.step', 'hinge.step', 'blinky.kicad_pcb', 'layered.dxf', 'arm.urdf', 'pair.glb'].map((name, index) => ({
+  path: `/models/${name}`, name, kind: 'file', pinned: index === 0, modified: Date.now() - index * 3600e3, size: 4096 * (index + 1) }));
+const homeLibrary = { list: async () => HOME_MODELS, change: async () => HOME_MODELS, thumbnail: async () => null, open: async () => {} };
+const homePresentation = showHome ? { home: <ModelLibrary library={homeLibrary as never} onLayoutChange={() => {}} /> } : undefined;
 
 // The one file both panes open, by its absolute path, as a viewer names files: a fixture server
 // lists each of its files under `/models`, so `?file=arm.urdf` (for a test whose fixture is not the
@@ -130,7 +137,7 @@ function App() {
   Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, tabStore, record: tabStore.getSnapshot(), captures, promptMessages, opened, exportViews, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted } });
   return <div className="dark" style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} chrome={chrome} /></ExportContext.Provider>}
+      {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={showHome ? null : file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} chrome={chrome} presentation={homePresentation} /></ExportContext.Provider>}
     </section>
     {second && <section data-testid="two" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <FileViewer file={file} host={b.host} renderers={b.renderers} state={otherState} onStateChange={onOtherStateChange} />

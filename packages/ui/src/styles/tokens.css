@@ -24,6 +24,18 @@
   --text-heading: var(--cad-text-heading);
   --text-heading--line-height: var(--cad-leading-heading);
   --text-heading--font-weight: 600;
+  /* THE scale's sizes (`globals.css`, "THE scale"): `h-control`, `size-icon-button`, `min-h-row`, `size-glyph`,
+   * `px-pad`, `gap-step`, `rounded-control`; each the desktop's value, and a phone's from the one switch. */
+  --spacing-control: var(--cad-control);
+  --spacing-icon-button: var(--cad-icon-button);
+  --spacing-row: var(--cad-row);
+  --spacing-row-sm: var(--cad-row-sm);
+  --spacing-glyph: var(--cad-glyph);
+  --spacing-glyph-sm: var(--cad-glyph-sm);
+  --spacing-pad: var(--cad-pad);
+  --spacing-step: var(--cad-step);
+  --spacing-thumb: var(--cad-thumb);
+  --radius-control: var(--cad-radius-control);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

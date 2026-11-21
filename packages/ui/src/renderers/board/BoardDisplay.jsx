@@ -3,10 +3,10 @@ import {
   BOARD_DISPLAY_DEFAULTS, BOARD_DISPLAY_OTHERS, boardDisplayDrawsCopper, boardDisplayIsCustom, readBoardDisplay, selectBoardMode
 } from "@cad/core/lib/plot2d/index.js";
 import { Checkbox } from "@cad/ui/primitives/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@cad/ui/primitives/select";
+import { ValueDropdown } from "@cad/ui/primitives/value-dropdown";
 import { cn } from "@cad/ui/utils";
 import {
-  FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetSettingRow, FileSheetSettingsSection, parseFileSheetNumberInput
+  FileSheetSettingRow, FileSheetSettingsSection, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
 import { CircuitBoard, Cpu, Route, SquareDashed } from "lucide-react";
@@ -51,8 +51,8 @@ const CUSTOM = "custom";
 const percent = value => `${Math.round(value * 100)}%`;
 // Every control fills the row's control column at the row's 24px height, a choice too: the room is the control's.
 // A row is as tall as its control where that is taller (a phone's 32px Select), never cut by it.
-const CONTROL_CLASS = "!h-6 w-full min-w-0";
-const ROW_CLASS = "h-auto min-h-6";
+const CONTROL_CLASS = "!h-icon-button w-full min-w-0";
+const ROW_CLASS = "h-auto min-h-icon-button";
 
 /** What the layers but the active one are, as Others names them. */
 export const BOARD_OTHERS_OPTIONS = Object.freeze(BOARD_DISPLAY_OTHERS.map(value => Object.freeze({ value, labelKey: `board.text.others_${value}` })));
@@ -65,10 +65,8 @@ export function boardDisplayChoice(display, sheet) {
 
 function Choice({ label, name, value, options, onChange, data }) {
   return <FileSheetSettingRow label={label} className={ROW_CLASS}>
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label={name} size="sm" className={cn(FILE_SHEET_SELECT_TRIGGER_CLASSES, CONTROL_CLASS)} {...data}><SelectValue /></SelectTrigger>
-      <SelectContent>{options.map(([id, title]) => <SelectItem key={id} value={id} data-board-option={id}>{title}</SelectItem>)}</SelectContent>
-    </Select>
+    <ValueDropdown value={value} options={options.map(([id, title]) => ({ value: id, label: title }))} onChange={onChange} label={name}
+      className={cn(CONTROL_CLASS, "justify-self-stretch py-2 text-xs")} triggerProps={{ "aria-label": name, ...data }} optionProps={option => ({ "data-board-option": option.value })} />
   </FileSheetSettingRow>;
 }
 

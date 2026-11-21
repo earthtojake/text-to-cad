@@ -101,10 +101,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   the file manager `Folder`, **Default app** `ExternalLink`. No ⋯ where there is nothing. The home has no file and no ⋯. The name has
   no right-click menu and there are no crumbs. On a desktop the left's controls sit edge to edge, spaced
   by their own padding alone: the logo, Back, Forward and the ⋯ in 28px buttons, and the name
-  4px in from its edges. On a phone they are the row's 36px tiles, all on its middle line: the first (the toggle) on
-  the row's 8px inset, each 4px from the next (the gap between the navbar's icon buttons, `NAVBAR_CONTROLS_CLASS`),
-  the logo's mark centred in its tile, and the name's button as tall, sized by its text, its text and chevron 10px in
-  from its edges as an icon is in its tile. A fill comes only under a pointer that hovers (Tailwind's `hover:`, inside
+  4px in from its edges (the pad less 4px), each the control tall and the logo's mark centred in its tile; a phone's
+  the same, at [the two scales](#two-scales). A fill comes only under a pointer that hovers (Tailwind's `hover:`, inside
   `@media (hover: hover)`) or while a control's menu is open, and the ring only for keyboard focus (`:focus-visible`),
   so a finger's tap leaves neither behind. A tap opens a menu (the logo's, the ⋯, View) and it stays open: a menu opens
   on its button's press, and focus then landing on that button (iOS gives a tapped button focus at the tap's click,
@@ -159,8 +157,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   menu's). The Home is the chrome's **type scale**: the controls `text-ui` (13/20); a tile's and a row's name 12/16,
   weight 500, over or beside its facts, 11/16 and muted (`src/designSystem.test.js` holds it). It has **no heading row
   of its own**: a light row directly above the grid, 28px, on the grid's column, holds the **type filter** at its left
-  (a stock DropdownMenu whose ghost trigger names what it shows, "All ▾", its text on the grid's edge; its radio items
-  All, Models and Files, there only where models and files are both listed) and the **grid/list switch** at its right
+  ([the dropdown](#dropdowns), its trigger drawn as the row's ghost control naming what it shows, "All ▾", its text on
+  the grid's edge; its options All, Models and Files, there only where models and files are both listed) and the **grid/list switch** at its right
   (two 28px icon buttons, the chosen one on the pressed fill, `accent`, with its icon the brand's, `--brand-icon`, as
   the tool in hand's is). A home drawn with no navbar has Recent, the search and Open in that row. Then the
   documents opened or built before, pinned first, then by last activity. The home is the
@@ -279,8 +277,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   layer, `data-view-top-layer`, over the panel). A person finds the strip where it always is,
   whatever is open beside it; a strip that slid with each panel moved under the pointer as a panel came and went.
   A file with no tools and no 3D view has no strip. On a phone
-  ([mobile](#the-views-panel-and-the-tool-stack)) the tiles are 36px with 18px icons, a chevron
-  20px wide, in one row that never wraps, its bar 46px (the desktop's 40 does not fit a finger). It is
+  ([mobile](#the-views-panel-and-the-tool-stack)) the same tiles at [the two scales](#two-scales), in one row that never wraps. It is
   centred in the whole view, on a phone as on a desktop and in every renderer (all of them mount
   `kit/shell/ViewFrame.jsx`), 8px from the edges at the least; what does not fit goes into
   **More tools** (an ellipsis, last): the tools that do not fit, from the strip's end, a tool there a row ticked while
@@ -292,7 +289,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 - **Sub-toolbar** under the strip, 8px below it, centred: the tool in hand's one row of
   controls (`SubToolbar`, `data-cad-sub-toolbar`), there for as long as the tool is up (see
   [Tools and lifecycle](#tools-and-lifecycle)). Select and Measure have none. On a phone its
-  buttons are the strip's 36px tiles and its sliders as tall, the slider rows 20rem wide.
+  buttons are the strip's tiles at [the two scales](#two-scales), the slider rows 20rem wide.
 - **Tool stack** under the sub-toolbar, in the same centred column: a renderer's own
   `toolPanels`, where it hands any (see
   [The view's panel and the tool stack](#the-views-panel-and-the-tool-stack)). The column
@@ -675,7 +672,7 @@ surface under it; **On plane**, its glyph a sheet: the whole mark on the plane o
 starts on; a flat view, a DXF, has none); then **Clear annotations** (the trash), disabled while there is
 nothing to clear. Under the **Eraser**, which draws nothing, Color, Stroke width and Placement are disabled (greyed out, still
 on the row so it does not jump). Undo and Redo have no buttons: they are ⌘Z and ⇧⌘Z (Ctrl+Z, Ctrl+Y). The two rows are the same at every width; on a phone their
-buttons are 36px tiles and, where the tools are wider than the view, they wrap rather than scroll (there is no second menu on
+buttons are the strip's tiles ([the two scales](#two-scales)) and, where the tools are wider than the view, they wrap rather than scroll (there is no second menu on
 the strip for it). The **Highlighter** draws a freehand stroke like the pen's, but broad and translucent: five times
 the chosen stroke width, 35% opaque, round at its ends, with no pressure taper; it is an ordinary stroke, picked,
 erased and recoloured as any (its Stroke width in the selection's bar is the same setting). The tools have no Select or Pan of their own (Select picks
@@ -737,7 +734,7 @@ borderless button reading the axis in hand, "X ⌄", lit while its menu is open 
 amount, **Reset clip**. The axis's dropdown holds all of Clip's settings, on Display's surface
 and in its type, as narrow as its content, with no heading and no glyphs: first X, Y and Z, a
 compact group of the app menu's Theme buttons (24px squares, its radius, no track) in a row as
-tall as an item (a phone's 40px, as Theme's row), the axis in hand in the accent a highlighted
+tall as an item (the row, as Theme's row), the axis in hand in the accent a highlighted
 item wears; a rule; then two of Display's `DropdownMenuCheckboxItem`s, plain text with the check
 at the right: **Part colours** (ticked by default: each section cap in its
 part's normal colour, without hover or selection tints; unticked, every cap one amber) and
@@ -1226,7 +1223,7 @@ slot (`TreeRowGlyph`, `TreeRowToggle`), its name and detail (`TreeRowName`, `Tre
 search) and its count (`TreeSearchStatus`). No view sets a text size of its own (`text-tiny`,
 `text-ui`): every row, detail, count and heading is the panel's 12px (`tree-row.test.tsx` holds it). In the panel's numbers (232px wide, its body padded by the inset, 16px):
 
-- **The box**: 28px (36px on a phone), the background 8px from each edge, its radius and its hover,
+- **The box**: the row, 28px ([the two scales](#two-scales)), the background 8px from each edge, its radius and its hover,
   selected and cursor fills; the panel's 12px text (`dense`), the name at full strength.
 - **The slot**: ONE glyph a row, its first child, always (`TreeRowGlyph`, `TreeRowToggle`): 12px wide (a
   phone's 16px glyphs widen it), its glyph centred and muted, its left edge on the search icon's, 16px in,
@@ -1270,19 +1267,13 @@ Model and link finds and the explorer's filter share `TreeFilterInput`; the expl
 is worked as a phone is. What a finger reaches is the gesture's own (`pointerType`): a touch takes an
 edge from 20px off (an edge within 16px wins over the face under it), ink, a measurement and the
 eraser's ring from 16px (`TOUCH_HIT_PX`), and a joint's knob from 22px; a mouse keeps its few px.
-On a phone every slider is a 36px band with a 20px thumb, and the selected ink's bar has 36px
-buttons. A pinch zooms at the touch speed from the first gesture after a load. A phone is read at arm's length
-and worked with a finger, so its chrome is one step up the scale, after the platforms' own
-guidance (Apple's 44pt and Material's 48dp touch targets, an 11pt type floor and 15-17pt body
-text, and iOS Safari zooming into any field under 16px): type 12, 13 and 14px for `text-tiny`, `text-xs` and
-`text-ui`, the heading 16px, on the desktop's line heights ([the type scale](#the-type-scale)); text entry at the panel's own size (the page's viewport,
-not a 16px font, stops a phone zooming in on a field); menu, select and tree rows 36-40px; the
-navbar, and Preview's bar in its place, a 48px row of 36px controls; the strip and the sub-toolbars 36px tiles (the strip one row,
+A pinch zooms at the touch speed from the first gesture after a load. Every size a phone draws at is
+[the two scales](#two-scales)'s, the one place it is said; what follows is layout, what a phone does differently, never a size: the strip one row,
 **More tools** holding what does not fit; the drawing tools' row the same single row, wrapping where it must — Shapes' does
 at 375px, its style group under its tools, and a row that wrapped draws no rule between its groups, the line
 break parting them, `SubToolbar`'s `data-wrapped`).
 The scale is set once, in `globals.css`, for the whole page while a phone's view is on it, so a
-portalled menu, select or hint is the same size as the chrome it opened from. A phone has no room beside
+portalled menu, dropdown or hint is the same size as the chrome it opened from. A phone has no room beside
 the app menu or the strip's More for a submenu (one placed beside More, which a board's rows make wide,
 ran off the screen's edge): there a submenu opens in place, its row showing the choices under it, in the
 menu itself and indented, the chevron turning down while they show; a press on the row, or Left, hides
@@ -1304,6 +1295,39 @@ at the finger, what the press started on the canvas (an orbit, a box) cancelled 
 nothing (a browser's own `contextmenu` for it opens nothing more). A second finger, or a move past the slop, makes
 either nothing: a pinch is never a double tap. The picture's canvases take no iOS callout and select no text
 (`globals.css`).
+
+### Two scales
+
+The chrome has TWO scales, a desktop's and a phone's, each defined ONCE as design tokens (`styles/globals.css`, "THE
+scale": `:root` for a desktop, ONE switch for a phone, the viewer's one breakpoint: under 600px,
+`data-viewer-layout="mobile"`), and every primitive and shared class reads them. **No component sizes itself outside the
+tokens**: no `mobile ?` size branch, no phone rule for one component, no pixel size where a token says it. The switch is
+for the whole page while a phone's view is on it, so a menu, dropdown or hint portalled out of the viewer is the size of
+the chrome it opened from; a viewer drawn out of sight for a picture never switches it. A desktop is as it was: its
+values are today's. Script that must count pixels (a virtual list's row height, the phone strip's fit) reads
+`lib/scale.js`, which `scale.test.js` holds equal to the stylesheet.
+
+| Token | Tailwind | Desktop | Phone | What uses it |
+| --- | --- | --- | --- | --- |
+| `--cad-text-*`, `--cad-leading-*` | `text-tiny`, `text-xs`, `text-ui`, `text-heading` | tiny 11/16, xs 12/16, ui 13/20, the panel 12/16, heading 15/20 | 15/20 for every control, label, row, menu item and field (xs, ui, the panel); secondary text (tiny, where a desktop steps down) 14/20; heading 17/22 | all text |
+| `--cad-control` | `h-control`, `size-control` | 28px | 36px | the strip's and a sub-toolbar's tiles; the navbar's and Preview's bar's buttons (their row the control and 12px: 40, 48); the panel's tabs and buttons and its head's row (the control and 4px); Quick Edit's buttons; a tool's chevron (half as wide); fields |
+| `--cad-icon-button` | `size-icon-button`, `h-icon-button` | 24px | 36px | a small icon button (a card's close, the playbar's, `TOOLBAR_ICON_BUTTON_CLASS`); [a dropdown](#dropdowns) in a card |
+| `--cad-row`, `--cad-row-sm` | `min-h-row`, `h-row-sm` | 28, 24px | 36px | a menu's, a dropdown's and a context menu's items, the panel's tree rows; the explorer's rows |
+| `--cad-glyph`, `--cad-glyph-sm` | `size-glyph`, `size-glyph-sm` | 16, 14px | 18, 16px | a tile's icon, a small button's; a row's actions (the glyph and 4px tall), a chip's x |
+| `--cad-pad`, `--cad-step`, `--cad-radius-control` | `px-pad`, `gap-step`, `rounded-control` | 8, 4, 4px | 10, 4, 6px | a control's horizontal padding, the gap between neighbours, a control's corners (a bar's are its own and 6) |
+| `--cad-switch-h`, `--cad-switch-w` | | 14 x 24px | 20 x 36px, level with the controls | a switch (its thumb the track less 2px) |
+| `--cad-thumb`, `--cad-check` | `size-thumb` | 12, 14px | 20, 20px | a slider's thumb; a checkbox |
+| `--cad-hit` | `.cad-hit` | 0 | 36px | the least area a small mark takes to press, invisibly, centred on it: a chip's x, a row's actions, a crumb, a slider's band |
+
+**How a component picks its sizes**: a control is the control tall; a small icon button the icon button; a row the row;
+its icon the glyph; its padding the pad and its gaps the step; text by the type scale's step (never a pixel size); a
+mark smaller than a control (a chip's x, a row's action, a crumb) keeps its drawn size and takes `.cad-hit`. A size the
+table does not have is a new token, in both scales at once, with its row here. The same padding rules hold at both scales
+(a card's equal inset, the panel's inset, the strip's 5px), scaled by the tokens. What stays a phone's alone is layout:
+the panel as a sheet, the strip's More, Quick Edit across the view, no peek, no tooltips, rows' actions always shown
+(nothing hovers). A card (Display's, Preview's Settings) grows past its 224px to fit its values at a phone's text, never
+past the view less its gaps; nothing truncates. `RendererShell.browser.test.mjs` walks the page on a phone and on a
+desktop and fails on a control or a text off its scale.
 
 ### A board in 3D
 
@@ -1409,14 +1433,13 @@ button ([Preview](#camera-animation-and-preview)). Each is the sidebar's peek ca
   capitals; its 24px hit area hangs into the padding), every label's left edge, every control's right edge, Reset's
   text's right edge and its baseline at the bottom.
 - **Rows.** 24px controls on a 32px pitch (8px between them), each row its muted label at the left and its control
-  at the right. **Every dropdown of a card is ONE width**: half the content (100px), or, where the card's widest option
+  at the right, each dropdown [the dropdown](#dropdowns) in its `fixedWidth` mode. **Every dropdown of a card is ONE width**: half the content (100px), or, where the card's widest option
   (its icon included) does not fit that, as wide as that option, the trigger's padding and gaps the design system's
   tightest (6px in, 4px apart, the panel dropdown's 12px chevron); a label keeps the rest whole, 8px from its control.
   A dropdown shows the chosen option's icon before its name wherever the options have icons, and its list the same
   icons. A colour is as wide as its value. A switch is the design system's (24×14), centred in its row. A number with a
   range is [the slider control](#the-slider-control) at its compact size: its label and value on a 24px line, the
-  track under it (36px), 8px to the next row; on a phone the same 36px, the track's touch band reaching over the gap
-  invisibly (`globals.css`). On a phone a dropdown is the phone's 36px control, its row as tall.
+  track under it (36px), 8px to the next row; on a phone the sizes are [the two scales](#two-scales)'s, the track's band its `--cad-hit`.
 - **Sections.** A card's rows stand in sections with **one hairline between sections, never between rows**, 12px from
   what is seen on either side of it (a control's edge, a switch's, a heading's capitals). A section heading is the
   foreground at medium weight; a switch that turns a section on and off (Preview's Orbit and Floor) is its heading.
@@ -1469,8 +1492,7 @@ edge, so the toggle, the name, Display and Preview stay in sight and usable), ov
 with **no scrim** and **no animation**: it is there, and gone, at once (the Sheet's `scrim={false}` and
 `animated={false}`, `usePhoneSheetPlace.js`), starting closed each time (kept nowhere). In it **the desktop's panel, the same components at the same sizes, gaps and type**:
 its head (the tabs, ⋯, the search's icon; no Back), its search, its tree rows (`primitives/tree-row.jsx`: the same 4px
-gap, 12px glyph slot, 16x20 actions 2px apart, 6px from the right; the row's own touch height, 36px, the one thing a
-phone changes in it) and every tab's content (`FlatPanel`'s `mode: "page"`). Only what a phone cannot do differs: a
+gap, 12px glyph slot, 16x20 actions 2px apart, 6px from the right; its row and text [the two scales](#two-scales)'s) and every tab's content (`FlatPanel`'s `mode: "page"`). Only what a phone cannot do differs: a
 row's actions are always shown, as nothing hovers (`globals.css`'s `[data-panel-surface="page"]`). A tap outside it, a
 swipe back to the left (the sheet's `onSwipeClose`: 48px towards its edge, more across than along it), Escape or the
 toggle again close it; ⌘\ too. A tap on the picture lands on the Sheet's overlay, kept but clear, so it closes the sheet
@@ -1546,7 +1568,7 @@ Text is drawn as Figma draws its interface, greyscale-antialiased (`-webkit-font
 menus included: macOS's subpixel default draws light text on the dark theme a weight heavier. It changes no
 family, size or weight. Type comes from [the type scale](#the-type-scale) only; no pixel font sizes. Sections use
 8px gutters and bottom insets and 4px row and column gaps. `FileSheetFieldGrid` owns horizontal spacing; its
-children never pad again. Menu, select and context-menu typography comes from the primitives, portals included.
+children never pad again. Menu, dropdown and context-menu typography comes from the primitives, portals included.
 Selected values show their icon where it means something.
 
 Use the slider control for a useful bounded range, `FileSheetNumberProperty` for other scalars,
@@ -1569,9 +1591,9 @@ Three interface sizes and one heading, each on a fixed line height, as Figma's U
 | App chrome: the navbar and the file's name, dialogs (What's new), the Home's body, the text a person types in Quick Edit's note (and its placeholder), floating or docked, and the loading indicator's step line | 13 / 20, regular | `text-ui` (`text-sm`, `text-base`) |
 | The one heading: the CAD app's notice title (the Home's **Recent** is the navbar's, 13/20 at 500) | 15 / 20, semibold | `text-heading` |
 
-A phone takes one step up on the same line heights: 12, 13 and 14px, the heading 16px
-([mobile](#the-views-panel-and-the-tool-stack)). There is no 10px step. A menu item is 16px of line in 6px of
-padding (`dropdown-menu.jsx`, `select.jsx`, `context-menu.jsx` and `tooltip.jsx` set `leading-4`), and no menu brings
+A phone's sizes are [the two scales](#two-scales)': 15/20 for every step, the secondary 14/20, the heading 17/22. There is no 10px step. A menu item is its text's line in 6px of
+padding, at least the row tall (`min-h-row`: `dropdown-menu.jsx`, `context-menu.jsx`; `tooltip.jsx` the
+tiny step's line), and no menu brings
 a size of its own (the viewport's context menu, the zoom's and the view menus take the primitives').
 
 Text drawn into the viewport is the picture's, not the chrome's, and keeps its own sizes, none under 10px: the
@@ -1631,9 +1653,25 @@ destructive's. The scene's blues — selection (#2979ff, more saturated than the
 a model, not the chrome), its fill, hover, the box select, the grid and the XYZ palette — are
 `@cad/core/lib/viewportTheme.js`'s, written once (`kit/look/sceneColors.test.js` holds it).
 
+### Dropdowns
+
+Every place that picks ONE value of a list from its own trigger is ONE component, `primitives/value-dropdown.jsx`'s
+`ValueDropdown`: a panel's row (`PanelSelectRow`), a settings card's row (Display's, Preview's Settings), a board's
+display rows, the home's type filter. Its trigger shows the chosen option (its icon where it has one, its label, a
+chevron), bordered as a field, the control tall ([the two scales](#two-scales)); its list is the options with the
+chosen one checked (radio items: a disabled option drawn off, a `fallback` label where no option is the value),
+`align`ed, named, each option carrying its own data attributes; `fixedWidth` makes the trigger as wide as its widest
+option, so a card's dropdowns keep one width whatever is chosen. It is built on the one `DropdownMenu` primitive, so
+there is ONE popup, ONE keyboard and ONE touch rule, the trigger's (`DropdownMenuTrigger`): a mouse or a pen opens a menu
+at its press; a finger toggles it at its tap's click, from the state the menu had as the finger landed (a second tap on
+the trigger shuts it). There is no other select: no Radix Select, no native one. A menu of actions (⋯, the app menu, a
+view's menu) is a `DropdownMenu` with items, not this; and a picker drawn as a toolbar tile (an annotation's colour,
+stroke and placement, Clip's axis, Preview's routine, Speed in the playback settings menu) keeps its tile and its own
+`DropdownMenu`, the same popup and touch rule.
+
 ### A control's label and value
 
-One rule, Figma's, for every labelled control — a slider, a select or settings row, a toggle, a number field, a menu's
+One rule, Figma's, for every labelled control — a slider, a dropdown or settings row, a toggle, a number field, a menu's
 setting row, a card's fact, in the panel, a sub-toolbar (Explode's and Clip's amount) or Preview's
 settings: its **label** is `--muted-foreground`, its **value** (the number, the option chosen, a field's text) the
 `--foreground`. Every label is one primitive, `FieldLabel` (`primitives/field-label.jsx`): no control sets its label's
@@ -1689,8 +1727,7 @@ playbars' scrubber, a timeline, is the one other slider).
   pointer anywhere over the slider) strengthens the fill a step (38%, 42%) and darkens the ring; the
   keyboard's **focus** rings the thumb (3px, the theme's ring at 40%); **disabled** (a motion owning a
   joint, a parameter being saved) the whole slider is at half strength and its thumb flat, no shadow.
-  No slider draws a colour of its own. On a phone the band is 16px in the panel, 36px of touch reaching
-  over the label's foot, and the thumb 16px.
+  No slider draws a colour of its own. On a phone its thumb and band are [the two scales](#two-scales)'s.
 
 ## Settings
 
@@ -1960,7 +1997,7 @@ border is blue while the note has the keyboard. Where the bar is narrow its chip
 **+N more** sooner and Copy Prompt drops its words for its icon (only where the window makes the bar narrower than 400px).
 
 On a phone (`docked`) the bar is the same two rows across the view's full width, 8px in a side, never capped at 400px,
-above the safe area, at a finger's sizes (36px buttons, the note's text a step up). A pick never brings up the
+above the safe area, at [the two scales](#two-scales). A pick never brings up the
 keyboard there: the note is a tap away. A tap on a chip opens its card (above the chip) and
 copies nothing: the card's title copies. On a desktop a card opens above its chip too, and a
 click on the chip copies it.
@@ -2136,8 +2173,8 @@ the tool strip, its sub-toolbar, the tool stack and their resize grips, Quick
 Edit, the host's notice and corner, joint handles, cube and context menu (`PreviewChrome`, hidden and
 inert); leaving Preview gives the host's chrome back as it was.
 
-In the navbar's place, over the view's top edge, is **Preview's bar**: the navbar's row (40px, a
-phone's 48px) on no surface, the model showing through, with the file's or model's name at its
+In the navbar's place, over the view's top edge, is **Preview's bar**: the navbar's row (the control and 12px: 40px, a
+phone's 48px, [the two scales](#two-scales)) on no surface, the model showing through, with the file's or model's name at its
 left as plain words, muted as its controls are (no logo, menu, dropdown or glyph), and at its right **Preview settings** (Display's
 cube, the plain one the file's Display button wears (`DisplaySettings.jsx`'s `DisplayIcon`), at Display's size, 16px in
 a 28px tile, and in Display's place: 2px left of the bar's last control, as Display stands 2px left of Preview in the

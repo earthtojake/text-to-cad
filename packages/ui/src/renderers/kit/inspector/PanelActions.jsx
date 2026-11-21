@@ -1,7 +1,7 @@
 import { cn } from "@cad/ui/utils";
 
 /** A panel tab's action button (Params' Reset and Save, Joints' Reset): a panel control, 28px, regular weight. */
-export const PANEL_ACTION_CLASS = "h-7 shrink-0 px-2 text-ui font-normal";
+export const PANEL_ACTION_CLASS = "h-control shrink-0 px-2 text-ui font-normal";
 
 /**
  * A tab's actions row, the last thing in it (Params' Reset and Save, Joints' Reset): its buttons at the

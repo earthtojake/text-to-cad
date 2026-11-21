@@ -60,7 +60,7 @@ function Slider({
       max={max}
       step={step}
       className={cn(
-        "group/slider relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
+        "cad-hit group/slider relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
         className
       )}
       {...props}
@@ -83,7 +83,7 @@ function Slider({
           {...thumbProps}
           data-slot="slider-thumb"
           key={index}
-          className="block size-3 shrink-0 rounded-full border border-(--slider-thumb-border) bg-(--slider-thumb) shadow-(--slider-thumb-shadow) ring-ring/40 transition-[border-color,box-shadow] group-hover/slider:border-foreground/60 focus-visible:ring-[3px] focus-visible:outline-hidden group-data-[disabled]/slider:shadow-none data-[disabled]:pointer-events-none"
+          className="block size-thumb shrink-0 rounded-full border border-(--slider-thumb-border) bg-(--slider-thumb) shadow-(--slider-thumb-shadow) ring-ring/40 transition-[border-color,box-shadow] group-hover/slider:border-foreground/60 focus-visible:ring-[3px] focus-visible:outline-hidden group-data-[disabled]/slider:shadow-none data-[disabled]:pointer-events-none"
         />
       ))}
     </SliderPrimitive.Root>

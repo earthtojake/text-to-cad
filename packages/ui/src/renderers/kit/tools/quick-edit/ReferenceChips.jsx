@@ -107,7 +107,7 @@ const OPEN_DELAY_MS = 300;
 const CLOSE_DELAY_MS = 150;
 const CHIP_CLASS = "inline-flex h-5 min-w-0 max-w-full items-center rounded-sm bg-accent/70 text-xs text-foreground";
 const CHIP_LABEL_CLASS = "min-w-0 truncate rounded-sm px-1.5 leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
-const CHIP_REMOVE_CLASS = "-ml-0.5 mr-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
+const CHIP_REMOVE_CLASS = "cad-hit -ml-0.5 mr-0.5 flex size-glyph shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 const POPOVER_CLASS = cn(FLOATING_SURFACE_CLASS, "p-0 text-xs data-[state=closed]:animate-none!");
 const LIST_STYLE = { maxHeight: "calc(var(--radix-popover-content-available-height, 32rem) - 0.5rem)" };
 
@@ -203,7 +203,7 @@ function useChip(chip) {
 function RemoveButton({ chip }) {
   const { t } = useI18n();
   return chip.onRemove ? <button type="button" className={CHIP_REMOVE_CLASS} aria-label={t("chip.remove", { name: chip.label })}
-    onClick={() => { chip.onHover?.(false); chip.onRemove(); }}><X className="size-2.5" aria-hidden="true" /></button> : null;
+    onClick={() => { chip.onHover?.(false); chip.onRemove(); }}><X className="size-[calc(var(--cad-glyph)-6px)]" aria-hidden="true" /></button> : null;
 }
 
 // A chip's card: what the view says of it (`ItemDetail.jsx`), the one place a pick is read in detail.
@@ -280,7 +280,7 @@ function GroupMember({ chip }) {
   return <li className="flex min-w-0 flex-col rounded-sm hover:bg-accent/50" data-quick-edit-group-member={chip.key}
     onPointerEnter={event => { if (event.pointerType === "mouse") chip.onHover?.(true); }}
     onPointerLeave={event => { if (event.pointerType === "mouse") chip.onHover?.(false); }}>
-    <div className="flex h-6 min-w-0 items-center gap-1 pl-1.5">
+    <div className="flex h-icon-button min-w-0 items-center gap-1 pl-1.5">
       <button type="button" aria-label={chip.label} className={cn("flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
         copyable ? "cursor-pointer" : "cursor-default")} onClick={() => { if (copyable) void copyChip(flash, chip); }} data-quick-edit-group-show="">
         {copied ? <span className="inline-flex items-center gap-1"><Check className="size-2.5" aria-hidden="true" />{t("chip.copied")}</span>
@@ -334,7 +334,7 @@ export function referenceFacts(facts) {
  */
 function ReferenceFacts({ facts }) {
   const shown = referenceFacts(facts);
-  return shown.length ? <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 pr-2 pb-1 pl-5 text-tiny leading-4 text-muted-foreground" data-quick-edit-ref-facts="">
+  return shown.length ? <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 pr-2 pb-1 pl-5 text-tiny leading-(--cad-leading-xs) text-muted-foreground" data-quick-edit-ref-facts="">
     {shown.map(fact => <div key={String(fact.label)} className="contents">
       <dt className="whitespace-nowrap">{String(fact.label)}</dt>
       <dd className="min-w-0 tabular-nums [overflow-wrap:anywhere]">{plainText(fact.value) ? String(fact.value) : fact.value}</dd>
@@ -360,7 +360,7 @@ function MoreChip({ chip }) {
   const state = useChip(chip);
   return <Popover open={state.hover.open} onOpenChange={state.hover.setOpen}>
     <PopoverAnchor asChild>
-      <li className="flex h-6 min-w-0 items-center gap-1 rounded-sm pl-1.5 hover:bg-accent/50" {...state.surface}>
+      <li className="flex h-icon-button min-w-0 items-center gap-1 rounded-sm pl-1.5 hover:bg-accent/50" {...state.surface}>
         <button className={cn("min-w-0 flex-1 truncate rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
           state.copyable ? "cursor-pointer" : "cursor-default")} {...state.label} />
         <RemoveButton chip={chip} />

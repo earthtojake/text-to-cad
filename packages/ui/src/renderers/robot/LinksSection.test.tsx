@@ -112,7 +112,7 @@ it('draws the kinematic tree collapsed below the first real choice, with each li
   expect(rows()).toEqual(['Select base_link', 'Select shoulder_link', 'Select camera_link']);
   const shoulder = screen.getByRole('button', { name: 'Select shoulder_link' });
   expect(shoulder.textContent).toBe('shoulder_linkshoulder_pan · revolute');
-  expect(shoulder.closest('div')!.style.height).toBe('28px'); // the panel's rows
+  expect(shoulder.closest('div')!.style.height).toBe('var(--cad-row)'); // the panel's rows (the scale's row)
   expect(shoulder.getAttribute('title')).toBeNull();
   expect(screen.getByRole('button', { name: 'Select base_link' }).textContent).toBe('base_linkfootprint_to_base · fixed');
   // The one root is pinned: a row you can select, with nothing to collapse and no indent

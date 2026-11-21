@@ -128,10 +128,10 @@ function ModelingSearchRow({ match, index, availability, selected, joinAbove, jo
  * text ending on the right inset.
  */
 function TreeStatusBar({ label, icon: Icon, text, title = text, action, onAction, disabled, ...props }) {
-  return <div role="status" aria-label={label} className="-mx-[calc(var(--panel-inset)/2)] mb-1 flex min-h-7 items-center gap-1 rounded-md bg-accent/60 pr-0.5 pl-[calc(var(--panel-inset)/2)] text-ui" {...props}>
+  return <div role="status" aria-label={label} className="-mx-[calc(var(--panel-inset)/2)] mb-1 flex min-h-control items-center gap-1 rounded-md bg-accent/60 pr-0.5 pl-[calc(var(--panel-inset)/2)] text-ui" {...props}>
     <Icon className="size-3 shrink-0 text-foreground" aria-hidden="true"/>
     <TooltipHint content={title} overflowOnly><span className="min-w-0 flex-1 truncate">{text}</span></TooltipHint>
-    <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-ui" onClick={onAction}>{action}</Button>
+    <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-icon-button shrink-0 px-1.5 text-ui" onClick={onAction}>{action}</Button>
   </div>;
 }
 

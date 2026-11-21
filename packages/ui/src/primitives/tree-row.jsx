@@ -2,15 +2,17 @@ import { forwardRef } from 'react';
 import { useViewerMobile } from '../file-viewer/responsive.js';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@cad/ui/utils';
+import { DESKTOP_SCALE, PHONE_SCALE, scaleFor } from '../lib/scale.js';
 
-// Every tree's row is one compact line: the explorer's 24px in 12px text, a list of the view's panel
-// 28px in the panel's one text size (`dense`: the panel's 12px, `globals.css`'s `--cad-text-panel`).
-export const TREE_ROW_HEIGHT = 24;
-export const TREE_ROW_DENSE_HEIGHT = 28;
-/** On a phone a row is a 36px line, big enough to take with a finger. */
-export const TREE_ROW_TOUCH_HEIGHT = 36;
-/** The height of a tree's row in the viewer at hand: a desktop's 28px panel row, a phone's 36px. */
-export const useTreeRowHeight = () => (useViewerMobile() ? TREE_ROW_TOUCH_HEIGHT : TREE_ROW_DENSE_HEIGHT);
+// Every tree's row is one compact line at THE scale (`globals.css`): the explorer's a small row (`--cad-row-sm`, 24px
+// on a desktop) in 12px text, a list of the view's panel a row (`--cad-row`, 28px) in the panel's one text size
+// (`dense`: `--cad-text-panel`); a phone's both 36px, from the scale, never from the row.
+export const TREE_ROW_HEIGHT = DESKTOP_SCALE.rowSm;
+export const TREE_ROW_DENSE_HEIGHT = DESKTOP_SCALE.row;
+/** A phone's row (the scale's, `lib/scale.js`). */
+export const TREE_ROW_TOUCH_HEIGHT = PHONE_SCALE.row;
+/** The height, in px, of a panel's tree row in the viewer at hand (for a virtual list's arithmetic): the scale's row. */
+export const useTreeRowHeight = () => scaleFor(useViewerMobile()).row;
 /** What each level of a tree adds to a row's indent: little, its rows hung from a faint line under each owner's glyph. */
 export const TREE_INDENT_PX = 10;
 /** The explorer's rows' left padding (`FolderExplorer.jsx`, `ModelList.jsx`): the default of `--tree-row-pad`. */
@@ -37,7 +39,7 @@ const GLYPH = 'var(--tree-row-glyph, 12px)';
 const rowPadding = depth => (depth ? `calc(${PAD} + ${depth * TREE_INDENT_PX}px)` : PAD);
 
 /**
- * One row of a list: 24px (28 in the view's panel, `dense`; 36 on a phone), its radius and its hover,
+ * One row of a list: the scale's small row (24px; the row, 28, in the view's panel, `dense`; both 36 on a phone), its radius and its hover,
  * selected (`active`: the brand's subtle fill, `--brand-subtle`) and cursor fills. A row given a `depth` owns its horizontal geometry: its padding
  * (`--tree-row-pad`, and 10px a level), its hang (`--tree-row-hang`), a faint guide under each of its owners' glyph slots, and no
  * right padding (its name's and its actions' own). Its children are, in order: its ONE glyph slot — a
@@ -50,14 +52,13 @@ const rowPadding = depth => (depth ? `calc(${PAD} + ${depth * TREE_INDENT_PX}px)
 export const TreeRowSurface = forwardRef(function TreeRowSurface({
   as: Component = 'div', active = false, cursor = false, dense = false, depth = null, actions = 0, className, style, children, ...props
 }, ref) {
-  const touch = useViewerMobile();
   const owned = depth !== null;
   return <Component ref={ref} className={cn(
     'relative flex min-w-0 w-full items-center gap-1 rounded-md text-left font-normal transition-colors', owned ? 'pr-0' : 'pr-2', dense ? 'text-ui' : 'text-xs',
     active ? 'bg-brand-subtle text-foreground' : cn(dense ? 'text-foreground' : 'text-foreground/80', 'hover:bg-accent/50'),
     cursor && !active && 'bg-accent/30', className
   )} data-tree-row="" style={{
-    height: touch ? TREE_ROW_TOUCH_HEIGHT : dense ? TREE_ROW_DENSE_HEIGHT : TREE_ROW_HEIGHT,
+    height: dense ? 'var(--cad-row)' : 'var(--cad-row-sm)',
     ...(owned ? { paddingLeft: rowPadding(depth), marginInline: `calc(${HANG} * -1)`, width: `calc(100% + 2 * ${HANG})` } : null),
     ...(actions ? { '--row-actions': `${0.5 + actions}rem` } : null),
     ...style,
@@ -154,7 +155,7 @@ export function TreeRowDetail({ children, className }) {
  * `as`: its element (an `h3`, or an `li` in a list it heads).
  */
 export function TreeRowHeading({ as: Component = 'h3', className, children, ...props }) {
-  return <Component className={cn('flex h-7 min-w-0 items-center text-ui font-normal text-muted-foreground', className)} data-tree-heading='' {...props}>
+  return <Component className={cn('flex h-control min-w-0 items-center text-ui font-normal text-muted-foreground', className)} data-tree-heading='' {...props}>
     <span className='min-w-0 truncate'>{children}</span>
   </Component>;
 }

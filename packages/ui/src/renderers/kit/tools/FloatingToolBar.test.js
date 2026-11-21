@@ -31,9 +31,10 @@ test('no rule parts the strip: the tools, the model\'s effects and the view\'s c
 test('the strip is at Figma\'s toolbar\'s proportions at a 28px tile: a 40px bar 5px in, 10px corners, tiles with 4px corners', () => {
   const view = render(FloatingToolBar, { tools: [tool('select')] });
   const [group] = elements(view.tree).filter(node => node.props.role === 'group');
-  assert.match(group.props.className, /rounded-\[10px\]/);
+  // At THE scale's tokens (`globals.css`): the control (28px) with its corners (4px), the bar's corners those and 6 (10px).
+  assert.match(group.props.className, /rounded-\[calc\(var\(--cad-radius-control\)\+6px\)\]/);
   assert.match(group.props.className, /p-\[5px\]/);
-  assert.match(buttons(view.tree)[0].props.className, /size-7 rounded-\[4px\] \[&>svg\]:size-4!/);
+  assert.match(buttons(view.tree)[0].props.className, /size-control rounded-control \[&>svg\]:size-glyph!/);
   view.unmount();
 });
 

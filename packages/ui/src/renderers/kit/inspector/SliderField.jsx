@@ -40,7 +40,7 @@ export function SliderField({
   const scrub = useRef(null);
   // Disabled, the slider alone looks it (half strength, the primitive's, and a not-allowed pointer); its label and its
   // value keep their colours, as Figma's do.
-  const slider = <Slider data-slider-field-track="" className={cn(inline ? "h-6 min-w-0 flex-1 px-2" : "h-3 min-w-0", "data-[disabled]:cursor-not-allowed")}
+  const slider = <Slider data-slider-field-track="" className={cn(inline ? "h-icon-button min-w-0 flex-1 px-2" : "h-3 min-w-0", "data-[disabled]:cursor-not-allowed")}
     value={[Number(value) || 0]} min={min} max={max} step={step} origin={origin} disabled={disabled}
     thumbProps={{ "aria-label": name, ...thumbProps }}
     onValueChange={next => onValueChange?.(next?.[0] ?? value)}
@@ -89,7 +89,7 @@ export function SliderField({
     </div>;
   }
   return <div data-slider-field="" className={cn("min-w-0", !compact && "pb-2", className)} {...props}>
-    <div className={cn("flex min-w-0 items-center justify-between gap-2", compact ? "h-6" : "h-7")}>
+    <div className={cn("flex min-w-0 items-center justify-between gap-2", compact ? "h-icon-button" : "h-control")}>
       <TooltipHint content={labelTitle || label} overflowOnly><FieldLabel data-slider-field-label="" {...scrubProps}
         className={cn("select-none", disabled ? "cursor-default" : "cursor-ew-resize touch-pan-y")}>{label}</FieldLabel></TooltipHint>
       {field}

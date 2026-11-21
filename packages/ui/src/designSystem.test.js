@@ -81,16 +81,17 @@ test("the Home is the chrome's type scale: the heading 15/20, names 12/16, facts
 });
 
 // THE type scale (docs/settings-ui.md, "The type scale"): three interface sizes and one heading, each on a fixed
-// line height -- tiny 11/16, xs 12/16, ui 13/20, heading 15/20 semibold -- a phone's one step up (12, 13, 14, the
-// heading 16) on the same lines, and the view's panel every step at its 12/16. No 10px step (text-micro is gone),
+// line height -- tiny 11/16, xs 12/16, ui 13/20, heading 15/20 semibold -- a phone's 15/20 (its secondary text 14/20, the
+// heading 17/22, "Two scales"), and the view's panel every step at its 12/16 (a phone's 15/20). No 10px step (text-micro is gone),
 // and no stylesheet sets a font size in pixels: every size is the scale's.
-test("the type scale is three sizes and a heading on fixed line heights, a phone's a step up, with no 10px step", () => {
+test("the type scale is three sizes and a heading on fixed line heights, a phone's one size, with no 10px step", () => {
   const css = readFileSync(join(root, "styles/globals.css"), "utf8"), tokens = readFileSync(join(root, "styles/tokens.css"), "utf8");
   const block = selector => css.slice(css.indexOf(`${selector} {`)).split("}")[0];
   const vars = text => Object.fromEntries([...text.matchAll(/--cad-(text|leading)-(\w+):\s*([^;]+);/g)].map(([, kind, name, value]) => [`${kind}-${name}`, value.trim()]));
   assert.deepEqual(vars(block(":root")), { "text-tiny": "0.6875rem", "text-xs": "0.75rem", "text-ui": "0.8125rem", "text-heading": "0.9375rem",
     "text-panel": "0.75rem", "leading-tiny": "1rem", "leading-xs": "1rem", "leading-ui": "1.25rem", "leading-heading": "1.25rem", "leading-panel": "1rem" });
-  assert.deepEqual(vars(block(':root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *))')), { "text-tiny": "12px", "text-xs": "13px", "text-ui": "14px", "text-heading": "16px" });
+  assert.deepEqual(vars(block(':root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *))')), { "text-tiny": "14px", "text-xs": "15px", "text-ui": "15px", "text-heading": "17px",
+    "text-panel": "15px", "leading-tiny": "20px", "leading-xs": "20px", "leading-ui": "20px", "leading-heading": "22px", "leading-panel": "20px" });
   for (const name of ["tiny", "xs", "ui", "heading"]) assert.match(tokens, new RegExp(`--text-${name}--line-height: var\\(--cad-leading-${name}\\);`));
   assert.match(tokens, /--text-heading--font-weight: 600;/);
   assert.doesNotMatch(css + tokens, /micro/);
@@ -102,35 +103,36 @@ test("the type scale is three sizes and a heading on fixed line heights, a phone
   assert.deepEqual(found, []);
 });
 
-// Every menu, dropdown, select and context menu is the scale's 12/16, its shortcut hints 11px, and a tooltip 11/16:
-// the primitives set it, so no menu or item brings a size of its own.
-test("menus are 12/16 and tooltips 11/16, from the primitives alone", () => {
-  for (const file of ["primitives/dropdown-menu.jsx", "primitives/select.jsx", "primitives/context-menu.jsx"]) {
+// Every menu, dropdown, select and context menu is the scale's xs step (12/16; a phone's 15/20), each item at least the
+// row (28; a phone's 36), its shortcut hints 11px, and a tooltip the tiny step: the primitives set it, so no menu or item
+// brings a size of its own.
+test("menus are the xs step on the row and tooltips the tiny step, from the primitives alone", () => {
+  for (const file of ["primitives/dropdown-menu.jsx", "primitives/context-menu.jsx"]) {
     const text = readFileSync(join(root, file), "utf8");
     assert.match(text, /bg-popover (p-1 )?text-xs text-popover-foreground/, `${file} draws its menu at text-xs`);
-    for (const item of text.matchAll(/"[^"]*\bpy-1\.5\b[^"]*"/g)) assert.match(item[0], /text-xs leading-4/, `${file}: ${item[0].slice(0, 60)}`);
+    for (const item of text.matchAll(/"[^"]*\bpy-1\.5\b[^"]*"/g)) assert.match(item[0], /min-h-row .*text-xs/, `${file}: ${item[0].slice(0, 60)}`);
+    assert.doesNotMatch(text, /leading-4/, `${file}: no fixed line height`);
   }
-  assert.match(readFileSync(join(root, "primitives/tooltip.jsx"), "utf8"), /text-tiny leading-4/);
+  assert.match(readFileSync(join(root, "primitives/tooltip.jsx"), "utf8"), /text-tiny leading-\(--cad-leading-tiny\)/);
   assert.doesNotMatch(readFileSync(join(root, "renderers/kit/shell/ViewportContextMenu.jsx"), "utf8"), /DropdownMenuItem className="text-/);
 });
 
-// The logo stands on the page's gutter (docs/settings-ui.md): the navbar's 10px start, the logo
-// button's 4px padding and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page. The Home itself is a centred
+// The logo stands on the page's gutter (docs/settings-ui.md): the navbar's 8px, the logo centred in its 28px tile (6px)
+// and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page. The Home itself is a centred
 // column of its own, 1128px at most on 24px gutters, 20px under the navbar, its tiles 232px at least.
 test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1128px column on its own gutters", () => {
   const css = readFileSync(join(root, "styles/globals.css"), "utf8");
   assert.match(css, /\.cad-library-content \{[^}]*max-width: 1128px; margin: 0 auto; padding: 20px 24px /);
   assert.match(css, /\.cad-library-grid \{[^}]*minmax\(232px, 1fr\)/);
   const navbar = readFileSync(join(root, "file-viewer/navigation/ViewerNavbar.jsx"), "utf8");
-  // The row's 8px, the button's 6px, and the 2px the mark's artwork sits in from its image's edge;
-  // the row 40px, the tool strip's height, its icon buttons the strip's 28px.
+  // The row the control and 12px (40px), the tool strip's height, its icon buttons the strip's tile (the control, 28px):
+  // THE scale's (a phone's from the same tokens).
   const row = readFileSync(join(root, "lib/navbarRow.js"), "utf8");
-  assert.match(row, /NAVBAR_ROW_CLASS = "flex h-10 shrink-0 items-center gap-2 border-b px-2"/);
-  assert.match(row, /NAVBAR_CONTROL_CLASS = "size-7 /);
+  assert.match(row, /NAVBAR_ROW_CLASS = "flex h-\[calc\(var\(--cad-control\)\+12px\)\] shrink-0 items-center gap-2 border-b px-2"/);
+  assert.match(row, /NAVBAR_CONTROL_CLASS = "size-control /);
   assert.match(navbar, /cn\(NAVBAR_ROW_CLASS, "relative border-border /);
-  // A desktop's mark on the 16px line; a phone's centred in its 36px tile.
-  assert.match(navbar, /"cad-navbar-logo w-7", mobile \? "justify-center px-0" : "justify-start px-1\.5"/);
-  assert.match(navbar, /const NAV_ITEM_CLASS = "flex h-7 /);
+  assert.match(navbar, /"cad-navbar-logo w-control justify-start px-\[calc\(\(var\(--cad-control\)-16px\)\/2\)\]"/);
+  assert.match(navbar, /const NAV_ITEM_CLASS = "flex h-control /);
 });
 
 // The panel's rows have ONE owner of their horizontal geometry (docs/settings-ui.md): the row

@@ -10,15 +10,15 @@ import { clampNumber, decimalsOf, formatNumber, readTyped, splitValueText } from
 // the brand's edge while it is edited and the destructive's while what is typed is no number, 6px in from either so
 // neither touches the text. The number is the foreground, its unit after it muted and never edited.
 const FIELD_CLASS = [
-  "group/value relative box-border inline-flex h-[22px] w-max min-w-8 max-w-24 shrink-0 cursor-text items-center justify-end gap-[3px] overflow-hidden",
-  "rounded-[5px] border border-transparent bg-transparent px-1.5 text-xs leading-4 tabular-nums text-foreground transition-colors",
+  "group/value relative box-border inline-flex h-[calc(var(--cad-icon-button)-2px)] w-max min-w-8 max-w-24 shrink-0 cursor-text items-center justify-end gap-[3px] overflow-hidden",
+  "rounded-[5px] border border-transparent bg-transparent px-1.5 text-xs leading-(--cad-leading-xs) tabular-nums text-foreground transition-colors",
   "hover:border-foreground/20",
   "data-[editing]:border-brand data-[editing]:bg-background data-[editing]:shadow-[inset_0_0_0_1px_var(--brand)]",
   "data-[invalid]:border-destructive data-[invalid]:shadow-[inset_0_0_0_1px_var(--destructive)]",
   // Disabled, the value keeps its colour (a value is read whether or not it can be set): only the pointer says it is off.
   "data-[disabled]:cursor-not-allowed data-[disabled]:hover:border-transparent",
 ].join(" ");
-const INPUT_CLASS = "m-0 min-w-0 shrink border-0 bg-transparent p-0 text-right text-inherit leading-4 tabular-nums text-foreground shadow-none outline-none ring-0 selection:bg-brand/30 disabled:cursor-not-allowed";
+const INPUT_CLASS = "m-0 min-w-0 shrink border-0 bg-transparent p-0 text-right text-inherit leading-(--cad-leading-xs) tabular-nums text-foreground shadow-none outline-none ring-0 selection:bg-brand/30 disabled:cursor-not-allowed";
 
 /**
  * The slider control's value (`SliderField.jsx`): the number a slider sets, typed. A click selects the number (its

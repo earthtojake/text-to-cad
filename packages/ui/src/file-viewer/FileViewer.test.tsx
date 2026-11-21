@@ -180,7 +180,7 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   expect(look()).toEqual(['Show panel', 'false', null, 'ghost']);
   // Its icon: the sidebar's own (a rounded rectangle and a short line), not lucide's panel.
   expect([Boolean(toggle().querySelector('svg[data-sidebar-icon] rect[rx="3"]')), toggle().querySelector('.lucide-panel-left'),
-    toggle().className.includes('size-7'), toggle().getAttribute('aria-keyshortcuts')]).toEqual([true, null, true, '⌘\\']);
+    toggle().className.includes('size-control'), toggle().getAttribute('aria-keyshortcuts')]).toEqual([true, null, true, '⌘\\']);
   // Its tooltip shows on a rest on it; once the panel peeks under it, it goes (the pointer still on it): the panel is
   // showing, which is what the tip offered.
   await user.hover(toggle());

@@ -32,10 +32,10 @@ const KEY_NUDGE_PX = 16;
  * Every panel's heading text: the size and weight of Display's section headings
  * (`FILE_SHEET_SECTION_HEADING_CLASSES`, 11px), so every heading in the stack reads alike.
  */
-export const TOOL_PANEL_HEADING_TEXT_CLASS = "text-xs font-normal leading-4 text-foreground";
+export const TOOL_PANEL_HEADING_TEXT_CLASS = "text-xs font-normal leading-(--cad-leading-xs) text-foreground";
 
 /** A panel header's small icon button: the chevron, the X, and a tool's settings menu (`ToolModeMenu.jsx`'s `ToolSettingsMenu`). */
-export const TOOL_PANEL_BUTTON_CLASS = "flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
+export const TOOL_PANEL_BUTTON_CLASS = "cad-hit flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 
 function CollapseButton({ panel, className = "" }) {
   const { t } = useI18n();
@@ -193,7 +193,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
 
   const closeButton = onClose ? <button type="button" aria-label={closeLabel || t("panel.close", { name: label.toLowerCase() })}
     className={cn(TOOL_PANEL_BUTTON_CLASS, REVEAL_CLASS)} onClick={onClose}><X className="size-3" aria-hidden="true" /></button> : null;
-  const heading = title ? <div {...foldRow} className={cn("flex min-h-7 shrink-0 items-center justify-end gap-0.5 pl-2 pr-1", foldRow?.className)} data-tool-panel-heading="">
+  const heading = title ? <div {...foldRow} className={cn("flex min-h-control shrink-0 items-center justify-end gap-0.5 pl-2 pr-1", foldRow?.className)} data-tool-panel-heading="">
     <h3 className={cn("min-w-0 truncate", TOOL_PANEL_HEADING_TEXT_CLASS)}>{title}</h3>
     {summary ? <span className="ml-2 shrink-0 text-tiny text-muted-foreground">{summary}</span> : null}
     <span className="min-w-0 flex-1" aria-hidden="true" />
@@ -202,7 +202,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
     {closeButton}
   </div>
     // No heading of its own: a folding panel's name stands in for one, beside its chevron.
-    : folding ? <div {...foldRow} className={cn("flex min-h-7 shrink-0 items-center gap-0.5 pl-2 pr-1", foldRow.className)} data-tool-panel-heading="">
+    : folding ? <div {...foldRow} className={cn("flex min-h-control shrink-0 items-center gap-0.5 pl-2 pr-1", foldRow.className)} data-tool-panel-heading="">
       <h3 className={cn("min-w-0 flex-1 truncate", TOOL_PANEL_HEADING_TEXT_CLASS)}>{name || label}</h3>
       <CollapseButton panel={folding} className="hover:bg-transparent" />
     </div> : null;

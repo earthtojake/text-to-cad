@@ -10,9 +10,18 @@
 
 @import "./tokens.css";
 
-/* The type scale (`tokens.css`, `docs/settings-ui.md`): 11/16, 12/16 and 13/20 at a desktop's pointer, and
- * the one heading 15/20; the view's panel's one size, 12px on a 16px line, at a desktop's pointer and a
- * phone's alike (the menus keep the chrome's scale). */
+/* THE scale (`docs/settings-ui.md`, "A phone's scale"): every size the chrome draws at, as tokens, and ONE switch
+ * for a phone below. Every primitive and shared class reads these (`tokens.css` names them for Tailwind:
+ * `h-control`, `size-icon-button`, `min-h-row`, `px-pad`, `gap-step`, `rounded-control`, `size-glyph`); nothing
+ * sizes itself for a phone on its own.
+ *   text      the type scale: 11/16, 12/16 and 13/20, the heading 15/20; the view's panel's one size 12/16
+ *   control   a control's height: a tile, a tab, a text button, a select, a field (28)
+ *   icon-button  a small icon button (a card's close, the playbar's, a row's action's hit area) (24)
+ *   row       a row: a tree row in the panel, a menu's item (28); row-sm a list's row, the explorer's (24)
+ *   hit       the least hit area a small mark takes (a chevron, a chip's x, a row's action: `.cad-hit`), none (0)
+ *   glyph     a control's icon (16), and the small one (14)
+ *   pad       a control's horizontal padding (8), gap between neighbours (4), a control's radius (4)
+ *   switch    a switch's track (14 x 24); thumb, a slider's thumb (12); check, a checkbox (14) */
 :root {
   --cad-text-tiny: 0.6875rem;
   --cad-text-xs: 0.75rem;
@@ -24,6 +33,20 @@
   --cad-leading-ui: 1.25rem;
   --cad-leading-heading: 1.25rem;
   --cad-leading-panel: 1rem;
+  --cad-control: 28px;
+  --cad-icon-button: 24px;
+  --cad-row: 28px;
+  --cad-row-sm: 24px;
+  --cad-hit: 0px;
+  --cad-glyph: 16px;
+  --cad-glyph-sm: 14px;
+  --cad-pad: 8px;
+  --cad-step: 4px;
+  --cad-radius-control: 4px;
+  --cad-switch-h: 14px;
+  --cad-switch-w: 24px;
+  --cad-thumb: 12px;
+  --cad-check: 14px;
 }
 /* Text is drawn as Figma draws its interface: greyscale antialiasing on macOS, not the platform's
  * subpixel default, which draws light text on the dark theme a weight heavier. The whole page while a
@@ -61,42 +84,47 @@
   --cad-leading-ui: var(--cad-leading-panel);
 }
 
-/* A phone's view (`data-viewer-layout="mobile"`: the viewer under 600px, `VIEWER_MOBILE_BREAKPOINT`)
- * is read at arm's length and worked with a finger, so its chrome takes one step up: type 12, 13 and 14px,
- * the heading 16px, on the same line heights (the platforms' floor is 11pt), rows and menu items 40px, controls
- * 36px; a field keeps its text size, since the page's viewport, not a 16px font, stops a phone
- * zooming in on it. The whole page follows, so a menu, a select or a hint portalled out of the
- * viewer is the same size as the chrome it opened from. Only the page's own viewer says so: a viewer drawn out of
- * sight for a picture (`OffscreenPicture.tsx`, 480px wide) pins its layout and carries no `data-viewer-layout`, and
- * one inside `[data-offscreen-picture]` is never read, so Home's type never jumps while its cards get pictures. */
+/* A phone's scale: ONE switch, the viewer under 600px (`data-viewer-layout="mobile"`, `VIEWER_MOBILE_BREAKPOINT`),
+ * read at arm's length and worked with a finger: every control, small icon button and row 36px (Apple's and
+ * Material's touch targets), every text 15/20 (secondary text, where a desktop steps down to its tiny size, 14/20; the
+ * heading 17/22), the glyphs 18 and 16, a control's padding 10px (an icon's inset in its tile), its radius 6px, a switch
+ * 36x20 level with the controls, a slider's thumb 20px. The whole page follows, so a menu, a select or a hint portalled out
+ * of the viewer is the same size as the chrome it opened from. Only the page's own viewer says so: a viewer drawn out
+ * of sight for a picture (`OffscreenPicture.tsx`) pins its layout, and one inside `[data-offscreen-picture]` is never
+ * read, so Home's type never jumps while its cards get pictures. A field keeps 15px: the page's viewport, not a 16px
+ * font, stops a phone zooming in on it. */
 :root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) {
-  --cad-text-tiny: 12px;
-  --cad-text-xs: 13px;
-  --cad-text-ui: 14px;
-  --cad-text-heading: 16px;
+  --cad-text-tiny: 14px;
+  --cad-text-xs: 15px;
+  --cad-text-ui: 15px;
+  --cad-text-heading: 17px;
+  --cad-text-panel: 15px;
+  --cad-leading-tiny: 20px;
+  --cad-leading-xs: 20px;
+  --cad-leading-ui: 20px;
+  --cad-leading-heading: 22px;
+  --cad-leading-panel: 20px;
+  --cad-control: 36px;
+  --cad-icon-button: 36px;
+  --cad-row: 36px;
+  --cad-row-sm: 36px;
+  --cad-hit: 36px;
+  --cad-glyph: 18px;
+  --cad-glyph-sm: 16px;
+  --cad-pad: 10px;
+  --cad-step: 4px;
+  --cad-radius-control: 6px;
+  --cad-switch-h: 20px;
+  --cad-switch-w: 36px;
+  --cad-thumb: 20px;
+  --cad-check: 20px;
 }
-:root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) :is([data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-checkbox-item"],
-  [data-slot="dropdown-menu-radio-item"], [data-slot="dropdown-menu-sub-trigger"], [data-slot="select-item"], [data-slot="context-menu-item"], [data-menu-theme], [data-clip-axis-row], [data-menu-language]) {
-  min-height: 40px;
-}
-/* The navbar, and Preview's bar in its place, a 48px row of 36px controls (Preview's settings docked
-   under it). */
-[data-viewer-layout="mobile"] :is([data-viewer-navbar], [data-preview-bar]) { height: 48px; }
-[data-viewer-layout="mobile"] :is([data-viewer-navbar], [data-preview-bar]) :is(button, a) { min-height: 36px; min-width: 36px; }
-[data-viewer-layout="mobile"] [data-preview-panel] { --preview-bar-height: 48px; }
 /* While a phone's sidebar sheet is open (modal: the page under it takes no press), the navbar above it stays usable:
    its toggle shuts the sheet, and a press on Display, Preview or the name closes it and does what it does
    (`usePhoneSheetPlace.js`). */
 :root:has([data-panel-sheet]) [data-viewer-navbar] { pointer-events: auto; }
 /* A finger held on a view's picture is a long press (its menu, `touchGestures.js`): no iOS callout, no text selected. */
 [data-slot="cad-file-view"] canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-[data-viewer-layout="mobile"] [data-select-trigger], [data-viewer-layout="mobile"] [data-slot="select-trigger"] { min-height: 36px; }
-/* A slider anywhere on a phone (the slider control, in the panel or a tool's row, and the scrubber):
- * a 36px band to press in — the band takes the finger, so the thumb need only be seen: 16px. The selected ink's
- * bar: 36px buttons. */
-:root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) :is([data-slot="slider"], [data-slider-field-track]) { height: 36px; }
-:root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) [data-slot="slider-thumb"] { width: 16px; height: 16px; }
-[data-viewer-layout="mobile"] [data-annotation-selection-bar] button { min-width: 36px; min-height: 36px; }
 /* The view's panel on a phone (its page in the sidebar sheet, `FlatPanel.jsx`) is the desktop's panel, the same
  * components at the same sizes, gaps and type: its tabs, its search row and its tree rows (`primitives/tree-row.jsx`,
  * whose own touch height, 36px, is the one thing a phone changes in a row). A phone cannot hover, so a row's actions
@@ -106,19 +134,10 @@
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--row-actions) - 0.5rem), transparent calc(100% - var(--row-actions)));
   mask-image: linear-gradient(to right, #000 calc(100% - var(--row-actions) - 0.5rem), transparent calc(100% - var(--row-actions)));
 }
-/* The slider control in the panel as on a desktop (`SliderField.jsx`): its label and value on one line,
- * its slider under them, the controls apart enough that a label reads as its slider's, not the one
- * above's. The slider draws a 16px band; its 36px touch band reaches over the label's foot and the
- * gap, invisibly. Its value stays on its line: a 24px field. */
-[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field]:not([data-inline]) [data-slider-field-track] { height: 16px; }
-[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field]:not([data-inline]) [data-slider-field-track]::before { content: ""; position: absolute; inset: -10px 0; }
-[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field]:not([data-inline]) [data-slider-field-label] { line-height: 16px; }
-[data-viewer-layout="mobile"] :is([data-panel-surface="page"], [data-panel-surface="card"]) [data-slider-field-value-box] { height: 24px; }
-[data-viewer-layout="mobile"] :is([data-panel-surface="page"], [data-panel-surface="card"]) [data-slider-field-value-box] input[type="text"] { height: auto; }
-/* A settings card's slider (`SettingsCard.jsx`) keeps the card's rhythm on a phone, a 12px track under its 24px line, and
- * takes the finger in a 36px band over it, reaching invisibly over its line's foot and the gap under it. */
-[data-viewer-layout="mobile"] [data-panel-surface="card"] [data-slider-field]:not([data-inline]) [data-slider-field-track] { height: 12px; }
-[data-viewer-layout="mobile"] [data-panel-surface="card"] [data-slider-field]:not([data-inline]) [data-slider-field-track]::before { content: ""; position: absolute; inset: -12px 0; }
+/* A small mark's hit area (`.cad-hit`): a chevron, a chip's x, a row's action, a slider's band keep their drawn size
+ * and take at least `--cad-hit` (none on a desktop, a control's 36px on a phone) to press, invisibly, centred on them. */
+.cad-hit { position: relative; }
+.cad-hit::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, var(--cad-hit)); height: max(100%, var(--cad-hit)); transform: translate(-50%, -50%); }
 
 @layer base {
   * {

@@ -3,7 +3,7 @@ import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { cn } from "@cad/ui/utils";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 // The surface's metrics, shared with the file viewer's stand-in drawn before the view is up (`file-viewer/FileViewer.tsx`).
-import { PANEL_HEAD_ROW_PX, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX } from "../../../file-viewer/panelToggles.js";
+import { PANEL_HEAD_ROW, PANEL_HEAD_ROW_PX, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX } from "../../../file-viewer/panelToggles.js";
 import { PANEL_PEEK_ASIDE_CLASS, PANEL_PEEK_CARD_CLASS, PANEL_PEEK_CARD_STYLE, PANEL_PEEK_CONTENT_STYLE, PANEL_PEEK_ELEVATION_CLASS, PANEL_PEEK_GAP_PX,
   PANEL_PEEK_IN_LEFT_CLASS, PANEL_PEEK_OUT_LEFT_CLASS, panelPeekMotionClass } from "../../../file-viewer/panelPeek.js";
 
@@ -26,6 +26,8 @@ export { PANEL_HEAD_ROW_PX, PANEL_SURFACE_PX };
 // with the stand-in it draws before the view is up and with any card that mirrors the peek.
 export { PANEL_PEEK_ELEVATION_CLASS, PANEL_PEEK_GAP_PX, PANEL_PEEK_IN_LEFT_CLASS as PEEK_IN_CLASS, PANEL_PEEK_OUT_LEFT_CLASS as PEEK_OUT_CLASS };
 const NO_HEAD_INSETS = Object.freeze({ start: 0, end: 0 });
+// A head inset, in px or as a CSS length (one the scale sizes).
+const inset = value => (typeof value === "number" ? `${value}px` : value);
 const KEY_NUDGE_PX = 16;
 
 /**
@@ -81,7 +83,7 @@ export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
  * phone's page or a peek).
  * @param {{ mode: "push" | "page", label: string, open: boolean, hidden?: boolean,
  *   width: number, grip: ReturnType<typeof usePanelWidth>["grip"] | null, gripLabel: string, head: import("react").ReactNode, headRule?: boolean,
- *   headRef?: import("react").Ref<HTMLDivElement>, headProps?: object, headInsets?: { start: number, end: number },
+ *   headRef?: import("react").Ref<HTMLDivElement>, headProps?: object, headInsets?: { start: number | string, end: number | string },
  *   scrollerRef?: import("react").Ref<HTMLElement>, scrollerProps?: object, onKeyDown?: (event: KeyboardEvent) => void,
  *   children?: import("react").ReactNode, peek?: boolean, asideRef?: import("react").Ref<HTMLElement> }} props
  *   `headInsets`: how far the head's first and last boxes hang out past the inset (their own padding: a tab's pill's,
@@ -95,8 +97,8 @@ export function PanelSurface({ mode, label, open, hidden = false, width, grip, g
   const page = mode === "page";
   const peeking = mode === "push" && peek;
   const headNode = head === null ? null : <div ref={headRef} className={cn("box-content flex shrink-0 items-center gap-1 border-b", headRule ? "border-border" : "border-transparent")}
-      style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX, height: PANEL_HEAD_ROW_PX,
-        paddingLeft: `calc(var(--panel-inset) - ${headInsets.start}px)`, paddingRight: `calc(var(--panel-inset) - ${headInsets.end}px)` }} data-panel-head="" data-rule={headRule ? "" : undefined}
+      style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX, height: PANEL_HEAD_ROW,
+        paddingLeft: `calc(var(--panel-inset) - ${inset(headInsets.start)})`, paddingRight: `calc(var(--panel-inset) - ${inset(headInsets.end)})` }} data-panel-head="" data-rule={headRule ? "" : undefined}
       {...headProps}>{head}</div>;
   const scroll = <ScrollArea className="min-h-0 flex-1" viewportRef={scrollerRef} viewportProps={{ "data-panel-scroller": "", ...scrollerProps }}>
       {children}
