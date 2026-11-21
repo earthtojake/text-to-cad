@@ -132,7 +132,7 @@ wheels = [
 
 [[package]]
 name = "cad"
-version = "0.11.13"
+version = "0.11.14"
 source = { editable = "packages/cad" }
 dependencies = [
     { name = "distlib", marker = "sys_platform == 'win32'" },
