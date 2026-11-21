@@ -51,7 +51,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-__all__ = ["SCHEMA", "WRITTEN_STAMP", "write"]
+__all__ = ["SCHEMA", "WRITTEN_STAMP", "shape_bytes", "write"]
 
 SCHEMA = "AP242DIS"
 # FILE_NAME's time_stamp: the date the xbf's header holds (``document.WRITTEN_DATE``), whatever
@@ -104,6 +104,49 @@ def write_document(doc: Any, path: Path) -> None:
         if writer.Write(str(path)) != IFSelect_RetDone:
             raise OSError(f"could not write {path}")
     _settle(Path(path), changed_styles)
+
+
+def shape_bytes(shape: Any) -> bytes:
+    """One shape's STEP, in memory: its geometry alone (a solid, or a compound of them), where it stands, in
+    millimetres, by the kernel's plain writer under the settings ``write_document`` writes with -- no document,
+    so no names, colours or materials, and no file. What a reader of one part's geometry is handed (the
+    quiddity integration's recogniser, ``cad.quiddity``). The same shape writes the same bytes: the header's
+    time is ``WRITTEN_STAMP``, and the product, which the kernel names from a counter of the process's, on from
+    every STEP it wrote before, is named by its place in the file (``_products``). ``OSError`` where the kernel's
+    writer does not write it."""
+    import io
+
+    from OCP.IFSelect import IFSelect_RetDone
+    from OCP.Interface import Interface_Static
+    from OCP.Message import Message
+    from OCP.STEPControl import STEPControl_AsIs, STEPControl_Writer
+
+    from cad.engine.document import _XCAF_LOCK
+
+    with _XCAF_LOCK:
+        _quiet(Message)
+        # The writer defines the translator's parameters: set them once it exists.
+        writer = STEPControl_Writer()
+        Interface_Static.SetCVal_s("write.step.unit", "MM")
+        Interface_Static.SetCVal_s("write.step.schema", SCHEMA)
+        if writer.Transfer(getattr(shape, "wrapped", shape), STEPControl_AsIs) != IFSelect_RetDone:
+            raise OSError("the kernel could not write the shape as STEP")
+        _stamp(writer.Model())
+        stream = io.BytesIO()
+        if writer.WriteStream(stream) != IFSelect_RetDone:
+            raise OSError("the kernel could not write the shape as STEP")
+    return _products(stream.getvalue())
+
+
+# A product the plain writer named itself: its id and its name, the translator's words and a number.
+_PRODUCT = re.compile(rb"PRODUCT\s*\(\s*'Open CASCADE STEP translator [^']*'\s*,\s*'Open CASCADE STEP translator [^']*'")
+
+
+def _products(data: bytes) -> bytes:
+    """Each product the plain writer named itself (``Open CASCADE STEP translator 8.0 <n>``, ``n`` a counter of
+    the process's) named by its place among them in the file, from 1: the same shape's bytes in every process."""
+    counter = itertools.count(1)
+    return _PRODUCT.sub(lambda _match: b"PRODUCT('%d','%d'" % ((next(counter),) * 2), data)
 
 
 @contextmanager
