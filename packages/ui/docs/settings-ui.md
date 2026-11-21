@@ -786,10 +786,10 @@ structure. Every rule here, and why:
   rounded rectangle, 14 × 12 in the 16px box, its corners 3px, and a short line inside near its left edge, half its
   height, centred, at lucide's stroke), **the same neutral button whether the panel is open or shut** — no pressed
   fill, no brand colour: the panel beside the model says which — its state said to assistive technology by
-  `aria-expanded` and by its name, "Hide panel" or "Show panel", its tooltip that name, its key (⌘\, Ctrl+\) and the key
-  that hides everything. Home has no panel, so no toggle.
-- **⌘\ (Ctrl+\) shows and hides it, and \ alone hides it and the strip** (the corner and Quick Edit stay), and pressed
-  again brings back exactly what was open. Focus on the model is one key away, and nothing is lost by it.
+  `aria-expanded` and by its name, "Hide panel" or "Show panel", its tooltip that name and its key (⌘\, Ctrl+\). Its
+  icon stands on the panel's inset, 16px in (the row's 8px, 2px before the tile and the tile's own 6px), so it is on the
+  line every text and control in the panel stands on. Home has no panel, so no toggle.
+- **⌘\ (Ctrl+\) shows and hides it**, as its toggle does. **\** alone is no key of the viewer's: it hides nothing.
 - **Collapsed, it leaves nothing over the model**: its toggle in the navbar, or its key, brings it back; nothing opens
   on a hover of the edge.
 - **It always pushes.** Open, it takes its width beside the model, the model's area the narrower for it (the model
@@ -800,14 +800,14 @@ structure. Every rule here, and why:
   collapse isn't remembered**, so widening the view brings back the person's choice; opened over it, it pushes. The
   strip and Quick Edit stay centred on the window, over the panel (the hard rule above).
 - **What is kept is the person's choice, per file, for the session** (the file's entry in the tab's settings,
-  `filePanel.js`: `open`, `width`, `tab`, `hidden`); a record from when the view had a right panel (`right`,
-  `rightWidth`, `sections`) is read as nothing.
+  `filePanel.js`: `open`, `width`, `tab`); a record from when the view had a right panel (`right`,
+  `rightWidth`, `sections`), or from when \ alone hid everything (`hidden`), is read as nothing.
 - **Its tabs**: the structure's first (Model; a board's Parts, Nets and Layers; a schematic's Parts, Nets and
   Hierarchy; a drawing's Layers; a robot's Links), then **Params**, **Joints** and **Animation**, each only where
   the file has it. Their content is as it was in the right panel's sections: Parameters' two-row sliders with the
   borderless value field, its foot and its locked state; Joints' Position dropdown; Animation's Clip dropdown, its play
   button and scrubber, its Speed dropdown and its Loop and Autoplay switches. Tabs that do not fit the head
-  scroll sideways (below), never truncated.
+  are ⋯'s items (below), never truncated and never scrolled.
 - **Animation** is one control group, not a form, in the panel's 28px rows 4px apart, every control's right edge on
   the right 16px line: the routine's dropdown, a labelled row as Speed is (the tab and the label are the routines' own
   words: an animation's, "Animation" and "Animation"; a mechanism's motion, "Motion" and "Sequence", from the renderer's
@@ -859,7 +859,8 @@ structure. Every rule here, and why:
   or a tab handed in unless it says `search: false`) — never Params, Joints or Animation; its icon is there only where
   the file has a searchable tab. Pressed (or **/**), the head row becomes the search box (`TreeFilterInput`, dense,
   placeholder "Search", its accessible name what it searches — "Search the board", "Search the schematic", "Search the
-  drawing", "Search the model"), its X (**Close search**) where the icon was, and the tabs stand in a row under it.
+  drawing", "Search the model"), its X (**Close search**) where the icon was, and the tabs stand in a row under it; its
+  magnifier starts on the inset and its X's glyph ends on the right inset, as every icon in the panel does.
   Like Figma's layer search it is **no box**: no border, fill or ring, only its icon and its text, 28px. **Escape or
   the X closes it**, the query gone. A query filters **every searchable tab at once** (KiCad's Parts, Nets and Layers
   alike), each searchable tab's name saying how many it finds (`useFlatPanelMatches`), the open tab showing its own;
@@ -869,29 +870,34 @@ structure. Every rule here, and why:
   read without its index) draws no pill: its name, a plain title at the tabs' size and the open tab's weight (500) in
   the tab's place, and no rule under the head, so the title flows straight into its list. **The title is a list row**:
   the head 28px tall (a row's height, not the 32px tab row), 8px over it and nothing under it (`PanelSurface`'s
-  `headCompact`), its name on the rows' icons' line, the 16px keyline where a row's chevron or icon starts (8px and the title's 8px), and the list 4px under it (the
+  `headCompact`), its name on the rows' icons' line, the panel's inset where a row's chevron or icon starts (the head's
+  padding, the inset less 5px, and the title's own 5px, a pill's), and the list 4px under it (the
   body's `pt-1`), so no gap stands between the title and its first row. The search's icon stands at the row's right
   end. Several tabs are pills over the rule.
 - **Its tabs**, the head's row, pills as Figma's right panel draws them (Design / Prototype): 28px, 5px
-  of padding either side and 2px between pills (tight enough for the qdd's four at 240px), the first pill's box on the 8px line so its name stands on
-  the 16px line; the open one a rounded pill on the accent's subtle fill, its name the foreground's at
+  of padding either side and 2px between pills (Model, Params, Joints and Motion, with the search's icon, fit the 256px
+  panel; at the grip's 200px the last go into ⋯), the first pill's box 5px before the inset so its name stands on it,
+  the search's icon (in its 28px button, 7px of it either side) ending on the right inset; the open one a rounded pill on the accent's subtle fill, its name the foreground's at
   medium weight, the others muted on no fill (the accent's half fill and the foreground on hover); each as
   wide as its name in medium weight, so choosing one moves nothing; the head's rule 8px under them; a board's **Parts**, **Nets** then **Layers**, a schematic's **Parts**, **Nets** then, for more than one
   sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, the file's
   (its view's `panel.tab`, below), the first at first. Every tab stays mounted, and each keeps its own scroll.
-- **Two lines, the same on both sides.** **8px in**: the edge of every box the head and the lists
-  draw — a tab's pill, the search row, a
-  row's fill (hover, selected). **16px in**: what is read in those boxes — the search icon, a tab's name,
-  a row's one glyph (a branch's chevron or a leaf's icon), then a row's name after it at 32px — and the
-  edge of a section's own controls (a settings row's label, as Joints' Pose; a full-width field) and the
-  start of every line of text that follows no icon: a heading, a parameter's or a joint's label, a file's
-  name over its parameters, a status line ("12 matches", "Saved"), a settings label; a value and an action
-  end on the right 16px line. The panel owns both lines: its head and body pad 8px and it sets the rows'
-  `--tree-row-pad` (8px) and `--tree-row-actions-pad` (6px), which the one row reads (`FlatPanel.jsx`,
-  `primitives/tree-row.jsx`); a section's controls pad 8px more; no list pads itself. Every rule runs the
+- **One inset, the same on both sides: `--panel-inset`, 16px** (`styles/globals.css`, on `:root`; in Tailwind
+  `px-(--panel-inset)`). Everything read in the panel stands on it, left and right — the search's icon and its text,
+  a tab's name, a row's one glyph (a branch's chevron or a leaf's icon), then a row's name after it at 32px, the edge
+  of a section's own controls (a settings row's label, as Joints' Pose; a full-width field; a dropdown; a slider's
+  track) and the start of every line of text that follows no icon: a heading, a parameter's or a joint's label, a
+  file's name over its parameters, a status line ("12 matches", "Saved"), a settings label; a value, a switch and a
+  row's last action end on the right inset — and so does the navbar's panel toggle's icon, over it. A box drawn round
+  what is read hangs out past the inset by its own padding, so what it holds stays on it: a row's fill (hover,
+  selected) by half the inset (8px in from the panel's edge), a tab's pill by its 5px, the head's icon buttons and a
+  number field's outline by their 7px. The panel owns the line: its body pads by the inset, and it sets the rows'
+  `--tree-row-pad` and `--tree-row-hang` (half the inset) and `--tree-row-actions-pad` (half the inset less 2px), which
+  the one row reads (`PanelSurface.jsx`, `primitives/tree-row.jsx`); no section and no list pads itself. Every rule runs the
   panel's width. A settings row's label column is 4rem (its labels are short
-  words) and its control fills the rest (`FileSheetSettingRow`). The navbar's logo stands on the same 16px
-  line: its drawn mark, not its image's edge.
+  words) and its control fills the rest (`FileSheetSettingRow`). Over a file the navbar's panel toggle's icon stands
+  on the same 16px line; over the home, which has no toggle, the navbar's logo does: its drawn mark, not its image's
+  edge.
 - **One spacing scale**: 4, 8 and 16px, 16 the outer keyline. Vertically the panel steps by 8: 8px over
   the head's row, 8px under it to its rule, 8px between the rule and the lists, 8px under a slider
   before the next control (a slider control is 48px: its 28px line, its 12px slider, 8px), and an actions
@@ -1040,9 +1046,9 @@ structure. Every rule here, and why:
   navbar's first control, before the logo: [The panel](#the-panel)), and nothing of it stays over the model. No rail, no hover reveal, and a pick on the picture
   never opens it.
   ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search with the keyboard in the box, while the view has
-  the keyboard. Docked, open or collapsed is the person's, and so is its width (240px at first, from 200px
-  to half the view and never so wide that the strip, at the view's centre, covers its head: 8px short of the
-  strip's left edge; from a grip on its right edge, Left/Right by 16px). **All of the panel's state is
+  the keyboard. Docked, open or collapsed is the person's, and so is its width (256px at first; from a grip on its
+  right edge, Left/Right by 16px, from 200px to what leaves the model 640px, and, before the view is measured, no
+  wider than it is). **All of the panel's state is
   the file's**, as its camera and its layers are: open or collapsed, the width and the tab are kept in
   the file's view (`panel`, `file-viewer/filePanel.js`), written by the panel's
   own state (`useFlatPanelState`) for every view that has a panel, 2D and 3D alike, and merged into the
@@ -1117,7 +1123,7 @@ slot (`TreeRowGlyph`, `TreeRowToggle`), its name and detail (`TreeRowName`, `Tre
 (`TreeRowActions`); a heading over a run of rows (`TreeRowHeading`); a long list mounted as it scrolls
 (`VirtualRows`); a search's lit match (`TreeFilterHighlight`, `TreeFilterMatch` for a plain substring
 search) and its count (`TreeSearchStatus`). No view sets a text size of its own (`text-tiny`,
-`text-ui`): every row, detail, count and heading is the panel's 12px (`tree-row.test.tsx` holds it). In the panel's numbers (240px wide, its body padded 8px):
+`text-ui`): every row, detail, count and heading is the panel's 12px (`tree-row.test.tsx` holds it). In the panel's numbers (256px wide, its body padded by the inset, 16px):
 
 - **The box**: 28px (36px on a phone), the background 8px from each edge, its radius and its hover,
   selected and cursor fills; the panel's 12px text (`dense`), the name at full strength.
@@ -1466,8 +1472,9 @@ labelled slider: no site brings its own slider and number (`src/designSystem.tes
 playbars' scrubber, a timeline, is the one other slider).
 
 - **In a panel**, two lines. The first (28px, a panel row): the label at the left (`FieldLabel`, muted, as every
-  control's), and the value at the right, its field's right edge on the slider's. The second: the slider (a 12px band) the
-  control's full width, from the label's left edge to the value's right edge. No icon before the label,
+  control's), and the value at the right, its text's right edge on the slider's (its field's outline hanging past by its
+  own 7px, as every box round what is read does). The second: the slider (a 12px band) the
+  control's full width, from the label's left edge to the value's text's right edge. No icon before the label,
   no indent. 8px under the slider, the next control: 48px a control, the gap between a label line and
   its slider and between one control and the next the same in Params and Joints, so each label reads
   with the slider under it. In the view's panel it stands on the panel's lines: the label and the track
@@ -1478,7 +1485,7 @@ playbars' scrubber, a timeline, is the one other slider).
   Joints, Preview's settings, a board's opacities, Explode's and Clip's rows):
   - **As wide as what it holds**: the number and its unit, 22px tall, 6px in (so neither the outline nor the editing
     edge touches the text), 5px corners; 32px at least (two or three digits) and 96px at most, never past its edge and
-    never over the label. Its right edge is the slider's, so a longer value grows it to the left; nothing moves
+    never over the label. Its text ends where the slider does, so a longer value grows it to the left; nothing moves
     between rest, hover and editing.
   - **Its states**: at rest no fill, so it reads with the panel's text and its dropdowns; under the pointer a 1px
     outline (the foreground at 20%), the cue that it is edited in place; editing, the background with a `--brand` edge
@@ -2084,9 +2091,8 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   them, and neither is any other binding's: ⇧1, ⇧2 and ⇧0 are the zoom's, ⇧P and ⇧L the drawing tools'.
 - **⌘\\** (Ctrl+\\) shows and hides the panel, in every view that has one (a board, a schematic,
   a drawing with Layers, a STEP, a robot), and **/** opens it on its search with the keyboard in the box, while the
-  view has the keyboard; in the box, Escape closes the search.
-  **\\** alone hides the panel and the strip and, pressed again, brings back what was open ([The panel](#the-panel)).
-  On a phone ⌘\\ opens and shuts the panel's sheet; / and \\ do nothing there.
+  view has the keyboard; in the box, Escape closes the search. **\\** alone does nothing.
+  On a phone ⌘\\ opens and shuts the panel's sheet; / does nothing there.
 - **Arrow keys** orbit the viewer that has focus or the pointer over
   it, never every mounted viewport; they do nothing in Preview or with a
   modifier held.

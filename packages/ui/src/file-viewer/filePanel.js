@@ -10,12 +10,11 @@ import { createContext } from "react";
 //
 //   open          the person opened (`true`) or closed (`false`) the left panel; absent, open;
 //   width         the width they dragged it to;
-//   tab           the tab it shows;
-//   hidden        \ put the panel and the strip away (`true`), until it brings them back.
+//   tab           the tab it shows.
 // Only a choice is written: a panel the view collapsed because it was too narrow (`renderers/kit/shell/sidebars.js`)
 // is not, so a wider view brings it back.
-// (A record from before the panel lost its Selected pane may hold `detailHeight`, and one from when the view had a
-// right panel `right`, `rightWidth` and `sections`: each is read as nothing.)
+// (A record from before the panel lost its Selected pane may hold `detailHeight`, one from when the view had a right
+// panel `right`, `rightWidth` and `sections`, and one from when \ alone hid everything `hidden`: each is read as nothing.)
 //
 // The tab once kept these for every file alike (`settings.toolStack`: `collapsed.flat`,
 // `panels.flat.width` and `tabs` by the kind of file): that form is read once, as the starting value of a
@@ -35,7 +34,6 @@ export function readFilePanel(value) {
   const width = size(value.width);
   if (width !== undefined) panel.width = width;
   if (typeof value.tab === "string" && TAB_ID.test(value.tab)) panel.tab = value.tab;
-  if (value.hidden === true) panel.hidden = true;
   return panel;
 }
 

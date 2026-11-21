@@ -67,7 +67,7 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   const toggling = defineFileRenderer({ id: 'panels', priority: 1, matches: () => true, prepare: async () => ({ data: null }),
     load: async () => ({ default: function Panels() {
       const [shown, setShown] = React.useState(false);
-      usePanelToggles(React.useMemo(() => ({ left: { open: shown, label: shown ? 'Hide panel' : 'Show panel', shortcut: '⌘\\', hint: '\\ hides all',
+      usePanelToggles(React.useMemo(() => ({ left: { open: shown, label: shown ? 'Hide panel' : 'Show panel', shortcut: '⌘\\',
         toggle: () => { left(); setShown(value => !value); } } }), [shown]));
       return <p>shown</p>;
     } }) });

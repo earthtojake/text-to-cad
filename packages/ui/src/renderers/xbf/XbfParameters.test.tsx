@@ -2,7 +2,7 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
+import FlatPanel, { FLAT_PANEL_DEFAULT_WIDTH } from '../../../dist/renderers/kit/shell/FlatPanel.js';
 import XbfParametersSection, { useXbfParameters } from '../../../dist/renderers/xbf/XbfParametersSection.js';
 import { xbfPanelSections } from '../../../dist/renderers/xbf/XbfRenderer.js';
 import QuickEdit from '../../../dist/renderers/kit/tools/quick-edit/QuickEdit.js';
@@ -41,7 +41,7 @@ function Tab({ client, document, copied = null, drawn = null, onEdit = null }: {
     readText: async () => '', writeImage: async () => {} } }), [copied]);
   return <ViewerHostContext.Provider value={host}>
     <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
-      sections={<XbfParametersSection parameters={parameters} />} tab="parameters" onTabChange={() => {}} width={240} maxWidth={480}
+      sections={<XbfParametersSection parameters={parameters} />} tab="parameters" onTabChange={() => {}} width={FLAT_PANEL_DEFAULT_WIDTH} maxWidth={480}
       onWidthChange={() => {}} focusSearch={0} />
     {copied ? <div data-slot="cad-file-view"><QuickEdit resource={resource} references={[face]} notes={parameters.notes} /></div> : null}
   </ViewerHostContext.Provider>;
@@ -257,7 +257,7 @@ it('what was saved is handed to one message at a time: a second taken before the
     const parameters = useXbfParameters(props);
     notes = parameters.notes;
     return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
-      sections={<XbfParametersSection parameters={parameters} />} tab="parameters" onTabChange={() => {}} width={240} maxWidth={480}
+      sections={<XbfParametersSection parameters={parameters} />} tab="parameters" onTabChange={() => {}} width={FLAT_PANEL_DEFAULT_WIDTH} maxWidth={480}
       onWidthChange={() => {}} focusSearch={0} />;
   }
   render(<Held client={{ setModelParameters }} document={modelDocument(structureOf())} />);

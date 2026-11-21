@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import FlatPanel, { FlatPanelChanged, fitTabs, useFlatPanel, useFlatPanelMatches } from './FlatPanel.jsx';
+import { DEFAULT_PANEL_WIDTH } from './sidebars.js';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -18,7 +19,7 @@ function Hits({ items }: { items: string[] }) {
 function Panel({ tabs, first, focusSearch = 0, onTab = () => {} }: { tabs: any[], first: string, focusSearch?: number, onTab?: (id: string) => void }) {
   const [tab, setTab] = useState(first);
   return <FlatPanel mode="docked" open onClose={() => {}} label="Panel" searchLabel="Search the board" tabs={tabs} tab={tab}
-    onTabChange={(id: string) => { onTab(id); setTab(id); }} width={240} maxWidth={400} onWidthChange={() => {}} focusSearch={focusSearch} />;
+    onTabChange={(id: string) => { onTab(id); setTab(id); }} width={DEFAULT_PANEL_WIDTH} maxWidth={400} onWidthChange={() => {}} focusSearch={focusSearch} />;
 }
 const row = () => document.querySelector<HTMLElement>('[data-flat-panel-head]')!;
 const searchIcon = () => screen.queryByRole('button', { name: 'Search the board' });
@@ -34,14 +35,17 @@ it('draws its tabs as pills, the open one filled, foreground and medium, the oth
   expect(tabs.map(tab => [tab.getAttribute('aria-selected'), tab.classList.contains('bg-accent'), tab.classList.contains('text-foreground'),
     tab.classList.contains('text-muted-foreground'), Boolean(tab.querySelector('[data-flat-panel-tab-name].font-medium')), tab.classList.contains('h-7'), tab.classList.contains('px-[5px]')]))
     .toEqual([['false', false, false, true, false, true, true], ['true', true, true, false, true, true, true]]);
-  expect(row().style.padding).toBe('8px');
+  // 8px over and under the row; at its sides the inset (`--panel-inset`) less what its first and last boxes hang out by
+  // (a pill's 5px, an icon button's 7px), so a tab's name and the search's icon stand on the inset.
+  expect([row().style.paddingTop, row().style.paddingBottom, row().style.paddingLeft, row().style.paddingRight])
+    .toEqual(['8px', '8px', 'calc(var(--panel-inset) - 5px)', 'calc(var(--panel-inset) - 7px)']);
   expect([row().classList.contains('border-border'), row().hasAttribute('data-rule')]).toEqual([true, true]);
   // The row: the tab row (its tablist taking the room), then the search's icon, last; no ⋯, no search box.
   const line = row().firstElementChild as HTMLElement;
   expect([...line.children].map(child => child.getAttribute('data-flat-panel-tab-row') !== null ? 'tabs' : child.getAttribute('aria-label'))).toEqual(['tabs', 'Search the board']);
   expect([document.querySelector('[data-flat-panel-more]'), box(), document.querySelector('[data-flat-panel-body] [data-flat-panel-search]')]).toEqual([null, null, null]);
   expect(screen.getByRole('tablist').classList.contains('flex-1')).toBe(true);
-  expect(document.querySelector('aside[data-flat-panel]')!.getAttribute('style')).toMatch(/width: 240px/);
+  expect(document.querySelector('aside[data-flat-panel]')!.getAttribute('style')).toMatch(/width: 256px/);
 });
 
 // One tab is a plain title in the tab's place: no pill, no fill, a list row's height (28px), 8px over it and nothing
@@ -50,8 +54,10 @@ it('draws a single tab as a plain title a row high, its list right under it, the
   render(<Panel tabs={[{ id: 'model', label: 'Model', content: <p>tree</p> }]} first="model" />);
   const title = row().querySelector<HTMLElement>('[data-flat-panel-heading]')!;
   expect([screen.queryAllByRole('tab').length, screen.queryByRole('tablist'), title.textContent]).toEqual([0, null, 'Model']);
-  expect([title.classList.contains('font-medium'), title.classList.contains('px-2'), title.classList.contains('h-7')]).toEqual([true, true, true]);
-  expect([row().classList.contains('border-transparent'), row().hasAttribute('data-compact'), row().classList.contains('h-7'), row().style.padding]).toEqual([true, true, true, '8px 8px 0px']);
+  // Its name on the inset, as a tab's is: the title pads as a pill does (5px), the row the inset less that.
+  expect([title.classList.contains('font-medium'), title.classList.contains('px-[5px]'), title.classList.contains('h-7')]).toEqual([true, true, true]);
+  expect([row().classList.contains('border-transparent'), row().hasAttribute('data-compact'), row().classList.contains('h-7'),
+    [row().style.paddingTop, row().style.paddingBottom, row().style.paddingLeft]]).toEqual([true, true, true, ['8px', '0px', 'calc(var(--panel-inset) - 5px)']]);
   expect([...row().children].map(child => child.getAttribute('aria-label') ?? child.tagName.toLowerCase())).toEqual(['h2', 'Search the board']);
   expect(document.querySelector('[data-flat-panel-body]')!.classList.contains('pt-1')).toBe(true);
   expect(document.querySelector('[data-flat-panel-section="model"]')!.getAttribute('aria-labelledby')).toBe(title.id);
@@ -165,7 +171,7 @@ it('marks a changed tab with a dot and ", changed", in the row and in ⋯, and �
   const tabs = (params: boolean, motion: boolean) => [{ id: 'tree', label: 'Model', content: <p>tree</p> },
     { id: 'parameters', label: 'Params', search: false, content: <Changing on={params} /> }, { id: 'animation', label: 'Animation', search: false, content: <Changing on={motion} /> }];
   const view = (params: boolean, motion: boolean) => <FlatPanel mode="docked" open onClose={() => {}} label="Panel" searchLabel="Search the board" tabs={tabs(params, motion)}
-    tab="tree" onTabChange={() => {}} width={240} maxWidth={400} onWidthChange={() => {}} focusSearch={0} />;
+    tab="tree" onTabChange={() => {}} width={DEFAULT_PANEL_WIDTH} maxWidth={400} onWidthChange={() => {}} focusSearch={0} />;
   const { rerender } = render(view(false, false));
   // Model and Params shown (140px: two 50px tabs beside ⋯), Animation in ⋯.
   expect([screen.getAllByRole('tab').map(tab => tab.getAttribute('data-flat-panel-tab')), document.querySelector('[data-tool-changed]')]).toEqual([['tree', 'parameters'], null]);

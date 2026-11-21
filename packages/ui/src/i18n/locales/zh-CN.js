@@ -610,7 +610,6 @@ export default {
   "inspector.kind.reference": "引用",
   "inspector.kind.item": "项",
   "inspector.kindOf": "{owner} 的{kind}",
-  "sidebars.hideAllHint": "{key} 全部隐藏",
   "chip.groupList": "{name}",
   "chip.group.part": "{count} 个零件",
   "chip.group.face": "{count} 个面",

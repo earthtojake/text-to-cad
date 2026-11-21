@@ -117,14 +117,14 @@ it("a file with no panel of its own starts from the tab's old shared one, which 
   expect(toolStack).toEqual({ panels: { tree: { width: 240 } }, collapsed: { tree: true }, tabs: undefined });
 });
 
-it("\\'s choice is the file's too, and what the right panel it once had kept is read as nothing", async () => {
+it("what the right panel it once had, and the \\ that once hid everything, kept is read as nothing", async () => {
   toolStack = { panels: {}, collapsed: {} };
   function Right() {
     const frameRef = useRef<HTMLDivElement>(null);
     const flat = useFlatPanelState({ frameRef, kind: 'board', toolStack, onToolStackChange: () => {} });
     return <div ref={frameRef} data-frame="">
       <output data-testid="record">{JSON.stringify(flat.record)}</output>
-      <button type="button" onClick={() => flat.change({ right: false, rightWidth: 300, sections: { view: false }, hidden: true })}>choose</button>
+      <button type="button" onClick={() => flat.change({ open: false, right: false, rightWidth: 300, sections: { view: false }, hidden: true })}>choose</button>
     </div>;
   }
   const own = defineFileRenderer({ id: 'right', priority: 2, matches: () => true, prepare: async () => ({ data: null }), load: async () => ({ default: Right }) });
@@ -135,7 +135,7 @@ it("\\'s choice is the file's too, and what the right panel it once had kept is 
   press('choose');
   page.unmount();
   page = view();
-  expect(JSON.parse((await screen.findByTestId('record')).textContent!)).toEqual({ hidden: true });
+  expect(JSON.parse((await screen.findByTestId('record')).textContent!)).toEqual({ open: false });
   page.unmount();
 });
 

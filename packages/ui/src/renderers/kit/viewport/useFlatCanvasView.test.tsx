@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { fitTransform } from '@cad/core/lib/drawing2d/transform.js';
 import { useFlatCanvasView } from './useFlatCanvasView.js';
 import { flatViewRecord } from './flatView.js';
+import { DEFAULT_PANEL_WIDTH } from '../shell/sidebars.js';
 
 // Every flat view's canvas (a board, a schematic's sheet, a drawing): the view the file was left at,
 // placed on the pane the picture is laid out in. A reload with the view's panel open lays the picture
@@ -11,7 +12,7 @@ import { flatViewRecord } from './flatView.js';
 
 const BOUNDS = [0, 0, 160, 100] as const;
 const VIEW = { width: 1440, height: 800 };
-const PANEL = 240;
+const PANEL = DEFAULT_PANEL_WIDTH;
 let pane = { ...VIEW };
 const observers = new Set<() => void>();
 const resize = (next: { width: number; height: number }) => act(() => { pane = next; observers.forEach(callback => callback()); });

@@ -34,7 +34,9 @@ it('a heading over rows is the panel\'s 28px muted line, in the element asked fo
   const { container } = render(<ul><TreeRowHeading as='li' aria-hidden='true'>Front</TreeRowHeading></ul>);
   const heading = container.querySelector<HTMLElement>('[data-tree-heading]')!;
   expect([heading.tagName, heading.textContent, heading.getAttribute('aria-hidden')]).toEqual(['LI', 'Front', 'true']);
-  expect(heading.className.split(' ')).toEqual(expect.arrayContaining(['h-7', 'px-2', 'text-ui', 'text-muted-foreground']));
+  expect(heading.className.split(' ')).toEqual(expect.arrayContaining(['h-7', 'text-ui', 'text-muted-foreground']));
+  // It pads nothing: the panel's body puts its words on the panel's inset (`--panel-inset`), as every line of text.
+  expect(heading.className).not.toMatch(/(^|\s)p[xlr]?-/);
 });
 
 it('a plain search lights where the query falls in a name, ignoring case, and nothing where it does not', () => {

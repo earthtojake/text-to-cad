@@ -8,7 +8,7 @@ import ItemDetail from '../../../dist/renderers/kit/inspector/ItemDetail.js';
 import { robotLinkItem } from '../../../dist/renderers/robot/LinkDetails.js';
 import { robotLinkFacts } from '../../../dist/renderers/robot/robotTree.js';
 import { InspectContext } from '../../../dist/renderers/kit/inspector/inspect.js';
-import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
+import FlatPanel, { FLAT_PANEL_DEFAULT_WIDTH } from '../../../dist/renderers/kit/shell/FlatPanel.js';
 import ToolPanel from '../../../dist/renderers/kit/tools/ToolPanel.js';
 
 Object.assign(globalThis, { React });
@@ -83,7 +83,7 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload
     {/* In the view's panel, as it ships: its Links tab, searched by the panel's search box. */}
     <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
       sections={<LinksSection robot={payload} components={components} parts={parts} selection={observed} hiddenPartIds={hiddenPartIds} onVisibilityChange={onVisibilityChange}/>}
-      tab="tree" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
+      tab="tree" onTabChange={() => {}} width={FLAT_PANEL_DEFAULT_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
     {chips.length ? <section aria-label="Reference details" data-references={JSON.stringify(references.map((reference: any) => reference.target.selectors))}>
       {chips.map((chip: any) => <div key={chip.key} aria-label={`Chip ${chip.label}`} data-copy={chip.copy}>
         {chip.detail ? <ItemDetail item={chip.detail} copy={chip.copy} /> : null}<button type="button" onClick={chip.onRemove}>Remove {chip.label}</button>
@@ -330,7 +330,7 @@ it('scrolls to a link picked while another tab is open once its tab is shown', (
     return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
       sections={<><LinksSection robot={robot} components={components} parts={parts} selection={selection}/>
         <ToolPanel id="other" label="Other"><p>Other</p></ToolPanel></>}
-      tab={tab} onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />;
+      tab={tab} onTabChange={() => {}} width={FLAT_PANEL_DEFAULT_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />;
   }
   try {
     const { rerender } = render(<Tabbed tab="other" pick="" />);

@@ -40,12 +40,12 @@ import { SETTINGS_PANEL_SURFACE_CLASS, FLOATING_CHROME_SURFACE_CLASS, FLOATING_S
 import { ControlUsageProvider } from '../../../../dist/usage/controls.js';
 import { PanelTogglesContext } from '../../../../dist/file-viewer/panelToggles.js';
 
-// The panels' toggles, as the navbar draws them (`file-viewer/panelToggles.js`): what the frame says, as buttons.
+// The panel's toggle, as the navbar draws it (`file-viewer/panelToggles.js`): what the frame says, as a button.
 function NavbarToggles({ children }: { children: React.ReactNode }) {
   const [toggles, setToggles] = React.useState<any>(null);
   return <PanelTogglesContext.Provider value={setToggles}>
-    {(['left', 'right'] as const).map(side => toggles?.[side] ? <button key={side} type="button" aria-label={toggles[side].label} aria-pressed={toggles[side].open}
-      data-navbar-panel={side} onClick={toggles[side].toggle} /> : null)}
+    {toggles?.left ? <button type="button" aria-label={toggles.left.label} aria-expanded={toggles.left.open}
+      data-navbar-panel="left" onClick={toggles.left.toggle} /> : null}
     {children}
   </PanelTogglesContext.Provider>;
 }
@@ -148,7 +148,13 @@ it("the strip is at the top centre with the stack under it; the view's panel is 
 });
 
 it("the panel's tabs are there whatever the tool, a tool's own section coming and going with it; a tab shows its section alone, its content kept; the tab, the width and a collapse are the person's, and never the tab's settings", () => {
+  // The view's frame as wide as the viewer, so the grip's bound is the model's 640px: 1280 - 640.
+  const rect = Element.prototype.getBoundingClientRect;
+  override(Element.prototype, 'getBoundingClientRect', { value(this: HTMLElement) {
+    return this.hasAttribute('data-sidebar') ? DOMRect.fromRect({ x: 0, y: 0, ...VIEWER }) : rect.call(this);
+  } });
   const { preferences } = frame();
+  expect(flatPanel().style.width).toBe('256px');
   fireEvent.click(tool('Draw'));
   expect(tabNames()).toEqual(['Harness tree', 'Reference']);
   fireEvent.click(tool('Pose'));
@@ -162,7 +168,7 @@ it("the panel's tabs are there whatever the tool, a tool's own section coming an
   // Its width, from the grip on its right edge: 16px a key, Home and End to its bounds.
   const grip = screen.getByRole('separator', { name: 'Resize panel' });
   fireEvent.keyDown(grip, { key: 'End' });
-  expect(flatPanel().style.width).toBe(`${grip.getAttribute('aria-valuemax')}px`);
+  expect([flatPanel().style.width, grip.getAttribute('aria-valuemax')]).toEqual(['640px', '640']);
   fireEvent.keyDown(grip, { key: 'Home' });
   expect(flatPanel().style.width).toBe('200px');
   // Collapsed, it goes whole, nothing of it over the model (its toggle the navbar's); shown again, on the tab it showed.
@@ -172,6 +178,20 @@ it("the panel's tabs are there whatever the tool, a tool's own section coming an
   expect([flatPanel().hidden, shownTab()]).toEqual([false, 'Reference']);
   // All of it is the file's (`filePanel.js`, kept in the file's view by the file viewer), none the tab's.
   expect([preferences.writes, layout(preferences)]).toEqual([0, { panels: {}, collapsed: {} }]);
+});
+
+it("⌘\\ (Ctrl+\\) shows and hides the panel; \\ alone does nothing, the panel and the strip left as they are", () => {
+  frame({ viewer: true });
+  const view = document.querySelector<HTMLElement>('[data-slot="cad-file-view"]')!;
+  const strip = () => document.querySelector<HTMLElement>('[data-cad-tool-groups]')!;
+  fireEvent.keyDown(view, { key: '\\', code: 'Backslash' });
+  expect([flatPanel().hidden, strip().closest('[hidden]'), screen.getByRole('button', { name: 'Hide panel' }).getAttribute('aria-expanded')]).toEqual([false, null, 'true']);
+  fireEvent.keyDown(view, { key: '\\', code: 'Backslash', ctrlKey: true });
+  expect([flatPanel().hidden, screen.getByRole('button', { name: 'Show panel' }).getAttribute('aria-expanded')]).toEqual([true, 'false']);
+  fireEvent.keyDown(view, { key: '\\', code: 'Backslash' });
+  expect(flatPanel().hidden).toBe(true);
+  fireEvent.keyDown(view, { key: '\\', code: 'Backslash', metaKey: true });
+  expect([flatPanel().hidden, strip().closest('[hidden]')]).toEqual([false, null]);
 });
 
 it("on a phone the panel is a sheet from the left behind the navbar's toggle, closed at the start, and the strip is centred in the view", async () => {
