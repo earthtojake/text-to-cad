@@ -38,6 +38,8 @@ and one of another model is another document: neither stops a check.
 
 from __future__ import annotations
 
+import contextlib
+import dataclasses
 import enum
 import os
 import secrets
@@ -45,7 +47,7 @@ import signal
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from cad.engine.client import WORKER_STDERR
 from cad.engine.frames import failed_type
@@ -156,6 +158,33 @@ class Asked:
                 **({"stopped": True} if self.state is State.STOPPED else {})}
 
 
+class _Ended(Exception):
+    """A check that ended with no answer of a checks process to go on from -- stopped, its process lost, none
+    that could be started: what its callers are told (``answer``)."""
+
+    def __init__(self, answer: dict[str, Any]) -> None:
+        super().__init__(answer.get("reason"))
+        self.answer = answer
+
+
+@dataclasses.dataclass
+class _Try:
+    """One try of a check, of its document as it was when the try began: the request's source (``spec``) and
+    ``check`` and what measures in its caller (``measures``); the document's id, for one the engine holds; its
+    key among the checks (``document``) and its version then (``before``: a model's generation, the digest of a
+    file's bytes; None for none); the id and version of it that outlive the engine (``durable``); and how many
+    times it had been deleted (``since``)."""
+
+    spec: dict[str, Any]
+    check: dict[str, Any]
+    measures: dict[str, Any]
+    ident: str | None
+    document: str
+    before: str | None
+    durable: tuple[str, str] | None
+    since: int
+
+
 class Runner:
     """The engine's manufacturing checks (the module): ``check`` answers one, ``reap``, ``halt`` and the watchdog
     stop them, ``status`` lists them. Of the daemon it takes what it cannot know: ``store`` (the kept results) and
@@ -244,7 +273,8 @@ class Runner:
             except ValueError as error:
                 told(_refused(error))
                 return
-            since = self.store.epoch(durable[0] if durable is not None else ident)
+            attempt = _Try(spec, check, measures, ident, document, before, durable,
+                           self.store.epoch(durable[0] if durable is not None else ident))
             same = (document, before, key) if before is not None else None
             with self.lock:
                 # Under one lock with a check's end (which keeps its result, then leaves ``running``) and with
@@ -273,52 +303,14 @@ class Runner:
                 told(_attached(running.answer))
                 return
             try:
-                kept = self.store.get(document, before, key, durable, serves) if before is not None else None
-                if kept is not None:
-                    asked.answer = {"done": {"reports": [], "files": [], "checked": kept, "reused": True}}
-                    told(asked.answer)
-                    return
-                if self.stopping():
-                    asked.answer = {"failed": STOPPED, "reason": State.STOPPED.value, "stopped": True}
-                    told(asked.answer)
-                    return
-                try:
-                    source, payload = self._read(ident) if ident is not None else ({"path": str(spec["path"])}, b"")
-                    moved = ident is not None and self._version(ident) != before
-                except ValueError as error:
-                    asked.answer = _refused(error)
-                    told(asked.answer)
-                    return
-                if moved:
+                answer = self._versioned(asked, attempt, key, serves, told)
+                if answer is None:
                     # A build landed as its bytes were read: nothing is measured of a version gone.
                     reads += 1
                     if reads < READS:
                         continue
-                    asked.answer = {"failed": SUPERSEDED, "reason": "superseded"}
-                    told(asked.answer)
-                    return
-                if "document" in source:
-                    source = {**source, "version": before}  # its bytes are this version's: read once there
-                order = {"id": 1, "op": "export", "source": source, "destinations": [], "cwd": None,
-                         "check": {**check, "token": asked.token, "measures": measures}}
-                answer = self._measure(asked, document, order, payload, told)
-                done = answer.get("done")
-                measured = done.get("checked") if isinstance(done, dict) else None
-                if isinstance(measured, dict):
-                    if ident is not None:
-                        current = self._version(ident) == before
-                        moved = not current  # built again under the check: its result is of a version gone
-                    else:
-                        current = measured.get("digest") == before
-                        moved = bool(measured.get("changed"))  # rewritten while it was read: of no version at all
-                    if not measured.get("changed"):
-                        self.store.counted(read=bool(measured.get("read")))
-                    if moved:
-                        answer = {"failed": SUPERSEDED, "reason": "superseded"}
-                    by = measured.get("measures")
-                    if "done" in answer and before is not None and current and _clean(measured) and serves(by):
-                        self.store.keep(document, before, key, _result(measured), durable, since, by)
-                if answer.get("reason") == State.SUPERSEDED.value:
+                    answer = {"failed": SUPERSEDED, "reason": "superseded"}
+                elif answer.get("reason") == State.SUPERSEDED.value:
                     reads += 1
                     if reads < READS and not asked.abandoned():
                         # Nothing of the version gone is answered: the document as it is now is checked, for
@@ -336,62 +328,145 @@ class Runner:
                         self.running.pop(same)
                 asked.finished.set()
 
+    def _versioned(self, asked: Asked, attempt: _Try, key: str, serves: Callable[[Any], bool],
+                   told: Callable[[dict[str, Any]], None]) -> dict[str, Any] | None:
+        """One try of a check kept by its document's version (``checks.Checks``): what was kept of it, else its
+        document read and the check measured in a checks process, its result kept where the version stood and
+        it is clean. Its answer; None where a build landed as its bytes were read, so nothing was measured."""
+        document, before = attempt.document, attempt.before
+        kept = self.store.get(document, before, key, attempt.durable, serves) if before is not None else None
+        if kept is not None:
+            return {"done": {"reports": [], "files": [], "checked": kept, "reused": True}}
+        if self.stopping():
+            return {"failed": STOPPED, "reason": State.STOPPED.value, "stopped": True}
+        try:
+            read = self._read_at(attempt)
+        except ValueError as error:
+            return _refused(error)
+        if read is None:
+            return None
+        source, payload = read
+        order = {"id": 1, "op": "export", "source": source, "destinations": [], "cwd": None,
+                 "check": {**attempt.check, "token": asked.token, "measures": attempt.measures}}
+        answer = self._measure(asked, document, order, payload, told)
+        done = answer.get("done")
+        measured = done.get("checked") if isinstance(done, dict) else None
+        if isinstance(measured, dict):
+            current, moved = self._stood(attempt, measured)
+            if not measured.get("changed"):
+                self.store.counted(read=bool(measured.get("read")))
+            if moved:
+                answer = {"failed": SUPERSEDED, "reason": "superseded"}
+            by = measured.get("measures")
+            if "done" in answer and before is not None and current and _clean(measured) and serves(by):
+                self.store.keep(document, before, key, _result(measured), attempt.durable, attempt.since, by)
+        return answer
+
+    def _read_at(self, attempt: _Try) -> tuple[dict[str, Any], bytes] | None:
+        """The try's document as a checks process reads it (``read``; a file by its path), a model's bytes said
+        to be of the try's version, so a process reads them once; None where a build landed as they were read:
+        they are of no version asked. ``ValueError`` for a document the engine does not hold."""
+        if attempt.ident is None:
+            return {"path": str(attempt.spec["path"])}, b""
+        source, payload = self._read(attempt.ident)
+        if self._version(attempt.ident) != attempt.before:
+            return None
+        if "document" in source:
+            source = {**source, "version": attempt.before}  # its bytes are this version's: read once there
+        return source, payload
+
+    def _stood(self, attempt: _Try, measured: dict[str, Any]) -> tuple[bool, bool]:
+        """Whether what a checks process answered (``measured``) is of the try's version (``current``), and
+        whether the document moved on under it, so nothing of the answer stands (``moved``): a model built
+        again; a file rewritten while it was read, which is of no version at all (one rewritten before it was
+        read is measured as it is now, and is of another version than the try's)."""
+        if attempt.ident is not None:
+            current = self._version(attempt.ident) == attempt.before
+            return current, not current
+        return measured.get("digest") == attempt.before, bool(measured.get("changed"))
+
     def _measure(self, asked: Asked, document: str, order: dict[str, Any], payload: bytes,
                  told: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
-        """``order`` asked of a checks process for ``asked``: a slot of the pool taken (waiting for one, said
-        once), its process leased, the request sent and its answer returned -- or the failure of the stop it
-        was in, of its process lost, or of none that could be started."""
+        """``order`` asked of a checks process leased for ``asked`` (``_leased``) and its answer returned -- or
+        the failure of the stop it was in, of its process lost, or of none that could be started."""
+        try:
+            with self._leased(asked, document, told) as request:
+                return request(order, payload)
+        except _Ended as ended:
+            return ended.answer
+
+    @contextlib.contextmanager
+    def _leased(self, asked: Asked, document: str, told: Callable[[dict[str, Any]], None]
+                ) -> Iterator[Callable[..., dict[str, Any]]]:
+        """A checks process for ``asked``, for as long as the block runs: a slot of the pool taken (waiting for
+        one, said once) and its process leased, the check ``MEASURING`` from then on, so every request the
+        block sends is one check's to the watchdog and to every stop (its time counted from the first), and
+        the process and the slot let go as the block ends, however it does. It gives ``request(order, payload,
+        more=False)``: the order asked of that process and its answer; ``more``, the check asks that process
+        again after this, and without it the check is ``ANSWERED`` with the answer, which no stop then
+        reaches. ``_Ended``, with what its callers are told, from the block's start, a request or its end: the
+        failure of the stop the check is in, of its process lost, or of none that could be started."""
         with self.lock:
             if asked.state is not State.ASKED:
-                return asked.failure()  # stopped as it read its document
+                raise _Ended(asked.failure())  # stopped as it read its document
             asked.state = State.WAITING
         try:
             slot = self.pool.take(document, lambda: asked.state is not State.WAITING,
                                   lambda said: told({"log": said, "stream": "waiting"}),
                                   lambda: self.reap(asked), lambda: self._defers(asked))
         except Withdrawn:
-            return asked.failure()  # stopped while it waited for a slot
-        process = None
+            raise _Ended(asked.failure()) from None  # stopped while it waited for a slot
+        process: Any = None
+
+        def request(order: dict[str, Any], payload: bytes = b"", more: bool = False) -> dict[str, Any]:
+            answer = process.request(order, told, payload)
+            with self.lock:
+                if asked.state is not State.MEASURING:
+                    raise _Ended(asked.failure())  # stopped as it answered: its process is killed, nothing of it kept
+                if not more:
+                    asked.state = State.ANSWERED
+            self.pool.learn(process, answer)
+            if "failed" in answer and "kind" not in answer:
+                answer = {**answer, "reason": "error"}  # the check itself failed there: its words, nothing measured
+            return answer
+
         try:
             with self.lock:
                 if asked.state is not State.WAITING:
-                    return asked.failure()  # stopped as it took its slot
+                    raise _Ended(asked.failure())  # stopped as it took its slot
                 asked.state, asked.slot = State.STARTING, slot
             process = self._lease(slot)
             with self.lock:
                 if asked.state is not State.STARTING:
-                    return asked.failure()  # stopped as its process started
+                    raise _Ended(asked.failure())  # stopped as its process started
                 asked.state, asked.process, asked.since = State.MEASURING, process, time.time()
                 watch = not self.watching
                 self.watching = True
             if watch:
                 threading.Thread(target=self._watch, name="cad-check-watchdog", daemon=True).start()
-            answer = process.request(order, told, payload)
+            yield request
             with self.lock:
-                if asked.state is not State.MEASURING:
-                    return asked.failure()  # stopped as it answered: its process is killed, nothing of it kept
-                asked.state = State.ANSWERED
-            self.pool.learn(process, answer)
-            if "failed" in answer and "kind" not in answer:
-                answer = {**answer, "reason": "error"}  # the check itself failed there: its words, nothing measured
-            return answer
+                if asked.state is State.MEASURING:
+                    asked.state = State.ANSWERED  # it asks its process no more
+                elif asked.state is not State.ANSWERED:
+                    raise _Ended(asked.failure())  # stopped between its requests: nothing of them stands
         except Gone as error:
             with self.lock:
                 if asked.state not in LIVE:
-                    return asked.failure()  # its process killed by the stop it is in
+                    raise _Ended(asked.failure()) from None  # its process killed by the stop it is in
                 asked.state = State.ANSWERED
             if self.stopping():
-                return {"failed": STOPPED, "reason": State.STOPPED.value, "stopped": True}
+                raise _Ended({"failed": STOPPED, "reason": State.STOPPED.value, "stopped": True}) from None
             if error.during:
-                return {"failed": _lost(str(error), error.code), "reason": "process_lost"}
-            return {"failed": str(error), "reason": "no_kernel", **failed_type(error)}  # it never started
+                raise _Ended({"failed": _lost(str(error), error.code), "reason": "process_lost"}) from None
+            raise _Ended({"failed": str(error), "reason": "no_kernel", **failed_type(error)}) from None  # it never started
         except RuntimeError as error:
             from cad.engine.serve import KernelProcessesUnavailable
 
             if not isinstance(error, KernelProcessesUnavailable):
                 raise
             # No kernel environment to start a checks process in: its line, and its type.
-            return {"failed": str(error), "reason": "no_kernel", **failed_type(error)}
+            raise _Ended({"failed": str(error), "reason": "no_kernel", **failed_type(error)}) from None
         finally:
             with self.lock:
                 asked.process = None  # before it is let go: no stop reaches a process it no longer has
