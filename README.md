@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="https://github.com/earthtojake/text-to-cad/raw/44d0973482e50ccf6c35036355bf9124203ca4c0/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
+<img src="https://github.com/earthtojake/text-to-cad/raw/0402a07cac87d861b14a20189efcce020d347f8e/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
 
 Design physical products with AI.
 
-[Website](https://www.texttocad.dev)
+[Website](https://www.texttocad.dev) · [Docs](https://www.texttocad.dev/docs)
 
 [![cad](https://img.shields.io/pypi/v/cad?style=flat&logo=pypi&logoColor=white&label=cad)](https://pypi.org/project/cad/)
 [![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Amain)
@@ -29,20 +29,20 @@ keeps itself up to date from then on. The first time a skill needs `cad`, your a
 permission, or you run it yourself.
 
 Then ask your agent for a part or an assembly: it writes the model as a Python
-script, runs it to build the model and shows it in the CAD viewer.
+script, runs it to build the model and shows it in the viewer.
 
 It works in Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Antigravity,
 Devin CLI, Factory Droid, GitHub Copilot CLI, Kimi Code, Muse, Pi, Qwen Code, Amp,
 Cline, Goose, Hermes Agent, Kilo Code, Kiro CLI, OpenClaw, OpenCode, Roo Code,
 Trae and Windsurf.
 
-Installing by hand, app by app, updating and removing: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/44d0973482e50ccf6c35036355bf9124203ca4c0/docs/install.md)
+Installing by hand, app by app, updating and removing: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/0402a07cac87d861b14a20189efcce020d347f8e/docs/install.md)
 
 ## ✨ Features
 
 The text-to-cad plugin gives your agent local workflows to generate 3D models as STEP, GLB, STL or 3MF files, check them for manufacturing, draw them, and connect to 3D printing, sheet metal and CNC services. It works with any agent that supports plugins or skills.
 
-- [**Parts and assemblies**](skills/cad/SKILL.md): Models written as Python scripts with [build123d](https://github.com/gumyr/build123d) and [OpenCASCADE](https://github.com/Open-Cascade-SAS/OCCT), exported as STEP, STL, 3MF or GLB, and as [DXF profiles and flat patterns](skills/cad/references/2d-profiles-and-dxf.md) for laser and waterjet cutting, with joints and animations for mechanisms, and shown live in the CAD viewer.
+- [**Parts and assemblies**](skills/cad/SKILL.md): Models written as Python scripts with [build123d](https://github.com/gumyr/build123d) and [OpenCASCADE](https://github.com/Open-Cascade-SAS/OCCT), exported as STEP, STL, 3MF or GLB, and as [DXF profiles and flat patterns](skills/cad/references/2d-profiles-and-dxf.md) for laser and waterjet cutting, with joints and animations for mechanisms, and shown live in the viewer.
 - [**Circuit boards**](skills/pcb/SKILL.md): KiCad schematics and boards, placed and routed, checked with ERC and DRC, reviewed before you order, and exported as fabrication files.
 - [**Manufacturing checks**](skills/cad/SKILL.md#can-it-be-made): Whether a part can be machined, cut and bent, molded or 3D printed, measured against the process's rules, and what to change where it cannot.
 - [**Stress checks**](skills/fea/SKILL.md): Whether a part or an assembly of bonded parts holds under its loads, solved with CalculiX: each part's peak stress, safety factor and how far it moves, drawn on the model.
@@ -64,12 +64,12 @@ text-to-cad is MIT-licensed and built in the open.
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
   A bug report with the model script and the output of `cad doctor` is the
   fastest to fix, and an agent app without a plugin gets one on request. A
-  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/44d0973482e50ccf6c35036355bf9124203ca4c0/SECURITY.md) says.
+  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/0402a07cac87d861b14a20189efcce020d347f8e/SECURITY.md) says.
 - **Questions, ideas and what you made**: the [Discord](https://discord.gg/5FGB9DwJYU).
   Say what the skills got wrong, too: that is what improves them.
 - **Code, skills and models**: a new skill (a fabrication service, a printer, a
   CAD workflow) goes in `skills/`, an example model in `models/`, and fixes
-  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/44d0973482e50ccf6c35036355bf9124203ca4c0/CONTRIBUTING.md) has the local setup, how to
+  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/0402a07cac87d861b14a20189efcce020d347f8e/CONTRIBUTING.md) has the local setup, how to
   test in the agent apps, and the guidance for agents working in the repository.
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random

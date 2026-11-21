@@ -92,7 +92,7 @@ location=(cx, cy, model.box[0].z))`.
 ## Colour
 
 Blender 5.2 shows a render through AgX, which keeps bright highlights from clipping but mutes
-saturated colours. For colours as the model and the CAD Viewer give them, use Standard:
+saturated colours. For colours as the model and the viewer give them, use Standard:
 
 ```python
 scene.view_settings.view_transform = "Standard"  # "AgX" for photographic highlights
