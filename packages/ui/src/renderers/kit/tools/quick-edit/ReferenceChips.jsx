@@ -105,7 +105,8 @@ export const VISIBLE_REFERENCE_CHIPS = 4;
 // a key) opens the card too. A card is as tall as its rows, up to the room the view has.
 const OPEN_DELAY_MS = 300;
 const CLOSE_DELAY_MS = 150;
-const CHIP_CLASS = "inline-flex h-5 min-w-0 max-w-full items-center rounded-sm bg-accent/70 text-xs text-foreground";
+// A chip reads as a chip on the bar: a filled tile with a hairline edge.
+const CHIP_CLASS = "inline-flex h-5 min-w-0 max-w-full items-center rounded-sm border border-border bg-accent text-xs text-foreground";
 const CHIP_LABEL_CLASS = "min-w-0 truncate rounded-sm px-1.5 leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 const CHIP_REMOVE_CLASS = "-ml-0.5 mr-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 const POPOVER_CLASS = cn(FLOATING_SURFACE_CLASS, "p-0 text-xs data-[state=closed]:animate-none!");

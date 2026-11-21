@@ -1947,10 +1947,8 @@ control or persisted preference; stale settings cannot suppress it.
 Quick Edit is a person's note to their agent about the file on screen, and the
 one way the viewer hands it over: a bar at the view's bottom, like a chat's input. **It is
 always there** in a view that has it, nothing picked or not: at rest ONE row, the note ("Describe
-a change…") with its buttons at the right, on the quiet chrome surface (the playbar's: 70%, a
-faint border, no shadow; `data-quick-edit-quiet`), and on the tool strip's floating surface (its
-radius and padding at the strip's V1 proportions) once it is used: the keyboard in it, a note
-written or something attached. **When something is attached a row of attachments comes above
+a change…") with its buttons at the right, always on the tool strip's floating surface (its
+radius and padding at the strip's V1 proportions). **When something is attached a row of attachments comes above
 the note** and the note does not move: the bar grows upward, its bottom edge and the note's box
 where they were. The bar has no X and no close: nothing it would hide is gone by hiding it, and
 a bar that came and went was a target that was not there when wanted. Only a view whose picks

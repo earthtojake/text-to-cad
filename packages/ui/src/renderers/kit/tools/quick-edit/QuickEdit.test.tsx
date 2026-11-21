@@ -34,9 +34,8 @@ const buttons = () => within(box()!).getAllByRole('button').map(button => button
 it('is always there: one row with nothing to carry, no close button; a row of attachments above the note with a pick, the keyboard the person\'s, never an agent\'s', () => {
   const edge = { resource, target: { kind: 'cad-selector', selectors: ['base/e:base.extrude1.3'] } } as const;
   const { update } = mount();
-  // Nothing to carry: the bar, one row (the note and Copy Prompt), at rest on the quiet surface; no attachments row, no X.
-  expect([box() !== null, box()!.querySelector('[data-quick-edit-context]'), buttons(), box()!.hasAttribute('data-quick-edit-quiet')])
-    .toEqual([true, null, ['Copy Prompt'], true]);
+  // Nothing to carry: the bar, one row (the note and Copy Prompt); no attachments row, no X.
+  expect([box() !== null, box()!.querySelector('[data-quick-edit-context]'), buttons()]).toEqual([true, null, ['Copy Prompt']]);
   // An agent's selection (no press of the person's) brings the attachments, above the note, which stays the same
   // element at the bar's foot (its box unmoved: `RendererShell.browser.test.mjs`), and leaves their keyboard where it was.
   const compose = box()!.querySelector('[data-quick-edit-compose]');

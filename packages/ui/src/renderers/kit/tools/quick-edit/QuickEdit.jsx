@@ -6,7 +6,7 @@ import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { cn } from "@cad/ui/utils";
 import { promptReferenceIds } from "@cad/core/prompt";
 import { usePromptDestination, useViewerHost } from "../../../../host/context.js";
-import { FLOATING_CHROME_SURFACE_CLASS, QUIET_CHROME_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
+import { FLOATING_CHROME_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { copiedQuickEdit, createQuickEditContext, pastedLines, quickEditSelection } from "./quickEditPrompt.js";
 import { insertAtCaret, markSelectedPills, noteText, pasteNodes, selectPillAt } from "./noteEditor.js";
 import ReferenceChips from "./ReferenceChips.jsx";
@@ -34,9 +34,8 @@ export function quickEditReferenceIds(selection) {
 /**
  * Quick Edit: a person's note about the file on screen, handed to their agent, in a bar at the bottom of the
  * view, on the tool strip's centre line, laid out as a chat's input (the frame places it: `ViewFrame.jsx`'s bottom
- * bar). It is always there: with nothing to carry, ONE row — the note and its buttons, no close button — on the
- * quiet chrome surface while it is at rest (nothing written, nothing carried, the keyboard elsewhere), the tool
- * strip's surface once it is used; with something to carry (its attachments: a selection, an annotation, a
+ * bar). It is always there, on the tool strip's surface: with nothing to carry, ONE row — the note and its buttons,
+ * no close button; with something to carry (its attachments: a selection, an annotation, a
  * measurement), a row of them appears above the note, the bar growing upward, the note where it was. What it carries
  * goes as each chip's X drops it, as the viewer's Escape clears the selection, or as a note queued or sent clears it
  * (`onClear`: the selection and the annotation). It takes the keyboard for the person — each pick of theirs, or an
@@ -91,7 +90,6 @@ export function quickEditReferenceIds(selection) {
 export default function QuickEdit({ resource, references = EMPTY, chips = null, annotation = null, prompt = null, nameReference = null, notes = null, onCopy, onEscape, onClear, disabled = false,
   hidden = false, docked = false, className, style }) {
   const { t } = useI18n();
-  const [focused, setFocused] = useState(false);
   const host = useViewerHost();
   const controls = useControlUsage();
   const destination = usePromptDestination();
@@ -337,15 +335,11 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
       return value;
     } } : chip));
   }, [annotationChip, ownChips]);
-  // At rest (nothing written, nothing carried, the keyboard elsewhere) it is permanent chrome over the model, so it
-  // stands on the quiet chrome surface (the playbar's: 70%, a faint border, no shadow); used, the tool strip's.
-  const quiet = !focused && !written && !shownChips.length;
-  const section = <section ref={box} aria-label={t("quickEdit.title")} data-quick-edit-box="" data-quick-edit-quiet={quiet ? "" : undefined}
-      onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}
+  const section = <section ref={box} aria-label={t("quickEdit.title")} data-quick-edit-box=""
       // The bar: the toolbar's shape, a chat's input — its attachments on a row over the note when it has any, the note
       // with its buttons at its right.
       className={cn("@container/quick-edit pointer-events-auto relative flex w-full flex-col gap-1 text-xs",
-        quiet ? QUIET_CHROME_SURFACE_CLASS : FLOATING_CHROME_SURFACE_CLASS, docked ? "rounded-[14px] p-1.5" : "rounded-[10px] p-[5px]",
+        FLOATING_CHROME_SURFACE_CLASS, docked ? "rounded-[14px] p-1.5" : "rounded-[10px] p-[5px]",
         "transition-[border-color,box-shadow,background-color] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20")}
       data-docked={docked ? "" : undefined}>
       {/* Its attachments, where it has any: the chips (the annotation's, the picks'), one a kind ("5 parts", or a single
