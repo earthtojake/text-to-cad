@@ -1097,6 +1097,98 @@ class ModellingMistakeTest(unittest.TestCase):
         self.assertAlmostEqual(result.measurements["parts"]["items"][0]["flat_area_mm2"],
                                plain.measurements["parts"]["items"][0]["flat_area_mm2"] - 2 * math.pi * 1.6 ** 2, delta=0.1)
 
+    def test_a_countersink_in_several_faces_reads_as_the_part_whole(self) -> None:
+        # some systems write a closed face as two halves with no seam (OCCT's ShapeUpgrade_ShapeDivideClosed
+        # leaves the same). A cone sunk to a knife edge in two halves has no whole circle, so it was a cut edge
+        # (the flat's hole its rim, 11 mm for 5); a corner of the outline cuts a piece of a cone in three from
+        # every skin, and that piece was no sheet at all; a cone laid into the flat in pieces left a round hole
+        # of chords, read as a cutout. A plate cut through its holes and joined unmerged holds no wire of them:
+        # its countersinks were not countersunk, and a skin in several faces counted each chamfer once a face
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse, BRepAlgoAPI_Splitter
+        from OCP.BRepCheck import BRepCheck_Analyzer
+        from OCP.collections import List_TopoDS_Shape
+        from OCP.ShapeUpgrade import ShapeUpgrade_ShapeDivideClosed
+
+        def divided(part: bd.Part, points: int) -> bd.Solid:
+            """Each closed face of ``part`` in ``points + 1`` faces."""
+            op = ShapeUpgrade_ShapeDivideClosed(part.wrapped)
+            op.SetNbSplitPoints(points)
+            op.Perform()
+            return bd.Compound(op.Result()).solids()[0]
+
+        def cut_through(part: bd.Part, xs: list[float]) -> bd.Solid:
+            """``part`` cut across X at each of ``xs`` (by the kernel's splitter) and joined again as the kernel
+            joins it, no face merged."""
+            parts, tools = List_TopoDS_Shape(), List_TopoDS_Shape()
+            parts.Append(part.solids()[0].wrapped)
+            for x in xs:
+                tools.Append(bd.Face.make_rect(400, 400, bd.Plane(origin=(x, 0, 0), x_dir=(0, 0, 1), z_dir=(-1, 0, 0))).wrapped)
+            op = BRepAlgoAPI_Splitter()
+            op.SetArguments(parts)
+            op.SetTools(tools)
+            op.Build()
+            pieces = sorted(bd.Compound(op.Shape()).solids(), key=lambda piece: piece.center().X)
+            joined = pieces[0]
+            for piece in pieces[1:]:
+                op = BRepAlgoAPI_Fuse(joined.wrapped, piece.wrapped)
+                op.Build()
+                joined = bd.Compound(op.Shape()).solids()[0]
+            return joined
+
+        def drilled(plate: bd.Part, holes: list[tuple[float, float, int]], hole: float, rim: float) -> bd.Part:
+            """``plate`` (3 mm) with ``hole`` mm holes sunk at 90 degrees to ``rim`` mm, from its top (side 1) or
+            from below (-1): a drill and a cone, cut. (A ``CounterSinkHole``'s faces, divided, are no valid
+            solid.)"""
+            r, big = hole / 2, rim / 2
+            for x, y, side in holes:
+                tool = bd.Pos(0, 0, 1) * (bd.Cylinder(r, 5, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX))
+                                          + bd.Cone(r, big + 1, big - r + 1,
+                                                    align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX)))
+                plate = plate - bd.Pos(x, y, side * 1.5) * bd.Rot(0 if side > 0 else 180, 0, 0) * tool
+            return plate
+
+        def read(part: bd.Shape) -> tuple[tuple, list[float]]:
+            """What must be the same, and the flat's length, width, area and material fraction."""
+            result = checked(part, k_factor=0.4)
+            item = result.measurements["parts"]["items"][0]
+            return ((result.status, verdicts(result), sorted(
+                        (hole["size_mm"], hole["countersink_diameter_mm"], hole["edge_distance_mm"])
+                        for hole in result.measurements["holes"]["items"])),
+                    [item["flat_length_mm"], item["flat_width_mm"], item["flat_area_mm2"], item["flat_material_fraction"]])
+
+        plate, slot = bd.Box(80, 40, 3), bd.Box(80, 40, 3) - bd.Box(30, 6, 10)
+        disc = bd.Cylinder(20, 3)
+        three = [(-20, 0, 1), (0, 8, 1), (20, 0, -1)]  # two from the top: the bottom is the larger skin
+        for name, whole, made in (
+                ("a knife edge, in halves", drilled(plate, three, 5.0, 11.0), lambda part: divided(part, 1)),
+                ("past the far skin, in thirds", drilled(plate, three, 5.0, 13.0), lambda part: divided(part, 2)),
+                ("its rim off a corner, in thirds", drilled(plate, [(37, 17, 1), (0, 0, 1), (-37, -17, -1)], 5.0, 10.0),
+                 lambda part: divided(part, 2)),
+                ("its rim off a corner from each skin, in thirds", drilled(plate, [(37.9, 17.9, 1), (-37.9, -17.9, -1)], 3.2, 6.4),
+                 lambda part: divided(part, 2)),
+                ("its rim off a corner, cut through its hole", drilled(plate, [(37, 17, 1)], 5.0, 10.0),
+                 lambda part: cut_through(part, [37.0])),
+                # three rims at one end: the bottom is the larger skin, but its middle piece is smaller than the top's
+                ("the larger skin in pieces", drilled(plate, [(-20, 0, -1), (30, -12, 1), (30, 0, 1), (30, 12, 1)], 3.2, 6.4),
+                 lambda part: cut_through(part, [-20.0, 20.0])),
+                ("its rim in a slot's side, in thirds", drilled(slot, [(0, 7, 1), (0, -7, -1)], 5.0, 10.0),
+                 lambda part: divided(part, 2)),
+                ("cut through its holes", self._sunk((80, 40, 3), [(-20, 0), (0, 5)], [(20, 0)], 5.0, 10.0),
+                 lambda part: cut_through(part, [-20.0, 0.0, 20.0])),
+                ("a knife edge, cut through its holes", self._sunk((80, 40, 3), [(-20, 0), (0, 5)], [(20, 0)], 5.0, 11.0, 90.0),
+                 lambda part: cut_through(part, [-20.0, 0.0, 20.0])),
+                ("a disc chamfered on one edge, cut through its axis",
+                 bd.chamfer(disc.edges().sort_by(bd.Axis.Z)[-1], 1.0), lambda part: cut_through(part, [0.0]))):
+            with self.subTest(part=name):
+                split = made(whole)
+                self.assertGreater(len(split.faces()), len(whole.faces()))
+                self.assertTrue(BRepCheck_Analyzer(split.wrapped).IsValid())
+                (got, sizes), (want, wanted) = read(split), read(whole)
+                self.assertEqual(got, want)
+                for value, expected, delta in zip(sizes, wanted, (2e-3, 2e-3, 0.05, 5e-4)):
+                    self.assertAlmostEqual(value, expected, delta=delta)  # the material: a cone's cut, triangulated
+                self.assertAlmostEqual(sheet.unfold(split).area, sheet.unfold(whole).area, delta=0.05)
+
     def test_what_countersinks_and_edge_breaks_cut_is_not_missing_from_the_flat(self) -> None:
         # the flat's area was held against the part's volume, which countersinks and edge breaks cut after the
         # blank: 24 countersinks in a 2 mm plate, or a 1 mm chamfer round a small 3 mm one, read 107% and 111%
