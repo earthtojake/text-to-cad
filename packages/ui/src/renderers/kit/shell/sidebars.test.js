@@ -7,9 +7,9 @@ const state = (frameWidth, extra = {}) => ({ frameWidth, want: true, has: true, 
 
 test("the one panel always pushes; it starts collapsed where open it would leave the model under 640px", () => {
   assert.equal(MIN_MODEL_WIDTH, 640);
-  // The 256px panel: 896px of view and more starts it open.
-  assert.equal(DEFAULT_PANEL_WIDTH, 256);
-  assert.deepEqual([1440, 1100, 1024, 896, 895, 867, 700].map(width => sidebarLayout(state(width)).mode),
+  // The 232px panel: 872px of view and more starts it open.
+  assert.equal(DEFAULT_PANEL_WIDTH, 232);
+  assert.deepEqual([1440, 1100, 1024, 872, 871, 867, 700].map(width => sidebarLayout(state(width)).mode),
     ["push", "push", "push", "push", "closed", "closed", "closed"]);
   // A panel the person widened needs the more: 320px of it, 960px of view.
   assert.deepEqual([960, 959].map(width => sidebarLayout(state(width, { panelWidth: 320 })).mode), ["push", "closed"]);

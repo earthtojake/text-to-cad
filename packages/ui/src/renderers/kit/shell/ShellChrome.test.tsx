@@ -159,7 +159,7 @@ it("the panel's tabs are there whatever the tool, a tool's own section coming an
     return this.hasAttribute('data-sidebar') ? DOMRect.fromRect({ x: 0, y: 0, ...VIEWER }) : rect.call(this);
   } });
   const { preferences } = frame();
-  expect(flatPanel().style.width).toBe('256px');
+  expect(flatPanel().style.width).toBe('232px');
   fireEvent.click(tool('Draw'));
   expect(tabNames()).toEqual(['Harness tree', 'Reference']);
   fireEvent.click(tool('Pose'));

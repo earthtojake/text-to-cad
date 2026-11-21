@@ -1030,7 +1030,7 @@ test('an alert the model survives is drawn on the canvas, beside the docked pane
 });
 
 // The one panel (`sidebars.js`): it always pushes the model aside, never over it; where open it would leave the model
-// under 640px (896px of view, with its 256px) it starts collapsed (never written), and opened then it pushes.
+// under 640px (872px of view, with its 232px) it starts collapsed (never written), and opened then it pushes.
 test('the panel always pushes, and starts collapsed where the model would keep under 640px without writing it', async (t) => {
   const origin = await serve(t);
   const page = await browser.newPage({ viewport: { width: 1400, height: 640 } });
@@ -1072,12 +1072,12 @@ test('the panel always pushes, and starts collapsed where the model would keep u
   await waitMode('push');
   assert.ok(await centredOnArea(), 'pushed: the strip on the view\'s centre line');
   assert.ok(await besideStage());
-  assert.equal(await drawnWidth(), 256);
-  // Down to 896px it still pushes: the model keeps 640px beside the 256px panel.
-  await width(896);
+  assert.equal(await drawnWidth(), 232);
+  // Down to 872px it still pushes: the model keeps 640px beside the 232px panel.
+  await width(872);
   await waitMode('push');
   assert.ok(await besideStage());
-  assert.equal(await drawnWidth(), 256, 'a narrower view never narrows the panel');
+  assert.equal(await drawnWidth(), 232, 'a narrower view never narrows the panel');
   // Below it collapses on its own, unwritten; opened then, it pushes too, and Escape leaves it where it is.
   await width(867);
   await waitMode('closed');
@@ -1085,7 +1085,7 @@ test('the panel always pushes, and starts collapsed where the model would keep u
   await pane.locator('[data-navbar-panel="left"][aria-expanded="false"]').click();
   await waitMode('push');
   assert.ok(await besideStage(), 'opened in a narrow view, it pushes');
-  assert.equal(await drawnWidth(), 256, 'opened in a narrow view, at its one width');
+  assert.equal(await drawnWidth(), 232, 'opened in a narrow view, at its one width');
   assert.ok(await centredOnArea(), 'the strip stays on the view\'s centre, over the panel');
   await page.keyboard.press('Escape');
   assert.equal(await mode(), 'push');
@@ -1124,7 +1124,7 @@ test('the panel always pushes, and starts collapsed where the model would keep u
   await waitMode('push');
   await settle(page);
   const pinned = await view();
-  assert.deepEqual([pinned.stage[0] - before.stage[0], before.canvas[0] - pinned.canvas[0], pinned.over], [256, 256, false], `pinned, it pushes: ${JSON.stringify(pinned)}`);
+  assert.deepEqual([pinned.stage[0] - before.stage[0], before.canvas[0] - pinned.canvas[0], pinned.over], [232, 232, false], `pinned, it pushes: ${JSON.stringify(pinned)}`);
   assert.ok(/"open":true/.test(await kept()));
   assert.deepEqual(errors, []);
 });
@@ -1218,13 +1218,14 @@ test('Copy Prompt keeps its words at the 400px bar, and is its icon alone only w
   assert.deepEqual([narrow.bar < 400, narrow.words], [true, false], `a window narrower than the bar: the icon alone: ${JSON.stringify(narrow)}`);
 });
 
-// The qdd actuator's four tabs, Model, Params, Joints and Motion, and the search's icon fit the 256px panel in English:
-// no ⋯. At the grip's 200px the tabs that do not fit are ⋯'s items, in order, and the open tab stays shown, in the last
-// shown tab's place (`FlatPanel.jsx`'s `fitTabs`): measured as drawn, nothing in the row overlapping, cut or past the panel.
-test('four tabs and the search fit the 256px panel with no ⋯; at 200px ⋯ holds the rest, the open tab still shown; a phone\'s sheet draws the same tabs and rows', async (t) => {
+// The panel is budgeted for three tabs: the widest three a model can have (Model, Params and Motion) and the search's icon
+// fit the 232px panel in English, with no ⋯. A fourth (the qdd actuator's Joints) puts the tabs that do not fit in ⋯, in
+// order, the open tab always shown, a tab chosen from it taking the last shown tab's place (`FlatPanel.jsx`'s `fitTabs`);
+// at the grip's 200px the same. Measured as drawn: nothing in the row overlapping, cut or past the panel.
+test('three tabs and the search fit the 232px panel with no ⋯; a fourth is ⋯\'s, the open tab still shown, at 232px and 200px; a phone\'s sheet draws the same tabs and rows', async (t) => {
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
-  await page.goto(`${origin}/?file=panel-qdd.harness`);
+  await page.goto(`${origin}/?file=panel-qdd-three.harness`);
   const pane = page.getByTestId('one');
   await pane.locator('[data-flat-panel-tab="animation"]').waitFor();
   const head = () => pane.locator('aside[data-flat-panel]').evaluate(aside => {
@@ -1238,21 +1239,33 @@ test('four tabs and the search fit the 256px panel with no ⋯; at 200px ⋯ hol
       inside: shown.every(rect => rect.left >= box.left - 0.5 && rect.right <= box.left + aside.clientWidth + 0.5),
       whole: tabs.every(tab => tab.scrollWidth <= tab.clientWidth + 0.5) };
   });
-  assert.deepEqual(await head(), { width: 256, tabs: ['tree', 'parameters', 'position', 'animation'], names: ['Model', 'Params', 'Joints', 'Motion'],
+  assert.deepEqual(await head(), { width: 232, tabs: ['tree', 'parameters', 'animation'], names: ['Model', 'Params', 'Motion'],
     more: false, search: true, apart: true, inside: true, whole: true });
-  // The last tab open, the panel at the grip's least: ⋯ holds what does not fit, the open tab shown.
-  await pane.locator('[data-flat-panel-tab="animation"]').click();
-  await pane.getByRole('separator', { name: 'Resize panel' }).press('Home');
+  // Four tabs: ⋯ holds what does not fit, in order; the open tab (the first) shown; the last chosen from ⋯ takes the
+  // last shown tab's place.
+  await page.goto(`${origin}/?file=panel-qdd.harness`);
+  await pane.locator('[data-flat-panel-tab="tree"]').waitFor();
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-flat-panel-head] [data-flat-panel-more]'));
-  const narrow = await head();
-  assert.deepEqual([narrow.width, narrow.more, narrow.search, narrow.apart, narrow.inside, narrow.whole, narrow.tabs.at(-1)],
-    [200, true, true, true, true, true, 'animation'], `at 200px: ${JSON.stringify(narrow)}`);
-  await pane.locator('[data-flat-panel-more]').click();
-  const held = await page.locator('[data-flat-panel-more-menu] [data-flat-panel-more-tab]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-flat-panel-more-tab')));
   const order = ['tree', 'parameters', 'position', 'animation'];
-  assert.ok(held.length > 0 && held.every(id => !narrow.tabs.includes(id)), `⋯ holds the tabs not shown: ${JSON.stringify({ held, shown: narrow.tabs })}`);
-  assert.deepEqual([...held].sort((a, b) => order.indexOf(a) - order.indexOf(b)), held, 'in the tabs\' order');
-  assert.deepEqual([...narrow.tabs, ...held].sort(), [...order].sort(), 'every tab shown or in ⋯');
+  const overflow = async (width, open) => {
+    const now = await head();
+    assert.deepEqual([now.width, now.more, now.search, now.apart, now.inside, now.whole, now.tabs.includes(open)], [width, true, true, true, true, true, true],
+      `at ${width}px: ${JSON.stringify(now)}`);
+    await page.locator('[data-flat-panel-more-menu]').waitFor({ state: 'detached' });
+    await pane.locator('[data-flat-panel-more]').click();
+    const held = await page.locator('[data-flat-panel-more-menu] [data-flat-panel-more-tab]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-flat-panel-more-tab')));
+    assert.ok(held.length > 0 && held.every(id => !now.tabs.includes(id)), `⋯ holds the tabs not shown: ${JSON.stringify({ held, shown: now.tabs })}`);
+    assert.deepEqual([...held].sort((a, b) => order.indexOf(a) - order.indexOf(b)), held, 'in the tabs\' order');
+    assert.deepEqual([...now.tabs, ...held].sort(), [...order].sort(), 'every tab shown or in ⋯');
+    return held;
+  };
+  await overflow(232, 'tree');
+  await page.locator('[data-flat-panel-more-tab="animation"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-flat-panel-tab="animation"][aria-selected="true"]'));
+  assert.equal((await head()).tabs.at(-1), 'animation', 'the tab chosen from ⋯ takes the last shown tab\'s place');
+  await pane.getByRole('separator', { name: 'Resize panel' }).press('Home');
+  await page.waitForFunction(() => Math.round(document.querySelector('[data-testid="one"] aside[data-flat-panel]').getBoundingClientRect().width) === 200);
+  await overflow(200, 'animation');
   await page.keyboard.press('Escape');
   await page.locator('[data-flat-panel-more-menu]').waitFor({ state: 'detached' });
   await pane.getByRole('separator', { name: 'Resize panel' }).press('End');
