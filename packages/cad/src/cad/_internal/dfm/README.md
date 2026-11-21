@@ -552,6 +552,67 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   (axial; radial: square to the axis and meeting it; perpendicular: square to it, beside it; off_axis). Drill table: Wikipedia
   "Drill bit sizes" (ASME B94.11M): metric 0.2-25 mm in its steps, fractional 1/64 in to 1 3/4 in, #80-#1,
   A-Z.
+
+  **Who reads a hole** (`_dfm_cnc_recognised`). A hole is recognised by quiddity, the feature recogniser
+  (`cad.quiddity`, the `quiddity` integration's), where its features are available for the part, and by the
+  detector above for whatever quiddity does not claim; every figure of the item is measured here either way,
+  so the fields above mean what they say whichever read the hole, and `recognised_by` says which (`quiddity`,
+  or `cad` for the detector alone). One recogniser's process is asked once for a document's every part that is
+  measured itself (a copy's holes are its first's), each part read alone.
+
+  - *What quiddity says*: which faces are one hole, which of its cylinders is the bore, and what closes it. Its
+    record is taken where it is `verified`, of quiddity 0.5.5 (`QUIDDITY`: the release the extra pins and these
+    readings were measured against, named in the code that measures so a report is one release's), and its
+    bore is a hole as defined above -- its cylinders sweep 300 degrees together and nothing stands inside
+    them. A record is declined otherwise, and said (`declined`, each `location`, `record` and `reason`):
+    `unproved` (its evidence is not verified), `superseded` (quiddity itself names an annular groove for those
+    walls), `open` (the bore does not go round: quiddity calls a channel open along its side a hole), `cored`,
+    `shared` (it names a face an earlier record took).
+  - *How each figure is obtained from it.* `diameter_mm`: the bore cylinder's own radius, read from the kernel
+    (quiddity publishes its diameter to five decimals; a rule compares to a nanometre). `depth_mm`: the bore's
+    axis between its two ends, measured here as above; quiddity's own depth is the bore cylinder's extent, the
+    same below a counterbore or a countersink and the longer where an end is inclined. `overall_depth_mm`,
+    `counterbores` (the hole's other cylinders: quiddity's counterbore, spotface and outer steps are among
+    them) and `countersinks` (the hole's cones: quiddity's seat, and the small chamfer of a mouth that it keeps
+    apart from a seat -- a countersink here, by its cone's largest diameter and included angle): measured here
+    on the hole's faces. `through` and `opening`: quiddity's -- the opening is the end its axis comes in from --,
+    in place of the ray's, which takes a floor that is no face of the hole's own (a plane wider than the bore,
+    one a round joins to the wall, the floor of a recess with a hole off its axis) for no floor at all. `bottom`:
+    quiddity's `through`, `flat` or `drill_point`, but `other` where the floor it calls flat is neither a plane
+    nor a cone (a ball nose: flat is a plane here, an end mill's floor); its `unknown` is no reading, and the
+    ray along the axis says what closes the hole. `point_angle_deg`: the cone a ray into the hole meets.
+    `xyz`, `location`, `faces`, `axis` and everything derived (the drill, the tap, the reach, the frame's
+    alignment, `reachable`): as above. quiddity's own point (the mouth of a plain hole, the bore's start under a
+    seat) is not reported: `xyz` stays the middle of the bore.
+  - *One hole, once, by faces.* The detector runs on every part whatever quiddity found: no hole found is not
+    no hole there, and quiddity leaves faces unexplained (a hole whose wall is a cone has no record; a bore
+    sealed inside the part is an interior void to it). A hole of the detector's none of whose faces a taken
+    record names is kept as it is (`cad`). One that shares a face with a taken record is that record's hole
+    and is not reported again: its faces are the record's and the detector's faces of it that no record names
+    (a counterbore's step plane, a drafted wall, a seat's cone that a keyway splits -- the hole's still, read
+    as the detector reads them), so two stretches of one drilled hole either side of a cross hole are one
+    hole, their depth the whole run. Where two records meet one of the detector's holes its unnamed faces go
+    with the first. An internal groove stays a groove unless a record names its cylinder as a step.
+  - *Where quiddity is not available* for a part -- no wheel for the platform, no environment that holds it
+    (`cad[quiddity]`'s, which the engine makes on first need for its checks processes, whose own environment
+    lacks it), a part it refused, failed on, did not finish in 30 s or ended its process on, a document of
+    another schema or release, faces the kernel does not confirm are the part's -- the part's holes are the
+    detector's, every one `cad`, exactly as they were before quiddity was asked, and `fallbacks` says the
+    part and the reason. No check fails for it.
+  - `holes.recognition` says it all, for the family: `{"library": "quiddity", "version": "0.5.5" (the release
+    that answered; None where none did), "holes": {"quiddity": n, "cad": n} (every item, by who read it),
+    "parts": {"quiddity": n, "cad": n} (every part judged; a copy counts as its first), "fallbacks": [{"part",
+    "reason", "detail"}], "declined": [{"location", "record", "reason"}], "disagreements": [{"location",
+    "field", "quiddity", "cad"}], "repeatable"}`. A disagreement is one hole the two read differently, at the
+    item's `location`, with both readings: `through`; `bottom` (both blind, another floor); `diameter_mm`;
+    `counterbores` (each one's diameters; the item lists every cylinder either found); `countersinks` (how
+    many cones each names; the item lists every cone); `holes` (how many each makes of the same faces);
+    `hole` (one found it and the other none: true and false). Fallbacks, declined records and disagreements
+    are said once for a geometry, at the part measured. `repeatable` is false where a part fell back for a
+    reason of the moment or of this environment (`not_installed`, `other_release`, `stopped`, `timed_out`):
+    the same check may read it with quiddity next time, so such a report is no result to keep for another
+    check. The detector alone, to compare the two by: `_dfm_cnc.measure(document, options, candidates,
+    recognise=False)` asks no recogniser, and its `holes` carries no `recognition`.
 - **threads** — modelled threads: non-analytic faces (no surface of revolution) whose edge points sweep >= 350
   degrees about a cylinder's axis in a radial band under a third of the radius, with a flank edge winding half
   a turn or more (a pitch), with their end caps. `internal`, `major_diameter_mm`,
@@ -898,6 +959,11 @@ unreached share is read on at most 16 points, its disc cutter's reach on 4. A pa
 not measured (`FACE_BUDGET`); rays' boxes are tested together a batch of at most a million ray-face pairs
 (`BATCH_PAIRS`), so memory a batch does not grow with the part's faces. Time is not bounded otherwise: a ray
 costs with the edges of the face it crosses (a plate of 576 holes takes most of a minute).
+
+The recogniser (`holes`) is a process of its own, started once a check: about a tenth of a second to start, then
+each part measured itself costs it hundredths of a second to about a second (a part of 240 faces); one it has not
+answered in 30 s is given up and read by the detector. The detector runs either way, as it did. The process ends
+with the check, however that ends -- answered, stopped at a limit, or with the engine.
 
 ## Sheet metal
 
