@@ -40,7 +40,7 @@
     "gltf-validator": "2.0.0-dev.3.10",
     "playwright": "^1.65.1",
     "typescript": "5.9.3",
-    "jsdom": "30.1.3"
+    "jsdom": "31.0.1"
   },
   "files": [
     "dist",
