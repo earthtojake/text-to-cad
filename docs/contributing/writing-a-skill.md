@@ -205,18 +205,30 @@ for word, and tests keep the copies from drifting:
   0.11.11 wrote. cad updates itself, so the block never has the agent update it. No skill runs the
   install script, and no skill pre-approves a tool (`allowed-tools`). A new skill copies the block
   from one beside it.
-
-  **The block is changed only with a person's explicit approval**, asked for by name: never as part
-  of a rewrite, a tidy-up or a fix that happens to reach it. It is what every agent runs first, on
-  every computer, and it installs software: a wrong word in it breaks every skill at once, for
-  people whose cad may no longer be able to fetch the correction. The release's version stamp is the
-  one change made without asking.
+  It changes only with a person's approval ([below](#what-changes-only-with-a-persons-approval)).
 - **Commands that last** (no test holds this one): a command, an option or a spelling the skills
   stop using keeps working, hidden if need be, for 30 days after the release that stopped using it.
   Say so in the pull request that removes it.
 - **Show the model** (`tests/python/global/test_skill_show_the_model.py`): how to show the person what
   was made, in every skill that makes something they look at. It covers an agent with the CAD app's
   tools (`cad_show`) and one without (the page's link).
+
+## What changes only with a person's approval
+
+Three parts of a skill change only with a person's explicit approval, asked for by name: never as
+part of a rewrite, a tidy-up or a fix that happens to reach them. Propose the change and wait.
+
+- **The Setup block.** It is what every agent runs first, on every computer, and it installs
+  software: a wrong word in it breaks every skill at once, for people whose cad may no longer be
+  able to fetch the correction. The release's version stamp is the one change made without asking.
+- **The front matter's `name` and `description`.** The plugin knows its skills by name, so a renamed
+  skill orphans every installed copy. The description decides whether the skill loads at all, and
+  sits in every agent's context on every turn beside every other skill's. The A/B bench hands an
+  agent its skill, so it does not test this: propose a description with the requests it should and
+  should not load for.
+- **A line that says what the agent does not do on a person's behalf** (print3d never contacts a
+  printer or starts a print; pcb never orders a board). Adding one, removing one and weakening one
+  are each a decision about the product, not wording.
 
 ## Checklist
 
@@ -227,8 +239,9 @@ for word, and tests keep the copies from drifting:
       longer says what was weighed.
 - [ ] A skill that makes something has "Check each change".
 - [ ] Every example was run, and every command in a code block parses.
-- [ ] The Setup and Show the model blocks are the shared text where they apply, and the Setup block
-      is as it was, or a person approved its change by name.
+- [ ] The Setup and Show the model blocks are the shared text where they apply.
+- [ ] The Setup block, the `name` and `description`, and every line on what the agent does not do on
+      a person's behalf are as they were, or a person approved the change by name.
 - [ ] A change to what agents are told was run A/B, with the table in the pull request, and a
       rewrite was audited against the text it replaced.
 - [ ] A command the skill stops using still works for 30 days.
