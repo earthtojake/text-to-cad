@@ -4,7 +4,7 @@ import * as THREE from "three";
 
 import { jointDeltas, jointValues } from "../../common/articulation.js";
 import { isKitScene, sceneFramingBounds } from "../viewer/sceneContract.js";
-import { ARM, ARM_SRDF, SWING, boxMesh, identity, robotOf, row, scaled, translation } from "./__tests__/robotFixtures.js";
+import { ARM, ARM_SRDF, boxMesh, identity, robotOf, row, scaled, translation } from "./__tests__/robotFixtures.js";
 import { createRobotScene } from "./robotScene.js";
 
 // The articulation player (`common/articulation.js`, the one STEP poses with) is the ORACLE here:
@@ -63,28 +63,27 @@ function solvedBounds(model, values) {
   return { min, max };
 }
 
-for (const [name, robot] of [["URDF", ARM], ["SDF", SWING]]) {
-  test(`${name}: every link is where the articulation's delta over its rest placement puts it, for any control vector`, () => {
-    const model = robotOf(robot);
-    const scene = createRobotScene(THREE, model);
-    const next = random(name.length * 7919);
-    for (let round = 0; round < 40; round += 1) {
-      const values = round === 0 ? {} : randomPose(robot, next);
-      scene.setControlValues(values);
-      const solved = solvedFrames(robot, Object.fromEntries(robot.articulation.controls.map(control => {
-        // The scene normalizes as the player does: a limited control is clamped.
-        const value = values[control.id] ?? 0;
-        return [control.id, control.min === null ? value : Math.min(Math.max(value, control.min), control.max)];
-      })));
-      const frames = scene.linkFrames();
-      assert.deepEqual([...frames.keys()].sort(), [...solved.keys()].sort());
-      for (const [link, frame] of solved) closeTo(frames.get(link), frame, 1e-9, `${link} @ ${JSON.stringify(values)}`);
-      const rest = solvedBounds(model, {});
-      closeTo([...scene.restBounds.min, ...scene.restBounds.max], [...rest.min, ...rest.max], 1e-9, "rest bounds never move");
-    }
-    scene.dispose();
-  });
-}
+test("every link is where the articulation's delta over its rest placement puts it, for any control vector", () => {
+  const robot = ARM;
+  const model = robotOf(robot);
+  const scene = createRobotScene(THREE, model);
+  const next = random(4 * 7919);
+  for (let round = 0; round < 40; round += 1) {
+    const values = round === 0 ? {} : randomPose(robot, next);
+    scene.setControlValues(values);
+    const solved = solvedFrames(robot, Object.fromEntries(robot.articulation.controls.map(control => {
+      // The scene normalizes as the player does: a limited control is clamped.
+      const value = values[control.id] ?? 0;
+      return [control.id, control.min === null ? value : Math.min(Math.max(value, control.min), control.max)];
+    })));
+    const frames = scene.linkFrames();
+    assert.deepEqual([...frames.keys()].sort(), [...solved.keys()].sort());
+    for (const [link, frame] of solved) closeTo(frames.get(link), frame, 1e-9, `${link} @ ${JSON.stringify(values)}`);
+    const rest = solvedBounds(model, {});
+    closeTo([...scene.restBounds.min, ...scene.restBounds.max], [...rest.min, ...rest.max], 1e-9, "rest bounds never move");
+  }
+  scene.dispose();
+});
 
 test("the scene is a graph: a node per joint under its parent's, a link's meshes under the joint that carries it, attached once", () => {
   const model = robotOf(ARM);

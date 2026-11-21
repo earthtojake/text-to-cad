@@ -58,7 +58,7 @@ These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
   id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`, `step`,
-  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
+  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
   and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
   engine's memory, addressed by its document id or the handle its call returns (`@model` declares one);
@@ -101,7 +101,7 @@ its operations and what writes it.
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad mcp`: a stateless stdio peer of the engine’s
-HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
+HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF and SRDF checks; a MuJoCo model's
 check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); OrcaSlicer's
 presets written complete for its command line (`cad.orcaslicer`); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
@@ -332,10 +332,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     **Tier 1: what an agent reads each session** -- the skills, the `cad` command's verbs and flags,
     the CAD tools' arguments, the wording of docs. cad moves to the newest release of its major on every
     computer while a store's copy of the skills may be weeks older, so a command, flag or tool the skills used
-    keeps working for 30 days after the release whose skills stopped using it, hidden if need be; CI
-    checks each release against the skill text released in the last 30 days. Past that window, hard
-    cutovers only, in any release: removing or renaming one is not a breaking change and needs no
-    migration guide. A retired surface does not exist: no alias, no shim, and no error that
+    keeps working for 30 days after the release whose skills stopped using it, hidden if need be. Past
+    that window, hard cutovers only, in any release: removing or renaming one is not a breaking change
+    and needs no migration guide. A retired surface does not exist: no alias, no shim, and no error that
     recognizes its old spelling to explain what replaced it. A removed command, flag, argument, key, module or name gets what the
     current contract's ordinary validation says -- an unknown command, an unrecognized argument, an
     unknown key, an `ImportError`, an `AttributeError`.
@@ -532,7 +531,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 24. **A document type is one object.** *The package.* `cad.<type>` is a `DocumentType`: the type's decorator where it
     has one (`@step("arm.step")`), its reader where it has one (`step.read`), its operations one to one
     with the CLI's, and the vocabulary the type's own standard defines where it takes no third-party
-    objects (`sdf.GZ_CHECK_MODES`). Its attributes load on first use: `import cad` imports no kernel. A
+    objects. Its attributes load on first use: `import cad` imports no kernel. A
     file of another type is refused by name before anything runs (`part.glb is a glb, not a stl`). A
     type's package (`cad/<type>/`) holds its reader, its operations' dispatch and its checks, and is
     neutral about producers: it imports no third-party library.
@@ -670,8 +669,8 @@ src/cad/
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
                          #   B-rep type's solve and ranges: model's, xbf's and step's)
-  urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
-                         #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
+  urdf/, srdf/           # the robot descriptions' types: `validate` and the checks behind it
+                         #   (_source.py, _validation.py)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
                          #   engine/formats/kicad, the standard library alone, and its flat
                          #   still engine/render/board.py); drc, export and edit (a with

@@ -15,7 +15,7 @@ resulting tickets and never supplies a same-origin transport fallback.
 
 `service.resources` owns JSON, byte and size reads, dependency resolution
 and worker tickets. Pass it as `{ resources }` to render loaders, peeks and robot
-loads. Relative references and URDF/SDF mesh references are resolved by the
+loads. Relative references and URDF mesh references are resolved by the
 provider. Direct glTF buffers and textures are read through it
 as well; the Three.js loader receives temporary object URLs that are revoked
 once parsing completes. Up to six nested glTF reads run together, each limited

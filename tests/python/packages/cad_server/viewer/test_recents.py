@@ -205,6 +205,39 @@ class RecentStoreTest(unittest.TestCase):
         self.assertIn("a shape handed over", entry["shown"])
         self.assertIn("no script to rerun", entry["shown"])
 
+    def test_a_record_of_a_file_no_type_reads_is_kept_unlisted_and_removable(self) -> None:
+        # A state folder as a release that read SDFormat left it: records of .sdf files a page opened (one pinned,
+        # with its picture; one since deleted), beside a URDF's and one of a suffix no release read. An .sdf is
+        # no type now: its record reads as the unknown suffix's does, and nothing fails on either.
+        from cad.engine.ids import file_id
+
+        files, state = self.tmp / "files", self.tmp / "state"
+        files.mkdir()
+        for name in ("robot.sdf", "arm.urdf", "notes.xyz"):
+            (files / name).write_text("<robot/>", encoding="utf-8")
+        (state / "recents" / "thumbnails").mkdir(parents=True)
+        picture = "f5a964f8fe0a7db4ddfeaf22876587a8.png"
+        (state / "recents" / "thumbnails" / picture).write_bytes(b"\x89PNG sdf")
+        for name, extra in (("robot.sdf", {"pinned": True, "preview": {"thumbnail": picture, "pictured": 1_700_000_002.0}}),
+                            ("gone.sdf", {}), ("arm.urdf", {}), ("notes.xyz", {})):
+            ident = file_id(str(files / name))
+            (state / "documents" / ident).mkdir(parents=True)
+            record = {"schema": 1, "id": ident, "kind": "file", "root": str(files), "home": name,
+                      "namespace": str(files), "name": name, "opened": 1_700_000_001.0, "created": 1_700_000_000.0,
+                      **extra}
+            (state / "documents" / ident / "document.json").write_text(json.dumps(record), encoding="utf-8")
+        store = RecentStore(state)
+        entries = {os.path.basename(entry.path): entry for entry in store.list()}
+        self.assertEqual(set(entries), {"robot.sdf", "gone.sdf", "arm.urdf", "notes.xyz"})
+        self.assertEqual({name: entry.row() is None for name, entry in entries.items()},
+                         {"robot.sdf": True, "gone.sdf": True, "arm.urdf": False, "notes.xyz": True},
+                         "no page reads it: listed nowhere, as a suffix no release read")
+        self.assertEqual(entries["arm.urdf"].row()["kind"], "urdf")
+        store.thumbnail(str(files / "arm.urdf"), b"\x89PNG urdf")
+        store.remove(str(files / "robot.sdf"))
+        self.assertEqual({os.path.basename(entry.path) for entry in store.list()}, {"gone.sdf", "arm.urdf", "notes.xyz"})
+        self.assertIsNone(store.read_thumbnail(picture), "its picture went with it")
+
     def test_two_processes_write_at_once_and_a_record_it_cannot_read_is_skipped(self) -> None:
         code = "import sys\nfrom cad_server.viewer.recents import RecentStore\nstore = RecentStore(__import__('pathlib').Path(sys.argv[1]))\n" \
                "for index in range(120):\n    store.opened(f'/{sys.argv[2]}/{index}.stl')\n"

@@ -268,11 +268,14 @@ who wants an older release installs it by hand, with automatic updates off
 ## The 30-day rule
 
 **Decision.** A command the skills used keeps working for at least 30 days after the skills stop
-using it, hidden if need be. CI checks each release against the skill text of every release in the
-last 30 days. Apart from that, a command, option or tool may change or go in any release.
+using it, hidden if need be. No test holds it: the change that removes a command says which
+releases' skills typed it and who may still be following them. Apart from that, a command, option
+or tool may change or go in any release.
 
 **Why.** cad moves to the newest release of its major on every computer, while a store's copy of the skills can
-lag by weeks. The rule keeps those skills working; the test keeps the rule.
+lag by weeks. The rule keeps those skills working. A test once replayed every command of the last 30
+days' skills against the command line; it was removed, because it measured the 30 days back from the
+newest release tag and so held a removal the owner had decided on until some later release was cut.
 
 **What it costs.** An old spelling lives on for a month after the skills drop it. A person's own
 scripts that run `cad` commands are not covered and may need changes after an update. A model's

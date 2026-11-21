@@ -8,7 +8,7 @@ drawn by OCCT as the viewer draws it. One dispatcher by SRC's suffix:
 - ``.stl``, ``.3mf``, ``.glb``: a mesh file, read by its reader (``formats/``: numpy, zip and XML,
   OCCT's glTF reader) into a structure and part buffers as a document's are, with the viewer's
   feature edges, and drawn by the documents' own path; a GLB's base colour textures through OCCT.
-- ``.urdf``, ``.sdf``, ``.srdf``: a robot, its link meshes placed by the viewer's forward
+- ``.urdf``, ``.srdf``: a robot, its link meshes placed by the viewer's forward
   kinematics (``formats/robot.py``), drawn as a document is; ``--pose`` poses it.
 - ``.dxf``: a drawing, from above, in its pens, in the viewer's 2D look (``render/drawing.py``).
 - ``.kicad_pcb``: a KiCad board, read from the file on each draw and painted flat in its layer
@@ -701,7 +701,7 @@ def parse_size(width: int | None, height: int | None, profile: str | None) -> tu
 
 DOCUMENTS = (".xbf", ".step", ".stp")
 # The files no document, each read by its reader (``formats.KINDS``): meshes, robots, a drawing.
-FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".dxf", ".kicad_pcb", ".kicad_sch")
+FILES = (".stl", ".3mf", ".glb", ".urdf", ".srdf", ".dxf", ".kicad_pcb", ".kicad_sch")
 MESHES = (".stl", ".3mf", ".glb")
 
 

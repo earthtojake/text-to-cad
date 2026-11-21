@@ -12,9 +12,8 @@ So no string a package can print or return -- every string literal in its source
 anywhere outside that package, nor "plugin" but there and where the command needs the word: its own module, its name
 and one-line help in the command table, the settings section that keeps its switch, the command words where the
 server runs ``cad plugin update``, that switch and its record as ``cad doctor`` reports them, and the telemetry field
-that counts how that command's run went. Each of those is listed below, as exact strings wherever it can be. The words
-a format uses for its own elements (SDF's ``<plugin>``) are not messages. And nothing but the command imports the
-package.
+that counts how that command's run went. Each of those is listed below, as exact strings wherever it can be. And
+nothing but the command imports the package.
 """
 
 from __future__ import annotations
@@ -27,11 +26,8 @@ from tests.python.support.paths import PROJECTS
 
 WORDS = re.compile(r"\b(skills?|plugins?)\b", re.IGNORECASE)
 SKILL = re.compile(r"\bskills?\b", re.IGNORECASE)
-# Strings that are no message, or that name the one command: per file, the exact strings allowed (None: every string
-# of the file, a format's own word).
+# Strings that are no message, or that name the one command: per file, the exact strings allowed.
 NOT_MESSAGES = {
-    "cad/sdf/_validation.py": None,  # SDF's <plugin> element: the format's word
-    "cad/engine/sdf_source.py": None,  # the same element, read
     # BRIDGE-ONLY: the folder 0.10.0 to 0.11.11's setup left in the state folder, which tells a computer its agent apps
     # got text-to-cad from that setup rather than a store alone (``cli.setup.ours``).
     "cad_server/cli/setup.py": {"plugin"},
@@ -84,8 +80,6 @@ def offenders() -> list[str]:
             if ".egg-info" in relative or relative.startswith(PACKAGE):
                 continue
             allowed = NOT_MESSAGES.get(relative, set())
-            if allowed is None:
-                continue
             words = SKILL if relative == COMMAND else WORDS
             tree = ast.parse(path.read_text(encoding="utf-8"))
             docstrings = _docstrings(tree)

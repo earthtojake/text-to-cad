@@ -1379,7 +1379,7 @@ class CadApp:
         response.send_json(status, body)
 
     def _handle_robot(self, request, response, path, mesh, api):
-        """``GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure``: the robot description resolved
+        """``GET /api/v1/documents/<urdf|srdf>/<id>/structure``: the robot description resolved
         for the page, or ``.../parts/<digest>`` one of the primitive meshes cadgen made for it
         (``robots.py`` owns both rules; ``api`` is where the document's reads are). Real work on a
         miss -- the validators, the frame graph, meshing a shape -- so it is counted, as the drawing

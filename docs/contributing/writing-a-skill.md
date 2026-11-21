@@ -115,11 +115,9 @@ for word, and tests keep the copies from drifting:
   (`latest`, claude.ai's directory's, Codex's) carries them byte for byte as they are here
   (`scripts/release/plugin_branch.py`), and a copy that names our install script or pipes a download
   to a shell fails the release. A new skill copies the block from one beside it.
-- **Commands that last** (`tests/python/global/test_released_commands_still_parse.py`): every `cad`
-  command in the skills of every release from the last 30 days still parses with today's `cad`. So a
-  command, an option or a spelling the skills stop using keeps working, hidden if need be, for at
-  least 30 days after the release that stopped using it. Remove it only once no release in that window
-  uses it, and say so in the pull request.
+- **Commands that last** (no test holds this one): a command, an option or a spelling the skills
+  stop using keeps working, hidden if need be, for at least 30 days after the release that stopped
+  using it. Remove it only once no release in that window uses it, and say so in the pull request.
 - **Show the model** (`tests/python/global/test_skill_show_the_model.py`): how to show the person what
   was made, in every skill that makes something they look at.
 

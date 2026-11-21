@@ -219,7 +219,7 @@ test("only an engine document has edges; Clip cuts every 3D file and Explode an 
     return [context.sceneSettings.view.mode, context.sceneSettings.view.edges.enabled, context.displaySettings.clip.enabled,
       context.displaySettings.exploded.enabled];
   };
-  for (const kind of ["stl", "3mf", "glb", "urdf", "srdf", "sdf"]) assert.deepEqual(view(kind), ["solid", false, true, false], kind);
+  for (const kind of ["stl", "3mf", "glb", "urdf", "srdf"]) assert.deepEqual(view(kind), ["solid", false, true, false], kind);
   assert.deepEqual(view("glb", 2), ["solid", false, true, true], "a GLB of several parts explodes");
   assert.deepEqual(view("dxf"), ["solid", false, false, false], "a drawing is no scene to cut");
 });

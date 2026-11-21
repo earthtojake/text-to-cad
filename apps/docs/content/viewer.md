@@ -24,7 +24,7 @@ Each kind of file gets its own tools. Every 3D view ends its tool strip with Pro
 - **Models, STEP and xbf**: select faces, edges and parts, measure, explode an assembly, clip it, and read its structure in the view's panel. Selection and measurement are exact because the server holds the B-rep (the solid's exact surfaces).
 - **Meshes (GLB, STL, 3MF)**: orbit and clip. A GLB or 3MF can also be measured, but only approximately, on triangles.
 - **Drawings (DXF)**: a flat 2D canvas with pan and zoom, and a Layers tab where the file has layers.
-- **Robots (URDF, SRDF, SDF)**: the links, and a Position tab to pose the joints.
+- **Robots (URDF, SRDF)**: the links, and a Position tab to pose the joints.
 - **Boards (KiCad)**: a board in 2D or 3D, and a schematic you can enter sheet by sheet. You do not need KiCad installed to view one.
 
 Preview is a full-page mode that draws the model rendered and plays its animations from a bar under it.

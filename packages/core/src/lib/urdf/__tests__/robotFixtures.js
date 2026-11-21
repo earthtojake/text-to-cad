@@ -112,46 +112,6 @@ export const ARM_SRDF = Object.freeze({
   }
 });
 
-// An SDF-shaped robot: the hinge joint hangs from nothing (the base is the root), its child link
-// sits 0.05 along the joint's X at an offset from the joint frame, so the joint frame and the
-// child frame differ: the case a rest-space delta over a rest placement exists for.
-export const SWING = Object.freeze({
-  schemaVersion: 2, kind: "sdf", name: "swing", root: "base",
-  articulation: {
-    schemaVersion: 2,
-    controls: [{ id: "hinge", label: "hinge", unit: "deg", min: -1.2 * DEG, max: 1.2 * DEG, default: 0 },
-      { id: "slide", label: "slide", unit: "m", min: 0, max: 0.3, default: 0 }],
-    joints: [
-      { id: "hinge", parent: null, kind: "revolute", origin: [0, 0, 0.2], axis: [0, 1, 0], turn: row("hinge") },
-      { id: "slide", parent: "hinge", kind: "slider", origin: [0.55, 0, 0.2], axis: [1, 0, 0], travel: row("slide") }
-    ],
-    carries: { hinge: ["arm"], slide: ["tip"] },
-    handles: [
-      { id: "hinge", joint: "hinge", dof: "turn", control: "hinge", weight: 1, label: "hinge", unit: "deg", min: -1.2 * DEG, max: 1.2 * DEG },
-      { id: "slide", joint: "slide", dof: "travel", control: "slide", weight: 1, label: "slide", unit: "m", min: 0, max: 0.3 }
-    ],
-    poses: {},
-    opening: { hinge: 0, slide: 0 }
-  },
-  links: [
-    { name: "base", placement: identity(), visuals: [{ name: "v", type: "box", filename: "", size: [0.4, 0.4, 0.1], origin: { xyz: [0, 0, 0.05], rpy: [0, 0, 0] }, color: "", materialName: "" }], collisions: [], inertial: null },
-    { name: "arm", placement: translation(0.05, 0, 0.2), visuals: [{ name: "v", type: "box", filename: "", size: [0.5, 0.08, 0.06], origin: { xyz: [0.25, 0, 0], rpy: [0, 0, 0] }, color: "", materialName: "" }], collisions: [], inertial: null },
-    { name: "tip", placement: translation(0.55, 0, 0.22), visuals: [{ name: "v", type: "sphere", filename: "", radius: 0.04, origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] }, color: "", materialName: "" }], collisions: [], inertial: null }
-  ],
-  joints: [
-    { name: "hinge", type: "revolute", parent: "base", child: "arm", axis: [0, 1, 0], origin: { xyz: [0, 0, 0.2], rpy: [0, 0, 0] }, limit: { lower: -1.2, upper: 1.2 }, mimic: null },
-    { name: "slide", type: "prismatic", parent: "arm", child: "tip", axis: [1, 0, 0], origin: { xyz: [0.5, 0, 0], rpy: [0, 0, 0] }, limit: { lower: 0, upper: 0.3 }, mimic: null }
-  ],
-  visuals: [
-    { id: "base:v1", link: "base", label: "box", placement: scaled(0, 0, 0.05), color: "", mesh: { format: "glb", url: "/primitives/box-0.4-0.4-0.1.glb" } },
-    { id: "arm:v1", link: "arm", label: "box", placement: scaled(0.3, 0, 0.2), color: "", mesh: { format: "glb", url: "/primitives/box-0.5-0.08-0.06.glb" } },
-    { id: "tip:v1", link: "tip", label: "sphere", placement: scaled(0.55, 0, 0.22), color: "", mesh: { format: "glb", url: "/primitives/sphere-0.04.glb" } }
-  ],
-  srdf: null,
-  sdf: { version: "1.9", documentKind: "model", worldName: "", modelName: "swing", rootLink: "base", rootLinks: ["base"], frameCount: 0, linkCount: 3, jointCount: 2,
-    staticMetadata: { includes: [], plugins: [], sensors: [], lights: [], physics: [], nestedModelCount: 0 } }
-});
-
 /** The meshes a payload's visuals name, as the loaders hand them back: a box (in millimetres) per primitive URL. */
 export function meshesFor(robot) {
   const meshes = new Map();

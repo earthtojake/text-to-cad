@@ -143,7 +143,7 @@ class EngineTelemetryTest(unittest.TestCase):
         # drawings and robot descriptions as documents and meshes are.
         from cad.engine import api
 
-        for suffix, kind in ((".xbf", "xbf"), (".step", "step"), (".3mf", "3mf"), (".dxf", "dxf"), (".urdf", "urdf"), (".sdf", "sdf"),
+        for suffix, kind in ((".xbf", "xbf"), (".step", "step"), (".3mf", "3mf"), (".dxf", "dxf"), (".urdf", "urdf"),
                              (".srdf", "srdf")):
             told = api._facts("snapshot", (self.tmp / f"secret{suffix}", self.tmp / "out.png"), {}, {}, None, None, 0.5)
             self.assertEqual(engine_telemetry.counts(told, "command"),

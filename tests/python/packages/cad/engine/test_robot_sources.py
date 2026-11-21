@@ -1,5 +1,5 @@
-"""A URDF and an SDF are each read once, in the engine (``cad.engine.urdf_source``, ``cad.engine.sdf_source``,
-the one articulation of ``cad.engine.robot_model``), and the viewer's payload (``cad_server.robot_payload``)
+"""A URDF is read once, in the engine (``cad.engine.urdf_source``, the one articulation of
+``cad.engine.robot_model``), and the viewer's payload (``cad_server.robot_payload``)
 and the stills (``cad.engine.formats.robot``) are two views of that read: every link frame at rest, and every
 joint -- its type, its links, its anchor, its axis, its range -- is the engine's in each.
 
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-from cad.engine import sdf_source, urdf_source
+from cad.engine import urdf_source
 from cad.engine.formats.robot import read_robot
 from cad_server.robot_payload import prepare_robot_description
 
@@ -36,27 +36,6 @@ URDF = """<?xml version="1.0"?>
   <joint name="mirror" type="prismatic"><parent link="arm"/><child link="twin"/><origin xyz="0.08 0 0.015"/><axis xyz="1 0 0"/><limit lower="-0.05" upper="0.02" effort="1" velocity="1"/><mimic joint="reach" multiplier="-1"/></joint>
   <joint name="mount" type="fixed"><parent link="slider"/><child link="tool"/><origin xyz="0.02 0.01 0" rpy="0.4 0 0.2"/></joint>
 </robot>
-"""
-
-# A post, an arm placed relative to a frame of the model, and a nested hand whose link is named by
-# scope: a joint whose pose is its child's, an axis expressed in the model's frame.
-SDF = """<?xml version="1.0"?>
-<sdf version="1.9">
-  <model name="rig">
-    <pose>0 0 0.1 0 0 0.2</pose>
-    <frame name="shelf"><pose>1 0 0.5 0 0 0</pose></frame>
-    <link name="post"><visual name="v"><geometry><box><size>0.1 0.1 0.1</size></box></geometry></visual></link>
-    <link name="arm"><pose relative_to="shelf">0 0 0 0 0 1.5707963267948966</pose>
-      <visual name="v"><pose>0.2 0 0 0 0 0</pose><geometry><capsule><radius>0.02</radius><length>0.3</length></capsule></geometry></visual></link>
-    <joint name="swing" type="revolute"><parent>post</parent><child>arm</child>
-      <axis><xyz expressed_in="__model__">0 0 1</xyz><limit><lower>-2</lower><upper>2</upper></limit></axis></joint>
-    <model name="hand"><pose relative_to="arm">0.4 0 0 0.3 0 0</pose>
-      <link name="palm"><visual name="v"><geometry><sphere><radius>0.03</radius></sphere></geometry></visual></link>
-    </model>
-    <joint name="wrist" type="prismatic"><pose>0 0 0.01 0 0 0</pose><parent>arm</parent><child>hand::palm</child>
-      <axis><xyz>0 1 0</xyz><limit><lower>0</lower><upper>0.1</upper></limit></axis></joint>
-  </model>
-</sdf>
 """
 
 
@@ -132,15 +111,6 @@ class OneSourceTwoViews(unittest.TestCase):
         self.assertEqual(articulation.joints[3].mimic, ("reach", -1.0, 0.0))
         (turret,) = articulation.visuals["turret"]
         self.assertEqual(turret.shape, ("file", (self.folder / "meshes" / "tet.stl").resolve(), [0.001, 0.001, 0.001]))
-        self.assert_one_source(path, articulation)
-
-    def test_an_sdf_is_one_read_the_payload_and_the_stills_view(self) -> None:
-        path = self.write("rig.sdf", SDF)
-        articulation = sdf_source.read_sdf(path)
-        self.assertEqual(list(articulation.links), ["post", "arm", "hand::palm"])
-        self.assertEqual([(joint.name, joint.parent, joint.child) for joint in articulation.joints],
-                         [("swing", "post", "arm"), ("wrist", "arm", "hand::palm")])
-        self.assertEqual(articulation.visuals["arm"][0].shape, ("capsule", {"radius": 0.02, "length": 0.3}))
         self.assert_one_source(path, articulation)
 
 

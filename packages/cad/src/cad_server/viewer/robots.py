@@ -1,5 +1,5 @@
 """A robot description resolved for the page, and the meshes cadgen made for it: what
-``GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure`` and ``.../parts/<digest>`` answer.
+``GET /api/v1/documents/<urdf|srdf>/<id>/structure`` and ``.../parts/<digest>`` answer.
 
 This module is the route's decisions — what may be opened, and what the HTTP answer is.
 The payload itself is cadgen's (``cad_server.robot_payload``), imported inside the handler so the
@@ -16,7 +16,7 @@ Two answers, both of the description at its absolute path (its document's file):
   description, never a 404.
 
 Statuses, in the order they are decided: no path, a ref that is not an absolute path or
-one that does not end in ``.urdf``, ``.srdf`` or ``.sdf`` -> 400; no such file -> 404; a
+one that does not end in ``.urdf`` or ``.srdf`` -> 400; no such file -> 404; a
 description cadgen cannot resolve (its validator's findings, a mesh the page cannot draw, an
 SRDF with no paired URDF) -> ``RobotReadError`` (a ``ValueError``) -> 400 with the teaching
 message, through the API's funnel (``{"error", "hint"}``).

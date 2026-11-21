@@ -643,6 +643,46 @@ class ProtocolTest(unittest.TestCase):
                       str(failed[0]), "the request's error says why")
         supervisor.release(process)
 
+    def test_a_child_stopped_before_its_request_is_written_says_why_as_one_stopped_mid_request(self) -> None:
+        """A request counts as running from before it is written, so the kill can land first and the
+        write find the pipe gone. It still fails as stopped mid-request, saying why, so it is not tried
+        again on a fresh process as a pipe that broke before a request is."""
+        from cad.engine.worker import footprint_mb
+
+        supervisor = Supervisor(1, (self.service(),), ceiling=lambda: 1.0, measure=footprint_mb)
+        self.addCleanup(supervisor.stop)
+        process = supervisor.lease("child", "doc", {}, label="/w/doc.xbf")
+        writing, written = threading.Event(), process._write
+        go_on = threading.Event()
+
+        def held(message: dict, payload: bytes = b"") -> None:
+            writing.set()
+            go_on.wait(30)
+            written(message, payload)
+
+        process._write = held
+        failed: list = []
+
+        def slow() -> None:
+            try:
+                process.request({"op": "slow"})
+            except Gone as error:
+                failed.append(error)
+
+        asking = threading.Thread(target=slow, daemon=True)
+        asking.start()
+        self.assertTrue(writing.wait(30), "the request to be on its way")
+        self.assertEqual(supervisor.overrun(), [], "a first reading past it")
+        self.assertEqual(supervisor.overrun(), [process])
+        process.popen.wait(timeout=30)
+        go_on.set()
+        asking.join(30)
+        self.assertEqual(len(failed), 1, "the request failed")
+        self.assertTrue(failed[0].during)
+        self.assertIn("the child doc.xbf exited (", str(failed[0]))
+        self.assertIn("one process may hold (CAD_ENGINE_WORKER_CEILING_MB", str(failed[0]), "the error says why")
+        supervisor.release(process)
+
     def test_an_answer_that_says_retire_retires_its_process_once_let_go(self) -> None:
         supervisor = Supervisor(1, (self.service(),))
         self.addCleanup(supervisor.stop)

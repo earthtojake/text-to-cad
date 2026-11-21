@@ -1,7 +1,7 @@
 # cad.engine
 
 A **document** is what a person reviews. Its kind is either a file format the viewer reads (STEP, XBF, STL, GLB,
-3MF, DXF, URDF, SRDF, SDF) or something derived from code: a model, built by this engine. A document exists so that a
+3MF, DXF, URDF, SRDF) or something derived from code: a model, built by this engine. A document exists so that a
 person can review the subjective output of an agent, a design, and answer it through the viewer's tools:
 annotate, select, quick edit. Everything below is how the engine makes, holds and serves documents.
 
@@ -664,10 +664,10 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
 | `snapshot.py` | `cad <type> snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`), or a KiCad board or one sheet of a KiCad schematic drawn flat (`render/board.py`, `render/schematic.py`), into a PNG; a script's model drawn from its worker's memory |
-| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (the stills' view of the engine's one read of each, `urdf_source` and `sdf_source`: numpy frames, the shapes the stills draw, forward kinematics held to a golden), DXF (group codes, flattened as the viewer's pane draws it); a KiCad board (`kicad/`: its S-expressions read by the standard library alone into an index of parts, pads, tracks, vias, pours, holes, outline and nets, its references, and the plot payload the page and the flat still draw); a KiCad schematic (`kicad/schematic*.py`: its hierarchy read from its project's root into sheets, symbols and pins, wires, buses, labels, and the nets KiCad's connection graph makes of them, its references, and its plot payload, every sheet a page) |
-| `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way; a `package://` one in the ROS package the description is in (`package_file`) |
-| `robot_model.py` | the one articulation every reader of a robot description makes (`Articulation`: each link's rest frame, its `Visual`s, the `LinkJoint`s with their mimics and four-bars, the named poses, an SRDF's home, the facts as written) and the `Dialect` a consumer reads by where the viewer's payload and the stills have read a detail differently (its refusals' words by code, `degrees`, a nested model's canonical link); matrices as lists, the standard library alone |
-| `urdf_source.py`, `sdf_source.py` | a URDF (and an SRDF's group states over it) and an SDF (its frame graph by the SDFormat rules, nested models by scoped name), each read once into `robot_model`'s articulation: the stills (`formats/robot.py`) and the viewer's payload (the server's `robot_payload.py`) are two views of that read; the standard library alone |
+| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SRDF (the stills' view of the engine's one read of each, `urdf_source`: numpy frames, the shapes the stills draw, forward kinematics held to a golden), DXF (group codes, flattened as the viewer's pane draws it); a KiCad board (`kicad/`: its S-expressions read by the standard library alone into an index of parts, pads, tracks, vias, pours, holes, outline and nets, its references, and the plot payload the page and the flat still draw); a KiCad schematic (`kicad/schematic*.py`: its hierarchy read from its project's root into sheets, symbols and pins, wires, buses, labels, and the nets KiCad's connection graph makes of them, its references, and its plot payload, every sheet a page) |
+| `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF reader and validator, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way; a `package://` one in the ROS package the description is in (`package_file`) |
+| `robot_model.py` | the one articulation every reader of a robot description makes (`Articulation`: each link's rest frame, its `Visual`s, the `LinkJoint`s with their mimics and four-bars, the named poses, an SRDF's home, the facts as written) and the `Dialect` a consumer reads by where the viewer's payload and the stills have read a detail differently (its refusals' words by code, whether it reads the facts as written); matrices as lists, the standard library alone |
+| `urdf_source.py` | a URDF (and an SRDF's group states over it), read once into `robot_model`'s articulation: the stills (`formats/robot.py`) and the viewer's payload (the server's `robot_payload.py`) are two views of that read; the standard library alone |
 | `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); a KiCad board's flat still, painted with Pillow from its plot (`board.py`), and a schematic sheet's (`schematic.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
 | `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script and Python, at most one per core alive (`supervisor.py`), connect-or-start (an installation's engine, never one of the library's own environment), a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
 | `supervisor.py`, `services.py` | the server's one supervisor of every process the daemon starts (`Supervisor`, `Process`), and their declarations (`WORKER`, `RENDER`, `CHECKS`): **Services** |
@@ -732,7 +732,7 @@ cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF
                                              mesh, is refused, saying what shows it); Q summary (the default
                                              without REF), structure (the summary with nothing measured),
                                              closure, geometry (the default with REF) or build
-cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
+cad urdf|srdf validate FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
 cad mujoco check FILE [--strict] [--json]    a MuJoCo model's file (an MJCF: no document type, an
                                              integration's operation), compiled by MuJoCo: what it
@@ -1065,7 +1065,7 @@ runners) for `export`, `snapshot` and `inspect`, each with its source said as th
 without `--tolerance` or `--angle`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
 function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
 repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
-choices (`sdf.validate`'s `gz_check`, `dfm`'s `process`, `rules`, `units` and `technology`), so a value outside them is the
+choices (`dfm`'s `process`, `rules`, `units` and `technology`), so a value outside them is the
 parser's usage error, naming the flag; a value the function itself refuses by name raises the library's
 `ArgumentRefused` (`cad._internal.refused`), which the command says as the command line's
 (`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
@@ -2369,14 +2369,14 @@ per file (read again when a file it read changes) or with `daemon=False` in this
   IOR, transmission, clear coat, anisotropy, emissive strength) and its base colour texture,
   drawn on its texture coordinates in the lit looks. `--pose` is refused: a mesh has no
   mechanism.
-- **A robot** (`.urdf`, `.sdf`, `.srdf`) is its link visuals' meshes (STL, 3MF and GLB files, a
+- **A robot** (`.urdf`, `.srdf`) is its link visuals' meshes (STL, 3MF and GLB files, a
   `package://NAME/...` one in the ROS package the description is in: the nearest folder above it
   named NAME or holding a `package.xml` that names it, as the viewer finds it too; a
-  box, cylinder, sphere or capsule made and meshed by the kernel), each in its colour. Solid and
+  box, cylinder or sphere made and meshed by the kernel), each in its colour. Solid and
   Parts draw its faces alone, as the viewer draws a robot: a link mesh's edges are its triangles'
   folds, which along a thin curved part (a cable's wires, tessellated at the engine's angle) are
-  lines a pixel apart that hide its colour; the line modes draw them. A URDF (and an SRDF's group states over it) and an SDF are each read
-  once, in the engine (`urdf_source.py`, `sdf_source.py`, into the one
+  lines a pixel apart that hide its colour; the line modes draw them. A URDF (and an SRDF's group states over it) is read
+  once, in the engine (`urdf_source.py`, into the one
   articulation of `robot_model.py`: every link's frame at rest, its visuals, its joints with their
   mimics and four-bars, its named poses), and the viewer's payload (the server's
   `robot_payload.py`) and the stills (`formats/robot.py`) are two views of that read, each
@@ -3453,7 +3453,7 @@ A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and it
 board's geometry per layer and its index, read from the file on each request: `viewer/plots.py`),
 `source`; `kicad_sch` -- `plot` (every sheet of the hierarchy a page, and the schematic's index;
 `?sheet=<path>` that sheet's page alone, `index=0` without the index; the hierarchy parsed once per
-revision of its files, `viewer/plots.py`'s `SchematicAnswers`), `source`; `urdf`, `srdf`, `sdf` --
+revision of its files, `viewer/plots.py`'s `SchematicAnswers`), `source`; `urdf`, `srdf` --
 `structure`, `parts/<digest>`, `source`; `stl`, `glb`, `3mf` -- `source`. Each engine read is
 `serve.py`'s own, asked in process (`viewer/engine_app.py`): `structure` is its `/api/doc/<id>`,
 `parts/<key>` its `/part/<key>`, `measure` its `/volumes` -- the vocabulary the door's `read` speaks
