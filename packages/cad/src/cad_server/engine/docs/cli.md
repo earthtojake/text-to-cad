@@ -51,6 +51,8 @@ cad mujoco check FILE [--strict] [--json]    a MuJoCo model's file (an MJCF: no 
                                              as what and the contact excludes; in cad[mujoco]'s
                                              environment (made first) where this one holds no mujoco
 cad orcaslicer presets KIND [--match TEXT] [--profiles DIR] [--json]
+                                             DEPRECATED, with `complete` below: unlisted, and said so
+                                             on stderr when run.
                                              the OrcaSlicer presets of one kind (machine, process,
                                              filament) a person can select, by name: an integration's
                                              operation on its tool's own files, found by name

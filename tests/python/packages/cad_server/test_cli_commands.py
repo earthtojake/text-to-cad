@@ -304,7 +304,10 @@ class MujocoCheck(unittest.TestCase):
         code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
         self.assertIn("integrations, for a tool's own files cad checks or writes and does not show (cad <integration> "
-                      "<operation> [FILE]):\n  mujoco      check              compile a MuJoCo model", said)
+                      "<operation> [FILE]):\n  mujoco  check  compile a MuJoCo model", said)
+        # A deprecated integration's commands still run (the 30 days a command the skills used is kept) and are
+        # no longer listed: `cad orcaslicer`, deprecated (a project saved from OrcaSlicer's app slices as it is).
+        self.assertNotIn("orcaslicer", said.split("integrations, for a tool's own files", 1)[1])
         code, said, _ = _run(["mujoco", "--help"])
         self.assertEqual(0, code)
         self.assertIn("usage: cad mujoco <operation> FILE [options]", said)
@@ -313,6 +316,15 @@ class MujocoCheck(unittest.TestCase):
         code, _, err = _run(["mjcf", "validate", str(self.model)])
         self.assertEqual((code, err), (2, "cad: unknown command 'mjcf' (did you mean 'mujoco'?); 'cad --help' lists the "
                                           "commands\n"))
+
+    def test_a_deprecated_integration_still_runs_and_says_so_once_on_stderr(self) -> None:
+        line = "cad orcaslicer: deprecated and will be removed: "
+        with tempfile.TemporaryDirectory() as folder:
+            _, _, err = _run(["orcaslicer", "presets", "machine", "--profiles", folder])
+            self.assertEqual(err.count(line), 1, err)
+            # A program's reply stays one document: under --json nothing is said beside it.
+            _, _, err = _run(["orcaslicer", "presets", "machine", "--profiles", folder, "--json"])
+            self.assertNotIn(line, err)
 
     def test_the_parser_is_the_generated_one(self) -> None:
         from cad_server.cli.integrations import build_parser

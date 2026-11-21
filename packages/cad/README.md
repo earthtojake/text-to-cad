@@ -65,18 +65,18 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone. A document type is a file cad
   shows: each has a view. A file cad writes or checks and never shows is none, whatever cad does with it: an
   MJCF, MuJoCo's own model file, is an export's destination and the mujoco integration's to check, and
-  MuJoCo Studio shows it; an OrcaSlicer preset is the orcaslicer integration's to write complete, and
-  OrcaSlicer reads it.
+  MuJoCo Studio shows it.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `orcaslicer`), never for a
-  capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs,
-  where it needs any (`orcaslicer`'s code is the standard library alone, so it has none); our code for it --
+  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`), never for a capability. It is
+  three things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
   helpers that take its objects, producers and operations; and a process kind: in-process, separate process,
-  or both. An integration has operations of its own only on its tool's own files that are no document type:
-  one file it checks (`cad mujoco check robot.xml`, `cad.mujoco.check`, answering findings as a type's check
-  does), or the files the tool keeps in its own folders, named as the tool names them (`cad orcaslicer presets
-  machine`, `cad orcaslicer complete`, `cad.orcaslicer.complete`).
+  or both. An integration has an operation of its own only on a file of its tool's that is no document type:
+  `check`, answering findings as a type's check does (`cad mujoco check robot.xml`, `cad.mujoco.check`).
+  The `orcaslicer` integration (`cad orcaslicer presets|complete`, `cad.orcaslicer`) is deprecated: it
+  completed the presets OrcaSlicer stores, from its own folders, for its command line, and cannot from
+  OrcaSlicer 2.5 on, which keeps the built-in ones in binary caches; a project saved from the app slices as
+  it is (law 28). It is kept, unlisted, for the 30 days law 14's first tier gives a command the skills used.
 - **Dependency**: one installable package or binary, named only in the distribution's metadata and lock
   files, never in the API, the CLI or the docs. It becomes an integration only when we write code for that
   tool: OCP is a dependency of `build123d`, not an integration.
@@ -101,8 +101,7 @@ makes an edit cost what it changed, documents and their exports, kinematics and 
 materials, references to geometry, snapshots drawn by OCCT; the viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF and SRDF checks; a MuJoCo model's
-check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); OrcaSlicer's
-presets written complete for its command line (`cad.orcaslicer`); a 3D
+check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
 B-rep document's interference check (`cad.<type>.interference(source, poses=..., fits=...)`: every
@@ -319,10 +318,8 @@ renumbers the list and every citation in the same change.
 24. **An integration is named for its tool and holds only our code for it.** *The package.*
     `cad.<integration>` holds the helpers we define that take that tool's objects and the producers it
     registers; it re-exports nothing of the tool and imports only its own extra's dependencies. cad
-    supports a tool only where cad's own code calls it, or makes a file the tool needs and cannot make
-    itself (`orcaslicer`: a complete preset, which OrcaSlicer's command line reads and the agent runs): a
-    tool only the agent runs, a remote service or a desktop app the person uses is no integration, and a
-    skill teaches it directly.
+    supports a tool only where cad's own code calls it: a tool only the agent runs, a remote service or
+    a desktop app the person uses is no integration, and a skill teaches it directly.
     *The signature rule*: a helper taking only paths, plain values or our own types goes under the
     document type; one taking a third-party library's objects goes under that integration.
 25. **A decorator works out its producer from what the function returns.** *The package.* The
@@ -337,9 +334,8 @@ renumbers the list and every citation in the same change.
     severity, a code and a location (`cad.results.CheckResult`), and `export` says the files it wrote.
     A new shared operation must be code-free, frequently needed and meaningful across types. A file cad
     checks and never shows has no document type, and its check is its tool's integration's (`cad mujoco
-    check robot.xml`); what a tool keeps in its own folders by name is its integration's too, and takes
-    those names and no file (`cad orcaslicer presets machine`, `cad orcaslicer complete`). A name is a
-    type's or an integration's, never both, and an operation lives in one place.
+    check robot.xml`, the one such operation). A name is a type's or an integration's, never both, and
+    an operation lives in one place.
 27. **An integration runs where its extra is installed.** *The package.* In the command's own process
     when that environment holds the extra, else in the integration's own environment
     (`cad[<integration>]` at the installation's release, made once on first need), as a subprocess. No
@@ -350,14 +346,16 @@ renumbers the list and every citation in the same change.
 28. **cad wraps a tool only where it adds something.** *The package.* A helper or a typed command for
     a third-party tool exists only where cad adds what the tool lacks, and says what: one result shape
     for a check (`cad kicad_pcb drc`), a safety guarantee (an edit that saves only when its block
-    changed the file), parity with the viewer, a fact the tool does not report (`cad mujoco
-    check`), or a file the tool's own command line needs and cannot make (a complete OrcaSlicer preset,
-    which `cad orcaslicer complete` writes). Everything else is the tool's own, used directly: its
-    Python API in the script that imports it, its command line (through `cad run` where an extra
-    installs it), its app in the person's hands. So cad adds no command that only passes arguments on
-    and no helper that renames a tool's function: a skill teaches the tool's way instead.
+    changed the file), parity with the viewer, or a fact the tool does not report (`cad mujoco
+    check`). Everything else is the tool's own, used directly: its Python API in the script that
+    imports it, its command line (through `cad run` where an extra installs it), its app in the
+    person's hands. So cad has no command that only passes arguments on, no helper that renames a
+    tool's function, and no code that rebuilds from a tool's own folders and caches what the tool
+    exports: a skill teaches the tool's way instead.
     *Pressure-test*: delete the helper and write what a skill would say in its place. If that is the
-    tool's own command or call and nothing is lost, the helper was a wrapper.
+    tool's own command or call and nothing is lost, the helper was a wrapper. `flat_pattern` and the
+    five helpers beside it were: each gave what build123d's own `Plane.to_local_coords`, `offset` and
+    `fuse` give, to the last digit.
 29. **A producer regenerates a file from code; an edit changes a native file in place.** *The
     package.* A producer is the engine's (law 25): a file decorator declares a persistent script's
     output, and the file is written again from the model whenever it runs. An edit is a native file's
@@ -426,7 +424,7 @@ src/cad/
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
-                         #   measurements of native geometry (_geometry), flat patterns (_flatten),
+                         #   measurements of native geometry (_geometry),
                          #   the manufacturing checks of exact geometry (_dfm_brep, the core; _dfm_cnc,
                          #   _dfm_sheet with unfold, _dfm_molding, _dfm_printing; _dfm_dxf, a cut file;
                          #   _dfm_check, the entry), the interference check's measuring
