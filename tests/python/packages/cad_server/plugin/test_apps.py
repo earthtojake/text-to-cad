@@ -522,6 +522,30 @@ class AppTableTests(PluginRuns):
         self.assertEqual((report.outcomes, self.calls()), ({}, []))
         self.assertTrue((self.home / ".agents/skills/fea/SKILL.md").is_file())
 
+    def test_copilot_adds_our_catalog_only_where_it_has_none(self) -> None:
+        # Copilot CLI's `marketplace add` fails for a catalog it has: a run whose add went in and whose install did
+        # not, or a person who uninstalled the plugin and kept the catalog, must still get the plugin.
+        self.programs("copilot")
+        fresh = self.run_install()
+        self.assertEqual(self.calls("copilot"), [["plugin", "update", "text-to-cad"],
+                                                 ["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
+                                                 ["plugin", "install", "text-to-cad@earthtojake"]])
+        self.assertIn("GitHub Copilot CLI: installed\n", fresh.stdout)
+        self.assertEqual(self.run_install().stdout.count("GitHub Copilot CLI: updated\n"), 1)
+        (self.home / ".copilot" / "config.json").unlink()  # uninstalled, the catalog kept
+        kept = self.run_install()
+        self.assertEqual(self.calls("copilot"), [["plugin", "update", "text-to-cad"],
+                                                 ["plugin", "install", "text-to-cad@earthtojake"]])
+        self.assertIn("GitHub Copilot CLI: installed\n", kept.stdout)
+        # A catalog of that name from somewhere else is left alone.
+        self.write(".copilot/settings.json", {"extraKnownMarketplaces": {"earthtojake": {
+            "source": {"source": "github", "repo": "someone/else"}}}})
+        (self.home / ".copilot" / "config.json").unlink()
+        theirs = self.run_install()
+        self.assertEqual(self.calls("copilot"), [["plugin", "update", "text-to-cad"]])
+        self.assertIn("GitHub Copilot CLI: failed: the earthtojake catalog is another source's (someone/else)",
+                      theirs.stdout)
+
     def test_one_app_failing_stops_no_other(self) -> None:
         self.programs("codex", "gemini")
         done = self.run_install(FAKE_FAIL="codex")

@@ -93,7 +93,7 @@ class App:
     ``{url}``, ``{branch}``, ``{plugin}``, ``{catalog}`` and ``{folder}`` filled in. ``installed``: whether ours is there
     already; without it, ``update`` runs first and ``install`` where that fails. ``handler``: an app whose old
     copies need more than its commands (Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Claude Desktop,
-    Hermes Agent, Antigravity).
+    Hermes Agent, Antigravity), or whose commands depend on what it holds already (GitHub Copilot CLI).
     ``folder``: an agent with no plugin command, given the skills in its own folder; ``marks`` find it."""
 
     key: str
@@ -713,6 +713,38 @@ def antigravity(app: App, here: Here, context: Context) -> Outcome:
     return Outcome("updated")
 
 
+def copilot(app: App, here: Here, context: Context) -> Outcome:
+    """GitHub Copilot CLI: ``plugin update text-to-cad``, else the catalog added (``plugin marketplace add
+    earthtojake/text-to-cad#latest``) and our plugin installed from it (``plugin install text-to-cad@earthtojake``).
+    Its ``marketplace add`` of a catalog it has already ends with exit status 1 (``Marketplace "earthtojake" already
+    registered``), so where a run added the catalog and its install did not go in, or a person uninstalled the plugin
+    and kept the catalog, every later run would fail at the add: the add is made only where its settings
+    (``$COPILOT_HOME/settings.json``, default ``~/.copilot``: ``extraKnownMarketplaces``) do not name the catalog
+    already. A catalog of that name from another source is left alone. Verified: `copilot plugin --help` and its
+    subcommands, and the commands run (1.0.55, 1.0.67, 1.0.79, 1.0.114, on Linux; 1.0.114 on Windows); docs
+    https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference. 1.0.43 takes no
+    ``#ref`` (it clones ``text-to-cad#latest``), and 0.0.x has no ``plugin`` command."""
+    cli = here.which("copilot")
+    if not cli:
+        return NOT_FOUND
+    source = context.source
+    if source.local:
+        return Outcome("skipped", "no install from a local folder")
+    words = source.words()
+    if here.run([cli, "plugin", "update", PLUGIN]).ok:
+        return Outcome("updated")
+    settings = Path(here.environ.get("COPILOT_HOME") or here.home / ".copilot") / "settings.json"
+    known = table(table(table(read_json(settings)).get("extraKnownMarketplaces")).get(source.catalog))
+    where = table(known.get("source"))
+    if not known:
+        here.must([cli, "plugin", "marketplace", "add", "{repo}#{branch}".format(**words)])
+    elif not our_repository(where.get("repo") or where.get("url")):
+        raise Failed(f"the {source.catalog} catalog is another source's "
+                     f"({where.get('repo') or where.get('url') or 'elsewhere'}): left alone")
+    here.must([cli, "plugin", "install", "{plugin}@{catalog}".format(**words)])
+    return Outcome("installed")
+
+
 def desktop_config(here: Here) -> Path:
     if here.platform == "darwin":
         return here.home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
@@ -1064,12 +1096,8 @@ APPS: Tuple[App, ...] = (
         local=[["plugins", "install", "--local", "{folder}", "-y"]]),
     # Antigravity (``antigravity``, above): installed again to update; uninstalled only where that fails. Not run.
     App("antigravity", "Antigravity", command="agy", handler=antigravity),
-    # GitHub Copilot CLI. Docs https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference
-    # (marketplace add owner/repo#ref; the catalog is named by its marketplace.json; install name@marketplace;
-    # update <name>). Superpowers installs it the same way. Not run.
-    App("copilot", "GitHub Copilot CLI", command="copilot",
-        install=[["plugin", "marketplace", "add", "{repo}#{branch}"], ["plugin", "install", "{plugin}@{catalog}"]],
-        update=[["plugin", "update", "{plugin}"]]),
+    # GitHub Copilot CLI (``copilot``, above): updated, else the catalog added where it has none, and installed.
+    App("copilot", "GitHub Copilot CLI", command="copilot", handler=copilot),
     # Pi. Docs https://docs.pi.dev/latest/packages (`pi install git:github.com/o/r@ref`; personal installs are recorded
     # in ~/.pi/agent/settings.json; `pi update` never moves a configured ref, so an update is the install again).
     # Lane C ran the install from a local copy; not run against GitHub here.

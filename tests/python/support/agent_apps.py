@@ -47,7 +47,10 @@ THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
 # `pipx list --json` names cad's command in FAKE_PIPX_VENVS, and `pipx install --force cad` sets the release in pipx's
 # metadata of cad (FAKE_PYPI); `gemini extensions uninstall
 # <name>` removes that extension's folder, and, with FAKE_GEMINI_RECORD, `gemini extensions install <url> --ref <ref>`
-# writes its record. Each call notes its folder and Gemini's trust.
+# writes its record; `copilot plugin` keeps its catalogs in ~/.copilot/settings.json and its plugins in
+# ~/.copilot/config.json as Copilot CLI does, its `marketplace add` failing for a catalog it has already, `install`
+# for one it has not, and `update` for a plugin not installed (as 1.0.114 does). Each call notes its folder and
+# Gemini's trust.
 #
 # For the install command: each call also notes the variables FAKE_LOG_ENV names and whether the file FAKE_LOG_EXISTS
 # names is there. `cad update` says a line on each stream and the lines FAKE_UPDATE_SAID names (split at `|`), waits
@@ -181,6 +184,31 @@ STAND_IN = textwrap.dedent('''\
         record.parent.mkdir(parents=True, exist_ok=True)
         ref = sys.argv[sys.argv.index("--ref") + 1]
         record.write_text(json.dumps({{"source": sys.argv[3], "type": "git", "ref": ref}}))
+    if name == "copilot" and sys.argv[1:2] == ["plugin"]:
+        home = Path(os.environ["HOME"]) / ".copilot"
+        settings, config = home / "settings.json", home / "config.json"
+        known = json.loads(settings.read_text()) if settings.exists() else {{}}
+        installed = json.loads(config.read_text()) if config.exists() else {{"installedPlugins": []}}
+        catalogs = known.setdefault("extraKnownMarketplaces", {{}})
+        home.mkdir(parents=True, exist_ok=True)
+        if sys.argv[2:4] == ["marketplace", "add"]:
+            repo, _, ref = sys.argv[4].partition("#")
+            if "earthtojake" in catalogs:
+                print('Failed to add marketplace: Marketplace "earthtojake" already registered')
+                sys.exit(1)
+            catalogs["earthtojake"] = {{"source": {{"source": "github", "repo": repo, **({{"ref": ref}} if ref else {{}})}}}}
+            settings.write_text(json.dumps(known))
+        elif sys.argv[2] == "install":
+            plugin, _, catalog = sys.argv[3].partition("@")
+            if catalog not in catalogs:
+                print(f'Failed to install plugin: Marketplace "{{catalog}}" not found')
+                sys.exit(1)
+            installed["installedPlugins"].append({{"name": plugin, "marketplace": catalog}})
+            config.write_text(json.dumps(installed))
+        elif sys.argv[2] == "update":
+            if not any(entry["name"] == sys.argv[3] for entry in installed["installedPlugins"]):
+                print(f'Failed to update plugin: Plugin "{{sys.argv[3]}}" is not installed')
+                sys.exit(1)
     if name == "git" and "clone" in sys.argv:
         target = Path(sys.argv[-1])
         (target / ".git").mkdir(parents=True)
