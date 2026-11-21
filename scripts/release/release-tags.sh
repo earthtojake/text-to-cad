@@ -94,7 +94,7 @@ breaking_part() {
 }
 
 # Whether a computer on the first X.Y.Z installs the second by itself: a later release of the same major -- a patch
-# or a minor, below 1.0 and from 1.0, a minor that breaks included; a new major never installs itself (CONTRIBUTING.md,
+# or a minor, below 1.0 and from 1.0, a minor that breaks included; a new major never installs itself (docs/contributing/releases.md,
 # "How a release reaches a computer"; cad's own update, cad_server/_internal/auto_update.py).
 # tests/python/global/test_pr_version_guard.py holds this to that rule.
 version_installs_itself() {

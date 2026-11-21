@@ -820,7 +820,7 @@ jobs:
       - name: Run the CAD app tests and build it
         run: scripts/test/test-js.sh --select mcp
 
-  # The docs site: lint, the Next build and icon verification, and the animated brand marks.
+  # The docs site: lint, the Next build and icon verification.
   docs:
     name: docs
     needs: changes

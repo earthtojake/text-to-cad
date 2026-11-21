@@ -7,7 +7,7 @@ directory holds for a reviewer -- and a release's pins from the merge on, before
 wheel. So installers follow branches that only Publish Release writes, once the wheel is on
 PyPI: one commit per release whose tree is only the plugin -- the manifests and the icon, the
 MCP config Codex's names (the one app given the CAD server), `skills/`, `LICENSE`, and the README, with each link to a file outside
-that tree pointed at the release commit on GitHub (CONTRIBUTING.md, "The install branches").
+that tree pointed at the release commit on GitHub (docs/contributing/releases.md, "The install branches").
 Three copies, differing in what they carry:
 
 - `latest`: the newest release, which every documented install command names. Every app's
