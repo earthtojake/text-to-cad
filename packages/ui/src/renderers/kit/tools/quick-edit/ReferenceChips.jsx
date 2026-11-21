@@ -4,6 +4,7 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@cad/ui/
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { cn } from "@cad/ui/utils";
+import { badgeVariants } from "@cad/ui/primitives/badge";
 import { useViewerMobile } from "../../../../file-viewer/responsive.js";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { useCopyFlash } from "../../inspector/copyFlash.js";
@@ -105,10 +106,12 @@ export const VISIBLE_REFERENCE_CHIPS = 4;
 // a key) opens the card too. A card is as tall as its rows, up to the room the view has.
 const OPEN_DELAY_MS = 300;
 const CLOSE_DELAY_MS = 150;
-// A chip reads as a chip on the bar: a filled tile with a hairline edge.
-const CHIP_CLASS = "inline-flex h-5 min-w-0 max-w-full items-center rounded-sm border border-border bg-accent text-xs text-foreground";
-const CHIP_LABEL_CLASS = "min-w-0 truncate rounded-sm px-1.5 leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
-const CHIP_REMOVE_CLASS = "cad-hit -ml-0.5 mr-0.5 flex size-glyph shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
+// A chip is the design system's Badge (`primitives/badge.jsx`, its secondary look: the filled tile, its radius, text and
+// 8px sides), given an edge so it stands off the bar's surface. Its two parts are buttons: the label (the badge's
+// padding is the label's, so the whole tile left of the x is the press) and the x, at the badge's 12px glyph.
+const CHIP_CLASS = cn(badgeVariants({ variant: "secondary" }), "h-5 min-w-0 max-w-full justify-start gap-0 border-border p-0 font-medium");
+const CHIP_LABEL_CLASS = "-my-px min-w-0 truncate rounded-md py-0 pr-1 pl-2 leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
+const CHIP_REMOVE_CLASS = "cad-hit mr-1 flex size-glyph-sm shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 const POPOVER_CLASS = cn(FLOATING_SURFACE_CLASS, "p-0 text-xs data-[state=closed]:animate-none!");
 const LIST_STYLE = { maxHeight: "calc(var(--radix-popover-content-available-height, 32rem) - 0.5rem)" };
 
@@ -147,7 +150,7 @@ function ChipText({ chip }) {
   const { compact } = chip;
   const glyph = chip.glyph ?? compact?.kind;
   const icon = chip.icon ?? (hasPickGlyph(glyph)
-    ? <PickGlyph kind={glyph} color={chip.glyphColor} className={cn("size-2.5 shrink-0", !chip.glyphColor && "text-muted-foreground")} /> : null);
+    ? <PickGlyph kind={glyph} color={chip.glyphColor} className={cn("size-3 shrink-0", !chip.glyphColor && "text-muted-foreground")} /> : null);
   const named = compact && hasPickGlyph(compact.kind);
   const hinted = !chip.detail;
   const words = chip.text ?? chip.label;
@@ -204,7 +207,7 @@ function useChip(chip) {
 function RemoveButton({ chip }) {
   const { t } = useI18n();
   return chip.onRemove ? <button type="button" className={CHIP_REMOVE_CLASS} aria-label={t("chip.remove", { name: chip.label })}
-    onClick={() => { chip.onHover?.(false); chip.onRemove(); }}><X className="size-[calc(var(--cad-glyph)-6px)]" aria-hidden="true" /></button> : null;
+    onClick={() => { chip.onHover?.(false); chip.onRemove(); }}><X className="size-3" aria-hidden="true" /></button> : null;
 }
 
 // A chip's card: what the view says of it (`ItemDetail.jsx`), the one place a pick is read in detail.
@@ -299,7 +302,7 @@ function GroupMember({ chip }) {
 function ReferenceName({ chip, name }) {
   const glyph = chip.glyph ?? chip.compact?.kind;
   const icon = chip.icon ?? (hasPickGlyph(glyph)
-    ? <PickGlyph kind={glyph} color={chip.glyphColor} className={cn("size-2.5 shrink-0", !chip.glyphColor && "text-muted-foreground")} /> : null);
+    ? <PickGlyph kind={glyph} color={chip.glyphColor} className={cn("size-3 shrink-0", !chip.glyphColor && "text-muted-foreground")} /> : null);
   return <span className="inline-flex min-w-0 items-center gap-1" data-quick-edit-ref-name="">{icon}<span className="min-w-0 truncate" title={name}>{name}</span></span>;
 }
 
