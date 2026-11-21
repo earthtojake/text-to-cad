@@ -13,3 +13,21 @@ test('the page asks browsers not to translate it', () => {
   assert.match(root, /\bclass="notranslate"/u);
   assert.match(shell, /<meta name="google" content="notranslate"\s*\/?>/u);
 });
+
+// Before the script runs, the page draws the navbar's bar (`index.html`), which the app's own navbar then replaces
+// where it stood: its height, a phone's under the viewer's breakpoint, its colour and its border are the navbar's.
+test("the page's bar before its script is the navbar's", () => {
+  const shell = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const ui = path => readFileSync(new URL(`../../../packages/ui/src/${path}`, import.meta.url), 'utf8');
+  assert.match(shell, /<div id="root"><div aria-hidden="true" data-boot-navbar=""><\/div><\/div>/u);
+  const bar = shell.match(/\[data-boot-navbar\] \{([^}]*)\}/u)?.[1] ?? '';
+  assert.match(bar, /box-sizing: border-box; height: 40px; border-bottom: 1px solid var\(--border\); background: var\(--sidebar\);/u);
+  const phone = shell.match(/@media \(max-width: ([\d.]+)px\) \{ \[data-boot-navbar\] \{ height: (\d+)px; \} \}/u);
+  // The navbar: 40px with its border inside (`h-10 … border-b` in a border-box), on the chrome's colour, and 48px in
+  // a phone's view, which is a viewer under `VIEWER_MOBILE_BREAKPOINT` wide (the page's whole width here).
+  assert.match(ui('lib/navbarRow.js'), /NAVBAR_ROW_CLASS = "flex h-10 shrink-0 items-center gap-2 border-b /u);
+  assert.match(ui('file-viewer/navigation/ViewerNavbar.jsx'), /cn\(NAVBAR_ROW_CLASS, "relative border-border bg-sidebar /u);
+  assert.match(ui('styles/globals.css'), /\[data-viewer-layout="mobile"\] :is\(\[data-viewer-navbar\], \[data-preview-bar\]\) \{ height: 48px; \}/u);
+  const breakpoint = Number(ui('file-viewer/responsive.js').match(/VIEWER_MOBILE_BREAKPOINT = (\d+)/u)?.[1]);
+  assert.deepEqual([Math.ceil(Number(phone?.[1])), phone?.[2]], [breakpoint, '48']);
+});

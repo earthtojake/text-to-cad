@@ -536,7 +536,10 @@ not). Before the view is up (its file being read, its chunk loading, or its fram
 (`panelToggles.js`'s `sidebarLayout`, which `sidebars.js` re-exports): the file's choice kept for this session (its view
 in `state.renderers`, by its own path or the host's `filePath`) at any width, else open where the model keeps 640px
 beside the default-width panel, closed on a phone; pressable from the first frame: a press pins or unpins it, the
-person's choice on the file, which the view opens with and writes as its own toggle would. Collapsed, a mouse resting
+person's choice on the file, which the view opens with and writes as its own toggle would. A host with a phase before
+it can mount the viewer (the web page's, while it asks its server what it is) draws that first frame with `FileViewer`
+itself, inert: a `files` source whose `stat` never answers keeps it in this phase, asking nothing, so the navbar, the
+stand-in and the cover stand where the viewer then draws them. Collapsed, a mouse resting
 on it peeks the stand-in over the page (`panelPeek.js`: the page's one peek, which `FileViewer` holds and hands to the
 view's frame, `PanelPeekContext`, so a card up as the view arrives stays up, taken over where it stands). Open, the panel's frame stands in its place at the width the view will draw (the kept one within the
 grip's bounds, `clampPanelWidth`; `data-panel-loading`), drawn as the view's panel is while its file loads: the head's

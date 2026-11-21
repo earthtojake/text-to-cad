@@ -818,7 +818,8 @@ structure. Every rule here, and why:
 
 - **Its toggle is the navbar's** (`file-viewer/panelToggles.js`: the frame says it, `FileViewer` hands it to the navbar,
   and draws it, in the state the view will open with and not pressable yet, from a document page's first frame until
-  the view is up: [the host contract](viewer-host.md)),
+  the view is up — a host's page before its viewer can mount too, which draws this phase inert: [the host
+  contract](viewer-host.md)),
   **the navbar's first control, before the logo**: the strip's 28px tile, its icon the sidebar's (`SidebarIcon`: a
   rounded rectangle, 14 × 12 in the 16px box, its corners 3px, and a short line inside near its left edge, half its
   height, centred, at lucide's stroke), **the same neutral button whether the panel is open or shut** — no pressed
