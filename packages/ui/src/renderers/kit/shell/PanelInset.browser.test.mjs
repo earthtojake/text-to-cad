@@ -30,6 +30,9 @@ const BOARD = readFileSync(new URL('../../board/__fixtures__/board.plot.json', i
 const DRAWING = readFileSync(new URL('../../dxf/__fixtures__/layered.drawing.json', import.meta.url));
 const MESH = readFileSync(join(GLB, 'pair.slide.glb'));
 const FILES = { 'hinge.step': 'step', 'blinky.kicad_pcb': 'kicad_pcb', 'layered.dxf': 'dxf', 'pair.glb': 'glb' };
+// `late.step`, the hinge again, its structure held until the test lets it go: a file whose tabs arrive after its title.
+let releaseLate;
+const lateStructure = new Promise(resolve => { releaseLate = resolve; });
 const INSET = 16;
 // A drawing's answer held back while a test looks at the panel as the file loads (`held`, released by the test).
 let held = null;
@@ -54,7 +57,7 @@ before(async () => {
     }
     const rest = path.slice(at);
     if (rest === '/api/v1/documents' && request.method === 'GET') {
-      return json(response, { documents: Object.entries(FILES).map(([file, kind]) => {
+      return json(response, { documents: Object.entries({ ...FILES, 'late.step': 'step' }).map(([file, kind]) => {
         const entry = { kind, file: `/models/${file}`, url: `/${file}`, hash: `h-${file}`, bytes: 4096 };
         return { entry, revision: entry.hash };
       }) });
@@ -74,6 +77,7 @@ before(async () => {
     if (rest === '/api/v1/look') return json(response, LOOK);
     if (rest === '/api/v1/look/environment') return send(response, 'application/octet-stream', ENVIRONMENT);
     if (rest.endsWith('/version')) return json(response, { version: HINGE.version, patch: null });
+    if (rest.endsWith('/structure') && rest.includes('/late.step/')) { lateStructure.then(() => json(response, STRUCTURE)); return; }
     if (rest.endsWith('/structure')) return json(response, STRUCTURE);
     if (rest.endsWith('/plot')) return json(response, BOARD);
     if (rest.endsWith('/drawing')) return Promise.resolve(held).then(() => json(response, DRAWING));
@@ -309,7 +313,8 @@ for (const file of Object.keys(FILES)) {
 }
 
 // While a file loads, a structure tab with no row shows placeholder rows on the rows' own lines: each glyph block on the
-// inset, each name's bar where a name starts (16px after the glyph's line), none past the right inset.
+// inset, each name's bar where a name starts (16px after the glyph's line), none past the right inset; the first under
+// the head's one block where the first real row then stands.
 test('a loading tab\'s placeholder rows stand on the inset', async t => {
   let release;
   held = new Promise(resolve => { release = resolve; });
@@ -319,7 +324,8 @@ test('a loading tab\'s placeholder rows stand on the inset', async t => {
   const placed = await page.evaluate(() => {
     const panel = document.querySelector('[data-testid="one"] [data-flat-panel]'), left = panel.getBoundingClientRect().left;
     const edges = selector => [...panel.querySelectorAll(selector)].map(node => node.getBoundingClientRect()).map(rect => [rect.left - left, rect.right - left]);
-    return { clientWidth: panel.clientWidth, glyphs: edges('[data-tree-row-placeholder-glyph]'), names: edges('[data-tree-row-placeholder-name]') };
+    return { clientWidth: panel.clientWidth, glyphs: edges('[data-tree-row-placeholder-glyph]'), names: edges('[data-tree-row-placeholder-name]'),
+      top: panel.querySelector('[data-tree-row-placeholder]').getBoundingClientRect().top - panel.getBoundingClientRect().top };
   });
   assert.equal(placed.glyphs.length, 6, 'six placeholder rows');
   const right = placed.clientWidth - INSET;
@@ -328,5 +334,31 @@ test('a loading tab\'s placeholder rows stand on the inset', async t => {
   release();
   await pane.locator('[data-flat-panel] [data-layer-row]').first().waitFor();
   assert.equal(await pane.locator('[data-flat-panel] [data-tree-row-placeholder]').count(), 0, 'gone as the layers arrive');
+  const rowTop = await page.evaluate(() => {
+    const panel = document.querySelector('[data-testid="one"] [data-flat-panel]');
+    return panel.querySelector('[data-flat-panel-body] [data-tree-row]').getBoundingClientRect().top - panel.getBoundingClientRect().top;
+  });
+  assert.equal(placed.top, rowTop, 'the first placeholder row where the first row then stands');
   assert.deepEqual(errors, []);
+});
+
+// A file's other tabs arrive after it has loaded (a model's Params, Joints and Motion come with its structure): the head
+// is one block for its lone title and for its tabs, so the body's top, where its first row stands, does not move.
+test('a file whose tabs arrive after its title: the head keeps its block and the body its top', async t => {
+  const { page, pane } = await open(t, 'late.step');
+  const place = () => page.evaluate(() => {
+    const panel = document.querySelector('[data-testid="one"] [data-flat-panel]'), top = panel.getBoundingClientRect().top;
+    const row = panel.querySelector('[data-flat-panel-body] [data-tree-row]');
+    return { head: panel.querySelector('[data-flat-panel-head]').getBoundingClientRect().height,
+      body: panel.querySelector('[data-flat-panel-body]').getBoundingClientRect().top - top, row: row ? row.getBoundingClientRect().top - top : null };
+  });
+  await pane.locator('[data-flat-panel] [data-flat-panel-heading]').waitFor();
+  const loading = await place();
+  releaseLate();
+  await pane.locator('[data-flat-panel] [role=tab]').first().waitFor();
+  await pane.locator('[data-flat-panel] [data-flat-panel-body] [data-tree-row]').first().waitFor();
+  const loaded = await place();
+  assert.deepEqual([loaded.head, loaded.body], [loading.head, loading.body], `the head and the body's top: ${JSON.stringify({ loading, loaded })}`);
+  // The first row stands at the body's top and its 8px, where it (or a row standing in for it) stood while the file loaded.
+  assert.equal(loaded.row, loading.body + 8);
 });

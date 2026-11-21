@@ -58,8 +58,8 @@ export const MIN_MODEL_WIDTH = 640;
  * The panel's width where none is given (`FlatPanel.jsx`'s `FLAT_PANEL_DEFAULT_WIDTH`): one fixed number, never the
  * view's or the tabs', budgeted for three tabs: the least width on the 8px grid where every three tabs a file can have
  * (a model's Model and two of Params, Joints and Motion; a board's Parts, Nets and Layers; a schematic's Parts, Nets and
- * Hierarchy) stand in English beside the search's icon with no ⋯ (the widest, Model, Params and Motion, needs 225px). A
- * fourth tab is ⋯'s.
+ * Hierarchy) stand in English beside the search's icon with no ⋯ (the widest, Model, Params and Motion, needs 213px with
+ * the pills' 6px padding, so 19px to spare, kept for longer translations). A fourth tab is ⋯'s.
  */
 export const DEFAULT_PANEL_WIDTH = 232;
 /** The narrowest the grip takes the panel (`FlatPanel.jsx`'s `FLAT_PANEL_MIN_WIDTH`). */

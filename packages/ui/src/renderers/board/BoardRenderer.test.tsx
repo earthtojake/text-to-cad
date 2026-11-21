@@ -342,10 +342,10 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   const leftToggle = pane.querySelector<HTMLElement>('[data-viewer-navbar] [data-navbar-panel="left"]')!;
   expect([leftToggle.getAttribute('aria-label'), leftToggle.getAttribute('aria-expanded'), leftToggle.getAttribute('aria-pressed'), leftToggle.getAttribute('aria-keyshortcuts')])
     .toEqual(['Hide panel', 'true', null, expect.stringMatching(/\\$/)]);
-  // 8px over the tabs and under them; at its sides the panel's inset less what the pills (8px) and the search's button
+  // 8px over the tabs and under them; at its sides the panel's inset less what the pills (6px) and the search's button
   // (7px) hang out by, so the tabs' names and the search's icon stand on the inset (`--panel-inset`).
   expect([head.style.paddingTop, head.style.paddingBottom, head.style.paddingLeft, head.style.paddingRight])
-    .toEqual(['8px', '8px', 'calc(var(--panel-inset) - 8px)', 'calc(var(--panel-inset) - 7px)']);
+    .toEqual(['8px', '8px', 'calc(var(--panel-inset) - 6px)', 'calc(var(--panel-inset) - 7px)']);
   expect(within(aside).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Parts', 'true'], ['Nets', 'false'], ['Layers', 'false']]);
   expect(aside.querySelector('[role=tab] svg')).toBeNull();
   // The search's box takes the tabs' row; Escape gives it back.
