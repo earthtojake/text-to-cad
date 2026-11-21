@@ -140,10 +140,23 @@
   animation: cad-progress-slide 1.15s ease-in-out infinite;
 }
 
+/* Waiting (the connection lost): held where it is. */
+[data-paused] .cad-progress-indeterminate {
+  animation-play-state: paused;
+}
+
+/* No motion (the host's Reduce motion, `data-still`, or the system's): an indeterminate bar does not slide; it stands
+   across the track, faint, so it claims no share of the work. */
+[data-still] .cad-progress-indeterminate {
+  width: 100%;
+  animation: none;
+  opacity: 0.45;
+}
 @media (prefers-reduced-motion: reduce) {
   .cad-progress-indeterminate {
-    animation-duration: 2.4s;
-    animation-timing-function: linear;
+    width: 100%;
+    animation: none;
+    opacity: 0.45;
   }
 }
 

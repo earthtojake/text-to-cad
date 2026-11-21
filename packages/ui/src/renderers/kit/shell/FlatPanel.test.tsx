@@ -56,10 +56,10 @@ it('draws a single tab as a plain title a row high, its list right under it, the
   expect([screen.queryAllByRole('tab').length, screen.queryByRole('tablist'), title.textContent]).toEqual([0, null, 'Model']);
   // Its name on the inset, as a tab's is: the title pads as a pill does (8px), the row the inset less that.
   expect([title.classList.contains('font-medium'), title.classList.contains('px-2'), title.classList.contains('h-7')]).toEqual([true, true, true]);
-  expect([row().classList.contains('border-transparent'), row().hasAttribute('data-compact'), row().classList.contains('h-7'),
-    [row().style.paddingTop, row().style.paddingBottom, row().style.paddingLeft]]).toEqual([true, true, true, ['8px', '0px', 'calc(var(--panel-inset) - 8px)']]);
+  expect([row().classList.contains('border-transparent'), row().hasAttribute('data-compact'), row().style.height,
+    [row().style.paddingTop, row().style.paddingBottom, row().style.paddingLeft]]).toEqual([true, true, '28px', ['8px', '0px', 'calc(var(--panel-inset) - 8px)']]);
   expect([...row().children].map(child => child.getAttribute('aria-label') ?? child.tagName.toLowerCase())).toEqual(['h2', 'Search the board']);
-  expect(document.querySelector('[data-flat-panel-body]')!.classList.contains('pt-1')).toBe(true);
+  expect(document.querySelector<HTMLElement>('[data-flat-panel-body]')!.style.paddingTop).toBe('4px');
   expect(document.querySelector('[data-flat-panel-section="model"]')!.getAttribute('aria-labelledby')).toBe(title.id);
   cleanup();
   render(<Panel tabs={[{ id: 'parts', label: 'Parts', content: <p>Parts</p> }, { id: 'nets', label: 'Nets', content: <p>Nets</p> }]} first="parts" />);

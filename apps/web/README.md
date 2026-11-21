@@ -293,15 +293,6 @@ temporary fixtures and a private server/cache; it runs exactly what CI runs
 screenshots and bounded failure diagnostics; the runner cleans up its project and
 processes on exit.
 
-### Branded loading indicator
-
-`@cad/ui/loading-icon` exports the decorative `LoadingIcon` independently of
-the CAD renderer, so a host can show loading feedback without eagerly importing the
-CAD surface. `size` controls its pixel dimensions (default 96), `className` its
-placement, and `active={false}` uses the still pose. The host owns status text.
-It also stays still for OS/app reduced motion and hidden documents. See
-the UI package's asset documentation for asset provenance and regeneration.
-
 ## Current viewer behavior
 
 The shared [viewer design system](../../packages/ui/docs/settings-ui.md) is the
@@ -523,8 +514,8 @@ server says it in time; the paint never waits for it, and until the catalog answ
 title "text-to-cad". Moving between documents, the name is the home's card's, or the one a document had when it
 was shown before, until the catalog's; a file opened by its path and not found is named by its path's last segment.
 Appearance (System, Light, Dark) is the app menu's Theme row, the tab's choice (`colorScheme`,
-over a file and on the home); the page has no light/dark button of its own. The original animated mark remains the shared LoadingIcon
-for loading states. The C and CAD marks are the UI package's; the favicons are this
+over a file and on the home); the page has no light/dark button of its own. Loading states are the UI package's one
+indicator, a step line over a thin bar, with no mark. The C and CAD marks are the UI package's; the favicons are this
 app's, exported alongside the docs brand assets. See
 [the brand recipe](../../scripts/brand/README.md).
 

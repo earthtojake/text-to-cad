@@ -4,7 +4,7 @@ import { isDocumentId } from "@cad/core/lib/cadRefs.js";
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { Button } from "../primitives/button.jsx";
-import { Spinner } from "../primitives/spinner.js";
+import LoadingStep from "../loading/LoadingStep.jsx";
 import { EmptyState, ViewerNavbar } from "./navigation/index.js";
 import type { EntryAction } from "./navigation/index.js";
 import { useFileDocument } from "./hooks/useFileDocument.js";
@@ -170,7 +170,9 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   let body: ReactNode;
   if (loaded.status === "empty") body = presentation?.home ?? null;
   else if (loaded.status === "loading") {
-    const loading = presentation?.loading ?? <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground" role="status"><Spinner className="size-3.5" />{t("file.opening")}</div>;
+    // The host's own cover where it has one (a CAD host's is on the viewport's Background), else the one indicator, in
+    // the app's theme: a host that knows no viewport has none to follow.
+    const loading = presentation?.loading ?? <div className="flex h-full items-center justify-center px-4"><LoadingStep label={t("file.opening")} /></div>;
     body = pendingOpen ? <div className="flex h-full min-h-0">
       <aside aria-busy="true" className="relative flex h-full shrink-0 flex-col border-r border-border bg-sidebar text-ui" style={{ ...PANEL_ROW_VARIABLES, width: pendingWidth }}
         data-panel-loading="">

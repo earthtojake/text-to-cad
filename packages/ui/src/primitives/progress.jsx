@@ -13,13 +13,18 @@ import { cn } from "@cad/ui/utils"
  * denominator SHOULD pass it. A sliding bar says "working, no estimate" honestly; the
  * alternative — inventing a number so the bar always has one — is how a ten-minute phase
  * came to display a confident 0%.
+ *
+ * `still`: no motion (the host's Reduce motion; the system's is the stylesheet's): an indeterminate bar stands across
+ * the track, faint, rather than sliding. `paused`: the work is waiting, its bar held where it is.
  */
-function Progress({ className, value, ...props }) {
+function Progress({ className, value, still = false, paused = false, ...props }) {
   const clamped = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : null;
   const indeterminate = clamped === null;
   return (
     <ProgressPrimitive.Root
       data-slot="progress"
+      data-still={still ? "" : undefined}
+      data-paused={paused ? "" : undefined}
       value={clamped}
       className={cn("relative h-[3px] w-full overflow-hidden bg-primary/20", className)}
       {...props}
