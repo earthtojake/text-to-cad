@@ -27,13 +27,28 @@ const SelectTrigger = React.forwardRef(/** @param {React.ComponentPropsWithoutRe
   size = "default",
   showIcon = true,
   children,
+  onPointerDown,
+  onClick,
   ...props
 }, ref) {
+  // Whether the list was open as a finger landed on the trigger. A finger opens a select at its tap's click (Radix's
+  // own), and an open list shuts itself on that same tap (a press outside it): the click would open it again, so a
+  // tap on an open select's trigger is left to shut it. The same rule as a menu's (`dropdown-menu.jsx`).
+  const openAtPress = React.useRef(false);
   return (
     <SelectPrimitive.Trigger
       ref={ref}
       data-slot="select-trigger"
       data-size={size}
+      onPointerDown={event => {
+        onPointerDown?.(event);
+        openAtPress.current = event.pointerType !== "mouse" && event.currentTarget.getAttribute("data-state") === "open";
+      }}
+      onClick={event => {
+        onClick?.(event);
+        if (openAtPress.current) event.preventDefault();
+        openAtPress.current = false;
+      }}
       className={cn(
         "flex w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground data-[size=default]:h-9 data-[size=sm]:h-8 dark:bg-input/30 dark:hover:bg-input/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
