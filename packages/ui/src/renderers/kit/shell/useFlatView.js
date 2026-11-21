@@ -186,15 +186,18 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
   chordRef.current = onChord;
   const viewKeyRef = useRef(onViewKey);
   viewKeyRef.current = onViewKey;
-  // The view's panel, as the frame drew it (`FlatViewFrame.jsx` fills it in): ⌘\ (Ctrl+\) shows or
-  // hides it, / opens it on its search.
+  // The view's panel, as the frame drew it (`ViewFrame.jsx` fills it in): ⌘\ (Ctrl+\) shows or hides it; / opens it
+  // on its search.
   const panelControl = useRef(null);
   // The view's zoom as the strip has it (the renderer writes it, Zoom to selection and all): what the zoom's keys reach.
   const zoomKeys = useRef(null);
   useViewerShortcuts({
     viewerElement,
     onChord: event => {
-      if (event.key === "\\" && !event.shiftKey && panelControl.current) { panelControl.current.toggle(); return true; }
+      if ((event.code === "Backslash" || event.key === "\\") && !event.shiftKey && panelControl.current) {
+        panelControl.current.toggle();
+        return true;
+      }
       return Boolean(shown && chordRef.current?.(event));
     },
     onCopy: () => copyAction(),
@@ -208,7 +211,8 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     onUndo: () => history.undo(),
     onRedo: () => history.redo(),
     // A tool's letter takes it up, F fits the picture (`toolShortcuts.js`), over the strip as drawn.
-    onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search() : shown && (viewKeyRef.current?.(event) === true
+    onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search()
+      : shown && (viewKeyRef.current?.(event) === true
       || pressToolKey(event, { tools: toolKeys.current, selectDrawing: tool => annotationRef.current.selectTool(tool), fit }))),
     zoom: () => (shown ? zoomKeys.current : null),
     escapeActive: Boolean(selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),

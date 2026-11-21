@@ -16,8 +16,10 @@ export const FILL_OPACITY = 0.35;
 
 /**
  * @typedef {{ x: number, y: number }} ScreenPoint
- * @typedef {{ color: string, width: number }} AnnotationStyle  `width`: the
- *   stroke's weight (1, 2, 4, 6), in CSS pixels on screen.
+ * @typedef {{ color: string, width: number, dash?: AnnotationDash }} AnnotationStyle  `width`: the
+ *   stroke's weight (1, 2, 4, 6), in CSS pixels on screen; `dash`: its line style.
+ * @typedef {"solid" | "dashed" | "dotted"} AnnotationDash  A stroke's line style; a mark without one is solid.
+ *   A stroke's `dash` (absent: solid) is a pattern in screen pixels, scaled with its width (`dashPattern`).
  * @typedef {{ kind: "stroke", id: string, points: ScreenPoint[], closed: boolean, color: string,
  *   width: number, opacity: number, widths?: number[], group?: string }} ScreenStroke
  *   `widths`: the pen's, each point's width as a share of `width` (its pressure). `group`: the
@@ -31,6 +33,11 @@ export const FILL_OPACITY = 0.35;
 let made = 0;
 /** A new mark's id: unique for the page's life, which is as long as any ink lasts. */
 export const annotationId = () => `ink-${Date.now().toString(36)}-${(made += 1).toString(36)}`;
+
+// A stroke's line styles and their patterns are the annotation model's (`@cad/core/common/annotation.js`).
+export { ANNOTATION_DASHES, dashPattern } from "@cad/core/common/annotation.js";
+/** A style's line style as a mark carries it: none for solid. */
+const dashOf = style => (style?.dash === "dashed" || style?.dash === "dotted" ? { dash: style.dash } : null);
 
 /** The pen draws a little heavier than a shape at the same weight, as a felt tip does next to a ruler. */
 export const penWidth = width => Math.max(1, width * 1.5);
@@ -99,8 +106,8 @@ export function arrowWings(from, tip, width) {
 }
 
 // A stroke mark of a style: its points, open or closed, at the style's weight.
-const stroke = (points, closed, { color, width }, { id = annotationId(), weight = width, opacity = 1 } = {}) =>
-  ({ kind: "stroke", id, points: densify(points, closed), closed, color, width: weight, opacity });
+const stroke = (points, closed, { color, width, dash }, { id = annotationId(), weight = width, opacity = 1, solid = false } = {}) =>
+  ({ kind: "stroke", id, points: densify(points, closed), closed, color, width: weight, opacity, ...(solid ? null : dashOf({ dash })) });
 
 /**
  * The pen's mark: the line it was drawn along, smoothed, each point as wide as its pressure made it
@@ -112,7 +119,7 @@ export function penMark(points, style, pressures = null) {
     pressures && pressures.length === points.length ? pressures : null);
   if (path.length < 2) path.push({ ...path[0], x: path[0].x + 0.01 });
   return { kind: "stroke", id: annotationId(), points: path.map(({ x, y }) => ({ x, y })), closed: false, color: style.color,
-    width: penWidth(style.width), opacity: 1, widths: path.map(point => point.width) };
+    width: penWidth(style.width), opacity: 1, widths: path.map(point => point.width), ...dashOf(style) };
 }
 
 /**
@@ -153,7 +160,8 @@ export function shapeMarks(tool, from, to, style) {
   if (tool === "line") return [stroke([from, to], false, style)];
   if (tool === "arrow") {
     const group = annotationId();
-    return [stroke([from, to], false, style), ...arrowWings(from, to, style.width).map(wing => stroke(wing, false, style))]
+    // The shaft takes the line style; the head stays solid, so it reads as a head however the line is drawn.
+    return [stroke([from, to], false, style), ...arrowWings(from, to, style.width).map(wing => stroke(wing, false, style, { solid: true }))]
       .map(mark => ({ ...mark, group }));
   }
   const left = Math.min(from.x, to.x), right = Math.max(from.x, to.x), top = Math.min(from.y, to.y), bottom = Math.max(from.y, to.y);
@@ -192,6 +200,8 @@ function segmentDistance(point, a, b) {
   return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
 }
 const inside = (point, polygon) => pointInPolygon(point.x, point.y, polygon);
+/** Whether a point on the screen is inside a closed outline there (a shape as it falls on the screen). */
+export const insideOutline = inside;
 
 /**
  * A point inside a closed outline on the screen, where a fill of it is seeded: its centroid, or, for
@@ -288,4 +298,41 @@ export function fillMarkAt(seed, inks, color) {
   // The region's points come back normalised to the mask's size (`normalizePolygonPoints`).
   const outline = region.points.map(point => ({ x: minX + (point.x * width) / scale, y: minY + (point.y * height) / scale }));
   return outline.length >= 3 ? { kind: "area", id: annotationId(), outline, color, opacity: FILL_OPACITY } : null;
+}
+
+/** How near, in CSS pixels on the screen now, a freehand stroke's end must come back to its start for Fill to take it as closed. */
+export const FILL_LOOP_GAP_PX = 20;
+const polygonArea = points => Math.abs(points.reduce((sum, p, i) => { const q = points[(i + 1) % points.length]; return sum + p.x * q.y - q.x * p.y; }, 0)) / 2;
+
+/**
+ * Whether ink on the screen is a closed outline Fill fills: a shape drawn closed (a rectangle, an ellipse), or a
+ * freehand stroke (the pen's, at any pressure, or the highlighter's) whose end lands within `FILL_LOOP_GAP_PX` of
+ * its start as the view shows it NOW, so the zoom it was drawn at does not matter, and that encloses something (a
+ * line, or an arrow's head, does not).
+ */
+export function fillableOutline(ink, gapPx = FILL_LOOP_GAP_PX) {
+  if (ink?.kind !== "stroke" || ink.points.length < 3) return false;
+  if (ink.closed) return true;
+  const first = ink.points[0], last = ink.points[ink.points.length - 1];
+  return Math.hypot(last.x - first.x, last.y - first.y) < gapPx && polygonArea(ink.points) >= (gapPx * gapPx) / 2;
+}
+
+/**
+ * What a Fill press (or the pointer, with Fill in hand) at `point` is on: the topmost (last drawn) closed outline
+ * on the screen it is inside, or on, within `radius` pixels of its line (`annotationDistance`: past the stroke's
+ * half width). `ink` comes back closed (a freehand loop's gap joined), to bound its fill with; `seed` is `point`
+ * where it is inside and clear of the ink, else null (the fill then seeds at the outline's own interior point).
+ * Null on nothing fillable.
+ * @param {{ x: number, y: number }} point @param {readonly ScreenAnnotation[]} inks
+ * @returns {{ id: string, ink: ScreenAnnotation, seed: { x: number, y: number } | null } | null}
+ */
+export function fillTargetAt(point, inks, { radius = 6, gapPx = FILL_LOOP_GAP_PX } = {}) {
+  for (let index = inks.length - 1; index >= 0; index -= 1) {
+    const found = inks[index];
+    if (!fillableOutline(found, gapPx)) continue;
+    const ink = found.closed ? found : { ...found, closed: true };
+    const distance = annotationDistance(point, ink), within = inside(point, ink.points);
+    if (within || distance <= radius) return { id: ink.id, ink, seed: within && distance > 0 ? point : null };
+  }
+  return null;
 }

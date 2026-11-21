@@ -32,7 +32,8 @@ export function placeOnSheet(mark, transform) {
   const item = { id: mark.id, kind: mark.kind, points, color: mark.color,
     ...(mark.group ? { group: mark.group } : {}), ...(mark.view ? { view: mark.view } : {}), touches: [] };
   if (mark.kind === "stroke") {
-    Object.assign(item, { width: mark.width, opacity: mark.opacity, closed: mark.closed, ...(mark.widths ? { widths: mark.widths } : {}) });
+    Object.assign(item, { width: mark.width, opacity: mark.opacity, closed: mark.closed, ...(mark.widths ? { widths: mark.widths } : {}),
+      ...(mark.dash ? { dash: mark.dash } : {}) });
   } else if (mark.kind === "area") {
     // A fill's outline alone, fanned from its first point: a drawing's fills are drawn by outline.
     const count = screen.length;

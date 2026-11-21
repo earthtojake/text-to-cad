@@ -37,8 +37,18 @@ import { testHost } from '../../../../dist/host/testing/host.js';
 import { ViewerMobileContext } from '../../../../dist/file-viewer/responsive.js';
 import { TOOL_PANEL_WIDTH } from '../../../../dist/renderers/kit/tools/toolStackLayout.js';
 import { SETTINGS_PANEL_SURFACE_CLASS, FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from '../../../../dist/lib/floatingSurface.js';
-import { SolidModeIcon } from '../../../../dist/renderers/kit/view-settings/DisplayModeOptions.js';
 import { ControlUsageProvider } from '../../../../dist/usage/controls.js';
+import { PanelTogglesContext } from '../../../../dist/file-viewer/panelToggles.js';
+
+// The panels' toggles, as the navbar draws them (`file-viewer/panelToggles.js`): what the frame says, as buttons.
+function NavbarToggles({ children }: { children: React.ReactNode }) {
+  const [toggles, setToggles] = React.useState<any>(null);
+  return <PanelTogglesContext.Provider value={setToggles}>
+    {(['left', 'right'] as const).map(side => toggles?.[side] ? <button key={side} type="button" aria-label={toggles[side].label} aria-pressed={toggles[side].open}
+      data-navbar-panel={side} onClick={toggles[side].toggle} /> : null)}
+    {children}
+  </PanelTogglesContext.Provider>;
+}
 import { SIDEBAR_SLIDE_CLASS } from '../../../../dist/renderers/kit/tools/PreviewChrome.js';
 import { createAnimationClock } from '../../../../dist/renderers/kit/tools/playbar/animationClock.js';
 import { writeFileView } from '../../../../dist/renderers/kit/shell/fileView.js';
@@ -85,8 +95,8 @@ function frame({ name = 'panel.harness', preferences = tabSettings(), state = un
     onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences }, ...data } };
   // `viewer`: inside a viewer's element, as FileViewer draws it, where the viewer's keys are its own.
   const element = () => {
-    const shell = <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}>
-      <HarnessRenderer {...(props as any)} /></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
+    const shell = <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}><NavbarToggles>
+      <HarnessRenderer {...(props as any)} /></NavbarToggles></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
     // `usage`: the host's count of the controls a person used (`usage/controls.js`).
     const counted = usage ? <ControlUsageProvider report={usage}>{shell}</ControlUsageProvider> : shell;
     if (!viewer) return counted;
@@ -118,12 +128,13 @@ it("the strip is at the top centre with the stack under it; the view's panel is 
   const { preferences } = frame();
   // The strip and the stack under it, 8px down from the viewer's top, centred on the whole view,
   // stopping 8px above the cube's line (the cube's box 8px off the bottom).
-  // Its left reaches back over the docked panel (`useStageReach.js`), before the frame is painted.
-  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: 'calc(8px - var(--cad-stage-left, 0px))', right: '8px', bottom: 'calc(16px + 6rem)' });
+  // The panels never move it: it stands over them, centred on the window (`ViewFrame.jsx`'s top layer).
+  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', right: '8px', bottom: 'calc(84px)' });
+  expect(document.querySelector('[data-cad-tool-groups]')!.closest('[data-view-top-layer]')).not.toBeNull();
   // The panel (`FlatPanel.jsx`), a board's: the search over its tabs, a tab per section in their order, the first shown.
   expect([flatPanel().getAttribute('data-flat-panel'), flatPanel().hidden]).toEqual(['docked', false]);
   expect([tabNames(), shownTab(), sections()]).toEqual([['Harness tree', 'Reference'], 'Harness tree', ['Harness tree']]);
-  expect(screen.getByRole('textbox', { name: 'Search the model' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Search the model' })).toBeTruthy();
   // A section is its tab's page: no surface, width, cap or grip of its own.
   for (const label of ['Harness tree', 'Harness reference']) {
     expect([panel(label)!.style.width, panel(label)!.style.maxHeight, handles(label)], label).toEqual(['', '', []]);
@@ -138,12 +149,12 @@ it("the strip is at the top centre with the stack under it; the view's panel is 
 
 it("the panel's tabs are there whatever the tool, a tool's own section coming and going with it; a tab shows its section alone, its content kept; the tab, the width and a collapse are the person's, and never the tab's settings", () => {
   const { preferences } = frame();
-  fireEvent.click(tool('Pencil'));
+  fireEvent.click(tool('Draw'));
   expect(tabNames()).toEqual(['Harness tree', 'Reference']);
   fireEvent.click(tool('Pose'));
-  expect(tabNames()).toEqual(['Harness tree', 'Reference', 'Position']);
-  fireEvent.click(tab('Position'));
-  expect([shownTab(), sections()]).toEqual(['Position', ['Harness position']]);
+  expect(tabNames()).toEqual(['Harness tree', 'Reference', 'Joints']);
+  fireEvent.click(tab('Joints'));
+  expect([shownTab(), sections()]).toEqual(['Joints', ['Harness position']]);
   // Its head's actions are a row at the top of its tab; nothing folds.
   expect(panel('Harness position')!.querySelector('[aria-expanded]')).toBeNull();
   fireEvent.click(tab('Reference'));
@@ -154,7 +165,7 @@ it("the panel's tabs are there whatever the tool, a tool's own section coming an
   expect(flatPanel().style.width).toBe(`${grip.getAttribute('aria-valuemax')}px`);
   fireEvent.keyDown(grip, { key: 'Home' });
   expect(flatPanel().style.width).toBe('200px');
-  // Collapsed, it goes whole, its pill at the canvas's top-left; shown again, on the tab it showed.
+  // Collapsed, it goes whole, nothing of it over the model (its toggle the navbar's); shown again, on the tab it showed.
   fireEvent.click(screen.getByRole('button', { name: 'Hide panel' }));
   expect(flatPanel().hidden).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: 'Show panel' }));
@@ -163,38 +174,61 @@ it("the panel's tabs are there whatever the tool, a tool's own section coming an
   expect([preferences.writes, layout(preferences)]).toEqual([0, { panels: {}, collapsed: {} }]);
 });
 
-it("on a phone there is no panel, no pill and no key for one, and the strip is centred in the view", () => {
+it("on a phone the panel is a sheet from the left behind the navbar's toggle, closed at the start, and the strip is centred in the view", async () => {
   frame({ mobile: true, viewer: true });
   const column = document.querySelector<HTMLElement>('[data-cad-tool-groups]')!;
-  expect(column.style).toMatchObject({ left: 'calc(8px - var(--cad-stage-left, 0px))', right: '8px' });
+  expect(column.style).toMatchObject({ left: '8px', right: '8px' });
   expect(column.className).toMatch(/\bitems-center\b/);
-  expect([document.querySelector('[data-flat-panel]'), screen.queryByRole('button', { name: 'Show panel' })]).toEqual([null, null]);
-  fireEvent.keyDown(document.querySelector('[data-slot="cad-file-view"]')!, { key: '\\', ctrlKey: true });
+  // No docked panel and nothing over the model until the toggle opens the sheet: the same panel, its tabs and search, a
+  // phone page's sizes; Escape (or a tap outside, a swipe back, its Back) puts it away. ⌘\ is its key too; / is none.
+  expect(document.querySelector('[data-flat-panel]')).toBeNull();
   fireEvent.keyDown(document.querySelector('[data-slot="cad-file-view"]')!, { key: '/' });
   expect(document.querySelector('[data-flat-panel]')).toBeNull();
-  fireEvent.click(tool('Pencil'));
-  expect(tool('Pencil').getAttribute('aria-pressed')).toBe('true');
-  // The drawing row is the same row on a phone, its buttons 36px tiles (`data-touch`), wrapping where it must; there is no chevron.
+  fireEvent.click(screen.getByRole('button', { name: 'Show panel' }));
+  const sheet = await waitFor(() => { const found = document.querySelector<HTMLElement>('[data-panel-sheet]'); expect(found).not.toBeNull(); return found!; });
+  expect([sheet.getAttribute('role'), sheet.querySelector('[data-flat-panel]')!.getAttribute('data-flat-panel'), sheet.querySelectorAll('[role=tab]').length > 0,
+    sheet.querySelector('[data-flat-panel-search-open]') !== null, document.querySelector('[data-navbar-panel="left"]')!.getAttribute('aria-label')]).toEqual(['dialog', 'page', true, true, 'Hide panel']);
+  fireEvent.keyDown(sheet, { key: 'Escape' });
+  await waitFor(() => expect(document.querySelector('[data-panel-sheet]')).toBeNull());
+  // A swipe back towards its edge closes it too.
+  fireEvent.keyDown(document.querySelector('[data-slot="cad-file-view"]')!, { key: '\\', ctrlKey: true });
+  const again = await waitFor(() => { const found = document.querySelector<HTMLElement>('[data-panel-sheet]'); expect(found).not.toBeNull(); return found!; });
+  fireEvent.pointerDown(again, { pointerId: 3, pointerType: 'touch', clientX: 200, clientY: 300 });
+  fireEvent.pointerUp(again, { pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 310 });
+  await waitFor(() => expect(document.querySelector('[data-panel-sheet]')).toBeNull());
+  fireEvent.click(tool('Draw'));
+  expect(tool('Draw').getAttribute('aria-pressed')).toBe('true');
+  // The drawing row is the same row on a phone, its buttons 36px tiles (`data-touch`), wrapping where it must: the
+  // drawing tools, then what is drawn next; Draw has no chevron.
   const row = screen.getByRole('toolbar', { name: 'Annotation controls' });
   expect(row.hasAttribute('data-touch')).toBe(true);
-  expect(screen.queryByRole('button', { name: /^(Pencil|Shapes) tools$/ })).toBeNull();
-  expect([...row.querySelectorAll('[role=group][aria-label$=" tools"] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Pen', 'Highlighter', 'Eraser']);
+  expect([...row.querySelectorAll('[role=group][aria-label="Drawing tools"] button')].map(button => button.getAttribute('aria-label')))
+    .toEqual(['Pen', 'Highlighter', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text']);
+  expect([...row.querySelectorAll('[role=group][aria-label="Editing tools"] button')].map(button => button.getAttribute('aria-label')))
+    .toEqual(['Fill', 'Eraser']);
+  expect(screen.queryByRole('button', { name: 'Drawing tools' })).toBeNull();
 });
 
-// Display: the current mode's tile and its menu, the modes and the Grid switch.
-const displayButton = (root: HTMLElement = document.body) => within(root).getByRole('button', { name: /^Display mode: / });
-const displayLit = (root?: HTMLElement) => displayButton(root).getAttribute('aria-expanded') === 'true';
-const displayMenu = () => document.querySelector<HTMLElement>('[role=menu][aria-label="Display"]');
-// Projection: its own tile, before Display's, switching on a click.
+// The corner's stack over the cube (`ViewCornerStack.jsx`): Display, its menu the modes, Grid and the Background; Projection; Home.
+const displayButton = () => screen.getByRole('button', { name: /^Display mode: / });
 const projectionButton = () => screen.getByRole('button', { name: /^Projection: / });
-async function openDisplay(user: ReturnType<typeof userEvent.setup>, root?: HTMLElement) {
-  await user.click(displayButton(root));
+const displayMenu = () => document.querySelector<HTMLElement>('[role=menu][aria-label="Display"]');
+async function openDisplay(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(displayButton());
   await waitFor(() => expect(displayMenu()).not.toBeNull());
 }
-// A control by its name, whatever it says it is set to ("Projection: Orthographic" is Projection).
+async function closeDisplay(user: ReturnType<typeof userEvent.setup>) {
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(displayMenu()).toBeNull());
+}
+const gridItem = () => within(displayMenu()!).getByRole('menuitemcheckbox', { name: 'Grid' });
+const backgroundItem = (value: string) => displayMenu()!.querySelector<HTMLElement>(`[data-display-background="${value}"]`);
+// A control by its name, whatever it says it is set to.
 const named = (button: Element) => button.getAttribute('aria-label')!.split(':')[0];
-// The view's controls: the strip's last, after its tools and a rule.
-const barButtons = () => [...document.querySelector('[role=group][aria-label="Interaction tools"] [data-view-controls]')?.querySelectorAll('button') ?? []].map(named);
+// The view's controls: the corner's (outside a file viewer's navbar, the stack over the cube: Display, Projection, Home;
+// under one, Home beside the cube), the navbar's (Display, Projection, Preview), then Preview, the strip's last.
+const barButtons = () => [...document.querySelectorAll('[data-view-corner-stack] button'), ...document.querySelectorAll('[data-navbar-view-controls] button'),
+  ...document.querySelectorAll('[role=group][aria-label="Interaction tools"] [data-view-controls] button')].map(named);
 // Preview's own bar, over the view's top edge: its name, and its controls at its right.
 const previewBar = () => document.querySelector<HTMLElement>('[data-preview-bar]');
 const cornerButtons = () => [...previewBar()?.querySelectorAll('button') ?? []].map(named);
@@ -205,7 +239,7 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   frame();
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Projection', 'Display mode', 'Preview']);
+  expect(barButtons()).toEqual(['Display mode', 'Projection', 'Home', 'Preview']);
   stage('finding');
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
@@ -213,23 +247,24 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   expect(viewportProps.current.isLoading).toBe(true);
   stage('idle');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Projection', 'Display mode', 'Preview']);
-  // With nothing to work on yet, the strip is idle together, and so are Projection, Display and Preview.
+  expect(barButtons()).toEqual(['Display mode', 'Projection', 'Home', 'Preview']);
+  // With nothing to work on yet, the strip is idle together, and so are the corner's Display, Projection and Home, and Preview.
   stage('unready');
-  expect(strip()).toEqual(['Select', 'Pencil', 'Shapes', 'Keep', 'Pose']);
+  expect(strip()).toEqual(['Select', 'Draw', 'Keep', 'Pose']);
   const idle = (name: string) => (name === 'Display' ? displayButton() : name === 'Projection' ? projectionButton()
-    : name === 'Preview' ? screen.getByRole('button', { name }) : tool(name)).hasAttribute('disabled');
-  expect(['Select', 'Pencil', 'Shapes', 'Projection', 'Display', 'Preview'].map(idle)).toEqual([true, true, true, true, true, true]);
+    : name === 'Preview' || name === 'Home' ? screen.getByRole('button', { name }) : tool(name)).hasAttribute('disabled');
+  expect(['Select', 'Draw', 'Display', 'Projection', 'Home', 'Preview'].map(idle)).toEqual([true, true, true, true, true, true]);
   stage('idle');
-  expect(['Select', 'Pencil', 'Shapes', 'Projection', 'Display', 'Preview'].map(idle)).toEqual([false, false, false, false, false, false]);
+  expect(['Select', 'Draw', 'Display', 'Projection', 'Home', 'Preview'].map(idle)).toEqual([false, false, false, false, false, false]);
 });
 
 it("Display and Preview are a 3D view's, as its renderer declares: a view that does not declare it has neither, not disabled ones, and a request for Preview leaves it as it is", () => {
   // Preview asked for from outside the strip, as a link or a host request would.
   const ask = () => act(() => { fireEvent.click(document.querySelector('[data-harness-ask-preview]')!); });
-  // A 3D view (the harness's, declared `previewable`): Projection, Display and Preview end the strip, and a request enters it.
+  // A 3D view (the harness's, declared `previewable`): Display, Projection and Home in the corner, Preview ending the
+  // strip, and a request enters it.
   frame();
-  expect(barButtons()).toEqual(['Projection', 'Display mode', 'Preview']);
+  expect(barButtons()).toEqual(['Display mode', 'Projection', 'Home', 'Preview']);
   ask();
   expect(inPreview()).toBe(true);
   cleanup();
@@ -237,12 +272,14 @@ it("Display and Preview are a 3D view's, as its renderer declares: a view that d
   // strip, no rule, and the same request leaves the normal view on screen, its tools up.
   frame({ name: 'flat.harness' });
   expect(barButtons()).toEqual([]);
-  for (const name of [/^Projection: /, /^Display mode: /, 'Preview']) expect(screen.queryByRole('button', { name })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
+  expect([screen.queryByRole('button', { name: /^Projection: / }), screen.queryByRole('button', { name: /^Display mode: / }), document.querySelector('[data-view-corner-stack]')])
+    .toEqual([null, null, null]);
   expect(document.querySelector('[data-strip-rule]')).toBeNull();
   ask();
   expect(inPreview()).toBe(false);
   expect(document.querySelector('[data-preview-chrome]')!.hasAttribute('inert')).toBe(false);
-  expect(strip()).toEqual(['Pencil', 'Shapes']);
+  expect(strip()).toEqual(['Draw']);
 });
 
 it('a load the model did not survive leaves only the card saying so, and a failed update it survives keeps the chrome', () => {
@@ -257,8 +294,66 @@ it('a load the model did not survive leaves only the card saying so, and a faile
   expect(viewportProps.current.viewCube).toBe(false);
   stage('failed');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Projection', 'Display mode', 'Preview']);
+  expect(barButtons()).toEqual(['Display mode', 'Projection', 'Home', 'Preview']);
   expect(viewportProps.current.viewCube).toBe(true);
+});
+
+// The view's settings under a file's navbar (`ViewSettingsMenu.jsx`): View ▾, ONE menu on a desktop and a phone alike,
+// a choice a submenu — Display ▸, Projection ▸, Background ▸ — each row the choice on screen's icon, its name and the
+// choice's name muted; Grid a check row of the menu itself; on a phone (no cube) Reset view last, and no bottom sheet.
+it("a 3D view's View: one menu of submenus on a desktop and a phone, the navbar's right end View and Preview", async () => {
+  const host = testHost({ links: viewerLinks({ version: '0.7.5' }), environment: { colorScheme: 'light', platform: 'darwin' },
+    files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop()!, kind: 'file', extension: 'harness', size: 1 }) } });
+  const viewer = (layout?: 'mobile') => <FileViewer file="/models/one.harness" host={host as any} renderers={[createHarnessRenderer({ preferences: tabSettings() })]}
+    state={{}} onStateChange={() => {}} layout={layout as any} />;
+  const right = () => [...document.querySelectorAll('[data-navbar-view] [data-navbar-view-controls] > *')].map(node => node.getAttribute('aria-label'));
+  const openView = async () => {
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'View' }), { button: 0, ctrlKey: false, pointerType: 'mouse' });
+    return waitFor(() => { const found = document.querySelector<HTMLElement>('[role=menu][aria-label="View"]'); expect(found).not.toBeNull(); return found!; });
+  };
+  // The menu's top level: each submenu's row (its id, its value, whether it shows the value's icon), the check rows, Reset view.
+  const top = (menu: HTMLElement) => ({
+    subs: [...menu.querySelectorAll<HTMLElement>('[data-view-sub]')].map(row => [row.getAttribute('data-view-sub'), row.querySelector('[data-view-sub-value]')!.textContent,
+      Boolean(row.querySelector('svg:not(.lucide-chevron-right)'))]),
+    toggles: [...menu.querySelectorAll<HTMLElement>('[data-view-toggle]')].map(row => [row.textContent, row.getAttribute('aria-checked'), Boolean(row.querySelector('svg'))]),
+    reset: menu.querySelector('[data-view-reset]')?.textContent ?? null, labels: menu.querySelectorAll('[data-slot=dropdown-menu-label]').length
+  });
+  // A submenu opened by a press on its row: its options, each its name, whether it is ticked and whether it has its icon.
+  const sub = (menu: HTMLElement, id: string) => {
+    fireEvent.click(menu.querySelector<HTMLElement>(`[data-view-sub="${id}"]`)!);
+    const content = document.querySelector<HTMLElement>(`[data-view-sub-content="${id}"]`)!;
+    return { content, rows: [...content.querySelectorAll<HTMLElement>('[role=menuitemradio]')].map(item => [item.textContent, item.getAttribute('aria-checked'),
+      Boolean(item.querySelector('svg:not(.lucide-check)'))]) };
+  };
+  const view = render(viewer());
+  await screen.findByRole('button', { name: 'Preview' });
+  expect(right()).toEqual(['View', 'Preview']);
+  let menu = await openView();
+  expect(top(menu)).toEqual({ subs: [['display', 'Solid', true], ['projection', 'Orthographic', true], ['background', 'Light', true]],
+    toggles: [['Grid', 'false', true]], reset: null, labels: 0 });
+  expect(sub(menu, 'projection').rows).toEqual([['Perspective', 'false', true], ['Orthographic', 'true', true]]);
+  expect(sub(menu, 'background').rows).toEqual([['Light', 'true', true], ['Dark', 'false', true]]);
+  // Grid leaves the menu open; a projection chosen closes it and switches the view.
+  fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: 'Grid' }));
+  expect(within(menu).getByRole('menuitemcheckbox', { name: 'Grid' }).getAttribute('aria-checked')).toBe('true');
+  fireEvent.click(sub(menu, 'projection').content.querySelector<HTMLElement>('[data-display-projection="perspective"]')!);
+  await waitFor(() => expect(document.querySelector('[role=menu][aria-label="View"]')).toBeNull());
+  expect(screen.getByRole('button', { name: 'View' }).getAttribute('data-view-projection')).toBe('perspective');
+  view.unmount();
+  cleanup();
+  // A phone: View and Preview, no cube; the same menu, its submenus the desktop's, Reset view last; no Drawer.
+  render(viewer('mobile'));
+  await screen.findByRole('button', { name: 'Preview' });
+  expect([right(), viewportProps.current.viewCube, document.querySelector('[data-zoom-pill]')]).toEqual([['View', 'Preview'], false, null]);
+  menu = await openView();
+  expect(top(menu)).toEqual({ subs: [['display', 'Solid', true], ['projection', 'Orthographic', true], ['background', 'Light', true]],
+    toggles: [['Grid', 'false', true]], reset: 'Reset view', labels: 0 });
+  expect(document.querySelector('[data-vaul-drawer], [data-slot=drawer-content], [data-view-sheet]')).toBeNull();
+  const modes = sub(menu, 'display');
+  expect(modes.rows).toEqual([['Solid', 'true', true]]);
+  fireEvent.click(sub(menu, 'projection').content.querySelector<HTMLElement>('[data-display-projection="perspective"]')!);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'View' }).getAttribute('data-view-projection')).toBe('perspective'));
+  await waitFor(() => expect(document.querySelector('[role=menu][aria-label="View"]')).toBeNull());
 });
 
 it("a dismissed alert's own icon, at the navbar's right, brings its card back; it goes with the card's return, and when the alert clears", async () => {
@@ -272,8 +367,14 @@ it("a dismissed alert's own icon, at the navbar's right, brings its card back; i
   const right = () => [...document.querySelector('[data-viewer-navbar] > div')!.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'));
   const card = () => screen.queryByRole('alert');
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
-  const view: string[] = [];
-  expect([right(), barButtons()]).toEqual([view, ['Projection', 'Display mode', 'Preview']]);
+  // The view's settings at the row's right, Preview last (its panel's toggle is the row's first control, at its left);
+  // the corner keeps Home beside the cube.
+  const view = ['View', 'Preview'];
+  expect([right(), barButtons()]).toEqual([view, ['Home', 'View', 'Preview']]);
+  // Home stands against the drawn cube, 4px from its outline and level with its top face; the strip holds no Preview.
+  const home = document.querySelector<HTMLElement>('[data-view-corner-home]')!;
+  expect([home.style.right, home.style.top, document.querySelector('[role=group][aria-label="Interaction tools"] [data-view-controls]')])
+    .toEqual(['calc(var(--cad-viewport-corner-right, 2px) + 74px)', 'calc(19px + var(--cad-viewport-corner-top, 0px))', null]);
   expect(document.querySelectorAll('[data-viewer-navbar] [data-view-controls] button')).toHaveLength(0);
   stage('failed');
   expect(card()!.textContent).toContain('Harness update failed');
@@ -298,7 +399,7 @@ it("a dismissed alert's own icon, at the navbar's right, brings its card back; i
   expect(right()).toEqual(view);
 });
 
-it("the host's notice waits for the model, then takes the top-right with Quick Edit stacked under it", () => {
+it("the host's notice waits for the model, then takes the top-right; Quick Edit is the bar at the view's bottom, on the strip's line", () => {
   const notice = <div role="dialog" aria-label="A notice" />;
   const corner = () => [...document.querySelector('[data-viewport-top-right-content]')?.children ?? []]
     .map(child => child.hasAttribute('data-viewport-notice') ? 'notice' : child.hasAttribute('data-quick-edit') ? 'Quick Edit' : child.tagName);
@@ -309,7 +410,11 @@ it("the host's notice waits for the model, then takes the top-right with Quick E
   stage('broken');  // a load the model did not survive: only its card
   expect(screen.queryByRole('dialog', { name: 'A notice' })).toBeNull();
   stage('idle');
-  expect(corner()).toEqual(['notice', 'Quick Edit']);
+  expect(corner()).toEqual(['notice']);
+  // Quick Edit's row: at the bottom, where the frame's measure stands it (from the stage's left, 400px at most).
+  const row = document.querySelector<HTMLElement>('[data-quick-edit-row]')!;
+  expect([row.querySelector('[data-quick-edit]') !== null, row.closest('[data-viewport-top-right]'), row.style.bottom, row.style.left, row.style.width])
+    .toEqual([true, null, '16px', 'var(--cad-quick-edit-left, 8px)', 'var(--cad-quick-edit-width, calc(100% - 2 * 8px))']);
   cleanup();
   // Shown small, the view has no Quick Edit and no strip, and the notice still asks.
   frame({ notice, appearance: { colorScheme: 'light', compact: true } });
@@ -326,58 +431,60 @@ it('a host showing the view small gets the model alone: no tools, no view action
   expect(viewportProps.current.viewCube).toBe(false);
 });
 
-it("Projection, Display and Preview end the strip and the corner is the cube's alone; Render is no mode of Display's, Projection a button that switches, and Display's Grid leaves the drawing tools and kept tools in place", async () => {
+it("the corner's stack over the cube is Display, Projection and Home, Preview ends the strip; Display's menu holds the modes, Grid and the Background (Light, Dark, Theme), Projection switches on a press, and Grid leaves the drawing tools and kept tools in place", async () => {
   const user = userEvent.setup({ skipHover: true });
+  const goHome = vi.fn(() => true);
+  viewportHandle.current = { goHome };
   const { remount } = frame();
-  expect([strip(), barButtons()]).toEqual([['Select', 'Pencil', 'Shapes', 'Keep', 'Pose'], ['Projection', 'Display mode', 'Preview']]);
-  // After the strip's rule.
-  expect(document.querySelector('[data-cad-toolbar] [data-strip-rule] + [data-view-controls]')).not.toBeNull();
-  // The corner is the cube's alone, the viewport's: the frame stands no control of its own beside it, and the view
-  // has no Home (a view comes back by Zoom to fit, or the cube's corners).
-  expect([...document.querySelectorAll('[data-preview-chrome] button')].filter(button => !button.closest('[data-cad-tool-groups], [data-viewport-top-right]'))
-    .map(button => button.getAttribute('aria-label'))).toEqual([]);
+  expect([strip(), barButtons()]).toEqual([['Select', 'Draw', 'Keep', 'Pose'], ['Display mode', 'Projection', 'Home', 'Preview']]);
+  // No rule on the strip.
+  expect(document.querySelector('[data-strip-rule]')).toBeNull();
+  // The corner is the cube's and its stack's: the frame stands nothing else beside it. Home brings back the view the file opened with.
+  expect([...document.querySelectorAll('[data-preview-chrome] button')].filter(button => !button.closest('[data-cad-tool-groups], [data-viewport-top-right], [data-flat-panel], [data-view-top-layer]'))
+    .map(named)).toEqual(['Display mode', 'Projection', 'Home']);
+  // Outside a file viewer's navbar the corner is the view's top-right, the bottom row Quick Edit's alone: the cube's
+  // 68px box 12px off the top, and under it the stack, the corner's inset at its right (12px from the edge, as a flat view's zoom pill stands), 4px under the cube's
+  // box; its buttons 24px bare icons with a halo, on no tile, their tooltips and menus to the left.
   expect(viewportProps.current.viewCube).toBe(true);
-  expect(screen.queryByRole('button', { name: 'Home' })).toBeNull();
-  const solid = render(<SolidModeIcon />).container.querySelector('svg')!;
-  expect(displayButton().querySelector('svg')!.innerHTML).toEqual(solid.innerHTML);
+  const cornerStack = document.querySelector<HTMLElement>('[data-view-corner-stack]')!;
+  expect([cornerStack.style.right, cornerStack.style.top, cornerStack.style.bottom]).toEqual(['calc(var(--cad-viewport-corner-right, 2px) + 10px)',
+    'calc(16px + 68px + var(--cad-viewport-corner-top, 0px))', '']);
+  for (const button of cornerStack.querySelectorAll('button')) {
+    expect([button.className.includes('size-6'), button.className.includes('text-foreground/62'), button.className.includes('drop-shadow')], named(button)).toEqual([true, true, true]);
+  }
+  const home = screen.getByRole('button', { name: 'Home' });
+  await user.click(home);
+  expect(goHome).toHaveBeenCalledTimes(1);
+  expect(viewportProps.current.viewCube).toBe(true);
+  // Display's menu, opening to the left: the view's modes (one here, Solid) with their icons, then Grid, then the
+  // viewport's Background (Light, the default), each with its icon; Render is Preview's, the projection Projection's.
   await openDisplay(user);
-  // The modes the view offers (an edgeless one: Solid), then Grid: Render is Preview's, and the projection is Projection's.
-  expect(within(displayMenu()!).getAllByRole('menuitemradio').map(item => [item.textContent, item.getAttribute('aria-checked')]))
-    .toEqual([['Solid', 'true']]);
-  expect(within(displayMenu()!).getAllByRole('menuitemcheckbox').map(item => [item.textContent, item.getAttribute('aria-checked')]))
-    .toEqual([['Grid', 'false']]);
+  expect(displayMenu()!.getAttribute('data-side')).toBe('left');
+  expect(within(displayMenu()!).getAllByRole('menuitemradio').map(item => [item.textContent, item.getAttribute('aria-checked'), Boolean(item.querySelector('svg:not(.lucide-check)'))]))
+    .toEqual([['Solid', 'true', true], ['Light', 'true', true], ['Dark', 'false', true]]);
+  expect(gridItem().getAttribute('aria-checked')).toBe('false');
   expect(within(displayMenu()!).queryByRole('menuitemradio', { name: 'Perspective' })).toBeNull();
-  await user.keyboard('{Escape}');
-  await waitFor(() => expect(displayMenu()).toBeNull());
-  // Projection's tile switches on a click, no menu: Orthographic to Perspective and back, its tile saying which it is.
+  await closeDisplay(user);
+  // Projection's button switches on a click, no menu: Orthographic to Perspective and back, saying which it is.
   expect(projectionButton().getAttribute('aria-label')).toBe('Projection: Orthographic');
   await user.click(projectionButton());
-  expect(document.querySelector('[role=dialog][aria-label="Projection"], [role=menu][aria-label="Projection"]')).toBeNull();
+  expect(document.querySelector('[role=menu][aria-label="Projection"]')).toBeNull();
   expect(projectionButton().getAttribute('aria-label')).toBe('Projection: Perspective');
   await user.click(projectionButton());
   expect(projectionButton().getAttribute('aria-label')).toBe('Projection: Orthographic');
-  await user.click(projectionButton());
-  expect(projectionButton().getAttribute('aria-label')).toBe('Projection: Perspective');
   await user.click(tool('Keep'));
-  await user.click(tool('Pencil'));
+  await user.click(tool('Draw'));
   const stack = shown();
   const controls = screen.getByRole('toolbar', { name: 'Annotation controls' });
+  // Grid toggles and leaves the menu open, and the drawing tools and the kept controls stay as they were.
   await openDisplay(user);
+  await user.click(gridItem());
+  expect(gridItem().getAttribute('aria-checked')).toBe('true');
+  await closeDisplay(user);
   expect([shown(), screen.getByRole('toolbar', { name: 'Annotation controls' })]).toEqual([stack, controls]);
-  // Grid toggles and leaves the menu open.
-  await user.click(within(displayMenu()!).getByRole('menuitemcheckbox', { name: 'Grid' }));
-  expect(within(displayMenu()!).getByRole('menuitemcheckbox', { name: 'Grid' }).getAttribute('aria-checked')).toBe('true');
-  expect(displayButton().getAttribute('aria-label')).toBe('Display mode: Solid');
-  await user.keyboard('{Escape}');
-  await waitFor(() => expect(displayMenu()).toBeNull());
-  expect(tool('Pencil').getAttribute('aria-pressed')).toBe('true');
-  await openDisplay(user);
-  await user.pointer({ keys: '[MouseLeft]', target: document.querySelector('[data-mock-viewport] canvas')! });
-  await waitFor(() => expect(displayMenu()).toBeNull());
-  expect(tool('Keep').getAttribute('aria-pressed')).toBe('true');
-  await openDisplay(user);
+  expect([tool('Draw').getAttribute('aria-pressed'), tool('Keep').getAttribute('aria-pressed')]).toEqual(['true', 'true']);
   remount();
-  expect([displayMenu(), displayLit()]).toEqual([null, false]);
+  expect(barButtons()).toEqual(['Display mode', 'Projection', 'Home', 'Preview']);
 });
 
 // Preview, entered as its tile enters it: the view covered first, then Preview under the cover.
@@ -387,7 +494,7 @@ async function enterPreview(user: ReturnType<typeof userEvent.setup>) {
 }
 const previewSettings = () => screen.queryByRole('region', { name: 'Preview settings' });
 
-it("three surfaces: the strip and the stack share the chrome surface, Preview's settings are more opaque, Display's dropdown the most; the docked panel is the chrome's colour, the navbar's, its sections no surface of their own", async () => {
+it("three surfaces: the strip and the stack share the chrome surface, Preview's settings are more opaque, a dropdown the most; the docked panel is the chrome's colour, the navbar's, its tabs no surface of their own", async () => {
   const user = userEvent.setup({ skipHover: true });
   frame();
   expect(new Set([FLOATING_CHROME_SURFACE_CLASS, SETTINGS_PANEL_SURFACE_CLASS, FLOATING_SURFACE_CLASS]).size).toBe(3);
@@ -396,13 +503,15 @@ it("three surfaces: the strip and the stack share the chrome surface, Preview's 
   expect(has(screen.getByRole('group', { name: 'Interaction tools' }), FLOATING_CHROME_SURFACE_CLASS)).toBe(true);
   fireEvent.click(tool('Keep'));
   expect(has(panel('Kept controls')!, FLOATING_CHROME_SURFACE_CLASS)).toBe(true);
-  // The docked panel is chrome, not something floating: the chrome's colour, a step off the canvas, and its sections no surface of their own.
-  expect(classes(flatPanel())).toContain('bg-sidebar');
+  // The docked panel is chrome, not something floating: the chrome's colour, a step off the canvas, and its tabs no surface of their own.
+  expect(classes(flatPanel()).includes('bg-sidebar')).toBe(true);
   expect(has(panel('Harness tree')!, FLOATING_CHROME_SURFACE_CLASS)).toBe(false);
-  // Display's menu is read while it is up: its text must not compete with the model.
+  // There is one panel: nothing docked at the right.
+  expect(document.querySelectorAll('aside').length).toBe(1);
+  // Display's menu, a dropdown, the most opaque.
   await openDisplay(user);
   expect(has(displayMenu()!, FLOATING_SURFACE_CLASS)).toBe(true);
-  await user.keyboard('{Escape}');
+  await closeDisplay(user);
   await enterPreview(user);
   await user.click(screen.getByRole('button', { name: 'Preview settings' }));
   expect(has(previewSettings()!, SETTINGS_PANEL_SURFACE_CLASS)).toBe(true);
@@ -412,14 +521,16 @@ it("Preview is in Render: the strip, the view's controls, the stack and the pane
   const user = userEvent.setup({ skipHover: true });
   frame();
   await user.click(tool('Pose'));
-  expect(tabNames()).toEqual(['Harness tree', 'Reference', 'Position']);
-  await openDisplay(user);
+  expect(tabNames()).toEqual(['Harness tree', 'Reference', 'Joints']);
+  // The editor's viewport as the view has settled: its pending view update applied (the stand-in acknowledges it at once).
+  await act(async () => { await Promise.resolve(); });
   const editor = viewportProps.current;
   await enterPreview(user);
   const chrome = document.querySelector<HTMLElement>('[data-preview-chrome]')!;
   expect([chrome.hidden, chrome.hasAttribute('inert')]).toEqual([true, true]);
-  expect(chrome.contains(document.querySelector('[data-cad-tool-stack]'))).toBe(true);
-  expect(displayMenu()).toBeNull();
+  // The strip's column and Quick Edit stand in the layer over the panels, which goes with it.
+  const top = document.querySelector<HTMLElement>('[data-view-top-layer]')!;
+  expect([top.hidden, top.hasAttribute('inert'), top.contains(document.querySelector('[data-cad-tool-stack]'))]).toEqual([true, true, true]);
   // The strip goes with the tools view.
   expect([barButtons(), screen.queryByRole('group', { name: 'Interaction tools' })]).toEqual([[], null]);
   // The panel is the tools view's alone: hidden, its sections kept mounted, no pill. (The harness has
@@ -429,7 +540,7 @@ it("Preview is in Render: the strip, the view's controls, the stack and the pane
   expect(screen.queryByRole('toolbar', { name: 'Animation playback' })).toBeNull();
   // Its bar, along the view's top edge: the file's name, then its settings and the way out, an X.
   expect([previewBar()!.querySelector('[data-preview-name]')!.textContent, cornerButtons()]).toEqual(['panel.harness', ['Preview settings', 'Exit preview']]);
-  expect(previewBar()!.className).toMatch(/\bh-9\b/);
+  expect(previewBar()!.className).toMatch(/\bh-10\b/);
   const corner = previewBar()!;
   expect(within(corner).getByRole('button', { name: 'Exit preview' }).querySelector('svg.lucide-x')).not.toBeNull();
   // Preview draws Render in a view of its own; the editor's viewport is asked for nothing new.
@@ -449,20 +560,18 @@ it("Preview is in Render: the strip, the view's controls, the stack and the pane
   expect(chrome.hidden).toBe(false);
   // Preview's view is gone, and the editor's is as it was: nothing Preview did reached it.
   expect([inPreview(), previewProps.current, viewportProps.current.suspended, unchanged()]).toEqual([false, null, false, []]);
-  expect(barButtons()).toEqual(['Projection', 'Display mode', 'Preview']);
-  // The tools view is in the file's own mode, as it always was.
-  expect(displayButton().getAttribute('aria-label')).toBe('Display mode: Solid');
-  // The tool in hand is as it was, its section's tile with it; Display, put away, stays shut.
-  expect(tabNames()).toEqual(['Harness tree', 'Reference', 'Position']);
+  expect(barButtons()).toEqual(['Display mode', 'Projection', 'Home', 'Preview']);
+  // The tools view is as it was: the panel back, the tool in hand, its section's tab with it.
+  expect(flatPanel().hidden).toBe(false);
+  expect(tabNames()).toEqual(['Harness tree', 'Reference', 'Joints']);
   expect(tool('Pose').getAttribute('aria-pressed')).toBe('true');
-  expect([displayMenu(), displayLit()]).toEqual([null, false]);
   // What was set in Preview is the file's Render settings: the next visit has it.
   act(() => { fireEvent.click(document.querySelector('[data-harness-ask-preview]')!); });
   expect(inPreview()).toBe(true);
   await user.click(within(previewBar()!).getByRole('button', { name: 'Preview settings' }));
   expect(floor().getAttribute('aria-checked')).toBe('false');
   await user.click(within(previewBar()!).getByRole('button', { name: 'Exit preview' }));
-  expect([displayMenu(), displayLit()]).toEqual([null, false]);
+  expect(flatPanel().hidden).toBe(false);
 });
 
 it("Preview is covered from the press until its picture has converged, then shows the finished picture", async () => {
@@ -655,21 +764,11 @@ it("Orbit's speed comes back with the file's view", async () => {
 it('Escape puts the tool in hand down and takes Select up, what it set kept', async () => {
   const user = userEvent.setup({ skipHover: true });
   frame({ viewer: true });
-  await user.click(tool('Pencil'));
-  expect(tool('Pencil').getAttribute('aria-pressed')).toBe('true');
+  await user.click(tool('Draw'));
+  expect(tool('Draw').getAttribute('aria-pressed')).toBe('true');
   act(() => { document.querySelector<HTMLElement>('[data-slot="cad-file-view"]')!.focus(); });
   await user.keyboard('{Escape}');
-  expect([tool('Pencil').getAttribute('aria-pressed'), tool('Select').getAttribute('aria-pressed')]).toEqual(['false', 'true']);
-});
-
-it('Escape closes the Display menu and gives its tile the focus back, the tool in hand kept', async () => {
-  const user = userEvent.setup({ skipHover: true });
-  frame();
-  await openDisplay(user);
-  await user.keyboard('{Escape}');
-  await waitFor(() => expect([displayMenu(), displayLit()]).toEqual([null, false]));
-  await waitFor(() => expect(document.activeElement).toBe(displayButton()));
-  expect(tool('Select').getAttribute('aria-pressed')).toBe('true');
+  expect([tool('Draw').getAttribute('aria-pressed'), tool('Select').getAttribute('aria-pressed')]).toEqual(['false', 'true']);
 });
 
 it("what a person uses is counted for the host by name: a tool taken up and how long it was up, Display's Grid, Preview and its seconds, never the tool the file opened in or its return from Preview", async () => {
@@ -678,11 +777,12 @@ it("what a person uses is counted for the host by name: a tool taken up and how 
   const reports: { control: string; count: number; seconds: number }[][] = [];
   const user = userEvent.setup({ skipHover: true });
   const view = frame({ usage: counts => reports.push(counts) });
-  fireEvent.click(tool('Pencil'));
+  fireEvent.click(tool('Draw'));
   now += 5_000;
   fireEvent.click(tool('Select'));
   await openDisplay(user);
-  await user.click(within(displayMenu()!).getByRole('menuitemcheckbox', { name: 'Grid' }));
+  await user.click(gridItem());
+  await closeDisplay(user);
   await enterPreview(user);
   // Preview's bar: its settings opened (a use, no seconds), then its way out.
   await user.click(within(previewBar()!).getByRole('button', { name: 'Preview settings', exact: true }));
@@ -691,9 +791,35 @@ it("what a person uses is counted for the host by name: a tool taken up and how 
   expect(reports).toEqual([]); // said at most every minute, or as the view goes
   view.unmount();
   const said = Object.fromEntries(reports.flat().map(({ control, ...counts }) => [control, counts]));
-  expect(said).toEqual({ pencil: { count: 1, seconds: 5 }, display_grid: { count: 1, seconds: 0 }, preview: { count: 1, seconds: 3 },
+  expect(said).toEqual({ draw: { count: 1, seconds: 5 }, display_grid: { count: 1, seconds: 0 }, preview: { count: 1, seconds: 3 },
     preview_settings: { count: 1, seconds: 0 },
     // Select is counted once: the person took it up again; the file opened in it, and Preview gave it back.
     select: { count: 1, seconds: 0 } });
   vi.restoreAllMocks();
+});
+
+it("the model area follows the viewport's Background, not the app's theme: Light in a dark app draws the scene, the cube and what stands on the picture light, the chrome dark; Dark from Display's Background, and Light again", async () => {
+  const user = userEvent.setup({ skipHover: true });
+  const { preferences } = frame({ appearance: { colorScheme: 'dark' } });
+  const box = () => document.querySelector<HTMLElement>('[data-cad-canvas-box]')!;
+  const corner = () => document.querySelector<HTMLElement>('[data-view-corner]')!;
+  // Light, the default: the scene's look, the cube's axes and the canvas box's tokens light; the strip (chrome) not scoped.
+  // Unset in the tab's settings (a host that hands over less): Light.
+  expect(preferences.getSnapshot().viewportBackground).toBeUndefined();
+  expect([viewportProps.current.appearance, box().classList.contains('light'), corner().classList.contains('light'),
+    document.querySelector('[data-viewport-scheme]')!.getAttribute('data-viewport-scheme')]).toEqual(['light', true, true, 'light']);
+  expect(screen.getByRole('group', { name: 'Interaction tools' }).closest('.light')).toBeNull();
+  // The light viewport's scene stands on its gradient, top to bottom, whatever the app's theme.
+  expect([viewportProps.current.themeSettings.background.type, viewportProps.current.themeSettings.background.solidColor]).toEqual(['linear', '#dfe2e5']);
+  // Display's Background: Dark, then Light again, each the person's, kept in the tab's settings.
+  await openDisplay(user);
+  await user.click(backgroundItem('dark')!);
+  await waitFor(() => expect(viewportProps.current.appearance).toBe('dark'));
+  expect([preferences.getSnapshot().viewportBackground, box().classList.contains('dark'), viewportProps.current.themeSettings.background]).toEqual(['dark', true,
+    expect.objectContaining({ type: 'solid', solidColor: '#1e1e1e' })]);
+  await openDisplay(user);
+  expect(backgroundItem('theme')).toBeNull();
+  await user.click(backgroundItem('light')!);
+  await waitFor(() => expect(preferences.getSnapshot().viewportBackground).toBe('light'));
+  await waitFor(() => expect(viewportProps.current.appearance).toBe('light'));
 });

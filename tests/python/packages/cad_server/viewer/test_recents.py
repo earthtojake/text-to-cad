@@ -108,7 +108,7 @@ class RecentStoreTest(unittest.TestCase):
         self.assertIsNone(entry.public()["thumbnailDark"])
         self.assertEqual([path.name for path in store.thumbnails.iterdir()], [entry.thumbnail])
 
-    def test_a_file_is_updated_when_it_last_changed_on_disk_and_a_gone_one_says_nothing(self) -> None:
+    def test_a_file_is_updated_and_sized_as_it_is_on_disk_and_a_gone_one_says_nothing(self) -> None:
         store = RecentStore(self.tmp / "state")
         model = self.tmp / "part.stl"
         model.write_bytes(b"solid t\nendsolid t\n")
@@ -116,8 +116,10 @@ class RecentStoreTest(unittest.TestCase):
         store.opened(str(model))
         store.opened(str(self.tmp / "gone.stl"))
         shown = {entry["name"]: entry for entry in (recent.public() for recent in store.list())}
-        self.assertEqual((shown["part.stl"]["updated"], shown["part.stl"]["missing"]), (1_700_000_000, False))
-        self.assertEqual((shown["gone.stl"]["updated"], shown["gone.stl"]["missing"]), (None, True))
+        self.assertEqual((shown["part.stl"]["updated"], shown["part.stl"]["size"], shown["part.stl"]["missing"]), (1_700_000_000, len(b"solid t\nendsolid t\n"), False))
+        self.assertEqual((shown["gone.stl"]["updated"], shown["gone.stl"]["size"], shown["gone.stl"]["missing"]), (None, None, True))
+        model.write_bytes(b"solid t\nfacet\nendsolid t\n")  # written again: the next read has its new size
+        self.assertEqual({recent.name or os.path.basename(recent.path): recent.size for recent in store.list()}["part.stl"], len(b"solid t\nfacet\nendsolid t\n"))
         self.assertGreater(shown["part.stl"]["opened"], 1_700_000_000, "opened is the page's, now")
         self.assertNotIn("modified", shown["part.stl"])
 
@@ -134,10 +136,10 @@ class RecentStoreTest(unittest.TestCase):
                                 "entry": "plate", "revision": "r1", "built": built})
         store = RecentStore(self.tmp)
         timed = []
-        with mock.patch.object(recents, "_mtime", side_effect=lambda path: timed.append(path)):
+        with mock.patch.object(recents, "_on_disk", side_effect=lambda path: timed.append(path)):
             [entry] = [recent.public() for recent in store.list()]
-        self.assertEqual(timed, [], "a model's script's time is never read")
-        self.assertEqual((entry["updated"], entry["opened"], entry["missing"]), (built, None, False))
+        self.assertEqual(timed, [], "a model's script's time and size are never read")
+        self.assertEqual((entry["updated"], entry["opened"], entry["missing"], entry["size"]), (built, None, False, None))
         self.assertIsNone(entry["created"], "a record from before the engine kept it says no creation time")
         store.opened(ident)  # a page opened it: its record says when, and its run's time stays
         [entry] = [recent.public() for recent in store.list()]

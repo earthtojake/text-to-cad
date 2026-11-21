@@ -2,13 +2,18 @@ import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup,
   DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger
 } from "@cad/ui/primitives/dropdown-menu";
+import { ChevronDown, Moon, Sun } from "lucide-react";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { useStripButtonClass } from "../tools/FloatingToolBar.js";
 import { GridIcon } from "../view-settings/DisplayModeOptions.js";
+import { VIEWPORT_BACKGROUNDS } from "@cad/core/lib/viewportTheme.js";
+import { useControlUsage } from "../../../usage/controls.js";
 
+// The Background's icons, the app menu's Theme's own: the sun and the moon.
+const BACKGROUND_ICONS = Object.freeze({ light: Sun, dark: Moon });
 // The camera's two projections, as Display's list names them where a view keeps Projection there.
 const PROJECTIONS = Object.freeze(["orthographic", "perspective"]);
 
@@ -19,14 +24,17 @@ const PROJECTIONS = Object.freeze(["orthographic", "perspective"]);
  * (`disabled`: what the view's own settings came to by hand), and may have no grid. A view that keeps
  * the camera's projection here, a setting it changes seldom, rather than as a tile of its own
  * (`ProjectionToggle.jsx`), ends the list with it (`projection`): after a rule, under its muted name,
- * Orthographic and Perspective, the one on screen ticked.
+ * Orthographic and Perspective, the one on screen ticked. Last, the viewport's **Background**
+ * (`background`, `@cad/core/lib/viewportTheme.js`: Light or Dark), the person's, the same in
+ * every file and view: after a rule, under its muted name, each with its icon, the one chosen ticked.
  *
  * @param {{ mode: { value: string, options: { value: string, label?: string, Icon?: Function, disabled?: boolean }[], onChange(value: string): void },
  *   grid?: { value: boolean, onChange(value: boolean): void } | null,
  *   projection?: { value: string, onChange(value: string): void } | null }} props
  */
-export function DisplayMenuItems({ mode, grid = null, projection = null }) {
+export function DisplayMenuItems({ mode, grid = null, projection = null, background = null }) {
   const { t } = useI18n();
+  const usage = useControlUsage();
   return <>
     <DropdownMenuRadioGroup aria-label={t("display.mode")} value={mode.value} onValueChange={mode.onChange}>
       {mode.options.map(({ value, Icon, label, disabled }) => <DropdownMenuRadioItem key={value} value={value} disabled={disabled === true} data-display-mode-option={value}>
@@ -49,18 +57,32 @@ export function DisplayMenuItems({ mode, grid = null, projection = null }) {
         {PROJECTIONS.map(value => <DropdownMenuRadioItem key={value} value={value} data-display-projection={value}>{t(`projection.${value}`)}</DropdownMenuRadioItem>)}
       </DropdownMenuRadioGroup>
     </> : null}
+    {background ? <>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel className="text-muted-foreground">{t("display.background")}</DropdownMenuLabel>
+      <DropdownMenuRadioGroup aria-label={t("display.background")} value={background.value}
+        onValueChange={value => { if (value === background.value) return; usage.used(`viewport_background_${value}`); background.onChange(value); }}>
+        {VIEWPORT_BACKGROUNDS.map(value => {
+          const Icon = BACKGROUND_ICONS[value];
+          return <DropdownMenuRadioItem key={value} value={value} data-display-background={value}><Icon className="size-4" />{t(`display.background.${value}`)}</DropdownMenuRadioItem>;
+        })}
+      </DropdownMenuRadioGroup>
+    </> : null}
   </>;
 }
 
 /**
- * The Display tile, on the strip after Projection's (a board's after its Flip and 2D/3D): the mode on
- * screen's sphere, opening Display's list (`DisplayMenuItems`) under it. A mode chosen closes it, as a
+ * The Display button: first in the corner's stack, a 3D view's over its cube, a board's over its zoom pill
+ * (`ViewCornerStack.jsx`, `className`, its menu to the side away from the corner, its bottom on the button's: `side`,
+ * `align`): the mode on screen's sphere, opening Display's list (`DisplayMenuItems`). A mode chosen closes it, as a
  * projection chosen does; the Grid switch leaves it open. Projection is otherwise a tile of its own that
  * switches on a click (`ProjectionToggle.jsx`); on a phone Display is More's submenu instead (`RendererShell.jsx`).
  */
-export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid = null, projection = null, icon = null }) {
+export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid = null, projection = null, background = null, icon = null,
+  className = null, side = "bottom", align = "center", chevron = false }) {
   const { t } = useI18n();
-  const tileClass = useStripButtonClass();
+  const stripClass = useStripButtonClass();
+  const tileClass = className ?? stripClass;
   const current = mode.options.find(option => option.value === mode.value) || mode.options[0];
   // The mode's own sphere, or the view's one glyph for Display (`icon`) where its modes have none.
   const Icon = icon || current?.Icon;
@@ -68,15 +90,17 @@ export default function DisplayPopover({ disabled = false, boundary = null, tool
   return <DropdownMenu modal={false} onOpenChange={onOpenChange}>
     <DropdownMenuTrigger asChild>
       <ToolbarButton label={t("display.modeCurrent", { mode: currentLabel })} tooltip={t("display.label")} tooltipSide={tooltipSide} disabled={disabled}
-        className={tileClass} data-display-mode={current?.value}>
+        className={cn(tileClass, chevron && "w-auto gap-0.5 px-1.5")} data-display-mode={current?.value}>
         {Icon ? <Icon /> : null}
+        {/* In the navbar, Display ▾: its menu's chevron after the mode's icon. */}
+        {chevron ? <ChevronDown className="size-3! opacity-60" aria-hidden="true" /> : null}
       </ToolbarButton>
     </DropdownMenuTrigger>
     {/* Closes with no exit animation, so a quick second press always reaches the tile. */}
-    <DropdownMenuContent align="center" sideOffset={6} collisionPadding={8} collisionBoundary={boundary || undefined} aria-label={t("display.label")}
+    <DropdownMenuContent side={side} align={align} sideOffset={side === "bottom" ? 6 : 8} collisionPadding={8} collisionBoundary={boundary || undefined} aria-label={t("display.label")}
       className={cn(FLOATING_SURFACE_CLASS, "w-44 data-[state=closed]:animate-none!")}>
       <DropdownMenuLabel className="text-muted-foreground">{t("display.label")}</DropdownMenuLabel>
-      <DisplayMenuItems mode={mode} grid={grid} projection={projection} />
+      <DisplayMenuItems mode={mode} grid={grid} projection={projection} background={background} />
     </DropdownMenuContent>
   </DropdownMenu>;
 }

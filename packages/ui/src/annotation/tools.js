@@ -1,6 +1,7 @@
 
+// Fill is a shape tool: it puts down no outline of its own, but a closed shape's interior, in the shapes' colour.
 /** @type {readonly ShapeTool[]} */
-export const SHAPE_TOOLS = Object.freeze(['rectangle', 'line', 'arrow', 'ellipse', 'text']);
+export const SHAPE_TOOLS = Object.freeze(['rectangle', 'line', 'arrow', 'ellipse', 'text', 'fill']);
 /** The tool each strip tool takes up first. */
 export const DEFAULT_PENCIL_TOOL = 'freedraw';
 export const DEFAULT_SHAPE_TOOL = 'rectangle';

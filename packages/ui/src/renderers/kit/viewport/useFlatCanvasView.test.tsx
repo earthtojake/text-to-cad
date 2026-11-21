@@ -11,7 +11,7 @@ import { flatViewRecord } from './flatView.js';
 
 const BOUNDS = [0, 0, 160, 100] as const;
 const VIEW = { width: 1440, height: 800 };
-const PANEL = 216;
+const PANEL = 240;
 let pane = { ...VIEW };
 const observers = new Set<() => void>();
 const resize = (next: { width: number; height: number }) => act(() => { pane = next; observers.forEach(callback => callback()); });

@@ -6,25 +6,28 @@ import {
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
-import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
+import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { ViewerHostContext } from "../../../host/context.js";
-import { STRIP_BUTTON_CLASS, STRIP_SHAPE_CLASS } from "../tools/stripTouch.js";
+import { CORNER_BUTTON_CLASS } from "./ViewCornerStack.jsx";
 import { ZOOM_FACTOR, zoomShortcuts } from "../tools/toolShortcuts.js";
 import { useViewCornerSide, viewCornerAway } from "./ViewCorner.jsx";
 import { viewCornerLayout } from "./viewportLayout.js";
 
 export { ZOOM_FACTOR };
 
-// The pill is a floating toolbar of its own: the strip's shape on the strip's surface (`FloatingToolBar.js`), its
-// tiles inside the strip's padding, so it is as tall as the strip (34px with its border) and reads as the same object.
-const PILL_CLASS = cn("pointer-events-auto absolute z-20 inline-flex shrink-0", STRIP_SHAPE_CLASS, FLOATING_CHROME_SURFACE_CLASS);
-// Its percentage: a tile 48px wide, its digits tabular, lit while the menu it opens is up.
-const PERCENT_CLASS = cn(STRIP_BUTTON_CLASS, "w-12 px-0 text-tiny font-medium tabular-nums aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground");
+// The zoom is drawn as the corner's stack is (`ViewCornerStack.jsx`): a row of bare 24px buttons, 4px apart, on no tile,
+// border or shadow — their icons and the percentage at the muted foreground, haloed in the theme's background so they
+// read over the drawing, the same faint fill under the pointer and stronger while the menu is open.
+// The − and + touch the percentage, which is as wide as its widest reading, so the three read as one control.
+const PILL_CLASS = "pointer-events-auto absolute z-20 inline-flex shrink-0 items-center";
+// Its percentage: a button 48px wide, its digits tabular, its text haloed as the icons are, lit while its menu is up.
+const PERCENT_CLASS = cn(CORNER_BUTTON_CLASS, "w-10 px-0 text-tiny font-medium tabular-nums",
+  "[text-shadow:0_0_1px_var(--background),0_0_2px_var(--background),0_0_3px_var(--background)]");
 
 /**
  * A flat view's zoom, the one thing in the view's corner (`ViewCorner.jsx`), as a canvas tool keeps it (tldraw's,
- * Excalidraw's, Miro's): − and + either side of the zoom as a percentage, the strip's tiles in a floating toolbar
- * of its own (the strip's shape and surface, 34px tall), and the percentage pressed opens the zoom's menu — Zoom in,
+ * Excalidraw's, Miro's): − and + either side of the zoom as a percentage, bare buttons in a row as the corner's stack
+ * draws its own (no surface: `ViewCornerStack.jsx`'s `CORNER_BUTTON_CLASS`, 24px), and the percentage pressed opens the zoom's menu — Zoom in,
  * Zoom out, Zoom to 100%, then Zoom to fit and Zoom to selection (off with nothing picked), each with its key
  * (`zoomShortcuts`; the view's keys, `pressZoomKey`).
  * A 3D view shows no percentage: its corner is the cube's alone. A flat view that draws its
@@ -50,7 +53,7 @@ export default function ZoomPill({ zoom, style = null }) {
   const shown = `${Math.round(percent).toLocaleString()}%`;
   const side = useViewCornerSide();
   return <div className={PILL_CLASS} style={style ?? viewCornerLayout(side).pill} data-zoom-pill="">
-    <ToolbarButton label={t("zoom.out")} shortcut={keys.out} tooltipSide="top" className={STRIP_BUTTON_CLASS} onClick={() => zoom.zoomBy(1 / ZOOM_FACTOR)}>
+    <ToolbarButton label={t("zoom.out")} shortcut={keys.out} tooltipSide="top" className={CORNER_BUTTON_CLASS} onClick={() => zoom.zoomBy(1 / ZOOM_FACTOR)}>
       <Minus aria-hidden="true" />
     </ToolbarButton>
     <DropdownMenu modal={false}>
@@ -64,7 +67,7 @@ export default function ZoomPill({ zoom, style = null }) {
         <ZoomMenuItems zoom={zoom} />
       </DropdownMenuContent>
     </DropdownMenu>
-    <ToolbarButton label={t("zoom.in")} shortcut={keys.in} tooltipSide="top" className={STRIP_BUTTON_CLASS} onClick={() => zoom.zoomBy(ZOOM_FACTOR)}>
+    <ToolbarButton label={t("zoom.in")} shortcut={keys.in} tooltipSide="top" className={CORNER_BUTTON_CLASS} onClick={() => zoom.zoomBy(ZOOM_FACTOR)}>
       <Plus aria-hidden="true" />
     </ToolbarButton>
   </div>;
@@ -74,7 +77,7 @@ export default function ZoomPill({ zoom, style = null }) {
 export function ZoomMenuItems({ zoom }) {
   const { t } = useI18n();
   const keys = zoomShortcuts(useContext(ViewerHostContext)?.environment?.platform);
-  const item = (label, shortcut, onSelect, disabled = false) => <DropdownMenuItem className="text-xs" disabled={disabled} onSelect={onSelect}>
+  const item = (label, shortcut, onSelect, disabled = false) => <DropdownMenuItem disabled={disabled} onSelect={onSelect}>
     {label}<DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut>
   </DropdownMenuItem>;
   return <>

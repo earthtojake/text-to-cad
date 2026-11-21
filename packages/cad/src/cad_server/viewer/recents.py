@@ -87,6 +87,9 @@ class Recent:
     thumbnail_dark: str | None = None
     # When the picture was taken, in seconds: a document updated since has an old one.
     pictured: float | None = None
+    # A file's size on disk, in bytes (None once it is gone); a model's and a shape's: None, its
+    # script never read.
+    size: int | None = None
     # ``file``, ``model`` or ``shape`` (the record's ``kind``).
     kind: str = "file"
     # A model's (and a shape's): its name, its script, and the command that builds it again.
@@ -149,6 +152,7 @@ class Recent:
             "thumbnail": self.thumbnail,
             "thumbnailDark": self.thumbnail_dark,
             "pictured": self.pictured,
+            "size": self.size,
         }
         found["kind"] = self.kind
         if self.kind != "file":
@@ -158,13 +162,13 @@ class Recent:
         return found
 
 
-def _mtime(path: str) -> float | None:
-    """A CAD file's time on disk; None once it is gone (or is no file)."""
+def _on_disk(path: str) -> tuple[float | None, int | None]:
+    """A CAD file's time and size on disk, from one stat; None for both once it is gone (or is no file)."""
     try:
         status = os.stat(path)
     except OSError:
-        return None
-    return status.st_mtime if stat.S_ISREG(status.st_mode) else None
+        return None, None
+    return (status.st_mtime, status.st_size) if stat.S_ISREG(status.st_mode) else (None, None)
 
 
 class RecentStore:
@@ -259,7 +263,8 @@ class RecentStore:
                       "created": record.get("created")}
             if record.get("kind") == "file" and record.get("opened"):
                 path = str(registering.home(self.registry, record))
-                entries.append(Recent(path=path, opened=float(record["opened"]), updated=_mtime(path), **common))
+                updated, size = _on_disk(path)
+                entries.append(Recent(path=path, opened=float(record["opened"]), updated=updated, size=size, **common))
             elif record.get("kind") in ("model", "shape"):
                 program = registering.program(self.registry, record)
                 entries.append(Recent(path=record["id"], kind=record["kind"], name=record.get("name") or record.get("entry"),

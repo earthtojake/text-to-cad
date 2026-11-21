@@ -1,8 +1,9 @@
+import { SCENE_COLORS } from "@cad/core/lib/viewportTheme.js";
 import { createScreenSpaceLineStrip } from "@cad/core/common/renderEdges.js";
 import {
   ANNOTATION_RENDER_ORDER, annotationDocument, annotationMarkObject, annotationObjectShown as shown, clipAnnotationObject, disposeAnnotationObject
 } from "@cad/core/common/annotation.js";
-import { markPoints } from "../../../../annotation/geometry.js";
+import { fillMarkAt, interiorPoint, markPoints } from "../../../../annotation/geometry.js";
 import { requestSceneFrame } from "../../viewport/sceneFrames.js";
 
 // The annotation in the model: each mark Annotate puts down (`annotation/geometry.js`), drawn over the view
@@ -518,7 +519,7 @@ export function projectAnnotations(runtime, marks, size, { placement = "surface"
     const item = { id: mark.id, kind: mark.kind, points: positions, color: mark.color, ...(mark.group ? { group: mark.group } : {}),
       ...(mark.view ? { view: mark.view } : {}), touches: touchesOf(mark.kind === "area" ? mark.outline : points, touchesAt, partAt) };
     if (mark.kind === "stroke") Object.assign(item, { width: mark.width, opacity: mark.opacity, closed: mark.closed,
-      ...(widths ? { widths } : {}) });
+      ...(widths ? { widths } : {}), ...(mark.dash ? { dash: mark.dash } : {}) });
     else if (mark.kind === "area") Object.assign(item, { opacity: mark.opacity, triangles: area.index, outline: mark.outline.length });
     else Object.assign(item, { text: mark.text, fontPx: mark.fontPx });
     return item;
@@ -587,7 +588,7 @@ export function annotationsOnScreen(runtime, items, { width, height }) {
 
 // What Select has picked is haloed: a wider line in the selection's blue behind the ink, along a
 // stroke, round a fill's outline or a text mark's box; what the pointer rests on, a fainter one.
-const SELECTION_COLOR = "#2979ff";
+const SELECTION_COLOR = SCENE_COLORS.selected;
 const HALO_PX = 6;
 const PICKED_OPACITY = 0.5;
 const HOVERED_OPACITY = 0.25;
@@ -700,4 +701,45 @@ export function mountAnnotations(runtime) {
       redraw();
     },
   };
+}
+
+// The plane a shape's own points lie on (Newell's method, a fit), or null where they do not lie on one
+// (drawn across a curved face, say) or lie on a line.
+export function planeOfShape(runtime, item) {
+  const points = annotationWorldPoints(runtime, item);
+  if (points.length < 3) return null;
+  const { THREE } = runtime;
+  const centre = points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).divideScalar(points.length);
+  const normal = new THREE.Vector3();
+  points.forEach((point, index) => {
+    const next = points[(index + 1) % points.length];
+    normal.x += (point.y - next.y) * (point.z + next.z);
+    normal.y += (point.z - next.z) * (point.x + next.x);
+    normal.z += (point.x - next.x) * (point.y + next.y);
+  });
+  if (normal.lengthSq() < 1e-18) return null;
+  normal.normalize();
+  const extent = Math.max(...points.map(point => point.distanceTo(centre)));
+  const tolerance = Math.max(1e-3 * extent, 1e-4 * (Number(runtime.modelRadius) || 1), 1e-6);
+  return points.every(point => Math.abs(point.clone().sub(centre).dot(normal)) <= tolerance)
+    ? { point: centre.toArray(), normal: normal.toArray() } : null;
+}
+/** A closed outline drawn as a shape (a rectangle, an ellipse): what a fill fills. */
+export const closedShape = item => item.kind === "stroke" && item.closed && !item.widths;
+
+/**
+ * A closed shape's fill, as ink: its interior as it falls on the screen now (`outline`, the shape on screen; from
+ * `seed`, a point inside it, else its own interior point), in `color`, lying where the shape does — on the shape's
+ * own plane if it has one, else on the surface under it. The fill the selected shape's Fill toggle and the drawing
+ * row's Fill tool put down alike (`session.fill`). Empty where nothing inside it is found.
+ * @param {object} runtime @param {object} shape @param {{ points: { x: number, y: number }[] }} outline
+ * @param {{ x: number, y: number } | null} seed @param {string} color @param {{ width: number, height: number }} view
+ */
+export function fillAreasOf(runtime, shape, outline, seed, color, view) {
+  const at = seed || interiorPoint(outline.points);
+  const mark = at && fillMarkAt(at, [outline], color);
+  if (!mark) return [];
+  const plane = planeOfShape(runtime, shape);
+  return projectAnnotations(runtime, [{ ...mark, ...(shape.view ? { view: shape.view } : {}) }], view,
+    { placement: plane ? "plane" : "surface", level: plane });
 }

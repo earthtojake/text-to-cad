@@ -2,7 +2,8 @@
 structure lists what the worker that built the model recorded; ``set`` -- the library's, the command's and the
 page's route alike -- writes the numbers at their bytes alone and builds the script's last run again, refuses
 by one word of a closed set with nothing written, and puts the bytes and the document back where the build at
-the new values fails. A declared xbf carries the record, read-only; a document no live worker built is too."""
+the new values fails. A declared xbf carries the record, read-only, and so does one exported from the model; a
+document no live worker built is read-only too."""
 
 from __future__ import annotations
 
@@ -240,6 +241,14 @@ class SiblingsTest(unittest.TestCase):
         self.assertEqual(self.wall(self.b), (3.5, True, None))
         self.assertEqual(cad.model.set(self.b, wall=4.0)["written"][0]["to"], 4.0, "set through b")
 
+    def test_an_xbf_exported_from_a_model_carries_its_parameters_read_only(self) -> None:
+        out = Path(tempfile.mkdtemp(prefix="parameters-export-")).resolve()
+        self.addCleanup(shutil.rmtree, out, True)
+        api.export(self.a, out / "a.xbf", progress=False)
+        listed = cad.xbf.inspect(out / "a.xbf", query="structure")["summary"]["parameters"]
+        self.assertEqual([(row["name"], row["value"], row["kind"], row["min"], row["max"], row["writable"], row["reason"])
+                          for row in listed], [("wall", 2.0, "float", 1, 5, False, "file")])
+
     def test_a_model_that_built_and_fails_at_the_new_values_fails_the_set(self) -> None:
         with self.assertRaises(ParameterRefused) as caught:
             cad.model.set(self.a, wall=4.8)
@@ -351,7 +360,14 @@ class BusyTest(unittest.TestCase):
             setting.set("id", {"wall": 3.0})
         self.assertEqual(caught.exception.code, "busy")
         worker.leased, worker.op = False, None
-        setting.scripts.add(os.path.normcase(row["file"]))  # a set of the same script under way
+        from cad.engine.ids import canonical
+
+        key = canonical(row["file"])
+        with setting.building(key):  # a build of the script in another worker (another Python's), or waiting for one
+            with self.assertRaises(ParameterRefused) as caught:
+                setting.set("id", {"wall": 3.0})
+            self.assertEqual(caught.exception.code, "busy")
+        setting.claims[key] = 0  # a set of the same script under way, on another thread
         with self.assertRaises(ParameterRefused) as caught:
             setting.set("id", {"wall": 3.0})
         self.assertEqual(caught.exception.code, "busy")

@@ -31,7 +31,7 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
 - `annotation/toolbar.jsx` — `AnnotationToolbar`, the sub-toolbar both strip tools share: one row (at every width; a phone's
   wraps where it has no room) — the tools of the strip tool that is up, a button each, the one in hand pressed (Pencil's Pen,
   Highlighter, Eraser; Shapes' Rectangle, Line, Arrow, Ellipse, Text); a rule; Color, Stroke width and Placement (On
-  surface, On plane), dropdowns of the tool in hand's own style (disabled under the Eraser), Stroke width's glyph a straight line drawn at the weight (four, 1–6px, unnamed in its menu; Color's and its menus have no heading), then Clear;
+  surface, On plane), dropdowns of the tool in hand's own style (disabled under the Eraser), Stroke width's button three lines thin to thick, each weight in its menu a straight line drawn at it (four, 1–6px, unnamed; Color's and its menus have no heading), then Clear;
   Undo and Redo are ⌘Z and ⇧⌘Z, with no buttons. A flat view (a DXF) passes `placements={false}`: its ink has nowhere to lie but the drawing.
   `annotationColors` offers
   neon swatches and a neutral that reads against the theme: white in dark mode,

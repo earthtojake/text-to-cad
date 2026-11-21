@@ -26,9 +26,9 @@ it('shows the state on screen and names it; its tooltip says what a press does, 
   expect(button.hasAttribute('aria-pressed')).toBe(false);
   expect([button.getAttribute('aria-keyshortcuts'), button.getAttribute('data-variant'), button.getAttribute('data-view-state')]).toEqual(['3', 'ghost', '2d']);
   expect(button.hasAttribute('data-state-button')).toBe(true);
-  // A strip tile: 24px, its icon 14px.
-  expect(button.className).toContain('size-6');
-  expect(button.className).toContain('[&>svg]:size-3.5!');
+  // A strip tile at Figma's proportions: 28px, its icon 16px.
+  expect(button.className).toContain('size-7');
+  expect(button.className).toContain('[&>svg]:size-4!');
   hover(button);
   expect(tip()!.textContent).toBe('Switch to 3D3');
   expect(document.querySelector('[data-slot=tooltip-content] [data-tooltip-shortcut]')!.textContent).toBe('3');

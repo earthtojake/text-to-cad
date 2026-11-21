@@ -69,3 +69,108 @@ it('requires an explicit clock for a routine', () => {
   expect(() => render(<AnimationTimeControl runtime={routine()} />)).toThrow(/animation clock/);
   error.mockRestore();
 });
+
+it("the Animation section holds the same controls playing and paused, its scrubber's start lets the routine go, and a file without routines has none", async () => {
+  const { default: AnimationTab } = await import('../../../../dist/renderers/kit/tools/playbar/AnimationSection.js');
+  const bar = () => document.querySelector<HTMLElement>('[data-animation-section]')!;
+  // Each control by its accessible name: the routine's dropdown, Play/Pause and the scrubber (one row), Speed, Loop, Autoplay.
+  const controls = () => [...bar().querySelectorAll('[data-animation-clip-menu], [data-animation-play], [role=slider], [data-animation-speed], [data-animation-loop], [data-animation-autoplay]')]
+    .map(control => control.getAttribute('aria-label') || control.textContent);
+  const props = { autoplay: false, onAutoplayChange: () => {} };
+  const clock = createAnimationClock();
+  const playing = routine({ clock, enabled: true, playing: true, onRelease: vi.fn() });
+  const { rerender } = render(<AnimationTab runtime={playing} {...props} />);
+  act(() => { clock.setAnimationClock(3); });
+  expect(controls()).toEqual(['Routines: Turn', 'Pause animation', 'Animation time', 'Animation speed: 1×', 'Loop', 'Autoplay']);
+  // One clip: its dropdown all the same, above the transport; Play and Reset at the row's left, the scrubber the rest;
+  // no time readout (the time is the scrubber's value).
+  expect([bar().querySelector('[data-animation-clip-menu] [data-field-value]')!.textContent, bar().querySelector('[data-animation-time]'),
+    [...bar().querySelector('[data-animation-transport]')!.children].map(child => child.hasAttribute('data-animation-play') ? 'play' : child.hasAttribute('data-animation-reset') ? 'reset' : child.hasAttribute('data-animation-scrubber') ? 'scrubber' : '?')])
+    .toEqual(['Turn', null, ['play', 'reset', 'scrubber']]);
+  // Every control the panel's own: Clip and Speed bordered dropdowns as Joints' Position is (the clip's name alone, no
+  // duration; Clip labelled as Speed is), Play/Pause and Reset the strip's 28px tiles, Loop and Autoplay
+  // switch rows, a label and its switch, no icon.
+  const clipMenu = bar().querySelector<HTMLElement>('[data-animation-clip-menu]')!, speed = bar().querySelector<HTMLElement>('[data-animation-speed]')!;
+  expect([clipMenu.hasAttribute('data-panel-dropdown'), speed.hasAttribute('data-panel-dropdown'), clipMenu.textContent, speed.textContent]).toEqual([true, true, 'Turn', '1×']);
+  expect([bar().querySelector('[data-animation-play]')!.className, bar().querySelector('[data-animation-reset]')!.className]).toEqual([expect.stringContaining('size-7'), expect.stringContaining('size-7')]);
+  // The clip row is labelled as Speed's is, the same row: its label and the dropdown.
+  expect([clipMenu.classList.contains('w-full'), clipMenu.closest('[data-panel-select-row]')!.children.length, clipMenu.closest('[data-panel-select-row]')!.firstElementChild!.textContent,
+    speed.closest('[data-panel-select-row]')!.className]).toEqual([false, 2, 'Animation', clipMenu.closest('[data-panel-select-row]')!.className]);
+  expect(['loop', 'autoplay'].map(id => { const row = bar().querySelector(`[data-animation-${id}]`)!; return [row.hasAttribute('data-panel-switch-row'), row.querySelector('svg'), Boolean(row.querySelector('[role=switch]'))]; }))
+    .toEqual([[true, null, true], [true, null, true]]);
+  expect(screen.getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuetext')).toBe('3.00s of 8.00s');
+  // Playing, its start is a scrub from the start: the routine plays on.
+  fireEvent.keyDown(screen.getByRole('slider', { name: 'Animation time' }), { key: 'Home' });
+  expect([playing.onScrub.mock.calls.at(-1), playing.onRelease.mock.calls.length]).toEqual([[0], 0]);
+  // Paused mid-routine: the same controls; scrubbed to its start, it lets the model go, at rest.
+  const paused = routine({ clock: createAnimationClock(), enabled: true, onRelease: vi.fn() });
+  rerender(<AnimationTab runtime={paused} {...props} />);
+  expect(controls()).toEqual(['Routines: Turn', 'Play animation', 'Animation time', 'Animation speed: 1×', 'Loop', 'Autoplay']);
+  fireEvent.keyDown(screen.getByRole('slider', { name: 'Animation time' }), { key: 'ArrowRight' });
+  expect(paused.onScrub).toHaveBeenLastCalledWith(2.01);
+  fireEvent.keyDown(screen.getByRole('slider', { name: 'Animation time' }), { key: 'Home' });
+  expect([paused.onRelease.mock.calls.length, paused.onScrub.mock.calls.length]).toEqual([1, 1]);
+  // Paused at its start (a routine just played from its start and paused), it is at rest as well.
+  const atStart = routine({ clock: createAnimationClock(), enabled: true, elapsedSec: 0, onRelease: vi.fn() });
+  rerender(<AnimationTab runtime={atStart} {...props} />);
+  expect(atStart.onRelease).toHaveBeenCalledTimes(1);
+  rerender(<AnimationTab runtime={{ clips: [] }} {...props} />);
+  expect(document.querySelector('[data-animation-section]')).toBeNull();
+});
+
+it("the Animation section's settings are the Playback settings menu's items as the panel's rows: Speed a dropdown, Loop and Autoplay switches; the routines a dropdown, the one in hand checked, a choice putting another in hand", async () => {
+  for (const [name, value] of Object.entries({ scrollIntoView() {}, hasPointerCapture: () => false, setPointerCapture() {}, releasePointerCapture() {} })) {
+    (Element.prototype as any)[name] = value;
+  }
+  const { default: AnimationSection } = await import('../../../../dist/renderers/kit/tools/playbar/AnimationSection.js');
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  const onAutoplayChange = vi.fn();
+  const runtime = routine({ clock: createAnimationClock(), enabled: true, playing: true,
+    clips: [{ id: 'turn', label: 'Turn', duration: 8 }, { id: 'open', label: 'Open', duration: 2 }] });
+  render(<AnimationSection runtime={runtime} autoplay={false} onAutoplayChange={onAutoplayChange} />);
+  await user.click(screen.getByRole('button', { name: 'Routines: Turn' }));
+  const clips = await screen.findAllByRole('menuitemradio');
+  expect(clips.map(clip => [clip.textContent, clip.getAttribute('aria-checked')])).toEqual([['Turn', 'true'], ['Open', 'false']]);
+  await user.click(clips[1]);
+  expect([runtime.onClipSelect.mock.calls, runtime.onPlayToggle.mock.calls.length]).toEqual([[['open']], 1]);
+  // Loop and Autoplay: switches, on and off.
+  expect([screen.getByRole('switch', { name: 'Loop' }).getAttribute('aria-checked'), screen.getByRole('switch', { name: 'Autoplay' }).getAttribute('aria-checked')])
+    .toEqual(['true', 'false']);
+  await user.click(screen.getByRole('switch', { name: 'Loop' }));
+  expect(runtime.onLoopToggle).toHaveBeenLastCalledWith(false);
+  await user.click(screen.getByRole('switch', { name: 'Autoplay' }));
+  expect(onAutoplayChange).toHaveBeenLastCalledWith(true);
+  await user.click(screen.getByRole('button', { name: 'Animation speed: 1×' }));
+  const speeds = await screen.findAllByRole('menuitemradio');
+  expect(speeds.map(item => [item.textContent, item.getAttribute('aria-checked')]).filter(([, checked]) => checked === 'true')).toEqual([['1×', 'true']]);
+  expect(speeds.map(item => item.textContent)).toEqual(['0.25×', '0.5×', '0.75×', '1×', '1.5×', '2×', '3×']);
+  await user.click(screen.getByRole('menuitemradio', { name: '1.5×' }));
+  expect(runtime.onSpeedChange).toHaveBeenLastCalledWith(1.5);
+});
+
+// The Animation tab's "changed" dot (`FlatPanel.jsx`'s `FlatPanelChanged`): on exactly while its Reset is, from the
+// same state — the routine off its start; Speed, Loop and Autoplay are preferences and never set it.
+it("the Animation tab's dot is on exactly while its Reset is, and its preferences never set it", async () => {
+  const { default: AnimationSection } = await import('../../../../dist/renderers/kit/tools/playbar/AnimationSection.js');
+  const { default: FlatPanel } = await import('../../../../dist/renderers/kit/shell/FlatPanel.js');
+  const panel = (runtime: object) => <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
+    sections={<AnimationSection runtime={runtime} autoplay={false} onAutoplayChange={() => {}} />} tab="animation" onTabChange={() => {}} width={240} maxWidth={480}
+    onWidthChange={() => {}} focusSearch={0} />;
+  const state = () => {
+    const reset = document.querySelector<HTMLButtonElement>('[data-animation-reset]')!, heading = document.querySelector<HTMLElement>('[data-flat-panel-heading]')!;
+    return [!reset.disabled, heading.hasAttribute('data-changed'), Boolean(heading.querySelector('[data-tool-changed]')), heading.getAttribute('aria-label')];
+  };
+  const rest = routine({ clock: createAnimationClock(), enabled: true, elapsedSec: 0, onRelease: vi.fn() });
+  const { rerender } = render(panel(rest));
+  expect(state()).toEqual([false, false, false, null]);
+  // Speed, Loop and Autoplay changed: still at its start, no dot.
+  rerender(panel({ ...rest, speed: 2, loopEnabled: false }));
+  expect(state()).toEqual([false, false, false, null]);
+  rerender(panel(routine({ clock: createAnimationClock(), enabled: true, elapsedSec: 3, onRelease: vi.fn() })));
+  expect(state()).toEqual([true, true, true, 'Animation, changed']);
+  rerender(panel(routine({ clock: createAnimationClock(), enabled: true, elapsedSec: 3, onRelease: vi.fn() }) as any));
+  rerender(<FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
+    sections={<AnimationSection runtime={routine({ clock: createAnimationClock(), enabled: true, elapsedSec: 3 })} disabled autoplay={false} onAutoplayChange={() => {}} />}
+    tab="animation" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />);
+  expect(state()).toEqual([false, false, false, null]);
+});

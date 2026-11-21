@@ -27,18 +27,18 @@ test("the scene a selection reads maps each reference to its entity, by type and
   assert.equal(scene.hasPart("hFFFF"), false);
   assert.deepEqual(scene.describePart("h90"), describeEntity(drawing.entities.get("90"), "mm"));
   assert.equal(scene.describePart("h90").name, "Circle on CUT");
-  assert.deepEqual(scene.describePart("h90").facts.map(fact => fact.label), ["Handle", "Type", "Layer", "Centre", "Radius", "Diameter Ø"]);
+  assert.deepEqual(scene.describePart("h90").facts.map(fact => fact.label), ["Layer", "Diameter Ø"]);
   assert.equal(scene.describePart("h99").name, "Block M5_NUT on HARDWARE");
   scene.setHighlight({ hovered: ["h99"], selected: ["h90", "hFFFF"] });
   assert.deepEqual(lit, { hovered: ["99"], selected: ["90"] });
 });
 
-test("a pick reads in the Selected pane and its card as what it is and measures; a block reference lists the other references of its block", () => {
+test("a pick reads in its card as what it is and measures, the entity alone: a block reference lists none of its block's others", () => {
   const drawing = fixture("layered.drawing.json");
   const fact = (item, label) => item.facts.find(row => row.label === label)?.value;
   const circle = describeDrawingPick(drawing, "h90", "mm");
-  assert.deepEqual([circle.title, circle.tip, circle.ref, fact(circle, "Diameter Ø"), fact(circle, "Radius"), fact(circle, "Centre"), circle.related],
-    ["Circle on CUT", "Ø 12.00 mm", "h90", "12.00 mm", "6.00 mm", "20.00 mm, 30.00 mm", null]);
+  assert.deepEqual([circle.title, circle.tip, circle.facts.map(row => [row.label, row.value])],
+    ["Circle on CUT", "Ø 12.00 mm", [["Layer", "CUT"], ["Diameter Ø", "12.00 mm"]]]);
   const line = describeDrawingPick(drawing, "h92", "mm");
   assert.match(line.tip, /^\d+\.\d\d mm$/);
   assert.equal(fact(line, "Length"), line.tip);
@@ -46,8 +46,7 @@ test("a pick reads in the Selected pane and its card as what it is and measures;
   const text = describeDrawingPick(drawing, "h93", "mm");
   assert.match(fact(text, "Size"), / × .* mm$/);
   const nut = describeDrawingPick(drawing, "h99", "mm");
-  assert.deepEqual([nut.title, fact(nut, "Block"), nut.related.title, nut.related.rows.map(row => [row.pick, row.label, row.detail])],
-    ["Block M5_NUT on HARDWARE", "M5_NUT", "Other references of M5_NUT", [["h9B", "#9B", "HARDWARE"]]]);
+  assert.deepEqual([nut.title, fact(nut, "Block"), "related" in nut], ["Block M5_NUT on HARDWARE", "M5_NUT", false]);
   assert.equal(describeDrawingPick(drawing, "hFFFF"), null);
 });
 
@@ -70,14 +69,14 @@ test("a drawing's unit is the one it declares, and bare drawing units when it de
   assert.deepEqual(drawingUnits(null), { unit: "units", declared: false });
 });
 
-test("a Layers section is shown for several layers or any block reference, never for a flat pattern's few", () => {
+test("a drawing always shows its Layers section once it is read, a single layer as its one row", () => {
   const drawing = fixture("layered.drawing.json");
   assert.equal(layersSectionShown(drawing), true);
-  assert.equal(layersSectionShown(fixture("sample.drawing.json")), false);
-  const flat = { layers: [{ name: "CUT" }, { name: "BEND" }, { name: "ENGRAVE" }], entities: new Map([["1", { type: "LINE" }]]) };
-  assert.equal(layersSectionShown(flat), false);
-  assert.equal(layersSectionShown({ ...flat, layers: [...flat.layers, { name: "NOTES" }] }), true);
-  assert.equal(layersSectionShown({ layers: [{ name: "0" }], entities: new Map([["9", { type: "INSERT" }]]) }), true);
+  assert.equal(layersSectionShown(fixture("sample.drawing.json")), true);
+  const flat = { layers: [{ name: "CUT" }, { name: "BEND" }], entities: new Map([["1", { type: "LINE" }]]) };
+  assert.equal(layersSectionShown(flat), true);
+  assert.equal(layersSectionShown({ layers: [{ name: "0" }], entities: new Map([["9", { type: "LINE" }]]) }), true);
+  assert.equal(layersSectionShown(null), false);
   const hardware = layerRows(drawing).find(row => row.name === "HARDWARE");
   assert.deepEqual(hardware.inserts, [{ handle: "99", block: "M5_NUT" }, { handle: "9B", block: "M5_NUT" }]);
 });

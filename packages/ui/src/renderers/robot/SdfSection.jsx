@@ -1,7 +1,8 @@
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { FieldLabel } from "@cad/ui/primitives/field-label";
 import { useI18n } from "@cad/ui/i18n";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
-import { FILE_SHEET_FIELD_LABEL_CLASSES, FileSheetFieldGrid, FileSheetSubsection, FileSheetValueField } from "../kit/inspector/FileSheet.js";
+import { FileSheetFieldGrid, FileSheetSubsection, FileSheetValueField } from "../kit/inspector/FileSheet.js";
 
 function formatSdfNumber(value, fallback = "0") {
   const numericValue = Number(value);
@@ -21,12 +22,12 @@ function SdfMetadataList({ title, items, fields }) {
   if (!records.length) return null;
   return (
     <div className="space-y-1.5 rounded-md border border-border/80 bg-background/40 p-2">
-      <span className={FILE_SHEET_FIELD_LABEL_CLASSES}>{title}</span>
+      <FieldLabel className="leading-4">{title}</FieldLabel>
       <div className="space-y-1">
         {records.slice(0, 5).map((record, index) => (
-          <TooltipHint key={`${title}:${index}`} content={record} overflowOnly><div  className="truncate text-tiny leading-4 text-foreground" >{record}</div></TooltipHint>
+          <TooltipHint key={`${title}:${index}`} content={record} overflowOnly><div  className="truncate leading-4 text-foreground" >{record}</div></TooltipHint>
         ))}
-        {records.length > 5 ? <div className="text-tiny leading-4 text-muted-foreground">{t("sdf.more", { count: records.length - 5 })}</div> : null}
+        {records.length > 5 ? <div className="leading-4 text-muted-foreground">{t("sdf.more", { count: records.length - 5 })}</div> : null}
       </div>
     </div>
   );
@@ -73,7 +74,7 @@ export default function SdfSection({ info }) {
         </FileSheetFieldGrid>
       </FileSheetSubsection>
       {includes.length || plugins.length || sensors.length || lights.length || physics.length ? (
-        <FileSheetSubsection title={t("sdf.metadata")} contentClassName="px-2">
+        <FileSheetSubsection title={t("sdf.metadata")}>
           <SdfMetadataList title={t("sdf.includes")} items={includes} fields={["name", "uri"]} />
           <SdfMetadataList title={t("sdf.plugins")} items={plugins} fields={["name", "filename"]} />
           <SdfMetadataList title={t("sdf.sensors")} items={sensors} fields={["name", "type"]} />

@@ -1,4 +1,5 @@
 import { useI18n } from "@cad/ui/i18n";
+import { useViewportTheme } from "../kit/look/useViewportTheme.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@cad/ui/utils";
 import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
@@ -12,6 +13,8 @@ import { useViewerHost } from "../../host/context.js";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
 import { annotationAt, withGroups } from "../../annotation/geometry.js";
 import { promptView } from "../../annotation/views.js";
+import { backgroundGroup } from "../kit/shell/ViewSettingsMenu.jsx";
+import { useControlUsage } from "../../usage/controls.js";
 import FlatViewFrame, { flatViewTools } from "../kit/shell/FlatViewFrame.jsx";
 import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
@@ -88,7 +91,13 @@ function SchematicSurface({ view, data }) {
   const host = useViewerHost();
   const mobile = useViewerMobile();
   const workspace = useWorkspaceDocument({ view, data });
-  const colorScheme = view.appearance?.colorScheme === "dark" ? "dark" : "light";
+  // The viewport's theme (`kit/look/useViewportTheme.js`): the person's Background over the app's light or dark.
+  // The picture — its paper, its strokes, the marks over it — is drawn in its scheme; the chrome keeps the app's.
+  const viewport = useViewportTheme(view.appearance?.colorScheme === "dark" ? "dark" : "light", workspace.services.preferences, workspace.services.onPreferenceChange);
+  // Its view settings, the navbar's View (`kit/shell/ViewSettingsMenu.jsx`): a drawing's one, the viewport's Background.
+  const usage = useControlUsage();
+  const viewGroups = [backgroundGroup({ value: viewport.background, onChange: viewport.setBackground }, t, usage.used)];
+  const colorScheme = viewport.scheme;
 
   // ---- the file's view: the sheet shown, its transform, what is isolated ----
   const [stored] = useState(() => readFileView(view.state, SLICES));
@@ -517,11 +526,11 @@ function SchematicSurface({ view, data }) {
   const takeSelect = useCallback(() => selectTool(SCHEMATIC_TOOL.SELECT), [selectTool]);
   const list = id => <SchematicSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onShow={showSelectors} onFrame={frameSelectors} onSelect={takeSelect} />;
-  const copySelectors = useCallback(ids => (path ? buildSchematicRefToken({ path, selectors: ids }) : ""), [path]);
   const tip = useSchematicTip(index);
-  const inspect = useSchematicInspect({ index, describe, tip, selection, hovered, onSelect: takeSelect, show: showSelectors, frame: frameSelectors, copyText: copySelectors });
-  const panel = index ? { kind: "schematic", label: t("schematic.text.schematic_panel"), searchLabel: t("schematic.text.search_schematic"),
-    tabs: [
+  const inspect = useSchematicInspect({ index, describe, tip, hovered });
+  // Parts from the first frame, the schematic still loading (its rows arrive with it); Nets and Hierarchy after it.
+  const panel = index || document.loading ? { kind: "schematic", label: t("schematic.text.schematic_panel"), searchLabel: t("schematic.text.search_schematic"),
+    tabs: !index ? [{ id: "parts", label: t("board.text.parts"), searchLast: true, content: null }] : [
       { id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
       { id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") },
       ...(index.order.length > 1 ? [{ id: "hierarchy", label: t("schematic.text.hierarchy"), content: <SheetsSection index={index} shown={shownSheet}
@@ -533,10 +542,10 @@ function SchematicSurface({ view, data }) {
   const zoom = { ...plotView.zoom, zoomToSelection: () => frameSelectors(selectionRef.current.selected), selectionAvailable: selection.selected.length > 0 };
   handover.zoomKeys.current = zoom;
   return (
-    <FlatViewFrame surface={SCHEMATIC_SURFACE} containerRef={containerRef} busy={document.loading || document.updating}
-      file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={document.loading} loadingLabel={t("schematic.text.reading_schematic")}
+    <FlatViewFrame surface={SCHEMATIC_SURFACE} viewport={viewport} containerRef={containerRef} busy={document.loading || document.updating}
+      file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} loading={document.loading} loadingLabel={t("schematic.text.reading_schematic")}
       updating={document.updating} updateStatus={{ pending: true, label: t("schematic.text.updating_schematic") }} tools={index ? strip : []}
-      toolRow={index ? toolRow : null} views={[]} panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
+      toolRow={index ? toolRow : null} views={[]} viewGroups={viewGroups} onResetView={zoom?.fit ?? null} panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems}
       zoom={zoom} inspect={inspect}>
@@ -548,6 +557,8 @@ function SchematicSurface({ view, data }) {
     </FlatViewFrame>
   );
 }
+
+// How many a collection holds, a Map's or an array's.
 
 export default function SchematicRenderer(props) {
   const { data, ...view } = props;

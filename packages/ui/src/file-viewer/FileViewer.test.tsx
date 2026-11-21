@@ -1,3 +1,4 @@
+import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -6,6 +7,9 @@ import { unavailablePromptContext } from '@cad/core/prompt';
 import { FileViewer, defineFileRenderer } from '../../dist/file-viewer/index.js';
 import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../../dist/primitives/dropdown-menu.js';
 import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
+import { usePanelToggles } from '../../dist/file-viewer/panelToggles.js';
+import { ModelLibrary } from '../../dist/library/ModelLibrary.js';
+import { readFileSync } from 'node:fs';
 
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -54,6 +58,81 @@ it('draws the navbar over every file, named by its name, and over the home with 
   expect(back).toHaveBeenCalledOnce();
   await userEvent.setup().click(screen.getByRole('button', { name: 'Menu' }));
   expect(screen.queryByRole('menuitem', { name: 'Back to home' })).toBeNull();
+});
+
+it('draws the view\'s panel toggle first in the navbar, before the logo: the same neutral button open or shut, its state aria-expanded, its icon the sidebar\'s; none over the home', async () => {
+  const user = userEvent.setup();
+  const left = vi.fn();
+  // A view whose frame says its toggle, as `ViewFrame.jsx` does.
+  const toggling = defineFileRenderer({ id: 'panels', priority: 1, matches: () => true, prepare: async () => ({ data: null }),
+    load: async () => ({ default: function Panels() {
+      const [shown, setShown] = React.useState(false);
+      usePanelToggles(React.useMemo(() => ({ left: { open: shown, label: shown ? 'Hide panel' : 'Show panel', shortcut: '⌘\\', hint: '\\ hides all',
+        toggle: () => { left(); setShown(value => !value); } } }), [shown]));
+      return <p>shown</p>;
+    } }) });
+  const actionsHost = { ...host, navigation: { ...(host as any).navigation, home() {} }, fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } } };
+  render(<FileViewer file={FILE} host={actionsHost as any} renderers={[toggling]} state={{}} onStateChange={() => {}} navbarActions={<button type="button" aria-label="Full size" />} />);
+  await screen.findByText('shown');
+  const toggle = () => navbar()!.querySelector<HTMLElement>('[data-navbar-panel="left"]')!;
+  await waitFor(() => expect(toggle()).not.toBeNull());
+  // The toggle, then the logo, then the name and its ⋯; nothing of it at the row's right.
+  const order = [...navbar()!.querySelectorAll('[data-navbar-menu], [data-file-name], [data-testid="file-actions"], [data-navbar-panel], [aria-label="Full size"]')]
+    .map(node => node.getAttribute('data-navbar-panel') ?? (node.hasAttribute('data-navbar-menu') ? 'logo' : null) ?? node.getAttribute('aria-label') ?? (node.hasAttribute('data-file-name') ? 'name' : '?'));
+  expect(order).toEqual(['left', 'logo', 'name', 'File actions', 'Full size']);
+  const look = () => [toggle().getAttribute('aria-label'), toggle().getAttribute('aria-expanded'), toggle().getAttribute('aria-pressed'), toggle().getAttribute('data-variant')];
+  expect(look()).toEqual(['Show panel', 'false', null, 'ghost']);
+  // Its icon: the sidebar's own (a rounded rectangle and a short line), not lucide's panel.
+  expect([Boolean(toggle().querySelector('svg[data-sidebar-icon] rect[rx="3"]')), toggle().querySelector('.lucide-panel-left'),
+    toggle().className.includes('size-7'), toggle().getAttribute('aria-keyshortcuts')]).toEqual([true, null, true, '⌘\\']);
+  await user.click(toggle());
+  // Open, the same neutral button: only its name and aria-expanded say so.
+  expect(look()).toEqual(['Hide panel', 'true', null, 'ghost']);
+  expect(left.mock.calls.length).toBe(1);
+  cleanup();
+  // The home: no toggle.
+  open({ host: { ...host, navigation: { openFile() {}, home() {} } }, file: null, presentation: { home: <p>home</p> } } as any);
+  await screen.findByText('home');
+  expect(navbar()!.querySelector('[data-navbar-panel]')).toBeNull();
+});
+
+it('draws the home\'s own controls in its navbar on the grid\'s column: the logo, then Recent and its count, at the left, the search and Open at the right; the filter and the layout in a row over the grid', async () => {
+  const user = userEvent.setup();
+  const models = [{ path: '/work/a.step', name: 'a.step', folder: '/work', opened: 1, updated: 1, created: null, pinned: false, missing: false, thumbnail: null, pictured: null },
+    { path: 'model-1', name: 'bracket', folder: null, opened: 1, updated: 1, created: null, pinned: false, missing: false, thumbnail: null, pictured: null, kind: 'model' }];
+  const library = { list: async () => models, change: async () => models, thumbnail: async () => null, open: async () => {}, pick: async () => {} };
+  // A 1440px row: the grid's column is 1128px, centred, on 24px gutters.
+  const boxes = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const width = this.hasAttribute('data-viewer-navbar') ? 1440 : this.matches('nav') ? 36 : 0;
+    return { x: 0, y: 0, left: 0, top: 0, right: width, bottom: 40, width, height: 40, toJSON() {} } as DOMRect;
+  });
+  open({ host: { ...host, navigation: { openFile() {}, home() {} } }, file: null,
+    presentation: { home: <ModelLibrary library={library as any} onLayoutChange={() => {}} /> } } as any);
+  await screen.findByText('a.step');
+  const home = navbar()!.querySelector<HTMLElement>('[data-navbar-home]')!;
+  const left = home.querySelector('[data-navbar-home-left]')!, right = home.querySelector('[data-navbar-home-right]')!;
+  expect([left.querySelector('h1')!.textContent, right.querySelector('input')!.getAttribute('aria-label'), within(right as HTMLElement).getByRole('button', { name: 'Open' }) !== null])
+    .toEqual(['Recent2', 'Search models', true]);
+  // On the grid's column at 1440, (1440 − 1128) / 2 + 24 = 180px from either edge, the background full width: the
+  // logo's mark (16px into its row) at 180, "Recent" after it, and Open ending at 180 from the right: the row's padding.
+  await waitFor(() => expect([navbar()!.style.paddingLeft, navbar()!.style.paddingRight]).toEqual(['172px', '180px']));
+  const lead = navbar()!.querySelector('nav')!;
+  expect([lead.nextElementSibling === home, home.firstElementChild === left]).toEqual([true, true]);
+  // No panel toggles and no ⋯ on the home; the app menu is the logo's.
+  expect([navbar()!.querySelector('[data-navbar-panel]'), navbar()!.querySelector('[data-testid="file-actions"]')]).toEqual([null, null]);
+  // The page's own row: the filter at its left and the layout switch at its right, no heading, no search.
+  const row = document.querySelector<HTMLElement>('.cad-library-toolbar')!;
+  expect([row.getAttribute('data-library-toolbar'), row.querySelector('h1'), row.querySelector('input'), row.querySelector('.cad-library-kind')!.textContent,
+    within(row).getByRole('group', { name: 'Layout' }) !== null]).toEqual(['filters', null, null, 'All', true]);
+  // Under 700px of navbar the search is its icon until pressed, then the field with the keyboard in it.
+  const css = readFileSync(`${process.cwd()}/src/styles/globals.css`, 'utf8');
+  expect(css).toMatch(/@container cad-navbar \(max-width: 699px\) \{[^@]*\.cad-home-search:not\(\[data-open\]\) \.cad-library-search \{ display: none; \}/);
+  expect((navbar() as HTMLElement).style.containerName).toBe('cad-navbar');
+  const search = right.querySelector<HTMLElement>('.cad-home-search')!;
+  expect(search.hasAttribute('data-open')).toBe(false);
+  await user.click(within(search).getByRole('button', { name: 'Search models' }));
+  expect(search.hasAttribute('data-open')).toBe(true);
+  boxes.mockRestore();
 });
 
 it('heads the home and a document with the one C mark, in one button that never changes', async () => {
@@ -240,6 +319,17 @@ it('ends the app menu with the version the host runs, a link to its release note
   const notes = 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.15';
   expect(await footer(viewerLinks({ version: '0.7.15' }))).toEqual(['v0.7.15Made by @earthtojake', notes]);
   expect(await footer(viewerLinks({ version: '0.7.15', build: 'b80844940-dirty' }))).toEqual(['v0.7.15-dev.b80844940-dirtyMade by @earthtojake', notes]);
+  // Its links are muted, 11/16, the foreground and underlined under the pointer or the keyboard: never the brand's blue.
+  open({ host: { ...host, links: viewerLinks({ version: '0.7.15' }) } });
+  await screen.findByText('shown');
+  await user.click(screen.getByRole('button', { name: 'Menu' }));
+  const links = [...document.querySelectorAll<HTMLElement>('[data-app-menu] [data-menu-footer] a')];
+  expect(links.length).toBe(2);
+  for (const link of links) {
+    expect(link.className).not.toMatch(/brand/);
+    expect(['text-muted-foreground', 'hover:text-foreground', 'hover:underline', 'focus-visible:underline'].every(name => link.className.split(' ').includes(name))).toBe(true);
+  }
+  expect(document.querySelector('[data-app-menu] [data-menu-footer]')!.className).toContain('text-tiny');
 });
 
 it('opens the explorer from the file\'s name where the host\'s files can be browsed, and a pick there is shown through the host', async () => {

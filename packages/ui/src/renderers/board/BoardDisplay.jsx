@@ -9,7 +9,10 @@ import {
   FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetSettingRow, FileSheetSettingsSection, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
+import { CircuitBoard, Cpu, House, Route, SquareDashed } from "lucide-react";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import DisplayPopover, { DisplayMenuItems } from "../kit/shell/DisplayPopover.jsx";
+import { backgroundGroup, displayGroup, projectionGroup } from "../kit/shell/ViewSettingsMenu.jsx";
 import StateButton from "../kit/shell/StateButton.jsx";
 import { textGlyphIcon } from "../kit/shell/TextGlyph.jsx";
 import { SolidModeIcon } from "../kit/view-settings/DisplayModeOptions.js";
@@ -39,12 +42,16 @@ import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
  */
 export { BOARD_DISPLAY_DEFAULTS, readBoardDisplay };
 
+// Each preset's icon, lucide's at the display modes' stroke (`DisplayModeOptions.js`, 1.7): the whole board, its copper
+// routes, its parts, and their placement (the courtyards' dashed outlines).
+const boardIcon = Icon => Object.assign(props => <Icon strokeWidth={1.7} {...props} />, { displayName: `Board${Icon.displayName || "Icon"}` });
 export const BOARD_MODE_OPTIONS = Object.freeze([
-  Object.freeze({ value: "board", labelKey: "board.text.board" }),
-  Object.freeze({ value: "copper", labelKey: "board.text.copper" }),
-  Object.freeze({ value: "assembly", labelKey: "board.text.assembly" }),
-  Object.freeze({ value: "placement", labelKey: "board.text.placement" }),
+  Object.freeze({ value: "board", labelKey: "board.text.board", Icon: boardIcon(CircuitBoard) }),
+  Object.freeze({ value: "copper", labelKey: "board.text.copper", Icon: boardIcon(Route) }),
+  Object.freeze({ value: "assembly", labelKey: "board.text.assembly", Icon: boardIcon(Cpu) }),
+  Object.freeze({ value: "placement", labelKey: "board.text.placement", Icon: boardIcon(SquareDashed) }),
 ]);
+// 2D and 3D as the right panel's Mode row draws them: a flat square and a box.
 const CUSTOM = "custom";
 const percent = value => `${Math.round(value * 100)}%`;
 // Every control fills the row's control column at the row's 24px height, a choice too: the room is the control's.
@@ -78,7 +85,7 @@ function Opacity({ id, label, name, value, onChange }) {
     const next = parseFileSheetNumberInput(draft, { fallback: value * 100, min: 0, max: 100 }) / 100;
     if (next !== value) onChange(next);
   };
-  return <SliderField data-board-opacity={id} label={label} name={name} value={value} min={0} max={1} step={0.01}
+  return <SliderField data-board-opacity={id} label={label} name={name} value={value} min={0} max={1} step={0.01} scale={100}
     onValueChange={onChange} text={percent(value)} onTextCommit={commit} textLabel={t("render.valueOf", { name })} />;
 }
 
@@ -91,7 +98,7 @@ function Opacity({ id, label, name, value, onChange }) {
  */
 export function boardPresetMode({ display, sheet, onChange, t = english }) {
   const choice = boardDisplayChoice(display, sheet);
-  const options = BOARD_MODE_OPTIONS.map(({ value, labelKey }) => ({ value, label: t(labelKey) }));
+  const options = BOARD_MODE_OPTIONS.map(({ value, labelKey, Icon }) => ({ value, label: t(labelKey), Icon }));
   if (choice.value === CUSTOM) options.push({ value: CUSTOM, label: t("board.text.custom"), disabled: true });
   return { value: choice.value, options, onChange: value => { if (value !== CUSTOM && value !== choice.value) onChange(selectBoardMode(display, value)); } };
 }
@@ -157,28 +164,73 @@ const SolidGlyph = textGlyphIcon("3D");
  *   `projection`: the 3D camera's, while the board is in 3D; null in 2D, which has none.
  */
 export function boardViewControls({ display, sheet = null, onChange, dimension = "2d", onDimensionChange = null, onSide = null, projection = null,
-  disabled = false, boundary = null, t = english }) {
+  background = null, onHome = null, disabled = false, boundary = null, t = english, used = null }) {
   const below = display.side === "bottom";
-  const flip = () => { const next = below ? "top" : "bottom"; if (onSide) onSide(next); else onChange({ ...display, side: next }); };
+  // The side and 2D/3D, however they are switched (the corner's buttons, More, their keys), are counted as the person's
+  // use of them (`board_side`, `board_dimension`: `usage/controls.js`).
+  const flip = () => { used?.("board_side"); const next = below ? "top" : "bottom"; if (onSide) onSide(next); else onChange({ ...display, side: next }); };
   const solid = dimension === "3d";
-  const switchDimension = () => onDimensionChange(solid ? "2d" : "3d");
+  const switchDimension = () => { used?.("board_dimension"); onDimensionChange(solid ? "2d" : "3d"); };
   const presets = boardPresetMode({ display, sheet, onChange, t });
   const [flat, inThreeD] = [t("board.text.view_2d"), t("board.text.view_3d")];
   // Each state's icon: the board's two layers, the side facing the viewer solid, from the top or the bottom;
   // the words 2D for the board flat and 3D for it in 3D.
+  // Each a view control of the corner's (`cornerTile`, `ViewCornerStack.jsx`), over the zoom pill, in 2D and 3D alike:
+  // Display at the top, then the side, then 2D/3D, then in 3D Home nearest the pill (`cornerRank`); a phone's More
+  // keeps them as rows.
+  const homeButton = (place = {}) => <ToolbarButton label={t("view.home")} tooltipSide={place.tooltipSide ?? "top"} disabled={disabled} onClick={onHome}
+    className={place.className ?? undefined} data-view-home=""><House aria-hidden="true" /></ToolbarButton>;
+  const sideButton = (place = {}) => <StateButton icon={below ? BoardBottomSideIcon : BoardTopSideIcon} label={t("board.text.side_current", { side: t(below ? "board.text.bottom" : "board.text.top") })}
+    tooltip={t(below ? "board.text.view_from_top" : "board.text.view_from_bottom")} shortcut={BOARD_FLIP_SHORTCUT}
+    disabled={disabled} onPress={flip} data-board-side={below ? "bottom" : "top"} className={place.className} tooltipSide={place.tooltipSide} />;
+  const dimensionButton = (place = {}) => <StateButton icon={solid ? SolidGlyph : FlatGlyph} label={t("board.text.dimension_current", { mode: solid ? inThreeD : flat })}
+    tooltip={t("board.text.dimension_switch", { mode: solid ? flat : inThreeD })} shortcut={BOARD_DIMENSION_SHORTCUT}
+    disabled={disabled} onPress={switchDimension} data-board-dimension={solid ? "3d" : "2d"} className={place.className} tooltipSide={place.tooltipSide} />;
   return [
     { id: "side", label: t("board.text.view_from_bottom"), icon: <BoardBottomSideIcon />, disabled, active: below, onSelect: flip,
-      tile: <StateButton icon={below ? BoardBottomSideIcon : BoardTopSideIcon} label={t("board.text.side_current", { side: t(below ? "board.text.bottom" : "board.text.top") })}
-        tooltip={t(below ? "board.text.view_from_top" : "board.text.view_from_bottom")} shortcut={BOARD_FLIP_SHORTCUT}
-        disabled={disabled} onPress={flip} data-board-side={below ? "bottom" : "top"} /> },
+      tile: sideButton(), cornerTile: sideButton, cornerRank: 1 },
     ...(onDimensionChange ? [{
       id: "dimension", label: t("board.text.view_in_3d"), icon: <SolidGlyph />, disabled, active: solid, onSelect: switchDimension,
-      tile: <StateButton icon={solid ? SolidGlyph : FlatGlyph} label={t("board.text.dimension_current", { mode: solid ? inThreeD : flat })}
-        tooltip={t("board.text.dimension_switch", { mode: solid ? flat : inThreeD })} shortcut={BOARD_DIMENSION_SHORTCUT}
-        disabled={disabled} onPress={switchDimension} data-board-dimension={solid ? "3d" : "2d"} />
+      tile: dimensionButton(), cornerTile: dimensionButton, cornerRank: 2
     }] : []),
     { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled,
-      tile: <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection} icon={SolidModeIcon} />,
-      submenu: () => <DisplayMenuItems mode={presets} projection={projection} /> }
+      tile: <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection} background={background} icon={SolidModeIcon} />,
+      // On a desktop it is the navbar's, first of the view's settings (`NavbarViewControls.jsx`; outside a file viewer's
+      // navbar, the corner's, over the zoom pill).
+      cornerTile: place => <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection} background={background} icon={SolidModeIcon}
+        className={place.className} tooltipSide={place.tooltipSide} side={place.side} align={place.align} chevron={place.chevron === true} />, cornerRank: 0,
+      submenu: () => <DisplayMenuItems mode={presets} projection={projection} background={background} /> },
+    // In 3D, Home, nearest the zoom: the board's 3D view has no cube to come back by (2D's 100% is the zoom's).
+    ...(onHome ? [{ id: "home", label: t("view.home"), icon: <House aria-hidden="true" />, disabled, onSelect: onHome,
+      // A camera control: under a file's navbar it stays on the picture, beside the zoom (`cornerCamera`).
+      tile: homeButton(), cornerTile: homeButton, cornerRank: 3, cornerCamera: true }] : [])
   ];
+}
+
+/**
+ * The board's view settings as the navbar's View ▾ draws them (`kit/shell/ViewSettingsMenu.jsx`, on a desktop and a
+ * phone alike), top to bottom: **Side** (Top, Bottom; ⇧F), **Mode** (2D, 3D; 3), its **Display** presets (`boardPresetMode`),
+ * in 3D the camera's **Projection**, and the **Background**. A side or a mode chosen is counted as the buttons count it
+ * (`board_side`, `board_dimension`), and does what they do (`onSide` turns a 3D view's camera over).
+ * @param {Parameters<typeof boardViewControls>[0]} options
+ */
+export function boardViewGroups({ display, sheet = null, onChange, dimension = "2d", onDimensionChange = null, onSide = null, projection = null,
+  background = null, t = english, used = null }) {
+  const side = display.side === "bottom" ? "bottom" : "top";
+  const sideGroup = { id: "side", label: t("board.text.side"), value: side, data: "data-board-side-option",
+    // The key on the choice it would make: the other side.
+    options: [{ value: "top", label: t("board.text.top"), Icon: BoardTopSideIcon, shortcut: side === "top" ? "" : BOARD_FLIP_SHORTCUT },
+      { value: "bottom", label: t("board.text.bottom"), Icon: BoardBottomSideIcon, shortcut: side === "bottom" ? "" : BOARD_FLIP_SHORTCUT }],
+    onChange: next => {
+      if (next === side) return;
+      used?.("board_side");
+      if (onSide) onSide(next); else onChange({ ...display, side: next });
+    } };
+  const solid = dimension === "3d";
+  const modeGroup = onDimensionChange ? { id: "dimension", label: t("board.text.mode"), value: solid ? "3d" : "2d", data: "data-board-dimension-option",
+    options: [{ value: "2d", label: t("board.text.view_2d"), Icon: FlatGlyph, shortcut: solid ? BOARD_DIMENSION_SHORTCUT : "" },
+      { value: "3d", label: t("board.text.view_3d"), Icon: SolidGlyph, shortcut: solid ? "" : BOARD_DIMENSION_SHORTCUT }],
+    onChange: next => { if (next === dimension) return; used?.("board_dimension"); onDimensionChange(next); } } : null;
+  return [sideGroup, modeGroup, displayGroup(boardPresetMode({ display, sheet, onChange, t }), t), projectionGroup(projection, t),
+    backgroundGroup(background, t, used)].filter(Boolean);
 }

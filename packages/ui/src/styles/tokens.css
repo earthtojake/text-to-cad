@@ -1,23 +1,29 @@
-@custom-variant dark (&:is(.dark *));
+/* Dark inside `.dark`, unless a `.light` scope is nearer (a light viewport in a dark app). */
+@custom-variant dark (&:where(.dark *):not(.light *));
 
 @theme inline {
-  /* A 13px default at the normal 16px root. Rems preserve the UI's scale
-   * without shrinking the spacing/radius system. Stock shadcn controls
-   * use text-sm/text-base, so both resolve to this shared UI size. */
-  /* Each size is a variable (`--cad-text-*`, `globals.css`) so a phone's view can take one step
-   * up the scale, menus and selects portalled out of the viewer included. */
+  /* THE type scale (`docs/settings-ui.md`, "The type scale"): three interface sizes and one heading, each
+   * with its fixed line height — tiny 11/16 (tooltips, shortcut hints, small metadata), xs 12/16 (the
+   * panel, Quick Edit, the sub-toolbars, every menu, dropdown, select and context menu), ui 13/20 (the
+   * app's chrome: the navbar, dialogs, the Home), heading 15/20 semibold (the one heading). A 13px default
+   * at the normal 16px root: rems preserve the UI's scale without shrinking the spacing/radius system.
+   * Stock shadcn controls use text-sm/text-base, so both resolve to the ui size. */
+  /* Each size and line height is a variable (`--cad-text-*`, `--cad-leading-*`, `globals.css`) so a
+   * phone's view can take one step up the scale, menus and selects portalled out of the viewer included,
+   * and the view's panel can draw every step at its one size. */
   --text-ui: var(--cad-text-ui);
-  --text-ui--line-height: 1.5;
+  --text-ui--line-height: var(--cad-leading-ui);
   --text-sm: var(--text-ui);
-  --text-sm--line-height: 1.5;
+  --text-sm--line-height: var(--cad-leading-ui);
   --text-base: var(--text-ui);
-  --text-base--line-height: 1.5;
+  --text-base--line-height: var(--cad-leading-ui);
   --text-xs: var(--cad-text-xs);
-  --text-xs--line-height: 1.34;
-  --text-micro: var(--cad-text-micro);
-  --text-micro--line-height: 1.2;
+  --text-xs--line-height: var(--cad-leading-xs);
   --text-tiny: var(--cad-text-tiny);
-  --text-tiny--line-height: 1.3;
+  --text-tiny--line-height: var(--cad-leading-tiny);
+  --text-heading: var(--cad-text-heading);
+  --text-heading--line-height: var(--cad-leading-heading);
+  --text-heading--font-weight: 600;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -25,13 +31,7 @@
 
   --color-background: var(--background);
   --color-canvas: var(--canvas);
-  --color-background-1: var(--background-1);
-  --color-background-2: var(--background-2);
-  --color-background-3: var(--background-3);
   --color-foreground: var(--foreground);
-  --color-foreground-inverse: var(--foreground-inverse);
-  --color-foreground-muted: var(--foreground-muted);
-  --color-foreground-passive: var(--foreground-passive);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -47,46 +47,18 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
-  --color-border-1: var(--border-1);
-  --color-border-2: var(--border-2);
-  --color-border-primary: var(--border-primary);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-selection: var(--selection);
   --color-selection-foreground: var(--selection-foreground);
-  --color-success: var(--foreground-success);
-  --color-success-bg: var(--background-success);
-  --color-success-bg-hover: var(--background-success-hover);
-  --color-success-border: var(--border-success);
   --color-error: var(--foreground-error);
-  --color-error-bg: var(--background-error);
-  --color-error-bg-hover: var(--background-error-hover);
   --color-error-border: var(--border-error);
-  --color-warning: var(--foreground-warning);
-  --color-warning-bg: var(--background-warning);
-  --color-warning-bg-hover: var(--background-warning-hover);
-  --color-warning-border: var(--border-warning);
-  --color-info: var(--foreground-info);
-  --color-info-bg: var(--background-info);
-  --color-info-bg-hover: var(--background-info-hover);
-  --color-info-border: var(--border-info);
-  --color-surface-sunken: var(--surface-sunken);
-  --color-surface-sunken-hover: var(--surface-sunken-hover);
-  --color-surface-sunken-selected: var(--surface-sunken-selected);
-  --color-surface-base: var(--surface-base);
-  --color-surface-base-hover: var(--surface-base-hover);
-  --color-surface-base-selected: var(--surface-base-selected);
-  --color-surface-elevated: var(--surface-elevated);
-  --color-surface-elevated-hover: var(--surface-elevated-hover);
-  --color-surface-elevated-selected: var(--surface-elevated-selected);
-  --color-surface-paper: var(--surface-paper);
-  --color-surface-paper-hover: var(--surface-paper-hover);
-  --color-surface-paper-selected: var(--surface-paper-selected);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-brand: var(--brand);
+  --color-brand-text: var(--brand-text);
+  --color-brand-icon: var(--brand-icon);
+  --color-brand-subtle: var(--brand-subtle);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -97,8 +69,8 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-:root {
-  /* shadcn/ui v4 — neutral, light */
+:root, .light {
+  /* shadcn/ui v4 — neutral, light. `.light` too: a light viewport in a dark app (`kit/shell/ViewFrame.jsx`) scopes it. */
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -118,72 +90,55 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --ring: var(--brand);
   /* The canvas: the content area behind every view, 2D and 3D, a step under the chrome (--sidebar)
    * so the panel and the navbar stand off it. Core's `lib/appTheme.js` writes it out for what
    * cannot read a stylesheet; `src/styles/canvas.test.js` holds the two equal. */
   --canvas: oklch(0.94 0 0);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.92 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: var(--brand);
 
-  /* Tokens the viewer's components consume beyond shadcn's set, derived from
-   * the shadcn values above so no second palette appears. */
-  --background-1: var(--secondary);
-  --background-2: oklch(0.94 0 0);
-  --background-3: var(--border);
-  --foreground-inverse: var(--primary-foreground);
-  --foreground-muted: var(--muted-foreground);
-  --foreground-passive: var(--ring);
-  --border-1: var(--ring);
-  --border-2: var(--muted-foreground);
-  --border-primary: var(--primary);
-  --selection: var(--accent);
-  --selection-foreground: var(--accent-foreground);
-  --foreground-success: oklch(0.448 0.119 151.328);
-  --background-success: oklch(0.95 0.052 163.051);
-  --background-success-hover: oklch(0.925 0.06 163.051);
-  --border-success: oklch(0.8 0.1 155);
+  /* Beyond shadcn's set: the brand (`--brand`, the logo's blue; `--brand-text`, the brand where it is
+   * text, dark enough to read on the panel (a search's match); `--brand-icon`, the brand where it
+   * is a glyph, the tool in hand's icon: near the logo's hue, 3:1 at least on the pressed fill and on
+   * white (light #1683c7: 3.24:1 on #e4e4e4, 4.11:1 on white), the graphics minimum, where text's 4.5:1
+   * would make it read dark; `--brand-subtle`, a selected tree row's fill, the brand
+   * 12% into the background), the selection, the error's and the warning's ink. The brand is the focus
+   * ring, a text selection, a selected row, the tool in hand's icon, a search's match and the logo: nothing else
+   * (never a link in the chrome, which is muted, the foreground and underlined under the pointer),
+   * and never a button's fill (`docs/settings-ui.md`, "The palette"). */
+  --brand: #249ddd;
+  --brand-text: #2c7197;
+  --brand-icon: #1683c7;
+  --brand-subtle: color-mix(in srgb, var(--brand) 12%, var(--background));
+  --selection: color-mix(in srgb, var(--brand) 30%, transparent);
+  --selection-foreground: var(--foreground);
   --foreground-error: oklch(0.505 0.213 27.518);
-  --background-error: oklch(0.936 0.032 17.717);
-  --background-error-hover: oklch(0.9 0.045 17.717);
   --border-error: oklch(0.8 0.12 22);
-  --foreground-warning: oklch(0.473 0.137 46.201);
-  --background-warning: oklch(0.962 0.059 95.617);
-  --background-warning-hover: oklch(0.94 0.075 95.617);
-  --border-warning: oklch(0.85 0.13 85);
-  --foreground-info: oklch(0.488 0.243 264.376);
-  --background-info: oklch(0.95 0.03 264);
-  --background-info-hover: oklch(0.92 0.045 264);
-  --border-info: oklch(0.8 0.1 264);
-  --surface-sunken: var(--secondary);
-  --surface-sunken-hover: oklch(0.94 0 0);
-  --surface-sunken-selected: var(--border);
-  --surface-base: var(--background);
-  --surface-base-hover: var(--secondary);
-  --surface-base-selected: oklch(0.94 0 0);
-  --surface-elevated: var(--popover);
-  --surface-elevated-hover: var(--secondary);
-  --surface-elevated-selected: oklch(0.94 0 0);
-  --surface-paper: var(--background);
-  --surface-paper-hover: var(--secondary);
-  --surface-paper-selected: oklch(0.94 0 0);
+  /* A warning: `--warning` its icon, edge and tint (amber), `--warning-foreground` its words. */
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.473 0.137 46.201);
+  /* The slider (`primitives/slider.jsx`), quiet as Figma's: a faint neutral track, a fill a few steps
+   * darker (never the accent or the primary's near-black), a white thumb held off the panel by a thin
+   * mid-grey ring (3:1 against the panel) and a small shadow. Hover strengthens the fill a step. */
+  --slider-track: oklch(0 0 0 / 9%);
+  --slider-fill: oklch(0 0 0 / 28%);
+  --slider-fill-hover: oklch(0 0 0 / 38%);
+  --slider-thumb: oklch(1 0 0);
+  --slider-thumb-border: oklch(0 0 0 / 45%);
+  --slider-thumb-shadow: 0 1px 2px oklch(0 0 0 / 16%);
 }
 
 .dark {
   /* Neutral grey surfaces (chroma 0, no hue), as Figma's and VS Code's dark themes are (a #1E1E1E canvas),
    * on the shadcn token steps; the lightness of each step is unchanged, so contrast is too. */
-  --background: oklch(0.28 0 0);
+  --background: #2c2c2c;
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.31 0 0);
   --card-foreground: oklch(0.985 0 0);
@@ -195,65 +150,39 @@
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.34 0 0);
   --muted-foreground: oklch(0.75 0 0);
-  --accent: oklch(0.38 0 0);
+  --accent: #444444;
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
+  --border: rgba(255, 255, 255, 0.12);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  --ring: var(--brand);
   --canvas: oklch(0.235 0 0);
-  --sidebar: oklch(0.30 0 0);
+  --sidebar: #2c2c2c;
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.38 0 0);
+  --sidebar-accent: #444444;
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-border: rgba(255, 255, 255, 0.12);
+  --sidebar-ring: var(--brand);
 
-  --background-1: var(--card);
-  --background-2: var(--secondary);
-  --background-3: oklch(0.38 0 0);
-  --foreground-inverse: var(--primary-foreground);
-  --foreground-muted: var(--muted-foreground);
-  --foreground-passive: var(--ring);
-  --border-1: var(--ring);
-  --border-2: var(--muted-foreground);
-  --border-primary: var(--primary);
-  --selection: var(--accent);
-  --selection-foreground: var(--accent-foreground);
-  --foreground-success: oklch(0.871 0.15 154.449);
-  --background-success: oklch(0.262 0.051 172.552);
-  --background-success-hover: oklch(0.3 0.06 172.552);
-  --border-success: oklch(0.45 0.1 160);
+  --brand: #62b7ec;
+  --brand-text: #62b7ec;
+  --brand-icon: #62b7ec;
+  --brand-subtle: color-mix(in srgb, var(--brand) 22%, var(--background));
+  --selection: color-mix(in srgb, var(--brand) 30%, transparent);
+  --selection-foreground: var(--foreground);
   --foreground-error: oklch(0.808 0.114 19.571);
-  --background-error: oklch(0.258 0.092 26.042);
-  --background-error-hover: oklch(0.3 0.1 26.042);
   --border-error: oklch(0.45 0.15 25);
-  --foreground-warning: oklch(0.879 0.169 91.605);
-  --background-warning: oklch(0.269 0.077 45.635);
-  --background-warning-hover: oklch(0.31 0.085 45.635);
-  --border-warning: oklch(0.5 0.12 70);
-  --foreground-info: oklch(0.75 0.15 264);
-  --background-info: oklch(0.27 0.06 264);
-  --background-info-hover: oklch(0.31 0.07 264);
-  --border-info: oklch(0.45 0.12 264);
-  --surface-sunken: var(--background);
-  --surface-sunken-hover: var(--card);
-  --surface-sunken-selected: var(--secondary);
-  --surface-base: var(--card);
-  --surface-base-hover: var(--secondary);
-  --surface-base-selected: oklch(0.38 0 0);
-  --surface-elevated: var(--secondary);
-  --surface-elevated-hover: oklch(0.38 0 0);
-  --surface-elevated-selected: oklch(0.42 0 0);
-  --surface-paper: var(--card);
-  --surface-paper-hover: var(--secondary);
-  --surface-paper-selected: oklch(0.38 0 0);
+  --warning: oklch(0.828 0.189 84.429);
+  --warning-foreground: oklch(0.879 0.169 91.605);
+  /* The slider, dark: the same steps in white over the panel, the thumb a light grey rather than pure
+   * white so it reads without glaring, ringed in black to part it from the fill. */
+  --slider-track: oklch(1 0 0 / 12%);
+  --slider-fill: oklch(1 0 0 / 32%);
+  --slider-fill-hover: oklch(1 0 0 / 42%);
+  --slider-thumb: oklch(0.9 0 0);
+  --slider-thumb-border: oklch(0 0 0 / 55%);
+  --slider-thumb-shadow: 0 1px 2px oklch(0 0 0 / 45%);
 }

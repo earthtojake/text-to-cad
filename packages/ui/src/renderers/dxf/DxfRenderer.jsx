@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box } from "lucide-react";
+import { useViewportTheme } from "../kit/look/useViewportTheme.js";
 import { cn } from "@cad/ui/utils";
 import { entitiesInBox, entityAt, drawEntityHighlights, snapAt } from "@cad/core/lib/drawing2d/entities.js";
 import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
@@ -10,6 +10,8 @@ import { useViewerMobile } from "../../file-viewer/responsive.js";
 import { annotationAt, withGroups } from "../../annotation/geometry.js";
 import { promptView } from "../../annotation/views.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
+import { backgroundGroup } from "../kit/shell/ViewSettingsMenu.jsx";
+import { useControlUsage } from "../../usage/controls.js";
 import FlatViewFrame, { flatViewTools } from "../kit/shell/FlatViewFrame.jsx";
 import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
 import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
@@ -25,7 +27,7 @@ import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
 import { menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import { readFlatView } from "../kit/viewport/flatView.js";
-import { createDrawingScene, describeDrawingPick, drawingPickTip, drawingHandleOf, drawingReferenceId, drawingUnits, layersSectionShown } from "./drawingReferences.js";
+import { createDrawingScene, describeDrawingPick, drawingPickTip, drawingHandleOf, drawingReferenceId, drawingUnits } from "./drawingReferences.js";
 import { drawingAnnotationDocument, drawingAnnotationSurface } from "./drawingAnnotation.js";
 import LayersSection from "./LayersSection.jsx";
 import { DXF_DECLINED_LIVE_COMMANDS, DXF_NO_CAMERA, DXF_NO_DISPLAY, DXF_TOOL, DXF_TOOL_MODES } from "./tools.js";
@@ -46,7 +48,7 @@ import { useI18n } from "@cad/ui/i18n";
  * it declares none). What is picked and drawn is Quick Edit's (what is measured, Measure's row's), whose views are the window
  * on screen as a plan-view camera, which `cad <type> snapshot --annotation PACKET --camera authored` draws again. A drawing with
  * layers and blocks to read has the view's panel docked at the left (`kit/shell/FlatPanel.jsx`, a
- * board's and a 3D view's): its search, then its Layers tab (`layersSectionShown`), kept open or
+ * board's and a 3D view's): its search, then its Layers tab (from the first frame), kept open or
  * collapsed as the other views' panel is, ⌘\ to show or hide it and / to search it. The chrome and
  * the hands are every flat view's, a board's and a schematic's (`kit/shell/FlatViewFrame.jsx`,
  * `kit/shell/useFlatView.js`): this renderer brings its canvas, its picks and its Layers.
@@ -64,8 +66,6 @@ const DXF_LIVE = Object.freeze({ commands: ["clearSelection"], declined: DXF_DEC
 // How near a pick must be, in CSS pixels: a cursor's, or a fingertip's (`TOUCH_HIT_PX`).
 const PICK_PX = 6;
 const pickPx = pointerType => (pointerType === "touch" ? TOUCH_HIT_PX : PICK_PX);
-// A block reference's glyph in the Selected pane and its chip's card, the Layers' own for it.
-const DRAWING_GLYPHS = Object.freeze({ block: Box });
 
 function DxfSurface({ view, data }) {
   const { t } = useI18n();
@@ -77,7 +77,13 @@ function DxfSurface({ view, data }) {
   const drawing = payload.drawing;
   const units = useMemo(() => drawingUnits(drawing?.units), [drawing]);
   const { onStateChange } = view;
-  const colorScheme = view.appearance?.colorScheme === "dark" ? "dark" : "light";
+  // The viewport's theme (`kit/look/useViewportTheme.js`): the person's Background over the app's light or dark.
+  // The picture — its paper, its strokes, the marks over it — is drawn in its scheme; the chrome keeps the app's.
+  const viewport = useViewportTheme(view.appearance?.colorScheme === "dark" ? "dark" : "light", workspace.services.preferences, workspace.services.onPreferenceChange);
+  // Its view settings, the navbar's View (`kit/shell/ViewSettingsMenu.jsx`): a drawing's one, the viewport's Background.
+  const usage = useControlUsage();
+  const viewGroups = [backgroundGroup({ value: viewport.background, onChange: viewport.setBackground }, t, usage.used)];
+  const colorScheme = viewport.scheme;
 
   // ---- the view this file was left at ---------------------------------------
   // The file's view (`kit/shell/fileView.js`) with the drawing's view as its camera (`kit/viewport/flatView.js`:
@@ -138,7 +144,7 @@ function DxfSurface({ view, data }) {
   selectionRef.current = selection;
   // What a pick is, as the Selected pane, its chip's card and the hover tip read it (`describeDrawingPick`).
   const describe = useCallback(id => (drawing ? describeDrawingPick(drawing, id, units.unit, t) : null), [drawing, units, t]);
-  const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource, describe });
+  const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource, describe, group: "entity" });
   const overlay = useCallback((ctx, { transform, pixelRatio }) => {
     const drawable = drawingRef.current;
     if (!drawable) return;
@@ -378,7 +384,7 @@ function DxfSurface({ view, data }) {
   const resource = workspace.resource;
   const copyText = useCallback(ids => sceneCopyText(resource, ids), [resource]);
   const tip = useCallback(id => (drawing ? drawingPickTip(drawing, id, units.unit, t) : ""), [drawing, units, t]);
-  const inspect = useSceneInspect({ scene, selection, describe, tip, frame: frameEntities, copyText, glyphs: DRAWING_GLYPHS, data: "drawing" });
+  const inspect = useSceneInspect({ scene, selection, describe, tip, data: "drawing" });
 
   // ---- the frame: every flat view's (`kit/shell/FlatViewFrame.jsx`) around the drawing's canvas ----
   // While the drawing loads, or once it has failed to, none of the viewer's own chrome. A compact host
@@ -390,20 +396,20 @@ function DxfSurface({ view, data }) {
   // The strip's zoom, and the zoom's keys (`useFlatHandover`'s `zoomKeys`).
   const zoom = { ...drawingView.zoom, zoomToSelection: () => frameEntities(selectionRef.current.selected), selectionAvailable: selection.selected.length > 0 };
   handover.zoomKeys.current = zoom;
-  // The panel: the drawing's Layers, where it has layers and blocks to read (`layersSectionShown`).
-  const panel = layersSectionShown(drawing) ? { kind: "drawing", label: t("drawing.panel"), searchLabel: t("drawing.search"), tabs: [{
+  // The panel: the drawing's Layers, from the first frame (its rows arrive with the drawing).
+  const panel = { kind: "drawing", label: t("drawing.panel"), searchLabel: t("drawing.search"), tabs: [{
     id: "layers", label: t("layers.title"),
     content: <LayersSection drawing={drawing} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} selection={selection} />
-  }] } : null;
+  }] };
 
   // The 3D views' cursors under Select: the arrow, pressed or dragging too, and the pointing hand
   // over what a press would pick. Measure keeps its crosshair (Annotate's layer has its own).
   const cursor = measuring ? "cursor-crosshair" : pointing && !dragging ? "cursor-pointer" : "cursor-default";
 
   return (
-    <FlatViewFrame surface={DRAWING_SURFACE} containerRef={containerRef} busy={payload.loading || payload.updating}
-      file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={payload.loading} loadingLabel={t("drawing.reading")}
-      updating={payload.updating} updateStatus={{ pending: true, label: t("drawing.updating") }} tools={strip} toolRow={row} views={[]}
+    <FlatViewFrame surface={DRAWING_SURFACE} viewport={viewport} containerRef={containerRef} busy={payload.loading || payload.updating}
+      file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} loading={payload.loading} loadingLabel={t("drawing.reading")}
+      updating={payload.updating} updateStatus={{ pending: true, label: t("drawing.updating") }} tools={strip} toolRow={row} views={[]} viewGroups={viewGroups} onResetView={zoom?.fit ?? null}
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={handover.quickEdit} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems} zoom={zoom} inspect={inspect}>

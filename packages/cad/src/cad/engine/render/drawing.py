@@ -296,6 +296,7 @@ def paint_ink(frame: np.ndarray, marks: list[dict[str, Any]], place: Any, line_s
     box of its four corners, set in the face the pane sets them in, line after line."""
     from PIL import Image, ImageDraw
 
+    from cad.engine.render.dashes import dash_pattern, dash_runs, segment_lengths
     from cad.engine.render.text import coverage, face
 
     ss = INK_SUPERSAMPLE
@@ -333,13 +334,20 @@ def paint_ink(frame: np.ndarray, marks: list[dict[str, Any]], place: Any, line_s
             if len(local) >= 3:
                 draw.polygon(local, fill=255)
         else:
-            for at, (start, end) in enumerate(zip(local, local[1:] or local)):
-                wide = (ends[at] + ends[min(at + 1, len(ends) - 1)]) / 2 * ss
-                if wide <= 0:
-                    continue
-                draw.line([start, end], fill=255, width=max(1, round(wide)))
-                for x, y in (start, end):  # round caps and joins
-                    draw.ellipse([x - wide / 2, y - wide / 2, x + wide / 2, y + wide / 2], fill=255)
+            # Its line style: the runs of ink of its pattern (``dashes.py``), each painted as the solid line is.
+            pattern = dash_pattern(mark.get("dash"), float(mark.get("width") or 0) * line_scale)
+            runs = [(np.asarray(local, float), np.asarray(ends, float))] if pattern is None else dash_runs(
+                np.asarray(local, float), [length / ss for length in segment_lengths(np.asarray(local, float))],
+                (pattern[0], pattern[1]), np.asarray(ends, float))
+            for run, run_ends in runs:
+                run_points = [tuple(point) for point in run]
+                for at, (start, end) in enumerate(zip(run_points, run_points[1:] or run_points)):
+                    wide = (run_ends[at] + run_ends[min(at + 1, len(run_ends) - 1)]) / 2 * ss
+                    if wide <= 0:
+                        continue
+                    draw.line([start, end], fill=255, width=max(1, round(wide)))
+                    for x, y in (start, end):  # round caps and joins
+                        draw.ellipse([x - wide / 2, y - wide / 2, x + wide / 2, y + wide / 2], fill=255)
         cover = np.asarray(mask.reduce(ss), float) / 255.0
         _laid(frame, left, top, cover, rgb, opacity)
 

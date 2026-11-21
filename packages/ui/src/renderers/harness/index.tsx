@@ -46,9 +46,22 @@ const sessionRecord = (): TabRecordStorage => ({
 const tabStore = createTabStore(new URLSearchParams(location.search).get('store') === 'session'
   ? sessionRecord() : memoryTabRecord((window as unknown as { __cadTabRecord?: unknown }).__cadTabRecord));
 const preferences = tabStore.settings;
+// The viewport's Background: the scenarios were written for a picture in the host's theme, so the harness starts it
+// as the host's colour scheme (`colorScheme`: Dark on a dark host) unless `?background=light|dark` asks for one, or a stored record
+// already names one.
+{
+  const asked = new URLSearchParams(location.search).get('background');
+  const stored = (window as unknown as { __cadTabRecord?: { settings?: { viewportBackground?: string } } }).__cadTabRecord?.settings?.viewportBackground;
+  if (asked === 'light' || asked === 'dark') preferences.update({ viewportBackground: asked });
+  else if (!stored) preferences.update({ viewportBackground: colorScheme });
+}
+// A scenario changes it as Display's Background does: the tab's setting, every view of the tab.
+(window as unknown as { __cadViewportBackground?: (next: 'light' | 'dark') => void }).__cadViewportBackground =
+  next => preferences.update({ viewportBackground: next });
 // The second pane is another viewer, and so another tab: a tab keeps the view of the one file it
 // shows (`TAB_FILE_LIMIT`), so two viewers sharing one record would drop each other's.
 const otherTabStore = createTabStore(memoryTabRecord());
+otherTabStore.settings.update({ viewportBackground: tabStore.settings.getSnapshot().viewportBackground });
 // The keyboard the browser under test types on, as a web host reports it: the drawing
 // editor's history keys must be the ones its SDK listens for on this machine.
 const keyboardPlatform = /Mac|iPhone|iPad/.test(navigator.platform) ? 'darwin' : /Win/.test(navigator.platform) ? 'win32' : 'linux';

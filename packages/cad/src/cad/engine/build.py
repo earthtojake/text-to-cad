@@ -712,6 +712,78 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
     return reports
 
 
+def preview(script: Path, name: str, values: dict[str, Any], *, cwd: Path | None = None, digest: str | None = None,
+            known: Any = ()) -> tuple[dict[str, Any], bytes]:
+    """Model ``name`` of ``script`` at other values of the parameters its script declares (``values``, which the
+    daemon checked against its last run's declarations): a page's preview. The script is loaded as a build
+    loads it, but with ``param`` returning those values in place of the defaults (``parameters.recording``'s
+    ``values``), from bytes of the digest the last run recorded (``digest``: else ``script_changed``), and the
+    one model is built in a run of the worker's memo (``memo.run``): every kernel call keyed by its inputs, so
+    a value tried before, and every stage the values do not reach, is a hit. Nothing a build keeps is touched:
+    no file is written (no declared xbf, no export), no document is kept (``_WRITTEN``, ``_BUILT``), no load
+    is kept for a run (``_LOAD`` is dropped, as any fresh load drops it), no closure is made and nothing is
+    taken from the engine's cache; the report is the answer alone. Answered as ``result`` answers a held
+    model: ``{"ok", "structure", "shapes": [[key, size]], "timings", "memo"}`` with the bytes of each part
+    whose key is not in ``known`` (the parts the daemon holds already), in order -- or ``{"ok": false,
+    "error", ...}``, the model's own error at those values, and no bytes."""
+    from cad.engine import document, parameters, reader
+    from cad.engine.export import structure_of
+    from cad.engine.kernel import determinism, memo
+    from cad.engine.kernel.trace import first_party_file
+    from cad.engine.mesh import shape_bytes
+    from cad.engine.model import _FINGERPRINTS, _MODELS, _NAMES, BuildContext, models_in
+
+    script = Path(script).resolve()
+    if not script.is_file():
+        raise BuildError(f"no script {script}")
+    determinism.install()
+    memo.install()
+    shown = _shown(script, cwd)
+    started = time.perf_counter()
+    with memo.run(script, model=("preview", name)) as run, BuildContext() as context, reader.session():
+        _MODELS.clear()
+        _NAMES.clear()
+        _FINGERPRINTS.clear()
+        _LOAD.clear()  # its modules are about to be replaced: a run's next call loads again
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=_DEPRECATED, category=FutureWarning)
+                with parameters.recording(first_party_file, values=values, script=canonical(script)) as declared:
+                    module = load_script(script)
+        except BuildError:
+            raise
+        except Exception as error:  # noqa: BLE001 - the model's own error at those values, answered
+            return {"ok": False, "model": shown, **_failed(error)}, b""
+        parameters.previewed(declared, values, canonical(script), digest)
+        context.declared = declared
+        context.loaded = set(_first_party_modules())
+        context.base, context.script = script.parent, script
+        context.preview = json.dumps(sorted(values.items()), separators=(",", ":"))
+        loaded = time.perf_counter()
+        model = next((found for found in models_in(vars(module), script) if found.name == name), None)
+        if model is None:
+            raise BuildError(f"{shown} defines no model {name}")
+        try:
+            result = context.root(model)
+        except Exception as error:  # noqa: BLE001 - the model's own error at those values, answered
+            return {"ok": False, "model": f"{shown}::{model.name}", **_failed(error)}, b""
+        body = time.perf_counter()
+        report: dict[str, Any] = {"timings": {"load": round(loaded - started, 4), "body": round(body - loaded, 4)}}
+        tree, _tokens, _built = _tree(model, result, run, report, context, None, closure=False)
+        structure = structure_of(tree, None)
+        held = set(known or ())
+        shapes, data = [], []
+        for part in tree.parts:
+            if part.key in held or any(key == part.key for key, _size in shapes):
+                continue
+            made = shape_bytes(part.shape)
+            shapes.append([part.key, len(made)])
+            data.append(made)
+        report["timings"]["total"] = round(time.perf_counter() - started, 4)
+        return {"ok": True, "model": f"{shown}::{model.name}", "structure": structure, "shapes": shapes,
+                "timings": report["timings"], "memo": dict(run.tally)}, b"".join(data)
+
+
 def _keep_load(load: _Load | None, reports: list[dict[str, Any]], context: Any) -> None:
     """Keep the build's load for its run's next call when the build ran nothing: every model
     taken from its key (``_previous``), so no body touched the module (``_Load``)."""
@@ -744,12 +816,33 @@ def _shown(script: Path, cwd: Path | None) -> str:
 
 def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Callable[[str], None],
             plan: list | None = None, context: Any = None) -> None:
-    from cad.engine import document
-
     timings = report["timings"]
     plan = plan if plan is not None else model.plan()
     targets = [(target.kind, target.path) for target in plan]
     _plan_said(model, plan)
+    xbf = next((path for kind, path in targets if kind == "xbf"), None)
+    tree, tokens, built = _tree(model, result, run, report, context, xbf)
+    signature = (_signature(tree), tuple(tokens), tree.closure, tree.parameters)
+    # What the tree holds at a glance, which the daemon says against the last build (``delta``).
+    clock = time.perf_counter()
+    from cad.engine.delta import facts
+
+    report["facts"] = facts(tree, f"{model.script}::{model.name}", signature)
+    timings["facts"] = round(time.perf_counter() - clock, 4)
+    _BUILT[model.id] = built
+    _write(model, plan, tree, signature, report, log)
+    timings["total"] = round(sum(value for name, value in timings.items() if name != "total"), 4)
+
+
+def _tree(model: Any, result: Any, run: Any, report: dict[str, Any], context: Any, xbf: Any,
+          closure: bool = True) -> tuple[Any, list, dict[str, "_Named"]]:
+    """A model's result as the document's tree (``document.collect``): its joints harvested (kept beside the
+    body's run), its closure (``closure``: a preview's tree has none) and the parameters its script declares
+    recorded, every part named and keyed (``_PARTS``), and parts of one geometry merged. The tree, each
+    part's naming token, and what the build made of each part by its key (``_BUILT``'s)."""
+    from cad.engine import document
+
+    timings = report["timings"]
     _say("named", model.name)
     clock = time.perf_counter()
     from cad.engine.kernel import memo
@@ -784,8 +877,7 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
         found = run.keys.get(name)
         if found is not None:
             run.keys[name] = (found[0], [*found[1], *checks], found[2] and keyed, found[3])
-    xbf = next((path for kind, path in targets if kind == "xbf"), None)
-    if context is not None:
+    if context is not None and closure:
         from cad.engine import previous
 
         modules, unkeyable = context.modules(model)
@@ -794,6 +886,7 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
                                  context.named(model))
         tree.closure = previous.text(made)
         report["closure"] = previous.located(made, folder)
+    if context is not None:
         # The parameters its script declares (``parameters``): the document records what they are, the
         # report says where each is in the code, which the engine keeps in memory and never writes.
         from cad.engine import parameters
@@ -834,19 +927,10 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
         tokens.append(cached.token)
         built[cached.key] = cached
     document.merge(tree)
-    signature = (_signature(tree), tuple(tokens), tree.closure, tree.parameters)
     timings["names"] = round(time.perf_counter() - clock, 4)
     report["parts"] = len(tree.parts)
     report["named"] = named
-    # What the tree holds at a glance, which the daemon says against the last build (``delta``).
-    clock = time.perf_counter()
-    from cad.engine.delta import facts
-
-    report["facts"] = facts(tree, name, signature)
-    timings["facts"] = round(time.perf_counter() - clock, 4)
-    _BUILT[model.id] = built
-    _write(model, plan, tree, signature, report, log)
-    timings["total"] = round(sum(value for name, value in timings.items() if name != "total"), 4)
+    return tree, tokens, built
 
 
 def _write(model: Any, plan: list, tree: Any, signature: tuple, report: dict[str, Any],

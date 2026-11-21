@@ -1,8 +1,9 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { annotationAt, highlighterMark, penMark, shapeMarks, textMark, withGroups } from "../../../../annotation/geometry.js";
+import { strokeInkPath } from "@cad/core/lib/drawing2d/marks.js";
+import { annotationAt, fillMarkAt, fillTargetAt, highlighterMark, interiorPoint, penMark, shapeMarks, textMark, withGroups } from "../../../../annotation/geometry.js";
 import { DEFAULT_OVERLAY_ANNOTATION_COLOR } from "../../../../annotation/toolbar.jsx";
 import { capturePointer } from "../../../../lib/pointerCapture.js";
-import { annotationsOnScreen, projectAnnotations } from "./annotation3d.js";
+import { annotationsOnScreen, fillAreasOf, projectAnnotations } from "./annotation3d.js";
 import { TOUCH_HIT_PX } from "../../viewport/dom.js";
 import { useI18n } from "@cad/ui/i18n";
 
@@ -13,8 +14,26 @@ export const CAD_ANNOTATION_DEFAULTS = Object.freeze({
 });
 
 const SHAPES = new Set(["line", "arrow", "rectangle", "ellipse"]);
+// The Fill tool's cursor: lucide's paint bucket, dark on a light halo so it reads on any part, its hot spot at the
+// paint's tip (bottom right).
+const BUCKET = '<path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/>'
+  + '<path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/>';
+const FILL_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><g stroke="white" stroke-width="4">${BUCKET}</g><g stroke="black" stroke-width="2">${BUCKET}</g></svg>`)}") 20 20, crosshair`;
 const ERASER_RADIUS = 8;
+// The hover halo's colour where the page has no `--brand-icon` (its light value).
+const FILL_HOVER_COLOR = "#1683c7";
 // A finger's eraser is a fingertip across (`TOUCH_HIT_PX`).
+/**
+ * The press a right or middle button makes on the drawing surface, handed on to the view's canvas unchanged: the
+ * same button, buttons and modifier keys the canvas would have had under Select, so the view's one camera mapping
+ * decides what the drag does in both tools.
+ */
+export function viewPressInit(event) {
+  return { pointerId: event.pointerId, pointerType: event.pointerType, isPrimary: event.isPrimary, clientX: event.clientX, clientY: event.clientY,
+    screenX: event.screenX, screenY: event.screenY, button: event.button, buttons: event.buttons, ctrlKey: event.ctrlKey, metaKey: event.metaKey,
+    shiftKey: event.shiftKey, altKey: event.altKey, bubbles: true, cancelable: true };
+}
+
 const eraserRadius = pointerType => pointerType === "touch" ? TOUCH_HIT_PX : ERASER_RADIUS;
 const FONT_PX = Object.freeze({ 1: 16, 2: 20, 4: 28 });
 const fontOf = px => `500 ${px}px ui-sans-serif, system-ui, sans-serif`;
@@ -32,28 +51,18 @@ function paintMark(context, mark) {
     mark.outline.forEach((point, index) => (index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y)));
     context.closePath();
     context.fill();
-  } else if (mark.widths) {
-    for (let index = 1; index < mark.points.length; index += 1) {
-      context.lineWidth = mark.width * (mark.widths[index - 1] + mark.widths[index]) / 2;
-      context.beginPath();
-      context.moveTo(mark.points[index - 1].x, mark.points[index - 1].y);
-      context.lineTo(mark.points[index].x, mark.points[index].y);
-      context.stroke();
-    }
   } else {
-    context.lineWidth = mark.width;
-    context.beginPath();
-    mark.points.forEach((point, index) => (index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y)));
-    context.stroke();
+    // In its line style, as it will lie (`strokeInkPath`, the 2D views' and a snapshot's painter).
+    strokeInkPath(context, mark.points, { width: mark.width, widths: mark.widths, closed: mark.closed, dash: mark.dash });
   }
   context.restore();
 }
 // Ink already in the model, outlined where it falls on the screen: what the eraser is about to take.
-function paintOutline(context, ink, { color }) {
+function paintOutline(context, ink, { color, opacity = 0.45, pad = 4 }) {
   context.save();
   context.strokeStyle = color;
-  context.lineWidth = Math.max(2, ink.width + 4);
-  context.globalAlpha = 0.45;
+  context.lineWidth = Math.max(2, ink.width + pad);
+  context.globalAlpha = opacity;
   context.lineCap = "round";
   context.lineJoin = "round";
   context.beginPath();
@@ -93,6 +102,9 @@ export default function AnnotationOverlay({ annotation, runtimeRef = null, viewO
   const gesture = useRef(null);
   // Marks just put into the model, still previewed until the scene has drawn them.
   const landing = useRef(null);
+  // With Fill in hand, the closed outline the pointer rests on (as it falls on the screen), haloed as Select halos ink.
+  const fillHover = useRef(null);
+  const [fillHoverId, setFillHoverId] = useState(null);
   const [text, setText] = useState(null);
   // Space held: the pointer is the view's, to orbit, as a design tool's hand is.
   const [passing, setPassing] = useState(false);
@@ -100,7 +112,7 @@ export default function AnnotationOverlay({ annotation, runtimeRef = null, viewO
   textRef.current = text;
   const annotationRef = useRef(annotation);
   annotationRef.current = annotation;
-  const style = { color: annotation.style.color, width: annotation.style.strokeWidth };
+  const style = { color: annotation.style.color, width: annotation.style.strokeWidth, dash: annotation.style.dash };
   const styleRef = useRef(style);
   styleRef.current = style;
   // The freehand gesture's mark: the pen's, tapered by pressure, or the highlighter's, broad and translucent.
@@ -163,6 +175,10 @@ export default function AnnotationOverlay({ annotation, runtimeRef = null, viewO
     context.clearRect(0, 0, width, height);
     const current = gesture.current, session = annotationRef.current;
     for (const mark of landing.current || []) paintMark(context, mark);
+    if (fillHover.current && session.tool === "fill") {
+      const brand = globalThis.getComputedStyle?.(host).getPropertyValue("--brand-icon").trim();
+      paintOutline(context, fillHover.current, { color: brand || FILL_HOVER_COLOR, opacity: 0.5, pad: 6 });
+    }
     if (!current) return;
     if (current.kind === "pen") {
       const mark = inkOf(current);
@@ -206,16 +222,59 @@ export default function AnnotationOverlay({ annotation, runtimeRef = null, viewO
     if (mark) put([mark]);
   };
 
-  // A right or middle press is the view's: it goes on to the canvas as the press that orbits, and the
-  // canvas takes the pointer from there.
+  // What Fill is on at a point of the surface: the closed outline there (`fillTargetAt`: the last drawn where outlines
+  // overlap; a press on its line counts, as does a freehand loop whose ends meet on the screen now), with its item.
+  const fillTarget = (at, radius) => {
+    const target = fillTargetAt(at, onScreen(), radius ? { radius } : undefined);
+    const shape = target && annotationRef.current.items.find(item => item.id === target.id && item.kind === "stroke");
+    return shape ? { ...target, shape } : null;
+  };
+  // The outline the pointer rests on with Fill in hand (`ink`, on the screen), or none: haloed on the preview.
+  const hoverFill = ink => {
+    if (!ink && !fillHover.current) return;
+    fillHover.current = ink;
+    setFillHoverId(ink?.id ?? null);
+    paint();
+  };
+  // The Fill tool's press: the closed outline under it filled with the colour in hand, the same fill the selected
+  // shape's Fill toggle puts down (`session.fill`, its area grouped with the shape). A shape filled in that colour
+  // already is unfilled; in another, its fill takes this one. A press on nothing, or on an open mark (a line, an
+  // arrow, a pen stroke whose ends are apart), does nothing. Each is one step to undo.
+  const fillAt = (at, radius) => {
+    const session = annotationRef.current, runtime = runtimeRef?.current, flat = surfaceRef.current;
+    if (!flat && !runtime) return;
+    const color = session.style.color;
+    const target = fillTarget(at, radius);
+    if (!target) return;
+    const { shape, ink: outline, seed } = target;
+    const fills = shape.group ? session.items.filter(item => item.kind === "area" && item.group === shape.group) : [];
+    if (fills.length) {
+      if (fills.every(item => item.color === color)) session.remove(fills.map(item => item.id));
+      else session.fillColor(shape.id, color);
+      return;
+    }
+    const view = size();
+    let areas;
+    if (flat) {
+      const from = seed || interiorPoint(outline.points);
+      const mark = from && fillMarkAt(from, [outline], color);
+      const labelled = viewNow();
+      areas = mark ? flat.place([{ ...mark, ...(labelled ? { view: labelled } : {}) }], view) : [];
+    } else areas = fillAreasOf(runtime, shape, outline, seed, color, view);
+    if (areas.length) session.fill(shape.id, areas, color);
+  };
+
+  // A right or middle press is the view's: it goes on to the canvas AS IT WAS (its button, buttons and keys), so the
+  // canvas maps it as it maps the same press under Select — a 3D view's OrbitControls' `mouseButtons` (the right
+  // button pans, `useViewerRuntime.js`), a flat view's own (`useFlatCanvasView.js`) — and takes the pointer from there.
   const handToView = event => {
     const target = viewElement();
     if (!target) return;
     event.preventDefault();
-    target.dispatchEvent(new PointerEvent("pointerdown", { pointerId: event.pointerId, pointerType: event.pointerType, isPrimary: event.isPrimary,
-      clientX: event.clientX, clientY: event.clientY, screenX: event.screenX, screenY: event.screenY, button: 0, buttons: 1, bubbles: true, cancelable: true }));
+    target.dispatchEvent(new PointerEvent("pointerdown", viewPressInit(event)));
   };
   const onPointerDown = event => {
+    if (event.button !== 0 && fillHover.current) hoverFill(null);
     if (event.button === 1 || event.button === 2) { handToView(event); return; }
     if (event.button !== 0) return;
     const session = annotationRef.current, at = point(event);
@@ -225,6 +284,7 @@ export default function AnnotationOverlay({ annotation, runtimeRef = null, viewO
     const pressure = event.pointerType === "pen" ? event.pressure : null;
     if (session.tool === "freedraw") gesture.current = { kind: "pen", points: [at], pressures: pressure == null ? null : [pressure] };
     else if (session.tool === "highlighter") gesture.current = { kind: "pen", highlight: true, points: [at], pressures: null };
+    else if (session.tool === "fill") fillAt(at, event.pointerType === "touch" ? TOUCH_HIT_PX : undefined);
     else if (SHAPES.has(session.tool)) gesture.current = { kind: "shape", tool: session.tool, from: at, to: at };
     else if (session.tool === "eraser") {
       const screen = onScreen();
@@ -237,7 +297,11 @@ export default function AnnotationOverlay({ annotation, runtimeRef = null, viewO
   };
   const onPointerMove = event => {
     const current = gesture.current;
-    if (!current) return;
+    if (!current) {
+      if (annotationRef.current.tool === "fill" && event.pointerType !== "touch") hoverFill(fillTarget(point(event))?.ink ?? null);
+      else if (fillHover.current) hoverFill(null);
+      return;
+    }
     const at = point(event);
     if (current.kind === "pen") {
       current.points.push(at);
@@ -269,15 +333,16 @@ export default function AnnotationOverlay({ annotation, runtimeRef = null, viewO
   const onKeyUp = event => { if (event.key === " ") setPassing(false); };
   // The wheel is the camera's, as it is outside Annotate.
   const onWheel = event => {
+    if (fillHover.current) hoverFill(null);
     const target = viewElement();
     target?.dispatchEvent(new WheelEvent("wheel", { deltaX: event.deltaX, deltaY: event.deltaY, deltaZ: event.deltaZ, deltaMode: event.deltaMode,
       clientX: event.clientX, clientY: event.clientY, ctrlKey: event.ctrlKey, shiftKey: event.shiftKey, metaKey: event.metaKey, bubbles: true, cancelable: true }));
   };
 
-  return <div ref={root} tabIndex={-1} data-cad-annotation-overlay="" data-annotation-tool={annotation.tool} data-passing={passing ? "" : undefined}
+  return <div ref={root} tabIndex={-1} data-cad-annotation-overlay="" data-annotation-tool={annotation.tool} data-fill-hover={annotation.tool === "fill" && fillHoverId ? fillHoverId : undefined} data-passing={passing ? "" : undefined}
     className="absolute inset-0 z-10 outline-none"
-    style={{ pointerEvents: passing ? "none" : "auto", cursor: annotation.tool === "text" ? "text" : "crosshair", touchAction: "none" }}
-    onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+    style={{ pointerEvents: passing ? "none" : "auto", cursor: annotation.tool === "text" ? "text" : annotation.tool === "fill" ? FILL_CURSOR : "crosshair", touchAction: "none" }}
+    onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onPointerLeave={() => hoverFill(null)}
     onMouseDown={onMouseDown} onKeyDown={onKeyDown} onKeyUp={onKeyUp} onBlur={() => setPassing(false)} onWheel={onWheel}
     onContextMenu={event => event.preventDefault()}>
     <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />

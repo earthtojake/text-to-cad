@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fuzzyMatch } from '../../../file-viewer/navigation/fuzzy.js';
 import { useControlUsage } from '../../../usage/controls.js';
+import { useFlatPanelMatches } from '../shell/FlatPanel.jsx';
 
 /** The scroller a tree sits in (its tool-stack panel's body): a search keeps its place in it. */
 const panelScroller = element => element?.closest('[data-tool-panel-body]') ?? element;
@@ -149,6 +150,8 @@ export function useTreeSearch(roots, external = null) {
   useLayoutEffect(() => { if (!external && !searching && listRef.current) panelScroller(listRef.current).scrollTop = resumeScroll.current; }, [searching]);
   // A query typed elsewhere starts its cursor on the first match, as one typed here does.
   useEffect(() => { if (external) setCursor(null); }, [external?.query]);
+  // A query typed in the view's panel: how many it finds here, said on this tab's name there.
+  useFlatPanelMatches(external ? (searching ? found.total : null) : undefined);
   const cursorId = found.matches.some(match => match.entry.node.id === cursor) ? cursor : found.matches[0]?.entry.node.id ?? null;
   useEffect(() => { if (cursorId) listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"]`)?.scrollIntoView?.({ block: 'nearest' }); }, [cursorId]);
   const onKeyDown = event => {

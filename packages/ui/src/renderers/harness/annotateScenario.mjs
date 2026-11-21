@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { PNG } from 'pngjs';
 
-// The drawing tools (Pencil and Shapes) end to end in a real browser: the viewer's own ink, drawn over the real viewport
+// The drawing tool (Draw: freehand and shapes) end to end in a real browser: the viewer's own ink, drawn over the real viewport
 // and projected into the real model. Unit tests cover the session, the ink geometry and the
 // projection; this is the flow a person actually uses.
 //
@@ -14,7 +14,7 @@ import { PNG } from 'pngjs';
 
 // The chrome over the viewport (the strip and its panels, the cube and its axes, menus) and the
 // stroke preview: none of it is ink in the model.
-const HIDDEN = '[data-cad-tool-groups], [data-flat-panel-pill], [aria-label="View cube"], [data-slot=popover-content], '
+const HIDDEN = '[data-cad-tool-groups], [aria-label="View cube"], [data-slot=popover-content], '
   + '[data-cad-annotation-overlay] canvas { visibility: hidden !important; }';
 // Neon red (#ff2d55, the pen's default) and neon green (#39ff14). The fixture's parts are blue and
 // grey-blue, neither of them red or green.
@@ -25,7 +25,7 @@ const NONE = 10;
 /**
  * @param {{ page: import('playwright').Page, pane: import('playwright').Locator, errors: string[],
  *   update?: () => Promise<void> }} view
- *   A page the harness has opened on a file whose renderer offers Pencil and Shapes; `update`, where the frame's
+ *   A page the harness has opened on a file whose renderer offers Draw; `update`, where the frame's
  *   harness has one, saves the file again and settles once the new revision is on screen.
  */
 export async function runAnnotateScenario({ page, pane, errors, update }) {
@@ -34,14 +34,13 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   const panel = pane.locator('[data-quick-edit-ref="annotation"]');
   const strip = pane.getByRole('group', { name: 'Interaction tools' });
   const tool = name => strip.getByRole('button', { name, exact: true });
-  // The drawing controls: ONE row hung under the strip, for Pencil and Shapes alike — the tools of the one that is up,
-  // what is drawn next, its history.
+  // The drawing controls: ONE row hung under the strip, whichever drawing tool is in hand — what is drawn next.
   const controls = pane.getByRole('toolbar', { name: 'Annotation controls', exact: true });
   const annotateHistory = name => controls.getByRole('button', { name, exact: true });
-  // What a strip tool draws with: a button at the row's start, once the strip tool is up.
-  const chooseTool = async (family, name) => {
-    if (await tool(family).getAttribute('aria-pressed') !== 'true') await tool(family).click();
-    await controls.getByRole('group', { name: `${family} tools` }).getByRole('button', { name, exact: true }).click();
+  // What Draw draws with: a button of the row's tools, once Draw is up (its family taken up with it).
+  const chooseTool = async (_family, name) => {
+    if (await tool('Draw').getAttribute('aria-pressed') !== 'true') await tool('Draw').click();
+    await controls.getByRole('button', { name, exact: true }).click();
   };
   // A setting of what is drawn next, from its dropdown in the row.
   const choose = async (setting, name) => {
@@ -49,7 +48,7 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
     // Color's is a grid of swatches, each a plain item; the rest are radio lists.
     await page.getByRole(setting === 'Colour' ? 'menuitem' : 'menuitemradio', { name, exact: true }).click();
   };
-  // A shape: its button in the row, Shapes up.
+  // A shape: its button in the row.
   const shape = name => chooseTool('Shapes', name);
   const names = group => group.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
   const position = () => page.evaluate(() => window.cadHarness.a.controller.readState().camera.position);
@@ -80,27 +79,28 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
     await page.mouse.move(...from); await page.mouse.down(); await page.mouse.move(...to, { steps: 10 }); await page.mouse.up();
   };
 
-  const draw = tool('Pencil');
+  const draw = tool('Draw');
   await viewport.waitFor();
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   await until('no ink before drawing', seen => seen.red < NONE && seen.green < NONE);
 
-  // Pencil opens on the pen, Shapes on the rectangle; their controls are one row under the strip, no panel of the tool
-  // stack: the colours, then what is drawn next, then the history, all on one line.
-  const drawing = ['Pencil', 'Shapes'];
-  assert.deepEqual((await names(strip)).filter(name => /^(Pencil|Shapes)/.test(name)), drawing, 'the strip has Pencil and Shapes, plain buttons with no chevron');
+  // Draw opens on the pen; its controls are one row under the strip, no panel of the tool stack: both families'
+  // tools, then what is drawn next, all on one line.
+  assert.deepEqual((await names(strip)).filter(name => /^(Draw|Pencil|Shapes)/.test(name)), ['Draw'], 'the strip has Draw, one plain button');
   await draw.click();
   const surface = pane.locator('[data-cad-annotation-overlay]');
   await surface.waitFor();
-  assert.equal(await draw.getAttribute('aria-pressed'), 'true', 'Pencil is the tool');
-  assert.equal(await tool('Shapes').getAttribute('aria-pressed'), 'false');
-  assert.equal(await draw.locator('svg').evaluate(icon => icon.getAttribute('class').includes('lucide-pencil')), true, 'Pencil opens on the pen');
-  assert.equal(await tool('Shapes').locator('svg').evaluate(icon => icon.getAttribute('class').includes('lucide-square')), true, 'Shapes opens on the rectangle');
-  // One row, in order, all on one line: the tools of Pencil, then Color, Stroke width, Placement and Clear.
+  assert.equal(await draw.getAttribute('aria-pressed'), 'true', 'Draw is the tool');
+  assert.equal(await draw.locator('svg').evaluate(icon => icon.getAttribute('class').includes('lucide-pencil')), true, 'Draw opens on the pen');
+  // In order: the seven tools that put ink down, then Fill, the Eraser, Colour, Stroke width, Line style, Placement and Clear.
   const row = await controls.getByRole('button').evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.getBoundingClientRect().top]));
-  assert.deepEqual(row.map(([name]) => name), ['Pen', 'Highlighter', 'Eraser', 'Colour', 'Stroke width', 'Placement', 'Clear annotations']);
+  assert.deepEqual(row.map(([name]) => name), ['Pen', 'Highlighter', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text',
+    'Fill', 'Eraser', 'Colour', 'Stroke width', 'Line style', 'Placement', 'Clear annotations']);
   assert.equal(await controls.getByRole('button', { name: 'Pen', exact: true }).getAttribute('aria-pressed'), 'true', 'the pen is in hand');
-  assert.ok(row.every(([, top]) => top === row[0][1]), 'every control on one line');
+  // Two rows of seven on one surface: the tools that put ink down on the first line, the rest on the second, under them.
+  const tops = row.map(([, top]) => top);
+  assert.ok(tops.slice(0, 7).every(top => top === tops[0]) && tops.slice(7).every(top => top === tops[7]) && tops[7] > tops[0],
+    `seven on one line, seven on the next: ${JSON.stringify(tops)}`);
   assert.equal(await controls.evaluate(row => Boolean(row.closest('[data-cad-tool-stack], [data-tool-panel]'))), false, 'not a panel of the stack');
   const [stripBox, rowBox] = await Promise.all([strip.boundingBox(), controls.boundingBox()]);
   assert.ok(rowBox.y >= stripBox.y + stripBox.height, 'the row hangs under the strip');
@@ -153,11 +153,11 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   await until('Clear annotation removes all ink', seen => seen.red < NONE && seen.green < NONE);
   await copy.waitFor({ state: 'detached' });
 
-  // The Highlighter, a button of Pencil's row: the strip's Pencil shows it, and a drag puts a stroke down (Quick Edit's chip);
+  // The Highlighter, a button of the row: Draw shows it, and a drag puts a stroke down (Quick Edit's chip);
   // it opens in the highlighter's own yellow, not the pen's green.
   await chooseTool('Pencil', 'Highlighter');
   assert.equal(await controls.getByRole('button', { name: 'Colour', exact: true }).locator('span').evaluate(swatch => swatch.style.backgroundColor), 'rgb(255, 230, 0)', "the highlighter's colour is its own");
-  assert.equal(await draw.locator('svg').evaluate(icon => icon.getAttribute('class').includes('lucide-highlighter')), true, 'Pencil shows the highlighter');
+  assert.equal(await draw.locator('svg').evaluate(icon => icon.getAttribute('class').includes('lucide-highlighter')), true, 'Draw shows the highlighter');
   assert.equal(await draw.getAttribute('aria-pressed'), 'true');
   await drag(at(-80, 10), at(60, 40));
   await copy.waitFor();

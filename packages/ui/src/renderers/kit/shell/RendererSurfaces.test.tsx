@@ -135,15 +135,17 @@ it('Quick Edit is there once something is picked, with what the host can do, is 
   expect(screen.queryByRole('button', { name: 'Quick Edit' })).toBeNull();
   pick(canvas);
   const box = screen.getByRole('region', { name: 'Quick Edit' });
-  expect(box.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('1 ref');
-  expect(within(box).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent)).toEqual(['Close Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
+  // The one reference is its own chip, by its name (several are one chip, "N refs": `ReferenceChips.jsx`).
+  expect(within(box).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent)).toEqual(['press-300-200', 'Close Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
   // Its X clears the pick, as a press on the background would, and goes with it.
   fireEvent.click(within(box).getByRole('button', { name: 'Close Quick Edit' }));
   expect(screen.queryByRole('region', { name: 'Quick Edit' })).toBeNull();
   pick(canvas);
   fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
   await waitFor(() => expect(container.querySelector('[data-preview-chrome]')!.hasAttribute('inert')).toBe(true));
-  expect(container.querySelector('[data-preview-chrome]')!.contains(container.querySelector('[data-quick-edit]'))).toBe(true);
+  // Quick Edit stands in the layer over the panels, which Preview puts away with the rest of the chrome.
+  const top = container.querySelector<HTMLElement>('[data-view-top-layer]')!;
+  expect([top.hidden, top.hasAttribute('inert'), top.contains(container.querySelector('[data-quick-edit]'))]).toEqual([true, true, true]);
 });
 
 // A stroke as the drawing tools put one into the model.
@@ -158,7 +160,7 @@ it("an annotation opens Quick Edit, which sends the note with the files made of 
   };
   const host = testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async () => ({ status: 'added', partIds: [] }), send } as any, promptFiles });
   mount(host);
-  fireEvent.click(screen.getByRole('button', { name: 'Pencil' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
   act(() => viewport.props.annotation.add([ink('a')]));
   const box = screen.getByRole('region', { name: 'Quick Edit' });
   expect(box.querySelector('[data-quick-edit-ref="annotation"]')).not.toBeNull();
@@ -194,7 +196,7 @@ it('a clipboard destination has no snapshot in the navbar; the annotation is Qui
     clipboard: { writeText: async () => {}, writeImage },
   }));
   expect(navigation.mock.calls.flatMap(([actions]) => actions)).toEqual([]);
-  fireEvent.click(screen.getByRole('button', { name: 'Pencil' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
   act(() => viewport.props.annotation.add([ink('a')]));
   const chip = screen.getByRole('region', { name: 'Quick Edit' }).querySelector('[data-quick-edit-ref="annotation"]')!;
   expect(chip.querySelector('svg[data-pick-glyph="pencil"]')).not.toBeNull();
@@ -283,75 +285,75 @@ it("under Box select a drag from empty space takes the ink the box touches, with
   viewport.annotationAt = null;
 });
 
-it("Escape on the drawing surface with no ink picked puts Pencil or Shapes down and takes Select up", () => {
+it("Escape on the drawing surface with no ink picked puts Draw down and takes Select up, whichever family is up", async () => {
   // The surface takes the keyboard on a press, so after a stroke its Escape is the one the key reaches.
   mount(testHost(), undefined, 'panel-one.harness', { current: document.body });
   const strip = within(screen.getByRole('group', { name: 'Interaction tools' }));
-  for (const name of ['Pencil', 'Shapes']) {
-    fireEvent.click(strip.getByRole('button', { name }));
-    act(() => viewport.props.annotation.add([ink(`${name}-mark`)]));
+  for (const tool of ['Pen', 'Rectangle']) {
+    if (strip.getByRole('button', { name: 'Draw' }).getAttribute('aria-pressed') !== 'true') fireEvent.click(strip.getByRole('button', { name: 'Draw' }));
+    fireEvent.click(within(screen.getByRole('toolbar', { name: 'Annotation controls' })).getByRole('button', { name: tool }));
+    act(() => viewport.props.annotation.add([ink(`${tool}-mark`)]));
     // The real surface is the viewport's (stood in here): a focusable layer marked as it is.
     const surface = document.body.appendChild(Object.assign(document.createElement('div'), { tabIndex: -1 }));
     surface.setAttribute('data-cad-annotation-overlay', '');
     act(() => { surface.focus(); });
     fireEvent.keyDown(surface, { key: 'Escape' });
     surface.remove();
-    expect([strip.getByRole('button', { name }).getAttribute('aria-pressed'), strip.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')]).toEqual(['false', 'true']);
+    expect([strip.getByRole('button', { name: 'Draw' }).getAttribute('aria-pressed'), strip.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')]).toEqual(['false', 'true']);
   }
 });
 
-it("Pencil and Shapes are two plain tools on the strip; one row under the strip is theirs both: the tools of the one that is up, then Color, Stroke width, Placement and Clear, disabled with nothing to do", async () => {
+it("Draw is one plain tool on the strip; one row under the strip is its: the drawing tools, one group, then Color, Stroke width, Placement and Clear, disabled with nothing to do", async () => {
   mount(testHost(), undefined, 'panel-one.harness');
   const strip = within(screen.getByRole('group', { name: 'Interaction tools' }));
   expect(strip.queryByRole('button', { name: 'Annotate' })).toBeNull();
-  // No chevron, no menu: a button each.
-  expect(strip.getAllByRole('button').map(button => button.getAttribute('aria-label')).slice(0, 4)).toEqual(['Select', 'Pencil', 'Shapes', 'Keep']);
-  expect(strip.getByRole('button', { name: 'Pencil' }).querySelector('svg')!.getAttribute('class')).toContain('lucide-pencil');
-  expect(strip.getByRole('button', { name: 'Shapes' }).querySelector('svg')!.getAttribute('class')).toContain('lucide-square');
+  // One plain tool: its button, no chevron; what it draws with is the row's.
+  expect(strip.getAllByRole('button').map(button => button.getAttribute('aria-label')).slice(0, 3)).toEqual(['Select', 'Draw', 'Keep']);
+  expect(strip.queryByRole('button', { name: 'Pencil' }) || strip.queryByRole('button', { name: 'Shapes' })).toBeNull();
+  expect(strip.getByRole('button', { name: 'Draw' }).querySelector('svg')!.getAttribute('class')).toContain('lucide-pencil');
   expect(screen.queryByRole('toolbar', { name: 'Annotation controls' })).toBeNull();
-  fireEvent.click(strip.getByRole('button', { name: 'Pencil' }));
-  expect([viewport.props.annotation.tool, strip.getByRole('button', { name: 'Pencil' }).getAttribute('aria-pressed')]).toEqual(['freedraw', 'true']);
+  fireEvent.click(strip.getByRole('button', { name: 'Draw' }));
+  expect([viewport.props.annotation.tool, strip.getByRole('button', { name: 'Draw' }).getAttribute('aria-pressed')]).toEqual(['freedraw', 'true']);
   // Not a panel of the tool stack: a toolbar of its own, hung under the strip.
   const row = screen.getByRole('toolbar', { name: 'Annotation controls' });
   expect([row.closest('[data-cad-tool-stack]'), row.closest('[data-tool-panel]')]).toEqual([null, null]);
   const panel = () => within(screen.getByRole('toolbar', { name: 'Annotation controls' }));
   expect(panel().getAllByRole('button').map(button => button.getAttribute('aria-label')))
-    .toEqual(['Pen', 'Highlighter', 'Eraser', 'Colour', 'Stroke width', 'Placement', 'Clear annotations']);
+    .toEqual(['Pen', 'Highlighter', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text', 'Fill', 'Eraser', 'Colour', 'Stroke width', 'Line style', 'Placement', 'Clear annotations']);
+  expect(panel().getByRole('button', { name: 'Pen' }).getAttribute('aria-pressed')).toBe('true');
   const clear = () => panel().getByRole('button', { name: 'Clear annotations' }).hasAttribute('disabled');
   expect(clear()).toBe(true);
   // Ink enables Clear. Undo and Redo are the keyboard's, ⌘Z and ⇧⌘Z (below), with no buttons.
   act(() => viewport.props.annotation.add([ink('a')]));
   expect(clear()).toBe(false);
-  // Shapes' row starts with its own tools.
-  fireEvent.click(strip.getByRole('button', { name: 'Shapes' }));
-  expect(panel().getAllByRole('button').slice(0, 5).map(button => button.getAttribute('aria-label'))).toEqual(['Rectangle', 'Line', 'Arrow', 'Ellipse', 'Text']);
 });
 
-it("choosing the Highlighter in Pencil's row makes the strip's Pencil show it, and a press on Pencil takes up what it last drew with; Shapes opens on the Rectangle; switching shows each kind's own colour, weight and placement", async () => {
+it("choosing the Highlighter in Draw's row makes Draw show it, and a press on Draw takes up what it last drew with; a shape's key takes up the shapes; each kind keeps its own colour, weight and placement", async () => {
   mount(testHost(), undefined, 'panel-one.harness');
   const strip = within(screen.getByRole('group', { name: 'Interaction tools' }));
-  const icon = (name: string) => strip.getByRole('button', { name }).querySelector('svg')!.getAttribute('class') ?? '';
-  const row = () => within(screen.getByRole('toolbar', { name: 'Annotation controls' }));
-  fireEvent.click(strip.getByRole('button', { name: 'Pencil' }));
-  fireEvent.click(row().getByRole('button', { name: 'Highlighter' }));
-  expect(viewport.props.annotation.tool).toBe('highlighter');
-  expect(row().getByRole('button', { name: 'Highlighter' }).getAttribute('aria-pressed')).toBe('true');
-  expect(icon('Pencil')).toContain('lucide-highlighter');
+  const icon = () => strip.getByRole('button', { name: 'Draw' }).querySelector('svg')!.getAttribute('class') ?? '';
+  const choose = async (tool: string) => {
+    if (strip.getByRole('button', { name: 'Draw' }).getAttribute('aria-pressed') !== 'true') fireEvent.click(strip.getByRole('button', { name: 'Draw' }));
+    fireEvent.click(within(screen.getByRole('toolbar', { name: 'Annotation controls' })).getByRole('button', { name: tool }));
+  };
+  await choose('Highlighter');
+  expect([viewport.props.annotation.tool, strip.getByRole('button', { name: 'Draw' }).getAttribute('aria-pressed')]).toEqual(['highlighter', 'true']);
+  expect(icon()).toContain('lucide-highlighter');
   // The highlighter's own settings, set while it is up: yellow to start.
-  expect(viewport.props.annotation.style).toEqual({ color: '#ffe600', strokeWidth: 2, placement: 'surface' });
+  expect(viewport.props.annotation.style).toEqual({ color: '#ffe600', strokeWidth: 2, placement: 'surface', dash: 'solid' });
   act(() => { viewport.props.annotation.selectColor('#39ff14'); viewport.props.annotation.selectStrokeWidth(4); viewport.props.annotation.selectPlacement('plane'); });
-  // Shapes takes up the Rectangle; Pencil keeps the Highlighter.
-  fireEvent.click(strip.getByRole('button', { name: 'Shapes' }));
+  // A shape chosen: the Rectangle, Shapes' own style; Draw shows it.
+  await choose('Rectangle');
   expect(viewport.props.annotation.tool).toBe('rectangle');
-  expect(strip.getByRole('button', { name: 'Pencil' }).getAttribute('aria-pressed')).toBe('false');
-  expect(icon('Pencil')).toContain('lucide-highlighter');
-  expect(viewport.props.annotation.style).toEqual({ color: '#ff2d55', strokeWidth: 2, placement: 'surface' });
-  fireEvent.click(row().getByRole('button', { name: 'Rectangle' }));
-  expect(icon('Shapes')).toContain('lucide-square');
-  fireEvent.click(strip.getByRole('button', { name: 'Pencil' }));
+  expect(icon()).toContain('lucide-square');
+  expect(viewport.props.annotation.style).toEqual({ color: '#ff2d55', strokeWidth: 2, placement: 'surface', dash: 'solid' });
+  // Put down, then taken up again: what it last drew with, the Rectangle.
+  fireEvent.click(strip.getByRole('button', { name: 'Select' }));
+  fireEvent.click(strip.getByRole('button', { name: 'Draw' }));
+  expect(viewport.props.annotation.tool).toBe('rectangle');
+  // The Highlighter again keeps its own style.
+  await choose('Highlighter');
   expect(viewport.props.annotation).toMatchObject({ tool: 'highlighter', style: { color: '#39ff14', strokeWidth: 4, placement: 'plane' } });
-  fireEvent.click(strip.getByRole('button', { name: 'Shapes' }));
-  expect(viewport.props.annotation.tool).toBe('rectangle');
 });
 
 it('⌘Z and ⇧⌘Z walk the annotation\'s history from anywhere in the viewer; a text field keeps its own', () => {
@@ -401,7 +403,7 @@ it('a host with no prompt workflow gets no snapshot, and Quick Edit copies a pro
   expect(navigation.mock.calls.flatMap(([actions]) => actions)).toEqual([]);
   pick(canvas);
   expect(within(screen.getByRole('region', { name: 'Quick Edit' })).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent))
-    .toEqual(['Close Quick Edit', 'Copy Prompt']);
+    .toEqual(['press-300-200', 'Close Quick Edit', 'Copy Prompt']);
 });
 
 it('the renderer is told the camera settled, through what the viewport reports: a recorded move and its own settle', async () => {

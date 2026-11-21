@@ -4,13 +4,13 @@ import { VIEWER_SCENE_SCALE } from "@cad/core/lib/viewer/sceneScale.js";
 import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
 import { hasOpenPopup } from "../../../lib/popups.js";
 import { useAnnotationSession } from "../../../annotation/session.js";
-import { DRAWING_TOOLS, annotationToolIcon, drawingToolLabel, drawingToolVariant } from "../../../annotation/toolbar.jsx";
+import { drawStripTool, isDrawingMode } from "../../../annotation/toolbar.jsx";
 import { useI18n } from "@cad/ui/i18n";
-import { DRAWING_SHORTCUTS, pressToolKey } from "../tools/toolShortcuts.js";
+import { pressToolKey } from "../tools/toolShortcuts.js";
 import { useViewerHistory } from "./useViewerHistory.js";
 import { promptView, promptViews } from "../../../annotation/views.js";
 import { sceneEdgeColor } from "../look/canvasColor.js";
-import { useCanvasColor } from "../look/useCanvasColor.js";
+import { useViewportTheme } from "../look/useViewportTheme.js";
 import { previewViewScene } from "../viewport/previewViewScene.js";
 import { CAD_ANNOTATION_DEFAULTS } from "../tools/annotate/AnnotationOverlay.jsx";
 import { annotationDocumentOf } from "../tools/annotate/annotation3d.js";
@@ -204,7 +204,11 @@ export function useRendererShell({
   const promptAvailable = destination.available;
   const composer = destination.kind === "composer";
   const { onStateChange, appearance } = view;
-  const colorScheme = appearance?.colorScheme === "dark" ? "dark" : "light";
+  // The viewport's theme (`look/useViewportTheme.js`): the person's Background over the app's light or
+  // dark. Everything drawn in the model area — the scene, its grid, edges and lights, the cube, the
+  // labels over it, Preview's studio — is in its `scheme`, never the app's; the chrome keeps the app's.
+  const viewport = useViewportTheme(appearance?.colorScheme === "dark" ? "dark" : "light", services.preferences, services.onPreferenceChange);
+  const colorScheme = viewport.scheme;
   const ownPreview = usePreviewState();
   const previewState = preview || ownPreview;
   // Preview is a 3D view's alone: one whose renderer did not declare it never enters it, whatever asks.
@@ -246,9 +250,9 @@ export function useRendererShell({
   // A renderer whose own work needs the display settings BEFORE it can hand this hook a scene
   // — one that reads them while it is still deciding what to load — creates them itself and passes
   // them in. It is the same store either way; owning it here is a convenience, not a rule.
-  // The canvas (`--canvas`): the tools view's scene is drawn on it, as every view's content is.
-  const canvasColor = useCanvasColor(colorScheme === "dark");
-  const { display: displaySettings, preview: previewLook, scene: desiredScene, store: viewSettingsStore } = useViewSettings(colorScheme, viewSettings, canvasColor);
+  // The viewport's canvas: the tools view's scene is drawn on it (a light viewport's gradient), as every view's content is.
+  const canvasColor = viewport.canvas;
+  const { display: displaySettings, preview: previewLook, scene: desiredScene, store: viewSettingsStore } = useViewSettings(colorScheme, viewSettings, viewport.gradient || viewport.canvas);
   useLayoutEffect(() => { viewSettingsStore.configure({ features }); }, [viewSettingsStore, features]);
   // Before the first paint, like every later edit: through the store, never around it.
   useLayoutEffect(() => { viewSettingsStore.restore(restored.display, restored.preview); }, [viewSettingsStore, restored]);
@@ -426,16 +430,24 @@ export function useRendererShell({
   // Pencil or Shapes is in hand: the drawing tools, which share one annotation.
   const drawingFamily = toolMode === SHELL_TOOL.PENCIL || toolMode === SHELL_TOOL.SHAPES ? toolMode : null;
   const annotateToolActive = !previewing && drawingFamily !== null;
-  const selectTool = useCallback((mode) => setToolMode(current => (toolModes ? toolModes.next(current, mode) : mode)), [toolModes, setToolMode]);
+  // A model effect in hand (`model-effects/ModelTools.jsx`): a tool of the strip, pressed, its row under
+  // the strip, over Select, which stays the mode underneath it, so a press on the model picks as Select's does. Any
+  // other tool taken up puts it down; what it set stays on the model. Never saved, as the tool in hand is not.
+  const [effectTool, setEffectTool] = useState(null);
+  const selectTool = useCallback((mode) => { setEffectTool(null); setToolMode(current => (toolModes ? toolModes.next(current, mode) : mode)); }, [toolModes, setToolMode]);
   // A tool panel's X: back to the file's default tool (Select, where there is one), from any tool.
-  const selectDefaultTool = useCallback(() => setToolMode(toolModes ? toolModes.defaultMode : ""), [toolModes, setToolMode]);
+  const selectDefaultTool = useCallback(() => { setEffectTool(null); setToolMode(toolModes ? toolModes.defaultMode : ""); }, [toolModes, setToolMode]);
+  const selectEffectTool = useCallback(id => { setToolMode(toolModes ? toolModes.defaultMode : ""); setEffectTool(id); }, [toolModes, setToolMode]);
+  const effectInHand = previewing ? null : effectTool;
   // The annotation's undo history (`useViewerHistory.js`): Annotate's panel's Undo and Redo, and ⌘Z.
   const history = useViewerHistory();
   const historyRef = useRef(history);
   historyRef.current = history;
   const annotation = useAnnotationSession(drawingFamily, CAD_ANNOTATION_DEFAULTS, history);
   // The tool in hand and Preview, each on while it is (`usage/controls.js`): Preview puts the tools away.
-  useToolControl(previewing || !toolModes || !toolMode ? null : toolMode);
+  // Pencil's and Shapes' modes are one tool, Draw, and one control (`draw`): what is drawn with is counted by
+  // its own name as it is chosen (`pencil_pen`, `shapes_rectangle`, …).
+  useToolControl(previewing || !toolModes || !toolMode ? null : isDrawingMode(toolMode) ? "draw" : toolMode);
   useEffect(() => {
     if (!previewing) return undefined;
     controls.active("preview", true);
@@ -552,13 +564,13 @@ export function useRendererShell({
     if (ink) session.remove(session.selected);
     return Boolean(deleteSelectionRef.current?.()) || ink;
   }, []);
-  // The view's panel, as the shell drew it (`RendererShell.jsx` fills it in): ⌘\\ (Ctrl+\\) shows or
-  // hides it, / opens it on its search.
+  // The view's panel, as the frame drew it (`ViewFrame.jsx` fills it in): ⌘\\ (Ctrl+\\) shows or hides it; / opens it
+  // on its search.
   const panelControl = useRef(null);
   useViewerShortcuts({
     viewerElement,
     onChord: event => {
-      if (event.key !== "\\" || event.shiftKey || previewing || !panelControl.current) return false;
+      if (event.code !== "Backslash" && event.key !== "\\" || event.shiftKey || previewing || !panelControl.current) return false;
       panelControl.current.toggle();
       return true;
     },
@@ -569,12 +581,13 @@ export function useRendererShell({
     onRedo: () => !previewing && historyRef.current.redo(),
     // A tool's letter takes it up, F frames the model (`toolShortcuts.js`), over the strip the frame
     // has on screen (`toolKeys`, RendererShell's); never in preview.
-    onKey: event => (event.key === "/" && !event.shiftKey && !previewing && panelControl.current ? panelControl.current.search() : !previewing && !idle && pressToolKey(event, {
+    onKey: event => (event.key === "/" && !event.shiftKey && !previewing && panelControl.current ? panelControl.current.search()
+      : !previewing && !idle && pressToolKey(event, {
       tools: toolKeysRef.current, selectDrawing: tool => annotationRef.current.selectTool(tool),
       fit: () => { controls.used("fit"); viewerRef.current?.resetZoom?.(); } })),
     // The zoom's keys (`pressZoomKey`): the strip's zoom (`zoomKeys`, RendererShell's); never in preview.
     zoom: () => (!previewing && !idle ? zoomKeysRef.current : null),
-    escapeActive: Boolean(escape.active || previewing || annotation.selected.length || (toolModes && toolMode !== toolModes.defaultMode)),
+    escapeActive: Boolean(escape.active || previewing || annotation.selected.length || effectInHand || (toolModes && toolMode !== toolModes.defaultMode)),
     onEscape(event) {
       // A popup opened in THIS viewer (a menu, a Select, a colour picker, Display) owns Escape before
       // preview; another viewer's popup is not this one's business.
@@ -588,7 +601,7 @@ export function useRendererShell({
       }
       if (escapeRef.current?.()) return;
       // A renderer that left it: the tool in hand goes down, back to the file's default (Select).
-      if (toolModes && toolMode !== toolModes.defaultMode) selectDefaultTool();
+      if (effectInHand || (toolModes && toolMode !== toolModes.defaultMode)) selectDefaultTool();
     }
   });
 
@@ -688,28 +701,22 @@ export function useRendererShell({
     }} />;
   const projection = projectionControl(viewSettingsStore, desiredScene, value => controls.used(`projection_${value}`));
   const stripTool = ({ id, label, icon, ...rest }) => ({
-    id, label, icon, active: !previewing && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
+    id, label, icon, active: !previewing && !effectInHand && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
   });
-  // Pencil and Shapes: the strip tools that draw, plain buttons. Each shows the tool it draws with (the pen, the line first), kept
-  // when it is put down, and a press takes that one up; choosing another is the one row under the strip
-  // (`RendererShell.jsx`, `annotation/toolbar.jsx`'s `AnnotationToolbar`), up while either is. A second press does nothing.
-  // Its tooltip names what it draws with now, with that tool's key ("Rectangle R").
-  const drawing = DRAWING_TOOLS.map(({ id }) => {
-    const variant = drawingToolVariant(id, annotation);
-    const Icon = annotationToolIcon(variant);
-    return stripTool({ id, label: drawingToolLabel(id, t), tooltip: drawingToolLabel(variant, t), shortcut: DRAWING_SHORTCUTS[variant],
-      icon: <Icon className="size-3" strokeWidth={2} aria-hidden="true" /> });
-  });
+  // Draw: the one strip tool that draws, over the two drawing modes (Pencil's freehand, Shapes'), its menu every
+  // drawing tool (`annotation/toolbar.jsx`'s `drawStripTool`); the row under the strip is the style of what is drawn
+  // next (`AnnotationToolbar`). Its button shows the tool it draws with, and a press takes it up.
+  const drawing = [drawStripTool({ toolMode: previewing ? null : toolMode, annotation, takeFamily: family => selectTool(family), disabled: idle, t })];
   const tools = {
     /** A tool of the renderer's own: `{ id, label, icon }` plus anything the strip reads. */
     own: stripTool,
-    /** Pencil, then Shapes: the strip tools that draw, one annotation between them. */
+    /** Draw: the strip's one drawing tool, over Pencil's and Shapes' modes, one annotation between them. */
     drawing,
   };
 
   return {
     // Renderer-facing.
-    toolMode, selectTool, selectDefaultTool, tools, idle, previewable, previewing, setPreviewing,
+    toolMode, selectTool, selectDefaultTool, effectTool: effectInHand, selectEffectTool, tools, idle, previewable, previewing, setPreviewing,
     // The file's playback settings: Orbit's speed, Autoplay, and the routine's chosen Speed and Loop.
     autoplay, setAutoplay, playback, setPlayback,
     // Preview's Orbit, on or off: off each time preview opens.
@@ -740,7 +747,9 @@ export function useRendererShell({
       // Select is the tool in hand (the default one), where a press on ink picks it before a part.
       selecting: !previewing && Boolean(toolModes) && toolMode === toolModes.defaultMode,
       annotateToolActive, annotation, history, deletePicked, toolKeys: toolKeysRef, zoomKeys: zoomKeysRef, animation, previewSettings, displayMode, grid, projection, sceneEffects,
-      previewDesiredScene
+      previewDesiredScene,
+      // The viewport's theme, and Display's Background (the person's, every view's).
+      viewport, background: { value: viewport.background, onChange: viewport.setBackground }
     }
   };
 }

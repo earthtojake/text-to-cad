@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
 import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
@@ -6,11 +6,14 @@ import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { ViewPreviewLabel, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import FloatingToolBar, { StripTouchProvider } from "../tools/FloatingToolBar.js";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
+import { ToolbarTooltipScope } from "@cad/ui/primitives/toolbar-button";
 import { InspectContext } from "../inspector/inspect.js";
-import { useSelectedDetail } from "../inspector/ItemDetail.jsx";
-import FlatPanel, { FlatPanelPill, useFlatPanelState } from "./FlatPanel.jsx";
+import FlatPanel, { flatPanelShortcut, useFlatPanelState } from "./FlatPanel.jsx";
 import HoverTip, { useFrameHoverTip } from "./HoverTip.jsx";
-import { stripLeft, useStageReach } from "./useStageReach.js";
+import { usePanelToggles } from "../../../file-viewer/panelToggles.js";
+import { ViewerElementContext, ViewerHostContext } from "../../../host/context.js";
+import { Sheet, SheetContent, SheetTitle } from "@cad/ui/primitives/sheet";
+import { sidebarLayout, sidebarWant, toggleSidebar } from "./sidebars.js";
 import { ViewCornerSideProvider, viewCornerSide } from "./ViewCorner.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 import { ViewportTopRight } from "./ViewportTopRight.jsx";
@@ -22,14 +25,16 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * cards stand in one place and behave one way in every renderer. `RendererShell.jsx` (a 3D view) and
  * `FlatViewFrame.jsx` (a picture drawn flat) mount it; nothing else draws the frame's parts.
  *
- * - **The panel** (`FlatPanel.jsx`, `useFlatPanelState`): docked at the view's left, the canvas the
- *   narrower for it while it is open, at any width; its open or shut state, width and tab are the
- *   file's (`filePanel.js`). Collapsed, its expand button on a pill at the canvas's top-left. A phone
- *   has none: no pill, no keys (`panelControl` stays empty). Preview keeps it mounted, out of sight,
- *   so a tree keeps its state.
- * - **The strip's column** at the top centre of the WHOLE view: it reaches back over the docked panel
- *   (`useStageReach.js`), so opening or shutting the panel never moves it, and it draws over the panel
- *   where they meet; on a phone, the same. In it the strip (`tools`, and its view controls `views`),
+ * - **The panel** (`sidebars.js`), the one sidebar, at the left (`FlatPanel.jsx`, `panel`; its width and tab the
+ *   file's, `filePanel.js`): the file's structure, then the file's own settings (Parameters, Joints, Animation), as
+ *   its tabs. It always pushes the model aside (a view that would leave the model under 640px beside it starts it collapsed, unwritten:
+ *   `sidebars.js`); ⌘\ (Ctrl+\) toggles it (`panelControl`). Its toggle is the
+ *   navbar's (`file-viewer/panelToggles.js`), its first control: a collapsed panel leaves nothing over the model. On a
+ *   phone the same toggle opens it as a sheet from the left (shadcn's Sheet), over the model with a scrim, starting
+ *   closed each time: a tap outside it, a swipe back to the left, Escape or its Back put it away. Preview keeps the
+ *   docked panel mounted, out of sight, so a tree keeps its state.
+ * - **The strip's column** at the top centre of the WHOLE view, always: no panel moves it, and where it meets one it
+ *   stands over it (a layer of its own over the panels, `data-view-top-layer`); on a phone, the same. In it the strip (`tools`, and its view controls `views`),
  *   the tool in hand's row (`toolRow`), the view catching up (`status`), and the tool stack
  *   (`toolStack`).
  * - **The update status** (`status`: what the view says while it catches up, `ViewUpdateStatus`'s
@@ -40,9 +45,16 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * - **One measure** of that column, onto the frame's root: `--cad-tools-bottom` (what a flat canvas's
  *   fit keeps clear of) and `--cad-top-right-left` (where the top-right column starts, clear of the
  *   strip), again whenever the column, the stage or what stands in the top-right corner changes.
- * - **The top-right** (`ViewportTopRight`): the host's notice once the view is up, and `quickEdit`.
- * - **The corner** (`corner`, the view's bottom-right, or its bottom-left where the host anchors the
- *   cube there: the side read off the root with the measure, `viewCornerSide`, and said to everything in
+ * - **The top-right**: the corner (below), and under it (`ViewportTopRight`, `--cad-corner-below`, measured) the host's
+ *   notice once the view is up.
+ * - **Quick Edit's bar** (`quickEdit`), in the same layer, at the bottom, centred on the WHOLE view, always: 400px at
+ *   most, narrower only with the view (16px in from each side); over a panel where they meet; a phone's the view's width
+ *   less its inset, above its safe area. The measure writes where it stands (`--cad-quick-edit-left`,
+ *   `--cad-quick-edit-width`, from the view's left).
+ * - **The navbar's view settings** (`navbar`: what a view portals into the file's navbar, `NavbarViewControls.jsx`),
+ *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's alone).
+ * - **The corner** (`corner`, the view's top-right — the cube or a flat view's zoom pill, the stack under it — or its
+ *   top-left where the host anchors the cube there: the side read off the root with the measure, `viewCornerSide`, and said to everything in
  *   the corner, `ViewCornerSideProvider`), **the bottom centre** (`bottomCentre`, a
  *   playbar), the renderer's `underlay` (between the canvas and the chrome: Preview's view) and its
  *   `overlays` (over everything but the cards: Preview's cover).
@@ -54,10 +66,10 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * - **Select in hand** (`selecting`), said on the root (`data-cad-selecting`): a double-click fits only
  *   then, in every view (`viewport/dom.js`'s `doubleClickFits`, which the canvas hooks read).
  * - **What is picked** (`inspect`, `inspector/inspect.js`'s: the view's picks and its description of
- *   each), one way in every view: the **Selected pane** under the panel's lists (`ItemDetail.jsx`'s
- *   `useSelectedDetail`, the panel's `detail`), the same component a Quick Edit chip's card draws; the
- *   **hover tip** over the canvas under Select (`HoverTip.jsx`), what a press would pick, named short;
- *   and the view's pick actions to both, wherever they are drawn (`InspectContext`).
+ *   each), one way in every view: Quick Edit's chip list, where a pick is read with its key facts (the panel holds
+ *   only its lists); the **hover tip** over the canvas under Select
+ *   (`HoverTip.jsx`), what a press would pick, named short; and the view's name for its marks to both
+ *   (`InspectContext`).
  *
  * `preview`: Preview's chrome (`PreviewChrome`'s `active`, `name`, `controls`, `panel`, `panelOpen`
  * and `idle`), which wraps exactly the strip's column, the top-right and the corner. While it is
@@ -75,6 +87,8 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * @param {boolean} props.mobile
  * @param {boolean} props.compact  A compact host: the picture alone.
  * @param {boolean} props.chromeHidden  The view loads, or has failed to: none of the frame's own chrome.
+ * @param {boolean} [props.failed]  The load failed: no panel either (while it loads the panel is there, its first tab
+ *   empty until the file arrives). Not given, the panel follows `chromeHidden`.
  * @param {boolean} [props.selecting]  Select is the tool in hand (or the view has no tools).
  * @param {{ update?: object | null, onRetry?: (() => void) | null, preview?: boolean } | null} [props.status]
  * @param {object[]} props.tools
@@ -83,11 +97,16 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * @param {import("../inspector/inspect.js").Inspect | null} [props.inspect]
  */
 export default function ViewFrame({ rootRef = null, surface = null, className = "", rootHandlers = null, stageColor = undefined,
-  canvasBoxRef = null, busy = undefined, children, underlay = null, overlays = null, file, mobile, compact, chromeHidden, previewing = false, selecting = false,
+  canvasBoxRef = null, busy = undefined, children, underlay = null, overlays = null, file, mobile, compact, chromeHidden, failed = undefined, previewing = false, selecting = false,
   preview = null, tools, views = [], toolRow = null, toolStack = null, status = null, panel = null, panelControl = null,
-  layout, onLayoutChange, corner = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
-  contextMenu = null, onCanvasPress = null, inspect = null }) {
+  layout, onLayoutChange, corner = null, navbar = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
+  contextMenu = null, onCanvasPress = null, inspect = null, viewport = null }) {
   const { t } = useI18n();
+  // The viewport's theme (`look/useViewportTheme.js`): what stands on the picture — the canvas box (labels, chips,
+  // the cube, the hover tip, the loading cover) and the corner's bare buttons — is scoped to its light or dark (the
+  // `.light` / `.dark` token scopes, `styles/tokens.css`), on its canvas (`--canvas`); the chrome on surfaces of
+  // its own (the strip, the panels, Quick Edit, the playbar, menus) keeps the app's theme.
+  const scheme = viewport?.scheme === "dark" ? "dark" : viewport ? "light" : null;
   const toolsHidden = chromeHidden || compact;
   // The view catching up, said as every view says it, unless the card says why the chrome is gone.
   const statusNode = !status || (chromeHidden && alert?.alert) ? null : <div className="pointer-events-none flex max-w-full items-center gap-2" data-viewport-status="">
@@ -100,23 +119,73 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   const topControls = useRef(null);
   const [cornerSide, setCornerSide] = useState("right");
 
-  // ---- the panel: docked, open at first in a wide view; none on a phone --------------------------
-  const sided = Boolean(panel && (panel.sections || panel.tabs?.length)) && !mobile;
-  // What is picked, under the panel's lists; what a press would pick, beside the pointer.
-  const selectedDetail = useSelectedDetail(sided ? inspect : null);
+  // ---- the panel (`sidebars.js`): the file's structure and its own settings, as tabs; a phone's a sheet ----------------
+  const sided = Boolean(panel && (panel.sections || panel.tabs?.length));
+  // A phone's sheet: closed until its toggle opens it, and kept nowhere.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const viewerElement = useContext(ViewerElementContext);
+  // What a press would pick, beside the pointer.
   const hoverTip = useFrameHoverTip({ hovered: inspect?.hovered || "", describe: inspect?.describe || null, tip: inspect?.tip || null, enabled: selecting && !toolsHidden && !previewing });
-  // Where the strip starts, from the view's left edge (measured below): the panel's head stays left of it.
-  const [stripReach, setStripReach] = useState(null);
-  const flat = useFlatPanelState({ frameRef: root, mobile, enabled: sided && !toolsHidden, kind: panel?.kind ?? "", toolStack: layout, onToolStackChange: onLayoutChange,
-    compact: Boolean(compact), reach: stripReach });
-  if (panelControl) panelControl.current = previewing ? null : flat.control;
-  const panelNode = sided && !toolsHidden ? <FlatPanel mode="docked" open={flat.open} hidden={previewing} onClose={() => flat.setOpen(false)}
+  const flat = useFlatPanelState({ frameRef: root, kind: panel?.kind ?? "", toolStack: layout, onToolStackChange: onLayoutChange, compact: Boolean(compact) });
+  // The choice kept (the file's entry in the tab's settings, `filePanel.js`): open or closed. The panel opened over the
+  // width's collapse is the view's for now, kept nowhere.
+  const kept = flat.record;
+  const [opened, setOpened] = useState(false);
+  // The panel is there from the view's first frame, the file still loading: its kind says it has one (its tabs fill as
+  // the file arrives), so neither it nor its toggle comes in late and pushes the model aside. A load that failed, or a
+  // compact host, has none.
+  const has = sided && !(failed ?? chromeHidden) && !compact;
+  const sidebarState = { frameWidth: flat.frameWidth, panelWidth: flat.width, want: sidebarWant(kept.open), has: has && !mobile, opened, mobile, phoneHas: has };
+  const { mode } = sidebarLayout(sidebarState);
+  const stateRef = useRef(sidebarState);
+  stateRef.current = sidebarState;
+  // A choice the person made is kept, for the file; a collapse the width made never is.
+  const change = flat.change;
+  const toggle = useCallback(() => {
+    const current = stateRef.current;
+    if (current.mobile) { if (current.phoneHas) setSheetOpen(open => !open); return; }
+    if (!current.has) return;
+    const next = toggleSidebar(current);
+    if (next.kept) change({ open: next.want });
+    setOpened(next.opened);
+  }, [change]);
+  if (panelControl) panelControl.current = previewing ? null : {
+    toggle,
+    search: () => {
+      if (stateRef.current.mobile) return false;
+      if (!stateRef.current.has) return false;
+      if (sidebarLayout(stateRef.current).mode === "closed") toggle();
+      flat.askSearch();
+      return true;
+    }
+  };
+  const panelNode = has && !mobile ? <FlatPanel mode="docked" open={mode !== "closed"} hidden={previewing} onClose={toggle}
     label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab}
-    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} detail={selectedDetail}
-    detailHeight={flat.detailHeight} onDetailHeightChange={flat.changeDetailHeight} /> : null;
+    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
+  // A phone's: the same panel, its tabs, search and every tab's content, the same components at the same sizes (a tree
+  // row's own touch height aside), in a sheet from the left over the model (`FlatPanel`'s "page" mode), in the viewer's element.
+  const closeSheet = useCallback(() => setSheetOpen(false), []);
+  const sheetNode = has && mobile ? <Sheet open={sheetOpen && !previewing} onOpenChange={setSheetOpen}>
+    <SheetContent side="left" showCloseButton={false} onSwipeClose={closeSheet} container={viewerElement?.current ?? undefined}
+      aria-describedby={undefined} className="w-[85%] max-w-[20rem] gap-0 overflow-hidden border-border p-0" data-panel-sheet="">
+      <SheetTitle className="sr-only">{panel.label}</SheetTitle>
+      <FlatPanel mode="page" open onClose={closeSheet} label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null}
+        sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}
+        onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} />
+    </SheetContent>
+  </Sheet> : null;
+  // The toggle, the navbar's (`file-viewer/panelToggles.js`), its first control. A collapsed panel leaves nothing over the model.
+  const platform = useContext(ViewerHostContext)?.environment?.platform;
+  const panelOpen = mobile ? sheetOpen : mode === "push";
+  const showToggle = has && !previewing;
+  const toggles = useMemo(() => (!showToggle ? null : {
+    left: { open: panelOpen, label: t(panelOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: flatPanelShortcut(platform), toggle }
+  }), [showToggle, panelOpen, platform, toggle, t]);
+  // Leaving a phone's width (or Preview) puts its sheet away.
+  useLayoutEffect(() => { if (!mobile || previewing) setSheetOpen(false); }, [mobile, previewing]);
+  usePanelToggles(toggles);
 
-  // ---- the strip's column: at the view's centre, reaching back over the docked panel -------------
-  useStageReach(stageRef, root);
+  // ---- the strip's column and Quick Edit: centred on the whole view, over the panels -------------
   const hasQuickEdit = Boolean(quickEdit);
   useLayoutEffect(() => {
     const controls = topControls.current, stage = stageRef.current, frame = root.current;
@@ -125,29 +194,38 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
       // Where the host anchors the corner (its variables are its own, on an ancestor), read as the
       // rest is: whenever the view's box or what stands in it changes.
       setCornerSide(viewCornerSide(frame));
+      const stageBox = stage.getBoundingClientRect();
+      // Quick Edit's bar, centred on the whole view, always: 400px at most, else the view's width less its margins.
+      // No panel moves or narrows it; where it meets one, it stands over it.
+      const viewWidth = frame.getBoundingClientRect().width;
+      const margin = mobile ? VIEWPORT_INSET_PX : QUICK_EDIT_MARGIN_PX;
+      const barWidth = Math.max(0, Math.min(QUICK_EDIT_MAX_PX, viewWidth - 2 * margin));
+      frame.style.setProperty("--cad-quick-edit-left", `${Math.round((viewWidth - barWidth) / 2)}px`);
+      frame.style.setProperty("--cad-quick-edit-width", `${Math.round(barWidth)}px`);
       // The rows with something in them: an empty one (no update under way) still takes the
       // column's gap, which would leave a wider gap under the strip than at its sides.
       const rows = [...controls.children].map(row => row.getBoundingClientRect()).filter(box => box.height > 0);
       const top = controls.getBoundingClientRect().top;
-      // The strip's own row stands at the view's centre whatever the panel's width: its left edge is how
-      // wide the panel may be with its head (the search and its collapse button) clear of it.
-      const strip = controls.firstElementChild?.getBoundingClientRect();
-      const reach = !mobile && strip?.width > 0 ? Math.round(strip.left - frame.getBoundingClientRect().left) : null;
-      setStripReach(current => (current === reach ? current : reach));
       frame.style.setProperty("--cad-tools-bottom", `${Math.round(VIEWPORT_INSET_PX * 2 + Math.max(top, ...rows.map(box => box.bottom)) - top)}px`);
+      // The corner at the top-right (the cube or the zoom pill, the stack under it): the host's notice stands under it,
+      // an inset away. A corner the host anchors at the left leaves the top-right to the notice.
+      const corner = () => [...stage.querySelectorAll(CORNER_CONTROLS)].map(element => element.getBoundingClientRect()).filter(box => box.height > 0);
+      const cornerBoxes = viewCornerSide(frame) === "right" ? corner() : [];
+      if (cornerBoxes.length) frame.style.setProperty("--cad-corner-below", `${Math.round(Math.max(...cornerBoxes.map(box => box.bottom)) - stageBox.top + VIEWPORT_INSET_PX)}px`);
+      else frame.style.removeProperty("--cad-corner-below");
       if (mobile || !rows.length) {
         frame.style.removeProperty("--cad-top-right-left");
         return;
       }
       // The column's right side, the widest of its rows, from the stage's left: the top-right
-      // corner (Quick Edit) starts past it, an inset away, so it never reaches under the strip.
-      const right = Math.max(...rows.map(row => row.right)) - stage.getBoundingClientRect().left;
+      // corner (the host's notice) starts past it, an inset away, so it never reaches under the strip.
+      const right = Math.max(...rows.map(row => row.right)) - stageBox.left;
       frame.style.setProperty("--cad-top-right-left", `${Math.round(right + VIEWPORT_INSET_PX)}px`);
     };
     measure();
     if (typeof ResizeObserver === "undefined") return () => { for (const name of MEASURED) frame.style.removeProperty(name); };
     // What moves them: the controls, the stage, and what comes and goes in the top-right corner
-    // (Quick Edit opening, closing, resized).
+    // (the host's notice; the corner's cube, pill and stack).
     const resized = new ResizeObserver(measure);
     resized.observe(controls);
     resized.observe(stage);
@@ -161,11 +239,17 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
       resized.disconnect(); changed?.disconnect();
       for (const name of MEASURED) frame.style.removeProperty(name);
     };
-  }, [root, toolsHidden, mobile, sided, flat.open, hasQuickEdit]);
+  }, [root, toolsHidden, mobile, sided, mode, hasQuickEdit]);
 
+  // The stage's own variables: its colour, where it is the scene's.
+  const stageVariables = {
+    ...(stageColor ? { backgroundColor: stageColor } : {})
+  };
   return (
     <InspectContext.Provider value={inspect}>
     <div ref={root} className={cn("relative flex h-full min-h-0 flex-row overflow-hidden bg-canvas text-foreground", className)}
+      style={{ ...(viewport?.canvas ? { "--canvas": viewport.canvas } : {}), "--cad-host-corner-right": "var(--cad-viewport-corner-right, 2px)", "--cad-host-corner-left": "var(--cad-viewport-corner-left, 0px)" }}
+      data-viewport-scheme={scheme ?? undefined} data-sidebar={mode}
       data-slot="cad-file-view" data-cad-surface="" data-cad-selecting={selecting ? "" : undefined} {...surface} tabIndex={-1} {...rootHandlers}
       onPointerDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest("canvas")) return;
@@ -173,19 +257,44 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
         onCanvasPress?.(event);
       }}>
       {panelNode}
-      {/* The stage: what the panel leaves of the view. The canvas fills it, so a fit centres in what
+      {sheetNode}
+      {/* The stage: what the pushed panels leave of the view. The canvas fills it, so a fit centres in what
           is visible and a change of its size reaches the picture as a plain resize. */}
       <div ref={stageRef} className="@container/cad-viewport pointer-events-none relative min-h-0 min-w-0 flex-1"
-        data-cad-canvas={stageColor ?? ""} style={stageColor ? { backgroundColor: stageColor } : undefined}>
-        <div ref={canvasBoxRef} className="pointer-events-auto absolute inset-0" aria-busy={busy === undefined ? undefined : busy ? "true" : "false"}
+        data-cad-canvas={stageColor ?? ""} style={stageVariables}>
+        <div ref={canvasBoxRef} className={cn("pointer-events-auto absolute inset-0", scheme)} style={viewport?.canvas ? { "--canvas": viewport.canvas } : undefined} aria-busy={busy === undefined ? undefined : busy ? "true" : "false"}
           data-cad-canvas-box="" {...hoverTip.handlers}>
           {children}
           <HoverTip tip={hoverTip.tip} />
         </div>
         {underlay}
         <PreviewChrome active={false} {...preview}>
+          {toolsHidden || previewing || mobile ? null : <ViewCornerSideProvider value={cornerSide}>
+            {/* The corner's buttons stand bare on the picture: in the viewport's theme, so they and their halo read on it. */}
+            <div className={cn("contents", scheme)} data-view-corner="">{corner}</div>
+          </ViewCornerSideProvider>}
+          {/* What the view portals into the file's navbar (its view settings), on a desktop and a phone alike. */}
+          {toolsHidden || previewing ? null : navbar}
+          {/* The host's notice once the view is up. */}
+          <ViewportTopRight notice={chromeHidden ? null : notice} />
+        </PreviewChrome>
+        {bottomCentre}
+        {overlays}
+        {/* The view catching up, at the top centre while there is no strip. */}
+        {statusNode && (toolsHidden || previewing) ? <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
+          style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }}>{statusNode}</div> : null}
+        {chromeHidden || previewing || !contextMenu ? null : <ViewportContextMenu {...contextMenu} />}
+        <div className={cn("contents", scheme)}><ViewerLoadingOverlay loading={loading} operationKey={file} /></div>
+        {/* The alert card, last: over the tools, which a warning the view survives keeps on screen. */}
+        {previewing || !alert ? null : <ViewerAlertCard {...alert} file={alert.file ?? file} />}
+      </div>
+      {/* The strip's column and Quick Edit's bar: centred on the whole view, always, whatever the panels do, and over
+          them where they meet (a layer of their own over the panels, an overlaid one too); hidden and inert in Preview,
+          as the rest of the chrome is (`PreviewChrome`). */}
+      <div className="pointer-events-none absolute inset-0 z-50" hidden={previewing} inert={previewing} data-view-top-layer="">
+        <ToolbarTooltipScope enabled={!previewing}>
           {toolsHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-center gap-2"
-            style={{ ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
+            style={TOOLBAR_POSITION} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
             <StripTouchProvider value={mobile}>
               <div ref={topControls} className="relative flex max-w-full shrink-0 flex-col items-center gap-2" data-cad-top-controls="">
                 <FloatingToolBar tools={tools} views={views} touch={mobile} />
@@ -195,37 +304,32 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
               {toolStack}
             </StripTouchProvider>
           </div>}
-          {toolsHidden || previewing || mobile ? null : <ViewCornerSideProvider value={cornerSide}>{corner}</ViewCornerSideProvider>}
-          {/* The host's notice once the view is up, and Quick Edit under it — hidden, not unmounted,
-              while the view loads: a note being written outlives a reload. On a phone Quick Edit is a
-              bottom sheet, portalled out of this corner. */}
-          <ViewportTopRight notice={chromeHidden ? null : notice}>{compact ? null : quickEdit}</ViewportTopRight>
-        </PreviewChrome>
-        {/* Collapsed, the panel's expand button, alone on a pill at the canvas's top-left. */}
-        {sided && !toolsHidden && !previewing && !flat.open ? <FlatPanelPill touch={mobile} onOpen={() => flat.setOpen(true)} /> : null}
-        {bottomCentre}
-        {overlays}
-        {/* The view catching up, at the top centre while there is no strip. */}
-        {statusNode && (toolsHidden || previewing) ? <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
-          style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }}>{statusNode}</div> : null}
-        {chromeHidden || previewing || !contextMenu ? null : <ViewportContextMenu {...contextMenu} />}
-        <ViewerLoadingOverlay loading={loading} operationKey={file} />
-        {/* The alert card, last: over the tools, which a warning the view survives keeps on screen. */}
-        {previewing || !alert ? null : <ViewerAlertCard {...alert} file={alert.file ?? file} />}
+          {/* Quick Edit's bar, at the bottom on the model's area's centre line (above): hidden, not unmounted, while the view
+              loads, as a note being written outlives a reload. */}
+          {compact || !quickEdit ? null : <div className="pointer-events-none absolute z-30 flex flex-col justify-end" data-quick-edit-row=""
+            style={{ left: `var(--cad-quick-edit-left, ${INSET})`, width: `var(--cad-quick-edit-width, calc(100% - 2 * ${INSET}))`,
+              bottom: mobile ? `calc(${INSET} + env(safe-area-inset-bottom, 0px))` : 2 * VIEWPORT_INSET_PX }}>{quickEdit}</div>}
+        </ToolbarTooltipScope>
       </div>
     </div>
     </InspectContext.Provider>
   );
 }
 
-// The strip and the tool stack under it share one column at the top centre, its height the room down
-// to the corner's line, so however many panels are up it never runs past the view. It spans the view
-// within its inset and centres what it holds: positioned from the centre (`left: 50%`) it would shrink
-// to the half right of it, and the strip would wrap at half the view.
+// The strip and the tool stack under it share one column at the top centre of the WHOLE view, its height the room
+// down to Quick Edit's row, so however many panels are up it never runs past the view. Where the view is narrow enough
+// for the strip to reach the corner's cube, the strip (a layer over the corner) stands over it. It spans the view within its
+// inset and centres what it holds: positioned from the centre (`left: 50%`) it would shrink to the half right of it,
+// and the strip would wrap at half the view. No panel moves it; it stands over them.
 const INSET = `${VIEWPORT_INSET_PX}px`;
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, right: INSET, bottom: VIEWPORT_STACK_BOTTOM });
-// What stands in the top-right corner: the host's notice and Quick Edit's box (not its column).
-const CORNER_BOXES = "[data-viewport-top-right] :is([data-viewport-notice], [data-quick-edit-box])";
-const MEASURED = ["--cad-tools-bottom", "--cad-top-right-left"];
+// What stands in the top-right corner: the corner's controls (the cube, a flat view's zoom pill, the stack under
+// either), and the host's notice under them (not its column).
+const CORNER_CONTROLS = "[data-view-cube], [data-zoom-pill], [data-view-corner-stack]";
+const CORNER_BOXES = `[data-viewport-top-right] [data-viewport-notice], ${CORNER_CONTROLS}`;
+const MEASURED = ["--cad-tools-bottom", "--cad-top-right-left", "--cad-corner-below", "--cad-quick-edit-left", "--cad-quick-edit-width"];
+// Quick Edit's bar: 400px at most, centred on the whole view; narrower only with the view, 16px in from each side.
+const QUICK_EDIT_MAX_PX = 400;
+const QUICK_EDIT_MARGIN_PX = 16;
 // Nothing to say: the status draws nothing.
 const IDLE_STATUS = Object.freeze({ pending: false });

@@ -94,13 +94,14 @@ function pickElements(current, ids, multiSelect) {
 }
 
 /**
- * The view's panel's tabs, in their order: the Model tree for an assembly (a part file's would be its
- * one row), Position for a mechanism, Parameters for a document that records any. None: no panel.
- * @param {{ assembly: boolean, posable: boolean, parameters: number }} document
- * @returns {("model" | "position" | "parameters")[]}
+ * The view's panel's tabs, in their order: the Model tree for any document with a part (a part file's
+ * is its one row, an assembly's every part), Parameters for a document that records any, Position for
+ * a mechanism. None: no panel.
+ * @param {{ parts: number, posable: boolean, parameters: number }} document  `parts`: the tree's rows.
+ * @returns {("model" | "parameters" | "position")[]}
  */
-export function xbfPanelSections({ assembly, posable, parameters }) {
-  return [assembly && "model", posable && "position", parameters > 0 && "parameters"].filter(Boolean);
+export function xbfPanelSections({ parts, posable, parameters }) {
+  return [parts > 0 && "model", parameters > 0 && "parameters", posable && "position"].filter(Boolean);
 }
 
 /** Every selection id at and under `ids` in the tree: what an isolation keeps in reach. */
@@ -115,7 +116,10 @@ function XbfSurface({ view, data }) {
   const { t } = useI18n();
   const host = useViewerHost();
   const document = useWorkspaceDocument({ view, data });
-  const loaded = useXbfScene({ client: document.client, file: view.file.path });
+  // A preview of other values of the model's parameters, drawn in the document's place while the
+  // Parameters tab holds drafts (`useXbfParameters`'s `onPreview`): its URL, else null.
+  const [parameterPreview, setParameterPreview] = useState(null);
+  const loaded = useXbfScene({ client: document.client, file: view.file.path, preview: parameterPreview });
   // A document the engine no longer holds is opened again, once, the catalog asked again first (it
   // still has the row it had): the file viewer then says what became of it, in the document's words.
   const reopened = useRef(false);
@@ -153,7 +157,8 @@ function XbfSurface({ view, data }) {
   const [toolMode, setToolMode] = useState(XBF_TOOL_MODES.defaultMode);
   const tool = useMemo(() => ({ mode: toolMode, set: setToolMode }), [toolMode]);
   const measuring = !previewing && toolMode === XBF_TOOL.MEASURE;
-  const measure = useMeasureSession({ fileKey: document.modelKey, revision: loaded.revision, picking: measuring });
+  // What is measured is what is drawn: a preview's geometry is its own revision.
+  const measure = useMeasureSession({ fileKey: document.modelKey, revision: loaded.sceneRevision || loaded.revision, picking: measuring });
   const requestFrame = useCallback(() => shellRef.current?.requestFrame?.(), []);
   const requestRender = useCallback(() => shellRef.current?.requestRender?.(), []);
 
@@ -212,9 +217,10 @@ function XbfSurface({ view, data }) {
   const { values: poseValues, applied: poseApplied, preset: posePreset, couplings: poseCouplings,
     setValues: setPoseValues, choosePreset, reset: resetPose } = pose;
   // ---- Motion: the document's motions played (`useXbfMotion.js`) ------------------------------
-  // While a motion owns the pose (playing, or paused off its start, until Reset lets go of it) its
-  // frames pose the scene and Position shows them, read-only. It is a motion as Explode and the
-  // pose are (below): playing it puts both at rest, and Explode used puts it at rest.
+  // While a motion owns the pose (playing, or paused off its start, until it is scrubbed back to its start or
+  // something else takes over) its frames pose the scene and Position shows them, editable: a Position edit lets
+  // the motion go and takes over from the frame. It is a motion as Explode and the pose are (below): playing it puts
+  // both at rest, and Explode or Position used puts it at rest.
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
   const positionRef = useRef(null);
@@ -229,12 +235,15 @@ function XbfSurface({ view, data }) {
   }, []);
   const motion = useXbfMotion(kinematics, poseFrame);
   // ---- Parameters: the named numbers the model's script declares (`XbfParametersSection.jsx`) ---
-  // Kept here, for as long as the file is on screen: the drafts, and what was saved, which the next
-  // Quick Edit tells the agent (`promptNotes`).
-  const parameters = useXbfParameters({ client: document.client, document: loaded.document });
-  const motionOwns = Boolean(motion?.enabled);
+  // Kept here, for as long as the file is on screen: the drafts, the preview of them the scene draws, and
+  // what was saved, which the next Quick Edit tells the agent (`promptNotes`).
   const motionRef = useRef(motion);
   motionRef.current = motion;
+  // A parameter edited lets go of a motion holding the model, explicitly: a preview the engine refuses must not
+  // leave the clip in charge (and Joints showing its frame). Joints and Explode never reset the parameters.
+  const releaseMotion = useCallback(() => { if (motionRef.current?.enabled) motionRef.current.onRelease(); }, []);
+  const parameters = useXbfParameters({ client: document.client, document: loaded.document, onPreview: setParameterPreview, onEdit: releaseMotion });
+  const motionOwns = Boolean(motion?.enabled);
   useEffect(() => {
     if (!scene || !poseValues || motionRef.current?.enabled) return;
     scene.setPose(poseApplied ? poseValues : null);
@@ -717,7 +726,7 @@ function XbfSurface({ view, data }) {
 
   // ---- the strip --------------------------------------------------------------------------------
   const bounds = scene ? boundsInUnits(sceneFramingBounds(scene), scene.units) : null;
-  const effects = useModelTools({ view: viewSettings, features, store, mesh: bounds ? { bounds } : null, disabled: shell.idle });
+  const effects = useModelTools({ view: viewSettings, features, store, mesh: bounds ? { bounds } : null, disabled: shell.idle, shell });
   const selectModeMenu = useMemo(() => <SelectMenu value={selectFilter} assembly={assembly} posable={posable} disabled={shell.idle}
     onChange={value => { setSelectFilter(value); shellRef.current?.selectTool(XBF_TOOL.SELECT); }}
     tool={selectTool} onToolChange={value => { setSelectTool(value); shellRef.current?.selectTool(XBF_TOOL.SELECT); }} />,
@@ -741,14 +750,24 @@ function XbfSurface({ view, data }) {
   const measureSelect = measureSelectHandlers(measure, runtimeOf, clearSelection, { picks: selects(selectFilter, "measurement") });
   measureSelectRef.current = measureSelect;
 
-  // Position's knobs: Select's, while its filter ticks Position, with nothing exploded and no motion owning the pose.
-  const knobsShown = selectActive && posable && selects(selectFilter, "position") && !explodeApplied && !motionOwns;
-  const handles = useMemo(() => (knobsShown && poseValues ? xbfJointHandles({ kinematics, rows: positionRows, values: poseValues, scene,
-    onChange: (row, value) => { const written = writeXbfPosition(poseValues, row, value); if (written) setPoseValues(written); } }) : null),
-  [knobsShown, kinematics, positionRows, poseValues, scene, setPoseValues]);
+  // Position's knobs: Select's, while its filter ticks Position, with nothing exploded. A motion paused holds the
+  // model at its frame: the knobs stand there, and a drag lets the motion go and takes over from that frame. While it
+  // plays the knobs step aside (they would stand where the model was): pausing brings them back.
+  const motionPlaying = motionOwns && motion?.playing === true;
+  const knobsShown = selectActive && posable && selects(selectFilter, "position") && !explodeApplied && !motionPlaying;
+  const knobValues = useMemo(() => (motionOwns && motion ? motion.valuesAt(motion.elapsedSec) : poseValues),
+    [motionOwns, motion?.elapsedSec, motion?.activeClipId, poseValues]);
+  const handles = useMemo(() => (knobsShown && knobValues ? xbfJointHandles({ kinematics, rows: positionRows, values: knobValues, scene,
+    onChange: (row, value) => {
+      const written = writeXbfPosition(knobValues, row, value);
+      if (!written) return;
+      if (motionRef.current?.enabled) motionRef.current.onRelease();
+      setPoseValues(written);
+    } }) : null),
+  [knobsShown, kinematics, positionRows, knobValues, scene, setPoseValues]);
   const handleLayoutRef = useRef(null);
 
-  // ---- the view's panel: the Model tree (an assembly's), then Position, then Parameters ---------
+  // ---- the view's panel: the Model tree (a part file's one row too), then Parameters, then Position
   const partControls = useMemo(() => ({
     isAssemblyView: assembly, hiddenPartIds: hiddenIds, focusedNodeIds: isolatedIds, selectableNodeIds: selectableIds ? [...selectableIds] : null,
     expandedTreeNodeIds: expandedIds, onToggleTreeNode: toggleExpanded, onRevealTreeNodes: revealExpanded, onSelectTreeNode: selectTreeNode,
@@ -758,32 +777,24 @@ function XbfSurface({ view, data }) {
     menuForNode, partMenuActions
   }), [assembly, hiddenIds, isolatedIds, selectableIds, expandedIds, toggleExpanded, revealExpanded, selectTreeNode, ensureSelect, isolate, exitSingleIsolate,
     exitIsolate, toggleVisibility, showAll, tree, menuForNode, partMenuActions]);
-  const sections = xbfPanelSections({ assembly, posable: Boolean(kinematics), parameters: parameters.parameters.length });
-  const sidebar = scene && sections.length ? <>
-    {sections.includes("model") ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
-      selectedIds={selected} onClearSelection={clearSelection} partControls={partControls} /> : null}
+  const sections = xbfPanelSections({ parts: tree.roots.length, posable: Boolean(kinematics), parameters: parameters.parameters.length });
+  // The panel's tabs: the structure (the Model tree, there from the first frame, its rows arriving with the model), then
+  // Parameters and Joints once the model says it has them.
+  const sidebar = !scene || sections.includes("model") ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
+    selectedIds={selected} onClearSelection={clearSelection} partControls={partControls} /> : null;
+  const fileSections = scene && (sections.includes("parameters") || sections.includes("position")) ? <>
+    {sections.includes("parameters") ? <XbfParametersSection parameters={parameters} /> : null}
     {sections.includes("position") ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
       onValues={setPoseValues} onPreset={choosePreset} onReset={resetPose} /> : null}
-    {sections.includes("parameters") ? <XbfParametersSection parameters={parameters} /> : null}
   </> : null;
 
-  // What is picked, as the frame reads it: the Selected pane under the Model tree, the hover tip, the rows of
-  // both, which pick, light and frame as the tree's rows do.
-  const inspectSelect = useCallback((id, { multiSelect = false } = {}) => {
-    ensureSelect();
-    setChosen(now => (isElementId(id) ? pickElements(now, [id], multiSelect) : pickNode(now, id, multiSelect)));
-  }, [ensureSelect]);
-  const inspectHover = useCallback(id => hoverChip(id ? [id] : null), [hoverChip]);
-  const inspectFrame = useCallback((ids) => {
-    const bounds = scene?.selectionBounds([...leavesOf(ids.filter(id => !isElementId(id))), ...ids.filter(isElementId)]);
-    if (bounds) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(bounds);
-  }, [scene, leavesOf]);
+  // What is picked, as the frame reads it: a chip's card and the hover tip.
   // The hover tip's own short path: names from the tree, nothing measured (`xbfTipper`).
   const tip = useMemo(() => xbfTipper({ scene, tree }), [scene, tree]);
-  const inspect = useMemo(() => (scene && !previewing ? { selected, describe, tip, hovered: pointed, select: inspectSelect, hover: inspectHover,
-    frame: inspectFrame, copyText: singleChip, data: "model" } : null), [scene, previewing, selected, describe, tip, pointed, inspectSelect, inspectHover, inspectFrame, singleChip]);
+  const inspect = useMemo(() => (scene && !previewing ? { describe, tip, hovered: pointed, data: "model" } : null), [scene, previewing, describe, tip, pointed]);
 
-  return <RendererShell shell={shell} tools={strip} subToolbar={measuring ? <MeasurementsBar measure={measure} /> : null} sidebar={sidebar} previewView={previewView}
+  return <RendererShell shell={shell} tools={strip} subToolbar={effects.subToolbar ?? (measuring ? <MeasurementsBar measure={measure} /> : null)} sidebar={sidebar} previewView={previewView}
+    fileSections={fileSections}
     inspect={inspect} promptNotes={parameters.notes}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameReference}
     onClearReferences={() => { setChosen(EMPTY); measure.select([]); }} copySelection={copySelection}

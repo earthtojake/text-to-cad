@@ -46,7 +46,7 @@ export function useSceneTools({ shell, scene, features, state, measurable, clear
   const { view, store } = shell.viewSettings;
   // Clip's slider maps in the box the camera frames, in the file's unit, as `clip.at` is.
   const bounds = scene ? boundsInUnits(sceneFramingBounds(scene), scene.units) : null;
-  const effects = useModelTools({ view, features, store, mesh: bounds ? { bounds } : null, disabled: shell.idle });
+  const effects = useModelTools({ view, features, store, mesh: bounds ? { bounds } : null, disabled: shell.idle, shell });
   const tools = [
     ...shell.tools.drawing.map(tool => ({ ...tool, disabled: shell.idle })),
     measurable ? shell.tools.own({ id: SCENE_MEASURE_TOOL, label: t("tool.measure"), shortcut: TOOL_SHORTCUTS.measure, icon: <MeasureIcon className="size-3.5" aria-hidden="true" />,
@@ -54,8 +54,8 @@ export function useSceneTools({ shell, scene, features, state, measurable, clear
       onSelect: () => { if (shell.toolMode !== SCENE_MEASURE_TOOL) shell.selectTool(SCENE_MEASURE_TOOL); } }) : null,
     ...effects.tools
   ].filter(Boolean);
-  // Measure's row under the strip: its measurements, as chips, while there are any.
-  const subToolbar = measuring ? <MeasurementsBar measure={measure} /> : null;
+  // The row under the strip: a model effect's while it is in hand, else Measure's measurements, as chips.
+  const subToolbar = effects.subToolbar ?? (measuring ? <MeasurementsBar measure={measure} /> : null);
   const runtime = useRef(null);
   const overlay = viewport => {
     runtime.current = viewport.runtimeRef;

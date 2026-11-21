@@ -4144,7 +4144,8 @@ too (`models.revision`: the closure's key and the record, digested, for a docume
 whose body reads no parameter of its script -- a sibling's `wall` -- has the same key after `wall` changes, but
 not the same document, so it is a new generation, its pages fetch it again, its cache file is saved again and
 its rows are served at it, however the record changed (a `set`, an edit and a run). A declared or exported xbf carries
-the same record (`Loaded.parameters`); opening that file shows them, read-only. It is an attribute of its
+the same record (`Loaded.parameters`; an export writes the document's own, `export/tree.py`'s `tree_of`); opening
+that file shows them, read-only. It is an attribute of its
 own under a GUID of its own, which a reader that does not know it passes over, and a document without it reads
 as one with none: the format stays `xbf/9`, and documents earlier releases wrote read as they did (law 15,
 tier 3). STEP, GLB and the other translations carry none.
@@ -4184,9 +4185,15 @@ which does in order, and changes nothing on disk before the fifth:
    (`written[].to`); a value that is not zero but rounds to zero (`1e-7`) is `not_a_number`, never written as
    `0.0`. A value equal to the one the code holds is no change, and a request that changes nothing writes and
    builds nothing.
-4. No build of the script running and no other set of it under way, else `busy`; the script's bytes on disk
-   of the digest its last run recorded, and the bytes at each span still spelling the recorded value
-   (`parameters.standing`), else `script_changed`: run the script first.
+4. No build under way, in any worker (another Python's build of the script is another worker's), of the file
+   it writes or of the script whose run it builds again, and no other set of either, else `busy`; the check and
+   the claim are one step (`Setting._claim`), and from then until its answer those scripts are the set's: a
+   build asked meanwhile waits for it, told so on its log (`Setting.building`, which the daemon's build path
+   enters from a build's request to its answer), so no build reads the file between the check of its bytes and
+   the set's own build of them. (A program reads its own script before it asks for a build -- `python
+   bracket.py` runs its top level first -- which no engine sees; the build it then asks reads the file as it is.)
+   Then the script's bytes on disk of the digest its last run recorded, and the bytes at each span still
+   spelling the recorded value (`parameters.standing`), else `script_changed`: run the script first.
 5. Each number spelled by the library (`parameters.spelled`: an integer as its digits, a float in the
    shortest text that reads back as it, always with a point or an exponent, so its kind is kept), the spans
    replaced from the last to the first (`parameters.splice`: every other byte as it was), and the file
@@ -4224,5 +4231,62 @@ every route does (`{"error", "hint"}`) with `code`, `reason` and `detail` likewi
 body that is not `{"values": {...}}` is a `400` with no `code`. It answers once the build is done.
 
 What it does not do: write a parameter another module declares, one with no span (`expression`), or one
-of a document no live worker built; overwrite a file another writer changed while it worked; preview a value, hold an override, or build anything but the run that
-last ran; write the record into a STEP, a GLB or any other translation.
+of a document no live worker built; overwrite a file another writer changed while it worked; build anything but
+the run that last ran; write the record into a STEP, a GLB or any other translation.
+
+**Previewing.** Before a Save, the page's Parameters tab shows the model at its drafts as a person moves them:
+`POST /api/v1/documents/model/<id>/preview` with `{"values": {...}, "page": token}` (`viewer/http_app.py`, behind
+the guard header and the page token as `set`'s route is; `page` a token of the page's own making, letters,
+digits, `-` and `_`, which keeps one page's previews from another's), answered by `parameters.Previewing.preview`
+in the daemon (`client.previewModelParameters` on the page; no command and no library function: nothing but the
+page reads what it makes). It writes nothing, and does in order:
+
+1. The values checked against the live rows as `set` checks them (steps 1 to 3: `no_worker`, `unknown_parameter`,
+   `not_writable`, `not_a_number`, `out_of_range`). Values that are all the document's build nothing: the page's
+   previews are let go and the answer is `{"id", "preview": null}` (the page's Reset, a Save that landed).
+2. A build or a `set` of the script comes first: one under way (`Setting.building`, which the daemon's build
+   path holds from a build's request to its answer, and a set's claim) refuses the preview `busy`.
+3. Per document, one preview builds at a time and one waits: a request that comes while one builds waits in the
+   slot, and a newer one takes its place, the one replaced answered `{"id", "superseded": true}`, never built. A
+   build or a set that begins answers the one waiting `busy` (`Previewing.yield_to`), so a preview never runs
+   before a run; one already building finishes -- a kernel call is not cut short -- and the run's lease waits for
+   it, that one build at most.
+4. Its turn come, the values are checked again (a run may have landed meanwhile), and the script's bytes against
+   the digest and spans its last run recorded (`parameters.standing`: `script_changed`). A preview runs the
+   script as it is on disk -- the worker loads its modules again from their files, and keys the memo by their
+   source there -- so a script changed by hand since its run is refused, never built: its new code at the last
+   run's positions of the numbers would be neither run. The engine never looks at the file for any other
+   reason, and says nothing of it before a preview or a set reads it.
+5. The worker that recorded the rows, under a lease of the preview's own (no other worker: one started afresh
+   holds neither the rows nor the memo, `no_worker`), is sent `{"op": "preview", "script", "name", "values",
+   "digest", "known"}` with the last run's working folder and environment (`worker.py`, `build.preview`). It loads
+   the script as a build does but inside `parameters.recording` given the values: each declaration of those names
+   in the model's own script returns the value asked, not its default, and records it as its value; a load whose
+   declarations are not where the run recorded them, or not of its digest, is `script_changed`
+   (`parameters.previewed`). It builds the one model on screen, not the run, in a run of the worker's memo, so
+   every kernel call keyed by its inputs is a hit where the values do not reach it, and a value tried before (a
+   slider dragged back) is a hit throughout while the memo keeps that run (its last `RUNS_KEPT` runs, previews
+   among them). A body whose key falls back to its module's bytes (law 5's fallbacks: a `globals()`, a value with
+   no canonical form) is keyed by the values too (`BuildContext.preview`), since a preview leaves those bytes as
+   they are and must not replay another value's run. Nothing a build keeps is touched: no declared file is
+   written, no document is kept (`_WRITTEN`, `_BUILT`, the provenance `made_by` answers), no closure is made,
+   nothing is taken from or saved to the engine's cache, and the worker's last run (`ran`, which `set` builds
+   again) is not changed; no progress frame is sent, so no page shows a build. It answers the structure and the
+   shape bytes of each part whose key the daemon does not hold already (`known`: the document's and the page's
+   last previews'), as `result` answers a held model.
+6. A model that fails at those values is `build_failed` with the build's words as `detail`; the page keeps the
+   last preview that built. Else the preview is held in the server's memory under an id of its own,
+   `<id>~preview-<token>` (`serve.Server.keep_preview`), and answered `{"id", "preview": {"id", "version",
+   "basis", "values", "seconds", "memo"}}` -- `basis` the document version it was built against, `memo` the
+   build's hits and misses.
+
+A preview is read at the document's read routes under its id, and at those alone
+(`serve.Server._preview_route`): its structure, its parts' buffers (meshed by geometry key in the one mesh cache,
+so a part the values did not change is never meshed again and the page fetches only the parts whose keys it has
+not held: `xbfDocument.js`), a part's groups, an element's facts, the parts' facts. It has no envelope, no
+version to wait on, no pose, no kinematics, no mesh run, no export, no thumbnail and no Recents row
+(`http_app.PREVIEW_MARK`); only the page that asked is told its id. It is never the document: the document's
+structure, version, record, cache file and every verb of it are as they were. A page holds two at most (the one
+drawn and the next), the server those of eight pages; a page's are let go by its next preview, by values equal to
+the document's, by a new version of the document (`Models.register`), and once nobody has read them for
+`PREVIEW_IDLE` seconds (two minutes, `Previewing.expire` at the daemon's `tend`).

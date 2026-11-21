@@ -1,4 +1,6 @@
 import { useI18n } from "@cad/ui/i18n";
+import { useControlUsage } from "../../usage/controls.js";
+import { useViewportTheme } from "../kit/look/useViewportTheme.js";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BOARD_THICKNESS_MM, headOnCamera, sideSeenAlong } from "@cad/core/lib/board3d/boardFrame.js";
 import { cn } from "@cad/ui/utils";
@@ -31,7 +33,7 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/annotate/plotAnnotation.js";
 import { useBoardDescribe, useBoardInspect, useBoardReferences, useBoardTip } from "./boardReferences.jsx";
 import { createBoardScene } from "./boardScene.js";
-import { BOARD_DIMENSION_SHORTCUT, BOARD_FLIP_SHORTCUT, boardViewControls, readBoardDisplay } from "./BoardDisplay.jsx";
+import { BOARD_DIMENSION_SHORTCUT, BOARD_FLIP_SHORTCUT, boardViewControls, boardViewGroups, readBoardDisplay } from "./BoardDisplay.jsx";
 import { shortcutOfEvent } from "../kit/tools/toolShortcuts.js";
 import BoardSection, { useBoardTrees } from "./BoardSection.jsx";
 import BoardSelectFilter from "./BoardSelectFilter.jsx";
@@ -140,9 +142,13 @@ function BoardSurface({ view, data }) {
   const host = useViewerHost();
   const mobile = useViewerMobile();
   const workspace = useWorkspaceDocument({ view, data });
+  const controls = useControlUsage();
   const document = useBoardDocument({ workspace, path: view.file.path });
   const { file, plot, index, sheet, layered, shown, alert } = document;
-  const colorScheme = view.appearance?.colorScheme === "dark" ? "dark" : "light";
+  // The viewport's theme (`kit/look/useViewportTheme.js`): the person's Background over the app's light or dark.
+  // The picture — its paper, its strokes, the marks over it — is drawn in its scheme; the chrome keeps the app's.
+  const viewport = useViewportTheme(view.appearance?.colorScheme === "dark" ? "dark" : "light", workspace.services.preferences, workspace.services.onPreferenceChange);
+  const colorScheme = viewport.scheme;
   // How thick the board is (its file's stack-up; KiCad's default where it names none), and its parts' 3D models table.
   const thickness = plot?.board?.thickness > 0 ? plot.board.thickness : BOARD_THICKNESS_MM;
   const thicknessRef = useRef(thickness);
@@ -185,7 +191,7 @@ function BoardSurface({ view, data }) {
     if (serialized === storedRef.current) return;
     storedRef.current = serialized;
     window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => stateChangeRef.current?.(record), SAVE_DELAY_MS);
+    saveTimer.current = window.setTimeout(() => { saveTimer.current = 0; stateChangeRef.current?.(record); }, SAVE_DELAY_MS);
   }, []);
   // A view that is still the fit stores no camera: `null` is "fit me".
   const rememberView = useCallback(moved => save({ camera: readFlatView(moved) }), [save]);
@@ -193,7 +199,13 @@ function BoardSurface({ view, data }) {
   useEffect(() => { storedRef.current = JSON.stringify(recordOf({ camera: restored, display, isolated: restoredIsolation, board3d: restored3d })); }, []);
   useEffect(() => { save({ display, isolated: isolation.isolated }); }, [display, isolation.isolated, save]);
   useEffect(() => { remember3d({ mode: dimension, projection, models: showModels }); }, [dimension, projection, showModels, remember3d]);
-  useEffect(() => () => window.clearTimeout(saveTimer.current), []);
+  // Gone with a write still pending (a file left at once, a view its boundary took down): written now, not dropped,
+  // so the file opens again as it was last left (a board switched to 3D a moment before is in 3D).
+  useEffect(() => () => {
+    if (!saveTimer.current) return;
+    window.clearTimeout(saveTimer.current);
+    stateChangeRef.current?.(recordOf(saved.current));
+  }, []);
 
   // ---- tools ----------------------------------------------------------------
   const tools = useFlatTools({ toolModes: BOARD_TOOL_MODES, file, revision: workspace.resource.revision, ready: Boolean(index) });
@@ -710,15 +722,15 @@ function BoardSurface({ view, data }) {
   const takeSelect = useCallback(() => selectTool(BOARD_TOOL.SELECT), [selectTool]);
   const list = id => <BoardSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onFrame={frameSelectors} onSelect={takeSelect} />;
-  const copySelectors = useCallback(ids => (path ? buildBoardRefToken({ path, selectors: ids }) : ""), [path]);
   const tip = useBoardTip(index);
   // How many parts the 3D view stands a model on (the Layers tab's 3D models row's count): every part with one shown, found.
   const modelCount = useMemo(() => (index && models ? [...index.parts.values()].filter(part => part.models.some(model => !model.hidden && models[model.name]?.document)).length : 0),
     [index, models]);
-  const inspect = useBoardInspect({ index, describe, tip, selection, hovered, onSelect: takeSelect, frame: frameSelectors, copyText: copySelectors });
+  const inspect = useBoardInspect({ index, describe, tip, hovered });
+  // Parts from the first frame, the board still loading (its rows arrive with it); Nets and Layers after it once known.
   const panelTabs = [
-    ...(index ? [{ id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
-      { id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") }] : []),
+    ...(index || document.loading ? [{ id: "parts", label: t("board.text.parts"), searchLast: true, content: index ? list("parts") : null }] : []),
+    ...(index ? [{ id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") }] : []),
     ...(layered ? [{ id: "layers", label: t("layers.title"), content: <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} colorScheme={colorScheme}
       models={index ? { shown: showModels, onChange: setShowModels, count: modelCount } : null} /> }] : [])
   ];
@@ -740,14 +752,22 @@ function BoardSurface({ view, data }) {
   // The board in 3D is mounted while it is the view, and while it leaves (`closing3d`).
   const mounted3d = (dimension === "3d" || closing3d) && layered && plot;
   // In 3D, Display's menu ends with the camera's projection, a setting changed seldom (`settings-ui.md`).
-  const views = layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown, dimension, onDimensionChange: switchDimension,
-    onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null }) : [];
+  const views = layered ? boardViewControls({ t, used: controls.used, display, sheet, onChange: setDisplay, disabled: !shown, dimension, onDimensionChange: switchDimension,
+    onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null,
+    background: { value: viewport.background, onChange: viewport.setBackground },
+    onHome: solid ? () => { controls.used("view_home"); view3dRef.current?.home?.(); } : null }) : [];
+  // The same settings as the navbar's View draws them (`kit/shell/ViewSettingsMenu.jsx`): Side, Mode, Display, in 3D Projection,
+  // and Background; a phone's View menu's Reset view is 3D's Home, or 2D's fit.
+  const viewGroups = layered ? boardViewGroups({ t, used: controls.used, display, sheet, onChange: setDisplay, dimension, onDimensionChange: switchDimension,
+    onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null,
+    background: { value: viewport.background, onChange: viewport.setBackground } }) : null;
+  const resetView = solid ? () => { controls.used("view_home"); view3dRef.current?.home?.(); } : () => zoom.fit?.();
   // The parts the 3D view stands models on: the index's (page millimetres, as the stage's outline is), each with its models.
   const boardParts = useMemo(() => (index ? [...index.parts.values()] : null), [index]);
   return (
-    <FlatViewFrame surface={BOARD_SURFACE} containerRef={containerRef} busy={document.loading || document.updating}
-      file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={document.loading} loadingLabel={t("board.text.reading_board")}
-      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={views}
+    <FlatViewFrame surface={BOARD_SURFACE} viewport={viewport} containerRef={containerRef} busy={document.loading || document.updating}
+      file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} loading={document.loading} loadingLabel={t("board.text.reading_board")}
+      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={views} viewGroups={viewGroups} onResetView={resetView}
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={activeCanvasRef} contextMenuItems={contextMenuItems}

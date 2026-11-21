@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
 
-// text-micro, text-tiny and text-ui are font sizes from the type scale in
+// text-tiny, text-ui and text-heading are font sizes from the type scale in
 // styles/globals.css. tailwind-merge only knows Tailwind's stock sizes, so
 // without this it reads them as text colours: it drops them whenever a
 // text-<colour> class follows in the same cn() call, and keeps a primitive's
@@ -9,7 +9,7 @@ import { extendTailwindMerge } from "tailwind-merge";
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
-      "font-size": [{ text: ["micro", "tiny", "ui"] }]
+      "font-size": [{ text: ["tiny", "ui", "heading"] }]
     }
   }
 });

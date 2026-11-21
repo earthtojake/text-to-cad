@@ -5,9 +5,9 @@ import { Button } from "@cad/ui/primitives/button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import {
   ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowActions, TreeRowGlyph,
-  TreeRowLabel, TreeRowSurface, TreeRowToggle, useTreeRowHeight
+  TreeRowDetail, TreeRowName, TreeRowSurface, TreeRowToggle, useTreeRowHeight
 } from "@cad/ui/primitives/tree-row";
-import { TreeFilterHighlight } from "@cad/ui/primitives/tree-filter";
+import { TreeFilterHighlight, TreeSearchStatus } from "@cad/ui/primitives/tree-filter";
 import { cn } from "@cad/ui/utils";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@cad/ui/primitives/context-menu";
 import { useFlatPanel } from "../shell/FlatPanel.jsx";
@@ -66,8 +66,8 @@ function visibleRows(roots, expanded) {
 // its chevron, as the model tree's.
 function RowName({ node }) {
   return <>
-    <TreeRowLabel className="max-w-full shrink-0">{node.label}</TreeRowLabel>
-    {node.detail ? <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{node.detail}</TreeRowLabel> : null}
+    <TreeRowName>{node.label}</TreeRowName>
+    {node.detail ? <TreeRowDetail>{node.detail}</TreeRowDetail> : null}
   </>;
 }
 /** A row's menu, built as it opens (`menuOf`, every view's groups): a tree of rows never pays for it. */
@@ -117,10 +117,10 @@ function CircuitSearchRow({ match, selected, isolated, cursor, choose, frame, ho
     <KindGlyph kind={node.kind} glyphs={glyphs} />
     <button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected} onClick={event => choose(node, event)} onDoubleClick={() => frame(node)}
       className={cn(TREE_ROW_NAME_CLASS, eye && (isolated ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover))}>
-      <TreeRowLabel className="max-w-full shrink-0"><TreeFilterHighlight indices={indices} text={entry.label} /></TreeRowLabel>
-      <TreeRowLabel className="flex-1 text-micro text-muted-foreground">
+      <TreeRowName><TreeFilterHighlight indices={indices} text={entry.label} /></TreeRowName>
+      <TreeRowDetail>
         {alias ? <TreeFilterHighlight indices={alias.indices} text={alias.text} /> : node.detail || entry.prefix.slice(0, -1)}
-      </TreeRowLabel>
+      </TreeRowDetail>
     </button>
     {eye ? <IsolateEye node={node} on={isolated} onToggle={onIsolate} data={data} /> : null}
   </TreeRowSurface></RowMenu>;
@@ -349,15 +349,13 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
     return <MemoCircuitSearchRow match={match} selected={highlighted.has(id)} isolated={isolatedIds.has(id)} cursor={id === cursorId}
       choose={choose} frame={frame} hover={hover} onIsolate={onIsolate} glyphs={glyphs} data={data} menuOf={menuOf} />;
   };
-  return <div className="flex flex-col text-tiny" aria-label={panel.listLabel}>
+  return <div className="flex flex-col" aria-label={panel.listLabel}>
     <div ref={listRef} onClick={event => {
       // A row menu's item is a portal's: its click reaches here through React, from outside the list.
       if (event.currentTarget.contains(event.target) && !event.target.closest("li,button,input")) clear();
     }}>
       {searching ? matches.length ? <div data-flat-panel-hit="">
-        {found.total > matches.length ? <p role="status" className="px-2 py-1 text-muted-foreground" data-tree-status="">
-          {t("tree.firstMatches", { shown: matches.length, total: found.total.toLocaleString() })}
-        </p> : null}
+        {found.total > matches.length ? <TreeSearchStatus shown={matches.length} total={found.total} /> : null}
         <VirtualRows key="search" aria-label={panel.resultsLabel} count={matches.length} rowHeight={rowHeight} pinned={searchPinned}
           rowKey={at => matches[at].entry.node.id} rowProps={at => ({ className: "min-w-0", "data-search-row": matches[at].entry.node.id })} renderRow={renderSearchRow} />
       </div> : null

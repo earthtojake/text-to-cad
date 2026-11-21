@@ -20,8 +20,8 @@ test('an engine document reopens with its tree as it was left, and its selection
   // The Model is the view's panel's first tab (its only one, with no tab row, where nothing has a Position), the panel
   // opened from its pill (the 800px view starts it collapsed).
   const openTree = async () => {
-    await pane.locator('[data-flat-panel-pill] button, [data-flat-panel][data-open]').first().waitFor();
-    if (await pane.locator('[data-flat-panel-pill] button').count()) await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
+    await pane.locator('[data-navbar-panel="left"]').first().waitFor();
+    if (await pane.locator('[data-navbar-panel="left"][aria-expanded="false"]').count()) await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
     const tab = pane.locator('[data-flat-panel]').getByRole('tab', { name: 'Model', exact: true });
     if (await tab.count()) await tab.click();
   };

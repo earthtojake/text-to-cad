@@ -154,3 +154,16 @@ test("a GLB of two nodes explodes them apart, its box following, and back to whe
   assert.deepEqual([lit.position.x, unlit.position.x, scene.bounds], [0, 2, document.restBounds]);
   scene.dispose();
 });
+
+test("a GLB's node tree is the view's panel's Model tab: every node under the one it hangs from, the ones that draw its parts", () => {
+  const { document, lit, unlit } = nodeDocument();
+  // A group node over the two: it draws nothing itself, so it is a branch to open, no part.
+  const group = new THREE.Group();
+  group.name = "assembly";
+  group.userData.gltfNode = 2;
+  document.scene.add(group);
+  group.add(lit, unlit);
+  const scene = createGlbScene(THREE, document);
+  const shape = nodes => nodes.map(({ id, label, part, children }) => [id, label, part, shape(children)]);
+  assert.deepEqual(shape(scene.nodeTree), [["n2", "assembly", null, [["n0", "part (n0)", "n0", []], ["n1", "part (n1)", "n1", []]]]]);
+});

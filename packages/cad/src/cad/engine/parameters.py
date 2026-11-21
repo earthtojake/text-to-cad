@@ -27,8 +27,13 @@ document's record (``served``).
 Changing a value is changing the script (``cad model set``, the page's Save): the values asked for are
 checked against the declarations (``changes``), the file's bytes against what the run recorded
 (``standing``), each number is spelled (``spelled``) and put in place of the one there (``splice``), and
-the script is built again. This module is the standard library alone: the server, which imports no
-kernel, imports it, and so does a script run where only the library is installed.
+the script is built again. A page may first look at values without writing them (a preview, the page's
+Parameters tab as a slider moves): the worker loads the script with those values in place of the
+defaults its own script declares (``recording``'s ``values``: ``param`` returns the value asked, not the
+default), builds the one model on screen and answers its geometry to that page alone; nothing is written,
+and the document is not that build (``cad_server.engine.parameters.Previewing``). This module is the
+standard library alone: the server, which imports no kernel, imports it, and so does a script run where
+only the library is installed.
 """
 
 from __future__ import annotations
@@ -49,7 +54,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterator
 
 __all__ = ["CODES", "KEYS", "REASONS", "UNITS", "Declared", "ParameterRefused", "changes", "digest", "param",
-           "record", "recording", "rows", "served", "source_of", "spelled", "splice", "standing"]
+           "previewed", "record", "recording", "rows", "served", "source_of", "spelled", "splice", "standing"]
 
 #: The options a declaration takes beside its name and default.
 KEYS = ("min", "max", "step", "unit")
@@ -126,7 +131,8 @@ def param(name: str, default: int | float, *, min: int | float | None = None, ma
     module's top level: a body can be replayed without running, and a declaration inside one would be
     lost. A build records each declaration in the model's document, where the CAD Viewer lists them;
     the value changes only in the code, by hand or by ``cad model set``, which rewrites the default
-    where it is a plain number."""
+    where it is a plain number. (The one load that returns another number is a page's preview, in the
+    engine's worker: the value a person is trying, which no document and no file keeps.)"""
     if unknown:
         raise TypeError(f"param() takes {', '.join(KEYS)} beside its name and default; not "
                         f"{', '.join(sorted(unknown))}")
@@ -158,7 +164,8 @@ def param(name: str, default: int | float, *, min: int | float | None = None, ma
                            "level (a body can be replayed without running, and its declaration would be lost)")
     held = _RECORDING[0]
     if held is not None:
-        held.declare(frame, name, value, kind, low, high, stride, unit)
+        # A preview's load (``recording``'s ``values``): the value asked for in place of the default.
+        return held.declare(frame, name, value, kind, low, high, stride, unit)
     return default
 
 
@@ -175,18 +182,24 @@ def _range(low: Any, high: Any) -> str:
 class _Recording:
     """The declarations one load of a script makes, in the order made (``declared``): each file they are
     in read and parsed once (``_sources``); ``first_party`` says whether a file is the model's own code,
-    whose declarations alone are recorded (a library's module loads once a process, never again)."""
+    whose declarations alone are recorded (a library's module loads once a process, never again). A
+    preview's load is given ``values`` (``{name: number}``) and the ``script`` they are of: a declaration
+    of that name in that file goes on with the value given, which it records, its span still the default's."""
 
-    def __init__(self, first_party: Callable[[str], bool]) -> None:
+    def __init__(self, first_party: Callable[[str], bool], values: dict[str, int | float] | None = None,
+                 script: str | None = None) -> None:
         self.first_party = first_party
+        self.values = values or {}
+        self.script = script
         self.declared: list[Declared] = []
         self._sources: dict[str, tuple[bytes, str, dict[tuple, ast.Call], list[int]] | None] = {}
 
     def declare(self, frame: Any, name: str, value: int | float, kind: str, low: Any, high: Any, stride: Any,
-                unit: str | None) -> None:
+                unit: str | None) -> int | float:
+        """Record one declaration; the value the script goes on with: its default, or a preview's value."""
         file, line = frame.f_code.co_filename, int(frame.f_lineno or 0)
         if not self.first_party(file):
-            return
+            return value
         from cad.engine.ids import canonical
 
         file = canonical(file)
@@ -195,6 +208,9 @@ class _Recording:
             raise ValueError(f"parameter {name!r} is declared at {other.file}:{other.line} and {file}:{line}; "
                              "give one declaration another name")
         span, found = self._literal(frame, file, name, value)
+        given = self.values.get(name) if file == self.script else None
+        if given is not None:
+            value = int(given) if kind == "int" else float(given)
         made = Declared(name, value, kind, low, high, stride, unit, file, line, span, found)
         if other is not None:  # the same line run again (its module loaded twice): the one declaration
             self.declared[self.declared.index(other)] = made
@@ -207,6 +223,7 @@ class _Recording:
             if len(sharing) > 1:
                 for at in sharing:
                     self.declared[at] = dataclasses.replace(self.declared[at], span=None, digest=None)
+        return value
 
     def _source(self, file: str) -> tuple[bytes, str, dict[tuple, ast.Call], list[int]] | None:
         """``file`` as this load reads it, once: its bytes, their digest, its calls by where each is, and
@@ -321,11 +338,13 @@ _RECORDING: list[_Recording | None] = [None]
 
 
 @contextlib.contextmanager
-def recording(first_party: Callable[[str], bool] = lambda _file: True) -> Iterator[list[Declared]]:
+def recording(first_party: Callable[[str], bool] = lambda _file: True, *, values: dict[str, int | float] | None = None,
+              script: str | None = None) -> Iterator[list[Declared]]:
     """Record the declarations made inside the block, a build's load of its script: the list they are
     appended to, in the order made. Each load starts from none, as it starts from no model; a ``param``
-    call outside any block records nothing."""
-    held = _Recording(first_party)
+    call outside any block records nothing. A preview's load (``values``, of the canonical ``script``):
+    each declaration of those names in that file returns the value given, and records it as its value."""
+    held = _Recording(first_party, values, script)
     previous, _RECORDING[0] = _RECORDING[0], held
     try:
         yield held.declared
@@ -515,6 +534,20 @@ def standing(data: bytes, listed: list[dict[str, Any]], name: str) -> None:
             raise ParameterRefused(f"{name} changed since its last run: the engine knows where "
                                    f"{row['name']} was, not where it is", "script_changed",
                                    "run the script first, then set the parameter")
+
+
+def previewed(declared: list[Declared], values: dict[str, Any], script: str, found: str | None) -> None:
+    """Whether a preview's load (``declared``) took every value asked (``values``) where the last run
+    recorded it: each a declaration of the model's own ``script`` with a span, read in bytes of the digest
+    the run recorded (``found``). ``ParameterRefused`` (``script_changed``) otherwise: the script on disk is
+    not the one that ran, and a preview shows the run's code at other values, never code no run read."""
+    named = {row.name: row for row in declared if row.file == script}
+    for name in values:
+        row = named.get(name)
+        if row is None or row.span is None or (found is not None and row.digest != found):
+            raise ParameterRefused(f"{os.path.basename(script)} changed since its last run: the engine previews the "
+                                   "code that ran, not another", "script_changed",
+                                   "run the script first, then change the parameter")
 
 
 def splice(data: bytes, edits: list[tuple[int, int, str]]) -> bytes:

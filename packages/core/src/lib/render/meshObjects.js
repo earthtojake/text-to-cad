@@ -11,11 +11,12 @@
 /**
  * @typedef {{ name: string, geometry: import("three").BufferGeometry,
  *   color: import("three").Color | null, opacity?: number, finish?: {metalness: number, roughness: number} | null,
- *   paletteIndex: number, path: number[] | null }} MeshObject
+ *   paletteIndex: number, path: number[] | null, body?: number }} MeshObject
  *   `color`: the object's source colour (linear, as authored), or null when the
  *   file gave it none and the viewer's own surface colour applies.
  *   `paletteIndex`: the object's place when a palette is cycled over the file.
  *   `path`: a 3MF object's place in the file's build (`threeMfMeshData.js`), or null (an STL).
+ *   `body`: an STL body's number, from 1 (`stlBodies.js`); an STL not split is body 1.
  */
 
 // A palette has always been dealt over a file's objects in the order of this key
@@ -76,7 +77,7 @@ export function buildMeshObjects(THREE, meshData) {
   if (!vertexCount || !triangleCount) return [];
   const ranges = Array.isArray(meshData.parts) && meshData.parts.length
     ? meshData.parts
-    : [{ name: "", vertexOffset: 0, vertexCount, triangleOffset: 0, triangleCount }];
+    : [{ name: String(meshData.name || ""), vertexOffset: 0, vertexCount, triangleOffset: 0, triangleCount }];
   // Once one object is coloured the file is: the rest keep the colour their material
   // carried (a writer's default grey included) rather than the viewer's surface colour.
   const colored = meshData.has_source_colors === true && meshData.colors?.length === meshData.vertices.length;
@@ -91,7 +92,8 @@ export function buildMeshObjects(THREE, meshData) {
       opacity: Number.isFinite(range.opacity) ? range.opacity : 1,
       finish: range.finish || null,
       paletteIndex: places[index],
-      path: Array.isArray(range.path) && range.path.length ? range.path : null
+      path: Array.isArray(range.path) && range.path.length ? range.path : null,
+      body: Number.isInteger(range.body) ? range.body : index + 1
     };
   }).filter(Boolean);
 }

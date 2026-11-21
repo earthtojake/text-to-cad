@@ -31,7 +31,7 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
         className={cn(
           "flex size-11 items-center justify-center rounded-xl border",
           tone === "warn"
-            ? "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            ? "border-warning/25 bg-warning/10 text-warning"
             : "bg-muted/40 text-muted-foreground"
         )}
       >

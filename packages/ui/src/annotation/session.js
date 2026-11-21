@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sameView } from './views.js';
 import { useViewerHistory } from '../renderers/kit/shell/useViewerHistory.js';
-import { strokeWidthAt } from './geometry.js';
+import { isHighlighterStroke, strokeWidthAt } from './geometry.js';
 import { DEFAULT_PENCIL_TOOL, DEFAULT_SHAPE_TOOL, styleSlot, toolFamily } from './tools.js';
 import { useControlUsage } from '../usage/controls.js';
 
@@ -9,7 +9,7 @@ import { useControlUsage } from '../usage/controls.js';
 const toolControl = tool => `${toolFamily(tool)}_${tool === 'freedraw' ? 'pen' : tool}`;
 
 /**
- * @typedef {{ color: string, strokeWidth: number, placement: import('./toolbar.jsx').AnnotationPlacement }} DrawingStyle
+ * @typedef {{ color: string, strokeWidth: number, placement: import('./toolbar.jsx').AnnotationPlacement, dash: import('./geometry.js').AnnotationDash }} DrawingStyle
  */
 
 /**
@@ -30,6 +30,8 @@ const toolControl = tool => `${toolFamily(tool)}_${tool === 'freedraw' ? 'pen' :
  *   else Pencil's `pencil`.
  * @property {import('./tools.js').PencilTool} pencil  What Pencil draws with (the pen first), kept while Shapes is up.
  * @property {import('./tools.js').ShapeTool} shape  What Shapes draws with (the rectangle first), kept while Pencil is up.
+ * @property {import('./tools.js').AnnotationFamily} lastFamily  The family last drawn with (Pencil's or Shapes'), the one
+ *   the strip's one Draw tool takes up and shows: what was last chosen, or last up.
  * @property {DrawingStyle} style  What the tool in hand puts down next: its slot's colour, stroke width and placement
  *   (`surface`, the default, each point on the visible surface under it, or `plane`, each on the plane of the surface the
  *   mark starts on; off the model both carry on at that plane: `annotation3d.js`'s `projectAnnotations`).
@@ -45,10 +47,12 @@ const toolControl = tool => `${toolFamily(tool)}_${tool === 'freedraw' ? 'pen' :
  * @property {(color: string) => void} selectColor  What the tool in hand draws next: its slot's, the others keep theirs.
  * @property {(width: number) => void} selectStrokeWidth  The same.
  * @property {(placement: import('./toolbar.jsx').AnnotationPlacement) => void} selectPlacement  The same: ink already down stays where it lies.
- * @property {(style: { color?: string, width?: number }) => void} restyle
+ * @property {(dash: import('./geometry.js').AnnotationDash) => void} selectDash  The line style the tool in hand draws next (`annotate_line_style`).
+ * @property {(style: { color?: string, width?: number, dash?: import('./geometry.js').AnnotationDash }) => void} restyle
  *   The ink selected, as one step: its colour, a stroke's weight (a shape's at that width, the pen's
  *   heavier, as each draws).
- * @property {(shape: string, areas: readonly import('../renderers/kit/tools/annotate/annotation3d.js').AnnotationItem[]) => void} fill
+ * @property {(shape: string, color: string) => void} fillColor  A filled shape's fill in another colour, one step.
+ * @property {(shape: string, areas: readonly import('../renderers/kit/tools/annotate/annotation3d.js').AnnotationItem[], color?: string | null) => void} fill
  *   A closed shape filled, as one step: the fill joins the shape's group, picked and deleted with it.
  * @property {(items: readonly import('../renderers/kit/tools/annotate/annotation3d.js').AnnotationItem[]) => void} add  Ink put down: one step.
  * @property {(ids: readonly string[]) => void} remove  Ink erased or deleted: one step.
@@ -66,10 +70,22 @@ const toolControl = tool => `${toolFamily(tool)}_${tool === 'freedraw' ? 'pen' :
  */
 
 // The pen and Shapes open in the neon red; the highlighter in the palette's neon yellow (`ANNOTATION_COLORS`), as a highlighter is.
+// Whether a line style applies to a stroke: not the highlighter's (a broad translucent band has none), nor an arrow's
+// head (the strokes of a group that end where a longer one of it does: its tip), which stays solid.
+const tail = item => Array.from(item.points.slice(-3));
+const sameTail = (a, b) => a.length === b.length && a.every((value, index) => Math.abs(value - b[index]) < 1e-6);
+function dashApplies(item, items) {
+  if (isHighlighterStroke(item)) return false;
+  if (!item.group) return true;
+  return !items.some(other => other !== item && other.kind === 'stroke' && other.group === item.group
+    && other.points.length > item.points.length && sameTail(tail(other), tail(item)));
+}
+
+// Every slot's line is solid until the person picks another (`dash`: the pen's and Shapes' own; the highlighter has none).
 const DEFAULT_STYLES = Object.freeze({
-  pen: Object.freeze({ color: '#ff2d55', strokeWidth: 2, placement: 'surface' }),
-  highlighter: Object.freeze({ color: '#ffe600', strokeWidth: 2, placement: 'surface' }),
-  shapes: Object.freeze({ color: '#ff2d55', strokeWidth: 2, placement: 'surface' }),
+  pen: Object.freeze({ color: '#ff2d55', strokeWidth: 2, placement: 'surface', dash: 'solid' }),
+  highlighter: Object.freeze({ color: '#ffe600', strokeWidth: 2, placement: 'surface', dash: 'solid' }),
+  shapes: Object.freeze({ color: '#ff2d55', strokeWidth: 2, placement: 'surface', dash: 'solid' }),
 });
 const SLOTS = Object.keys(DEFAULT_STYLES);
 const NO_ANNOTATIONS = Object.freeze([]);
@@ -93,6 +109,8 @@ export function useAnnotationSession(family = 'pencil', initial = {}, history = 
   }), [initial.pencil, initial.shape, initial.styles]);
   const [pencil, setPencil] = useState(start.pencil);
   const [shape, setShape] = useState(start.shape);
+  const [lastFamily, setLastFamily] = useState(family === 'shapes' ? 'shapes' : 'pencil');
+  useEffect(() => { if (family === 'pencil' || family === 'shapes') setLastFamily(family); }, [family]);
   const [styles, setStyles] = useState(start.styles);
   const own = useViewerHistory();
   const log = history ?? own;
@@ -150,12 +168,17 @@ export function useAnnotationSession(family = 'pencil', initial = {}, history = 
       : { ...current, [target]: { ...current[target], ...change } }));
   }, []);
   const actions = useMemo(() => ({
-    selectTool: next => { controls.used(toolControl(next)); return toolFamily(next) === 'shapes' ? setShape(next) : setPencil(next); },
+    selectTool: next => {
+      controls.used(toolControl(next));
+      setLastFamily(toolFamily(next));
+      return toolFamily(next) === 'shapes' ? setShape(next) : setPencil(next);
+    },
     selectColor: next => { controls.changed('annotate_color'); setStyle({ color: next }); },
     selectStrokeWidth: next => { controls.used('annotate_stroke_width'); setStyle({ strokeWidth: next }); },
     selectPlacement: next => { controls.used(next === 'plane' ? 'annotate_on_plane' : 'annotate_on_surface'); setStyle({ placement: next }); },
+    selectDash: next => { controls.used('annotate_line_style'); setStyle({ dash: next }); },
     // Not a style: ink already down, selected or not, stays where it lies.
-    restyle: ({ color: nextColor, width }) => {
+    restyle: ({ color: nextColor, width, dash }) => {
       const ids = new Set(selectedRef.current);
       if (!ids.size) return;
       controls.changed('annotate_restyle');
@@ -165,18 +188,22 @@ export function useAnnotationSession(family = 'pencil', initial = {}, history = 
           if (!ids.has(item.id)) return item;
           const styled = { ...item };
           if (nextColor != null && item.color !== nextColor) styled.color = nextColor;
+          // A line style restyles a stroke the line style applies to: never the highlighter's, nor an arrow's head.
+          if (dash != null && item.kind === 'stroke' && dashApplies(item, current)) {
+            if (dash === 'solid') delete styled.dash; else styled.dash = dash;
+          }
           if (width != null && item.kind === 'stroke') {
             // The pen's own weight is heavier than a shape's at the same setting, the highlighter's broad (`geometry.js`).
             const drawn = strokeWidthAt(item, width);
             if (item.width !== drawn) styled.width = drawn;
           }
-          if (Object.keys(styled).some(key => styled[key] !== item[key])) { changed = true; return styled; }
+          if (Object.keys(styled).length !== Object.keys(item).length || Object.keys(styled).some(key => styled[key] !== item[key])) { changed = true; return styled; }
           return item;
         });
         return changed ? next : current;
       });
     },
-    fill: (shape, areas) => {
+    fill: (shape, areas, color = null) => {
       if (!areas.length) return;
       controls.used('annotate_fill');
       step(current => {
@@ -184,10 +211,19 @@ export function useAnnotationSession(family = 'pencil', initial = {}, history = 
         if (!target) return current;
         const group = target.group ?? `group-${shape}`;
         return [...current.map(item => (item.id === shape && !item.group ? { ...item, group } : item)),
-          ...areas.map(area => ({ ...area, group, color: target.color }))];
+          ...areas.map(area => ({ ...area, group, color: color ?? target.color }))];
       });
       // A picked shape's fill is picked with it, as its group is.
       setSelected(current => (current.includes(shape) ? [...current, ...areas.map(area => area.id)] : current));
+    },
+    // A shape's fill in another colour (the Fill tool's press on a filled shape with another colour in hand): one step.
+    fillColor: (shape, color) => {
+      controls.used('annotate_fill');
+      step(current => {
+        const group = current.find(item => item.id === shape)?.group;
+        if (!group || !current.some(item => item.kind === 'area' && item.group === group && item.color !== color)) return current;
+        return current.map(item => (item.kind === 'area' && item.group === group ? { ...item, color } : item));
+      });
     },
     select: ids => setSelected([...ids]),
     undo: () => { logRef.current.undo(); },
@@ -202,7 +238,7 @@ export function useAnnotationSession(family = 'pencil', initial = {}, history = 
     },
   }), [step, put, setStyle, controls]);
   const hasContent = items.length > 0;
-  return { ready: true, tool, pencil, shape, style: styles[slot ?? 'pen'], styles, items, selected, views,
+  return { ready: true, tool, pencil, shape, lastFamily, style: styles[slot ?? 'pen'], styles, items, selected, views,
     canUndo: log.canUndo, canRedo: log.canRedo, hasContent, hasAnnotation: hasContent,
     add, remove, noteView, forget: actions.clear, ...actions };
 }

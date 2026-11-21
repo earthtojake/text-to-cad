@@ -12,6 +12,7 @@ import { PointerPick } from "../kit/tools/select/usePointerPick.js";
 import { sceneCopyText, useSceneDescribe, useSceneInspect, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
 import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
+import SceneTreeSection from "../kit/inspector/SceneTreeSection.jsx";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { MESH_DECLINED_LIVE_COMMANDS, MESH_TOOL, STL_TOOL_MODES, THREE_MF_TOOL_MODES } from "./tools.js";
 import { useMeshScene } from "./useMeshScene.js";
@@ -123,8 +124,12 @@ function MeshSurface({ view, data }) {
   const described = useSceneDescribe(parted ? scene : null);
   const inspect = useSceneInspect({ scene: previewing ? null : parted ? scene : null, selection, describe: described });
 
+  // A 3MF of several objects has the view's panel, its Model tab the objects (`SceneTreeSection.jsx`), as a GLB's nodes
+  // are; an STL, and a 3MF of one object, none: there is nothing to list that the model does not show.
+  const sidebar = parted && scene?.nodeTree?.length > 1 ? <SceneTreeSection tree={scene.nodeTree} selection={selection} active={!previewing}
+    onPick={() => { if (shellRef.current?.toolMode !== MESH_TOOL.SELECT) shellRef.current?.selectTool(MESH_TOOL.SELECT); }} /> : null;
   return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} previewView={previewView}
-    inspect={inspect}
+    inspect={inspect} sidebar={sidebar}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameObject}
     onClearReferences={() => { selection.clear(); measure.select([]); }}
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}

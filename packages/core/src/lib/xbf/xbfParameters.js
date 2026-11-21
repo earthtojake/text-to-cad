@@ -2,9 +2,11 @@
 // structure JSON (`xbfDocument.js`), each a named number its script declares -- its value as the
 // document was built, its kind (a whole number or a float), its range and step where declared, its
 // unit, and whether the engine can write it back (`writable`, else `reason`). A page holds new
-// values as drafts and saves the changed ones in one request (`client.setModelParameters`): the
-// engine rewrites the numbers in the script and builds the model again, and the page reads the
-// rebuilt document as it reads any new version. Nothing here draws or fetches.
+// values as drafts, shows the model at them as they move (`client.previewModelParameters`: the engine
+// builds it for that page alone and writes nothing), and saves the changed ones in one request
+// (`client.setModelParameters`): the engine rewrites the numbers in the script and builds the model
+// again, and the page reads the rebuilt document as it reads any new version. Nothing here draws or
+// fetches.
 
 /** Why a parameter cannot be written, the engine's closed set (any other reads as read-only, unexplained). */
 export const PARAMETER_REASONS = Object.freeze(["file", "no_worker", "shared", "expression"]);
@@ -192,4 +194,19 @@ export function savedParametersNote(saved) {
   const said = changes.filter(change => change.from !== change.to)
     .map(change => `${change.name} ${change.from} -> ${change.to}${change.file ? ` (${change.file})` : ""}`);
   return said.length ? `Saved from the viewer since your last edit: ${said.join(", ")}` : "";
+}
+
+/**
+ * What a page tells an agent of the values on screen that are not saved (a preview: the model drawn at
+ * values the script does not hold), as one line of plain text for a message sent while they are: each
+ * parameter's value in the code and on screen, and the file that declares it ("Shown in the viewer, not
+ * saved: wall 2 -> 3.5 (bracket.py); the script still holds the first values"). Said with every message
+ * while it is so: it is the view's state, not a change. "" for none.
+ * @param {readonly XbfParameter[]} parameters @param {Record<string, number>} changed  `changedParameters`'s.
+ * @returns {string}
+ */
+export function unsavedParametersNote(parameters, changed) {
+  const said = (parameters || []).filter(parameter => Object.hasOwn(changed || {}, parameter.name))
+    .map(parameter => `${parameter.name} ${parameter.value} -> ${changed[parameter.name]}${parameter.source ? ` (${baseName(parameter.source)})` : ""}`);
+  return said.length ? `Shown in the viewer, not saved: ${said.join(", ")}; the script still holds the first values` : "";
 }

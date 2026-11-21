@@ -2,6 +2,7 @@ import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } f
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@cad/ui/utils";
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
+import { FlatPanelSectionScope } from "../shell/FlatPanel.jsx";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 import ResizeGrip from "./ResizeGrip.jsx";
@@ -31,7 +32,7 @@ const KEY_NUDGE_PX = 16;
  * Every panel's heading text: the size and weight of Display's section headings
  * (`FILE_SHEET_SECTION_HEADING_CLASSES`, 11px), so every heading in the stack reads alike.
  */
-export const TOOL_PANEL_HEADING_TEXT_CLASS = "text-tiny font-normal leading-4 text-foreground";
+export const TOOL_PANEL_HEADING_TEXT_CLASS = "text-xs font-normal leading-4 text-foreground";
 
 /** A panel header's small icon button: the chevron, the X, and a tool's settings menu (`ToolModeMenu.jsx`'s `ToolSettingsMenu`). */
 export const TOOL_PANEL_BUTTON_CLASS = "flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
@@ -208,19 +209,18 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
 
   const dragging = draft !== null;
   if (tabbed) {
-    const searching = stack.searching;
-    return <section ref={section} aria-label={label} hidden={hidden || !(searching || stack.activeSection === id)} role={stack.single ? "region" : "tabpanel"}
-      id={`flat-panel-body-${id}`} aria-labelledby={stack.single ? undefined : `flat-panel-tab-${id}`} data-flat-panel-section={id} data-tool-panel-id={id || undefined} data-tool-panel={fit}
-      className={cn("min-w-0 text-tiny", searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
-      {searching && !stack.single ? <h3 className="flex h-6 items-center px-2 text-tiny text-muted-foreground">{tabName}</h3> : null}
+    // One tab shows at a time, a search's too (it filters each tab the panel's search covers: `FlatPanel.jsx`).
+    return <section ref={section} aria-label={label} hidden={hidden || stack.activeSection !== id} role="tabpanel"
+      id={`flat-panel-body-${id}`} aria-labelledby={`flat-panel-tab-${id}`} data-flat-panel-section={id} data-tool-panel-id={id || undefined} data-tool-panel={fit}
+      className="min-w-0 text-ui">
       <div ref={body} data-tool-panel-body="" className="min-w-0">
-        <div ref={content} className="flow-root">{children}</div>
+        <div ref={content} className="flow-root"><FlatPanelSectionScope id={id}>{children}</FlatPanelSectionScope></div>
       </div>
     </section>;
   }
   return <section ref={section} aria-label={label} hidden={hidden} data-tool-panel={fit} data-tool-panel-id={id || undefined}
     data-collapsed={collapsed ? "" : undefined} data-resizable={sized ? "" : undefined} data-tool-panel-lead={lead ? "" : undefined}
-    className={cn("pointer-events-auto relative flex max-w-full flex-col rounded-md text-tiny", FLOATING_CHROME_SURFACE_CLASS, collapsed ? "shrink-0" : FIT[fit])}
+    className={cn("pointer-events-auto relative flex max-w-full flex-col rounded-md text-xs", FLOATING_CHROME_SURFACE_CLASS, collapsed ? "shrink-0" : FIT[fit])}
     style={{ width, maxHeight: collapsed || cap === null ? undefined : `${cap}px`, minHeight, order: lead ? -1 : undefined }}>
     {heading}
     {/* Folded under a heading, the header (a tree's filter) goes with the body. */}

@@ -5,8 +5,7 @@ const GROUP_KEYS = {"ICs": "board.text.ics", "Transistors": "board.text.transist
  * **Parts**, in blocks — the schematic sheets their footprints record (`(sheetname ...)`, the
  * payload's `parts[].sheet`), else, on a board that records none, their kinds (ICs, Resistors, ...)
  * — and its **Nets**, flat, those of pins on nothing under one shut group. A part's pads and a net's
- * are not rows: they are the picked part's or net's detail (`boardDetail`), under the lists. The
- * search still finds a pad: the Parts' search reads each part with its pads (`partsSearch`).
+ * are not rows; the search still finds a pad: the Parts' search reads each part with its pads (`partsSearch`).
  * Nodes are what the kit's tree search reads (`id`, `label`, `children`, `selectionId` — the
  * reference a pasted `#U3.9` finds — and `searchAliases`: a part's value, footprint name and MPN),
  * plus what the row selects (`pick`, its reference; a block's `picks`, every part in it) and a muted `detail`.
@@ -15,7 +14,7 @@ const GROUP_KEYS = {"ICs": "board.text.ics", "Transistors": "board.text.transist
  * missing), each row saying why; it selects and isolates as any block does, in 2D and in 3D alike.
  */
 import { formatBoardRefSelector, parseBoardRefSelector } from "@cad/core/lib/boardRefs.js";
-import { boardReferenceId, describeBoardReference, partModels } from "./boardFacts.js";
+import { boardFactLabel, boardReferenceId, describeBoardReference, partModels } from "./boardFacts.js";
 
 // KiCad's reference prefixes, read as what the parts are. A prefix not here is "Other".
 const KINDS = Object.freeze([
@@ -160,38 +159,6 @@ export function boardTreeAncestors(tree, id) {
   return chain;
 }
 
-/**
- * What a selector picks, in detail (`describeBoardPick`'s `related`): a part's pads, each its number,
- * its pin's name and its net; a net's pads, each its part and number; a pad, its part's. Null for
- * anything else (a track, a via, a block of parts).
- */
-export function boardDetail(index, selector, t = english) {
-  const parsed = parseBoardRefSelector(selector);
-  if (!parsed) return null;
-  const count = (n) => t(n === 1 ? "board.text.count_pad" : "board.text.count_pads", { count: n });
-  if (parsed.kind === "part" || parsed.kind === "pad") {
-    const part = index.parts.get(parsed.ref);
-    if (!part) return null;
-    const rows = partPads(index, part);
-    return {
-      id: `part:${part.ref}`, kind: "part", pick: `#${part.ref}`, label: part.ref,
-      detail: [part.value, part.footprint.split(":").pop()].filter(Boolean).join(" · "),
-      count: count(rows.length), listLabel: t("board.text.pads_of", { name: part.ref }), rows,
-    };
-  }
-  if (parsed.kind === "net" || parsed.kind === "copper") {
-    const net = index.nets.get(parsed.net);
-    if (!net) return null;
-    const rows = net.pads.map((pad) => ({ pad, key: `${pad.ref}.${pad.number}` })).sort((a, b) => naturalCompare(a.key, b.key))
-      .map(({ pad }) => padNode(pad, { underNet: true }));
-    return {
-      id: `net:${net.name}`, kind: "net", pick: formatBoardRefSelector({ kind: "net", net: net.name }), label: net.name, detail: "",
-      count: count(rows.length), listLabel: t("board.text.pads_on_net", { name: net.name }), rows,
-    };
-  }
-  return null;
-}
-
 /** The net a pick is on, where it is on one: a pad's, a piece of copper's, a track's, a via's, a zone's. */
 function netOf(resolved) {
   if (!resolved) return "";
@@ -209,29 +176,26 @@ export function boardPickTip(index, id, t = english) {
   return name ? [name, resolved?.kind === "pad" ? resolved.pad.net : resolved?.kind === "part" ? resolved.part?.value : ""].filter(Boolean).join(" · ") : "";
 }
 
+// A card's few key facts, by the board's own names for them (`boardFacts.js`'s): what a part is and where
+// its model is, what a pad or a piece of copper is on and its size; where it is, its rotation, its fields
+// and the like are the board's to read, not the card's.
+const KEY_FACTS = Object.freeze(["Value", "Footprint", "Side", "Net", "Pin", "Type", "Class", "Pads", "Layer", "Layers", "Width",
+  "Length", "Diameter", "Drill", "Text"]);
+
 /**
- * A pick, as the Selected pane, its chip's card and the hover tip read it (`kit/inspector/inspect.js`'s
- * `DetailItem`): what it is — its name, a line in words for a pad, its ID and its facts (`boardFacts.js`'s)
- * — and what it is connected to: a part its own pads, each with its net; a net its pads; a pad, a track, a
- * via, a pour or a zone the pads on its net, the pad itself lit there. Its hover tip's short kind: a pad's
- * net, a part's value. Its glyph is its chip's (`boardReferences.jsx`'s kinds). Null for a selector the
- * board does not resolve.
+ * A pick, as its chip's card and the hover tip read it (`kit/inspector/inspect.js`'s `DetailItem`): the
+ * thing in focus alone — its name and its few key facts (`KEY_FACTS` of `boardFacts.js`'s, and a part's 3D
+ * model), never what it is connected to (the Parts and the Nets are the lists). Its hover tip's short kind: a
+ * pad's net, a part's value. Its glyph is its chip's (`boardReferences.jsx`'s kinds). Null for a selector
+ * the board does not resolve.
  */
 export function describeBoardPick(index, id, t = english, models = null) {
   const resolved = index.resolve(id), described = describeBoardReference(resolved, index, t, models);
   if (!described) return null;
-  const part = resolved.kind === "pad" ? index.parts.get(resolved.pad.ref) : null;
-  const what = resolved.kind === "pad" ? [t("selection.padOf", { part: resolved.pad.ref }), part?.value].filter(Boolean).join(" · ")
-    : "";
-  const net = resolved.kind === "net" ? resolved.net.name : netOf(resolved);
-  const list = resolved.kind === "part" ? boardDetail(index, `#${resolved.part.ref}`, t)
-    : net ? boardDetail(index, formatBoardRefSelector({ kind: "net", net }), t) : null;
-  const title = resolved.kind === "part" ? t("board.text.pads_of", { name: resolved.part.ref })
-    : resolved.kind === "net" ? t("board.text.pads_on_net", { name: net }) : t("selection.connectedTo", { name: net });
+  const kept = new Set([...KEY_FACTS.map(key => boardFactLabel(key, t)), t("board.text.model_3d")]);
   return {
     id: `selected:${id}`, pick: id, kind: described.icon || described.glyph || "solid", title: described.name,
     tip: resolved.kind === "pad" ? resolved.pad.net || "" : resolved.kind === "part" ? resolved.part.value || "" : "",
-    what, ref: boardReferenceId(id), facts: described.facts,
-    related: list?.rows.length ? { title, count: list.count, rows: list.rows } : null
+    facts: described.facts.filter(fact => kept.has(fact.label))
   };
 }

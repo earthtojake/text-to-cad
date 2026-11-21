@@ -19,7 +19,7 @@ export default function JointHandleOverlay({ handles = null, handlesRef = null, 
         hidden
         role="status"
         data-cad-joint-handle-label=""
-        className="pointer-events-none absolute left-0 top-0 z-10 whitespace-pre rounded-md border border-border bg-background px-1.5 py-0.5 text-micro tabular-nums text-foreground shadow-sm"
+        className="pointer-events-none absolute left-0 top-0 z-10 whitespace-pre rounded-md border border-border bg-background px-1.5 py-0.5 text-tiny tabular-nums text-foreground shadow-sm"
       />
     </>
   );

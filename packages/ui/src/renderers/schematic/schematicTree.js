@@ -1,8 +1,8 @@
 import { english } from "@cad/ui/i18n";
 /**
  * A schematic's lists: its **Parts**, in blocks, the sheets they are placed on, and its **Nets**,
- * flat, as a board's (`../board/boardTree.js`: a part's pins and a net's are the picked one's detail,
- * `schematicDetail`, and the Parts' search reads each part with its pins, `partsSearch`) — and its
+ * flat, as a board's (`../board/boardTree.js`: a part's pins and a net's are no rows, and the Parts'
+ * search reads each part with its pins, `partsSearch`) — and its
  * **Hierarchy**, the sheets as KiCad's Hierarchy Navigator lists them, the root and the sheets each
  * places, in page order. Nodes are what the kit's tree search reads (`id`, `label`, `children`,
  * `selectionId` and `searchAliases`: a part's value, footprint name, symbol and MPN, a pin's name),
@@ -111,36 +111,6 @@ export function schematicRowOwners(index, selector) {
   return resolved.kind === "pin" ? [`part:${resolved.ref}`, ...net] : net;
 }
 
-/**
- * What a selector picks, in detail (`describeSchematicPick`'s `related`): a part's pins, each its number,
- * name and net; a net's pins, each its part and number; a pin, its part's. Null for anything else.
- */
-export function schematicDetail(index, selector, t = english) {
-  const parsed = parseBoardRefSelector(selector);
-  if (!parsed) return null;
-  const count = (n) => t(n === 1 ? "schematic.text.count_pin" : "schematic.text.count_pins", { count: n });
-  if (parsed.kind === "part" || parsed.kind === "pad") {
-    const part = index.parts.get(parsed.ref);
-    if (!part) return null;
-    const rows = (pinsByPart(index).get(part.ref) || []).map((pin) => pinNode(pin));
-    return {
-      id: `part:${part.ref}`, kind: "part", pick: `#${part.ref}`, label: part.ref,
-      detail: [part.value, String(part.footprint || "").split(":").pop()].filter(Boolean).join(" · "),
-      count: count(rows.length), listLabel: t("schematic.text.pins_of", { name: part.ref }), rows
-    };
-  }
-  if (parsed.kind === "net") {
-    const net = index.nets.get(parsed.net);
-    if (!net) return null;
-    const rows = net.pins.slice().sort(naturalCompare).map((key) => index.pins.get(key)).filter(Boolean).map((pin) => pinNode(pin, { underNet: true }));
-    return {
-      id: `net:${net.name}`, kind: "net", pick: formatBoardRefSelector({ kind: "net", net: net.name }), label: net.name, detail: "",
-      count: count(rows.length), listLabel: t("schematic.text.pins_on_net", { name: net.name }), rows
-    };
-  }
-  return null;
-}
-
 /** The Hierarchy: the root, and under each sheet the sheets it places, in page order; each row its page number. */
 export function buildSheetTree(index) {
   const node = (path) => ({
@@ -167,27 +137,17 @@ export function schematicPickTip(index, id, t = english) {
 }
 
 /**
- * A pick, as the Selected pane, its chip's card and the hover tip read it (`kit/inspector/inspect.js`'s
- * `DetailItem`): what it is — its name, a line in words for a pin, its ID and its facts
- * (`schematicFacts.js`'s) — and what it is connected to: a part its own pins, each with its net; a net its
- * pins; a pin, a wire or a label the pins on its net, the pin itself lit there. Its hover tip's short
- * kind: a pin's net, a part's value. Null for a selector the schematic does not resolve.
+ * A pick, as its chip's card and the hover tip read it (`kit/inspector/inspect.js`'s `DetailItem`): the
+ * thing in focus alone — its name and its facts (`schematicFacts.js`'s, a few a kind) — never what it is
+ * connected to (the Parts and the Nets are the lists). Its hover tip's short kind: a pin's net, a part's
+ * value. Null for a selector the schematic does not resolve.
  */
 export function describeSchematicPick(index, id, t = english) {
   const resolved = index.resolve(id), described = describeSchematicReference(resolved, index, t);
   if (!described) return null;
-  const part = resolved.kind === "pin" ? index.parts.get(resolved.ref) : null;
-  const what = resolved.kind === "pin" ? [t("selection.pinOf", { part: resolved.ref }), part?.value].filter(Boolean).join(" · ")
-    : "";
-  const net = resolved.kind === "net" ? resolved.net : resolved.kind === "part" ? "" : String(resolved.net || "");
-  const list = resolved.kind === "part" ? schematicDetail(index, `#${resolved.ref}`, t)
-    : net ? schematicDetail(index, formatBoardRefSelector({ kind: "net", net }), t) : null;
-  const title = resolved.kind === "part" ? t("schematic.text.pins_of", { name: resolved.ref })
-    : resolved.kind === "net" ? t("schematic.text.pins_on_net", { name: net }) : t("selection.connectedTo", { name: net });
   return {
     id: `selected:${id}`, pick: id, kind: described.glyph || "part", title: described.name,
     tip: resolved.kind === "pin" ? String(resolved.net || "") : resolved.kind === "part" ? String(resolved.part?.value || "") : "",
-    what, ref: schematicReferenceId(id), facts: described.facts,
-    related: list?.rows.length ? { title, count: list.count, rows: list.rows } : null
+    facts: described.facts
   };
 }

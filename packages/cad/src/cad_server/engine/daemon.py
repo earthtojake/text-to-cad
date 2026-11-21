@@ -78,6 +78,7 @@ pages waiting on a served document the frame's build writes (``serve.Server.buil
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -682,8 +683,12 @@ class Daemon:
         self.models = Models(self)
         from cad_server.engine.parameters import Setting
 
-        # A model's parameters set in its script and the script built again (``parameters``): ``set``.
+        # A model's parameters set in its script and the script built again (``parameters``): ``set``; and a page's
+        # look at other values, built in the model's worker and held for that page alone: ``preview``.
         self.setting = Setting(self)
+        from cad_server.engine.parameters import Previewing
+
+        self.previewing = Previewing(self)
         from cad_server.engine import registry
         from cad_server.engine.checks import Checks, Pool, pool_size
         from cad_server.engine.checks_runner import Limits, Runner
@@ -1071,6 +1076,7 @@ class Daemon:
                 # A model's parameters as its live worker recorded them, and their ``set`` (``parameters``).
                 self.server.parameters = self.models.live
                 self.server.set_parameters = self.setting.set
+                self.server.preview_parameters = self.previewing.preview
                 application = getattr(self.server.http, "app", None)
                 if application is not None:
                     application.worked = self.stamp  # an agent's tool call is a command too (``mcp.http.Sessions``)
@@ -1576,9 +1582,13 @@ class Daemon:
                 return
             with self.busy_lock:
                 self.busy += 1
+            first = contextlib.ExitStack()
             try:
                 script = request["script"]
                 key, cwd, _python = self._routed(request)  # a build's Python is ``caller``'s
+                # The script's turn (``parameters.Setting.building``): a set of it under way first, then this
+                # build before a set of it and before a page's preview of it (``parameters.Previewing``).
+                first.enter_context(self.setting.building(key, send))
                 for attempt in (1, 2):
                     worker = None
                     fresh = None
@@ -1665,6 +1675,7 @@ class Daemon:
                         if worker is not None:
                             self.release(worker)
             finally:
+                first.close()
                 with self.busy_lock:
                     self.busy -= 1
                     self.worked = time.monotonic()
@@ -1953,6 +1964,7 @@ class Daemon:
             self.door.sweep()
         self.supervisor.shed(self.pressure.under())
         self.models.prune()
+        self.previewing.expire()  # a page's previews nobody has read for a while (``parameters.Previewing``)
         _send_counts()
         if self.draining or self.stopping.is_set():
             return

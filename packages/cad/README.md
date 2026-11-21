@@ -481,7 +481,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     they do (`dfm`, `interference`, `solve`, `ranges`, `set`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
     `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, `cad.model.set`, ...), one to one with the commands that
     call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`, `cad model set`; the
-    CAD Viewer's Parameters Save is `set`'s too, the same code: law 31); serving, the engine's status, stopping it and running it (`cad serve`,
+    CAD Viewer's Parameters Save is `set`'s too, the same code: law 31; the preview a page shows before it
+    saves is no operation and no command, since nothing but that page reads it); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
     are commands only, with no function of the library. Every successful server-backed build reports its id and localhost
     viewer URL, including a build with file outputs. A cold `daemon=False` build has no served
@@ -502,14 +503,18 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     and starts a build: `cad model set` (law 31), asked by a person or an agent -- the command, its function, the
     page's Save -- never on its own. It reads the model's own script to check that its bytes are the ones its last
     run read, writes the numbers asked, and runs that run again, as it was run, in the model's warm worker: what the
-    engine knows of the model is then what that run told it, as ever.
+    engine knows of the model is then what that run told it, as ever. Its preview, a page's look at other values
+    before a Save (law 31), reads the script the same way, asked by that page as a person moves a value: only
+    bytes of its last run's digest, loaded in that run's warm worker at those values to build the one model on
+    screen; what the engine knows of the model is unchanged by it, and the page alone sees what it built.
     The one startup exception is the JSON identity migration (the engine's README, **Identity
     migration**): it hashes existing scripts once for older records, without importing them or
     reading or writing an XBF.
     *Pressure-test*: build a model, then edit its script, its modules and the files its bodies
     read, without running it: every page, the home, every verb and tool and `cad server status` answer
-    as they did before the edit -- but `cad model set`, which reads the script and refuses, since it changed
-    (`script_changed`) -- and no other process of the engine has opened a file of the model's code since its run.
+    as they did before the edit -- but `cad model set` and a page's preview, which read the script and refuse,
+    since it changed (`script_changed`) -- and no other process of the engine has opened a file of the model's
+    code since its run.
 
 
 23. **One table names every document type and integration.** *The package.* The registry (`cad.registry`) is the
@@ -659,10 +664,16 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     file, and then runs that run again in the model's warm worker; a build at the new values that breaks a model
     (one that built before, or now fails otherwise than it did) puts the bytes back and builds again, so the
     document stays the last good one -- never over another writer's change: a file changed meanwhile is left as
-    it is, and said so. There is no override, no preview build and no value kept anywhere but the code: a
-    parameter another module declares, or one whose default is an expression or a literal not its own alone (a
-    loop's call, a file not in UTF-8), is listed and never written, and a document no live worker built lists
-    its parameters read-only. The mechanism: the engine's **Parameters**.
+    it is, and said so. Only a saved value is the model: a parameter another module declares, or one whose
+    default is an expression or a literal not its own alone (a loop's call, a file not in UTF-8), is listed and
+    never written, and a document no live worker built lists its parameters read-only. A page may look at
+    other values before it saves them: a preview, the model on screen built at those values in the same warm
+    worker (the script's own declarations returning them in place of their defaults, its bytes those its last
+    run read), for the one page that asked. A preview is held in the server's memory for that page alone, under
+    an id of its own, and becomes nothing else: never written to a file, never the document, its version, its
+    record or the engine's cache, never what another page, an export, a snapshot, an inspection, the CAD app or
+    an agent reads, never the run `set` builds again; it is let go when that page's values are the document's,
+    when the document has a new version, and once nobody reads it. The mechanism: the engine's **Parameters**.
 
 ## Inspection
 

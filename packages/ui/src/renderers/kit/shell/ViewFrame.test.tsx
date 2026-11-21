@@ -1,6 +1,5 @@
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import ViewFrame from '../../../../dist/renderers/kit/shell/ViewFrame.js';
 import { HOVER_TIP_DELAY_MS } from '../../../../dist/renderers/kit/shell/HoverTip.js';
@@ -35,17 +34,17 @@ it('the update status stands under the strip, at the top centre without one, and
   expect(idle.container.querySelector('[data-view-update-status]')).toBeNull();
 });
 
-// What is picked is the frame's in every view (`settings-ui.md`): the Selected pane under the panel's
-// lists and the hover tip over the canvas, both from the view's description of a pick (`inspect`).
-it('the frame names what a press would pick in a tip beside the pointer, under Select and while no button is held, and shows the pick in the Selected pane', () => {
+// What a press would pick is the frame's in every view (`settings-ui.md`): the hover tip over the canvas, from
+// the view's description of a pick (`inspect`); the panel is the lists alone, nothing of the pick under them.
+it('the frame names what a press would pick in a tip beside the pointer, under Select and while no button is held, and draws no pane of the pick', () => {
   vi.useFakeTimers();
   const item = { id: 'selected:#U3', pick: '#U3', kind: 'solid', title: 'U3', tip: 'ATmega328P', facts: [{ label: 'Value', value: 'ATmega328P' }] };
-  const inspect = { selected: ['#U3'], describe: () => item, hovered: '#U3', select: () => {}, hover: () => {} };
+  const inspect = { describe: () => item, hovered: '#U3' };
   const panel = { kind: 'test', label: 'Panel', searchLabel: 'Search', tabs: [{ id: 'list', label: 'List', content: <p>rows</p> }] };
   const frame = (props: object) => render(<ViewFrame file="board.kicad_pcb" mobile={false} compact={false} chromeHidden={false} tools={[]} layout={{}}
     onLayoutChange={() => {}} selecting panel={panel} inspect={inspect} {...props}><canvas data-testid="canvas" /></ViewFrame>);
   const view = frame({});
-  expect(view.container.querySelector('[data-flat-panel-detail] [data-detail-head]')!.textContent).toBe('U3');
+  expect([view.container.querySelector('[data-flat-panel]') !== null, view.container.querySelector('[data-detail-head]')]).toEqual([true, null]);
   const canvas = view.getByTestId('canvas');
   fireEvent.pointerMove(canvas, { clientX: 40, clientY: 60, buttons: 0 });
   act(() => { vi.advanceTimersByTime(HOVER_TIP_DELAY_MS); });
@@ -64,7 +63,7 @@ it('the frame names what a press would pick in a tip beside the pointer, under S
 it("the hover tip takes the view's short words where it has them, and never runs the full description for a hover", () => {
   vi.useFakeTimers();
   const describe = vi.fn(() => null);
-  const inspect = { selected: [], describe, tip: (id: string) => `${id} · hinge`, hovered: 'pin', select: () => {}, hover: () => {} };
+  const inspect = { describe, tip: (id: string) => `${id} · hinge`, hovered: 'pin' };
   const view = render(<ViewFrame file="part.step" mobile={false} compact={false} chromeHidden={false} tools={[]} layout={{}} onLayoutChange={() => {}}
     selecting inspect={inspect}><canvas data-testid="canvas" /></ViewFrame>);
   fireEvent.pointerMove(view.getByTestId('canvas'), { clientX: 10, clientY: 10, buttons: 0 });
@@ -74,50 +73,3 @@ it("the hover tip takes the view's short words where it has them, and never runs
   vi.useRealTimers();
 });
 
-// Several picks: the pane draws one at a time, the active one, the last picked (Blender's active object), under a
-// switcher of them all (`ItemDetail.jsx`'s `SelectedPane`): ‹ and › step and wrap, the count is a menu of every
-// pick, ←/→ and [ ] step while it has the keyboard, the view lights the active pick while the pane is in use, and
-// as the picks change it follows them: letting go of the active one hands it to the nearest left.
-it('several picks: the pane draws the active one under a switcher that steps, wraps, lists them all and follows the picks', async () => {
-  const user = userEvent.setup({ skipHover: true });
-  const item = (name: string) => ({ id: `selected:#${name}`, pick: `#${name}`, kind: 'solid', title: name, tip: `${name} tip`, facts: [] });
-  const hover = vi.fn();
-  const panel = { kind: 'test', label: 'Panel', searchLabel: 'Search', tabs: [{ id: 'list', label: 'List', content: <p>rows</p> }] };
-  const frame = (selected: string[]) => <ViewFrame file="board.kicad_pcb" mobile={false} compact={false} chromeHidden={false} tools={[]} layout={{}}
-    onLayoutChange={() => {}} panel={panel} inspect={{ selected, describe: (id: string) => item(id.slice(1)), select: () => {}, hover }}><canvas /></ViewFrame>;
-  const view = render(frame(['#U1']));
-  const head = () => view.container.querySelector('[data-flat-panel-detail] [data-detail-head]')!.textContent;
-  const count = () => view.container.querySelector('[data-flat-panel-picks-count]')?.textContent ?? null;
-  // One pick: its detail, and no switcher.
-  expect([head(), count()]).toEqual(['U1', null]);
-  // Two more, added: the last is the active one.
-  view.rerender(frame(['#U1', '#C1', '#R1']));
-  expect([head(), count()]).toEqual(['R1', '3 of 3']);
-  const group = screen.getByRole('group', { name: 'Picks' });
-  expect([...group.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Previous pick', 'Pick 3 of 3', 'Next pick']);
-  // › wraps to the first, ‹ back to the last.
-  await user.click(screen.getByRole('button', { name: 'Next pick' }));
-  expect([head(), count()]).toEqual(['U1', '1 of 3']);
-  await user.click(screen.getByRole('button', { name: 'Previous pick' }));
-  expect([head(), count()]).toEqual(['R1', '3 of 3']);
-  // With the keyboard on the switcher, ← and ] step; the view lights the active pick meanwhile.
-  fireEvent.keyDown(screen.getByRole('button', { name: 'Previous pick' }), { key: 'ArrowLeft' });
-  expect([head(), count()]).toEqual(['C1', '2 of 3']);
-  expect(hover).toHaveBeenLastCalledWith('#C1');
-  fireEvent.keyDown(screen.getByRole('button', { name: 'Previous pick' }), { key: ']' });
-  expect([head(), count()]).toEqual(['R1', '3 of 3']);
-  // The count is a menu of every pick, its name and short kind, the active one ticked; a choice makes it active.
-  await user.click(screen.getByRole('button', { name: 'Pick 3 of 3' }));
-  const menu = await waitFor(() => { const found = document.querySelector<HTMLElement>('[role=menu][aria-label="Picks"]'); expect(found).not.toBeNull(); return found!; });
-  expect([...menu.querySelectorAll('[role=menuitemradio]')].map(row => [row.textContent, row.getAttribute('aria-checked')]))
-    .toEqual([['U1U1 tip', 'false'], ['C1C1 tip', 'false'], ['R1R1 tip', 'true']]);
-  await user.click(screen.getByRole('menuitemradio', { name: /^U1/ }));
-  await waitFor(() => expect(document.querySelector('[role=menu][aria-label="Picks"]')).toBeNull());
-  expect([head(), count()]).toEqual(['U1', '1 of 3']);
-  // The active one let go of (Shift on it): the nearest left, the one after it, takes over.
-  view.rerender(frame(['#C1', '#R1']));
-  expect([head(), count()]).toEqual(['C1', '1 of 2']);
-  // One left: its detail, and no switcher.
-  view.rerender(frame(['#R1']));
-  expect([head(), count()]).toEqual(['R1', null]);
-});

@@ -456,7 +456,8 @@ FEATURES = frozenset({"assembly", "declared_mesh", "kinematics", "animation", "d
 # items, Export by format, and the home's. A name of this list and nothing else: a value of the page's (a render
 # mode's name) only where it is one.
 CONTROLS = frozenset({
-    "select", "pencil", "shapes", "measure", "explode", "clip", "preview",
+    # Draw is Pencil and Shapes as one tool ("draw"); "pencil" and "shapes" are older releases'.
+    "select", "pencil", "shapes", "measure", "explode", "clip", "preview", "draw",
     "select_filter_all", "select_filter_parts", "select_filter_faces", "select_filter_edges", "select_filter_position",
     "select_filter_links", "select_group_faces", "select_group_edges",
     "select_filter_annotations", "select_filter_measurements", "select_filter_texts", "select_filter_tracks", "select_filter_vias",
@@ -466,13 +467,14 @@ CONTROLS = frozenset({
     "measure_filter_all", "measure_filter_vertices", "measure_filter_edges", "measure_filter_faces",
     "measure_taken", "measure_delete", "measure_clear",
     "pencil_pen", "pencil_highlighter", "pencil_eraser",
-    "shapes_rectangle", "shapes_line", "shapes_arrow", "shapes_ellipse", "shapes_text",
+    "shapes_rectangle", "shapes_line", "shapes_arrow", "shapes_ellipse", "shapes_text", "shapes_fill", "annotate_line_style",
     "annotate_mark", "annotate_color", "annotate_stroke_width", "annotate_on_surface", "annotate_on_plane",
     "annotate_restyle", "annotate_fill", "annotate_delete", "annotate_clear", "annotate_copy", "undo", "redo",
     "explode_amount", "explode_reset", "clip_amount", "clip_axis_x", "clip_axis_y", "clip_axis_z", "clip_part_colors",
     "clip_reverse", "clip_reset",
     "display_solid", "display_shaded", "display_parts", "display_xray", "display_hidden_line", "display_wireframe",
     "display_grid", "projection_orthographic", "projection_perspective",
+    "viewport_background_light", "viewport_background_dark", "viewport_background_theme", "view_home",
     "preview_settings", "preview_orbit", "preview_orbit_speed", "preview_parts_color_mode", "preview_parts_colors",
     "preview_parts_color", "preview_lighting_quality", "preview_lighting_exposure", "preview_lighting_rotation",
     "preview_lighting_size", "preview_lighting_fill", "preview_background_color", "preview_background_opacity",
@@ -487,7 +489,7 @@ CONTROLS = frozenset({
     "menu_zoom_selection",
     "menu_select_tangent_faces", "menu_select_tangent_edges",
     "look_at", "isolate", "view_cube", "view_cube_drag", "fit",
-    "quick_edit_copy", "quick_edit_queue", "quick_edit_send",
+    "quick_edit_copy", "quick_edit_queue", "quick_edit_send", "quick_edit_shown", "quick_edit_dismissed", "board_side", "board_dimension",
     "navbar_back", "navbar_forward", "models", "models_open", "models_filter", "explorer", "explorer_filter",
     "file_copy_path", "file_copy_link", "file_reveal", "file_open_app", "home",
     "theme_system", "theme_light", "theme_dark", "language", "feedback",

@@ -110,23 +110,25 @@ async function exported(page, file) {
   assert.deepEqual([shown.doc, shown.file, shown.name], [`/models/${file}`, `/models/${file}`, file]);
   assert.ok(shown.revision.endsWith(`-${file}`), `the catalog hash of the bytes shown: ${shown.revision}`);
 }
-// A mesh file's strip: an STL's Select (in hand, picking nothing), Pencil, Shapes and Clip; a 3MF's Select (in hand),
-// Pencil, Shapes, Measure and Clip. Clip is a popover from its tile, never in hand: it has no pressed state. Its
-// view's controls end the strip, in Clip's section: Projection, Display, then Preview.
-const STL_TOOLS = ['Select:true', 'Pencil:false', 'Shapes:false'];
-const THREE_MF_TOOLS = ['Select:true', 'Pencil:false', 'Shapes:false', 'Measure:false'];
+// A mesh file's strip: an STL's Select (in hand, picking nothing), Draw and Clip; a 3MF's Select (in hand),
+// Draw, Measure and Clip. Clip is a tool as Draw is, pressed while in hand. Preview ends the strip; Display and
+// Projection are the corner's stack over the cube.
+const STL_TOOLS = ['Select:true', 'Draw:false', 'Clip:false'];
+const THREE_MF_TOOLS = ['Select:true', 'Draw:false', 'Measure:false', 'Clip:false'];
 const meshTools = async (pane, expected) => {
   assert.deepEqual(await pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button')
     .evaluateAll(buttons => buttons.filter(button => button.hasAttribute('aria-pressed') && !button.closest('[data-view-controls]')).map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
   expected);
   const strip = pane.getByRole('group', { name: 'Interaction tools' });
-  assert.deepEqual(await strip.locator('[data-view-controls]').getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Projection: Orthographic', 'Display mode: Solid', 'Preview'], 'the view\'s controls end the strip, Preview last');
-  assert.equal(await strip.locator('[data-strip-rule]').count(), 1, 'one rule, after the tools that pick');
-  assert.equal(await strip.locator('[data-view-controls]').evaluate(element => element.previousElementSibling?.getAttribute('aria-label')), 'Clip', 'the view\'s controls follow Clip, no rule between');
-  assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');
+  // The strip is the tools alone, Clip last, no rule; the view's settings are the navbar's (Display, Projection, then
+  // Preview, last), and the corner keeps Home beside the cube.
+  assert.equal(await strip.locator('[data-view-controls]').count(), 0, 'nothing of the view on the strip');
+  assert.equal(await strip.locator('[data-strip-rule]').count(), 0, 'no rule');
+  assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label').split(':')[0])),
+    ['View', 'Preview'], 'the navbar\'s view settings: View ▾ (Display, Projection, Grid, Background), then Preview');
+  assert.deepEqual(await pane.locator('[data-view-corner-home] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Home'], 'Home beside the cube');
   // The corner is the cube's alone: no Home.
-  for (const name of ['Orbit', 'Draw', 'Explode', 'Position', 'Animation', 'Home']) assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
+  for (const name of ['Orbit', 'Pencil', 'Shapes', 'Explode', 'Joints', 'Animation']) assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
 };
 /** World point -> page coordinates, from the camera the viewport publishes. */
 function projector(camera, box) {
@@ -143,24 +145,21 @@ function projector(camera, box) {
     return [box.x + (dot(offset, right) / halfWidth * 0.5 + 0.5) * box.width, box.y + (0.5 - dot(offset, up) / camera.halfHeight * 0.5) * box.height];
   };
 }
-const displayButton = pane => pane.locator('[data-cad-toolbar] [data-view-controls]').getByRole('button', { name: /^Display mode: / });
-// Display's menu: the modes, then the Grid switch.
-async function openDisplay(pane) {
+// Display: the corner's first button (`kit/shell/ViewCornerStack.jsx`, under the cube at the top-right), its menu the
+// modes a file offers (a radio each), then Grid, then the Background.
+const displayButton = pane => pane.locator('[data-navbar-view-controls] [data-display-mode]');
+// Display's menu opened, its rows read (the modes by id; whether Grid is there; the Background's choices), and shut again.
+async function displayMenu(pane) {
   await displayButton(pane).click();
-  await displayPanel(pane).waitFor();
-}
-// The display modes Display's menu offers, by id.
-async function displayModes(pane) {
-  await displayButton(pane).click();
-  const menu = displayPanel(pane);
-  const modes = await menu.locator('[data-display-mode-option]').evaluateAll(items => items.map(item => item.getAttribute('data-display-mode-option')));
+  const menu = pane.page().locator('[role=menu][aria-label="View"]');
+  await menu.locator('[data-display-mode-option]').first().waitFor();
+  const read = selector => menu.locator(selector).evaluateAll(items => items.map(item => item.getAttribute('data-display-mode-option') ?? item.getAttribute('data-display-background') ?? 'grid'));
+  const rows = { modes: await read('[data-display-mode-option]'), grid: (await read('[data-display-grid]')).length === 1, backgrounds: await read('[data-display-background]') };
   await pane.page().keyboard.press('Escape');
   await menu.waitFor({ state: 'detached' });
-  return modes;
+  return rows;
 }
-// Display's menu: a dropdown, portaled out of the viewer.
-// Its accessible name is its tile's ("Display mode: Solid"); its own label is Display.
-const displayPanel = pane => pane.page().locator('[role=menu][aria-label="Display"]');
+const displayModes = async pane => (await displayMenu(pane)).modes;
 // The viewport's own pixels, without any chrome over them: what a host capture returns.
 async function capture(page) {
   const encoded = await page.evaluate(async () => {
@@ -227,22 +226,15 @@ test('an STL opens as one mesh in Select, which picks nothing: display settings,
   // An STL is one mesh in no unit: Select navigates and picks nothing, nothing to measure; it is drawn on and cut.
   await meshTools(pane, STL_TOOLS);
   assert.equal(await pane.locator('[data-quick-edit-box]').count(), 0, 'Quick Edit opens on a mark, never by itself');
-  assert.equal(await pane.locator('[data-view-controls]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
-    'an STL is 3D: Preview ends the strip after Display');
+  assert.equal(await pane.locator('[data-navbar-view-controls]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
+    'an STL is 3D: Preview is the navbar\'s, after Display');
 
-  // A mesh has no panel of its own: its only settings are Display's, and Display is never
-  // where a file opens, so the model has the room.
+  // A mesh has no panel of its own: its only settings are Display's, the corner's menu, never over the model.
   assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing in the tool stack');
-  // One mesh: Solid alone (Shaded would be Solid again, and Parts has one part to colour).
-  assert.deepEqual(await displayModes(pane), ['solid']);
-  await openDisplay(pane);
-  assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing joins the tool stack');
-  const displayMenu = displayPanel(pane);
-  assert.equal(await displayMenu.getByRole('menuitemcheckbox', { name: 'Grid', exact: true }).count(), 1, 'the Grid switch, in every view');
-  assert.equal(await displayMenu.getByRole('menuitem').count(), 0, 'and no settings: a mode has nothing to set');
-  await page.keyboard.press('Escape');
-  await displayPanel(pane).waitFor({ state: 'detached' });
-  // The column closing reaches the scene as a resize; let that frame land before comparing pictures.
+  // One mesh: Solid alone (Shaded would be Solid again, and Parts has one part to colour), then the Grid switch and
+  // the Background, in every view, and no settings a mode would bring.
+  assert.deepEqual(await displayMenu(pane), { modes: ['solid'], grid: true, backgrounds: ['light', 'dark', 'theme'] });
+  assert.equal(await pane.locator('[data-cad-tool-stack] [data-tool-panel]').count(), 0, 'nothing joins the tool stack');
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 790);
   await settle(page);
 
@@ -353,6 +345,9 @@ test('a 3MF is one mesh per object with its source colour; an uncoloured one tak
   await meshTools(pane, THREE_MF_TOOLS);
   // Display shut as it opens, the same dropdown an STL has, with Parts: a 3MF of two objects has two to colour.
   assert.deepEqual(await displayModes(pane), ['solid', 'parts']);
+  // The panel put away from its navbar toggle, so the picture has the whole view (an open panel pushes it aside).
+  const opened = pane.locator(`[data-navbar-panel][aria-expanded="true"]`);
+  while (await opened.count()) await opened.first().click();
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 790);
   await settle(page);
 
@@ -424,7 +419,7 @@ test('a corrupt mesh raises the viewer\'s load alert and an empty one says there
   assert.match(await alert.innerText(), /Couldn’t load the model/);
   assert.match(await alert.innerText(), /broken\.stl/);
   // Nothing on screen is the file's to work on: the card alone, with no tools or view actions.
-  for (const name of [/^Display mode: /, 'Preview']) {
+  for (const name of ['View', 'Preview']) {
     assert.equal(await broken.pane.getByRole('button', { name, exact: true }).count(), 0, `no ${name} over a failed load`);
   }
   assert.equal(await alert.getByRole('button', { name: 'Retry', exact: true }).count(), 1);

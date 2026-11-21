@@ -8,7 +8,6 @@ import RendererShell from "../kit/shell/RendererShell.jsx";
 import { useViewerHost } from "../../host/context.js";
 import { menuEntry } from "../kit/shell/viewMenu.js";
 import { sceneCopyText } from "../kit/tools/select/sceneReferences.jsx";
-import { isLabelSelector } from "@cad/core/lib/cadRefs.js";
 import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { readFileView } from "../kit/shell/fileView.js";
 import { usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
@@ -313,14 +312,13 @@ function RobotSurface({ view, data }) {
     {kind === "sdf" ? <ToolPanel id="sdf" title="SDF" label="SDF" fit="details" defaultCollapsed>
       <SdfSection info={robot?.robot?.sdf || null} />
     </ToolPanel> : null}
-    {/* Headed "Position"; its Pose row's Default puts the joints back. */}
-    {posable && pose ? <PositionSection pose={pose} previewPose={previewPose} revision={robot.revision} /> : null}
   </>;
+  // The panel's tab after Links: Joints; its Pose row's Default puts the joints back.
+  const fileSections = posable && pose ? <PositionSection pose={pose} previewPose={previewPose} revision={robot.revision} /> : null;
 
   // What is selected, for Quick Edit: each link (an object by its link) as a reference into the
   // description, and as a chip whose card says what the description says of it.
-  const describe = useRobotDescribe({ robot: robot?.robot || null, components: robot?.components, selectLink: selection.selectLink,
-    onOpenFile: view.onOpenFile, resource: shell.frame.resource });
+  const describe = useRobotDescribe({ robot: robot?.robot || null, components: robot?.components, selectLink: selection.selectLink });
   const { references, chips: referenceChips } = useRobotReferences({ robot: robot?.robot || null, components: robot?.components,
     selection, resource: shell.frame.resource, describe });
 
@@ -350,23 +348,13 @@ function RobotSurface({ view, data }) {
     run: () => { const box = scene?.selectionBounds?.(pickedIds()); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
   };
 
-  // What is picked, as the frame reads it: the Selected pane under the Links, the hover tip, the rows of both.
+  // What is picked, as the frame reads it: a chip's card and the hover tip.
   const components = robot?.components;
-  const frameIds = useCallback((ids) => {
-    const objects = new Set((components || []).map(component => component.id));
-    const box = scene?.selectionBounds?.(ids.map(id => (objects.has(id) ? id : `link:${id}`)));
-    if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box);
-  }, [components, scene]);
-  const resource = shell.frame.resource;
-  // A link copies its reference; a mesh object its link's, as its chip does.
-  const copyLinks = useCallback((ids) => {
-    const linkOf = new Map((components || []).map(component => [component.id, component.link]));
-    return sceneCopyText(resource, [...new Set(ids.map(id => linkOf.get(id) ?? id))].filter(name => isLabelSelector(String(name || ""))));
-  }, [resource, components]);
   const tip = useRobotTip({ robot: robot?.robot || null, components });
-  const inspect = useRobotInspect({ selection, components, describe, tip, frame: frameIds, copyText: copyLinks, enabled: Boolean(scene) && !shell.previewing });
+  const inspect = useRobotInspect({ selection, describe, tip, enabled: Boolean(scene) && !shell.previewing });
 
   return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} sidebar={sidebar} previewView={previewView}
+    fileSections={fileSections}
     inspect={inspect}
     references={shell.previewing ? NO_REFERENCES : references} referenceChips={shell.previewing ? NO_REFERENCES : referenceChips}
     nameReference={nameLink}

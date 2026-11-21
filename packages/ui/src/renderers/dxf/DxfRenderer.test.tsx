@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createCadClient } from '@cad/core/client';
+import userEvent from '@testing-library/user-event';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createDxfRenderer } from '../../../dist/renderers/dxf/index.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
@@ -200,21 +201,34 @@ it("the host's notice shows at the top-right once the drawing is on screen", asy
   dispose();
 });
 
-it("a DXF's strip is Select (in hand), Pencil, Shapes and Measure, its zoom the corner's pill: no Display, no Preview", async () => {
+it("a DXF's strip is Select (in hand), Draw and Measure, its zoom the corner's pill: no Display, no Preview; its View menu the Background alone", async () => {
   const { pane, delivered, dispose } = await openDrawing();
   const inPane = within(pane);
   const strip = inPane.getByRole('group', { name: 'Interaction tools' });
-  expect(within(strip).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
+  expect(within(strip).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Draw', 'Measure']);
   expect(within(strip).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   // Tools alone, no rule: the drawing's zoom is the corner's pill (`ViewCorner.jsx`).
   expect(strip.querySelector('[data-strip-rule]')).toBeNull();
   expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
-  for (const name of ['Orbit', 'Position', 'Animation', 'Preview', 'Display', 'Display settings', 'Projection', 'Explode', 'Clip']) {
+  for (const name of ['Orbit', 'Joints', 'Animation', 'Preview', 'Display', 'Display settings', 'Projection', 'Explode', 'Clip']) {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
   expect(pane.querySelectorAll('[data-view-controls] button')).toHaveLength(0);
-  // A drawing of one layer and no blocks has nothing for a Layers tab to say: no panel, and no pill.
-  expect(pane.querySelector('[data-flat-panel], [data-flat-panel-pill]')).toBeNull();
+  // Its view settings, the navbar's View ▾: one submenu, the viewport's Background, Light ticked; a choice is the person's.
+  expect([...pane.querySelectorAll('[data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['View']);
+  const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
+  await user.click(inPane.getByRole('button', { name: 'View' }));
+  const menu = await waitFor(() => { const found = document.querySelector<HTMLElement>('[role=menu][aria-label="View"]'); expect(found).not.toBeNull(); return found!; });
+  expect([...menu.querySelectorAll('[data-view-sub]')].map(row => [row.getAttribute('data-view-sub'), row.querySelector('[data-view-sub-value]')!.textContent]))
+    .toEqual([['background', 'Light']]);
+  fireEvent.click(menu.querySelector<HTMLElement>('[data-view-sub="background"]')!);
+  const backgrounds = document.querySelector<HTMLElement>('[data-view-sub-content="background"]')!;
+  expect([...backgrounds.querySelectorAll('[data-display-background]')].map(item => [item.textContent, item.getAttribute('aria-checked')]))
+    .toEqual([['Light', 'true'], ['Dark', 'false']]);
+  await user.click(backgrounds.querySelector<HTMLElement>('[data-display-background="dark"]')!);
+  await waitFor(() => expect(inPane.getByRole('button', { name: 'View' }).getAttribute('data-view-background')).toBe('dark'));
+  // A drawing always has its Layers (open, or its pill where the view starts it collapsed), one layer its one row.
+  expect(pane.querySelector('[data-flat-panel], [data-flat-panel-pill]')).not.toBeNull();
   // Nothing is picked, drawn or measured yet: Quick Edit is not there, and nothing went anywhere.
   expect(pane.querySelector('[data-quick-edit-box]')).toBeNull();
   expect(inPane.queryByRole('button', { name: 'Take snapshot' })).toBeNull();
@@ -223,14 +237,14 @@ it("a DXF's strip is Select (in hand), Pencil, Shapes and Measure, its zoom the 
   // Measure in hand hangs no row under the strip; the drawing row has no placement.
   fireEvent.click(within(strip).getByRole('button', { name: 'Measure' }));
   expect(pane.querySelector('[data-cad-sub-toolbar]')).toBeNull();
-  fireEvent.click(within(strip).getByRole('button', { name: 'Pencil' }));
+  fireEvent.click(within(strip).getByRole('button', { name: 'Draw' }));
   expect(pane.querySelector('[data-annotation-controls]')).not.toBeNull();
   expect(inPane.queryByRole('button', { name: /Placement/ })).toBeNull();
   expect(pane.querySelector('[data-cad-annotation-overlay]')).not.toBeNull();
   dispose();
 });
 
-it('Select picks an entity by handle: lit, a Quick Edit chip by type and layer, and a reference into the file', async () => {
+it('Select picks an entity by handle: lit, a Quick Edit chip by type and layer (two of them one chip), and a reference into the file', async () => {
   const drawing = await openDrawing();
   const { pane, tap, dispose } = drawing;
   // The red circle (handle 33) at its rightmost point; Shift adds the bottom edge (handle 2F).
@@ -238,7 +252,12 @@ it('Select picks an entity by handle: lit, a Quick Edit chip by type and layer, 
   const box = await waitFor(() => { const element = pane.querySelector('[data-quick-edit-box]'); expect(element).not.toBeNull(); return element as HTMLElement; });
   expect(within(box).getByText('Circle on 0')).toBeTruthy();
   tap(50, 0, { shiftKey: true });
-  await waitFor(() => expect(within(box).getByText('Line on 0')).toBeTruthy());
+  // Two references are one chip ("2 refs"), its list naming each.
+  await waitFor(() => expect(within(box).getByRole('button', { name: '2 refs' })).toBeTruthy());
+  fireEvent.click(within(box).getByRole('button', { name: '2 refs' }));
+  const list = await screen.findByRole('dialog', { name: '2 refs' });
+  expect([within(list).getByText('Circle on 0'), within(list).getByText('Line on 0')].every(Boolean)).toBe(true);
+  fireEvent.keyDown(list, { key: 'Escape' });
   const controller = await waitFor(() => { expect(drawing.controller).not.toBeNull(); return drawing.controller; });
   const state = controller.readState();
   expect(state.selectedEntities).toEqual(['33', '2F']);
@@ -303,14 +322,26 @@ it('host commands a flat drawing cannot answer are declined in words', async () 
 it('a drawing with layers and blocks has the docked panel and its Layers tab: a layer hidden is not drawn, a block reference is picked from it', async () => {
   readDrawing = () => json(LAYERED);
   const { pane, dispose } = await openDrawing();
-  // The view's panel, a board's: docked at the left, its search, then its one list, Layers, with no row of tabs.
+  // The view's panel, a board's: docked at the left, its search, then its one tab, Layers, its title.
   const aside = await waitFor(() => { const element = pane.querySelector<HTMLElement>('[data-flat-panel]'); expect(element).not.toBeNull(); return element!; });
   expect([aside.getAttribute('data-flat-panel'), aside.hidden, aside.getAttribute('aria-label')]).toEqual(['docked', false, 'Drawing panel']);
-  expect(within(aside).queryAllByRole('tab')).toEqual([]);
-  expect(within(aside).getByRole('region', { name: 'Layers' })).toBeTruthy();
+  expect([within(aside).queryAllByRole('tab').length, aside.querySelector('[data-flat-panel-heading]')!.textContent]).toEqual([0, 'Layers']);
+  expect(within(aside).getByRole('tabpanel', { name: 'Layers' })).toBeTruthy();
   const list = aside.querySelector<HTMLElement>('[data-drawing-layers]')!;
   expect([...list.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row')))
     .toEqual(['CUT', 'BEND', 'ENGRAVE', 'HARDWARE', 'CENTRE', '0']);
+  // The Model tree's rows: ONE glyph slot each. A layer's colour takes it; a layer with blocks under it has its
+  // chevron there, and its colour after its name; its block references hang a level under it, their slot a block's glyph.
+  const slots = (row: Element) => [...row.querySelectorAll('[data-tree-row-glyph]')];
+  for (const row of list.querySelectorAll('[data-tree-row]')) expect(slots(row)).toHaveLength(1);
+  const centre = list.querySelector('[data-layer-row="CENTRE"]')!;
+  expect([centre.firstElementChild!.getAttribute('data-layer-glyph'), centre.querySelector('[data-layer-glyph="mark"]')]).toEqual(['swatch', null]);
+  const hardwareRow = list.querySelector('[data-layer-row="HARDWARE"]')!;
+  expect([slots(hardwareRow)[0].querySelector('button')?.getAttribute('aria-label'), hardwareRow.querySelector('[data-layer-glyph="swatch"]')])
+    .toEqual(['Collapse HARDWARE', null]);
+  expect(hardwareRow.querySelector('[data-layer-glyph="mark"]')!.previousElementSibling!.textContent).toBe('HARDWARE');
+  const insertRow = list.querySelector('[data-insert-row="99"]')!.closest<HTMLElement>('[data-tree-row]')!;
+  expect([insertRow.style.paddingLeft, insertRow.querySelectorAll('[data-tree-guide]').length]).toEqual(['calc(var(--tree-row-pad, 5px) + 10px)', 1]);
   fireEvent.click(list.querySelector('[data-layer-visibility="CENTRE"]')!);
   await waitFor(() => expect(painted.at(-1)!.hidden).toEqual(['CENTRE']));
   // HARDWARE holds the two M5_NUT references; a click picks one, as a tap on the drawing would.
@@ -322,11 +353,14 @@ it('a drawing with layers and blocks has the docked panel and its Layers tab: a 
   await waitFor(() => expect(within(pane.querySelector('[data-quick-edit-box]') as HTMLElement).getByRole('button', { name: 'Block M5_NUT on HARDWARE' })).toBeTruthy());
 
   // The panel's search keeps the layers whose names match, and the blocks whose names do, under their layer.
+  fireEvent.click(within(aside).getByRole('button', { name: 'Search the drawing' }));
   const search = within(aside).getByRole('textbox', { name: 'Search the drawing' });
   const hits = (kind: string) => [...aside.querySelectorAll(`[data-flat-panel-hit] [data-${kind}-row]`)].map(row => row.getAttribute(`data-${kind}-row`));
   fireEvent.change(search, { target: { value: 'nut' } });
   await waitFor(() => expect(hits('layer')).toEqual(['HARDWARE']));
   expect(hits('insert')).toEqual(['99', '9B']);
+  // The match lit in each hit's name, as the Model tree's search lights it.
+  expect([...aside.querySelectorAll('[data-insert-row="99"] [data-tree-filter-hit]')].map(hit => hit.textContent).join('')).toBe('NUT');
   // A handle finds its reference, as it is shown or bare.
   fireEvent.change(search, { target: { value: '#9b' } });
   await waitFor(() => expect(hits('insert')).toEqual(['9B']));
@@ -353,10 +387,12 @@ it('a drawing with layers and blocks has the docked panel and its Layers tab: a 
   await waitFor(() => expect(within(hardware()).getByRole('button', { name: 'Expand HARDWARE' })).toBeTruthy());
   expect(aside.querySelectorAll('[data-insert-row]')).toHaveLength(0);
 
-  // Hidden, its expand button stands alone on a pill at the canvas's top-left, and brings it back.
-  fireEvent.click(within(aside).getByRole('button', { name: 'Hide panel' }));
-  const pill = await waitFor(() => { const element = pane.querySelector<HTMLElement>('[data-flat-panel-pill]'); expect(element).not.toBeNull(); return element!; });
-  fireEvent.click(within(pill).getByRole('button', { name: 'Show panel' }));
+  // Its toggle is the navbar's, and hidden it leaves nothing over the drawing; the toggle brings it back.
+  const navbar = pane.querySelector<HTMLElement>('[data-viewer-navbar]')!;
+  fireEvent.click(within(navbar).getByRole('button', { name: 'Hide panel' }));
+  await waitFor(() => expect(pane.querySelector<HTMLElement>('[data-flat-panel]')!.hidden).toBe(true));
+  expect(pane.querySelector('[data-flat-panel-pill], [data-inspector-pill]')).toBeNull();
+  fireEvent.click(within(navbar).getByRole('button', { name: 'Show panel' }));
   await waitFor(() => expect(pane.querySelector<HTMLElement>('[data-flat-panel]')!.hidden).toBe(false));
   dispose();
 });

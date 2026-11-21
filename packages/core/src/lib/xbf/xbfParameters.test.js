@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  changedParameters, formatParameterValue, parameterIsRanged, parameterStep, parameterValue, savedParametersNote, settledDrafts, xbfParameters
+  changedParameters, formatParameterValue, parameterIsRanged, parameterStep, parameterValue, savedParametersNote, settledDrafts, unsavedParametersNote, xbfParameters
 } from "./xbfParameters.js";
 
 // A structure's `parameters` as the engine serves them: two of the model's own, one of another module.
@@ -72,4 +72,13 @@ test("what was saved from the page is one line for the agent, a parameter's save
   assert.equal(savedParametersNote([{ name: "wall", from: 2, to: 3, file: "a.py" }, { name: "wall", from: 3, to: 2, file: "a.py" }]), "");
   assert.equal(savedParametersNote([{ name: "wall", from: 2, to: 3, file: "a.py" }, { name: "wall", from: 4, to: 5 }]),
     "Saved from the viewer since your last edit: wall 2 -> 3 (a.py), wall 4 -> 5");
+});
+
+test("values on screen and not saved are one line for the agent, the script's value beside each", () => {
+  const parameters = xbfParameters({ parameters: [
+    { name: "wall", value: 2, kind: "float", writable: true, source: "bracket.py" },
+    { name: "holes", value: 6, kind: "int", writable: true, source: "lib/spec.py" }] });
+  assert.equal(unsavedParametersNote(parameters, {}), "");
+  assert.equal(unsavedParametersNote(parameters, { wall: 3.5, holes: 8 }),
+    "Shown in the viewer, not saved: wall 2 -> 3.5 (bracket.py), holes 6 -> 8 (spec.py); the script still holds the first values");
 });

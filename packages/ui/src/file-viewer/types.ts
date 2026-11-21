@@ -239,6 +239,13 @@ export interface FileViewerProps {
    * app's file handler). The renderer's own controls over the viewport are the same either way.
    */
   chrome?: "page" | "bare";
+  /**
+   * The viewer's layout pinned, for a viewer that is not the page's own (a picture drawn out of sight,
+   * `OffscreenPicture.tsx`): neither measured nor said to the page, so its size never changes the page's.
+   * Unset (the page's viewer): measured from its own width (`responsive.js`), and its root carries
+   * `data-viewer-layout`, which the page's stylesheet reads (a phone's type a step up: `styles/globals.css`).
+   */
+  layout?: "desktop" | "mobile";
   onError?: (error: Error) => void;
   presentation?: {
     /** The host's home, shown with no file: a page of its own under the navbar, which has only its logo's menu, Back and Forward and the host's actions there. */

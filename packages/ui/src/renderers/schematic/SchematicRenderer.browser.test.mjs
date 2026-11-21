@@ -93,12 +93,16 @@ for (const [scheme, paper, surround, lit] of [
     assert.ok(near(pixel(fitted, inX, inY), hex(paper), 12), `the paper: ${pixel(fitted, inX, inY)}`);
     // The MID wire to the sheet Load (y = 64.77, x 101.6..127): drawn as the sheet draws it, until a press lights it.
     const [x, y] = at([120, 64.77]);
-    assert.ok(!near(pixel(fitted, x, y), lit), `the wire as drawn first: ${pixel(fitted, x, y)}`);
+    // The wire is about a pixel wide at this fit (the strip's 48px row keeps the sheet clear of it), so its pixels blend a
+    // little with the paper: lit means within 80 of the highlight, and as drawn first it is further than that from it.
+    const before = [-1, 0, 1].flatMap(dx => [-1, 0, 1].map(dy => pixel(fitted, x + dx, y + dy)));
+    assert.ok(!before.some(rgb => near(rgb, lit, 80)), `the wire as drawn first: ${JSON.stringify(before)}`);
     await page.mouse.click(canvas.x + x, canvas.y + y);
     await page.mouse.move(canvas.x + 2, canvas.y + 2);
     await page.waitForFunction(() => window.cadHarness.a.controller?.readState().selection[0]?.target.selectors[0]?.startsWith('#wire:'));
     const shown = await frame(pane, fitted);
-    assert.ok(near(pixel(shown, x, y), lit, 60), `the wire is lit where it is: ${pixel(shown, x, y)}`);
+    const around = [-1, 0, 1].flatMap(dx => [-1, 0, 1].map(dy => pixel(shown, x + dx, y + dy)));
+    assert.ok(around.some(rgb => near(rgb, lit, 80)), `the wire is lit where it is: ${JSON.stringify(around)}`);
     assert.deepEqual(errors, []);
   });
 }

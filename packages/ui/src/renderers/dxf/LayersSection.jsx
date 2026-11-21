@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Box, Eye, EyeOff, Layers } from "lucide-react";
+import { Box, Eye, EyeOff } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import {
-  ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowActions, TreeRowGlyph, TreeRowLabel,
-  TreeRowSurface, TreeRowToggle, useTreeRowHeight
+  ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowActions, TreeRowDetail, TreeRowGlyph,
+  TreeRowName, TreeRowSurface, TreeRowToggle, useTreeRowHeight
 } from "@cad/ui/primitives/tree-row";
+import { TreeFilterMatch } from "@cad/ui/primitives/tree-filter";
 import { cn } from "@cad/ui/utils";
-import { useFlatPanel } from "../kit/shell/FlatPanel.jsx";
-import { LayerSwatch } from "../kit/inspector/layerRows.jsx";
+import { useFlatPanel, useFlatPanelMatches } from "../kit/shell/FlatPanel.jsx";
+import { LayerColorMark, LayerSwatch } from "../kit/inspector/layerRows.jsx";
 import VirtualRows from "../kit/inspector/VirtualRows.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import { drawingReferenceId, layerRows } from "./drawingReferences.js";
@@ -47,11 +48,11 @@ function searchRows(rows, query) {
  * pen, its name, how many entities drew on it, and its eye, which hides or shows it in the view (a
  * hidden layer is not drawn and nothing on it is picked or snapped to) — and under a layer, the
  * block references placed on it, each a row of its block's name that selects it as a click on the
- * drawing does (Shift adds). Every layer row is two glyphs, so none starts with a gap: its slot, 16px
- * in, holds its chevron where blocks hang under it, else a layer's icon, and the box after it its
- * colour. A block reference's row stands in line with its layer's: its slot only the layer's guide
- * (under the chevron), its box its block's glyph (under the colour), its name under the layer's name.
- * While the panel's search is up, the layers whose names match and the blocks whose names do, opened:
+ * drawing does (Shift adds). Every row is the Model tree's (`primitives/tree-row.jsx`), one glyph slot
+ * 16px in: a layer's slot holds its colour, or its chevron where blocks hang under it (its colour then
+ * after its name); a block reference's row is a level under its layer's, hung from its line, its slot
+ * its block's glyph. While the panel's search is up, the layers whose names match and the blocks whose
+ * names do, opened, the match lit:
  * the search decides which rows are candidates, and a layer's chevron folds and unfolds the hits under
  * it, its own row staying. Those folds are the search's (`searchFolded`): they hold as the query changes
  * and go when it is cleared, so the layers come back folded and open as the person left them, as every
@@ -68,6 +69,7 @@ export default function LayersSection({ drawing, hiddenLayers, onToggleLayer, se
   const all = useMemo(() => layerRows(drawing), [drawing]);
   const query = useFlatPanel()?.query.trim().toLowerCase() ?? "";
   const rows = useMemo(() => searchRows(all, query), [all, query]);
+  useFlatPanelMatches(query ? rows.length : null);
   // A layer with block references on it opens on them; the person folds it from there. A search opens every
   // layer it keeps on its hits, and what its chevrons fold then is the search's own, dropped as it is cleared.
   const [folded, setFolded] = useState(() => new Set());
@@ -92,19 +94,18 @@ export default function LayersSection({ drawing, hiddenLayers, onToggleLayer, se
       const hidden = hiddenLayers.has(row.name);
       return <TreeRowSurface dense depth={0} actions={1} className="group/row" data-layer-row={row.name}>
         {row.inserts.length ? <TreeRowToggle open={open} label={t(open ? "tree.collapse" : "tree.expand", { name: row.name })} onToggle={() => toggle(row.name)} />
-          : <TreeRowGlyph><Layers className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} /></TreeRowGlyph>}
-        <LayerSwatch color={row.color} />
+          : <LayerSwatch color={row.color} />}
         <span className={cn(TREE_ROW_NAME_CLASS, hidden && "text-muted-foreground", hidden ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover)}>
-          <TreeRowLabel className="max-w-full shrink-0">{row.name}</TreeRowLabel>
-          <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{row.entities.toLocaleString("en-US")}</TreeRowLabel>
+          <TreeRowName><TreeFilterMatch text={row.name} query={query} /></TreeRowName>
+          {row.inserts.length ? <LayerColorMark color={row.color} /> : null}
+          <TreeRowDetail>{row.entities.toLocaleString("en-US")}</TreeRowDetail>
         </span>
         <LayerEye name={row.name} hidden={hidden} onToggle={onToggleLayer} />
       </TreeRowSurface>;
     }
     const id = drawingReferenceId(insert.handle);
-    return <TreeRowSurface dense depth={0} active={chosen.has(id)}
+    return <TreeRowSurface dense depth={1} active={chosen.has(id)}
       onMouseEnter={() => selection.hover(id)} onMouseLeave={() => selection.hover("")}>
-      <TreeRowGlyph guide />
       <TreeRowGlyph><Box className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} /></TreeRowGlyph>
       {/* Its detail is its handle, the entity's id in the file (what its reference names, `#h9C`),
           marked as one and said whole in its tooltip: the payload carries no insertion point. */}
@@ -112,14 +113,14 @@ export default function LayersSection({ drawing, hiddenLayers, onToggleLayer, se
         <button type="button" aria-label={t("layers.selectBlock", { name: insert.block || insert.handle })} aria-pressed={chosen.has(id)} data-insert-row={insert.handle}
           onClick={event => selection.select(id, { multiSelect: event.shiftKey || event.metaKey || event.ctrlKey })}
           className={TREE_ROW_NAME_CLASS}>
-          <TreeRowLabel className="max-w-full shrink-0">{insert.block || t("layers.block")}</TreeRowLabel>
-          <TreeRowLabel className="flex-1 text-micro text-muted-foreground">#{insert.handle}</TreeRowLabel>
+          <TreeRowName>{insert.block ? <TreeFilterMatch text={insert.block} query={query} /> : t("layers.block")}</TreeRowName>
+          <TreeRowDetail><TreeFilterMatch text={`#${insert.handle}`} query={query} /></TreeRowDetail>
         </button>
       </TooltipHint>
     </TreeRowSurface>;
-  }, [flat, toggle, hiddenLayers, chosen, selection, onToggleLayer, t]);
+  }, [flat, toggle, hiddenLayers, chosen, selection, onToggleLayer, query, t]);
   if (query && !rows.length) return null;
-  return <VirtualRows className="text-tiny" aria-label={t("layers.label")} data-drawing-layers="" data-flat-panel-hit={query ? "" : undefined}
+  return <VirtualRows aria-label={t("layers.label")} data-drawing-layers="" data-flat-panel-hit={query ? "" : undefined}
     count={flat.length} rowHeight={rowHeight} rowKey={at => (flat[at].insert ? `insert:${flat[at].insert.handle}` : `layer:${flat[at].row.name}`)}
     rowProps={() => ({ className: "min-w-0" })} renderRow={renderRow} />;
 }

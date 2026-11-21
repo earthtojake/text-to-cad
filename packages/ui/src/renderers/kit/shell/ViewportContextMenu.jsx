@@ -139,7 +139,7 @@ export default function ViewportContextMenu({ viewport, items, onOpenChange = nu
         {open.items.map(item => (
           <div key={item.id} className="contents">
             {item.separatorBefore ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuItem className="text-xs" disabled={item.disabled === true}
+            <DropdownMenuItem disabled={item.disabled === true}
               onSelect={() => { setOpen(null); item.onSelect?.(); }}>{item.label}</DropdownMenuItem>
           </div>
         ))}

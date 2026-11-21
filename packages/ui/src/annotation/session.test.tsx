@@ -136,12 +136,12 @@ it('style is kept per drawing kind: the pen, the highlighter and Shapes (all fiv
   expect(slots()).toEqual({ pen: ['#ff2d55', 2, 'surface'], highlighter: ['#ffe600', 2, 'surface'], shapes: ['#ff2d55', 2, 'surface'] });
   act(() => { current().selectColor('#00e5ff'); current().selectStrokeWidth(6); });
   act(() => current().selectTool('highlighter'));
-  expect(current().style).toEqual({ color: '#ffe600', strokeWidth: 2, placement: 'surface' });
+  expect(current().style).toEqual({ color: '#ffe600', strokeWidth: 2, placement: 'surface', dash: 'solid' });
   act(() => current().selectPlacement('plane'));
   session.rerender({ family: 'shapes' });
   act(() => current().selectStrokeWidth(4));
   act(() => current().selectTool('arrow'));
-  expect(current().style).toEqual({ color: '#ff2d55', strokeWidth: 4, placement: 'surface' });
+  expect(current().style).toEqual({ color: '#ff2d55', strokeWidth: 4, placement: 'surface', dash: 'solid' });
   expect(slots()).toEqual({ pen: ['#00e5ff', 6, 'surface'], highlighter: ['#ffe600', 2, 'plane'], shapes: ['#ff2d55', 4, 'surface'] });
   // A selection's restyle restyles that ink only, no slot.
   act(() => current().add([stroke('a')]));
@@ -173,4 +173,45 @@ it("put down, the drawing tools keep what each draws with, the ink, Select's pic
   act(() => { current().add([stroke('a')]); current().selectTool('eraser'); current().select(['a']); });
   session.rerender({ family: null });
   expect(current()).toMatchObject({ pencil: 'eraser', selected: ['a'], hasAnnotation: true });
+});
+
+it("the Fill tool's fill is the toggle's data in the colour in hand: recoloured or taken away as one step each, and undone back to the shape alone", () => {
+  const session = renderHook(() => useAnnotationSession('shapes', CAD));
+  const current = () => session.result.current;
+  act(() => current().selectTool('fill'));
+  expect([current().tool, current().shape]).toEqual(['fill', 'fill']);
+  act(() => current().add([stroke('r', { closed: true })]));
+  act(() => current().fill('r', [{ id: 'f', kind: 'area', points: new Float32Array(9), color: '#000000' } as any], '#39ff14'));
+  const fillOf = () => current().items.find(item => item.kind === 'area');
+  expect(fillOf()).toMatchObject({ color: '#39ff14', group: current().items[0].group });
+  act(() => current().fillColor('r', '#2979ff'));
+  expect(fillOf()!.color).toBe('#2979ff');
+  act(() => current().undo());
+  expect(fillOf()!.color).toBe('#39ff14');
+  act(() => current().undo());
+  expect(current().items.map(item => item.id)).toEqual(['r']);
+});
+
+it("a line style is what the pen and Shapes draw next, each its own; the selection's restyle dashes its strokes but an arrow's head and the highlighter's band, one step", () => {
+  const session = renderHook(() => useAnnotationSession('pencil', CAD));
+  const current = () => session.result.current;
+  expect([current().styles.pen.dash, current().styles.shapes.dash]).toEqual(['solid', 'solid']);
+  act(() => current().selectDash('dotted'));
+  expect([current().style.dash, current().styles.pen.dash, current().styles.shapes.dash]).toEqual(['dotted', 'dotted', 'solid']);
+  // An arrow (its shaft, then its two wings ending at its tip), a highlighter's band, and a plain stroke.
+  const at = (...xyz: number[]) => new Float32Array(xyz);
+  act(() => current().add([
+    stroke('shaft', { group: 'g', points: at(0, 0, 0, 5, 0, 0, 10, 0, 0) }),
+    stroke('wing1', { group: 'g', points: at(8, 1, 0, 10, 0, 0) }), stroke('wing2', { group: 'g', points: at(8, -1, 0, 10, 0, 0) }),
+    stroke('band', { opacity: 0.35, width: 10 }), stroke('plain')]));
+  act(() => current().select(['shaft', 'wing1', 'wing2', 'band', 'plain']));
+  act(() => current().restyle({ dash: 'dashed' }));
+  const dash = () => Object.fromEntries(current().items.map(item => [item.id, (item as any).dash ?? 'solid']));
+  expect(dash()).toEqual({ shaft: 'dashed', wing1: 'solid', wing2: 'solid', band: 'solid', plain: 'dashed' });
+  act(() => current().undo());
+  expect(dash()).toEqual({ shaft: 'solid', wing1: 'solid', wing2: 'solid', band: 'solid', plain: 'solid' });
+  act(() => current().redo());
+  act(() => current().restyle({ dash: 'solid' }));
+  expect(Object.values(dash()).every(value => value === 'solid')).toBe(true);
+  expect(current().items.some(item => 'dash' in item)).toBe(false);
 });

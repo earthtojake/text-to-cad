@@ -28,7 +28,7 @@ test('a new tab starts at the defaults and two tabs never meet: each reload brin
   // Tab two, in the same browser: none of it.
   const second = createTabStore(two.record());
   expect(second.getSnapshot()).toEqual(defaultTabRecord());
-  expect(second.settings.getSnapshot()).toEqual({ toolStack: { panels: {}, collapsed: {} }, appearance: 'system', library: { layout: 'grid' }, explorer: { folder: null } });
+  expect(second.settings.getSnapshot()).toEqual({ toolStack: { panels: {}, collapsed: {} }, appearance: 'system', viewportBackground: 'light', library: { layout: 'grid' }, explorer: { folder: null } });
   const fresh = readFileView(second.files.read('/models/part.step', 'step'));
   expect([fresh.display.mode, fresh.playback]).toEqual(['solid', DEFAULT_PLAYBACK]);
   second.settings.update({ appearance: 'light' });

@@ -99,6 +99,31 @@ export function createPreviewIdle() {
   };
 }
 
+/** A `#rrggbb` colour's relative luminance (WCAG), or null for anything else. */
+export function relativeLuminance(color) {
+  const match = /^#([0-9a-f]{6})$/i.exec(String(color ?? ""));
+  if (!match) return null;
+  const channel = at => {
+    const value = parseInt(match[1].slice(at, at + 2), 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
+
+/**
+ * The ink Preview's chrome over the model is drawn in: the backdrop's, never the app's — `"light"` (dark ink) over a
+ * light backdrop, `"dark"` (light ink) over a dark one, as the corner and the cube follow the viewport. The backdrop is
+ * Preview's Background (`background`, the scene's: `{ enabled, color, opacity }`); one mostly see-through, or none,
+ * shows the viewport's canvas, whose scheme is `fallback`. Light where black ink has the better contrast on it.
+ * @param {{ enabled?: boolean, color?: string, opacity?: number } | null | undefined} background
+ * @param {"light" | "dark"} fallback
+ */
+export function backdropScheme(background, fallback) {
+  const luminance = background?.enabled !== false && Number(background?.opacity ?? 1) >= 0.5 ? relativeLuminance(background?.color) : null;
+  if (luminance === null) return fallback === "dark" ? "dark" : "light";
+  return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? "light" : "dark";
+}
+
 /** Whether Preview's chrome is up, from its store (`createPreviewIdle`); up where there is none. */
 export function usePreviewShown(idle) {
   const subscribe = useCallback(listener => (idle ? idle.subscribe(listener) : () => {}), [idle]);
@@ -124,34 +149,38 @@ export function usePreviewIdle(root, active, held) {
  * Preview's settings, docked at the view's right edge, sliding in from it while `panelOpen` and out
  * again as it closes (`SIDEBAR_SLIDE_CLASS`).
  *
+ * The bar is drawn in the backdrop's ink (`scheme`, `backdropScheme`), its token scope `.light` or `.dark`; the panel,
+ * on a surface of its own, keeps the app's.
+ *
  * @param {{ active: boolean, name?: string, controls?: import("react").ReactNode, panel?: import("react").ReactNode,
- *   panelOpen?: boolean, idle?: ReturnType<typeof createPreviewIdle> | null, children?: import("react").ReactNode }} props
+ *   panelOpen?: boolean, idle?: ReturnType<typeof createPreviewIdle> | null, scheme?: "light" | "dark" | null, children?: import("react").ReactNode }} props
  */
-export default function PreviewChrome({ active, name = "", controls = null, panel = null, panelOpen = false, idle = null, children }) {
+export default function PreviewChrome({ active, name = "", controls = null, panel = null, panelOpen = false, idle = null, scheme = null, children }) {
   return <>
     <div data-preview-chrome="" hidden={active} inert={active}
       className="pointer-events-none absolute inset-0 z-20">
       <ToolbarTooltipScope enabled={!active}>{children}</ToolbarTooltipScope>
     </div>
     {active ? <ToolbarTooltipScope enabled>
-      <PreviewBar name={name} controls={controls} idle={idle} />
-      {/* `panel`, under the bar (`top-9`), as tall as its content up to the room under it. Closed, it
+      <PreviewBar name={name} controls={controls} idle={idle} scheme={scheme} />
+      {/* `panel`, under the bar (`top-10`), as tall as its content up to the room under it. Closed, it
           is off the view's right edge, out of reach and out of the accessibility tree. */}
       {panel ? <div data-preview-panel="" data-open={panelOpen ? "" : undefined} inert={!panelOpen} aria-hidden={panelOpen ? undefined : true}
-        className={cn("pointer-events-none absolute top-9 z-30 flex min-h-0 max-w-[calc(100%-1rem)] flex-col items-end", SIDEBAR_SLIDE_CLASS,
+        className={cn("pointer-events-none absolute top-10 z-30 flex min-h-0 max-w-[calc(100%-1rem)] flex-col items-end", SIDEBAR_SLIDE_CLASS,
           panelOpen ? null : "translate-x-[calc(100%+1rem)] opacity-0")}
         style={{ right: VIEWPORT_INSET_PX, bottom: VIEWPORT_INSET_PX }}>{panel}</div> : null}
     </ToolbarTooltipScope> : null}
   </>;
 }
 
-// The navbar's row (`h-9`, a phone's 48px in `globals.css`) with no surface under it: the only part of
+// The navbar's row (`h-10`, a phone's 48px in `globals.css`) with no surface under it: the only part of
 // the frame that redraws as it comes and goes. The name is muted, as its controls are.
-function PreviewBar({ name, controls, idle }) {
+function PreviewBar({ name, controls, idle, scheme }) {
   const shown = usePreviewShown(idle);
   const reach = shown ? "pointer-events-auto" : "pointer-events-none";
   return <div data-preview-bar="" data-state={shown ? "visible" : "hidden"} {...idle?.hold("bar")}
-    className={cn("pointer-events-none absolute inset-x-0 top-0 z-30 flex h-9 items-center justify-between gap-2 px-2", PREVIEW_FADE_CLASS,
+    data-scheme={scheme ?? undefined}
+    className={cn("pointer-events-none absolute inset-x-0 top-0 z-30 flex h-10 items-center justify-between gap-2 px-2", scheme, PREVIEW_FADE_CLASS,
       shown ? "opacity-100" : "opacity-0")}>
     <span data-preview-name="" className={cn("min-w-0 truncate px-1 text-sm text-muted-foreground [text-shadow:0_0_6px_var(--background)]", reach)}>{name}</span>
     {controls ? <div data-preview-controls="" className={cn("flex shrink-0 items-center gap-1", reach)}>{controls}</div> : null}

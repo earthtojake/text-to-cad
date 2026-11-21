@@ -112,15 +112,27 @@ it('follows its orientation store alone: an equal orientation is no change, a ne
   expect(screen.getByLabelText('View cube').querySelectorAll('polygon').length).toBe(1);
   expect(renders).toBe(1);
 });
-it('keeps every axis label inside its own box, however the cube is turned, so a corner of the view never cuts one off', () => {
-  // Seen from below at 45°, the Z axis points straight down: its label would sit past the box's edge.
+it('draws its axes on its own edges, every line and label inside its square box, however the cube is turned', () => {
+  // Seen from below at 45°, the Z axis points straight down.
   const DOWN = { x: [0.707, 0.5, 0.5], y: [-0.707, 0.5, 0.5], z: [0, -0.707, 0.707] };
   for (const orientation of [ISO, DOWN]) {
     cleanup();
-    cube({ orientation: createViewPlaneOrientationStore(orientation) });
+    cube({ orientation: createViewPlaneOrientationStore(orientation), viewPlaneSize: '68px' });
+    // The box is square (one uniform scale), cropped to the cube: 12 to 88 in the drawing's units.
+    const svg = screen.getByLabelText('View cube');
+    const [x0, y0, w, h] = svg.getAttribute('viewBox')!.split(' ').map(Number);
+    expect([x0, y0, w, h]).toEqual([12, 12, 76, 76]);
+    const box = svg.parentElement!;
+    expect([box.style.width, box.style.height]).toEqual(['68px', '68px']);
     for (const axis of ['X', 'Y', 'Z']) {
       const label = screen.getByText(axis);
-      for (const value of [Number(label.getAttribute('x')), Number(label.getAttribute('y'))]) expect(value >= 6 && value <= 94, `${axis}: ${value}`).toBe(true);
+      for (const value of [Number(label.getAttribute('x')), Number(label.getAttribute('y'))]) expect(value >= x0 + 4 && value <= x0 + w - 4, `${axis}: ${value}`).toBe(true);
+    }
+    // Each axis line runs along one of the cube's edges: from a corner to a corner, 2 half-sizes (42 units) long at most.
+    for (const line of svg.querySelectorAll('g[aria-hidden="true"] line')) {
+      const length = Math.hypot(Number(line.getAttribute('x2')) - Number(line.getAttribute('x1')), Number(line.getAttribute('y2')) - Number(line.getAttribute('y1')));
+      expect(length).toBeLessThanOrEqual(42.01);
+      for (const value of ['x1', 'y1', 'x2', 'y2'].map(name => Number(line.getAttribute(name)))) expect(value >= x0 && value <= x0 + w).toBe(true);
     }
   }
 });

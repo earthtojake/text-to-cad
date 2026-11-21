@@ -22,7 +22,7 @@ const softwareWebGl = page => page.evaluate(() => {
 
 // The harness renders its panes at a fixed CSS size; the spec draws them smaller, so a software
 // GL (CI's SwiftShader) has fewer pixels to fill and a screenshot fewer to read.
-const HARNESS_SIZE = '<style>#root > div { width: 800px !important; height: 500px !important; }</style>';
+const HARNESS_SIZE = '<style>#root > div { width: 960px !important; height: 500px !important; }</style>';
 
 // One harness bundle and one browser for the file; every test serves its own files and opens its
 // own page. (A browser's first WebGL page pays for compiling the viewer's shaders; later pages
@@ -61,7 +61,7 @@ async function serve(t, route = () => false) {
 }
 
 async function newPage(t, { deviceScaleFactor = 1, timeout = 15000 } = {}) {
-  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor });
+  const page = await browser.newPage({ viewport: { width: 960, height: 500 }, deviceScaleFactor });
   t.after(() => page.close());
   page.setDefaultTimeout(timeout);
   const errors = [];
@@ -77,7 +77,7 @@ const settle = page => page.evaluate(() => new Promise(resolve => requestAnimati
 // temporary harness.
 const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 20 0 0\nvertex 0 20 0\nendloop\nendfacet\nendsolid triangle\n';
 
-test('a phone\'s tools centre on the viewport as space runs out, and what does not fit is More\'s', async (t) => {
+test('a phone\'s tools centre on the viewport as space runs out; its View and Preview are the navbar\'s', async (t) => {
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
   await page.goto(`${origin}/?file=panel.harness`);
@@ -98,14 +98,17 @@ test('a phone\'s tools centre on the viewport as space runs out, and what does n
       return Math.abs(tools.left - expected) < 1 && tools.right <= view.right - 7;
     }, width);
   }
-  await pane.getByRole('button', { name: 'More tools', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Preview', exact: true }).waitFor();
+  // At 599 every tool fits, and the navbar's right end is View and Preview alone: no More, no cube, no zoom.
+  assert.equal(await pane.getByRole('button', { name: 'More tools', exact: true }).count(), 0);
+  assert.deepEqual(await pane.locator('[data-navbar-view] [data-navbar-view-controls] > *').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['View', 'Preview']);
+  assert.deepEqual([await pane.locator('[data-view-cube]').count(), await pane.locator('[data-zoom-pill]').count()], [0, 0]);
   assert.deepEqual(errors, []);
 });
 
 // ONE FRAME (`kit/shell/ViewFrame.jsx`), over a 3D view (the harness) and a flat one (a drawing with
-// layers): toggling the view's panel leaves the strip's centre on the view's centre, the picture is
-// drawn in what the panel leaves, centred on it, and on a phone the strip is centred with no panel.
+// layers): the strip stands on the centre of the WHOLE view however the left panel is opened and shut; a panel that
+// pushes takes its width out of the canvas, the picture drawn in what it leaves, centred on it; and on a phone the
+// strip is centred with no panel.
 const LAYERED = JSON.parse(await readFile(new URL('../../dxf/__fixtures__/layered.drawing.json', import.meta.url), 'utf8'));
 const drawingRoute = (url, root, response) => {
   if (url.pathname.endsWith('/drawing')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(LAYERED)); return true; }
@@ -115,8 +118,9 @@ const drawingRoute = (url, root, response) => {
     documents: [{ entry: { kind: 'dxf', file: '/models/layered.dxf', url: '/layered.dxf', hash: `${root}-layered`, bytes: 4096 }, revision: `${root}-layered` }] }));
   return true;
 };
-for (const [what, file, route] of [['a 3D view', 'panel.harness', undefined], ['a flat view', 'layered.dxf', drawingRoute]]) {
-  test(`${what}: the strip stays at the view's centre as the panel opens and shuts, the picture is centred in what the panel leaves, and a phone has no panel`, async (t) => {
+for (const [what, file, route, groups] of [['a 3D view', 'panel.harness', undefined, ['display', 'projection', 'background', 'grid']],
+  ['a flat view', 'layered.dxf', drawingRoute, ['background']]]) {
+  test(`${what}: the strip stays at the view's centre as the panel opens and shuts, the picture is centred in what a pushed panel leaves, and a phone's panel is a sheet, its View the desktop's menu`, async (t) => {
     const origin = await serve(t, route);
     const { page, errors } = await newPage(t);
     await page.addInitScript(() => { window.Worker = undefined; });
@@ -132,34 +136,186 @@ for (const [what, file, route] of [['a 3D view', 'panel.harness', undefined], ['
       const tools = box(pane.querySelector('[aria-label="Interaction tools"]'));
       const canvas = [...pane.querySelectorAll('[data-cad-canvas] canvas')].map(box).sort((a, b) => b.width * b.height - a.width * a.height)[0];
       const panel = pane.querySelector('aside[data-flat-panel]');
-      return { view: view.left + view.width / 2, strip: tools.left + tools.width / 2, stage: stage.left + stage.width / 2, stageWidth: stage.width,
-        canvas: canvas.left + canvas.width / 2, canvasWidth: canvas.width, panel: panel && !panel.hidden ? box(panel).width : 0 };
+      // An overlaid panel covers the stage's edge: the model's area is what it leaves.
+      const over = [...pane.querySelectorAll('aside[data-flat-panel]')].filter(aside => !aside.hidden && getComputedStyle(aside).position === 'absolute').map(box);
+      const left = Math.max(stage.left, ...over.filter(aside => aside.left <= stage.left + 1).map(aside => aside.right));
+      const right = Math.min(stage.right, ...over.filter(aside => aside.right >= stage.right - 1).map(aside => aside.left));
+      return { view: view.left + view.width / 2, area: (left + right) / 2, strip: tools.left + tools.width / 2, stage: stage.left + stage.width / 2, stageWidth: stage.width,
+        canvas: canvas.left + canvas.width / 2, canvasWidth: canvas.width, panel: panel && !panel.hidden ? box(panel).width : 0,
+        pushed: Boolean(panel && !panel.hidden && getComputedStyle(panel).position !== 'absolute') };
     });
-    // Opened from its pill (the 800px view starts it collapsed), then shut again from its own button.
-    const shut = await measure();
-    await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
+    // At 960px the left panel starts open (the model keeps 640px beside its 240px), pushing the model aside; shut
+    // from the navbar's toggle, and opened again from it.
     await page.waitForFunction(() => !document.querySelector('[data-testid="one"] aside[data-flat-panel]')?.hidden);
     await settle(page);
     const open = await measure();
+    // Every tab's name whole, Search beside the tabs, none over another or past the panel, at the panel's narrowest
+    // (Home on its grip): that is what the head needs.
+    const head = () => page.evaluate(() => {
+      const aside = document.querySelector('[data-testid="one"] aside[data-flat-panel]');
+      const row = aside.querySelector('[data-flat-panel-head]');
+      const shown = [...row.children].filter(child => !child.hidden).map(child => child.getBoundingClientRect());
+      return { width: aside.getBoundingClientRect().width,
+        whole: [...row.querySelectorAll('[role=tab], [data-flat-panel-tab-name]')].every(element => element.scrollWidth <= element.clientWidth + 0.5),
+        apart: shown.every((box, at) => at === 0 || shown[at - 1].right <= box.left + 0.5),
+        inside: shown.at(-1).right <= aside.getBoundingClientRect().right - 8 + 0.5 };
+    });
+    await pane.getByRole('separator', { name: 'Resize panel', exact: true }).focus();
+    await page.keyboard.press('Home');
+    await settle(page);
+    const narrowest = await head();
+    assert.deepEqual([narrowest.whole, narrowest.apart, narrowest.inside], [true, true, true], `at its narrowest, the head's row whole: ${JSON.stringify(narrowest)}`);
     await pane.getByRole('button', { name: 'Hide panel', exact: true }).click();
     await settle(page);
-    const again = await measure();
-    assert.ok(open.panel > 0 && shut.panel === 0, `the panel opens and shuts: ${shut.panel} -> ${open.panel}`);
-    for (const [state, at] of [['shut', shut], ['open', open], ['shut again', again]]) {
+    const shut = await measure();
+    assert.equal(await pane.locator('[data-flat-panel-pill]').count(), 0, 'a collapsed panel leaves nothing over the model');
+    await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('[data-testid="one"] aside[data-flat-panel]').hidden);
+    await settle(page);
+    const pushed = await measure();
+    for (const [state, at] of [['open', open], ['shut', shut], ['opened again', pushed]]) {
       assert.ok(Math.abs(at.strip - at.view) <= 1, `${state}, the strip is at the view's centre: ${at.strip} of ${at.view}`);
       assert.ok(Math.abs(at.canvas - at.stage) <= 1 && Math.abs(at.canvasWidth - at.stageWidth) <= 1, `${state}, the picture fills the stage, centred on it: ${JSON.stringify(at)}`);
     }
-    assert.ok(Math.abs(open.stageWidth - (shut.stageWidth - open.panel)) <= 1, 'the open panel takes its width out of the canvas');
-    // A phone: no panel, no pill, the strip centred in the view.
+    assert.ok(open.pushed && pushed.pushed && shut.panel === 0, 'the panel always pushes');
+    assert.ok(pushed.stageWidth <= shut.stageWidth - pushed.panel + 1, 'a pushed panel takes its width out of the canvas');
+    // A phone: no docked panel, no pill, the strip centred in the view.
     await page.locator('#root > div').evaluate(element => element.style.setProperty('width', '390px', 'important'));
     await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-cad-tool-groups]')?.hasAttribute('data-mobile'));
     await settle(page);
     const phone = await measure();
     assert.ok(Math.abs(phone.strip - phone.view) <= 1, `on a phone the strip is at the view's centre: ${phone.strip} of ${phone.view}`);
-    assert.equal(await pane.locator('[data-flat-panel], [data-flat-panel-pill]').count(), 0, 'a phone has no panel');
+    assert.equal(await pane.locator('[data-flat-panel], [data-zoom-pill], [data-view-cube]').count(), 0, 'a phone has no docked panel, pill or cube');
+    // Its panel is a sheet from the left, over the model with a scrim, opened by the navbar's toggle; a tap outside shuts it.
+    await pane.locator('[data-navbar-panel="left"]').click();
+    const sheet = page.locator('[data-panel-sheet]');
+    await sheet.waitFor();
+    // In from the left edge, once it has slid in.
+    await page.waitForFunction(() => Math.round(document.querySelector('[data-panel-sheet]').getBoundingClientRect().left) === 0);
+    assert.equal(await sheet.locator('[data-flat-panel]').getAttribute('data-flat-panel'), 'page');
+    await settle(page);
+    await page.mouse.click(380, 300);
+    await sheet.waitFor({ state: 'detached' });
+    // View opens the desktop's menu (no bottom sheet), its submenus and check rows the file's, Reset view last; a tap
+    // outside shuts it.
+    await pane.locator('[data-view-menu]').click();
+    const viewMenu = page.locator('[role=menu][aria-label="View"]');
+    await viewMenu.waitFor();
+    assert.deepEqual(await viewMenu.locator('[data-view-sub], [data-view-toggle]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-view-sub') ?? node.getAttribute('data-view-toggle'))), groups);
+    assert.equal(await viewMenu.locator('[data-view-reset]').count(), 1);
+    assert.equal(await page.locator('[data-slot=drawer-content]').count(), 0, 'no bottom sheet');
+    await settle(page);
+    await page.mouse.click(200, 500);
+    await viewMenu.waitFor({ state: 'detached' });
     assert.deepEqual(errors, []);
   });
 }
+
+// THE type scale (docs/settings-ui.md, "The type scale"), as a page computes it: a panel row and a menu item at
+// 12/16, a tooltip at 11/16, the navbar at 13/20. And the strip's proportions: a 40px bar of 28px tiles 5px in, its
+// corners 10px, theirs 4px; the panel's head a 32px row of the same tiles, its rule on the strip's bottom line; the
+// panels' toggles the navbar's 28px tiles.
+test('the type scale and the strip\'s proportions, as drawn: the panel, a menu, a tooltip and the navbar; the strip, the panel\'s head and the navbar\'s toggles', async (t) => {
+  const origin = await serve(t);
+  const { page, errors } = await newPage(t);
+  await page.setViewportSize({ width: 1100, height: 600 });
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`${origin}/?file=panel.harness`);
+  await page.addStyleTag({ content: '#root > div { width: 1100px !important; height: 600px !important; }' });
+  const pane = page.getByTestId('one');
+  const strip = pane.getByRole('group', { name: 'Interaction tools' });
+  await strip.waitFor();
+  const type = locator => locator.evaluate(element => { const style = getComputedStyle(element); return [style.fontSize, style.lineHeight]; });
+  const box = locator => locator.evaluate(element => { const { top, bottom, height, width } = element.getBoundingClientRect(); const style = getComputedStyle(element);
+    return { top: Math.round(top), bottom: Math.round(bottom), height: Math.round(height), width: Math.round(width), radius: style.borderTopLeftRadius, padding: style.paddingTop }; });
+  const bar = await box(strip), tile = await box(strip.getByRole('button', { name: 'Keep', exact: true }));
+  assert.deepEqual([bar.height, bar.radius, bar.padding, tile.height, tile.width, tile.radius], [40, '10px', '5px', 28, 28, '4px'], `the strip: ${JSON.stringify([bar, tile])}`);
+  // The panels' toggles are the navbar's: 28px tiles on its 40px row, nothing of a collapsed panel over the model.
+  const navbar = await box(pane.locator('[data-viewer-navbar]')), toggle = await box(pane.locator('[data-navbar-panel="left"]'));
+  assert.deepEqual([navbar.height, toggle.height, toggle.width], [40, 28, 28], `the navbar's toggle: ${JSON.stringify([navbar, toggle])}`);
+  if (await pane.locator('[data-navbar-panel="left"][aria-expanded="false"]').count()) await pane.locator('[data-navbar-panel="left"]').click();
+  const head = pane.locator('[data-flat-panel-head]');
+  await head.waitFor();
+  const row = await head.evaluate(element => { const style = getComputedStyle(element); return Math.round(element.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)); });
+  const pill = await box(head.getByRole('tab').first());
+  assert.deepEqual([row, pill.height, (await box(head)).bottom], [32, 28, bar.bottom + 1], 'the head: a 32px row of 28px pills, its rule just under the strip');
+  // The type, where it is drawn.
+  assert.deepEqual(await type(pane.locator('aside[data-flat-panel] li').first()), ['12px', '16px'], 'a panel row');
+  assert.deepEqual(await type(pane.locator('[data-viewer-navbar] [data-file-name]').first()), ['13px', '20px'], 'the navbar');
+  await pane.getByRole('button', { name: 'Keep', exact: true }).hover();
+  assert.deepEqual(await type(page.locator('[data-slot="tooltip-content"]').first()), ['11px', '16px'], 'a tooltip');
+  await page.mouse.move(0, 0);
+  await pane.locator('[data-cad-canvas]').click({ button: 'right', position: { x: 500, y: 300 } });
+  assert.deepEqual(await type(page.getByRole('menuitem', { name: 'Note the press', exact: true })), ['12px', '16px'], 'a menu item');
+  await page.keyboard.press('Escape');
+  assert.deepEqual(errors, []);
+});
+
+// In the dark (the harness's app), a toolbar button under the pointer is seen: its fill, lighter or darker as its surface
+// is (the corner's is the light viewport's), never the base Button's ghost hover, which matched the surface — the strip, the
+// panel's head, and the corner's stack, over the dark canvas and over a light viewport.
+test('a toolbar button under the pointer is seen on its surface in the dark, over a light viewport: the strip, the panel head and the corner', async (t) => {
+  const origin = await serve(t);
+  const { page, errors } = await newPage(t);
+  await page.setViewportSize({ width: 1100, height: 600 });
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`${origin}/?file=panel.harness&background=light`);
+  const pane = page.getByTestId('one');
+  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
+  assert.equal(await pane.evaluate(element => Boolean(element.closest('.dark'))), true, 'the dark app');
+  // The pixels of a control's middle, as drawn: their mean, at rest and under the pointer.
+  const mean = async locator => {
+    const box = await locator.boundingBox();
+    const shot = await page.screenshot({ clip: { x: box.x + 2, y: box.y + 2, width: 4, height: 4 } });
+    const { PNG } = await import('pngjs');
+    const png = PNG.sync.read(shot);
+    let sum = 0;
+    for (let at = 0; at < png.data.length; at += 4) sum += (png.data[at] + png.data[at + 1] + png.data[at + 2]) / 3;
+    return sum / (png.data.length / 4);
+  };
+  const seen = async (name, locator, target = locator) => {
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(250);
+    const rest = await mean(target);
+    await locator.hover();
+    await page.waitForTimeout(250);
+    const hovered = await mean(target);
+    assert.ok(Math.abs(hovered - rest) >= 6, `${name}: the hover fill is seen (${rest.toFixed(1)} -> ${hovered.toFixed(1)})`);
+  };
+  await seen('a strip tool', pane.getByRole('button', { name: 'Keep', exact: true }));
+  // A tool with a menu (this harness's has none; `FloatingToolBar.test.tsx` holds its classes) is the strip's fill round both.
+  if (await pane.locator('[data-navbar-panel="left"][aria-expanded="false"]').count()) await pane.locator('[data-navbar-panel="left"]').click();
+  await seen('the panel head', pane.locator('[data-flat-panel-head]').getByRole('tab', { selected: false }).first());
+  assert.ok(await pane.locator('[data-view-corner-stack] button').count(), 'the harness has the corner\'s stack');
+  await seen('the corner', pane.locator('[data-view-corner-stack] button').first());
+  assert.deepEqual(errors, []);
+});
+
+// Preview's chrome over the model is drawn in the backdrop's ink, not the app's: in the dark app over a light backdrop
+// (the viewport's Background light, so Preview's own backdrop white), its name and its buttons read dark on it.
+test('Preview\'s bar takes the backdrop\'s ink: dark text on a light backdrop in the dark app, at 4.5:1 or more', async (t) => {
+  const origin = await serve(t);
+  const { page, errors } = await newPage(t);
+  await page.goto(`${origin}/?file=panel.harness&background=light`);
+  const pane = page.getByTestId('one');
+  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
+  assert.equal(await pane.evaluate(element => Boolean(element.closest('.dark'))), true, 'the dark app');
+  await pane.getByRole('button', { name: 'Preview', exact: true }).click();
+  const bar = pane.locator('[data-preview-bar]');
+  await bar.waitFor();
+  const read = await bar.evaluate(element => {
+    const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
+    const lum = ([r, g, b]) => [r, g, b].map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; })
+      .reduce((sum, v, at) => sum + v * [0.2126, 0.7152, 0.0722][at], 0);
+    const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    const backdrop = [255, 255, 255];
+    const name = element.querySelector('[data-preview-name]'), button = element.querySelector('[data-preview-controls] button');
+    return { scheme: element.getAttribute('data-scheme'), name: ratio(rgb(getComputedStyle(name).color), backdrop), button: ratio(rgb(getComputedStyle(button).color), backdrop) };
+  });
+  assert.equal(read.scheme, 'light');
+  assert.ok(read.name >= 4.5 && read.button >= 4.5, `the bar reads on the backdrop: ${JSON.stringify(read)}`);
+  assert.deepEqual(errors, []);
+});
 
 test('a shell renderer restores isolated view state on a remount', async (t) => {
   const requests = [];
@@ -218,15 +374,11 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   });
   await page.goto(`${origin}/`);
   const first = page.getByTestId('one');
-  // Display is a menu from its tile at the strip's end, the modes and the Grid switch
-  // (`DisplayPopover.jsx`), portaled out of the pane: a file never opens with it, and it is not a tool.
-  // A pane narrower than a phone's breakpoint (each of two side by side) has a phone's strip: the
-  // view's controls are rows of its More menu, Projection and Preview items, Display's and the zoom's
-  // choices opened under their rows in More itself (a phone has no room beside More for a submenu).
-  const displayButton = pane => pane.locator('[data-cad-toolbar] [data-view-controls]').getByRole('button', { name: /^Display mode: / });
-  const moreButton = pane => pane.locator('[data-cad-toolbar] [data-strip-more]');
-  const moreMenu = page.getByRole('menu', { name: 'More tools', exact: true });
-  const display = moreMenu.getByRole('group', { name: 'Display', exact: true });
+  // A desktop's view settings are the navbar's View ▾. A pane narrower than a phone's breakpoint (each of two side by
+  // side) has a phone's strip and no corner: its navbar's View opens the same menu (`ViewSettingsMenu.jsx`).
+  const displayButton = pane => pane.locator('[data-navbar-view-controls] [data-display-mode]');
+  const viewButton = pane => pane.locator('[data-navbar-view-controls] [data-view-menu]');
+  const display = page.locator('[role=menu][aria-label="View"]');
   const cameraZoom = id => page.evaluate(pane => window.cadHarness[pane].controller?.readState().camera?.zoom ?? null, id);
   await displayButton(first).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
   await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
@@ -245,8 +397,8 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   // ISOLATED: a sibling renderer over the same file opens at its own framing, and the first
   // pane keeps the camera it was given.
   await page.evaluate(() => window.cadHarness.second(true));
-  await moreButton(page.getByTestId('two')).waitFor();
-  assert.equal(await displayButton(page.getByTestId('two')).count(), 0, 'a phone-wide pane has no Display tile');
+  await viewButton(page.getByTestId('two')).waitFor();
+  assert.equal(await page.getByTestId('two').locator('[data-view-cube], [data-zoom-pill]').count(), 0, 'and no corner');
   await page.waitForFunction(() => window.cadHarness.b.controller?.readState().loading === false);
   assert.equal(await cameraZoom('b'), 1, 'a sibling renderer opens at its own framing');
   assert.ok(requests.includes('/two/mesh.stl'));
@@ -255,23 +407,19 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   // observer and camera event publish before taking the saved snapshot.
   await settle(page);
 
-  // The file goes with its Display choices open, from More (the first pane is phone-wide now too):
-  // Display's row opens the modes under it, then Grid, which toggles and leaves them open.
-  await moreButton(first).click();
-  assert.deepEqual(await moreMenu.getByRole('menuitem').evaluateAll(items => items.map(item => `${item.textContent.trim()}:${item.getAttribute('aria-haspopup') || (item.hasAttribute('aria-expanded') ? 'opens' : 'item')}`)),
-    ['Projection:item', 'Display:opens', 'Zoom:opens', 'Preview:item'], 'the view\'s controls are More\'s rows: Projection switches, Display and Zoom open their choices under them');
-  await moreMenu.getByRole('menuitem', { name: 'Display', exact: true }).click();
+  // The file goes with its View menu open (the first pane is phone-wide now too): its submenus the 3D view's, the STL's
+  // one mode in Display's, Grid a check row that toggles and leaves the menu open.
+  await page.setViewportSize({ width: 800, height: 812 });
+  await viewButton(first).click();
   await display.waitFor();
-  // One menu, every row of it on screen: nothing is placed beside More, where a phone has no room.
-  assert.equal(await page.getByRole('menu').count(), 1, 'More alone');
-  assert.deepEqual(await moreMenu.locator('[role^=menuitem]').evaluateAll(items => items.filter(item => {
-    const box = item.getBoundingClientRect();
-    return box.left < 0 || box.top < 0 || box.right > window.innerWidth || box.bottom > window.innerHeight;
-  }).map(item => item.textContent.trim())), [], 'every row on screen');
-  assert.deepEqual(await display.getByRole('menuitemradio').allInnerTexts(), ['Solid'], 'an STL of one mesh: Solid alone');
-  assert.equal(await display.getByRole('menuitem').count(), 0, 'no settings page');
-  await display.getByRole('menuitemcheckbox', { name: 'Grid', exact: true }).click();
-  assert.equal(await display.getByRole('menuitemcheckbox', { name: 'Grid', exact: true }).getAttribute('aria-checked'), 'true');
+  assert.deepEqual(await display.locator('[data-view-sub], [data-view-toggle]').evaluateAll(rows => rows.map(row => row.getAttribute('data-view-sub') ?? row.getAttribute('data-view-toggle'))),
+    ['display', 'projection', 'background', 'grid'], 'the menu\'s rows: Display, Projection, Background, Grid');
+  await display.locator('[data-view-sub="display"]').click();
+  assert.deepEqual(await page.locator('[data-view-sub-content="display"] [data-display-mode-option]').allInnerTexts(), ['Solid'], 'an STL of one mesh: Solid alone');
+  assert.equal(await first.locator('[data-viewer-navbar] [data-navbar-panel]').count(), 0, 'an STL has nothing to list: no panel, so no toggle');
+  const grid = display.locator('[data-view-toggle="grid"]');
+  await grid.click();
+  assert.equal(await grid.getAttribute('aria-checked'), 'true');
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.grid === true);
   assert.equal(await display.count(), 1, 'ticking Grid leaves the menu open');
   await page.evaluate(() => window.cadHarness.mounted(false));
@@ -294,10 +442,10 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
     assert.deepEqual([saved.display.mode, saved.display.grid], ['solid', true], 'and the display: its mode and the Grid switch');
   }
   await page.evaluate(() => window.cadHarness.mounted(true));
-  // Whether Display is open is transient, not file state.
-  await moreButton(first).waitFor();
-  assert.equal(await display.count(), 0, 'the remounted file opens with its Display menu shut');
-  assert.deepEqual([await moreButton(first).getAttribute('aria-expanded'), await moreMenu.count()], ['false', 0], 'and More shut');
+  // Whether View is open is transient, not file state.
+  await viewButton(first).waitFor();
+  assert.equal(await display.count(), 0, 'the remounted file opens with its View menu shut');
+  assert.equal(await viewButton(first).getAttribute('aria-expanded'), 'false');
   // The pane remounts before the viewport adopts the mesh and publishes its restored
   // camera. Wait for the actual presented frame, not an arbitrary settling delay.
   await page.waitForFunction(() => {
@@ -514,8 +662,8 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   const snapped = await page.evaluate(() => window.__cadCamera());
   snapped.target.forEach((value, index) => assert.ok(Math.abs(value - beforeSnap.target[index]) < 1e-8));
   assert.equal(snapped.zoom, beforeSnap.zoom);
-  // There is no Home, in the cube or beside it: Zoom to fit brings a view back.
-  assert.equal(await pane.getByRole('button', { name: 'Home', exact: true }).count(), 0, 'no Home in the view');
+  // Home, the corner's, nearest the cube (the view the file opened with: `ShellChrome.test.tsx` presses it).
+  assert.equal(await pane.locator('[data-view-corner-home] [data-view-home]').count(), 1, 'Home in the corner');
   await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
   const recovered = await settleInk(ink => ink > 0.05, 'Zoom to Fit frames the plate after panning away');
   assert.ok(recovered > lost * 5);
@@ -696,33 +844,33 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.equal(await overlay.count(), 0, 'a plain load covers nothing');
   assert.equal(await card.count(), 0, 'and raises nothing');
 
-  // THE CUBE IS THE BOTTOM-RIGHT CORNER'S, far enough off the bottom that its axes stay inside the
-  // view, and the tool stack stops above it. The view's controls, Projection, Display then Preview,
-  // end the strip after its rule; the navbar holds none of them. The right of the view is Quick
-  // Edit's, and the bottom middle the host's (a composer, on some).
+  // THE CUBE IS THE TOP-RIGHT CORNER'S: its 68px box (square: one uniform scale) 12px off the top and 12px from the
+  // right, and the bottom row is Quick Edit's alone: the tool stack stops clear of it. Home stands beside the cube's box,
+  // 4px outside it at its top-left, never over it; Display, Projection and Preview are the navbar's, at its right end,
+  // Preview last; the strip is the tools alone, no rule. The bottom middle is the host's (a composer, on some).
   const frameBox = await canvasElement.boundingBox();
   const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
   const stackBox = await pane.locator('[data-cad-tool-groups]').boundingBox();
-  const offBottom = frameBox.y + frameBox.height - cubeBox.y - cubeBox.height;
-  // Its box 8px off the bottom and 2px from the right edge, so its axes stay inside the view.
-  assert.ok(Math.abs(offBottom - 8) < 0.5, `the view cube sits 8px off the bottom: ${offBottom}px`);
+  const offTop = cubeBox.y - frameBox.y;
+  assert.deepEqual([Math.round(cubeBox.width), Math.round(cubeBox.height)], [68, 68], 'the cube\'s box, 68px square');
+  assert.ok(Math.abs(offTop - 12) < 0.5, `the view cube sits 12px off the top: ${offTop}px`);
   const offRight = frameBox.x + frameBox.width - cubeBox.x - cubeBox.width;
-  assert.ok(Math.abs(offRight - 2) < 0.5, `the view cube stays 2px from the right edge: ${offRight}px`);
-  assert.ok(stackBox.y + stackBox.height <= cubeBox.y, 'the tool stack stops above the cube');
-  assert.deepEqual(await pane.locator('[data-cad-toolbar] [data-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Projection: Orthographic', 'Display mode: Solid', 'Preview'], 'Projection, Display then Preview at the strip\'s end');
-  // The corner is the cube's alone: where a ViewCube's house would stand, over its box's top-left corner, a press
-  // reaches what it reaches over the bare canvas.
-  const hitAt = (x, y) => page.evaluate(([x, y]) => {
-    const hit = document.elementFromPoint(x, y);
-    return hit ? `${hit.tagName}${hit.closest('button, [role=button]') ? ' (a control)' : ''}` : null;
-  }, [x, y]);
-  const bare = await hitAt(frameBox.x + 40, frameBox.y + frameBox.height / 2);
-  for (const [x, y] of [[cubeBox.x - 4, cubeBox.y - 4], [cubeBox.x - 4, cubeBox.y + 6], [cubeBox.x + 6, cubeBox.y - 10]]) {
-    assert.equal(await hitAt(x, y), bare, `nothing stands at the cube's upper-left: (${x}, ${y})`);
-  }
-  assert.equal(await pane.locator('[data-cad-toolbar] [data-strip-rule] + [data-view-controls]').count(), 1, 'after the strip\'s rule');
-  assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');
+  assert.ok(Math.abs(offRight - 12) < 0.5, `the view cube stands 12px from the right edge: ${offRight}px`);
+  assert.ok(stackBox.y + stackBox.height <= frameBox.y + frameBox.height - 68 - 16 + 0.5, 'the tool stack stops clear of Quick Edit\'s row');
+  assert.equal(await pane.locator('[data-cad-toolbar] [data-view-controls]').count(), 0, 'nothing of the view on the strip');
+  assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label').split(':')[0])),
+    ['View', 'Preview'], 'View and Preview, the navbar\'s, Preview last');
+  // Home is attached to the cube as drawn: 4px left of its outline, its top on the top face's top (the cube is drawn
+  // from the view the file opened with, inset in its box).
+  const homeBox = await pane.locator('[data-view-corner-home] [data-view-home]').boundingBox();
+  const ink = await pane.locator('[data-view-cube] svg').evaluate(svg => {
+    const boxes = [...svg.querySelectorAll('g > polygon')].map(polygon => polygon.getBoundingClientRect());
+    return { left: Math.min(...boxes.map(box => box.left)), top: Math.min(...boxes.map(box => box.top)) };
+  });
+  assert.deepEqual([homeBox.width, homeBox.height, Math.round(ink.left - (homeBox.x + homeBox.width)), Math.round(homeBox.y - ink.top)], [24, 24, 4, 0],
+    `Home, 24px, 4px from the drawn cube at its top-left: ${JSON.stringify({ homeBox, ink })}`);
+  assert.equal(await pane.locator('[data-view-corner-stack]:not([data-view-corner-home])').count(), 0, 'no stack under the cube');
+  assert.equal(await pane.locator('[data-cad-toolbar] [data-strip-rule]').count(), 0, 'no rule on the strip');
 
   // FINDING: the wait before the file is even located covers the viewport, and says
   // so as such rather than as a phase of reading it.
@@ -815,9 +963,9 @@ test('a renderer says more about its load than a download: finding the file, edi
   // And the frame still takes focus on that same press, as it always did.
   assert.equal(await page.evaluate(() => document.activeElement?.dataset?.slot), 'cad-file-view');
 
-  // Quick Edit is nowhere until something is picked; then it takes the top-right corner, 15rem
-  // wide, and its own corner sizes it: wider to the left, and its note taller than the 10rem it
-  // grows to with what is written. The box keeps up with the corner, a frame after each move.
+  // Quick Edit is nowhere until something is picked; then it is the bar at the view's bottom, on the strip's centre
+  // line, clear of the corner, a chat's input: its context row over its note, one line, which grows upward as it is
+  // written, its bottom staying where it stands.
   const quickEdit = pane.getByRole('region', { name: 'Quick Edit', exact: true });
   assert.equal(await pane.locator('[data-quick-edit-box]').count(), 0, 'nothing picked: no Quick Edit, not even a button');
   await canvasElement.click({ button: 'right', position: { x: 300, y: 200 } });
@@ -825,28 +973,19 @@ test('a renderer says more about its load than a download: finding the file, edi
   await quickEdit.waitFor();
   await quickEdit.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
   const opened = await quickEdit.boundingBox();
-  // Its corner is the view's top-right, 8px in, whatever the strip's width: the two may overlap.
-  assert.ok(opened.x + opened.width > frameBox.x + frameBox.width - 20 && Math.abs(opened.y - frameBox.y - 8) <= 1,
-    `Quick Edit takes the view's top-right corner: ${JSON.stringify([opened, frameBox])}`);
-  assert.equal(Math.round(opened.width), 240);
+  const stripBox = await pane.getByRole('group', { name: 'Interaction tools' }).boundingBox();
+  assert.ok(Math.abs(opened.x + opened.width / 2 - (stripBox.x + stripBox.width / 2)) <= 1 && Math.abs(frameBox.y + frameBox.height - 16 - opened.y - opened.height) <= 1,
+    `Quick Edit is the bar on the strip's line, 16px off the bottom: ${JSON.stringify([opened, stripBox, frameBox])}`);
+  assert.ok(opened.width <= 480, 'never wider than 480px');
   const note = quickEdit.getByRole('textbox', { name: 'Describe your changes', exact: true });
-  const noteHeight = (await note.boundingBox()).height;
-  const corner = await quickEdit.locator('[data-quick-edit-resize]').boundingBox();
-  const grip = { x: corner.x + corner.width / 2, y: corner.y + corner.height / 2 };
-  await page.mouse.move(grip.x, grip.y);
-  await page.mouse.down();
-  // Wider by 30px in all: the strip's column (its zoom readout too) leaves an 800px view's box ~38px to grow.
-  await page.mouse.move(grip.x - 15, grip.y + 60, { steps: 2 });
-  await settle(page);
-  const midway = (await quickEdit.boundingBox()).width;
-  assert.ok(Math.abs(midway - opened.width - 15) <= 1, `mid-drag, the box is where its corner is: ${opened.width} -> ${midway}`);
-  await page.mouse.move(grip.x - 30, grip.y + 120, { steps: 2 });
-  await page.mouse.up();
-  const resized = await quickEdit.boundingBox();
-  assert.ok(Math.abs(resized.width - opened.width - 30) <= 1, `dragged out 30px: ${opened.width} -> ${resized.width}`);
-  const noteResized = (await note.boundingBox()).height;
-  assert.ok(noteResized > 160 && Math.abs(noteResized - noteHeight - 120) <= 1, `and its note 120px down: ${noteHeight} -> ${noteResized}`);
-  assert.ok(Math.abs(resized.x + resized.width - opened.x - opened.width) < 1, 'still hanging from the same corner');
+  await note.click();
+  await page.keyboard.type('One line.');
+  for (const line of ['Two.', 'Three.']) { await page.keyboard.press('Shift+Enter'); await page.keyboard.type(line); }
+  const grown = await quickEdit.boundingBox();
+  assert.ok(grown.height >= opened.height + 39 && Math.abs(grown.y + grown.height - opened.y - opened.height) <= 1,
+    `three lines, grown upward by two: ${opened.height} -> ${grown.height}`);
+  assert.equal(await note.evaluate(element => element.innerText.split('\n').filter(Boolean).length), 3, 'real new lines');
+  // Its X puts it away, the pick kept.
   await quickEdit.getByRole('button', { name: 'Close Quick Edit', exact: true }).click();
   await quickEdit.waitFor({ state: 'detached' });
   assert.deepEqual(errors, []);
@@ -856,11 +995,15 @@ test('an alert the model survives is drawn on the canvas, beside the docked pane
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
   await page.addInitScript(() => { window.Worker = undefined; });
+  // A view wide enough for the panel to push the model aside (`sidebars.js`: the model keeps 600px).
+  await page.setViewportSize({ width: 1200, height: 600 });
   await page.goto(`${origin}/?file=panel.harness`);
+  await page.addStyleTag({ content: '#root > div { width: 1100px !important; }' });
   const pane = page.getByTestId('one');
-  // The tree is the view's panel's, opened from its pill (the 800px view starts it collapsed), made as wide as it goes.
-  await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
-  await pane.locator('[data-flat-panel]').getByRole('tab', { name: 'Harness tree', exact: true }).click();
+  // The tree is the view's panel's, docked at the view's left, made as wide as it goes.
+  const harnessTab = pane.locator('[data-flat-panel]').getByRole('tab', { name: 'Harness tree', exact: true });
+  await pane.locator('[data-flat-panel] [role=tab], [data-flat-panel] [data-flat-panel-heading]').first().waitFor();
+  if (await harnessTab.count()) await harnessTab.click();
   const tree = pane.locator('[data-flat-panel]');
   await pane.getByRole('separator', { name: 'Resize panel', exact: true }).press('End');
   // A failed update keeps the model, and with it the tools: the card stands on the canvas, the panel docked beside it untouched.
@@ -872,5 +1015,270 @@ test('an alert the model survives is drawn on the canvas, beside the docked pane
   const drawn = await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('[role="alert"]')),
     { x: over.x + over.width / 2, y: over.y + over.height / 2 });
   assert.ok(drawn, 'the card is drawn where it stands');
+  assert.deepEqual(errors, []);
+});
+
+// The one panel (`sidebars.js`): it always pushes the model aside, never over it; where open it would leave the model
+// under 640px (896px of view, with its 256px) it starts collapsed (never written), and opened then it pushes; \ hides
+// it and the strip and brings back what was open.
+test('the panel always pushes, starts collapsed where the model would keep under 640px without writing it, and \\ hides and restores it', async (t) => {
+  const origin = await serve(t);
+  const page = await browser.newPage({ viewport: { width: 1400, height: 640 } });
+  t.after(() => page.close());
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(`${origin}/?file=panel.harness&store=session`);
+  const pane = page.getByTestId('one');
+  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
+  const width = async value => {
+    await page.locator('#root > div').first().evaluate((element, value) => element.style.setProperty('width', `${value}px`, 'important'), value);
+    await settle(page);
+    await settle(page);
+  };
+  const surface = pane.locator('[data-cad-surface]');
+  const mode = () => surface.getAttribute('data-sidebar');
+  const waitMode = value => page.waitForFunction(value => document.querySelector('[data-testid="one"] [data-cad-surface]')?.getAttribute('data-sidebar') === value, value);
+  const kept = () => page.evaluate(() => sessionStorage.getItem('text-to-cad:tab:harness') || '');
+  // The strip is centred on the whole view, whatever the panel does, and stands over the panel where they meet: what is
+  // drawn at its centre is the strip, not the panel.
+  const centredOnArea = () => page.evaluate(() => {
+    const pane = document.querySelector('[data-testid="one"]');
+    const view = pane.querySelector('[data-cad-surface]').getBoundingClientRect();
+    const strip = pane.querySelector('[aria-label="Interaction tools"]').getBoundingClientRect();
+    const on = document.elementFromPoint(strip.left + 6, strip.top + strip.height / 2);
+    return Math.abs(strip.left + strip.width / 2 - (view.left + view.width / 2)) <= 1 && Boolean(on?.closest('[aria-label="Interaction tools"]'));
+  });
+  // The open panel is beside the stage, never over it; there is one.
+  const besideStage = () => page.evaluate(() => {
+    const pane = document.querySelector('[data-testid="one"]');
+    const stage = pane.querySelector('[data-cad-canvas]').getBoundingClientRect();
+    const open = [...pane.querySelectorAll('aside[data-panel-surface]:not([hidden])')];
+    return open.length === 1 && open.every(aside => aside.getBoundingClientRect().right <= stage.left + 1);
+  });
+  // The panel's drawn width: one number at every view width, never the view's share.
+  const drawnWidth = () => pane.locator('aside[data-flat-panel]').evaluate(aside => Math.round(aside.getBoundingClientRect().width));
+  await width(1300);
+  await waitMode('push');
+  assert.ok(await centredOnArea(), 'pushed: the strip on the view\'s centre line');
+  assert.ok(await besideStage());
+  assert.equal(await drawnWidth(), 256);
+  // Down to 896px it still pushes: the model keeps 640px beside the 256px panel.
+  await width(896);
+  await waitMode('push');
+  assert.ok(await besideStage());
+  assert.equal(await drawnWidth(), 256, 'a narrower view never narrows the panel');
+  // Below it collapses on its own, unwritten; opened then, it pushes too, and Escape leaves it where it is.
+  await width(867);
+  await waitMode('closed');
+  assert.ok(!/"open":false/.test(await kept()), 'a collapse the width made is not kept');
+  await pane.locator('[data-navbar-panel="left"][aria-expanded="false"]').click();
+  await waitMode('push');
+  assert.ok(await besideStage(), 'opened in a narrow view, it pushes');
+  assert.equal(await drawnWidth(), 256, 'opened in a narrow view, at its one width');
+  assert.ok(await centredOnArea(), 'the strip stays on the view\'s centre, over the panel');
+  await page.keyboard.press('Escape');
+  assert.equal(await mode(), 'push');
+  assert.ok(!/"open":/.test(await kept()), 'nothing the width did was kept');
+  // Wide again: open, as the person left it.
+  await width(1300);
+  await waitMode('push');
+  // \ hides the panel and the strip, and brings back exactly what was open; the choice is the file's, kept.
+  await surface.focus();
+  await page.keyboard.press('\\');
+  await waitMode('closed');
+  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'the strip goes too');
+  assert.ok(/"hidden":true/.test(await kept()));
+  await page.keyboard.press('\\');
+  await waitMode('push');
+  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 1);
+  // A person's close is kept: closed by its button, the panel stays closed when the view is wide.
+  await pane.locator('[data-navbar-panel="left"]').click();
+  assert.equal(await mode(), 'closed');
+  assert.ok(/"open":false/.test(await kept()));
+  assert.deepEqual(errors, []);
+});
+
+// The strip and Quick Edit's bar are centred on the whole view, always: no panel moves or narrows them, and where they
+// meet the panel they stand over it, and take the press. The panel's tab scrolls as one.
+test('the strip and Quick Edit stay centred on the view at 1440, 867 and 620 with the panel open, over it where they meet; the panel is one scroller', async (t) => {
+  const origin = await serve(t);
+  const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
+  t.after(() => page.close());
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(`${origin}/?file=panel.harness`);
+  const pane = page.getByTestId('one');
+  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
+  // Something picked, so Quick Edit's bar is up.
+  const canvas = pane.locator('[data-cad-canvas]').first();
+  await canvas.click({ button: 'right', position: { x: 300, y: 200 } });
+  await page.getByRole('menuitem', { name: 'Note the press', exact: true }).click();
+  await pane.locator('[data-quick-edit-box]').waitFor();
+  const read = () => page.evaluate(() => {
+    const pane = document.querySelector('[data-testid="one"]');
+    const view = pane.querySelector('[data-cad-surface]').getBoundingClientRect();
+    const strip = pane.querySelector('[aria-label="Interaction tools"]').getBoundingClientRect();
+    const bar = pane.querySelector('[data-quick-edit-box]').getBoundingClientRect();
+    const panels = [...pane.querySelectorAll('aside[data-flat-panel]')].filter(aside => !aside.hidden).map(aside => aside.getBoundingClientRect());
+    // Where the bar or the strip meets a panel, a press there reaches the bar or the strip.
+    const meets = (box, selector) => panels.filter(panel => panel.left < box.right && panel.right > box.left).every(panel => {
+      const x = Math.max(box.left, panel.left) + 4, y = box.top + box.height / 2;
+      return Boolean(document.elementFromPoint(x, y)?.closest(selector));
+    });
+    return { view: view.left + view.width / 2, width: view.width, strip: strip.left + strip.width / 2, bar: bar.left + bar.width / 2, barWidth: bar.width,
+      panels: panels.length, stripOver: meets(strip, '[aria-label="Interaction tools"]'), barOver: meets(bar, '[data-quick-edit-box]'),
+      overlap: panels.some(panel => panel.left < bar.right && panel.right > bar.left) };
+  });
+  for (const width of [1440, 867, 620]) {
+    await page.locator('#root > div').first().evaluate((element, width) => element.style.setProperty('width', `${width}px`, 'important'), width);
+    await settle(page); await settle(page);
+    // The panel open (a view that would leave the model under 640px starts it collapsed).
+    const shut = pane.locator('[data-navbar-panel="left"][aria-expanded="false"]');
+    if (await shut.count()) await shut.click();
+    await settle(page);
+    const at = await read();
+    assert.ok(Math.abs(at.strip - at.view) <= 1, `${width}: the strip on the view's centre: ${JSON.stringify(at)}`);
+    assert.ok(Math.abs(at.bar - at.view) <= 1, `${width}: Quick Edit on the view's centre: ${JSON.stringify(at)}`);
+    assert.equal(Math.round(at.barWidth), Math.min(400, width - 32), `${width}: 400px at most, else the view's width less 16px a side`);
+    assert.ok(at.panels > 0 && at.stripOver && at.barOver, `${width}: over the panel where they meet: ${JSON.stringify(at)}`);
+    if (width === 620) assert.ok(at.overlap, 'at 620 the bar meets the panel, and stands over it');
+  }
+  // The panel: one scroller for its tabs; nothing in a tab scrolls on its own.
+  await page.locator('#root > div').first().evaluate(element => element.style.setProperty('width', '1440px', 'important'));
+  await page.setViewportSize({ width: 1500, height: 900 });
+  await settle(page);
+  const scrollers = await pane.locator('aside[data-flat-panel]').evaluate(aside => [...aside.querySelectorAll('*')]
+    .filter(element => /(auto|scroll)/.test(getComputedStyle(element).overflowY) && !element.closest('[data-flat-panel-tabs]')).map(element => element.getAttribute('data-slot') || element.tagName));
+  assert.deepEqual(scrollers, ['scroll-area-viewport'], `one scroller, the panel's: ${scrollers}`);
+  assert.deepEqual(errors, []);
+});
+
+// Copy Prompt, Quick Edit's one action where the host takes no message (the web's), keeps its words at the bar's full
+// 400px — its text and its icon side by side inside the button, beside the note — and drops them for its icon only
+// where the window makes the bar narrower.
+test('Copy Prompt keeps its words at the 400px bar, and is its icon alone only where the window is narrower than the bar', async (t) => {
+  const origin = await serve(t);
+  const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
+  t.after(() => page.close());
+  page.setDefaultTimeout(15000);
+  await page.addInitScript(() => { window.__cadPromptDestination = 'clipboard'; });
+  await page.goto(`${origin}/?file=panel.harness`);
+  const pane = page.getByTestId('one');
+  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
+  await pane.locator('[data-cad-canvas]').first().click({ button: 'right', position: { x: 300, y: 200 } });
+  await page.getByRole('menuitem', { name: 'Note the press', exact: true }).click();
+  await pane.locator('[data-quick-edit-box]').waitFor();
+  const read = () => pane.locator('[data-quick-edit-box]').evaluate(bar => {
+    const actions = [...bar.querySelectorAll('[data-quick-edit-action]')];
+    const button = bar.querySelector('[data-quick-edit-action="copy"]'), words = button.querySelector('span');
+    const box = button.getBoundingClientRect(), text = words.getBoundingClientRect(), icon = button.querySelector('svg').getBoundingClientRect();
+    return { actions: actions.length, bar: Math.round(bar.getBoundingClientRect().width), words: getComputedStyle(words).display !== 'none' && text.width > 0,
+      inside: text.right <= box.right + 0.5 && icon.right <= text.left + 0.5, text: words.textContent };
+  });
+  for (const width of [1440, 432]) {
+    await page.locator('#root > div').first().evaluate((element, width) => element.style.setProperty('width', `${width}px`, 'important'), width);
+    await settle(page);
+    assert.deepEqual(await read(), { actions: 1, bar: 400, words: true, inside: true, text: 'Copy Prompt' }, `${width}: Copy Prompt in words`);
+  }
+  await page.locator('#root > div').first().evaluate(element => element.style.setProperty('width', '380px', 'important'));
+  await settle(page);
+  const narrow = await read();
+  assert.deepEqual([narrow.bar < 400, narrow.words], [true, false], `a window narrower than the bar: the icon alone: ${JSON.stringify(narrow)}`);
+});
+
+// The qdd actuator's four tabs fit the 256px panel in English, with no scrolling: the head is the tabs alone, and the
+// search is the Model tab's first row, over its tree, gone from the other tabs; / brings it back with the keyboard in it.
+test('four tabs fit the 256px panel unscrolled, and the search is the Model tab\'s first row alone; a phone\'s sheet draws the same tabs, search and rows', async (t) => {
+  const origin = await serve(t);
+  const { page, errors } = await newPage(t);
+  await page.goto(`${origin}/?file=panel-qdd.harness`);
+  const pane = page.getByTestId('one');
+  await pane.locator('[data-flat-panel-tab="animation"]').waitFor();
+  const fit = await pane.locator('aside[data-flat-panel]').evaluate(aside => {
+    const strip = aside.querySelector('[data-flat-panel-tabs]');
+    return { width: Math.round(aside.getBoundingClientRect().width), names: [...strip.querySelectorAll('[data-flat-panel-tab-name]')].map(name => name.textContent),
+      overflow: strip.scrollWidth - strip.clientWidth, clipped: strip.getAttribute('data-clipped'), head: [...aside.querySelector('[data-flat-panel-head]').children].length };
+  });
+  assert.deepEqual(fit, { width: 256, names: ['Model', 'Params', 'Joints', 'Animation'], overflow: 0, clipped: null, head: 1 });
+  const search = pane.locator('[data-flat-panel-body] > [data-flat-panel-search] input');
+  assert.equal(await search.count(), 1);
+  await pane.locator('[data-flat-panel-tab="animation"]').click();
+  assert.equal(await search.count(), 0);
+  await pane.locator('canvas').first().click();
+  await page.keyboard.press('/');
+  await search.waitFor();
+  assert.equal(await search.evaluate(input => document.activeElement === input), true);
+  assert.equal(await pane.locator('[data-flat-panel-tab="tree"]').getAttribute('aria-selected'), 'true');
+  // On a phone the panel is a sheet of the same components: a tree row's gap, glyph slot, actions (their gap, size and
+  // inset), a tab's size and type and the search row are the desktop's, only the row a finger's height (36px, its own);
+  // and the four tabs fit the sheet's strip, or it scrolls as the desktop's does, its clipped edge marked.
+  const geometry = () => page.evaluate(() => {
+    const surface = [...document.querySelectorAll('[data-testid="one"] [data-panel-surface], [data-panel-sheet] [data-panel-surface]')].find(node => !node.hidden && node.getBoundingClientRect().width > 0);
+    const row = surface.querySelector('[data-tree-row]'), actions = row.querySelector('[data-row-actions]'), [isolate, hide] = actions.querySelectorAll('button');
+    const tab = surface.querySelector('[role=tab]'), strip = surface.querySelector('[data-flat-panel-tabs]'), search = surface.querySelector('[data-slot="tree-filter"]');
+    const size = node => { const r = node.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; };
+    return { row: { gap: getComputedStyle(row).columnGap, glyph: size(row.querySelector('[data-tree-row-glyph]'))[0], actionsGap: getComputedStyle(actions).columnGap,
+      between: Math.round(hide.getBoundingClientRect().left - isolate.getBoundingClientRect().right), button: size(isolate), inset: getComputedStyle(actions).paddingRight },
+    height: Math.round(row.getBoundingClientRect().height), tab: [Math.round(tab.getBoundingClientRect().height), getComputedStyle(tab).paddingLeft, getComputedStyle(tab).fontSize],
+    search: search ? Math.round(search.getBoundingClientRect().height) : null,
+    strip: { overflow: strip.scrollWidth - strip.clientWidth, clipped: strip.getAttribute('data-clipped'), tabs: strip.children.length } };
+  });
+  await pane.locator('[data-flat-panel-tab="tree"]').click();
+  const desktop = await geometry();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.locator('#root > div').first().evaluate(element => element.style.setProperty('width', '375px', 'important'));
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-cad-tool-groups]')?.hasAttribute('data-mobile'));
+  await pane.locator('[data-navbar-panel="left"]').click();
+  await page.locator('[data-panel-sheet] [data-tree-row]').first().waitFor();
+  await settle(page);
+  const phone = await geometry();
+  assert.deepEqual([phone.row, phone.tab, phone.search], [desktop.row, desktop.tab, desktop.search], `the phone's rows, tabs and search are the desktop's: ${JSON.stringify({ desktop, phone })}`);
+  assert.deepEqual([desktop.height, phone.height, desktop.row.between, phone.strip.tabs], [28, 36, 2, 4]);
+  assert.ok(phone.strip.overflow <= 0 || phone.strip.clipped === 'end', `the sheet's strip fits or shows it scrolls: ${JSON.stringify(phone.strip)}`);
+  assert.equal(await page.locator('[data-panel-sheet] [data-flat-panel-head] button:not([role=tab])').count(), 0, 'the sheet\'s head is the tabs alone: no Back');
+  assert.deepEqual(errors, []);
+});
+
+// The panel's tab strip (`FlatPanel.jsx`), scrolled sideways away from its open tab, the last: a trackpad's swipe
+// (small sideways steps with vertical jitter, some of it larger than the step) and a mouse's wheel each move it one
+// way only, frame by frame, never snapping back toward the open tab.
+test('the panel\'s tab strip scrolls away from its open tab one way, under a trackpad\'s swipe and a mouse\'s wheel', async (t) => {
+  const origin = await serve(t);
+  const { page, errors } = await newPage(t);
+  await page.goto(`${origin}/?file=panel.harness`);
+  // Its three tabs fit the 240px panel in English: spaced out as a longer translation is, they do not.
+  await page.addStyleTag({ content: '[data-flat-panel-tab-name], [data-flat-panel-tab] [aria-hidden] { letter-spacing: 6px; }' });
+  const pane = page.getByTestId('one');
+  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
+  await pane.getByRole('button', { name: 'Pose', exact: true }).click();
+  const strip = pane.locator('[data-flat-panel-tabs]');
+  await strip.locator('[data-flat-panel-tab="position"]').click();
+  await page.waitForFunction(() => {
+    const element = document.querySelector('[data-testid="one"] [data-flat-panel-tabs]');
+    return element && element.scrollWidth > element.clientWidth + 20 && element.scrollLeft + element.clientWidth >= element.scrollWidth - 1;
+  });
+  const box = await strip.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const reset = () => strip.evaluate(element => {
+    element.scrollLeft = element.scrollWidth;
+    window.__stripLog = [];
+    const tick = () => { window.__stripLog.push(element.scrollLeft); if (window.__stripLog.length < 600) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  });
+  const readLog = () => page.evaluate(() => [...window.__stripLog, document.querySelector('[data-testid="one"] [data-flat-panel-tabs]').scrollLeft]);
+  for (const [what, step] of [['a trackpad\'s swipe', at => [-2, at % 3 === 0 ? 3 : -1]], ['a mouse\'s wheel', () => [0, -4]]]) {
+    // A new gesture: the last one's events long gone (`FlatPanel.jsx`'s `WHEEL_GESTURE_GAP_MS`).
+    await page.waitForTimeout(300);
+    await reset();
+    const start = await strip.evaluate(element => element.scrollLeft);
+    for (let at = 0; at < 12; at++) { await page.mouse.wheel(...step(at)); await settle(page); }
+    await settle(page);
+    const log = await readLog();
+    const back = log.findIndex((value, at) => at > 0 && value > log[at - 1] + 0.5);
+    assert.equal(back, -1, `${what}: never back toward the open tab: ${log.join(' ')}`);
+    assert.ok(log.at(-1) < start - 10, `${what}: it moved: ${start} to ${log.at(-1)}`);
+  }
   assert.deepEqual(errors, []);
 });

@@ -7,11 +7,11 @@ import {
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
-import { STRIP_BUTTON_CLASS, STRIP_SHAPE_CLASS, StripTouchProvider, TOUCH_STRIP_BUTTON_CLASS } from "./stripTouch.js";
+import { STRIP_SHAPE_CLASS, StripTouchProvider, TOP_STRIP_BUTTON_CLASS, TOP_STRIP_SHAPE_CLASS, TOUCH_STRIP_BUTTON_CLASS } from "./stripTouch.js";
 import { ChangedDot } from "./ChangedDot.jsx";
 import { useI18n } from "@cad/ui/i18n";
 
-export { STRIP_BUTTON_CLASS, StripTouchProvider, TOUCH_STRIP_BUTTON_CLASS, useStripButtonClass, useStripTouch } from "./stripTouch.js";
+export { STRIP_BUTTON_CLASS, StripTouchProvider, TOP_STRIP_BUTTON_CLASS, TOUCH_STRIP_BUTTON_CLASS, useStripButtonClass, useStripTouch } from "./stripTouch.js";
 
 /**
  * One tool of the strip. The strip draws it; whoever hands it over decides what
@@ -27,16 +27,13 @@ export { STRIP_BUTTON_CLASS, StripTouchProvider, TOUCH_STRIP_BUTTON_CLASS, useSt
  * @property {import("react").ReactNode} icon
  * @property {boolean} [active]
  * @property {boolean} [disabled]
- * @property {() => void} [onSelect]  Every press of the button (a tool with a `tile` has none).
- * @property {import("react").ReactNode} [tile]  Drawn in place of the button: a model effect's, which opens
- *   its row in a popover from its own tile (`model-effects/ModelTools.jsx`) and is never in hand.
- * @property {(props: { anchor: import("react").RefObject<HTMLElement>, open: boolean, onOpenChange(open: boolean): void }) => import("react").ReactNode} [popover]
- *   With a `tile`: that popover, opened from the touch strip's More button when the tile has no room.
+ * @property {() => void} [onSelect]  Every press of the button.
  * @property {string} [description]  `aria-description`.
  * @property {import("react").ReactNode} [menu]  Its modes: the chevron after its button, and the menu it opens.
- * @property {boolean} [changed]  What it sets is off its default (an effect on the model): a dot in its tile's corner.
- * @property {string} [group]  The strip's group it is in: a thin rule parts it from the tool before it when that
- *   tool's group is another (the tools that pick — Select, Pencil, Shapes, Measure — then the model's effects, "model").
+ * @property {boolean} [changed]  What it sets is off its default (an effect on the model, its tool not in hand): a dot in
+ *   its tile's corner.
+ * @property {string} [group]  The strip's group it is in (the tools that pick — Select, Pencil, Shapes, Measure — then
+ *   the model's effects, "model"): their order, never a rule, since the strip draws none.
  */
 
 /**
@@ -64,12 +61,15 @@ export { STRIP_BUTTON_CLASS, StripTouchProvider, TOUCH_STRIP_BUTTON_CLASS, useSt
 // on hover, while the tool is in hand and while its menu is open; the chevron's half only brightens,
 // on its own hover and while its menu is open (`CHEVRON_CLASS`), with no line between them, so the two never
 // read as two buttons side by side.
-const SPLIT_CLASS = "group/split inline-flex items-center rounded-sm transition hover:bg-sidebar-accent data-[active]:bg-sidebar-accent has-[[aria-expanded=true]]:bg-sidebar-accent";
-const SPLIT_BUTTON_CLASS = "rounded-r-none hover:bg-transparent data-[variant=secondary]:bg-transparent data-[variant=secondary]:hover:bg-transparent group-hover/split:text-sidebar-accent-foreground";
+// A tool with a menu is one fill round its button and chevron: the wrapper's, in the toolbar's fills (the dark's the
+// foreground over the surface, as `TOOLBAR_ICON_BUTTON_CLASS`'s), its button's own put away in both themes.
+const SPLIT_CLASS = ["group/split inline-flex items-center rounded-[4px] transition hover:bg-sidebar-accent data-[active]:bg-sidebar-accent has-[[aria-expanded=true]]:bg-sidebar-accent",
+  "dark:hover:bg-foreground/10 dark:data-[active]:bg-foreground/16 dark:has-[[aria-expanded=true]]:bg-foreground/16"].join(" ");
+const SPLIT_BUTTON_CLASS = ["rounded-r-none hover:bg-transparent data-[variant=secondary]:bg-transparent data-[variant=secondary]:hover:bg-transparent group-hover/split:text-sidebar-accent-foreground",
+  "dark:hover:bg-transparent dark:data-[variant=secondary]:bg-transparent dark:data-[variant=secondary]:hover:bg-transparent"].join(" ");
 
 // A plain function, not a component: the strip's own output is the buttons.
-function toolButton(tool, className = STRIP_BUTTON_CLASS, touch = false) {
-  if (tool.tile) return tool.tile;
+function toolButton(tool, className = TOP_STRIP_BUTTON_CLASS, touch = false) {
   const active = tool.active === true;
   const button = <ToolbarButton tooltipSide="top" label={tool.label} tooltip={tool.tooltip ?? true} shortcut={tool.shortcut} active={active} disabled={tool.disabled}
     className={cn(className, tool.changed && "relative", tool.menu && SPLIT_BUTTON_CLASS)} aria-pressed={active} aria-description={tool.description} onClick={() => tool.onSelect()}
@@ -81,19 +81,18 @@ function toolButton(tool, className = STRIP_BUTTON_CLASS, touch = false) {
   return <span className={cn(SPLIT_CLASS, touch && "rounded-md")} data-tool-split="" data-active={active ? "" : undefined}>{button}{tool.menu}</span>;
 }
 
-const GROUP_CLASS = `pointer-events-auto inline-flex min-h-8 max-w-full ${STRIP_SHAPE_CLASS} ${FLOATING_CHROME_SURFACE_CLASS}`;
+// The strip: Figma's toolbar's proportions on a desktop (40px, `TOP_STRIP_SHAPE_CLASS`), the touch strip's on a phone.
+const GROUP_CLASS = `pointer-events-auto inline-flex max-w-full ${FLOATING_CHROME_SURFACE_CLASS}`;
 // A More row's icon at a menu item's standard size (16px) and one line weight, whatever drew it
 // (a tool's own glyph, a view control's), so the rows read as one list.
 const MORE_ICON_CLASS = "flex size-4 shrink-0 items-center justify-center [&_svg]:size-4! [&_:is(svg,path,circle,line,polyline,polygon,rect,ellipse)]:[stroke-width:2px]";
-const rule = <span role="separator" aria-orientation="vertical" className="mx-0.5 h-4 w-px shrink-0 bg-border" data-strip-rule="" />;
 
 
 /**
  * The interaction tools: a dumb strip positioned by the viewport shell. It renders the
- * tools it is handed, left to right, then the view's own controls (`views`:
- * a 3D view's Display and Preview), which are no tools and sit in the last section the tools have, parted from
- * the tools before by no rule of their own (only when the tools are one group do they get a rule): pressing one leaves the tool in hand as it
- * is. It holds no state and knows no tool by name. On a phone (`touch`) it is one row of
+ * tools it is handed, left to right, then the view's own controls (`views`: a 3D view's Preview, a board's
+ * Flip, 2D/3D and Display), which are no tools: pressing one leaves the tool in hand as it is. No rule parts
+ * them; the strip is one row of tiles at Figma's toolbar's proportions (a 40px bar, 28px tiles). It holds no state and knows no tool by name. On a phone (`touch`) it is one row of
  * touch-sized tiles, the tools, with the view's controls (and any tool that does not fit) in a More
  * menu (`TouchStrip`).
  *
@@ -104,16 +103,9 @@ export default function FloatingToolBar({ tools = [], views = [], touch = false 
   const { t } = useI18n();
   if (!tools.length && !views.length) return null;
   if (touch) return <TouchStrip tools={tools} views={views} />;
-  // Two sections at most, parted by one thin rule: the tools of the first group, then the rest. The view's
-  // controls end the last section the tools have; with one section only, they are the second.
-  const sectioned = tools.some((tool, index) => index > 0 && (tool.group || "") !== (tools[index - 1].group || ""));
   return (<div className="relative z-20 flex max-w-full shrink-0 flex-col items-end gap-1" data-cad-toolbar="tools">
-      <div role="group" aria-label={t("toolbar.tools")} className={cn(GROUP_CLASS, "flex-wrap")}>
-        {tools.map((tool, index) => <Fragment key={tool.id}>
-          {index > 0 && (tool.group || "") !== (tools[index - 1].group || "") ? rule : null}
-          {toolButton(tool)}
-        </Fragment>)}
-        {tools.length && views.length && !sectioned ? rule : null}
+      <div role="group" aria-label={t("toolbar.tools")} className={cn(GROUP_CLASS, TOP_STRIP_SHAPE_CLASS, "flex-wrap")}>
+        {tools.map(tool => <Fragment key={tool.id}>{toolButton(tool)}</Fragment>)}
         {views.length ? <span className="inline-flex items-center gap-1" data-view-controls="">
           {views.map(view => <Fragment key={view.id}>{view.tile}</Fragment>)}
         </span> : null}
@@ -122,9 +114,8 @@ export default function FloatingToolBar({ tools = [], views = [], touch = false 
 }
 
 // The touch strip's geometry, as its classes draw it: 36px tiles 4px apart (`gap-1`), a tool's
-// chevron 20px and touching its button, the rule 1px with 2px each side, and 4px of padding inside
-// a 1px border.
-const TILE_PX = 36, CHEVRON_PX = 20, GAP_PX = 4, RULE_PX = 5, FRAME_PX = 10;
+// chevron 20px and touching its button, and 4px of padding inside a 1px border. No rule parts anything.
+const TILE_PX = 36, CHEVRON_PX = 20, GAP_PX = 4, FRAME_PX = 10;
 
 /**
  * How many of the strip's entries (its tools, then its view controls) fit, in order, in `room`
@@ -135,9 +126,8 @@ export function touchStripFit(entries, room, { more = false } = {}) {
   const width = (count, more) => {
     const shown = entries.slice(0, count);
     const items = shown.length + (more ? 1 : 0);
-    const ruled = shown.some(entry => !entry.view) && shown.some(entry => entry.view);
     return FRAME_PX + shown.reduce((sum, entry) => sum + entry.width, 0) + (more ? TILE_PX : 0)
-      + Math.max(0, items - 1) * GAP_PX + (ruled ? RULE_PX + GAP_PX : 0);
+      + Math.max(0, items - 1) * GAP_PX;
   };
   if (!more && width(entries.length, false) <= room) return entries.length;
   if (more && width(entries.length, true) <= room) return entries.length;
@@ -177,16 +167,15 @@ function TouchStrip({ tools, views }) {
   const count = touchStripFit(toolEntries, room, { more: viewEntries.length > 0 });
   const shown = toolEntries.slice(0, count), hidden = [...toolEntries.slice(count), ...viewEntries];
   const shownTools = shown.filter(entry => !entry.view), shownViews = shown.filter(entry => entry.view);
-  // What opens a popover from More: a view control's, or a model effect's (a tool with a `tile`).
-  const overflowPopovers = hidden.map(entry => entry.view ? entry.control : entry.tool).filter(item => item.popover);
+  // What opens a popover from More: a view control's.
+  const overflowPopovers = hidden.filter(entry => entry.view).map(entry => entry.control).filter(item => item.popover);
   const popoverView = overflowPopovers.find(item => item.id === openView);
   // A tool in hand that lives in More: More's button is drawn selected while it is (its row checked).
   const heldInMore = hidden.some(entry => !entry.view && entry.tool.active === true);
   return <StripTouchProvider value={true}>
     <div ref={root} className="relative z-20 flex max-w-full shrink-0 flex-col items-end gap-1" data-cad-toolbar="tools" data-touch-strip="">
-      <div role="group" aria-label={t("toolbar.tools")} className={cn(GROUP_CLASS, "flex-nowrap")}>
+      <div role="group" aria-label={t("toolbar.tools")} className={cn(GROUP_CLASS, STRIP_SHAPE_CLASS, "flex-nowrap")}>
         {shownTools.map(({ tool }) => <Fragment key={tool.id}>{toolButton(tool, TOUCH_STRIP_BUTTON_CLASS, true)}</Fragment>)}
-        {shownTools.length && shownViews.length ? rule : null}
         {shownViews.length ? <span className="inline-flex items-center gap-1" data-view-controls="">
           {shownViews.map(({ control }) => <Fragment key={control.id}>{control.tile}</Fragment>)}
         </span> : null}
@@ -225,10 +214,6 @@ function TouchStrip({ tools, views }) {
                 onSelect={() => { if (entry.control.popover) pending.current = entry.control.id; else entry.control.onSelect?.(); }}>
                 <span className={MORE_ICON_CLASS} aria-hidden="true">{entry.control.icon}</span>{entry.control.label}
               </DropdownMenuItem>
-              : entry.tool.popover
-                ? <DropdownMenuItem key={entry.tool.id} disabled={entry.tool.disabled} onSelect={() => { pending.current = entry.tool.id; }}>
-                  <span className={MORE_ICON_CLASS} aria-hidden="true">{entry.tool.icon}</span>{entry.tool.label}
-                </DropdownMenuItem>
               : <DropdownMenuCheckboxItem key={entry.tool.id} checked={entry.tool.active === true} disabled={entry.tool.disabled}
                 onSelect={() => entry.tool.onSelect()}>
                 <span className={MORE_ICON_CLASS} aria-hidden="true">{entry.tool.icon}</span>{entry.tool.label}

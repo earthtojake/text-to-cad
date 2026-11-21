@@ -282,6 +282,11 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
     },
     requestPaint,
     fit: () => viewerRef.current?.resetZoom?.(),
+    /** Home: the view it opens with, from the side the camera is on, framed whole, eased (the corner's Home: it has no cube). */
+    home() {
+      const home = cameraOnSide({ position: [...DEFAULT_VIEW_DIRECTION], target: [0, 0, 0], up: [...WORLD_UP] }, sideNow());
+      viewerRef.current?.goHome?.({ direction: home.position, up: home.up });
+    },
     /** A page box framed, the camera's direction kept. */
     frameSheet: ([x0, y0, x1, y1]) => viewerRef.current?.zoomToBounds?.({ min: [x0, -y1, -thickness], max: [x1, -y0, 0] }),
     /** The camera turned over to `side`, eased: Flip's. */

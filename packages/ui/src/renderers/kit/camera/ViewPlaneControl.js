@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { VIEW_CUBE_CORNERS, VIEW_CUBE_EDGES, viewPlaneTitle } from "./viewportCameraKit.js";
+import { axisColors } from "@cad/core/lib/viewportTheme.js";
 import { useI18n } from "../../../i18n/react.js";
 import { useControlUsage } from "../../../usage/controls.js";
 
@@ -16,7 +17,6 @@ const ORIENTATION_FALLBACK = Object.freeze({
 
 // Each face names its side on the cube, in the view's language (`viewCube.face.*`).
 const FACE_SIDES = Object.freeze({ z: "top", zNeg: "bottom", yNeg: "front", y: "back", x: "right", xNeg: "left" });
-const AXIS_COLORS = Object.freeze({ x: "rgb(239, 83, 80)", y: "rgb(76, 175, 80)", z: "rgb(66, 133, 244)" });
 const DEFAULT_VIEW_PLANE_SIZE = "7rem";
 const HOME_CORNER_ID = "iso+-+";
 // What a hover changes eases in, briefly; what it lights is one plain, lighter shade.
@@ -25,8 +25,34 @@ const HOVER_FILL = "color-mix(in oklch, var(--background) 55%, var(--foreground)
 // SVG units: the cube's half-size on screen, and where its centre sits.
 const SCALE = 21;
 const CENTER = 50;
-// An axis label's centre, kept inside the 0–100 view box by more than half its 10-unit glyph.
-const inBox = value => Math.min(94, Math.max(6, value));
+// The cube's box, the view box cropped to the cube: its silhouette at most √3 half-sizes from the centre (36.4 units),
+// with room for a corner's dot and an edge's stroke, so the cube fills its box and nothing it draws leaves it.
+const VIEW_BOX_MIN = 12;
+const VIEW_BOX_SIZE = 100 - 2 * VIEW_BOX_MIN;
+
+/**
+ * Where the cube's drawing (its faces' outline, as drawn from `direction`, the camera's place looking at the cube with Z
+ * up) stands in its box, in px of a box `size` px square: `{ left, top, right, bottom }` from the box's top-left. What
+ * stands against the drawn cube (the corner's Home, `viewportLayout.js`) is placed from it, not from the box.
+ * @param {readonly number[]} direction
+ * @param {number} [size]
+ */
+export function cubeInkBox(direction, size = 68) {
+  const length = Math.hypot(...direction) || 1;
+  const back = direction.map(value => value / length);
+  const cross = ([ax, ay, az], [bx, by, bz]) => [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
+  const rightRaw = cross([0, 0, 1], back);
+  const rightLength = Math.hypot(...rightRaw) || 1;
+  const right = rightRaw.map(value => value / rightLength);
+  const up = cross(back, right);
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const points = [-1, 1].flatMap(a => [-1, 1].flatMap(b => [-1, 1].map(c => [CENTER + dot(right, [a, b, c]) * SCALE, CENTER - dot(up, [a, b, c]) * SCALE])));
+  const px = units => (units - VIEW_BOX_MIN) * size / VIEW_BOX_SIZE;
+  return { left: px(Math.min(...points.map(([x]) => x))), top: px(Math.min(...points.map(([, y]) => y))),
+    right: px(Math.max(...points.map(([x]) => x))), bottom: px(Math.max(...points.map(([, y]) => y))) };
+}
+// An axis's letter, by its edge, kept inside the box by more than half its glyph.
+const inBox = value => Math.min(100 - VIEW_BOX_MIN - 4, Math.max(VIEW_BOX_MIN + 4, value));
 
 function normalizeCssLength(value, fallback = "") {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) return `${value}px`;
@@ -145,6 +171,7 @@ function ViewPlaneControl({
   isLoading,
   meshData,
   viewPlaneOffsetRight,
+  viewPlaneGutter = 0,
   viewPlaneOffsetLeft,
   viewPlaneOffsetBottom = 16,
   viewPlaneOffsetTop,
@@ -156,8 +183,11 @@ function ViewPlaneControl({
   viewPlaneSize,
   viewPlaneHeader = null,
   activateViewPlaneFace,
-  orbitViewCube
+  orbitViewCube,
+  // The viewport's light or dark (`lib/viewportTheme.js`): the axes in the one XYZ palette, as the grid's.
+  scheme = "light"
 }) {
+  const AXIS_COLORS = axisColors(scheme);
   // The cube's own subscription to the camera's orientation (`createViewPlaneOrientationStore`):
   // a moving camera re-renders the cube and nothing around it.
   const viewPlaneOrientation = useSyncExternalStore(orientationStore.subscribe, orientationStore.getSnapshot, orientationStore.getSnapshot);
@@ -209,23 +239,20 @@ function ViewPlaneControl({
       return { ...corner, x, y, facing: view[2] };
     })
     .filter((corner) => corner.facing > 0.05);
-  // Anchor all three axes to one model-space corner, just outside the cube.
-  // Their projection follows the cube edges, extending past each positive face.
-  const axisOrigin = [-1.08, -1.08, -1.08];
-  const [axisX, axisY] = toScreen(toView(orientation, axisOrigin));
+  // The axes lie on the cube's own edges, nothing past its silhouette: each along the edge parallel to it nearest the
+  // camera on the bottom (X and Y the bottom's near edges; Z the upright edge at their corner), drawn from its negative end
+  // to its positive one, as an axis points, and lettered just inside its positive end, off the edge away from the centre.
+  const near = [0, 1].map(index => (orientation[["x", "y", "z"][index]][2] >= 0 ? 1 : -1));
+  const corner = [near[0], near[1], -1];
   const triad = ["x", "y", "z"].map((axis, index) => {
-    const end = [...axisOrigin];
-    end[index] = 1.4;
-    const [x, y] = toScreen(toView(orientation, end));
-    const dx = x - axisX, dy = y - axisY;
-    const length = Math.hypot(dx, dy);
-    const fallback = axis === "x" ? [1, 0] : axis === "y" ? [0, -1] : [-0.7, -0.7];
-    const direction = length > 1 ? [dx / length, dy / length] : fallback;
-    // The two adjacent faces determine whether this edge lies behind the cube.
-    const visible = ["x", "y", "z"].some((other) => other !== axis && orientation[other][2] < 0);
-    // A label sits a little past its axis's end, but never outside the cube's own box: in a corner
-    // of the view the box's edge is the view's, which would cut it off.
-    return { axis, x, y, lx: inBox(x + direction[0] * 7), ly: inBox(y + direction[1] * 7), visible };
+    const from = [...corner], to = [...corner];
+    from[index] = -1;
+    to[index] = 1;
+    const [x0, y0] = toScreen(toView(orientation, from));
+    const [x, y] = toScreen(toView(orientation, to));
+    const along = [x0 + (x - x0) * 0.82, y0 + (y - y0) * 0.82];
+    const off = [along[0] - CENTER, along[1] - CENTER], length = Math.hypot(...off) || 1;
+    return { axis, x0, y0, x, y, lx: inBox(along[0] + off[0] / length * 5), ly: inBox(along[1] + off[1] / length * 5), visible: true };
   });
 
   const hoveredPick = VIEW_CUBE_EDGES.find(edge => edge.id === hoveredId) || VIEW_CUBE_CORNERS.find(corner => corner.id === hoveredId);
@@ -295,10 +322,12 @@ function ViewPlaneControl({
 
   return (
     <div
-      className="pointer-events-none absolute z-30 flex flex-col items-center gap-0"
+      className="pointer-events-none absolute z-30 flex flex-col items-center gap-0" data-view-cube=""
       style={{ ...(viewPlaneOffsetLeft != null ? { left: `${viewPlaneOffsetLeft}px` } : {
         left: "var(--cad-viewport-corner-left, auto)", right: `var(--cad-viewport-corner-right, ${viewPlaneOffsetRight}px)` }),
-        ...(viewPlaneOffsetTop != null ? { top: viewPlaneOffsetTop } : { bottom }) }}
+        ...(viewPlaneOffsetTop != null ? { top: viewPlaneOffsetTop } : { bottom }),
+        // Its box stands `viewPlaneGutter` in from the host's corner variable, at either side it anchors.
+        ...(viewPlaneGutter ? { paddingLeft: `${viewPlaneGutter}px`, paddingRight: `${viewPlaneGutter}px` } : null) }}
     >
       {viewPlaneHeader ? (
         <div className="pointer-events-auto" onPointerDown={(event) => event.stopPropagation()}>
@@ -310,7 +339,7 @@ function ViewPlaneControl({
         style={sizeStyle}
         onPointerDown={(event) => { event.stopPropagation(); startDrag(event); }}
       >
-        <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" aria-label={t("viewCube.label")}>
+        <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox={`${VIEW_BOX_MIN} ${VIEW_BOX_MIN} ${VIEW_BOX_SIZE} ${VIEW_BOX_SIZE}`} aria-label={t("viewCube.label")}>
           {faces.map((face) => {
             const active = activeViewPlaneFace === face.id;
             const hovered = hoveredId === face.id;
@@ -328,9 +357,11 @@ function ViewPlaneControl({
                 <polygon points={face.points.map((point) => point.join(",")).join(" ")}
                   fill="color-mix(in oklch, var(--background) 90%, var(--foreground))" stroke="var(--background)" strokeWidth="0.6" strokeLinejoin="round" />
                 <path d={roundedInsetFace(face.points)} fill={fill} pointerEvents="none" style={HOVER_TRANSITION} />
+                {/* A face's name: 0.5 of the face's half-size, 10px on a face seen square-on in the 96px cube
+                    (the type scale's floor for text drawn into the viewport), foreshortened with its face. */}
                 {face.facing > 0.25 ? (
                   <text x="0" y="0" transform={face.labelTransform} textAnchor="middle" dominantBaseline="central"
-                    fontSize="0.43" fontWeight={hovered || active ? 600 : 500} fill={hovered || active ? "var(--foreground)" : "color-mix(in oklch, var(--foreground) 90%, transparent)"}
+                    fontSize="0.5" fontWeight={hovered || active ? 600 : 500} fill={hovered || active ? "var(--foreground)" : "color-mix(in oklch, var(--foreground) 90%, transparent)"}
                     opacity={Math.min(1, face.facing * 1.6)} pointerEvents="none" aria-hidden="true">
                     {face.label}
                   </text>
@@ -366,10 +397,10 @@ function ViewPlaneControl({
             );
           })}
           <g aria-hidden="true" pointerEvents="none">
-            {triad.map(({ axis, x, y, lx, ly, visible }) => (
+            {triad.map(({ axis, x0, y0, x, y, lx, ly, visible }) => (
               <g key={axis} opacity={visible ? 1 : 0.4}>
-                <line x1={axisX} y1={axisY} x2={x} y2={y} stroke={AXIS_COLORS[axis]} strokeWidth="1.7" strokeLinecap="round" />
-                <text x={lx} y={ly} textAnchor="middle" dominantBaseline="central" fontSize="10" fontWeight="600" fill={AXIS_COLORS[axis]}>
+                <line x1={x0} y1={y0} x2={x} y2={y} stroke={AXIS_COLORS[axis]} strokeWidth="1.7" strokeLinecap="round" />
+                <text x={lx} y={ly} textAnchor="middle" dominantBaseline="central" fontSize="8" fontWeight="600" fill={AXIS_COLORS[axis]} data-view-cube-axis-label="">
                   {axis.toUpperCase()}
                 </text>
               </g>

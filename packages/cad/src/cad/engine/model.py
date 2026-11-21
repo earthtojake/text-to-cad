@@ -807,6 +807,9 @@ class BuildContext:
         self.others: dict[Path, Any] = {}
         # The parameters the script's load declared (``parameters.recording``; ``build`` sets it).
         self.declared: list = []
+        # A preview's values (``build.preview``), as text: a body whose key falls back to a module's bytes
+        # (which a preview leaves as they are) is keyed by them too, so it never replays another value's run.
+        self.preview: str | None = None
 
     def source(self, model: Model) -> str:
         """What a model's body is made of: the symbols its function reaches, a module's
@@ -825,7 +828,8 @@ class BuildContext:
             digest, reasons = self.symbols.key(model.function)
             if reasons:
                 self.fallbacks[model.identity] = reasons
-            found = self.sources[key] = digest + _engine_version()
+            found = self.sources[key] = digest + _engine_version() + (
+                f"|preview {self.preview}" if reasons and self.preview is not None else "")
             self.key_seconds += time.perf_counter() - started
         return found
 

@@ -1,10 +1,11 @@
 import { ArrowLeft, ArrowRight, ChevronDown, Ellipsis } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@cad/ui/primitives/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@cad/ui/primitives/tabs";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
 
@@ -33,7 +34,7 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  * actions. A host that shows the view alone (`chrome: "bare"`: the CAD app's file
  * handler) has no navbar, and Preview hides it in every host, drawing its own bar in its place.
  *
- * Left, in this order: the text-to-cad logo (the C mark, over the home and over a document
+ * Left, in this order: the panel's toggle, over a file with a panel (below); the text-to-cad logo (the C mark, over the home and over a document
  * alike), which opens the app's menu (`AppMenu`: Back to home
  * where the host has a home, then the person's settings, feedback and links); Back and Forward,
  * where the host keeps the view's own history (`history`), on a desktop's row alone (a phone's has
@@ -42,8 +43,12 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  * Open in (Browser, the file manager) and the host's own items (the CAD viewer's Export) — a model's
  * Copy path and file manager acting on its script. The menu and its submenus are shadcn's own width.
  *
+ * The view's panel toggle (`panels.left`, which the view's frame says: `../panelToggles.js`), the row's first control,
+ * before the logo, over a file that has a panel (never over the home); the strip's 28px tile, the same neutral button
+ * open or shut, its tooltip naming its key and the key that hides everything.
+ *
  * Right, only what a host or a file adds, in this order: the file's own actions (the CAD viewer's
- * one: a dismissed alert's icon, which brings its card back); last, outermost, the host's own actions
+ * one: a dismissed alert's icon, which brings its card back); the host's own actions
  * (`actions`: the CAD app's Full size, inline).
  * The colour scheme is the app menu's. A view's own controls are never here: Display and Preview end its tool strip.
  *
@@ -53,10 +58,10 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
 /**
  * The left of the row: the logo, the file's name and its ⋯, one kind of control — transparent until
  * the pointer is on it or its menu is open, then the same accent — and none with a tooltip: each
- * says what it is. They sit edge to edge, spaced by their own padding alone: the logo's 24px button,
- * Back, Forward and the ⋯ in 20px ones, the name 4px in from its edges — about 7px between glyphs.
+ * says what it is. They sit edge to edge, spaced by their own padding alone: the logo, Back, Forward
+ * and the ⋯ in 28px buttons (the tool strip's), the name 4px in from its edges.
  */
-const NAV_ITEM_CLASS = "flex h-6 shrink-0 cursor-pointer items-center rounded-md outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground";
+const NAV_ITEM_CLASS = "flex h-7 shrink-0 cursor-pointer items-center rounded-md outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground";
 
 /**
  * The text-to-cad logo, the app's menu: the "C" mark, 16px, the same over the home and over a
@@ -65,14 +70,14 @@ const NAV_ITEM_CLASS = "flex h-6 shrink-0 cursor-pointer items-center rounded-md
  */
 function LogoMenu({ onHome, menu }) {
   const { t } = useI18n();
-  return <AppMenu onHome={onHome} {...menu} trigger={<button type="button" aria-label={t("navbar.menu")} className={cn(NAV_ITEM_CLASS, "cad-navbar-logo justify-start px-1")}
+  return <AppMenu onHome={onHome} {...menu} trigger={<button type="button" aria-label={t("navbar.menu")} className={cn(NAV_ITEM_CLASS, "cad-navbar-logo w-7 justify-start px-1.5")}
     data-navbar-menu="" data-logo="mark">
     <img src={logo} alt="" className="cad-navbar-mark" draggable={false} />
   </button>} />;
 }
 
 // Back and Forward: the row's icon buttons, muted as the ⋯ is, and dimmed where there is nowhere to go.
-const HISTORY_CLASS = cn(NAV_ITEM_CLASS, "w-5 justify-center text-muted-foreground disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground");
+const HISTORY_CLASS = cn(NAV_ITEM_CLASS, "w-7 justify-center text-muted-foreground disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground");
 
 /**
  * Back and Forward through the view's own history, as a browser's are: each disabled where it has
@@ -147,7 +152,7 @@ function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, 
   const trigger = <DropdownMenuSubTrigger data-open-in-menu="" disabled={!openable} className={DISABLED_ROW_CLASS}>{label}</DropdownMenuSubTrigger>;
   return <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
     <DropdownMenuTrigger asChild><button aria-label={t("navbar.fileActions")} data-testid="file-actions" type="button"
-      className={cn(NAV_ITEM_CLASS, "w-5 justify-center text-muted-foreground")}>
+      className={cn(NAV_ITEM_CLASS, "w-7 justify-center text-muted-foreground")}>
       <Ellipsis className="size-3.5" />
     </button></DropdownMenuTrigger>
     <DropdownMenuContent align="start" sideOffset={6}>
@@ -246,6 +251,69 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
   </Popover>;
 }
 
+/** Home's column, the grid's (`styles/globals.css`'s `.cad-library-content`): 1128px at most, 24px gutters. */
+const HOME_COLUMN_PX = 1128, HOME_GUTTER_PX = 24, HOME_CLEAR_PX = 8, HOME_MARK_PX = 16, HOME_ROW_PAD_PX = 8;
+// The home's row is a size container (`cad-navbar`), so its search folds to its icon on the row's width, not the window's.
+const HOME_ROW_STYLE = Object.freeze({ containerType: "inline-size", containerName: "cad-navbar" });
+
+/**
+ * Where Home's controls stand on the row: on the grid's column, so the logo's mark (and Back and Forward after it), then
+ * "Recent" and its count, start over the grid's first tile, as the logo precedes the file's name on a file's page, and
+ * the search and Open end over its last tile; never over the host's actions at the row's right end. The row's
+ * background stays full width: these are its padding (the logo stays the row's first child, the one button over the
+ * home and every file). In a pane narrower than the column they meet the
+ * row's own padding, as on a file's page. Measured whenever the row changes size.
+ */
+function useHomeColumn(header, trail, on) {
+  const [insets, setInsets] = useState(null);
+  useLayoutEffect(() => {
+    const row = header.current;
+    if (!on || !row) return undefined;
+    const measure = () => {
+      const width = row.getBoundingClientRect().width;
+      const margin = (width - HOME_COLUMN_PX) / 2;
+      const actions = trail.current?.getBoundingClientRect().width || 0;
+      // What the row adds to its own 8px a side. The mark stands HOME_MARK_PX in from the row's edge (its 8px, its
+      // button's 6px, the artwork's 2px); the host's actions keep the row's right end, Open ending before them.
+      const next = { left: Math.round(Math.max(0, margin + HOME_GUTTER_PX - HOME_MARK_PX)),
+        right: Math.round(Math.max(0, Math.max(0, margin) + HOME_GUTTER_PX - HOME_ROW_PAD_PX - (actions ? actions + HOME_CLEAR_PX : 0))) };
+      setInsets(now => (now?.left === next.left && now?.right === next.right ? now : next));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    for (const element of [row, trail.current]) if (element) observer.observe(element);
+    return () => observer.disconnect();
+  }, [header, trail, on]);
+  return insets;
+}
+
+/**
+ * The sidebar's glyph, as Claude Code's: a rounded rectangle (14 × 12 in the 16px box, its corners 3px) and a short
+ * line inside it near its left edge, half the rectangle's height, centred; lucide's stroke, so it weighs what the
+ * row's other icons weigh. The same open or shut: the panel itself says which.
+ */
+export function SidebarIcon(props) {
+  return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.33} strokeLinecap="round"
+    strokeLinejoin="round" aria-hidden="true" data-sidebar-icon="" {...props}>
+    <rect x="1" y="2" width="14" height="12" rx="3" />
+    <path d="M5 5v6" />
+  </svg>;
+}
+
+/**
+ * The panel's toggle, the row's first control: the strip's 28px tile, the same neutral button whether its panel is
+ * open or shut (no pressed fill: the panel beside the model says which), its state said to assistive technology
+ * (`aria-expanded`), its tooltip its name ("Hide panel", "Show panel"), its key and the key that hides everything.
+ */
+function PanelToggleButton({ toggle }) {
+  return <ToolbarButton label={toggle.label} shortcut={toggle.shortcut || ""} hint={toggle.hint || ""} tooltipSide="bottom" expandedTooltip
+    aria-expanded={toggle.open} onClick={toggle.toggle}
+    className="size-7 shrink-0 rounded-md text-muted-foreground [&>svg]:size-4!" data-navbar-panel="left">
+    <SidebarIcon />
+  </ToolbarButton>;
+}
+
 /**
  * @param {object} props
  * @param {(() => void) | undefined} [props.onHome] The host's home, where it has one: the menu's Back to home.
@@ -265,31 +333,52 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
  *   The ⋯ after the name: what the host can do with the document on screen, and its own items (Export).
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
+ * @param {{ left(element: HTMLElement | null): void, right(element: HTMLElement | null): void } | null} [props.homeSlots]
+ *   Over the home: where its controls go (`../navbarSlots.js`), two slots on the grid's column.
+ * @param {{ left?: { open: boolean, label: string, shortcut?: string, hint?: string, toggle(): void } | null } | null} [props.panels]
+ *   The view's panel toggle, where it has a panel (`../panelToggles.js`).
+ * @param {((element: HTMLElement | null) => void) | null} [props.viewSlot] Over a file: where its view puts its view settings
+ *   (`../navbarSlots.js`'s `NavbarViewSlotContext`).
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, trailing = null, actions = null, className }) {
+export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, trailing = null, actions = null, panels = null, homeSlots = null, viewSlot = null, className }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const onHome = goHome ? () => { usage.used("home"); goHome(); } : goHome;
   const mobile = useViewerMobile();
+  const header = useRef(null), lead = useRef(null), trail = useRef(null);
+  const homing = Boolean(homeSlots && !file);
+  const homeInsets = useHomeColumn(header, trail, homing);
+  const leadNav = <nav ref={lead} aria-label={t("navbar.viewer")} className={cn("flex min-w-0 items-center overflow-hidden text-sm", homing ? "shrink-0" : "flex-1")}>
+    {/* The panel's toggle first, where the file has a panel (the home has none), then the logo. */}
+    {file && panels?.left ? <span className="mr-0.5 flex shrink-0 items-center"><PanelToggleButton toggle={panels.left} /></span> : null}
+    {onHome || menu ? <LogoMenu onHome={onHome} menu={menu} /> : null}
+    {/* A phone's row has no room for them: Back and Forward are a desktop's alone. */}
+    {history && !mobile ? <HistoryButtons viewHistory={history} /> : null}
+    {file ? <span className="flex min-w-0 items-center">
+      <FileName path={file} name={name} kind={kind} explorer={explorer} recent={recent} />
+      {fileMenu ? <FileMenu {...fileMenu} /> : null}
+    </span> : null}
+  </nav>;
   return (
-    // `pl-[10px]`: the logo's drawn mark stands on the page's 16px gutter, the Home's grid's left edge
-    // (`.cad-library-content`) and a board's or schematic's panel's line: 10px, its button's 4px, and
+    // The logo's drawn mark stands on the page's 16px gutter, the Home's grid's left edge
+    // (`.cad-library-content`) and the view's panel's 16px line: the row's 8px, its button's 6px, and
     // the 2px the mark's artwork sits in from its 16px image's edge.
     // On the chrome's colour, a step off the canvas's (`--sidebar`: lighter than white's off-white, a
     // step above the dark canvas), as the panel beside a board or a model is: the frame reads as frame.
-    <header className={cn(NAVBAR_ROW_CLASS, "pl-[10px] border-border bg-sidebar text-foreground", className)} data-viewer-navbar="">
-      <nav aria-label={t("navbar.viewer")} className="flex min-w-0 flex-1 items-center overflow-hidden text-sm">
-        {onHome || menu ? <LogoMenu onHome={onHome} menu={menu} /> : null}
-        {/* A phone's row has no room for them: Back and Forward are a desktop's alone. */}
-        {history && !mobile ? <HistoryButtons viewHistory={history} /> : null}
-        {file ? <span className="flex min-w-0 items-center">
-          <FileName path={file} name={name} kind={kind} explorer={explorer} recent={recent} />
-          {fileMenu ? <FileMenu {...fileMenu} /> : null}
-        </span> : null}
-      </nav>
-      <div className={NAVBAR_CONTROLS_CLASS}>
+    <header ref={header} className={cn(NAVBAR_ROW_CLASS, "relative border-border bg-sidebar text-foreground", className)} data-viewer-navbar=""
+      style={homing ? { ...HOME_ROW_STYLE, ...(homeInsets ? { paddingLeft: HOME_ROW_PAD_PX + homeInsets.left, paddingRight: HOME_ROW_PAD_PX + homeInsets.right } : null) } : undefined}>
+      {leadNav}
+      {/* Over the home: "Recent" and its count after the logo, the search and Open at the column's right. */}
+      {homing ? <div className="flex min-w-0 flex-1 items-center justify-between gap-2" data-navbar-home="">
+        <div ref={homeSlots.left} className="flex min-w-0 items-center" data-navbar-home-left="" />
+        <div ref={homeSlots.right} className="flex shrink-0 items-center gap-2" data-navbar-home-right="" />
+      </div> : null}
+      <div ref={trail} className={cn(NAVBAR_CONTROLS_CLASS, homing && "empty:hidden")}>
         {trailing}
+        {/* The view's settings, the view's own (Display, Projection or a board's Side and 2D/3D, then Preview), portalled
+            in by the view on screen (`../navbarSlots.js`); before the host's actions. */}
+        {file && viewSlot ? <div ref={viewSlot} className="flex shrink-0 items-center gap-0.5 empty:hidden" data-navbar-view="" /> : null}
         {actions}
       </div>
     </header>

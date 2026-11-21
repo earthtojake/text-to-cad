@@ -6,7 +6,9 @@ materials and element names; every assembly node of the view's tree is an assemb
 own here, each component placed in its parent's frame. A part read from a STEP this engine
 did not write takes the geometry key a build would give it, so an xbf of it caches like any.
 The mechanism is the document's, whole, and so are its animations (``animations.record``): the
-tree's occurrences are the view's, so their paths are the ones the tracks name.
+tree's occurrences are the view's, so their paths are the ones the tracks name; and so is the record of
+the parameters its script declared (``parameters.record``), so an xbf exported from a model lists them as
+the model's own declared xbf does.
 """
 
 from __future__ import annotations
@@ -113,6 +115,10 @@ def tree_of(view: Any) -> Any:
     tree = document.Tree(root, order, list(parts.values()), ("exported", view.name))
     tree.mechanism = source.mechanism
     tree.animations = source.animations
+    # The parameters the document records (``parameters.record``), read-only wherever the xbf is opened.
+    from cad.engine.parameters import record
+
+    tree.parameters = record(source.structure.get("parameters"))
     return tree
 
 

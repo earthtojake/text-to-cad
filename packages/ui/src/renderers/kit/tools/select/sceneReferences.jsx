@@ -7,12 +7,12 @@ const EMPTY = Object.freeze([]);
 /**
  * A part, as the frame reads a pick (`inspector/inspect.js`'s `DetailItem`), from what its scene says of it
  * (`describePart`: its name, its facts — each named by its `key` in the view's language where it has one —
- * and, where the scene has them, its `tip`, its `what` and its `related`), its id as its ID.
+ * and, where the scene has one, its `tip`).
  */
 export function scenePartItem(part, id, t = english) {
   if (!part) return null;
-  return { id: `part:${id}`, pick: id, kind: part.kind || "solid", title: part.name || id, tip: part.tip || "", what: part.what || "", ref: id,
-    facts: (part.facts || EMPTY).map(fact => ({ ...fact, label: fact.key ? t(fact.key) : fact.label })), related: part.related || null };
+  return { id: `part:${id}`, pick: id, kind: part.kind || "solid", title: part.name || id, tip: part.tip || "",
+    facts: (part.facts || EMPTY).map(fact => ({ ...fact, label: fact.key ? t(fact.key) : fact.label })) };
 }
 
 /** A scene's parts described (`scenePartItem` over its `describePart`), in the view's language. */
@@ -23,17 +23,16 @@ export function useSceneDescribe(scene) {
 
 /**
  * A scene's picks as its frame reads them (`inspector/inspect.js`'s `Inspect`): what `useSceneSelection`
- * has picked and what the pointer is on in the view (`pointed`), each described (`describe`), and what a
- * row of the pane does — picks it, lights it, frames it (`frame`) — and what its name copies (`copyText`).
+ * has picked and what the pointer is on in the view (`pointed`), each described (`describe`).
  * The hover tip's words are `tip`'s, else the scene's name for the part alone (`nameOf`), which measures
  * nothing. Null with no scene.
  */
-export function useSceneInspect({ scene, selection, describe, tip = null, frame = null, copyText = null, glyphs = null, data = "" }) {
-  const { selected, select, hover, pointed } = selection;
+export function useSceneInspect({ scene, selection, describe, tip = null, data = "" }) {
+  const { pointed } = selection;
   const named = useCallback(id => scene?.nameOf?.(id) || "", [scene]);
   const words = tip || (scene?.nameOf ? named : null);
-  return useMemo(() => (scene ? { selected, describe, tip: words, hovered: pointed || "", select, hover, frame, copyText, glyphs, data: data || undefined } : null),
-    [scene, selected, describe, words, pointed, select, hover, frame, copyText, glyphs, data]);
+  return useMemo(() => (scene ? { describe, tip: words, hovered: pointed || "", data: data || undefined } : null),
+    [scene, describe, words, pointed, data]);
 }
 
 /** What Copy Reference copies for `ids` in the file on screen: one reference naming them all ("" off a workspace file). */
@@ -52,9 +51,10 @@ export function sceneCopyText(resource, ids) {
  * @param {{ scene: { describePart?: (id: string) => ({ name: string, facts: { label: string, value: string }[] } | null) } | null,
  *   describe?: ((id: string) => import("../../inspector/inspect.js").DetailItem | null) | null,
  *   selection: ReturnType<typeof import("./useSceneSelection.js").useSceneSelection>,
- *   resource: import("@cad/core/prompt").ResourceRef | null }} options
+ *   resource: import("@cad/core/prompt").ResourceRef | null, group?: string }} options
+ *   `group`: what Quick Edit groups the chips as (`ReferenceChips.jsx`'s `CHIP_GROUPS`): a scene's parts, a drawing's entities.
  */
-export function useSceneReferences({ scene, selection, resource, describe = null }) {
+export function useSceneReferences({ scene, selection, resource, describe = null, group = "part" }) {
   const { selected, select, hover } = selection;
   const own = useSceneDescribe(scene);
   const described = describe || own;
@@ -66,10 +66,10 @@ export function useSceneReferences({ scene, selection, resource, describe = null
     const chips = selected.map((id) => {
       const detail = described(id);
       const value = reference(id);
-      return { key: `part:${id}`, label: detail?.title || id, glyph: "solid", id, ...(value ? { copy: formatPromptReference(value) } : {}),
+      return { key: `part:${id}`, label: detail?.title || id, glyph: "solid", group, id, ...(value ? { copy: formatPromptReference(value) } : {}),
         detail,
         onRemove: () => select(id, { multiSelect: true }), onHover: on => hover(on ? id : "") };
     });
     return { references, chips };
-  }, [scene, selected, resource, select, hover, described]);
+  }, [scene, selected, resource, select, hover, described, group]);
 }

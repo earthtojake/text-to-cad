@@ -1,3 +1,4 @@
+import { SCENE_COLORS } from "@cad/core/lib/viewportTheme.js";
 import { useEffect, useRef } from "react";
 
 import {
@@ -27,7 +28,7 @@ function entityChipText(pick, faceArea = null) {
 }
 
 // What Select has picked, as the annotations and the parts are: the one selection blue.
-const MEASURE_SELECTED_COLOR = "#2979ff";
+const MEASURE_SELECTED_COLOR = SCENE_COLORS.selected;
 
 /**
  * Measure's drawing over the viewport, on its own 2D canvas (`measureCanvasRef`): every measurement

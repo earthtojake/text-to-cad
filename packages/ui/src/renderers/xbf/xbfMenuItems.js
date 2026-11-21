@@ -129,7 +129,7 @@ export function viewportMenuEntries(menu, options) {
 }
 
 /** That same list as the items of a menu primitive (the Features tree's context menu). */
-export function AssemblyPartMenuItems({ menu, Item, Separator, itemClassName = "text-xs", disabled = false, actions = {} }) {
+export function AssemblyPartMenuItems({ menu, Item, Separator, itemClassName = "", disabled = false, actions = {} }) {
   const { t } = useI18n();
   return assemblyPartMenuEntries(menu, { disabled, actions, t }).map((item) => (
     <Fragment key={item.id}>

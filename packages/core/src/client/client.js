@@ -147,6 +147,24 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     return request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body, operation }).finally(forgetSettings);
   }
 
+  /**
+   * A guarded POST of a model's parameters (`setModelParameters`, `previewModelParameters`): answered once the
+   * engine's build has ended, so nothing bounds the wait. A refusal carries the engine's `code`
+   * (`lib/xbf/xbfParameters.js`'s `PARAMETER_REFUSALS`) on the error raised, with its `hint`, the parameter's
+   * `reason` and a failed build's whole words (`detail`); its message is the engine's own.
+   */
+  async function parameterRequest(path, body, signal, operation) {
+    try {
+      return await request(path, { method: 'POST', headers: JSON_POST, body, signal, operation });
+    } catch (error) {
+      const refusal = error?.failure?.payload;
+      if (typeof refusal?.code !== 'string' || !refusal.code) throw error;
+      throw Object.assign(new Error(error.failure.detail, { cause: error }), { code: refusal.code,
+        hint: typeof refusal.hint === 'string' ? refusal.hint : '', ...(typeof refusal.reason === 'string' ? { reason: refusal.reason } : {}),
+        ...(typeof refusal.detail === 'string' ? { detail: refusal.detail } : {}) });
+    }
+  }
+
   async function request(path, { signal, file = '', params = {}, method = 'GET', headers = {}, body, timeoutMs = 0, idempotent = false, operation = 'request' } = {}) {
     if (disposed || signal?.aborted) throw abortError();
     const controller = new AbortController();
@@ -506,15 +524,30 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       if (!named.length || !named.every(([, value]) => typeof value === 'number' && Number.isFinite(value))) {
         throw new TypeError('A parameter takes a finite number.');
       }
-      try {
-        return await request(`${API}/documents/model/${encodeURIComponent(id)}/parameters`,
-          { method: 'POST', headers: JSON_POST, body: { values: Object.fromEntries(named) }, signal, operation: 'parameters' });
-      } catch (error) {
-        const refusal = error?.failure?.payload;
-        if (typeof refusal?.code !== 'string' || !refusal.code) throw error;
-        throw Object.assign(new Error(error.failure.detail, { cause: error }), { code: refusal.code,
-          hint: typeof refusal.hint === 'string' ? refusal.hint : '', ...(typeof refusal.reason === 'string' ? { reason: refusal.reason } : {}) });
+      return parameterRequest(`${API}/documents/model/${encodeURIComponent(id)}/parameters`,
+        { values: Object.fromEntries(named) }, signal, 'parameters');
+    },
+    async previewModelParameters(id, values, { page, signal } = {}) {
+      // A model at other values of its declared parameters, for this page alone
+      // (`POST /api/v1/documents/model/<id>/preview`): the ENGINE builds it in the model's worker and holds
+      // it for the page that asked, writing nothing -- not the script, not the document. Answered once that
+      // build has ended with the preview's own id, whose structure and parts the page reads as it reads a
+      // document's (`/api/v1/documents/model/<preview id>/...`, `previewUrl`); `preview: null` for values that
+      // are the document's (the page's previews let go: `{}` is Reset); `superseded: true` for a request a
+      // newer one of the same document replaced before it built. `page` is the page's own token, which keeps
+      // its previews from another page's. Refused as `setModelParameters` is, by the same codes.
+      if (!isDocumentId(id)) throw new TypeError('A model is named by its document id.');
+      if (typeof page !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(page)) throw new TypeError('A preview names its page by a token.');
+      const named = values && typeof values === 'object' && !Array.isArray(values) ? Object.entries(values) : null;
+      if (!named || !named.every(([, value]) => typeof value === 'number' && Number.isFinite(value))) {
+        throw new TypeError('A parameter takes a finite number.');
       }
+      const answer = await parameterRequest(`${API}/documents/model/${encodeURIComponent(id)}/preview`,
+        { values: Object.fromEntries(named), page }, signal, 'parameters-preview');
+      const held = answer?.preview;
+      return held && typeof held.id === 'string'
+        ? { ...answer, preview: { ...held, url: viewerOriginUrl(origin, `${API}/documents/model/${encodeURIComponent(held.id)}`) } }
+        : answer;
     },
     async engineHolds(file, { signal } = {}) {
       // Whether the engine holds a read of the document now (its envelope's `held`), asked without starting one.

@@ -20,7 +20,7 @@ import { useControlUsage } from "../../usage/controls.js";
 
 const NONE = Object.freeze([]);
 // A setting's row: 32px, its name and its control spaced apart, the control's centre on one line.
-const SETTING_ROW_CLASS = "flex min-h-8 items-center justify-between gap-2 py-0.5 pr-1 pl-2 text-tiny text-foreground";
+const SETTING_ROW_CLASS = "flex min-h-8 items-center justify-between gap-2 py-0.5 pr-1 pl-2 text-xs text-foreground";
 const COLOR_SCHEMES = Object.freeze([["system", Monitor], ["light", Sun], ["dark", Moon]]);
 // AUTOMATIC is the Language submenu's value for "no choice": the context decides.
 const AUTOMATIC = "automatic";
@@ -136,7 +136,7 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, colorSchem
   ].filter(group => group.length);
   // Only the version shortens to fit the line, never the rest of it, and says itself whole when it does.
   const version = links?.version ? <TooltipHint content={`v${links.version}`} overflowOnly>{links.release
-    ? <a href={links.release} target="_blank" rel="noreferrer" onClick={follow} className="min-w-0 truncate hover:text-foreground"
+    ? <a href={links.release} target="_blank" rel="noreferrer" onClick={follow} className="min-w-0 truncate text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
       data-menu-version="">v{links.version}</a>
     : <span className="min-w-0 truncate" data-menu-version="">v{links.version}</span>}</TooltipHint> : null;
   const madeBy = links?.x ? <MadeBy links={links} /> : null;

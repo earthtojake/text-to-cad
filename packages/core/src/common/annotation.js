@@ -14,12 +14,13 @@ import { createScreenSpaceLineStrip } from "./renderEdges.js";
  *   points: ArrayLike<number>, color: string, opacity?: number,
  *   width?: number, widths?: ArrayLike<number>, closed?: boolean, group?: string,
  *   outline?: number, triangles?: ArrayLike<number>,
- *   text?: string, fontPx?: number,
+ *   text?: string, fontPx?: number, dash?: "dashed" | "dotted",
  *   touches?: { part: string, ref?: string }[]
  * }} AnnotationMark
  *   `points`: x, y, z triples, in model coordinates. A stroke's are its line; an area's (a fill) its outline (the first `outline`) then the points inside
  *   it its `triangles` index; a text mark's its label's four corners. `width`: a stroke's thickness in
- *   screen pixels, at any zoom; `widths`: the pen's, each point's share of it. `fontPx`: a text mark's
+ *   screen pixels, at any zoom; `widths`: the pen's, each point's share of it; `dash`: its line style (absent: solid,
+ *   as every mark written before there were line styles). `fontPx`: a text mark's
  *   size on screen as it was written. `view`: the label of the view it was drawn in. `touches`: what
  *   it was drawn over, most first: a part, with the face or edge of it (`ref`, a prompt reference)
  *   where the view could name one. What it touches says what it is about; its points alone say where.
@@ -27,6 +28,21 @@ import { createScreenSpaceLineStrip } from "./renderEdges.js";
  */
 
 export const ANNOTATION_MARK_KINDS = Object.freeze(["stroke", "area", "text"]);
+/** The line styles a stroke can be drawn in (`dash`); solid is the default, and a mark without one. */
+export const ANNOTATION_DASHES = Object.freeze(["solid", "dashed", "dotted"]);
+/**
+ * A stroke's dash pattern in screen pixels, `[on, off]`, for a stroke `width` pixels wide (null: solid). A dash is
+ * four widths with three between; a dot is its round caps alone, two widths apart, so a dot is round however wide.
+ * Every painter takes it from here: the viewer's 2D canvas and 3D lines, and a snapshot's (`cad` mirrors it).
+ * @param {"solid" | "dashed" | "dotted" | undefined} dash @param {number} width
+ * @returns {[number, number] | null}
+ */
+export function dashPattern(dash, width) {
+  const w = Math.max(1, Number(width) || 1);
+  if (dash === "dashed") return [Math.max(6, 4 * w), Math.max(4, 3 * w)];
+  if (dash === "dotted") return [0.001, Math.max(3, 2 * w)];
+  return null;
+}
 const COLOR = /^#[0-9a-f]{6}$/i;
 // A capture's ink is as heavy against its height as it was on a viewer this tall.
 export const ANNOTATION_REFERENCE_HEIGHT_PX = 900;
@@ -61,7 +77,7 @@ export function normalizeAnnotation(raw) {
     if (!mark || typeof mark !== "object") fail(`${at} must be an object`);
     for (const key of Object.keys(mark)) {
       if (!["id", "kind", "view", "points", "color", "opacity", "width", "widths", "closed", "group",
-        "outline", "triangles", "text", "fontPx", "touches"].includes(key)) fail(`${at}: unknown field "${key}"`);
+        "outline", "triangles", "text", "fontPx", "touches", "dash"].includes(key)) fail(`${at}: unknown field "${key}"`);
     }
     const id = String(mark.id ?? "");
     if (!id || ids.has(id)) fail(`${at}.id must be a unique, non-empty string`);
@@ -85,6 +101,10 @@ export function normalizeAnnotation(raw) {
         if (out.widths.length !== count) fail(`${at}.widths must have one value per point`);
       }
       out.closed = Boolean(mark.closed);
+      if (mark.dash != null && mark.dash !== "solid") {
+        if (!ANNOTATION_DASHES.includes(mark.dash)) fail(`${at}.dash must be one of ${ANNOTATION_DASHES.join(", ")}`);
+        out.dash = mark.dash;
+      }
       if (count < 2) fail(`${at}: a stroke has at least two points`);
     } else if (mark.kind === "area") {
       out.triangles = numbers(mark.triangles, `${at}.triangles`);
@@ -195,6 +215,35 @@ function onceOnly(THREE, material, ref) {
   material.needsUpdate = true;
 }
 
+// A screen pixel's size in the scene at `at`, for `camera` drawing into `renderer`: what a stroke's dash pattern, in
+// screen pixels, is measured against, so a dashed mark's dashes keep their length on screen at any zoom.
+function worldPerPixel(THREE, renderer, camera, at) {
+  const height = renderer.getSize?.(new THREE.Vector2()).y || 1;
+  if (camera.isOrthographicCamera) return (camera.top - camera.bottom) / (camera.zoom || 1) / height;
+  const distance = at.distanceTo(camera.getWorldPosition(new THREE.Vector3()));
+  return 2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / (camera.zoom || 1) / height;
+}
+
+// A dashed or dotted stroke: three's screen-space line dashed along its own length, its pattern (`dashPattern`) in
+// screen pixels: each frame the line's distances are scaled by the size of a pixel where the line is. A dot is a
+// square of the width (three's line has no round cap per dash), two widths apart.
+function dashLine(THREE, line, mark) {
+  const width = Math.max(1, mark.width || 1);
+  const [on, off] = mark.dash === "dotted" ? [width, 2 * width] : dashPattern(mark.dash, width);
+  line.computeLineDistances();
+  const material = line.material;
+  material.dashed = true;
+  material.dashSize = on;
+  material.gapSize = off;
+  material.needsUpdate = true;
+  line.geometry.computeBoundingSphere();
+  const centre = new THREE.Vector3();
+  line.onBeforeRender = (renderer, scene, camera) => {
+    centre.copy(line.geometry.boundingSphere.center).applyMatrix4(line.matrixWorld);
+    material.dashScale = 1 / Math.max(1e-9, worldPerPixel(THREE, renderer, camera, centre));
+  };
+}
+
 /**
  * One mark's object: a stroke a screen-width line along its points, an area a flat mesh of its
  * triangles, a text mark its picture on a quad, where its points are: in model coordinates.
@@ -219,6 +268,7 @@ export function annotationMarkObject(context, mark, { lineScale }) {
       object.material.onBeforeCompile = taperedCompile;
       object.material.needsUpdate = true;
     }
+    if (object && (mark.dash === "dashed" || mark.dash === "dotted")) dashLine(THREE, object, mark);
   } else {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));

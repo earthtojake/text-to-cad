@@ -3,13 +3,13 @@ import { useViewerMobile } from '../file-viewer/responsive.js';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@cad/ui/utils';
 
-// Every tree's row is one compact 24px line: the explorer's in 12px text, a list of the view's panel
-// in the panel's 11px text (`dense`).
+// Every tree's row is one compact line: the explorer's 24px in 12px text, a list of the view's panel
+// 28px in the panel's one text size (`dense`: the panel's 12px, `globals.css`'s `--cad-text-panel`).
 export const TREE_ROW_HEIGHT = 24;
-export const TREE_ROW_DENSE_HEIGHT = 24;
+export const TREE_ROW_DENSE_HEIGHT = 28;
 /** On a phone a row is a 36px line, big enough to take with a finger. */
 export const TREE_ROW_TOUCH_HEIGHT = 36;
-/** The height of a tree's row in the viewer at hand: a desktop's 24px, a phone's 36px. */
+/** The height of a tree's row in the viewer at hand: a desktop's 28px panel row, a phone's 36px. */
 export const useTreeRowHeight = () => (useViewerMobile() ? TREE_ROW_TOUCH_HEIGHT : TREE_ROW_DENSE_HEIGHT);
 /** What each level of a tree adds to a row's indent: little, its rows hung from a faint line under each owner's glyph. */
 export const TREE_INDENT_PX = 10;
@@ -27,21 +27,25 @@ export const TREE_ROW_DENSE_ICON_CLASS = TREE_GLYPH_CLASS;
  */
 export const TREE_ROW_NAME_CLASS = 'flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
-// Where a row's geometry comes from: whoever holds the rows sets these once (the view's panel:
-// `--tree-row-pad` 8px, `--tree-row-actions-pad` 6px), so its rows' first glyph stands 16px in and
-// their last action's glyph 16px from the right; the defaults are the explorer's.
+// Where a row's geometry comes from: whoever holds the rows sets these once (the view's panel, `PanelSurface.jsx`:
+// its rows hang half its inset out past it, `--tree-row-hang`, their fill reaching that far, and pad half its inset,
+// `--tree-row-pad`, so their first glyph stands on the inset and their last action's glyph ends the inset from the
+// right, `--tree-row-actions-pad`); the defaults are the explorer's, whose rows hang out by nothing.
 const PAD = `var(--tree-row-pad, ${TREE_ROW_INSET_PX}px)`;
+const HANG = 'var(--tree-row-hang, 0px)';
 const GLYPH = 'var(--tree-row-glyph, 12px)';
 const rowPadding = depth => (depth ? `calc(${PAD} + ${depth * TREE_INDENT_PX}px)` : PAD);
 
 /**
- * One row of a list: 24px (36 on a phone), its radius and its hover, selected (`active`) and cursor
- * fills. A row given a `depth` owns its horizontal geometry: its padding (`--tree-row-pad`, and 10px a
- * level), a faint guide under each of its owners' glyph slots, and no right padding (its name's and
- * its actions' own). Its children are, in order: its glyph slot (`TreeRowGlyph`, `TreeRowToggle`),
- * where a list needs one a second glyph box, its name (`TREE_ROW_NAME_CLASS`), then its actions
- * (`TreeRowActions`), `actions` of them, which the name fades out under. Without a `depth` (the
- * explorer's rows) the caller pads it. `dense`: 11px text.
+ * One row of a list: 24px (28 in the view's panel, `dense`; 36 on a phone), its radius and its hover,
+ * selected (`active`: the brand's subtle fill, `--brand-subtle`) and cursor fills. A row given a `depth` owns its horizontal geometry: its padding
+ * (`--tree-row-pad`, and 10px a level), its hang (`--tree-row-hang`), a faint guide under each of its owners' glyph slots, and no
+ * right padding (its name's and its actions' own). Its children are, in order: its ONE glyph slot — a
+ * branch's chevron (`TreeRowToggle`) or a leaf's kind icon or marker (`TreeRowGlyph`: a layer's colour
+ * takes the slot instead of an icon), never two, so every name at a level starts on one column — its
+ * name (`TREE_ROW_NAME_CLASS`: `TreeRowName` and `TreeRowDetail`), then its actions (`TreeRowActions`),
+ * `actions` of them, which the name fades out under. Without a `depth` (the explorer's rows) the caller pads it. `dense`: the panel's text,
+ * its names at full strength.
  */
 export const TreeRowSurface = forwardRef(function TreeRowSurface({
   as: Component = 'div', active = false, cursor = false, dense = false, depth = null, actions = 0, className, style, children, ...props
@@ -49,12 +53,12 @@ export const TreeRowSurface = forwardRef(function TreeRowSurface({
   const touch = useViewerMobile();
   const owned = depth !== null;
   return <Component ref={ref} className={cn(
-    'relative flex min-w-0 w-full items-center gap-1 rounded-md text-left font-normal transition-colors', owned ? 'pr-0' : 'pr-2', dense ? 'text-tiny' : 'text-xs',
-    active ? 'bg-accent text-accent-foreground' : 'text-foreground/80 hover:bg-accent/50',
+    'relative flex min-w-0 w-full items-center gap-1 rounded-md text-left font-normal transition-colors', owned ? 'pr-0' : 'pr-2', dense ? 'text-ui' : 'text-xs',
+    active ? 'bg-brand-subtle text-foreground' : cn(dense ? 'text-foreground' : 'text-foreground/80', 'hover:bg-accent/50'),
     cursor && !active && 'bg-accent/30', className
   )} data-tree-row="" style={{
     height: touch ? TREE_ROW_TOUCH_HEIGHT : dense ? TREE_ROW_DENSE_HEIGHT : TREE_ROW_HEIGHT,
-    ...(owned ? { paddingLeft: rowPadding(depth) } : null),
+    ...(owned ? { paddingLeft: rowPadding(depth), marginInline: `calc(${HANG} * -1)`, width: `calc(100% + 2 * ${HANG})` } : null),
     ...(actions ? { '--row-actions': `${0.5 + actions}rem` } : null),
     ...style,
   }} {...props}>{children}{owned ? <Guides depth={depth} /> : null}</Component>;
@@ -72,15 +76,11 @@ const SLOT_CLASS = 'relative grid h-full min-w-3 shrink-0 place-items-center';
 
 /**
  * A row's glyph slot, always its first child: 12px wide (a phone's 16px glyphs widen it), its glyph
- * centred — the row's kind icon, a layer's colour — or nothing, the slot kept. `guide`: only a faint
- * line down its middle, under the glyph of the row above it. A list that needs two glyphs (a
- * drawing's layer: its chevron or icon, then its colour) draws a second one after it.
+ * centred — the row's kind icon, a layer's colour — or nothing, the slot kept. A row has one slot, never
+ * a second glyph; a row a level down hangs from its owner's line by its `depth` (`TreeRowSurface`).
  */
-export function TreeRowGlyph({ guide = false, className, children, ...props }) {
-  return <span data-tree-row-glyph='' aria-hidden='true' className={cn(SLOT_CLASS, className)} {...props}>
-    {children}
-    {guide ? <span className='pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border' data-tree-guide='' /> : null}
-  </span>;
+export function TreeRowGlyph({ className, children, ...props }) {
+  return <span data-tree-row-glyph='' aria-hidden='true' className={cn(SLOT_CLASS, className)} {...props}>{children}</span>;
 }
 
 /** A branch's disclosure: one light chevron, turned down while it is open. The explorer draws it bare. */
@@ -131,6 +131,32 @@ export function TreeRowActions({ persistent = false, className, children }) {
 
 export function TreeRowLabel({ children, className }) {
   return <span className={cn('min-w-0 truncate', className)}>{children}</span>;
+}
+
+/** A row's name where a detail follows it: whole before the detail gives way. */
+export function TreeRowName({ children, className }) {
+  return <TreeRowLabel className={cn('max-w-full shrink-0', className)}>{children}</TreeRowLabel>;
+}
+
+/**
+ * A row's detail after its name, 4px on, muted, in the row's own text: a count (a layer's entities, a
+ * net's pins), a page number, an owner's path. Every tree's details and counts are this one, so a count
+ * reads the same in every view; it is the first to truncate.
+ */
+export function TreeRowDetail({ children, className }) {
+  return <TreeRowLabel className={cn('flex-1 text-muted-foreground', className)}>{children}</TreeRowLabel>;
+}
+
+/**
+ * A heading over a run of a list's rows (a board's Front and Back, a model's parameters' file, a tab's
+ * name over its search hits): a 28px line in the panel's text, muted, its words on the rows' glyph line
+ * (on the panel's inset, no padding of its own), so it reads as a label of the rows under it, never as one of them.
+ * `as`: its element (an `h3`, or an `li` in a list it heads).
+ */
+export function TreeRowHeading({ as: Component = 'h3', className, children, ...props }) {
+  return <Component className={cn('flex h-7 min-w-0 items-center text-ui font-normal text-muted-foreground', className)} data-tree-heading='' {...props}>
+    <span className='min-w-0 truncate'>{children}</span>
+  </Component>;
 }
 
 /**

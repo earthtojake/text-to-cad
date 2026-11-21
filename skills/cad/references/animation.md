@@ -33,7 +33,7 @@ The rules:
 
 - **Prefer a motion where the mechanism says it**, and waypoints in it.
 - **No helper joints to fake an explode.** A joint per part only to slide it out is an
-  animation's job, and the Position panel would show a slider for each.
+  animation's job, and the Joints tab would show a slider for each.
 - **Animations are GLB-only.** `cad model export "$ID" model.glb`,
   `model.export(part(), "model.glb")` and `cad xbf export model.xbf model.glb` from an xbf the
   model exported all bake them, the same bytes. `xbf.read` imports a part's geometry
@@ -137,7 +137,8 @@ Each of these fails the run, by name:
 ## Reviewing
 
 Export the GLB and give the person its path; when they ask to see it, open it in the CAD
-Viewer ([Show the model](../SKILL.md#show-the-model)). Its playbar, under the model, lists the motions and the animations, and plays, pauses, scrubs
-and loops them, at a chosen speed. While one plays, it owns the parts' places; putting
+Viewer ([Show the model](../SKILL.md#show-the-model)). Its panel's **Animation** tab lists the motions and the
+animations and plays, pauses and scrubs them (scrubbed back to the start, the model is at rest), with the speed, loop
+and autoplay under them; Preview has its own playbar. While one plays, it owns the parts' places; putting
 it down puts them back at rest. A snapshot shows the model as built: it never plays an
 animation.

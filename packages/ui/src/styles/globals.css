@@ -10,27 +10,72 @@
 
 @import "./tokens.css";
 
-/* The chrome's type sizes: 10, 11, 12 and 13px at a desktop's pointer. */
+/* The type scale (`tokens.css`, `docs/settings-ui.md`): 11/16, 12/16 and 13/20 at a desktop's pointer, and
+ * the one heading 15/20; the view's panel's one size, 12px on a 16px line, at a desktop's pointer and a
+ * phone's alike (the menus keep the chrome's scale). */
 :root {
-  --cad-text-micro: 10px;
-  --cad-text-tiny: 11px;
+  --cad-text-tiny: 0.6875rem;
   --cad-text-xs: 0.75rem;
   --cad-text-ui: 0.8125rem;
+  --cad-text-heading: 0.9375rem;
+  --cad-text-panel: 0.75rem;
+  --cad-leading-tiny: 1rem;
+  --cad-leading-xs: 1rem;
+  --cad-leading-ui: 1.25rem;
+  --cad-leading-heading: 1.25rem;
+  --cad-leading-panel: 1rem;
+}
+/* Text is drawn as Figma draws its interface: greyscale antialiasing on macOS, not the platform's
+ * subpixel default, which draws light text on the dark theme a weight heavier. The whole page while a
+ * viewer is on it (its root, `data-viewer-layout`, FileViewer's), so a menu, select or hint portalled
+ * out of it is drawn alike; family, sizes and weights are untouched. It is inherited. */
+:root:has([data-viewer-layout]), [data-viewer-layout] {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* The view's panels (`PanelSurface.jsx`, both of them — the left, `FlatPanel.jsx`, and the right, `InspectorPanel.jsx` —
+ * docked or a phone's page) are one surface with ONE text size:
+ * every step of the scale drawn in it is the panel's, so a heading, a label, a row, a field and a
+ * muted detail are told apart by colour and weight, never by size, whatever class a list inside it
+ * names. A Quick Edit chip's card (`ItemDetail.jsx`'s `data-detail-card`, the Selected pane's
+ * reading) is the same size, so a pick reads alike in both. A menu, select or hint portalled out of
+ * either keeps the chrome's scale. */
+/* The view's panel's ONE horizontal line, Figma's panel inset: every piece of its content (a tab's name, the title,
+ * the search's text, a tree's first glyph, a label, a field, a dropdown, a switch, a slider's track, a heading, an
+ * empty state) starts this far in from the panel's left edge and ends this far in from its right, on a desktop and
+ * a phone alike. The body pads by it (`FlatPanel.jsx`) and no section pads itself; what has a fill or a box wider
+ * than what it holds (a tab's pill, a tree row's hover and selection, a ghost button, a number field's outline)
+ * hangs out past the line by its own padding, so what it holds stays on it. The navbar's panel toggle's icon stands
+ * on the same column (`ViewerNavbar.jsx`). In Tailwind: `px-(--panel-inset)`. */
+:root {
+  --panel-inset: 16px;
+}
+
+:is([data-panel-surface], [data-detail-card]) {
+  --cad-text-tiny: var(--cad-text-panel);
+  --cad-text-xs: var(--cad-text-panel);
+  --cad-text-ui: var(--cad-text-panel);
+  --cad-leading-tiny: var(--cad-leading-panel);
+  --cad-leading-xs: var(--cad-leading-panel);
+  --cad-leading-ui: var(--cad-leading-panel);
 }
 
 /* A phone's view (`data-viewer-layout="mobile"`: the viewer under 600px, `VIEWER_MOBILE_BREAKPOINT`)
- * is read at arm's length and worked with a finger, so its chrome takes one step up: type 12, 13, 14
- * and 15px (the platforms' floor is 11pt; body text 15-17pt), rows and menu items 40px, controls
+ * is read at arm's length and worked with a finger, so its chrome takes one step up: type 12, 13 and 14px,
+ * the heading 16px, on the same line heights (the platforms' floor is 11pt), rows and menu items 40px, controls
  * 36px; a field keeps its text size, since the page's viewport, not a 16px font, stops a phone
  * zooming in on it. The whole page follows, so a menu, a select or a hint portalled out of the
- * viewer is the same size as the chrome it opened from. */
-:root:has([data-viewer-layout="mobile"]) {
-  --cad-text-micro: 12px;
-  --cad-text-tiny: 13px;
-  --cad-text-xs: 14px;
-  --cad-text-ui: 15px;
+ * viewer is the same size as the chrome it opened from. Only the page's own viewer says so: a viewer drawn out of
+ * sight for a picture (`OffscreenPicture.tsx`, 480px wide) pins its layout and carries no `data-viewer-layout`, and
+ * one inside `[data-offscreen-picture]` is never read, so Home's type never jumps while its cards get pictures. */
+:root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) {
+  --cad-text-tiny: 12px;
+  --cad-text-xs: 13px;
+  --cad-text-ui: 14px;
+  --cad-text-heading: 16px;
 }
-:root:has([data-viewer-layout="mobile"]) :is([data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-checkbox-item"],
+:root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) :is([data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-checkbox-item"],
   [data-slot="dropdown-menu-radio-item"], [data-slot="dropdown-menu-sub-trigger"], [data-slot="select-item"], [data-slot="context-menu-item"], [data-menu-theme], [data-clip-axis-row], [data-menu-language]) {
   min-height: 40px;
 }
@@ -43,46 +88,27 @@
 /* A slider anywhere on a phone (the slider control, in the panel or a tool's row, and the scrubber):
  * a 36px band to press in — the band takes the finger, so the thumb need only be seen: 16px. The selected ink's
  * bar: 36px buttons. */
-:root:has([data-viewer-layout="mobile"]) :is([data-slot="slider"], [data-slider-field-track]) { height: 36px; }
-:root:has([data-viewer-layout="mobile"]) [data-slot="slider-thumb"] { width: 16px; height: 16px; }
+:root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) :is([data-slot="slider"], [data-slider-field-track]) { height: 36px; }
+:root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) [data-slot="slider-thumb"] { width: 16px; height: 16px; }
 [data-viewer-layout="mobile"] [data-annotation-selection-bar] button { min-width: 36px; min-height: 36px; }
-/* The view's panel on a phone (its page, `FlatPanel.jsx`), on the Display menu's scale: ONE text size, the panel's (13px), for
- * headings, labels, rows and fields alike — a heading told apart by its colour, never its size —
- * and its rows a finger's. A tree row is 36px (`TREE_ROW_TOUCH_HEIGHT`), its glyphs 16px (its slot
- * widens with them, and its guides follow the slots' centres: `--tree-row-glyph`); the
- * filter a 32px field; a pose or routine dropdown, a value field and the transport's buttons 32px.
- * (Inputs keep the panel's text size: the page's viewport, not a 16px font, stops a phone zooming
- * in on a focused field.) */
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-tree-row] { gap: 6px; --tree-row-glyph: 16px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-tree-row] svg { width: 16px; height: 16px; }
-/* A phone cannot hover: a row's actions (Isolate, the Hide/Reveal eye) are always shown, and its name
- * fades out under them. */
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-row-actions], [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-row-actions] button { opacity: 1 !important; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-tree-row] [class*="group-hover/row:[mask-image"] {
+/* The view's panel on a phone (its page in the sidebar sheet, `FlatPanel.jsx`) is the desktop's panel, the same
+ * components at the same sizes, gaps and type: its tabs, its search row and its tree rows (`primitives/tree-row.jsx`,
+ * whose own touch height, 36px, is the one thing a phone changes in a row). A phone cannot hover, so a row's actions
+ * (Isolate, the Hide/Reveal eye) are always shown there, and its name fades out under them. */
+[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-row-actions], [data-viewer-layout="mobile"] [data-panel-surface="page"] [data-row-actions] button { opacity: 1 !important; }
+[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-tree-row] [class*="group-hover/row:[mask-image"] {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--row-actions) - 0.5rem), transparent calc(100% - var(--row-actions)));
   mask-image: linear-gradient(to right, #000 calc(100% - var(--row-actions) - 0.5rem), transparent calc(100% - var(--row-actions)));
 }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slot="tree-filter"] { height: 36px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slot="tree-filter"] input { height: 34px; padding-left: 28px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slot="tree-filter"] svg { width: 16px; height: 16px; }
-/* The filter's inside is a row's at a phone's size too: its icon 8px in, its text 6px after it, its
- * clear glyph ending 8px from the right edge, as a row's last action's does. */
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slot="tree-filter"] [data-tree-filter-icon] { left: 6px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slot="tree-filter"] [data-tree-filter-clear] { right: 5px; width: 16px; height: 20px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-tree-row] { --tree-row-actions-pad: 8px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [role="tab"] { height: 32px; padding-inline: 12px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] :is([data-pose-menu], [data-animation-routine] button, input[type="text"]) { height: 32px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] :is([data-pose-row], [data-animation-routine]) { height: 44px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-animation-transport] { height: 44px; }
 /* The slider control in the panel as on a desktop (`SliderField.jsx`): its label and value on one line,
  * its slider under them, the controls apart enough that a label reads as its slider's, not the one
  * above's. The slider draws a 16px band; its 36px touch band reaches over the label's foot and the
- * gap, invisibly. Its value stays on its line: a 24px field, not the panel's 32px one. */
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slider-field]:not([data-inline]) [data-slider-field-track] { height: 16px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slider-field]:not([data-inline]) [data-slider-field-track]::before { content: ""; position: absolute; inset: -10px 0; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slider-field]:not([data-inline]) [data-slider-field-label] { line-height: 16px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slider-field]:not([data-inline]) input[type="text"] { height: 24px; margin-block: -4px; }
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-animation-transport] button { width: 32px; height: 32px; }
+ * gap, invisibly. Its value stays on its line: a 24px field. */
+[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field]:not([data-inline]) [data-slider-field-track] { height: 16px; }
+[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field]:not([data-inline]) [data-slider-field-track]::before { content: ""; position: absolute; inset: -10px 0; }
+[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field]:not([data-inline]) [data-slider-field-label] { line-height: 16px; }
+[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field-value-box] { height: 24px; }
+[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field-value-box] input[type="text"] { height: auto; }
 
 @layer base {
   * {
@@ -126,94 +152,134 @@
 .cad-navbar-mark { display: block; width: 16px; height: 16px; max-width: none; user-select: none; -webkit-user-drag: none; }
 
 /* The host's home (`library/`): the models opened before, to open again, on the page's own
- * colour, the navbar's. One type scale: every text is text-ui (13px) -- the type filter, the search,
- * the names, the table -- but the heading, Recent, 17px and weight 600 (the one larger text), and a
- * tile's age, text-tiny (11px) and muted; a tile's and a row's glyph is 16px; the control row's
- * controls are 24px tall. A centred column, 1128px wide at most on 24px gutters of its own, 44px
- * under the navbar: a grid of three tiles a row at full width, or a list of rows. */
+ * colour, the navbar's. The chrome's type scale: the heading, Recent, text-heading (15/20, weight 600, the
+ * one larger text) with the count beside it; the controls text-ui (13/20); a tile's name 12/16 at 500 over
+ * its size and age, 11/16 muted; the table's cells the same two. Every control of the row is 28px, its
+ * icons 16px, and neutral: the chosen layout's icon alone is the brand's (`--brand-icon`), as the tool in
+ * hand's is. Spacing on the 4/8/16 scale. A centred column, 1128px wide at most on 24px gutters of its own,
+ * 32px under the navbar: a grid of framed cards, or a list of rows. */
 .cad-library { width: 100%; height: 100%; background: var(--background); }
+/* The model area's light gradient, every picture's ground in both themes (the pictures are the light
+ * viewport's), with its faint edge. */
+.cad-library { --cad-library-area: linear-gradient(to bottom, #f4f5f6, #dfe2e5); --cad-library-area-edge: rgba(0, 0, 0, .07); }
 /* Below the last row: 40px, or room to scroll it clear of a host's composer floating over the bottom
    (`--cad-host-bottom-inset`), whichever is more. Added together, a library that fits would still scroll. */
-.cad-library-content { box-sizing: border-box; width: 100%; max-width: 1128px; margin: 0 auto; padding: 44px 24px max(40px, calc(var(--cad-host-bottom-inset, 0px) + 16px)); container-type: inline-size; }
-/* The control row, the page's first line (Figma's Recents): every control 24px tall. At the left "Recent",
-   a plain small heading (no tab: no fill, no box); at the right the type filter, the search and the
-   grid/list switch, 8px apart. */
-.cad-library-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
-.cad-library-heading { display: inline-flex; align-items: center; height: 24px; margin: 0; padding: 0;
-  font-size: 1.0625rem; line-height: 1; font-weight: 600; letter-spacing: -0.01em; color: var(--foreground); }
+.cad-library-content { box-sizing: border-box; width: 100%; max-width: 1128px; margin: 0 auto; padding: 20px 24px max(40px, calc(var(--cad-host-bottom-inset, 0px) + 16px)); container-type: inline-size; }
+/* The control row, the page's first line (Figma's Recents): every control 28px tall. Under a navbar it is the filter row
+   (the type filter at its left, the grid/list switch at its right: "Recent", the search and Open are the navbar's); a
+   home with no navbar has "Recent" and its count at its left, a plain heading, and every control at its right. */
+.cad-library-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+.cad-library-heading { display: inline-flex; align-items: center; gap: 8px; height: 28px; margin: 0; padding: 0;
+  font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); font-weight: 600; letter-spacing: -0.01em; color: var(--foreground); }
+.cad-library-count { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: 999px; background: var(--muted);
+  font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); font-weight: 500; letter-spacing: 0; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .cad-library-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.cad-library-kind { color: var(--foreground); }
+.cad-library-kind { color: var(--foreground); padding: 0 8px; }
 .cad-library-kind > svg { color: var(--muted-foreground); }
 .cad-library-kind[data-state=open] { background: var(--accent); }
-.cad-library-search { position: relative; width: 200px; }
-.cad-library-search > svg { position: absolute; left: 8px; top: 50%; width: 14px; height: 14px; transform: translateY(-50%); color: var(--muted-foreground); pointer-events: none; }
-.cad-library-search input { padding-left: 28px; padding-right: 8px; }
-/* Grid or list: two 24px icon buttons, the chosen one on the muted fill, as "Recent" is. */
-.cad-library-layout { display: flex; gap: 2px; }
+.cad-library-search { position: relative; width: 240px; }
+/* Home's navbar (`ViewerNavbar.jsx`'s `homeSlots`): "Recent" in the navbar's type, 13/20 at weight 500, its count after
+   it; the filter row under the navbar holds the filter at its left and the grid/list switch at its right. Under 700px
+   of navbar the search is its 28px icon until it is pressed (`data-open`), then the field, 200px. */
+[data-navbar-home] .cad-library-heading { font-size: var(--cad-text-ui); line-height: var(--cad-leading-ui); font-weight: 500; letter-spacing: 0; white-space: nowrap; }
+.cad-library-toolbar[data-library-toolbar=filters] { flex-wrap: nowrap; height: 28px; margin-bottom: 12px; }
+.cad-library-toolbar[data-library-toolbar=filters] .cad-library-kind { margin-left: -8px; }
+.cad-home-search { display: flex; align-items: center; }
+.cad-home-search-button { display: none; }
+@container cad-navbar (max-width: 699px) {
+  .cad-home-search:not([data-open]) .cad-library-search { display: none; }
+  .cad-home-search:not([data-open]) .cad-home-search-button { display: inline-flex; }
+  .cad-home-search[data-open] .cad-library-search { width: 200px; }
+}
+.cad-library-search > svg { position: absolute; left: 8px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--muted-foreground); pointer-events: none; }
+.cad-library-search input { padding-left: 32px; padding-right: 8px; }
+/* Grid or list: two 28px icon buttons; the chosen one on the pressed fill, its icon the brand's. */
+.cad-library-layout { display: flex; gap: 0; }
 .cad-library-layout button { color: var(--muted-foreground); }
-.cad-library-layout button[aria-pressed=true] { background: var(--muted); color: var(--foreground); }
-/* Figma's tiles: at least 240px a column (four across a 1280px window), 24px apart both ways. A tile is
-   transparent on the page in both themes, its 1px border the border token and its 12px radius the same
-   at rest and under the pointer, with no shadow; its picture on its own muted fill. */
-.cad-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); align-items: start; gap: 24px; margin: 0; padding: 0; list-style: none; }
+.cad-library-layout button[aria-pressed=true] { background: var(--accent); color: var(--brand-icon); }
+/* Tiles: at least 232px a column (four across a 1128px column), 16px apart, 24px between rows. B, the
+   framed card: the picture edge to edge over its caption inside one 1px-bordered box on the card's
+   colour; under the pointer its border a step darker, selected (in keyboard focus, or being opened) the
+   brand's ring with the caption on --brand-subtle. */
+.cad-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); align-items: start; gap: 24px 16px; margin: 0; padding: 0; list-style: none; }
 .cad-library-card, .cad-library-row { position: relative; min-width: 0; }
 .cad-library-main { position: relative; min-width: 0; }
-.cad-library-card { overflow: hidden; border: 1px solid var(--border); border-radius: calc(var(--radius) + 2px); background: transparent; }
+.cad-library-card { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--card); transition: border-color .15s ease, box-shadow .15s ease; }
+.cad-library-card:not([data-missing]):hover { border-color: color-mix(in srgb, var(--foreground) 22%, transparent); box-shadow: 0 2px 10px rgba(0, 0, 0, .06); }
+.cad-library-card:has(.cad-library-open:focus-visible), .cad-library-card[data-opening] { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.cad-library-card:has(.cad-library-open:focus-visible) .cad-library-body, .cad-library-card[data-opening] .cad-library-body { background: var(--brand-subtle); }
 .cad-library-open { display: flex; width: 100%; min-width: 0; text-align: left; cursor: pointer; outline: none; color: inherit; background: none; border: 0; padding: 0; font: inherit; }
 .cad-library-open:disabled { cursor: default; }
-.cad-library-open:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .cad-library-card .cad-library-open { flex-direction: column; }
-.cad-library-thumbnail { display: grid; place-items: center; overflow: hidden; background: var(--cad-library-backdrop, var(--muted)); color: var(--muted-foreground); }
+.cad-library-thumbnail { position: relative; display: grid; place-items: center; overflow: hidden; background: var(--cad-library-area); color: #9aa0a6; }
 .cad-library-thumbnail img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-/* A drawing's picture is dark line work on nothing (`useDrawingView`'s `thumbnail`): on a dark card its
- * lightness turns over and its hues stay. */
-.dark .cad-library-thumbnail[data-drawing] img { filter: invert(1) hue-rotate(180deg); }
 .cad-library-thumbnail > svg { width: 24px; height: 24px; opacity: .7; }
-.cad-library-card .cad-library-thumbnail { width: 100%; aspect-ratio: 330 / 185; }
-/* The caption, 12px by 16px: the kind's glyph in a 24px column, then the name (text-ui, 500) over its age. */
-/* A tile's caption is compact: 8px by 12px around the glyph, 8px before the name, the age right under it. */
-.cad-library-body { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 12px; }
-.cad-library-text { display: flex; flex: 1 1 auto; flex-direction: column; gap: 1px; min-width: 0; }
-.cad-library-card .cad-library-glyph { box-sizing: content-box; width: 16px; height: 16px; padding: 0 2px; }
-.cad-library-card .cad-library-label { font-weight: 500; line-height: 18px; color: var(--foreground); }
-.cad-library-name { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--foreground); }
+.cad-library-card .cad-library-thumbnail { width: 100%; aspect-ratio: 330 / 185; border-bottom: 1px solid var(--border); }
+/* A card's format, a small badge at its picture's top-left: on the picture, so light in both themes. */
+.cad-library-format { position: absolute; left: 8px; top: 8px; z-index: 1; height: 16px; padding: 0 5px; border-radius: 4px;
+  font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); font-weight: 500; white-space: nowrap; color: #3d4247;
+  background: rgba(255, 255, 255, .82); box-shadow: 0 0 0 1px rgba(0, 0, 0, .06); }
+/* The caption, 8px by 12px: the kind's glyph, 8px before the name (12/16, 500) over its size and age (11/16, muted). */
+.cad-library-body { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 8px 12px; }
+.cad-library-text { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+.cad-library-card .cad-library-label { font-size: var(--cad-text-xs); line-height: var(--cad-leading-xs); font-weight: 500; color: var(--foreground); }
+.cad-library-name { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--foreground); }
 .cad-library-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A card's and a row's kind, 16px: a model's cube or a file's plain File, the name menu's own. */
+/* A card's kind, 16px: a model's cube or a file's plain File, the name menu's own. */
 .cad-library-glyph { flex: none; width: 16px; height: 16px; color: var(--muted-foreground); }
-.cad-library-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-tiny, 0.6875rem); line-height: 14px; color: var(--muted-foreground); }
+.cad-library-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); color: var(--muted-foreground); }
 .cad-library-card[data-missing] .cad-library-thumbnail, [data-missing] .cad-library-name, .cad-library-card[data-missing] .cad-library-body { opacity: .55; }
 /* A card's pin and ⋯ (Figma's star): at its picture's top-right, shown on hover or focus, the pin always
- * while the model is pinned, and both always where nothing hovers (touch). On a picture they stand on the
- * page's colour, so a light or a dark model never hides them. */
+ * while the model is pinned, and both always where nothing hovers (touch). On the picture, so in its
+ * light colours in both themes. A row's stand on the page's own. */
 .cad-library-actions { position: absolute; display: flex; align-items: center; gap: 4px; color: var(--muted-foreground); }
 .cad-library-card .cad-library-actions { top: 8px; right: 8px; }
-.cad-library-card .cad-library-actions button { background: var(--background); box-shadow: 0 0 0 1px var(--border); }
-.cad-library-card .cad-library-actions button:hover { background: var(--accent); color: var(--foreground); }
+.cad-library-card .cad-library-actions button { background: rgba(255, 255, 255, .9); color: #4a4f55; box-shadow: 0 0 0 1px rgba(0, 0, 0, .08); }
+.cad-library-card .cad-library-actions button:hover, .cad-library-card .cad-library-actions button[data-state=open] { background: #fff; color: #111; }
 .cad-library-actions button { opacity: 0; transition: opacity .15s ease; }
 .cad-library-card:hover .cad-library-actions button, .cad-library-row:hover .cad-library-actions button, .cad-library-actions:focus-within button,
   .cad-library-actions button[data-state=open], .cad-library-actions .cad-library-pin[aria-pressed=true] { opacity: 1; }
-.cad-library-actions button[data-state=open] { background: var(--accent); color: var(--foreground); }
+.cad-library-row .cad-library-actions button[data-state=open] { background: var(--accent); color: var(--foreground); }
 .cad-library-pin[aria-pressed=true] { color: var(--foreground); }
+.cad-library-card .cad-library-pin[aria-pressed=true] { color: #111; }
 @media (hover: none) { .cad-library-actions button { opacity: 1; } }
-/* The list, Figma's table: one type in every cell (text-ui, 13px), the header's labels (Name, Updated,
-   Opened) muted in a 32px row over 40px rows, each its glyph and name, then its two ages, muted, in fixed
-   160px columns; rows transparent, the hover fill under the pointer, the pin and ⋯ at the row's end. A
-   narrow page drops Opened. */
-.cad-library-table { --cad-library-columns: minmax(0, 1fr) 160px 160px; }
-.cad-library-columns { display: grid; grid-template-columns: var(--cad-library-columns); align-items: center; height: 32px; padding: 0 64px 0 12px;
-  border-bottom: 1px solid var(--border); font-size: var(--text-ui); line-height: 1; color: var(--muted-foreground); user-select: none; }
-.cad-library-row .cad-library-status { font-size: var(--text-ui); line-height: 18px; }
-.cad-library-list { margin: 4px 0 0; padding: 0; list-style: none; }
-.cad-library-row .cad-library-main { border-radius: calc(var(--radius) - 2px); transition: background-color .15s ease; }
-.cad-library-row:not([data-missing]) .cad-library-main:hover { background: color-mix(in oklab, var(--accent) 60%, transparent); }
-.cad-library-row .cad-library-open { display: grid; grid-template-columns: var(--cad-library-columns); align-items: center; height: 40px; padding: 0 64px 0 12px; border-radius: inherit; }
-.cad-library-row .cad-library-name { gap: 8px; }
+/* The list, Figma's table: a 28px header of muted 11/16 labels (Name, Kind, Size, Updated, Created) over
+   44px rows, each its picture (40 by 28 on the model area) and name (12/16, 500), then its kind, size and two
+   ages, 11/16 muted, in fixed columns; rows transparent, the palette's hover (--muted) under the pointer,
+   a selected row (in keyboard focus, or being opened) on --brand-subtle, the pin and ⋯ at the row's end.
+   A narrower page drops Created, then Kind and Updated. */
+.cad-library-table { --cad-library-columns: minmax(0, 1fr) 96px 88px 120px 120px; }
+.cad-library-columns { display: grid; grid-template-columns: var(--cad-library-columns); align-items: center; height: 28px; padding: 0 64px 0 8px;
+  border-bottom: 1px solid var(--border); font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); font-weight: 500; color: var(--muted-foreground); user-select: none; }
+.cad-library-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 0; padding: 0; list-style: none; }
+.cad-library-row .cad-library-main { border-radius: 6px; transition: background-color .15s ease; }
+.cad-library-row:not([data-missing]) .cad-library-main:hover { background: var(--muted); }
+.cad-library-row:has(.cad-library-open:focus-visible) .cad-library-main, .cad-library-row[data-opening] .cad-library-main { background: var(--brand-subtle); }
+.cad-library-row .cad-library-open { display: grid; grid-template-columns: var(--cad-library-columns); align-items: center; height: 44px; padding: 0 64px 0 8px; border-radius: inherit; }
+.cad-library-row .cad-library-open:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
+.cad-library-row .cad-library-label { font-size: var(--cad-text-xs); line-height: var(--cad-leading-xs); font-weight: 500; }
+.cad-library-row .cad-library-thumbnail { flex: none; width: 40px; height: 28px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--cad-library-area-edge); }
+.cad-library-row .cad-library-thumbnail img { padding: 2px; box-sizing: border-box; }
+.cad-library-row .cad-library-thumbnail > svg { width: 14px; height: 14px; }
 .cad-library-row .cad-library-actions { right: 8px; top: 50%; transform: translateY(-50%); }
-@container (max-width: 560px) {
-  .cad-library-table { --cad-library-columns: minmax(0, 1fr) 96px; }
+@container (max-width: 820px) {
+  .cad-library-table { --cad-library-columns: minmax(0, 1fr) 80px 72px 104px; }
   .cad-library-table [data-column=created] { display: none; }
 }
+@container (max-width: 560px) {
+  .cad-library-table { --cad-library-columns: minmax(0, 1fr) 72px 96px; }
+  .cad-library-table [data-column=kind] { display: none; }
+}
 .cad-library-empty { margin: 48px 0 0; text-align: center; color: var(--muted-foreground); line-height: 1.6; }
+/* No models yet: the C mark on the model area, a 15/20 title, one short line, Open file where the host has
+   a chooser, and the formats the viewer opens. */
+.cad-library-welcome { display: flex; flex-direction: column; align-items: center; max-width: 560px; margin: 24px auto 0; text-align: center; }
+.cad-library-welcome-stage { display: grid; place-items: center; width: 100%; height: 200px; margin-bottom: 24px; border-radius: 12px;
+  background: var(--cad-library-area); box-shadow: inset 0 0 0 1px var(--cad-library-area-edge); }
+.cad-library-welcome-stage img { display: block; width: 64px; height: 64px; user-select: none; -webkit-user-drag: none; }
+.cad-library-welcome-title { margin: 0 0 4px; font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); font-weight: 600; letter-spacing: -0.01em; color: var(--foreground); }
+.cad-library-welcome-body { margin: 0 0 16px; color: var(--muted-foreground); }
+.cad-library-welcome-formats { margin: 16px 0 0; font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); letter-spacing: .02em; color: var(--muted-foreground); }
 /* While the list is read: the cards' own shapes, pulsing. */
 .cad-library [data-loading] .cad-library-open { cursor: default; }
 .cad-library [data-loading] .cad-library-thumbnail, .cad-library-placeholder { animation: cad-library-pulse 1.4s ease-in-out infinite; }
@@ -222,8 +288,8 @@
 .cad-library-row .cad-library-placeholder { width: 40%; }
 @keyframes cad-library-pulse { 50% { opacity: .5; } }
 /* The model being opened: a spinner over its picture until the host has it on screen. */
-.cad-library-thumbnail { position: relative; }
 .cad-library-opening { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklab, var(--background) 45%, transparent); color: var(--foreground); }
+.cad-library-row .cad-library-opening [data-slot=spinner], .cad-library-row .cad-library-opening svg { width: 14px; height: 14px; }
 .cad-library-opening > svg { width: 20px; height: 20px; opacity: 1; }
 .cad-library-error { margin-bottom: 16px; color: var(--destructive); }
 .cad-library-error p { margin: 0; }

@@ -43,7 +43,7 @@ const AXIS_OPTIONS = Object.freeze(AXES.map(value => ({ value, label: value.toUp
 
 // An axis's button: the app menu's Theme buttons (24px square, its radius, the menu's type), the axis in
 // hand in the accent a highlighted item wears, the others in the item's own colour.
-const AXIS_ITEM_CLASS = "grid size-6 cursor-default place-items-center rounded-sm text-tiny leading-4 text-foreground outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground";
+const AXIS_ITEM_CLASS = "grid size-6 cursor-default place-items-center rounded-sm text-xs leading-4 text-foreground outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground";
 
 // A press in this menu keeps it open: an axis as each setting does, so several change in one go.
 const keepOpen = event => event.preventDefault();
@@ -76,7 +76,7 @@ function ClipAxisSelect({ viewSettings, onViewSettingsPatch, bounds }) {
   return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild>
       <ToolbarButton tooltip={false} label={t("clip.axisCurrent", { axis: clip.axis.toUpperCase() })} data-clip-axis={clip.axis}
-        className="w-auto shrink-0 gap-0.5 px-1 text-tiny aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground">
+        className="w-auto shrink-0 gap-0.5 px-1 text-xs aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground">
         {clip.axis.toUpperCase()}<ChevronDown className="size-2.5 opacity-60" aria-hidden="true" />
       </ToolbarButton>
     </DropdownMenuTrigger>

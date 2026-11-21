@@ -12,9 +12,13 @@
  * `SETTINGS_PANEL_SURFACE_CLASS`: Preview's settings panel, mostly text, up for as long as Preview
  * is: 92%, a small blur.
  * `FLOATING_SURFACE_CLASS`: the popovers and menus opened over the viewport (a mode menu, the
- * viewport's context menu, the app menu, the explorer, Display's settings, the playbar's
- * Playback settings) — read while they are up: 95%, blurred.
+ * viewport's context menu, the app menu, the explorer, Display's settings, a playbar's Playback
+ * settings) — read while they are up: 95%, blurred.
+ * `QUIET_CHROME_SURFACE_CLASS`: the tools view's playbar (`kit/tools/playbar/PlaybackBar.jsx`), up for
+ * as long as a file with routines is open and seldom used: the chrome's surface stepped back — 70%,
+ * its border faint, no shadow — its controls always at full strength (never dimmed).
  */
 export const FLOATING_SURFACE_CLASS = "border border-border bg-popover/95 text-foreground shadow-sm backdrop-blur-md";
 export const SETTINGS_PANEL_SURFACE_CLASS = "border border-border bg-popover/92 text-foreground shadow-sm backdrop-blur-sm";
 export const FLOATING_CHROME_SURFACE_CLASS = "border border-border bg-popover/90 text-foreground shadow-md backdrop-blur-sm";
+export const QUIET_CHROME_SURFACE_CLASS = "border border-border/60 bg-popover/70 text-foreground shadow-none backdrop-blur-sm";

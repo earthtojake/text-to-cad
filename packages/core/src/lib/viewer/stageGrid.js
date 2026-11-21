@@ -3,7 +3,7 @@ import {
   VIEWER_SCENE_SCALE,
   getSceneScaleSettings
 } from "./sceneScale.js";
-import { BASE_VIEWER_THEME } from "./stageTheme.js";
+import { AXIS_COLORS, GRID_COLORS } from "../viewportTheme.js";
 import {
   DEFAULT_FLOOR_AXIS_SETTINGS,
   DEFAULT_FLOOR_GRID_SETTINGS,
@@ -31,10 +31,8 @@ export const GRID_FADE_START_FRAMINGS = 1.5;
 export const GRID_FADE_END_FRAMINGS = 6;
 // The paper's ink: one colour, the majors' at full strength; the minors are the same ink, lighter.
 // A light cyan-blue on a light backdrop; a cool steel blue that reads on a dark one without glowing.
-export const GRID_LINE_DEFAULTS = Object.freeze({
-  light: Object.freeze({ color: "#4ea8cc", opacity: 0.45 }),
-  dark: Object.freeze({ color: "#5d9ac0", opacity: 0.35 })
-});
+// (`lib/viewportTheme.js`, the scene's colours written once.)
+export const GRID_LINE_DEFAULTS = GRID_COLORS;
 // Line widths in drawing-buffer pixels, and how strong each family is beside the grid's opacity.
 const MINOR_WIDTH = 0.75;
 const MAJOR_WIDTH = 1.25;
@@ -45,10 +43,7 @@ const AXIS_STRENGTH = 1.9;
 const MINOR_CROWD = 3.5;
 const MAJOR_CROWD = 3.5;
 // The axes in the view cube's colours, a shade deeper on a light backdrop to hold their contrast.
-export const GRID_AXIS_COLORS = Object.freeze({
-  light: Object.freeze({ x: "#e5484d", y: "#2f9e57", z: "#3d6fe8" }),
-  dark: Object.freeze({ x: "#f2555a", y: "#4cc970", z: "#5b8cff" })
-});
+export const GRID_AXIS_COLORS = AXIS_COLORS;
 // The Axes setting's line is the third axis, Z, through the origin: blue, as on the view cube.
 const GRID_Z_AXIS_COLOR = GRID_AXIS_COLORS.light.z;
 
@@ -68,13 +63,12 @@ function resolveGridStyle(viewerTheme = {}, floorSettings = {}) {
   return {
     color: gridSettings.color
       || gridSettings.centerColor
-      || viewerTheme?.gridCenter
-      || BASE_VIEWER_THEME.gridCenter,
+      || GRID_COLORS.light.color,
     xAxisColor: gridSettings.xAxisColor || GRID_AXIS_COLORS.light.x,
     yAxisColor: gridSettings.yAxisColor || GRID_AXIS_COLORS.light.y,
     opacity: Number.isFinite(Number(gridSettings?.opacity))
       ? clamp(Number(gridSettings.opacity), 0, 1)
-      : (viewerTheme?.gridOpacity ?? BASE_VIEWER_THEME.gridOpacity)
+      : GRID_COLORS.light.opacity
   };
 }
 

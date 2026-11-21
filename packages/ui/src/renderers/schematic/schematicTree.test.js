@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import { createSchematicIndex } from "@cad/core/lib/schematic2d/schematicIndex.js";
-import { buildSchematicTree, buildSheetTree, schematicDetail, schematicRowOwners, schematicTreeNodeIds, sheetOfSelector } from "./schematicTree.js";
+import { buildSchematicTree, buildSheetTree, schematicRowOwners, schematicTreeNodeIds, sheetOfSelector } from "./schematicTree.js";
 
 const PAYLOAD = JSON.parse(fs.readFileSync(new URL("./__fixtures__/schematic.plot.json", import.meta.url), "utf8"));
 const index = createSchematicIndex(PAYLOAD.schematic);
@@ -27,11 +27,6 @@ test("the Parts are the parts in their sheets' blocks and the Nets a list of the
     "#R1", "#net:/MID", "#sheet:/Load/"].map(selector => schematicRowOwners(index, selector)), [["net:/MID"], ["net:/MID"], ["net:/MID"], [], [], []]);
   assert.deepEqual(schematicTreeNodeIds("#net:/MID"), ["net:/MID"]);
   assert.deepEqual(schematicTreeNodeIds("#sheet:/Load/"), []);
-  const part = schematicDetail(index, "#R1.2");
-  assert.deepEqual([part.id, part.count, part.rows.map(pin => [pin.pick, pin.label, pin.detail])], ["part:R1", "2 pins", [["#R1.1", "1", "+5V"], ["#R1.2", "2", "/MID"]]]);
-  const net = schematicDetail(index, "#net:/MID");
-  assert.deepEqual([net.label, net.count, net.rows.map(pin => pin.label)], ["/MID", "3 pins", ["C1.1", "R1.2", "R2.1"]]);
-  assert.equal(schematicDetail(index, "#sheet:/Load/"), null);
 });
 
 test("the Hierarchy is the root and the sheets it places, each its page", () => {

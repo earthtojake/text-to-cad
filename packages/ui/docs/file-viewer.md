@@ -60,7 +60,12 @@ Preview's, the navbar hidden: nothing of the view is the navbar's.
 
 Below 600px of its own width FileViewer is mobile (`useViewerMobile`). The width is a
 breakpoint boolean, never a pixel value, so a resize within one layout does not
-re-render the renderer.
+re-render the renderer. Its root says which (`data-viewer-layout`), and the page's stylesheet reads it: a phone's
+type and touch targets a step up, page-wide, so a menu portalled out of the view matches it. Only the page's own
+viewer says so. A viewer that is not the page's (a library card's picture, drawn out of sight at 480px:
+`OffscreenPicture.tsx`) pins its layout (`layout="mobile"` or `"desktop"`), measures nothing and carries no
+`data-viewer-layout`, and the page-wide rules ignore anything inside `[data-offscreen-picture]`, so Home's type never
+changes while its cards get their pictures.
 
 A renderer is handed, besides its document: `onNavigationActionsChange`, for its
 nav-row actions (`FileNavigationAction`, with an optional shorter `hint`), hidden

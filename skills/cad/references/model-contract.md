@@ -118,8 +118,9 @@ shared between two models: a builder several models call with the same arguments
 ### Parameters a person tunes
 
 The few numbers a person is likely to tune -- a fit, a wall, a clearance, a count -- can also be
-declared as the script's parameters, at the module's top level. The CAD Viewer's Parameters tab
-shows them, and the person can change them there:
+declared as the script's parameters, at the module's top level. The CAD Viewer's Params tab
+shows them, and the person can change them there: the view shows the model at the new values as they
+drag (nothing is written), and Save writes them into the script:
 
 ```python
 # src/bracket.py
@@ -163,7 +164,7 @@ def bracket():
     bore  3.2  float, in bracket.py, read-only: not a plain number in the code
   ```
 
-- **Setting one** writes the script and runs it again. The Parameters tab's Save and `cad model
+- **Setting one** writes the script and runs it again. The Params tab's Save and `cad model
   set` are one path:
 
   ```bash
@@ -182,11 +183,15 @@ def bracket():
   refuses with nothing written: exit 2 for a name the model does not declare or a value it does
   not take (`unknown_parameter`, `not_a_number`, `out_of_range`), exit 1 for a parameter that is
   not writable, a script edited since its run (`script_changed`: run it first), a model no live
-  worker built (`no_worker`: run its script), or one building now (`busy`). A build at the new values
+  worker built (`no_worker`: run its script), or a script building now, from any Python, or being set
+  already (`busy`); a run of the script asked while it is being set waits for the set. A build at the new values
   that breaks a model (one that built before; a model already failing the same way does not count)
   puts the script back and builds it again (`build_failed`, exit 1), so the document stays the last
   good one; a script someone else changed meanwhile is left as it is, and the refusal says so. It prints no build report: check the change as after any run. `--json` answers
   `{"id", "written", "rebuilt"}`; `cad.model.set(handle_or_id, wall=2.5)` is the same from Python.
+- **An xbf keeps them, read-only**: a declared one and one exported (`cad model export "$ID" part.xbf`)
+  record each parameter at the value it was built with, which the CAD Viewer lists when the file is
+  opened; the code is the only place they change.
 
 ## `@memo` marks stages
 

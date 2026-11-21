@@ -1,3 +1,5 @@
+import { withStlBodies } from "./stlBodies.js";
+
 let stlWorker = null;
 let nextRequestId = 1;
 const pendingRequests = new Map();
@@ -45,7 +47,7 @@ function ensureStlWorker() {
     pendingRequests.delete(message.id);
     request.cleanup();
     if (message.ok) {
-      request.resolve(message.meshData);
+      request.resolve(message.bodies || message.meshData);
       return;
     }
     const error = new Error(message.error?.message || "Failed to load STL mesh in worker.");
@@ -101,6 +103,38 @@ export function loadStlMeshDataInWorker(url, { signal, resources } = {}) {
       cleanup(); reject(error);
     });
     else post({ kind: "url", url });
+  });
+}
+
+// Each decode's bodies, split once: a file reopened finds them here.
+const bodiesOf = new WeakMap();
+
+/**
+ * An STL's bodies (`stlBodies.js`), split after its model is on screen: in the STL worker, over a copy of its triangles,
+ * else here. `meshData` with its triangles in body order and a part a body; the decode itself is never written.
+ * @param {object} meshData  `loadRenderStl`'s.
+ * @param {{ signal?: AbortSignal }} [options]
+ * @returns {Promise<object>}
+ */
+export function loadStlBodies(meshData, { signal } = {}) {
+  const known = bodiesOf.get(meshData);
+  if (known) return known;
+  const worker = ensureStlWorker();
+  const split = worker ? new Promise((resolve, reject) => {
+    const id = nextRequestId;
+    nextRequestId += 1;
+    pendingRequests.set(id, { resolve, reject, cleanup: () => {} });
+    // Copies: the decode stays the cache's, and the worker sends its own back.
+    worker.postMessage({ type: "stlBodies", id, vertices: meshData.vertices, normals: meshData.normals, solids: meshData.stlSolids || [] });
+  }) : Promise.resolve().then(() => withStlBodies({ vertices: meshData.vertices, normals: meshData.normals }, meshData.stlSolids || []));
+  const result = split.then(({ vertices, normals, parts }) => ({ ...meshData, vertices, normals, parts }));
+  bodiesOf.set(meshData, result);
+  result.catch(() => bodiesOf.delete(meshData));
+  if (!signal) return result;
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(makeAbortError()); return; }
+    signal.addEventListener("abort", () => reject(makeAbortError()), { once: true });
+    result.then(resolve, reject);
   });
 }
 

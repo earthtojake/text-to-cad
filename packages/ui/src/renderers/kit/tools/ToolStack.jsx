@@ -39,7 +39,8 @@ export default function ToolStack({ layout: stored, onLayoutChange, hidden = fal
   useLayoutEffect(() => {
     const element = column.current;
     if (!element) return undefined;
-    const viewer = element.closest("[data-cad-canvas]");
+    // The view the column stands over: the whole view (the column is centred on it, over the panels).
+    const viewer = element.closest("[data-cad-surface]") || element.closest("[data-cad-canvas]");
     const measure = () => setMeasured(current => {
       const next = { stack: element.clientHeight, viewer: Math.round(viewer?.getBoundingClientRect().width || 0) };
       return current.stack === next.stack && current.viewer === next.viewer ? current : next;

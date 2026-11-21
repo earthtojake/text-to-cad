@@ -41,7 +41,7 @@ function Range({ label, name = label, value, onChange, min = 0, max = 1, step = 
     const next = Number(clamped.toFixed(precision));
     if (next !== value) onChange(next);
   };
-  return <SliderField label={label} name={name} value={value} min={min} max={max} step={step} disabled={disabled}
+  return <SliderField label={label} name={name} value={value} min={min} max={max} step={step} scale={scale} disabled={disabled}
     onValueChange={onChange} text={format(value)} onTextCommit={commit} textLabel={t("render.valueOf", { name })} />;
 }
 function Color({ label, name = label, value, onChange, disabled = false }) {
@@ -82,7 +82,7 @@ export function PreviewRenderSettings({ settings = {}, display = {}, appearance 
   const opacity = (name, title) => <Range label={t("render.opacity")} name={title} value={look[name].opacity} onChange={opacity => patch(name, { opacity })} />;
   return <div className="flex min-h-0 flex-1 flex-col">
     <ScrollArea className="min-h-0 flex-1">
-      <div className="p-1">
+      <div className="px-3 py-1">
         <FileSheetSettingsSection title={t("render.partColours")}>
           <Choice label={t("render.source")} name={t("render.colourSource")} value={look.parts.colorMode} options={[["original", t("render.source.original")], ["single", t("render.source.single")], ["by-part", t("render.source.byPart")]]}
             onChange={colorMode => patch("parts", { colorMode })} />
@@ -109,7 +109,7 @@ export function PreviewRenderSettings({ settings = {}, display = {}, appearance 
       </div>
     </ScrollArea>
     <div className="shrink-0 border-t border-border p-1">
-      <Button type="button" variant="ghost" size="xs" className="h-7 w-full justify-start gap-2 px-2 text-tiny font-normal text-muted-foreground hover:text-foreground"
+      <Button type="button" variant="ghost" size="xs" className="h-7 w-full justify-start gap-2 px-2 text-xs font-normal text-muted-foreground hover:text-foreground"
         disabled={!previewSettingsChanged(settings, options)} onClick={onReset}>
         <RotateCcw className="size-3.5" aria-hidden="true" />{t("render.reset")}
       </Button>

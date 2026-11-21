@@ -68,6 +68,8 @@ class LibraryTest(unittest.TestCase):
         ident = file_id(self.model)
         self.assertEqual(entry, {**RecentStore().list()[0].public(), "id": ident, "kind": "stl", "record": "file",
                                  "api": f"/api/v1/documents/stl/{ident}"})
+        # Its size on disk, which the home shows beside its age.
+        self.assertEqual(entry["size"], len(STL))
         self.assertTrue(self.change("pin", str(self.model))[1]["documents"][0]["pinned"])
         self.assertFalse(self.change("unpin", str(self.model))[1]["documents"][0]["pinned"])
         # The picture, by its document's id; in the dark theme the same one, as it has no dark one.

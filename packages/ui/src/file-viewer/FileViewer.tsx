@@ -14,6 +14,9 @@ import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { I18nProvider, translator } from "../i18n/index.js";
 import { mayTakeKeyboard } from "./takeKeyboard.js";
 import { FilePanelContext, filePanelOf, withFilePanel } from "./filePanel.js";
+import { PanelTogglesContext } from "./panelToggles.js";
+import { NavbarSlotsContext, NavbarViewSlotContext } from "./navbarSlots.js";
+import type { PanelToggles } from "./panelToggles.js";
 
 class RenderBoundary extends Component<{ children: ReactNode; title: string; onError?: (error: Error) => void }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -26,7 +29,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page" }: FileViewerProps) {
+export function FileViewer({ file, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page", layout }: FileViewerProps) {
   // The language the host names (`environment.locale`): this frame's own strings, and everything
   // drawn under it (`I18nProvider`), the nodes the host hands it included.
   const locale = host.environment.locale;
@@ -47,14 +50,23 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
     current.onStateChange(next);
   }, []);
 
-  // Width matters only as the breakpoint: this state changes when it is crossed, never per pixel.
-  const [rootRef, mobile] = useViewerMobileMeasure();
+  // Width matters only as the breakpoint: this state changes when it is crossed, never per pixel. A pinned layout
+  // (`layout`: a viewer that is not the page's own) is neither measured nor said to the page.
+  const [rootRef, measuredMobile] = useViewerMobileMeasure(layout === undefined);
+  const mobile = layout ? layout === "mobile" : measuredMobile;
   const viewerElement = useRef<HTMLDivElement | null>(null);
   const bindElement = useCallback((element: HTMLDivElement | null) => { viewerElement.current = element; rootRef(element); }, [rootRef]);
   // The file whose renderer says its Preview is up, while it is: the navbar steps aside for Preview's own bar.
   const [previewing, setPreviewing] = useState<typeof key | null>(null);
   const onPreviewChange = useCallback((on: boolean) => { if (currentKey.current === key) setPreviewing(on ? key : null); }, [key]);
   const [readiness, setReadiness] = useState<{ key: string; ready: boolean } | null>(null);
+  // The view's two panel toggles, which its frame says (`panelToggles.js`) and the navbar draws.
+  const [panelToggles, setPanelToggles] = useState<PanelToggles | null>(null);
+  // Home's controls' places in the navbar (`navbarSlots.js`), once the navbar has drawn them.
+  const [homeLeft, setHomeLeft] = useState<HTMLElement | null>(null);
+  const [homeRight, setHomeRight] = useState<HTMLElement | null>(null);
+  // The navbar's view slot, where the view on screen puts its view settings (`navbarSlots.js`).
+  const [viewSlot, setViewSlot] = useState<HTMLElement | null>(null);
   const [navActions, setNavActions] = useState<{ key: string; actions: readonly FileNavigationAction[] } | null>(null);
   const onNavigationActionsChange = useCallback((actions: readonly FileNavigationAction[]) => { if (currentKey.current === key) setNavActions({ key, actions }); }, [key]);
   const onReady = useCallback((ready: boolean) => { if (currentKey.current === key) setReadiness((previous) => previous?.key === key && previous.ready === ready ? previous : { key, ready }); }, [key]);
@@ -98,10 +110,10 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   const rendererBody = useMemo(() => {
     if (!shown) return null;
     const Renderer = shown.prepared.Component;
-    return <RenderBoundary key={key} title={t("file.displayFailed")} onError={onError}><FilePanelContext.Provider value={filePanel}><Renderer notice={notice} key={key} file={shown.file} source={source}
+    return <RenderBoundary key={key} title={t("file.displayFailed")} onError={onError}><PanelTogglesContext.Provider value={setPanelToggles}><FilePanelContext.Provider value={filePanel}><Renderer notice={notice} key={key} file={shown.file} source={source}
       onPreviewChange={onPreviewChange} onReady={onReady} onNavigationActionsChange={onNavigationActionsChange}
       onOpenFile={onOpenFile} appearance={appearance}
-      state={rendererState} onStateChange={setRendererState} reload={reload} /></FilePanelContext.Provider></RenderBoundary>;
+      state={rendererState} onStateChange={setRendererState} reload={reload} /></FilePanelContext.Provider></PanelTogglesContext.Provider></RenderBoundary>;
   }, [shown, key, onError, notice, source, onPreviewChange, onReady,
     onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, filePanel, reload, t]);
 
@@ -166,13 +178,16 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   // and not while the renderer's Preview is up, which draws its own bar in its place.
   const home = loaded.status === "empty" && Boolean(presentation?.home);
   const navbar = (Boolean(path) || home) && !appearance.compact && chrome !== "bare" && previewing !== key;
-  return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={mobile ? "mobile" : "desktop"} tabIndex={-1}>
+  const homeSlotRefs = useMemo(() => ({ left: setHomeLeft, right: setHomeRight }), []);
+  const homeSlots = useMemo(() => (navbar && !path && home ? { left: homeLeft, right: homeRight } : null), [navbar, path, home, homeLeft, homeRight]);
+  return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><NavbarSlotsContext.Provider value={homeSlots}><NavbarViewSlotContext.Provider value={navbar && path ? viewSlot : null}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={layout ? undefined : mobile ? "mobile" : "desktop"} data-viewer-pinned-layout={layout} tabIndex={-1}>
     {navbar ? (path
-      ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name} kind={model ? "model" : "file"} explorer={explorer} recent={recentMenu} fileMenu={fileMenu} trailing={trailing} actions={navbarActions} />
-      : <ViewerNavbar menu={menu} history={history} actions={navbarActions} />) : null}
+      ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name} kind={model ? "model" : "file"} explorer={explorer} recent={recentMenu} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}
+        panels={shown ? panelToggles : null} viewSlot={setViewSlot} />
+      : <ViewerNavbar menu={menu} history={history} actions={navbarActions} homeSlots={home ? homeSlotRefs : null} />) : null}
     <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div className="min-w-0 flex-1 overflow-hidden">{body}</div>
       {overlay}
     </div>
-  </div></ViewerElementContext.Provider></ViewerHostContext.Provider></ViewerMobileContext.Provider></I18nProvider>;
+  </div></NavbarViewSlotContext.Provider></NavbarSlotsContext.Provider></ViewerElementContext.Provider></ViewerHostContext.Provider></ViewerMobileContext.Provider></I18nProvider>;
 }

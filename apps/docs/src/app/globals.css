@@ -14,7 +14,8 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  /* Muted shades of the logo’s pastel blue, deepened for light labels. */
+  /* Muted shades of the logo’s pastel blue, deepened for light labels: the viewer's `--brand-text` (#2c7197 light,
+   * #62b7ec dark), as this site's brand is always text or a fill under light text. */
   --brand: #2c7197;
   --primary: #2c7197;
   --primary-hover: #24658a;
@@ -23,7 +24,8 @@
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  /* The viewer's hover and selected fill (`packages/ui/src/styles/tokens.css`'s light `--accent`'s step, Figma's bg-tertiary). */
+  --accent: #e4e4e4;
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);

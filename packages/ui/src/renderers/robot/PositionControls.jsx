@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { FileSheetStatusText, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
-import { KinematicsPoseRow, NO_PRESET_VALUE, DEFAULT_POSE_VALUE, positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
+import { KinematicsPoseRow, KinematicsResetRow, NO_PRESET_VALUE, DEFAULT_POSE_VALUE, positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import { useI18n } from "@cad/ui/i18n";
 
@@ -147,7 +147,7 @@ const ControlRow = memo(function ControlRow({ control, value, rest, onValueChang
         commitValue(parseFileSheetNumberInput(nextValue, { fallback: liveValue * scale, min: min * scale, max: max * scale }) / scale);
       }}
       textLabel={t("position.valueIn", { name: label || t("position.joint"), unit: unitLabel })}
-      hint={t("position.range", { min: formatControlValue(min, control), max: formatControlValue(max, control) })}
+      scale={scale}
       min={min}
       max={max}
       step={sliderStep}
@@ -178,20 +178,30 @@ function PoseControlRow({ pose, control }) {
   return <ControlRow control={control} value={value} rest={pose.defaults[control.id] ?? 0} onValueChange={(...args) => { usage.changed("position_joint"); return pose.write(...args); }} />;
 }
 
+// The pose in hand: Default where every joint is at its default, a group state chosen, else none (set by hand).
+function usePoseValue(pose) {
+  const read = () => pose.getSnapshot();
+  const { groupStateId, values } = useSyncExternalStore(pose.subscribe, read, read);
+  return positionValuesAreDefault(values, pose.defaults) ? DEFAULT_POSE_VALUE : pose.groupStates.some(state => state.id === groupStateId) ? groupStateId : NO_PRESET_VALUE;
+}
+
 /** The Pose row: Default, then the SRDF's named group states, if it declares any. */
 export function PoseGroupStateRow({ pose }) {
   const { t } = useI18n();
-  const read = () => pose.getSnapshot();
-  const { groupStateId, values } = useSyncExternalStore(pose.subscribe, read, read);
   return <KinematicsPoseRow
     poses={pose.groupStates.map(state => ({ value: state.id, label: String(state.label || state.name || "").trim() || t("pose.state") }))}
     onReset={pose.reset}
-    activeValue={positionValuesAreDefault(values, pose.defaults) ? DEFAULT_POSE_VALUE : pose.groupStates.some(state => state.id === groupStateId) ? groupStateId : NO_PRESET_VALUE}
+    activeValue={usePoseValue(pose)}
     onSelect={(value) => {
       const state = pose.groupStates.find(candidate => candidate.id === value);
       if (state) pose.selectGroupState(state);
     }}
   />;
+}
+
+/** The tab's actions row: Reset, back to the default pose. */
+function PoseResetRow({ pose }) {
+  return <KinematicsResetRow activeValue={usePoseValue(pose)} onReset={pose.reset} />;
 }
 
 /**
@@ -204,11 +214,12 @@ export default function PositionControls({ pose }) {
   const { t } = useI18n();
   if (!pose.controls.length) return <FileSheetStatusText className="py-2">{t("position.noJoints")}</FileSheetStatusText>;
   return (
-    <div className="space-y-1 pb-2 pt-0.5">
+    <div>
       {/* A pose is a way of SETTING the controls, so it leads them: Default for any robot, the
-          named states where an SRDF declares them. */}
+          named states where an SRDF declares them; Reset, the way back, is the tab's last row. */}
       <PoseGroupStateRow pose={pose} />
       {pose.controls.map(control => <PoseControlRow key={control.id} pose={pose} control={control} />)}
+      <PoseResetRow pose={pose} />
     </div>
   );
 }

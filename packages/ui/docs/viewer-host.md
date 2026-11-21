@@ -84,7 +84,7 @@ are for reading and maintaining the contracts.
 | `ViewerHost`, `ClipboardPort`, `PromptFiles` (a Quick Edit's views and annotations, saved as JSON), `usage` | [Host types](../src/host/types.ts) | `@cad/ui/host` |
 | `FileSource` (`stat`, and `list` and `search` where the host has them), `FileActions`, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@cad/ui/file-viewer` |
 | `PromptContextPort` (`deliver`, `send`), bundles, references, delivery receipts and `formatPromptMessage` (the one message a Quick Edit is) | [Prompt types](../../core/src/prompt/types.ts) | `@cad/core/prompt` |
-| `CadWorkspaceService` (the catalog of the files on screen, `folder`, `search`; `setModelParameters`, the Parameters tab's Save, optional: a host that cannot carry it leaves it out and the tab shows values without Save), `createCadClient` (`{ origin, fetch, … }`), `isMissingFileError`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@cad/core/client` |
+| `CadWorkspaceService` (the catalog of the files on screen, `folder`, `search`; `setModelParameters`, the Params tab's Save, and `previewModelParameters`, the model drawn at its drafts before a Save, each optional: a host that cannot carry one leaves it out, and the tab shows values without Save, or a value only once it is saved), `createCadClient` (`{ origin, fetch, … }`), `isMissingFileError`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@cad/core/client` |
 | `createHttpPromptFiles` (the viewer server's `PromptFiles`: `POST /api/v1/local/prompt-files`, writes JSON and returns paths) | [Prompt files](../../core/src/client/promptFiles.js) | `@cad/core/client` |
 | `XbfRendererOptions` (an `.xbf` and a STEP), `LiveViewBinding`, `LiveViewController` | [Engine document registration](../src/renderers/xbf/index.ts) | `@cad/ui/renderers/xbf` |
 | `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, the view of the file on screen, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@cad/ui/tab-store` |
@@ -96,7 +96,7 @@ are for reading and maintaining the contracts.
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@cad/ui/renderers/workspace` |
 | `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@cad/ui/host` |
-| `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail`, `ageLabel`, `lastActivity` (a host's home, under the navbar, the library alone: one control row of 24px controls — Recent, then at the right the type filter ("All ▾": All, Models, Files, where both are listed), the search, the grid/list switch and, where `pick` is given (a computer with a file chooser), Open — then the documents opened or built before, pinned first, then by last activity (the later of a row's `opened` and `updated`), as tiles (the picture, its kind's glyph, its name and its age with no verb) or as a table's rows (Name, then `updated` and `created` as ages); every model a card and a row of its own, never tied to its script (the library's `script` is not read); on each a pin toggle and one ⋯ menu: Open, a file's Copy path and Reveal where `fileActions` can (a model has neither), Pin or Unpin, then Delete, which asks first (`change("delete")` for a model, `change("remove")` for a file) and takes the card off at once; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), and a spinner over the model being opened, which takes no second press until `open` settles) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@cad/ui/library` |
+| `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail`, `ageLabel`, `lastActivity` (a host's home, under the navbar, the library alone: Recent and its count, the search and, where `pick` is given (a computer with a file chooser), Open in the navbar on the grid's column; a light 28px row over the grid, the type filter ("All ▾": All, Models, Files, where both are listed) at its left and the grid/list switch at its right — then the documents opened or built before, pinned first, then by last activity (the later of a row's `opened` and `updated`), as framed cards (the picture, the light viewport's on the model area's gradient, with its format's badge; its kind's glyph, its name, a file's `size` and its age with its verb) or as a table's rows (Name, Kind, Size, then `updated` and `created` as ages); every model a card and a row of its own, never tied to its script (the library's `script` is not read); on each a pin toggle and one ⋯ menu: Open, a file's Copy path and Reveal where `fileActions` can (a model has neither), Pin or Unpin, then Delete, which asks first (`change("delete")` for a model, `change("remove")` for a file) and takes the card off at once; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), and a spinner over the model being opened, which takes no second press until `open` settles) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@cad/ui/library` |
 | `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the six CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@cad/ui/cad-viewer` |
 | `createCadFileSource` (a CAD client as a read-only `FileSource`: `stat` through the client's `resolveEntry`, `list` through `folder`, `search` through `search`), `createCadFileActions` (the file menu's Copy path, the absolute path, and Reveal, Open in's file manager), `normalizePath`, `baseName`, `joinPath`, `contentRevision` | [Catalog](../src/cad-viewer/catalog.ts) | `@cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the version, X, GitHub, Discord, where a new issue opens, and how a link is followed), `issueUrl` (a new issue filled in — its title, labels and body — its address kept under `ISSUE_URL_MAX`) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@cad/ui/links` |
@@ -136,15 +136,25 @@ relative viewport below it. The generic FileViewer knows nothing about export jo
 ## A CAD renderer's controls
 
 The controls of a CAD renderer (an engine document's, GLB, mesh, robot) are its own, over the viewport: its
-tool strip, the tool in hand's sub-toolbar and its docked panel, its view's controls (Projection,
-Display, Preview) ending the strip and, in Preview, Preview's own bar
-(`settings-ui.md#camera-animation-and-preview`), the same with a navbar or without; a
+tool strip, the tool in hand's sub-toolbar and its docked panel (a phone's sheet), its view's settings (under a
+file's navbar one View menu and Preview, the same on a phone; without one Projection, Display and Preview over the
+picture) and, in Preview, Preview's own bar (`settings-ui.md#camera-animation-and-preview`); a
 DXF's are its own canvas's. Nothing a renderer does opens or closes the explorer (only the
 file's name opens that). The layout a person gives the tool stack's panels is one
 of the tab's settings (`settings.toolStack` of the tab record, `@cad/ui/tab-store`),
-beside the appearance and the home's layout; the view's panel — open or collapsed, its width,
-its tab — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
+beside the appearance and the home's layout; the panel — open or collapsed by the person (a collapse the
+view's width made is not kept), its width and tab, and \ having hidden it — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
 into the renderer's record by `FileViewer`).
+The model area is drawn in **the viewport's theme**, not the host's `colorScheme`: the person's Background
+(`settings.viewportBackground` of the tab record: Light by default, Dark, Theme), resolved by
+`kit/look/useViewportTheme.js` over `@cad/core/lib/viewportTheme.js`; a renderer draws its scene and its picture in
+its `scheme` and hands it to its frame, which scopes the canvas box and the corner to it
+(`settings-ui.md#the-viewports-theme-background`). A host's appearance still themes the chrome.
+Every list a renderer puts in its panel (a tab of the `sidebar`) is built of the STEP/xbf Model tree's
+base components, in `@cad/ui/primitives/tree-row` and `@cad/ui/primitives/tree-filter` (the row, its one
+glyph slot, its name and detail, a heading, the search's lit match and count) and `VirtualRows`: a new
+renderer's list adds a prop or a slot to those, never a row of its own
+(`settings-ui.md#the-views-panel-and-the-tool-stack`).
 
 ## Preview and renderer navigation actions
 
@@ -170,9 +180,10 @@ mode. Preview is a view of its own, mounted over the tools view's while it is op
 (`kit/shell/PreviewView.jsx`), with its own scene, camera, pose and routine, sharing only the
 page's GPU device; the tools view's viewport stays mounted under it and nothing of it changes.
 Nothing of Preview's state — its camera, pose, routine, whether it orbits — is persisted; its
-Render settings are the file's view's (`preview`). Routines play from the playbar under the
-model, in the tools view and in Preview alike (`PreviewPlaybar.jsx`). Preview opens still: Orbit is off every time it opens, and its settings panel turns it
-on. The file's view's `playback` — Orbit's speed, Autoplay, and the chosen speed and loop —
+Render settings are the file's view's (`preview`). Routines play from the panel's Animation tab in
+the tools view (`AnimationSection.jsx`; no playbar there) and
+from Preview's playbar in Preview (`PreviewPlaybar.jsx`). Preview opens still: Orbit is off every time it opens, and its settings panel turns it
+on. The file's view's `playback` — Orbit's speed, Autoplay, the chosen speed and loop —
 is kept between visits to Preview and across a reload, and a file's routine plays on entry
 only when its Autoplay is on. The rules are in
 [settings-ui.md](settings-ui.md#camera-animation-and-preview).
@@ -190,10 +201,10 @@ commands should read the current viewport through a ref, avoiding parent/child
 render loops. These actions use existing host capabilities for effects. What a
 person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 
-A renderer's controls for the view are the renderer's own, over its view, the same with a
-navbar or without: the CAD viewer's for a 3D view, Projection, Display and Preview at its
-strip's end, and in Preview its bar's Preview settings and Exit preview, the navbar hidden.
-Nothing of the view is the navbar's. The host's `captureRequest`
+A renderer's controls for the view are the renderer's own: the CAD viewer's for a 3D view, under a file's navbar
+portalled into its view slot (View ▾ and Preview; a phone's View and Preview), the cube's Home attached to the cube;
+without a navbar Preview at its strip's end and Display, Projection and Home stacked under the cube at the top-right;
+and in Preview its bar's Preview settings and Exit preview, the navbar hidden. The host draws none of them. The host's `captureRequest`
 command is the same capture: to a composer destination it delivers the view and
 the selection through `promptContext.deliver`. Neither route detects the platform.
 
@@ -510,17 +521,18 @@ keyboard `platform` (`environment.platform`) for its undo and redo keys.
 
 FileViewer draws one navbar, the same wherever it is drawn, over every file and over a host's
 home, in a page's chrome (`FileViewerProps.chrome` / `CadViewerProps.chrome`: `"page"`, the
-default, the web viewer's, and the CAD app's sidebar, tabs and cards). A host whose own frame
-is the view's navigation hands `"bare"` (the CAD app's file handler, Codex's *Open with CAD*,
-which shows one file alone): no navbar at all, over a file or a page that will not open — no
-logo or app menu, no Back and Forward, no name or name menu, no ⋯, no Export and no Open in
-browser — and what it still adds is its own, as its notice at the viewport's top-right
-(`notice`, the column Quick Edit hangs under: the CAD app's Full size).
+default, the web viewer's, and every view of the CAD app's: its sidebar, tabs, cards and file handler). `"bare"` draws
+no navbar at all, over a file or a page that will not open, and what a host still adds is its own, as its notice at the
+viewport's top-right (`notice`); no host hands it today, since the navbar holds the panel's toggle. **The view's
+panel toggle is the navbar's** (`file-viewer/panelToggles.js`): the view's frame says it (`usePanelToggles`), and the
+navbar draws it first, before the logo, the same neutral button open or shut (`aria-expanded` says which); a collapsed
+panel leaves nothing over the model.
 In Preview, in
-every host, the navbar steps aside for Preview's own bar. Over the home the navbar has only
-the logo and its menu (no Back to home), Back and Forward where the host hands a `history`,
-and the host's actions, as they stand over a file; the home's type filter, search and
-layout switch stay in its control row, and its links are the app menu's. Left: the text-to-cad
+every host, the navbar steps aside for Preview's own bar. Over the home the navbar has the logo and its menu (no Back
+to home), Back and Forward where the host hands a `history`, then the home's own controls on the grid's column —
+**Recent** and its count where a file shows its name, the search and Open at the right (`ModelLibrary` portals them
+into the navbar's slots, `file-viewer/navbarSlots.js`) — and the host's actions, outermost; no panel toggles. The
+home's type filter and layout switch stand in a light row over its grid, and its links are the app menu's. Left: the text-to-cad
 logo (the "C" mark, 16px, over the home and over a document alike),
 which opens the app menu (`AppMenu`, `file-viewer/navigation/AppMenu.jsx`), then Back and
 Forward where the host hands a `history`, then the open file's name, with no glyph, and its ⋯ menu. The
@@ -607,10 +619,21 @@ and "Could
 not open that file" and the reason otherwise, each with a Go home button where the host has a home.
 
 The viewport's edges and corners are the shell's, never the host's: the tool strip at the
-top centre, ending in the view's own controls (Projection, Display and Preview, a 3D view's; Flip,
-2D/3D and Display, a board's), the tool in hand's sub-toolbar under it, the view's panel docked at the
-left edge, Quick Edit at the top-right, and at the bottom-right the view cube, or a flat
-view's zoom pill. A host's one notice goes through the shell too: `notice` is drawn at the top-right once the
+top centre of the window, ending in Preview (a 3D view's), the tool in hand's sub-toolbar under it, the one panel
+(the file's structure, then its Parameters, Joints and Animation, as tabs) docked at the left, always pushing the model
+aside (collapsed on its own under 700px of view), Quick Edit's bar at the bottom centred on the window as the strip is
+(the panel never moves either; where they meet it they sit above it), the bottom row Quick Edit's alone, and at the
+top-right the view cube (a 68px box at the corner's 12px inset) with its Home attached to the drawn cube, or a flat
+view's zoom pill. Under a file's navbar the view's settings are the navbar's right end — **View ▾**, one menu of every
+group (a 3D view's Display, Projection, Grid and Background; a board's Side, Mode, Display and Background; a drawing's
+Background), then a 3D view's Preview: the file viewer draws a view slot there (`file-viewer/navbarSlots.js`'s
+`NavbarViewSlotContext`) and the view portals them in (`NavbarViewControls.jsx`, `ViewSettingsMenu.jsx`). On a phone
+the same slot holds the same **View ▾** menu and Preview alone, the picture has no cube or zoom,
+and the panel is a sheet from the left (shadcn's Sheet, portalled into the viewer's element:
+`ViewerElementContext`), so a host keeps the viewer's element round its view. A host that shows the view with no navbar keeps them on the picture: Display,
+Projection and Home stacked under the cube at the corner's inset, a board's under its zoom pill, Preview at the strip's end. A host that anchors the corner at the left (`--cad-viewport-corner-left`) moves the stack
+with it, mirrored at the top-left. A host's one notice goes through the shell too: `notice` is drawn at the top-right,
+under the corner (an inset under its last button; at the top itself where the corner is at the left), once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
 it while it stands; the home never shows it. The CAD app's file handler hands its corner (Full
 size) as its notice; the web viewer has none.
@@ -640,17 +663,19 @@ A copied reference names its file by its absolute path (`<path>#<selector>`), a 
 document id (`<id>#<selector>`), and so does a copied Quick Edit: every view spells a file the same way, so a reference pasted
 into a chat or a tool says exactly which file it means.
 
-Nothing of the tools view sits at the bottom centre (Preview's playbar does). A host whose own control floats over
+Nothing of the tools view sits at the bottom centre but a file's playbar, for a file with routines
+(a quiet pill, or hidden to a smaller one), and Preview's playbar in Preview. A host whose own control floats over
 that edge (a chat's composer) sets `--cad-host-bottom-inset` on an ancestor to the height it
 covers: the model library scrolls its last rows clear of it. A host whose own control
-floats over the view's bottom-right corner sets `--cad-viewport-corner-bottom` to the room
-it takes from the bottom edge, and the view's whole corner sits that much higher. To choose the
+floats over the view's top-right corner sets `--cad-viewport-corner-top` to the room
+it takes from the top edge, and the view's whole corner sits that much lower. To choose the
 opposite corner instead, set `--cad-viewport-corner-left: 2px` and
 `--cad-viewport-corner-right: auto`; their defaults are `auto` and the cube's right inset (2px). All of
-the corner follows, as one group mirrored at the bottom-left: the cube and a flat view's zoom pill (placed
-from the same variable, the corner's inset from the edge), its tooltips and menu opening away from the corner
+the corner follows, as one group mirrored at the top-left: the cube, a flat view's zoom pill (placed
+from the same variable, the corner's inset from the edge) and the stack under either, its tooltips and menus opening
+away from the corner
 (`viewportLayout.js`'s `viewCornerLayout`).
-Codex's tab presentation uses the left corner across sidebar, thread and file views.
+Codex's tab presentation uses the left corner across sidebar, thread and file views (clear of its chat button).
 The shared viewer consumes these layout values without identifying the host.
 
 The update status is the view's own: every renderer's frame (`ViewFrame.jsx`) shows it centred under
@@ -659,6 +684,6 @@ none.
 
 
 A retained predecessor is useful for a Quick Edit's note and references, but does not prove
-which bytes the file contains. While one is displayed, Quick Edit says so in the box and in its
+which bytes the file contains. While one is displayed, Quick Edit says so in the bar and in its
 prompt context, and makes no replay packet. Once the matching saved revision is displayed,
 snapshot handoff resumes.

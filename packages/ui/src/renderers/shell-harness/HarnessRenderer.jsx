@@ -10,6 +10,7 @@ import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
 import { createToolModes } from "../kit/tools/toolModes.js";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
 import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
+import { ROW_NAME_UNDER_ACTIONS, TREE_ROW_NAME_CLASS, TreeRowActions, TreeRowGlyph, TreeRowLabel, TreeRowSurface } from "@cad/ui/primitives/tree-row";
 
 // TEST SCAFFOLDING. This renderer is never registered in a product: it exists so
 // the shell's own tools can be driven in a real browser under a frame that is
@@ -213,12 +214,29 @@ function HarnessSurface({ view, data }) {
     onSelect: () => setPosing(value => !value) };
   const rows = (count, name) => <ul className="px-2 py-1">{Array.from({ length: count }, (_, index) =>
     <li key={index} className="flex h-6 items-center">{name} {index + 1}</li>)}</ul>;
+  // A tree's rows as every tree draws them (`primitives/tree-row.jsx`): a glyph, a name and two actions, Isolate and Hide.
+  const realRows = (count, name) => <ul className="py-1">{Array.from({ length: count }, (_, index) => <li key={index}>
+    <TreeRowSurface dense depth={0} actions={2} className="group/row">
+      <TreeRowGlyph><span className="size-3 rounded-sm bg-muted-foreground/40" /></TreeRowGlyph>
+      <span className={`${TREE_ROW_NAME_CLASS} ${ROW_NAME_UNDER_ACTIONS.hover}`}><TreeRowLabel>{name} {index + 1}</TreeRowLabel></span>
+      <TreeRowActions>{["Isolate", "Hide"].map(action => <button key={action} type="button" aria-label={`${action} ${name} ${index + 1}`}
+        className="grid h-5 w-4 place-items-center rounded"><svg className="size-3" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4" fill="currentColor" /></svg></button>)}
+      </TreeRowActions>
+    </TreeRowSurface>
+  </li>)}</ul>;
   // The view's panel: a tree, a Reference and, while posing, Position; the tool stack: the kept panel.
-  const sidebar = withPanel ? <>
+  // `panel-qdd.harness` is the qdd actuator's four tabs, in English: Model, Params, Joints and Animation.
+  const qdd = view.file.name.startsWith("panel-qdd");
+  const sidebar = qdd ? <>
+      <ToolPanel id="tree" title="Model" label="Harness tree" fit="tree" collapsible={false}>{realRows(12, "Row")}</ToolPanel>
+      <ToolPanel id="parameters" title="Params" label="Harness parameters" fit="details">{rows(4, "Param")}</ToolPanel>
+      <ToolPanel id="position" title="Joints" label="Harness position" fit="details" collapsible={false}>{rows(4, "Joint")}</ToolPanel>
+      <ToolPanel id="animation" title="Animation" label="Harness animation" fit="details">{rows(2, "Clip")}</ToolPanel>
+    </> : withPanel ? <>
       <ToolPanel id="tree" label="Harness tree" fit="tree" resizable collapsible={false}
         header={<TreeFilterInput label="Filter tree" placeholder="Search…" value={filter} onChange={setFilter} dense className="px-0 shadow-none" />}>{rows(treeRows, "Row")}</ToolPanel>
       <ToolPanel id="reference" title="Reference" label="Harness reference" fit="details" resizable>{rows(referenceRows, "Fact")}</ToolPanel>
-      {posing ? <ToolPanel id="position" title="Position" label="Harness position" fit="details" resizable collapsible={false}>{rows(30, "Joint")}</ToolPanel> : null}
+      {posing ? <ToolPanel id="position" title="Joints" label="Harness position" fit="details" resizable collapsible={false}>{rows(30, "Joint")}</ToolPanel> : null}
     </> : null;
   const toolPanels = kept ? <ToolPanel id="kept" title="Kept" label="Kept controls" onClose={() => setKept(false)}><div className="h-16 px-2">Kept</div></ToolPanel> : null;
 

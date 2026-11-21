@@ -199,6 +199,9 @@ class Models:
                                            "builtAt": time.time(), "version": version,
                                            "files": list(report.get("files") or {}), "revision": recorded,
                                            "facts": facts, "parameters": rows if isinstance(rows, list) else None}
+                previewing = getattr(self.daemon, "previewing", None)
+                if not same and previewing is not None:
+                    previewing.drop(ident)  # a page's look at other values of the version before (``parameters``)
                 if facts is not None:
                     from cad.engine.delta import delta
 

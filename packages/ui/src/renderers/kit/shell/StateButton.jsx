@@ -12,17 +12,18 @@ import { useStripButtonClass } from "../tools/FloatingToolBar.js";
  * strip's tooltips show theirs). No state is drawn as pressed or selected: the icon says which is on screen,
  * and the tile is filled only under the pointer, as the strip's tiles are, in either state.
  *
- * It is a tile of the strip in hand (`useStripButtonClass`: 24px, a phone's 36px), the same size whatever its
- * state, so nothing round it moves when the state does.
+ * It is a tile of the strip in hand (`useStripButtonClass`: 32px, a phone's 36px), or of the corner's stack
+ * (`className`), the same size whatever its state, so nothing round it moves when the state does.
  *
  * @param {{ icon: import("react").ComponentType<{ "aria-hidden"?: boolean | "true" }>, label: string, tooltip: string,
  *   onPress(): void, shortcut?: string, disabled?: boolean, tooltipSide?: "top" | "right" | "bottom" | "left" }
  *   & Record<`data-${string}`, string>} props
  *   `data-*`: its own data attributes, which say the state to a host or a test (`data-projection="orthographic"`).
  */
-export default function StateButton({ icon: Icon, label, tooltip, onPress, shortcut = "", disabled = false, tooltipSide = "top", ...data }) {
+export default function StateButton({ icon: Icon, label, tooltip, onPress, shortcut = "", disabled = false, tooltipSide = "top", className = null, ...data }) {
+  const stripClass = useStripButtonClass();
   return <ToolbarButton label={label} tooltip={tooltip} shortcut={shortcut} tooltipSide={tooltipSide} disabled={disabled}
-    className={useStripButtonClass()} onClick={() => onPress()} data-state-button="" {...data}>
+    className={className ?? stripClass} onClick={() => onPress()} data-state-button="" {...data}>
     <Icon aria-hidden="true" />
   </ToolbarButton>;
 }

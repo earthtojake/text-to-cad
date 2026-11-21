@@ -1,8 +1,9 @@
 // The file's playback settings (`playback` of the file's view, `kit/shell/fileView.js`), remembered
 // between leaving and re-entering Preview and across a reload of the tab: Preview's Orbit
-// speed; Autoplay; and — once chosen in the Animation section's Playback settings — the speed and the
-// loop the routine plays with, while unset the routine's own authored values. Orbit on or off is not
-// here: Preview opens still every time.
+// speed; Autoplay; once chosen in the playbar's Playback settings, the speed and the loop the routine
+// plays with, while unset the routine's own authored values. Orbit on or off is not here: Preview opens
+// still every time. (A record from before the Animation tab may say its playbar was put away, `collapsed`:
+// there is no playbar in the tools view now, and it is dropped.)
 // Importing this module has no environmental effects.
 import { clampAnimationSpeed } from "@cad/core/common/animationClock.js";
 

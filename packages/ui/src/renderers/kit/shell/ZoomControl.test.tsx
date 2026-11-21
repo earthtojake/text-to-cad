@@ -46,20 +46,23 @@ it('the zoom is its percentage, redrawn as the view says it moved, and its menu 
   expect(listeners.size).toBe(0);
 });
 
-// The pill is a floating toolbar as the strip is: its shape and its surface, bordered and shadowed, its tiles inside.
-it('the pill is the strip\'s own shape on the strip\'s surface, the corner\'s inset from the edges', async () => {
+// The zoom is drawn as the corner's stack is: bare 24px buttons in a row on no surface, the percentage haloed as the icons
+// are, the corner's inset from the edges (its right edge on the stack's).
+it('the zoom is a row of bare buttons as the corner\'s stack draws them, the corner\'s inset from the edges', async () => {
   const { FLOATING_CHROME_SURFACE_CLASS } = await import('../../../../dist/lib/floatingSurface.js');
-  const { STRIP_SHAPE_CLASS } = await import('../../../../dist/renderers/kit/tools/stripTouch.js');
+  const { CORNER_BUTTON_CLASS } = await import('../../../../dist/renderers/kit/shell/ViewCornerStack.js');
   const zoom = { read: () => 100, subscribe: () => () => {}, zoomBy: vi.fn(), fit: vi.fn() };
   const view = render(<ZoomControl zoom={zoom} />);
   const pill = view.container.querySelector('[data-zoom-pill]') as HTMLElement;
-  for (const name of [...STRIP_SHAPE_CLASS.split(' '), ...FLOATING_CHROME_SURFACE_CLASS.split(' ')]) expect(pill.classList.contains(name), name).toBe(true);
-  expect([...pill.querySelectorAll('button')].map(button => [button.getAttribute('aria-label'), button.classList.contains('size-6')]))
+  for (const name of FLOATING_CHROME_SURFACE_CLASS.split(' ')) expect(pill.classList.contains(name), name).toBe(false);
+  expect([...pill.querySelectorAll('button')].map(button => [button.getAttribute('aria-label'), CORNER_BUTTON_CLASS.split(' ').every((name: string) => button.classList.contains(name))]))
     .toEqual([['Zoom out', true], ['Zoom 100%', true], ['Zoom in', true]]);
-  expect([pill.style.right, pill.style.bottom]).toEqual(['calc(var(--cad-viewport-corner-right, 2px) + 10px)', 'calc(12px + var(--cad-viewport-corner-bottom, 0px))']);
+  expect(pill.querySelector('[data-zoom-control]')!.className).toMatch(/text-shadow/);
+  // At the view's top-right, the bottom row being Quick Edit's: 12px in from the right and from the top.
+  expect([pill.style.right, pill.style.top, pill.style.bottom]).toEqual(['calc(var(--cad-viewport-corner-right, 2px) + 10px)', 'calc(12px + var(--cad-viewport-corner-top, 0px))', '']);
 });
 
-// A host that anchors the cube at the bottom-left (`--cad-viewport-corner-left`) moves the corner there: the pill
+// A host that anchors the cube at the top-left (`--cad-viewport-corner-left`) moves the corner there: the pill
 // the corner's inset from the left edge.
 it('the corner follows the side the host anchors the cube at', async () => {
   const { ViewCornerSideProvider, viewCornerSide } = await import('../../../../dist/renderers/kit/shell/ViewCorner.js');
@@ -69,13 +72,13 @@ it('the corner follows the side the host anchors the cube at', async () => {
       <ZoomControl zoom={zoom} />
     </ViewCornerSideProvider>);
     const pill = view.container.querySelector('[data-zoom-pill]') as HTMLElement;
-    const placed = [pill.style.left, pill.style.right, pill.style.bottom];
+    const placed = [pill.style.left, pill.style.right, pill.style.top];
     view.unmount();
     return placed;
   };
-  const pillBottom = 'calc(12px + var(--cad-viewport-corner-bottom, 0px))';
-  expect(corner('right')).toEqual(['', 'calc(var(--cad-viewport-corner-right, 2px) + 10px)', pillBottom]);
-  expect(corner('left')).toEqual(['calc(var(--cad-viewport-corner-left, 0px) + 10px)', 'auto', pillBottom]);
+  const pillTop = 'calc(12px + var(--cad-viewport-corner-top, 0px))';
+  expect(corner('right')).toEqual(['', 'calc(var(--cad-viewport-corner-right, 2px) + 10px)', pillTop]);
+  expect(corner('left')).toEqual(['calc(var(--cad-viewport-corner-left, 0px) + 10px)', 'auto', pillTop]);
   const host = document.body.appendChild(document.createElement('div'));
   expect(viewCornerSide(host)).toBe('right');
   host.style.setProperty('--cad-viewport-corner-left', '2px');

@@ -17,3 +17,8 @@ test('the orbit speed keeps stopped and fractional speeds and bounds a corrupt o
   for (const speed of [0, -1, 'fast', NaN, Infinity]) assert.equal('speed' in normalizePlayback({ speed }), false);
   assert.equal('loop' in normalizePlayback({ loop: 'yes' }), false);
 });
+
+test("a record's playbar put away is dropped: the tools view has no playbar, its routines are the Animation tab's", () => {
+  // A record from when the tools view had a playbar to put away: no playbar now, and its `collapsed` is dropped.
+  for (const collapsed of [true, false, 'yes', 1, null]) assert.equal('collapsed' in normalizePlayback({ collapsed }), false);
+});

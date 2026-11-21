@@ -8,6 +8,7 @@ import { createTabStore } from '@cad/ui/tab-store';
 import { I18nProvider, resolveLocale, translateIn } from '@cad/ui/i18n';
 import { createWebCadClient } from './host/cadClient.js';
 import { keepAddressLink } from './host/addressLink.js';
+import { reloadOnStaleBuild } from './host/staleBuild.js';
 import App from './App';
 import { EngineStopped } from './EngineStopped';
 import { sessionTabRecord } from './persistence/tabRecord';
@@ -42,6 +43,9 @@ const onError = (event: ErrorEvent) => reportCrash(event.error);
 const onRejection = (event: PromiseRejectionEvent) => reportCrash(event.reason);
 window.addEventListener('error', onError);
 window.addEventListener('unhandledrejection', onRejection);
+// A chunk of the build this page was served, gone from the server since (a new release, a rebuilt bundle):
+// the page reloads into the build the server has now, rather than a view saying it could not display.
+const stopStaleBuild = reloadOnStaleBuild();
 const root = createRoot(element, {
   // Logged as React logs one, and counted: the page went on, with the view's "could not display".
   onCaughtError: (error, info) => { console.error(error, info.componentStack); reportCrash(error, { handled: true }); },
@@ -52,7 +56,7 @@ icon.type = 'image/png'; icon.href = faviconUrl;
 document.title = 'text-to-cad';
 const controller = new AbortController();
 function dispose() {
-  controller.abort(); stopAddressLink(); root.unmount(); client.dispose(); window.removeEventListener('pagehide', onPageHide);
+  controller.abort(); stopAddressLink(); stopStaleBuild(); root.unmount(); client.dispose(); window.removeEventListener('pagehide', onPageHide);
   window.removeEventListener('error', onError); window.removeEventListener('unhandledrejection', onRejection);
 }
 function onPageHide(event: PageTransitionEvent) { if (!event.persisted) dispose(); }

@@ -117,6 +117,24 @@ declared ranges and have the script's last run built again, which runs that
 script's own code as it ran before. They cannot pick the file, write any other
 file, or add or change code. `cad model set`, through the door, is the same code.
 
+**Its preview runs code and writes nothing.** Before a Save, the Parameters tab asks
+for the model at its drafts (`POST /api/v1/documents/model/<id>/preview`), behind the
+same Host check, guard header and credentials. Its body is `{"values": {name: number},
+"page": token}` (64 KiB at most; `page` 1 to 64 letters, digits, `-` and `_`): no path,
+no text the server runs. The values are checked exactly as a Save's are (the live
+worker, the parameter's kind and range, the script's bytes against its last run's),
+and the model's own script is then run in that worker with those numbers in place of
+its declared defaults, to build the one model on screen. It writes no file and changes
+no document, record or cache: what it built is held in memory under an unguessable id
+(`<id>~preview-<16 hex digits>`) told only to the page that asked, read at the
+document's read routes alone (no export, envelope, pose or version), and let go after
+two minutes unread. So whoever holds a credential can run a model's own code at other
+values in range, as `cad model set` then a run would, without writing; they cannot
+write anything, pick the code run, or read another page's preview without its id. The
+work is bounded as a run's is: one preview builds per document at a time, a newer
+request replaces the one waiting, and the server holds at most two per page and
+sixteen in all.
+
 **The CAD app in agent hosts.** The page's own tools (`cad_sync`,
 `cad_capture_reply` and `cad_http`, its requests of the viewer's routes) need a
 capability, one for each host connection. The server delivers it in tool-result metadata, which
@@ -216,7 +234,9 @@ its major before one ships.
   that makes the server do unbounded work or hold unbounded memory.
 - A Parameters Save, or `cad model set`, that writes anything but a number at a
   position a run recorded in a model's own script, or writes when the script's
-  bytes are not the ones that run read.
+  bytes are not the ones that run read; a preview that writes anything, runs a
+  script whose bytes are not the ones its last run read, or shows another page
+  or a verb what it built.
 - An MCP tool that the model can use to act as the CAD app's page, or a frame
   that can act as its host.
 - A way to publish to PyPI or the install branches (`latest`, `claude-plugin`,

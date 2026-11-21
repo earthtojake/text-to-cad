@@ -438,10 +438,10 @@ set alone are refused by name before anything renders.
 
 On the model's page, Position poses the document live: a slider per coupling and per
 joint no coupling moves, and the mechanism states as presets. The playbar under the model, in the
-tools view and Preview alike, plays the document's configuration sequences (play, pause, scrub, loop, speed), so the page is
+tools view and Preview, plays the document's configuration sequences (play, pause, scrub, loop, speed; scrubbed back to the start, the mechanism is at rest), so the page is
 where to review one.
 
-A sequence is drawn at a time of it, the mechanism where the playbar would have it then, and a list
+A sequence is drawn at a time of it, the mechanism where playback would have it then, and a list
 of jobs draws its frames in one command, each from one camera
 ([a camera that does not move](snapshot-review.md#annotations-and-quick-edit-views)):
 

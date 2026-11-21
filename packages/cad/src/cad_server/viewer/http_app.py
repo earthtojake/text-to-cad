@@ -228,8 +228,12 @@ _FUNNEL_HINTS = {400: "fix the request as the error says", 404: "check the path 
 _ELEMENTS = {"faces": "face", "edges": "edge", "vertices": "vertex"}
 _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure, "
                   "kinematics, POST pose, POST mesh")
-# A model's own: its parameters set in its script.
-_MODEL_ROUTES = _ENGINE_ROUTES + ", POST parameters"
+# A model's own: its parameters set in its script, and a look at other values of them (a preview).
+_MODEL_ROUTES = _ENGINE_ROUTES + ", POST parameters, POST preview"
+# What a preview (``<id>~preview-<token>``, the engine's ``parameters.Previewing``) is read at: what a page draws
+# and measures of it, nothing else.
+_PREVIEW_ROUTES = "structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure"
+PREVIEW_MARK = "~preview-"
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
                 "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source"}
@@ -687,6 +691,10 @@ class CadApp:
                 return self._methods(request, {"GET": lambda: send_json(response, 200, self.documents(request.query, first))})
             return self._kind_route(request, response, first, rest[1], rest[2:])
         ident = first
+        if PREVIEW_MARK in ident:
+            # A page's preview is no document: it has no envelope, version, thumbnail or export.
+            raise ApiError(404, f"no route {request.path}", f"a preview's routes are {_PREVIEW_ROUTES}, "
+                           "under /api/v1/documents/model/<id>~preview-<token>/")
         if len(rest) == 1:
             return self._methods(request, {"GET": lambda: send_json(response, 200, self.envelope(ident)),
                                            "DELETE": lambda: self._forget(response, ident)})
@@ -921,6 +929,8 @@ class CadApp:
         (``cad/engine/serve.py``'s routes, in process: ``_relay``)."""
         doc = f"/api/doc/{ident}"
         query = request.query
+        if PREVIEW_MARK in ident and not (rest in (["structure"], ["measure"]) or (len(rest) >= 2 and rest[0] == "parts")):
+            raise ApiError(404, f"no route {request.path}", f"a preview's routes are {_PREVIEW_ROUTES}")
         if rest == ["structure"]:
             return self._methods(request, {"GET": lambda: self._relay(request, response, doc, query)})
         if rest == ["kinematics"]:
@@ -933,6 +943,8 @@ class CadApp:
             return self._methods(request, {"POST": lambda: self._relay(request, response, f"{doc}/mesh", query)})
         if rest == ["parameters"] and kind == "model":
             return self._methods(request, {"POST": lambda: self._parameters(request, response, ident)})
+        if rest == ["preview"] and kind == "model":
+            return self._methods(request, {"POST": lambda: self._preview(request, response, ident)})
         if len(rest) >= 2 and rest[0] == "parts" and rest[1]:
             part = f"{doc}/part/{rest[1]}"
             if len(rest) == 2:
@@ -952,14 +964,42 @@ class CadApp:
         says each one's status) and, for ``not_writable``, the parameter's ``reason``; ``build_failed`` carries
         the build's whole words too (``detail``). The request names parameters and numbers alone: never a
         path, never text."""
-        from cad.engine.parameters import ParameterRefused
-
         self._limit(request, 65536)
         payload = json.loads(request.body() or b"{}")
         if type(payload) is not dict or set(payload) != {"values"} or type(payload["values"]) is not dict:
             raise ValueError('a change of parameters is {"values": {name: number, ...}}')
+        self._parameter_answer(response, lambda: self.set_parameters(ident, payload["values"]))
+
+    def _preview(self, request, response, ident) -> None:
+        """``POST /api/v1/documents/model/<id>/preview`` with ``{"values": {name: number, ...}, "page": token}``:
+        the model at those values, built in its worker and held for that page alone (``preview_parameters``: the
+        engine's ``parameters.Previewing``), never written to its script or its document. Answered ``200`` with
+        ``{"id", "preview": {"id", "version", "basis", "values", "seconds", "memo"}}`` -- the preview's own id, read
+        at ``/api/v1/documents/model/<that id>/structure`` and its parts' routes --, ``{"id", "preview": null}``
+        for values that are the document's (the page's previews let go: Reset, a Save that landed), or ``{"id",
+        "superseded": true}`` for a request a newer one replaced before it built. Refused as ``parameters`` is,
+        by the same ``code``s and statuses. The request names parameters, numbers and the page's own token alone:
+        never a path, never text the engine runs."""
+        self._limit(request, 65536)
+        payload = json.loads(request.body() or b"{}")
+        if type(payload) is not dict or set(payload) != {"values", "page"} or type(payload["values"]) is not dict:
+            raise ValueError('a preview is {"values": {name: number, ...}, "page": token}')
+        self._parameter_answer(response, lambda: self.preview_parameters(ident, payload["values"], payload["page"]))
+
+    def preview_parameters(self, ident, values, page) -> dict:
+        """A model's preview (``_preview``): the engine's, so an application with none under it has none."""
+        raise ApiError(404, "documents are served by the installation's engine",
+                       "open the document in the CAD Viewer: `cad viewer <file>`")
+
+    def _parameter_answer(self, response, asked) -> None:
+        """The answer of a change of parameters or a preview (``asked``), or its refusal as the routes answer one:
+        ``{"error", "hint"}`` with its ``code`` (``PARAMETER_STATUS`` says each one's status), the parameter's
+        ``reason`` for ``not_writable``, and a failed build's whole words (``detail``); a document the engine
+        does not hold, its state and what builds it again."""
+        from cad.engine.parameters import ParameterRefused
+
         try:
-            answer = self.set_parameters(ident, payload["values"])
+            answer = asked()
         except ParameterRefused as refused:
             extra = {"code": refused.code}
             if refused.code == "not_writable":

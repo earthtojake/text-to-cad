@@ -31,11 +31,13 @@ const stackWrites: any[] = [];
 let compact = false;
 function Panelled() {
   const frameRef = useRef<HTMLDivElement>(null);
-  const flat = useFlatPanelState({ frameRef, mobile: false, enabled: !compact, compact, kind: 'board', toolStack,
+  const flat = useFlatPanelState({ frameRef, compact, kind: 'board', toolStack,
     onToolStackChange: (patch: any) => { stackWrites.push(patch); toolStack = { ...toolStack, ...(typeof patch === 'function' ? patch(toolStack) : patch) }; } });
+  // Open or closed is the person's choice the record keeps (`open`, absent for the default, open); where the panels
+  // stand at a width is `sidebars.js`'s, never written (`sidebars.test.js`).
   return <div ref={frameRef} data-frame="">
-    <output data-testid="panel">{JSON.stringify({ open: flat.open, width: flat.width, tab: flat.tab ?? null, detail: flat.detailHeight })}</output>
-    <button type="button" onClick={() => flat.control!.toggle()}>toggle</button>
+    <output data-testid="panel">{JSON.stringify({ open: flat.record.open !== false, width: flat.width, tab: flat.tab ?? null })}</output>
+    <button type="button" onClick={() => flat.change({ open: flat.record.open === false })}>toggle</button>
     <button type="button" onClick={() => flat.changeWidth(300)}>300</button>
     <button type="button" onClick={() => flat.changeWidth(260)}>260</button>
     <button type="button" onClick={() => flat.changeTab('layers')}>layers</button>
@@ -75,33 +77,33 @@ it("each file keeps its own panel — open or closed, its width, its tab — and
   stackWrites.length = 0;
   const kept = { state: {} };
   let page = tab(kept);
-  expect(await panel()).toEqual({ open: true, width: 216, tab: null, detail: null });
+  expect(await panel()).toEqual({ open: true, width: 256, tab: null });
   press('300'); press('layers'); press('toggle');
-  expect(await panel()).toEqual({ open: false, width: 300, tab: 'layers', detail: null });
+  expect(await panel()).toEqual({ open: false, width: 300, tab: 'layers' });
   // Another file: its own panel, at the defaults, not the first file's.
   await page.show(B);
   await screen.findByTestId('panel');
-  expect(await panel()).toEqual({ open: true, width: 216, tab: null, detail: null });
+  expect(await panel()).toEqual({ open: true, width: 256, tab: null });
   press('260');
-  expect(await panel()).toEqual({ open: true, width: 260, tab: null, detail: null });
+  expect(await panel()).toEqual({ open: true, width: 260, tab: null });
   // Each is in its own file's view, and nothing in the tab's settings.
   expect(Object.fromEntries(Object.entries((kept.state as any).renderers).map(([key, view]: any) => [JSON.parse(key)[0], view.panel])))
     .toEqual({ [A]: { open: false, width: 300, tab: 'layers' }, [B]: { width: 260 } });
   expect(stackWrites).toEqual([]);
-  // A reload: each file comes back as it was left, even in a view too narrow to open a panel of its own accord.
+  // A reload: each file comes back as it was left, in a narrow view too (the choice is kept, not the width's collapse).
   page.unmount();
   frameWidth = 800;
   page = tab(kept);
-  expect(await panel()).toEqual({ open: false, width: 300, tab: 'layers', detail: null });
+  expect(await panel()).toEqual({ open: false, width: 300, tab: 'layers' });
   await page.show(B);
   await screen.findByTestId('panel');
-  expect(await panel()).toEqual({ open: false, width: 260, tab: null, detail: null });
+  expect(await panel()).toEqual({ open: true, width: 260, tab: null });
   press('toggle');
   page.unmount();
   page = tab(kept);
   await page.show(B);
   await screen.findByTestId('panel');
-  expect(await panel()).toEqual({ open: true, width: 260, tab: null, detail: null });
+  expect(await panel()).toEqual({ open: false, width: 260, tab: null });
 });
 
 it("a file with no panel of its own starts from the tab's old shared one, which is then the file's and gone from the tab's settings", async () => {
@@ -109,10 +111,32 @@ it("a file with no panel of its own starts from the tab's old shared one, which 
   stackWrites.length = 0;
   const kept = { state: {} };
   tab(kept);
-  expect(await panel()).toEqual({ open: false, width: 280, tab: 'nets', detail: null });
+  expect(await panel()).toEqual({ open: false, width: 280, tab: 'nets' });
   expect((kept.state as any).renderers[JSON.stringify([A, 'panelled'])].panel).toEqual({ open: false, width: 280, tab: 'nets' });
   // The shared form is dropped, the other panels' sizes and folds kept.
   expect(toolStack).toEqual({ panels: { tree: { width: 240 } }, collapsed: { tree: true }, tabs: undefined });
+});
+
+it("\\'s choice is the file's too, and what the right panel it once had kept is read as nothing", async () => {
+  toolStack = { panels: {}, collapsed: {} };
+  function Right() {
+    const frameRef = useRef<HTMLDivElement>(null);
+    const flat = useFlatPanelState({ frameRef, kind: 'board', toolStack, onToolStackChange: () => {} });
+    return <div ref={frameRef} data-frame="">
+      <output data-testid="record">{JSON.stringify(flat.record)}</output>
+      <button type="button" onClick={() => flat.change({ right: false, rightWidth: 300, sections: { view: false }, hidden: true })}>choose</button>
+    </div>;
+  }
+  const own = defineFileRenderer({ id: 'right', priority: 2, matches: () => true, prepare: async () => ({ data: null }), load: async () => ({ default: Right }) });
+  const kept = { state: {} as any };
+  const view = () => render(<FileViewer file={A} host={host as any} renderers={[own]} state={kept.state} onStateChange={next => { kept.state = next; }} />);
+  let page = view();
+  expect(JSON.parse((await screen.findByTestId('record')).textContent!)).toEqual({});
+  press('choose');
+  page.unmount();
+  page = view();
+  expect(JSON.parse((await screen.findByTestId('record')).textContent!)).toEqual({ hidden: true });
+  page.unmount();
 });
 
 it("a compact view (a picture taken out of sight) leaves the tab's old shared panel for the file the person opens", async () => {
@@ -131,51 +155,19 @@ it("a compact view (a picture taken out of sight) leaves the tab's old shared pa
   }
 });
 
-it("a panel the person opened or closed stays so while the view is resized across 1024px, either way, and when the renderer mounts again; until then the width decides", async () => {
-  toolStack = { panels: {}, collapsed: {} };
-  const kept = { state: {} };
-  const page = tab(kept);
-  expect((await panel()).open).toBe(true);
-  // No choice yet: the breakpoint decides, both ways.
-  resize(800);
-  expect((await panel()).open).toBe(false);
-  resize(1280);
-  expect((await panel()).open).toBe(true);
-  // Closed by the person in a wide view: closed at every width after, and after the renderer mounts again.
-  press('toggle');
-  for (const width of [800, 1280, 600, 1500]) {
-    resize(width);
-    expect((await panel()).open, `closed at ${width}px`).toBe(false);
-  }
-  await page.register();
-  resize(1280);
-  expect((await panel()).open, 'closed after a remount').toBe(false);
-  // Opened in a narrow view: open at every width after.
-  resize(800);
-  press('toggle');
-  for (const width of [1280, 700, 1024, 1023]) {
-    resize(width);
-    expect((await panel()).open, `open at ${width}px`).toBe(true);
-  }
-  await page.register();
-  resize(800);
-  expect((await panel()).open, 'open after a remount').toBe(true);
-});
-
-// The strip stands at the view's centre, over the panel where they meet: the panel is never so wide that
-// the strip covers its head (its search and its collapse button), whatever the person drags it to.
-it("is never wider than leaves its head clear of the strip, nor than half the view", async () => {
+// The panel's width is one number (`sidebars.js`): the default, whatever the view's width; only the grip is bounded,
+// leaving the model 640px as it is dragged.
+it("draws one width at every view width; the grip alone leaves the model 640px", async () => {
   frameWidth = 1024;
-  function Reached({ reach }: { reach: number | null }) {
+  function Capped() {
     const frameRef = useRef<HTMLDivElement>(null);
-    const flat = useFlatPanelState({ frameRef, mobile: false, enabled: true, kind: 'board', toolStack: { panels: {}, collapsed: {} },
-      onToolStackChange: () => {}, reach });
-    return <div ref={frameRef} data-frame=""><output data-testid="max">{flat.maxWidth}</output></div>;
+    const flat = useFlatPanelState({ frameRef, kind: 'board', toolStack: { panels: {}, collapsed: {} }, onToolStackChange: () => {} });
+    return <div ref={frameRef} data-frame=""><output data-testid="width">{flat.width}</output><output data-testid="max">{flat.maxWidth}</output></div>;
   }
-  const { rerender } = render(<Reached reach={null} />);
-  expect(screen.getByTestId('max').textContent).toBe('512');
-  rerender(<Reached reach={447} />); // the strip's left edge, 447px in: the head ends 8px short of it
-  expect(screen.getByTestId('max').textContent).toBe('439');
-  rerender(<Reached reach={900} />); // a narrow strip leaves the half-view cap
-  expect(screen.getByTestId('max').textContent).toBe('512');
+  render(<Capped />);
+  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['256', '384']);
+  resize(700);
+  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['256', '200']);
+  resize(1440);
+  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['256', '800']);
 });

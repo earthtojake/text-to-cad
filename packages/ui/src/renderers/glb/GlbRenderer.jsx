@@ -12,6 +12,7 @@ import { PointerPick } from "../kit/tools/select/usePointerPick.js";
 import { sceneCopyText, useSceneDescribe, useSceneInspect, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
 import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
+import SceneTreeSection from "../kit/inspector/SceneTreeSection.jsx";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
 import { useGlbAnimation } from "./useGlbAnimation.js";
@@ -147,12 +148,16 @@ function GlbSurface({ view, data }) {
     run: () => { const box = scene?.selectionBounds?.(selectionRef.current.selected); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
   };
 
-  // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows. No panel, so no Selected pane.
+  // The view's panel: the Model tab, the file's node tree (`SceneTreeSection.jsx`), a row a node, a pick in it
+  // taking Select up and picking the node as a press on the model does. A GLB of one node has its one row.
+  const sidebar = scene?.nodeTree?.length ? <SceneTreeSection tree={scene.nodeTree} selection={selection} active={!previewing}
+    onPick={() => { if (shellRef.current?.toolMode !== GLB_TOOL.SELECT) shellRef.current?.selectTool(GLB_TOOL.SELECT); }} /> : null;
+  // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows.
   const described = useSceneDescribe(scene);
   const inspect = useSceneInspect({ scene: previewing ? null : scene, selection, describe: described });
 
   return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} previewView={previewView}
-    inspect={inspect}
+    inspect={inspect} sidebar={sidebar}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameNode}
     onClearReferences={() => { selection.clear(); measure.select([]); }}
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}
@@ -161,6 +166,8 @@ function GlbSurface({ view, data }) {
       <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} />
     </>; }} />;
 }
+
+// Every node of a tree of `{ children }`, counted.
 
 export default function GlbRenderer(props) {
   const { data, ...view } = props;

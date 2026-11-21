@@ -316,9 +316,11 @@ and an SDF's metadata are tabs of the view's panel, docked at the left, whatever
 file's name in the navbar opens its name menu: Models and Files (the explorer).
 Every file's tools are on a strip at the top centre (each format's are the
 [design system's table](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle)).
-Every 3D file's strip ends in Projection, Display (its settings, a popover that opens down) and
-Preview, a board's in Flip, 2D/3D and Display; the bottom-right corner holds the view cube, or a
-flat view's zoom pill, and Quick Edit is at the top-right. DXF is a
+Every 3D file's strip ends in Preview; the top-right corner holds the view cube with Display, Projection and Home
+stacked under it, or a flat view's zoom pill with a board's Display, Side and 2D/3D under it; the one panel, at the
+left, is the file's structure and, as tabs after it, its Parameters, Joints and Animation; what is selected is read
+in Quick Edit's chip list; and Quick Edit is a bar at the
+bottom, centred on the window as the strip is, the bottom row its alone. DXF is a
 2D canvas with pan, zoom, snapshot and Quick Edit, with no view controls on its strip; one with
 layers and blocks to read has the view's panel, its Layers tab.
 
@@ -329,13 +331,14 @@ explorer: the file's folder (a model's, the folder the explorer was last in this
 person's home folder), one folder at a
 time, with "Filter files..." to find a file anywhere under it. It opens on Models over a model
 and on Files over a file. Below 600px of
-FileViewer width (a phone) the chrome is touch-sized and the panel's pill leads the tool strip. Preview is the shared shell's button after Display on the strip: it takes the whole page,
+FileViewer width (a phone) the chrome is touch-sized and there is no panel. Preview is the shared shell's button at the strip's end: it takes the whole page,
 hiding the navbar, the tool strip and Quick Edit, opens still (Orbit, in its settings, is
 off at every entry), draws the model in Render — the one place it is drawn — and draws its
 own bar in the navbar's place, over the view's top edge on no surface: the file's name at
 its left, Preview settings (Orbit, then Render's settings, a panel sliding in from the right
 edge) and Exit preview at its right, fading with the playbar while the pointer rests. Routines play
-from the playbar under the model, in the tools view and in Preview (on entry only with Autoplay on); the host passes no Preview props.
+from the panel's Animation tab in the tools view (no playbar under the model there)
+and from Preview's playbar in Preview (on entry only with Autoplay on); the host passes no Preview props.
 The file on screen keeps its view in the tab — its camera, Display settings
 (explode and clip included) and pose — so a refresh restores it; leaving the file for
 another or for the home drops it, and opening it again frames it anew (see
@@ -392,17 +395,18 @@ No snapshot is written while drawing or typing, and no image is rendered.
 
 The bare URL is the home: the library every CAD view shares (`@cad/ui/library`),
 and nothing else, laid out after Figma's Recents in a centred column (1128px at most, on 24px
-gutters, 44px under the navbar). It starts with one control row of 24px
-controls: "Recent" at the left, a 17px heading on the row's line, and at the right the type filter, a dropdown
+gutters, 32px under the navbar). It starts with one control row of 28px
+controls: "Recent" and its count at the left, the 15/20 heading on the row's line, and at the right the type filter, a dropdown
 ("All ▾": All, Models, Files) where both kinds are listed, the search, the grid/list
 switch and, where the server's computer has a file chooser (`pick` in its info), **Open**,
 which opens the desktop's own chooser (`POST /api/v1/local/pick`, `cad_server._internal.picker`) and shows
-the file picked. The grid's tiles are transparent with a 1px border, at least 280px wide (three across
-the full column): a picture on the muted fill, then, in a compact caption, the kind's glyph (a model's cube, a
-file's plain file outline, whatever its kind) beside its name over its last activity with its verb ("Edited now",
+the file picked. The grid's tiles are framed cards, at least 232px wide (four across the full column): the
+picture (the light viewport's, on the model area's light gradient in both themes, its format's badge at its
+top-left), then, in a compact caption, the kind's glyph (a model's cube, a file's plain file outline, whatever
+its kind) beside its name over a file's size (the server's `size`) and its last activity with its verb ("Edited now",
 "Viewed 5m ago", "Edited 2h ago", "Viewed 3d ago", then the short date: Edited when it changed after it was last
-opened, Viewed when it was opened after it last changed). The list is a table: Name, Updated and Created over 40px
-rows, each a document's glyph and name and those two ages with no verb. Every model is a tile and a row of
+opened, Viewed when it was opened after it last changed). The list is a table: Name, Kind, Size, Updated and Created
+over 44px rows, each a document's small picture and name, its format, its size and those two ages with no verb. Every model is a tile and a row of
 its own, nothing folded, and none is tied to the script it was built from: a model shows its
 name, its glyph and its age. The pin and the ⋯ appear on hover (at a tile's picture's corner, at a row's end); a
 pinned one keeps its pin. The ⋯ menu holds Open, a file's Copy path and Reveal (a model has
@@ -499,8 +503,8 @@ which opens the name menu (Models and Files), with its ⋯ (Export, over a file 
 person's settings (Language — Automatic or a named language —, Telemetry, Theme), Send feedback (a new issue titled "Feedback: "),
 GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
 (X), as in the CAD app, over a file and on the home alike.
-Projection, Display and Preview (a board's Flip, 2D/3D and Display) are the view's, at the tool
-strip's end, never the navbar's;
+Preview at the tool strip's end and Display, Projection, Home and a board's Side and 2D/3D in the corner's stack
+are the view's, never the navbar's (whose first control, before the logo, is the panel's toggle);
 in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new

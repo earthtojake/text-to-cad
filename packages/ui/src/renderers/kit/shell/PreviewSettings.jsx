@@ -19,15 +19,15 @@ export default function PreviewSettings({ orbit, onOrbitChange, speed, onSpeedCh
   const { t } = useI18n();
   const speeds = ORBIT_SPEEDS.includes(speed) ? ORBIT_SPEEDS : [...ORBIT_SPEEDS, speed].sort((a, b) => a - b);
   return <div role="region" aria-label={t("preview.settings")} data-preview-settings-panel=""
-    className={cn("pointer-events-auto flex max-h-full w-60 min-h-0 flex-col overflow-hidden rounded-md text-tiny", SETTINGS_PANEL_SURFACE_CLASS)}>
+    className={cn("pointer-events-auto flex max-h-full w-60 min-h-0 flex-col overflow-hidden rounded-md text-xs", SETTINGS_PANEL_SURFACE_CLASS)}>
     <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border/60 pl-3 pr-1">
-      <h3 className="min-w-0 flex-1 truncate text-tiny text-foreground">{t("preview.settingsTitle")}</h3>
+      <h3 className="min-w-0 flex-1 truncate text-xs text-foreground">{t("preview.settingsTitle")}</h3>
       <button type="button" aria-label={t("preview.close")} onClick={onClose}
         className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45">
         <X className="size-3" aria-hidden="true" />
       </button>
     </div>
-    <div className="shrink-0 border-b border-border/60 p-1">
+    <div className="shrink-0 border-b border-border/60 px-3 py-1">
       <FileSheetSettingsSection title={t("preview.orbit")} enabled={orbit} onEnabledChange={onOrbitChange}>
         <FileSheetSettingRow label={t("preview.speed")}>
           <Select value={String(speed)} onValueChange={value => onSpeedChange(Number(value))}>

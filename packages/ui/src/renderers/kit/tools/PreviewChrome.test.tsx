@@ -1,7 +1,7 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import PreviewChrome, { createPreviewIdle } from '../../../../dist/renderers/kit/tools/PreviewChrome.js';
+import PreviewChrome, { backdropScheme, createPreviewIdle } from '../../../../dist/renderers/kit/tools/PreviewChrome.js';
 
 afterEach(cleanup);
 it('keeps editor controls hidden throughout Preview and restores them on exit', () => {
@@ -97,4 +97,12 @@ it("counts the pointer's rest from the frame that shows the chrome: a long frame
     vi.useRealTimers();
     vi.unstubAllGlobals();
   }
+});
+
+// Preview's bar and playbar take the backdrop's ink, never the app's: light (dark ink) on a light backdrop, dark on a
+// dark one; a see-through or absent backdrop shows the viewport's canvas, whose scheme stands.
+it('draws its chrome in the backdrop\'s scheme', () => {
+  expect([backdropScheme({ enabled: true, color: '#ffffff', opacity: 1 }, 'dark'), backdropScheme({ enabled: true, color: '#222222', opacity: 1 }, 'light'),
+    backdropScheme({ enabled: true, color: '#ffffff', opacity: 0.2 }, 'dark'), backdropScheme(null, 'dark'), backdropScheme({ color: '#e7e7e5' }, 'dark')])
+    .toEqual(['light', 'dark', 'dark', 'dark', 'light']);
 });

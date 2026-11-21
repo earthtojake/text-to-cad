@@ -97,7 +97,7 @@ async function frame(pane, before = null) {
     // and neither is the hover tip, which shows by the pointer once it has rested a moment over an entity
     // (`HOVER_TIP_DELAY_MS`): a frame slow to come to rest after a wheel over the drawing caught it, its box
     // read as ink below the pointer.
-    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill], [data-hover-tip] { visibility: hidden !important; }' });
+    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill], [data-view-corner-stack], [data-flat-panel-pill], [data-inspector-pill], [data-hover-tip] { visibility: hidden !important; }' });
     if (last?.equals(shot) && !before?.shot.equals(shot)) return Object.assign(PNG.sync.read(shot), { shot });
     last = shot;
   }
@@ -178,18 +178,14 @@ const deltaForFactor = factor => -Math.log(factor) / 0.0015;
 const margins = shot => 2 * Math.max(16, 0.06 * Math.min(shot.width, shot.height));
 const stripRoom = page => page.evaluate(() => Number.parseFloat(getComputedStyle(document.querySelector('[data-slot="cad-file-view"]')).getPropertyValue('--cad-tools-bottom')) || 0);
 
-test('a drawing opens fitted and centred, in the theme’s ink, and flips with the theme', async (t) => {
+test('a drawing opens fitted and centred, in the viewport’s ink, and flips with the viewport’s Background', async (t) => {
   const { page, pane, errors } = await open(t, 'sample.dxf');
   await drawn(pane);
 
-  // This harness opens dark. Ask for the light token cascade before measuring its light ink;
-  // the later switch on html then exercises the same host theme change in the other direction.
-  await page.evaluate(() => {
-    for (let element = document.querySelector('[data-drawing-surface]'); element; element = element.parentElement) {
-      element.classList.remove('dark');
-    }
-    document.documentElement.classList.add('light');
-  });
+  // This harness's app opens dark. The viewport's Background Light (the default in the apps): the drawing on the light
+  // canvas in dark ink, whatever the app's theme; the switch to Dark then repaints it the other way.
+  await page.evaluate(() => window.__cadViewportBackground('light'));
+  await page.waitForFunction(() => document.querySelector('[data-viewport-scheme="light"]'));
 
   const light = await frame(pane);
   const box = inkBox(light);
@@ -200,9 +196,11 @@ test('a drawing opens fitted and centred, in the theme’s ink, and flips with t
   assert.ok(Math.abs(box.centreY - (strip + (light.height - strip) / 2)) <= 2, `centred down, under the strip: ${box.centreY} of ${light.height}`);
   const aspect = box.width / box.height;
   assert.ok(Math.abs(aspect - MODEL.width / MODEL.height) < 0.05, `the drawing's own aspect: ${aspect}`);
-  // The pane is wider than the drawing, so height is the binding axis: the ink
-  // reaches to the margin and no further.
-  assert.ok(Math.abs(box.height - (light.height - strip - margins(light))) <= 3, `fitted to the margin: ${box.height} in ${light.height}`);
+  // Fitted on its binding axis: the ink reaches the margin there and no further (beside the docked Layers panel, at
+  // this 800px view, the canvas is the narrower one; on a wider one, the height binds).
+  const tall = Math.abs(box.height - (light.height - strip - margins(light))) <= 3, wide = Math.abs(box.width - (light.width - margins(light))) <= 3;
+  assert.ok((tall || wide) && box.height <= light.height - strip - margins(light) + 3 && box.width <= light.width - margins(light) + 3,
+    `fitted to the margin: ${box.width} × ${box.height} in ${light.width} × ${light.height}`);
 
   // Default pen: the theme's foreground, on the canvas. The outline is
   // default-pen line-work.
@@ -214,8 +212,8 @@ test('a drawing opens fitted and centred, in the theme’s ink, and flips with t
   // The red circle is red — its own pen, not the theme's.
   assert.ok(countWhere(light, reddish) > 200, `a red circle is drawn: ${countWhere(light, reddish)} px`);
 
-  // One payload serves both themes: flipping the app's tokens repaints, it does not refetch.
-  await page.evaluate(() => document.documentElement.classList.add('dark'));
+  // One payload serves both: the Background's switch repaints, it does not refetch.
+  await page.evaluate(() => window.__cadViewportBackground('dark'));
   const dark = await frame(pane, light);
   const darkBox = inkBox(dark);
   assert.ok(darkBox.backdrop[0] < 110, `dark background: ${darkBox.backdrop}`);

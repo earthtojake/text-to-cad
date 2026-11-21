@@ -99,6 +99,22 @@ const near = (left, right, tolerance = 40) => Math.abs(left[0] - right[0]) + Mat
 const hex = value => [1, 3, 5].map(index => Number.parseInt(value.slice(index, index + 2), 16));
 const red = ([r, g, b]) => r > 150 && g < 90 && b < 90;
 
+
+// The board's view settings are the navbar's View ▾ (`kit/shell/ViewSettingsMenu.jsx`): Side, Mode (2D/3D), Display and
+// Background in one menu, its button saying each group's state (`data-view-side`, `data-view-dimension`).
+const VIEW = '[data-navbar-view-controls] [data-view-menu]';
+const OPTION = Object.freeze({ side: 'data-board-side-option', dimension: 'data-board-dimension-option' });
+const OTHER = Object.freeze({ top: 'bottom', bottom: 'top', '2d': '3d', '3d': '2d' });
+const viewValue = (pane, id) => pane.locator(VIEW).getAttribute(`data-view-${id}`);
+async function chooseView(pane, id, value) {
+  if (await viewValue(pane, id) === value) return;
+  await pane.locator(VIEW).click();
+  const menu = pane.page().locator('[role=menu][aria-label="View"]');
+  await menu.locator(`[${OPTION[id]}="${value}"]`).click();
+  await menu.waitFor({ state: 'detached' });
+}
+const toggleView = async (pane, id) => chooseView(pane, id, OTHER[await viewValue(pane, id)]);
+
 test('a board opens fitted on its own background, its track in KiCad’s red, and a press on a pad picks it and lights it', async (t) => {
   const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
   t.after(() => page.close());
@@ -156,23 +172,30 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
   await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
   const pane = page.getByTestId('one');
   await frame(pane);
-  // The view's controls at the strip's end, Flip, 2D/3D and Display, each one 24px tile 4px after the one before it;
-  // then the corner's pill, the strip's shape on its surface, 114 x 34, 12px in from the pane's right and bottom edges.
-  const controls = () => pane.evaluate(element => [...element.querySelectorAll('[data-cad-toolbar] [data-view-controls] button, [data-zoom-pill]')]
+  // In 2D the corner, at the top-right (the bottom row is Quick Edit's): the zoom, a row of bare buttons touching, 88 x 24,
+  // 12px in from the pane's right and top edges, and under it the stack, Display, the side and 2D/3D, 24px each, 4px
+  // apart, its right edge on the pill's, 8px under it.
+  const controls = () => pane.evaluate(element => [...element.querySelectorAll('[data-navbar-view-controls] button'), ...element.querySelectorAll('[data-zoom-pill]')]
     .map(control => { const { x, y, width, height } = control.getBoundingClientRect(); return { x, y, width, height }; }));
   const flat = await controls();
   const pill = flat.at(-1);
   const stage = await pane.locator('[data-cad-canvas]').first().boundingBox();
-  assert.equal(flat.length, 4);
-  assert.deepEqual([pill.width, pill.height, stage.x + stage.width - pill.x - pill.width, stage.y + stage.height - pill.y - pill.height],
-    [114, 34, 12, 12], 'the pill: 114 x 34, 12px in from the corner');
-  for (const [index, box] of flat.slice(0, 3).entries()) {
-    assert.deepEqual([box.width, box.height], [24, 24], `view control ${index} a 24px tile`);
-    if (index) assert.equal(box.x - flat[index - 1].x - flat[index - 1].width, 4, `view control ${index} 4px after the one before it`);
-  }
-  await pane.locator('[data-board-dimension]').click();
+  assert.equal(flat.length, 2, 'the zoom in the corner, and View ▾ in the navbar');
+  assert.deepEqual([pill.width, pill.height, stage.x + stage.width - pill.x - pill.width, pill.y - stage.y],
+    [88, 24, 12, 12], 'the zoom: a row of bare buttons touching, 88 x 24, 12px in from the top-right corner');
+  // View ▾: the navbar's 28px button, over the view, not on it.
+  assert.deepEqual(flat.slice(0, 1).map(button => [button.height, button.y + button.height <= stage.y]), [[28, true]], 'the view settings the navbar\'s');
+  await toggleView(pane, 'dimension');
   await page.waitForFunction(() => document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible'));
-  assert.deepEqual(await controls(), flat, 'every view control and the pill stand where they stood');
+  // Toggled to 3D on a board just opened: the board in 3D, never the view's "Could not display that file".
+  assert.equal(await page.getByText('Could not display that file').count(), 0, 'the board in 3D, not the error card');
+  // In 3D, Home stands beside the zoom pill (the board's 3D view has no cube), 4px left of it; the pill unmoved, and
+  // Display, the side and 2D/3D in the navbar where they stood.
+  const solid = await controls();
+  assert.deepEqual(solid.at(-1), pill, 'the pill where it stood');
+  assert.deepEqual(solid.slice(0, 1), flat.slice(0, 1), 'View ▾ where it stood');
+  const home = await pane.locator('[data-view-corner-home] [data-view-home]').boundingBox();
+  assert.deepEqual([solid.length, home.width, Math.round(pill.x - home.x - home.width), Math.round(home.y - pill.y)], [1 + 1, 24, 4, 0], 'Home beside the pill');
   // The pill is the 3D camera's zoom: a step in (half again), and it reads the camera's new percentage.
   const settled = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
   await settled();
@@ -200,7 +223,7 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
   const [padX, padY] = project3d(camera, [35.825, -15, 0], box.width, box.height);
   await page.mouse.click(box.x + padX, box.y + padY);
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().selection[0]?.target.selectors[0] === '#R1.2');
-  assert.equal(await pane.locator('[data-board-side]').getAttribute('data-board-side'), 'top');
+  assert.equal(await viewValue(pane, 'side'), 'top');
   assert.deepEqual(errors, []);
 });
 
@@ -254,7 +277,7 @@ test('2D to 3D and back: every frame shows the board, and the 2D view comes back
     };
     requestAnimationFrame(look);
   });
-  await pane.locator('[data-board-dimension]').click();
+  await toggleView(pane, 'dimension');
   // Up in place of the flat canvas, then eased from head on to where 3D opens (Home, the world's z up);
   // then the camera is moved, turned onto R1 pad 2 from the front, right and above, nearer.
   await page.waitForFunction(() => {
@@ -264,7 +287,7 @@ test('2D to 3D and back: every frame shows the board, and the 2D view comes back
   await page.evaluate(() => window.cadHarness.a.controller.setCamera({ position: [55, -45, 40], target: [35.825, -15, 0], up: [0, 0, 1] }));
   await page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling && Math.abs(camera.target[0] - 35.825) < 1e-6; });
   // Back in 2D: its own window, as it was left, not the camera's (each mode keeps its own view).
-  await pane.locator('[data-board-dimension="3d"]').click();
+  await chooseView(pane, 'dimension', '2d');
   await pane.locator('[data-board-3d]').waitFor({ state: 'detached' });
   const back = litAt(await frame(pane));
   assert.deepEqual(await page.evaluate(() => { const missed = window.__missed; window.__missed = null; return missed; }), [],
@@ -289,7 +312,7 @@ test('a board reopened in 3D leaves for the 2D window it was left at (here the f
   const pad = litAt(await frame(pane, fitted));
   assert.ok(pad, 'R1 pad 2 lit in 2D');
   // In 3D, the camera turned onto R1 pad 2 from the front, right and above, and kept with the file's view.
-  await pane.locator('[data-board-dimension]').click();
+  await toggleView(pane, 'dimension');
   // Up in place of the flat canvas and eased from head on to Home (the world's z up), as 3D opens: the camera at
   // rest head on, before its ease has begun, is not yet where 3D stays, and the ease would carry a camera set then away.
   await page.waitForFunction(() => {
@@ -307,11 +330,11 @@ test('a board reopened in 3D leaves for the 2D window it was left at (here the f
   await page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling && Math.abs(camera.target[0] - 35.825) < 1e-6; });
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   await page.evaluate(() => window.cadHarness.a.controller.select('#R1.2'));
-  await pane.locator('[data-board-dimension="3d"]').click();
+  await chooseView(pane, 'dimension', '2d');
   await pane.locator('[data-board-3d]').waitFor({ state: 'detached' });
   const back = litAt(await frame(pane));
   assert.ok(back && Math.hypot(back[0] - pad[0], back[1] - pad[1]) <= 1, `R1 pad 2 where the fit draws it, not at the camera's centre: ${back} vs ${pad}`);
-  assert.equal(await pane.locator('[data-board-side]').getAttribute('data-board-side'), 'top');
+  assert.equal(await viewValue(pane, 'side'), 'top');
   assert.deepEqual(errors, []);
 });
 
@@ -325,24 +348,23 @@ test('in 3D Flip turns the camera over and its icon is the side the camera is on
   await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
   const pane = page.getByTestId('one');
   await frame(pane);
-  const controls = () => pane.evaluate(element => [...element.querySelectorAll('[data-cad-toolbar] [data-view-controls] button, [data-zoom-pill]')]
+  const controls = () => pane.evaluate(element => [...element.querySelectorAll('[data-navbar-view-controls] button'), ...element.querySelectorAll('[data-zoom-pill]')]
     .map(control => { const { x, y, width, height } = control.getBoundingClientRect(); return { x, y, width, height }; }));
-  const boxes = await controls();
-  await pane.locator('[data-board-dimension]').click();
+  await toggleView(pane, 'dimension');
   await page.waitForFunction(() => document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible'));
+  // The corner as 3D stands it (Home nearest the zoom), which no turn of the camera moves.
+  const boxes = await controls();
   // At rest, the side the camera looks at (`boardFrame.js`'s `sideSeenAlong`) and what Flip says: its side, its name, its fill.
   const rest = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; })
     .then(() => page.evaluate(() => {
       const { position, target } = window.__cadCamera();
-      const button = document.querySelector('[data-board-side]');
-      return { camera: target[2] - position[2] > 0 ? 'bottom' : 'top',
-        flip: [button.dataset.boardSide, button.getAttribute('aria-label'), button.dataset.variant] };
+      return { camera: target[2] - position[2] > 0 ? 'bottom' : 'top', flip: document.querySelector('[data-navbar-view-controls] [data-view-menu]').dataset.viewSide };
     }));
-  // Like Projection, Flip's icon says its side, and neither side is drawn in a pressed fill.
-  const top = { camera: 'top', flip: ['top', 'Side: Top', 'ghost'] }, bottom = { camera: 'bottom', flip: ['bottom', 'Side: Bottom', 'ghost'] };
+  // The corner's Side says the side the camera is on.
+  const top = { camera: 'top', flip: 'top' }, bottom = { camera: 'bottom', flip: 'bottom' };
   assert.deepEqual(await rest(), top, 'Home, over the board');
   // Flip: the camera turned over the board, and the button follows it under; not one control moves.
-  await pane.locator('[data-board-side]').click();
+  await toggleView(pane, 'side');
   await page.waitForFunction(() => window.__cadCamera?.().position[2] < 0);
   assert.deepEqual(await rest(), bottom, 'Flip turned the camera under the board');
   assert.deepEqual(await controls(), boxes, 'every view control and the pill stand where they stood');
@@ -358,11 +380,11 @@ test('in 3D Flip turns the camera over and its icon is the side the camera is on
   await page.waitForFunction(() => window.__cadCamera?.().position[2] < 0);
   assert.deepEqual(await rest(), bottom, '⇧F turned the camera under the board');
   // Leaving 3D, the 2D view comes back from the side the camera was on, the bottom (Flip's icon is one state), its own window kept.
-  await pane.locator('[data-board-dimension]').click();
+  await toggleView(pane, 'dimension');
   await pane.locator('[data-board-3d]').waitFor({ state: 'detached' });
   assert.deepEqual(await page.evaluate(() => [window.cadHarness.a.controller.readState().boardDisplay.side,
-    document.querySelector('[data-board-side]').getAttribute('aria-label'), document.querySelector('[data-board-dimension]').getAttribute('aria-label')]),
-  ['bottom', 'Side: Bottom', 'View: 2D']);
+    document.querySelector('[data-navbar-view-controls] [data-view-menu]').dataset.viewSide, document.querySelector('[data-navbar-view-controls] [data-view-menu]').dataset.viewDimension]),
+  ['bottom', 'bottom', '2d']);
   assert.deepEqual(errors, []);
 });
 
@@ -382,7 +404,7 @@ test('in 3D a part stands its model, a press on its body picks the part rather t
   await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
   const pane = page.getByTestId('one');
   await frame(pane);
-  await pane.locator('[data-board-dimension]').click();
+  await toggleView(pane, 'dimension');
   // The model read, baked once and placed: one body, one model; D1, whose model the table does not find, a block.
   await pane.locator('[data-board-3d][data-board-bodies="1"][data-board-models="1"][data-board-blocks="1"]').waitFor();
   const settled = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
@@ -416,14 +438,14 @@ test('3D entered from the 2D bottom eases to Home’s tilt under the board, Flip
   await frame(pane);
   // Seen from the bottom in 2D, then in 3D, Flip's side read on every frame: head on from below, then eased to
   // Home's tilt from below (the world's z up), the camera never over the board's plane.
-  await pane.locator('[data-board-side]').click();
-  await pane.locator('[data-board-side="bottom"]').waitFor();
+  await toggleView(pane, 'side');
+  await pane.locator('[data-navbar-view-controls] [data-view-menu][data-view-side="bottom"]').waitFor({ state: 'attached' });
   await page.evaluate(() => {
     window.__sides = new Set();
-    const look = () => { if (!window.__sides) return; window.__sides.add(document.querySelector('[data-board-side]')?.dataset.boardSide); requestAnimationFrame(look); };
+    const look = () => { if (!window.__sides) return; window.__sides.add(document.querySelector('[data-navbar-view-controls] [data-view-menu]')?.dataset.viewSide); requestAnimationFrame(look); };
     requestAnimationFrame(look);
   });
-  await pane.locator('[data-board-dimension]').click();
+  await toggleView(pane, 'dimension');
   await page.waitForFunction(() => {
     const camera = window.__cadCamera?.();
     return document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible') && camera && !camera.settling && camera.up[2] > 0.9;
@@ -444,4 +466,23 @@ test('3D entered from the 2D bottom eases to Home’s tilt under the board, Flip
   assert.ok(after.position.every((value, axis) => Math.abs(value - before.position[axis]) < 1e-6), 'the camera did not move');
   await pane.locator('[data-board-3d][data-board-faces~="bottom"]').waitFor();
   assert.deepEqual(errors, []);
+});
+
+// The panel is ONE surface (`kit/shell/PanelSurface.jsx`): its tabs and its rows are drawn in its 12/16 type, never the
+// chrome's 13px.
+test('the panel draws its tabs and rows in one type, 12/16', async (t) => {
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+  t.after(() => page.close());
+  page.setDefaultTimeout(20000);
+  await page.addInitScript(() => { window.Worker = undefined; window.__cadPromptDestination = 'clipboard'; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
+  const pane = page.getByTestId('one');
+  await frame(pane);
+  const type = await pane.evaluate(element => {
+    const of = node => { if (!node) return null; const style = getComputedStyle(node); return `${style.fontSize}/${style.lineHeight}`; };
+    const panel = element.querySelector('aside[data-flat-panel]');
+    return { row: of(panel.querySelector('[data-tree-row] [data-tree-row-name], [data-tree-row]')), tab: of(panel.querySelector('[data-flat-panel-tab-name]')),
+      surface: panel.getAttribute('data-panel-surface'), asides: element.querySelectorAll('aside').length };
+  });
+  assert.deepEqual(type, { row: '12px/16px', tab: '12px/16px', surface: 'docked', asides: 1 });
 });

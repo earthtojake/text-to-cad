@@ -77,6 +77,8 @@ export interface CadRecent {
   thumbnail: string | null; pictured: number | null;
   /** Its picture in the dark theme's own colours, where its view draws one (a board's); null or absent: `thumbnail` in both. */
   thumbnailDark?: string | null;
+  /** A file's size on disk, in bytes; null once it is gone, and for a document built from code (its script is never read). */
+  size?: number | null;
   /** A CAD file on disk, or a document built from code: a model's, or a shape a program handed over. */
   kind: 'file' | 'model' | 'shape';
   /** A model's or a shape's: the script it was built from (a shape's home). */
@@ -168,11 +170,26 @@ export interface CadParametersSaved {
   rebuilt: string[];
 }
 /**
- * A save the engine refused, as `setModelParameters` raises it: the engine's message, its `code`
- * (`no_worker`, `unknown_parameter`, `not_writable`, `not_a_number`, `out_of_range`, `script_changed`,
- * `busy`, `build_failed`), what to do about it (`hint`), and for `not_writable` the parameter's `reason`.
+ * What a preview of a model's parameters answers (`POST /api/v1/documents/model/<id>/preview`): the model
+ * built at those values for this page alone, nothing written -- its own id and the URL its structure and
+ * parts are read at (a document's routes), its version, the document version it was built against
+ * (`basis`), the values it differs from the document by, the build's seconds and how its memo went. `preview:
+ * null`: the values are the document's (the page's previews let go). `superseded`: a newer request of the
+ * same document took its place before it built.
  */
-export interface CadParametersRefusal extends Error { code: string; hint: string; reason?: string }
+export interface CadParametersPreview {
+  id: string;
+  preview?: { id: string; url: string; version: string; basis: string | null; values: Record<string, number>;
+    seconds: number | null; memo: Record<string, number> | null } | null;
+  superseded?: boolean;
+}
+/**
+ * A save or a preview the engine refused, as `setModelParameters` and `previewModelParameters` raise it: the
+ * engine's message, its `code` (`no_worker`, `unknown_parameter`, `not_writable`, `not_a_number`,
+ * `out_of_range`, `script_changed`, `busy`, `build_failed`), what to do about it (`hint`), for `not_writable`
+ * the parameter's `reason`, and for `build_failed` the build's whole words (`detail`).
+ */
+export interface CadParametersRefusal extends Error { code: string; hint: string; reason?: string; detail?: string }
 /**
  * What `GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure` answers: a URDF, SDF or SRDF resolved by the server into the articulation
  * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
@@ -292,6 +309,13 @@ export interface CadWorkspaceService {
    * show a model's parameters without a way to save them.
    */
   setModelParameters?(id: string, values: Record<string, number>, options?: CadRequestOptions): Promise<CadParametersSaved>;
+  /**
+   * `POST /api/v1/documents/model/<id>/preview`: the model at other values of its declared parameters, for
+   * this page alone (`page`, the page's own token): the engine builds it in the model's worker and writes
+   * nothing; the page reads the preview's structure and parts as a document's. `{}` lets the page's previews
+   * go. A host that cannot make it leaves it out, and its views show a value only once it is saved.
+   */
+  previewModelParameters?(id: string, values: Record<string, number>, options: CadRequestOptions & { page: string }): Promise<CadParametersPreview>;
   readonly resources: CadResourceProvider;
   createRenderSession(options?: { file?: string }): CadRenderSession;
   dispose(): void;
