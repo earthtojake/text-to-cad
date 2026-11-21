@@ -3,14 +3,14 @@ import { Boxes, Clapperboard, Cpu, Layers, ListTree, Move3d, MoreHorizontal, Sea
 import { useI18n } from "@cad/ui/i18n";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
 import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
-import { TreeRowsLoading } from "@cad/ui/primitives/tree-row";
+import { TreeRowHeading, TreeRowsLoading } from "@cad/ui/primitives/tree-row";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { ChangedDot } from "../tools/ChangedDot.jsx";
 import { ToolStackContext } from "../tools/ToolStack.jsx";
 import { FilePanelContext, hasLegacyFilePanel, legacyFilePanel, legacyFilePanelTab, readFilePanel, withoutLegacyFilePanel } from "../../../file-viewer/filePanel.js";
 import { PanelSurface, usePanelWidth } from "./PanelSurface.jsx";
-import { DEFAULT_PANEL_WIDTH, MIN_MODEL_WIDTH } from "./sidebars.js";
+import { DEFAULT_PANEL_WIDTH, MAX_PANEL_WIDTH, MIN_PANEL_WIDTH, clampPanelWidth } from "./sidebars.js";
 
 /**
  * The view's one panel, the sidebar (`ViewFrame.jsx`), docked at the view's left edge the way KiCad's Appearance
@@ -25,12 +25,17 @@ import { DEFAULT_PANEL_WIDTH, MIN_MODEL_WIDTH } from "./sidebars.js";
  *   on the toggle shows it over the view (`peek`, `usePanelPeek.js`), the same panel, pushing nothing.
  * - **Search** is the panel's one query over its tree-like tabs (`isStructureTab`: the `tree` section, every tab
  *   handed in but one marked `search: false`), never Parameters, Joints or Animation: an icon at the head row's right
- *   end, there only where some tab is searchable. Pressed (or /), the row is the search box, its X where the icon was,
- *   and the tabs stand in a row under it; Escape or the X closes it. A query filters every searchable tab at once, each
- *   tab's name saying how many it finds (`useFlatPanelMatches`); the open tab shows its own, and opened from a tab it
- *   does not cover the search opens the first that it does, then, as a query finds nothing there, the first with
- *   matches. A tab reads the query from `useFlatPanel()` (a tab it does not cover reads none), and a tab whose results
- *   the arrow keys walk registers its keys there (the Parts' and the Nets'): the open tab's get them.
+ *   end, there only where some tab is searchable. Pressed (or /), the head's row BECOMES the search box — the same row,
+ *   its height, its place and its rule (or none, under one tab's title) unchanged, so nothing under it moves — its
+ *   magnifier on the left inset and its X on the right one; Escape or the X closes it, the tabs or the title back as
+ *   they were. An empty box changes nothing in the body (the open tab, its scroll, its selection). A query shows
+ *   results only: a file of one tree-like tab (a model's Model, a mechanism's Links, a drawing's Layers) shows that tree's
+ *   hits, whatever tab was open; a file of several (a board's or a schematic's) shows ONE list, a group per tab that
+ *   finds something, in the tabs' order, each under a heading with the tab's name and its count (`useFlatPanelMatches`).
+ *   The stored tab never changes: cleared or closed, the body is the tab it was. A tab reads the query from
+ *   `useFlatPanel()` (a tab it does not cover reads none), and a tab whose results the arrow keys walk registers its
+ *   keys there (the Parts' and the Nets'): the arrows go through the groups in order (`keyed`: the group whose cursor
+ *   is drawn), Enter picks under the cursor.
  * - **The tabs** take the head row's width as they fit it, measured; those that do not fit are a ⋯ menu's items at the
  *   row's end, with their icons (`fitTabs`), and the open tab always shows.
  * - **Two ways to be shown**: `docked` beside the canvas, the canvas always the narrower for it, its
@@ -98,11 +103,11 @@ export function useFlatPanelState({ frameRef, kind, toolStack, onToolStackChange
   useEffect(() => { if (legacyTab && panelRef.current.tab === undefined) change({ tab: legacyTab }); }, [legacyTab, change]);
   const tab = panel.tab;
   const changeTab = useCallback(id => change({ tab: id }), [change]);
-  // The width is one number: the default, or what the person dragged it to, never the view's or the tabs'. The grip
-  // alone is bounded, as it moves: it leaves the model `MIN_MODEL_WIDTH` (`sidebars.js`). A narrow view collapses the
-  // panel instead (`sidebarLayout`).
-  const maxWidth = frameWidth > 0 ? Math.max(FLAT_PANEL_MIN_WIDTH, Math.floor(frameWidth - MIN_MODEL_WIDTH)) : Infinity;
-  const width = panel.width ?? FLAT_PANEL_DEFAULT_WIDTH;
+  // The width is one number: the default, or what the person dragged it to, never the view's or the tabs', between
+  // fixed bounds the same at any window width (200px to `MAX_PANEL_WIDTH`, `sidebars.js`); a width stored outside
+  // them reads as the bound.
+  const maxWidth = MAX_PANEL_WIDTH;
+  const width = clampPanelWidth(panel.width ?? FLAT_PANEL_DEFAULT_WIDTH, FLAT_PANEL_MIN_WIDTH);
   const changeWidth = useCallback(next => change({ width: next }), [change]);
   const [focusSearch, setFocusSearch] = useState(0);
   const askSearch = useCallback(() => setFocusSearch(count => count + 1), []);
@@ -145,7 +150,7 @@ const STRUCTURE_SECTIONS = new Set(["tree"]);
 /** Whether the search covers a tab (a tree-like one): a structure section, or a tab handed in unless it says `search: false`. */
 export const isStructureTab = (entry, sections) => Boolean(entry) && (sections ? STRUCTURE_SECTIONS.has(entry.id) : entry.search !== false);
 export const FLAT_PANEL_DEFAULT_WIDTH = DEFAULT_PANEL_WIDTH;
-export const FLAT_PANEL_MIN_WIDTH = 200;
+export const FLAT_PANEL_MIN_WIDTH = MIN_PANEL_WIDTH;
 /** The toggle's key, as its tooltip shows it: ⌘\ on a Mac (the host's `environment.platform`), Ctrl+\ elsewhere. */
 export const flatPanelShortcut = platform => (platform === "darwin" ? "⌘\\" : "Ctrl+\\");
 
@@ -171,8 +176,8 @@ export function useFlatPanelSection(id) {
 }
 
 /**
- * A searchable tab says how many rows the panel's query finds in it (`count`; `null` while nothing is typed), so its
- * name in the head can say it. Outside a panel, or in a tab the search does not cover, it does nothing.
+ * A searchable tab says how many rows the panel's query finds in it (`count`; `null` while nothing is typed), so the
+ * search can say it (its group's heading, or nothing found). Outside a panel, or in a tab the search does not cover, it does nothing.
  * @param {number | null | undefined} count
  */
 export function useFlatPanelMatches(count) {
@@ -199,6 +204,7 @@ function FlatPanelTab({ panel, id, shown, children }) {
   const { registerKeys, report, searchable, setChanged } = panel;
   const covered = searchable?.has(id) ?? false;
   const value = useMemo(() => ({ ...panel, shown: panel.shown && shown, query: covered ? panel.query : "", searching: covered && panel.searching,
+    keyed: panel.keyTab == null || panel.keyTab === id,
     registerKeys: handler => registerKeys(handler, id), matches: covered && report ? count => report(id, count) : null,
     markChanged: setChanged ? on => setChanged(id, on) : null }), [panel, id, shown, covered, registerKeys, report, setChanged]);
   return <FlatPanelContext.Provider value={value}>{children}</FlatPanelContext.Provider>;
@@ -283,8 +289,6 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   const setChanged = useCallback((id, on) => setChangedState(current => (Boolean(current[id]) === on ? current : { ...current, [id]: on })), []);
   // Drawn as sections, a tree reads the panel where it draws its section (`ToolPanel`, `tree`): its matches are that tab's.
   const sectionMatches = useMemo(() => (sections ? count => report("tree", count) : null), [Boolean(sections), report]);
-  const panel = useMemo(() => ({ query, searching, page, shown: onScreen, registerKeys, picked, searchable, report, matches: sectionMatches, setChanged }),
-    [query, searching, page, onScreen, registerKeys, picked, searchable, report, sectionMatches, setChanged]);
   // While the file loads, the structure tabs with no row to show yet: their placeholders, until a row is drawn in them
   // (the body watched while it loads, so a tree that fills before the model is drawn — an engine document's — drops
   // them as its rows arrive). Not while a query is typed: the search says what it finds.
@@ -300,17 +304,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
     observer.observe(element, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [loading, searching, searchable]);
-
-  // Each tab keeps its own scroll.
   const scroller = useRef(null), scrolls = useRef(new Map());
-  const lastKey = useRef(tab);
-  useLayoutEffect(() => {
-    const element = scroller.current;
-    if (!element || lastKey.current === tab) return;
-    scrolls.current.set(lastKey.current, element.scrollTop);
-    lastKey.current = tab;
-    element.scrollTop = scrolls.current.get(tab) ?? 0;
-  }, [tab]);
 
   const input = useRef(null), head = useRef(null);
   const closeSearch = useCallback(() => { setQuery(""); setSearchOpen(false); }, []);
@@ -321,7 +315,22 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
       closeSearch();
       return;
     }
-    const handler = keys.current.get(activeRef.current) ?? keys.current.values().next().value;
+    // Several lists of results: the arrows walk them in order, an arrow past one list's end handing the keys to the
+    // next list that has any, its first hit (its last, going up).
+    if (groupedRef.current) {
+      const order = groupsRef.current.filter(id => keys.current.has(id));
+      if (!order.length) return;
+      const at = Math.max(0, order.indexOf(keyTabRef.current));
+      const handled = keys.current.get(order[at])(event);
+      const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+      if (order[at] !== keyTabRef.current) setKeyTab(order[at]);
+      if (handled !== false || !step || !order[at + step]) return;
+      event.preventDefault();
+      setKeyTab(order[at + step]);
+      keys.current.get(order[at + step])({ key: step > 0 ? "Home" : "End", preventDefault() {} });
+      return;
+    }
+    const handler = keys.current.get(displayedRef.current) ?? keys.current.values().next().value;
     handler?.(event);
   };
   // A phone's page goes with Escape, wherever its focus is.
@@ -338,26 +347,42 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   const activeRef = useRef(active);
   activeRef.current = active;
   const firstSearchable = tabs.find(entry => searchable.has(entry.id))?.id;
-  // A tab chosen by hand while a query is on stays chosen: the search moves to the tab with matches only until then.
-  const chosen = useRef(false);
-  const chooseTab = useCallback(id => { chosen.current = true; onTabChange(id); }, [onTabChange]);
+  const chooseTab = onTabChange;
+  // What the body shows: the open tab, but for a query, the results — one tree's (the open tab's where it is searched,
+  // else the first that is), or, where several tabs are searched, every one's that finds something (`grouped`), under
+  // a heading each. The stored tab is never changed by the search: cleared or closed, the body is that tab again.
+  const displayed = searching && !searchable.has(active) ? firstSearchable : active;
+  const displayedRef = useRef(displayed);
+  displayedRef.current = displayed;
+  const grouped = searching && !sections && searchable.size > 1;
+  const groups = grouped ? tabs.filter(entry => searchable.has(entry.id) && counts[entry.id] > 0).map(entry => entry.id) : [];
+  const groupedRef = useRef(grouped), groupsRef = useRef(groups);
+  groupedRef.current = grouped;
+  groupsRef.current = groups;
+  // The group whose cursor the arrows move (and is drawn): the first with hits, until the arrows move on.
+  const [keyTab, setKeyTab] = useState(null);
+  const keyed = grouped ? (groups.includes(keyTab) ? keyTab : groups[0] ?? null) : null;
+  const keyTabRef = useRef(keyed);
+  keyTabRef.current = keyed;
+  useEffect(() => { setKeyTab(null); }, [query]);
+  const panel = useMemo(() => ({ query, searching, page, shown: onScreen, registerKeys, picked, searchable, report, matches: sectionMatches, setChanged, keyTab: keyed }),
+    [query, searching, page, onScreen, registerKeys, picked, searchable, report, sectionMatches, setChanged, keyed]);
+  // Each view of the body keeps its own scroll: each tab's, and the results'.
+  const viewKey = searching ? "\u0000results" : active;
+  const lastKey = useRef(viewKey);
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    if (!element || lastKey.current === viewKey) return;
+    scrolls.current.set(lastKey.current, element.scrollTop);
+    lastKey.current = viewKey;
+    element.scrollTop = scrolls.current.get(viewKey) ?? 0;
+  }, [viewKey]);
   const openSearch = useCallback(() => {
     if (firstSearchable === undefined) return;
-    chosen.current = false;
-    // Opened from a tab it does not cover, the search opens the first it does.
-    if (!searchable.has(activeRef.current)) onTabChange(firstSearchable);
+    // Only the head changes: the box in the row's place, the body as it was.
     setSearchOpen(true);
     setFocusAsked(count => count + 1);
-  }, [firstSearchable, searchable, onTabChange]);
-  useEffect(() => { chosen.current = false; }, [query]);
-  // A query that finds nothing in the open tab, and something in another: that tab, the first, unless one was chosen.
-  useEffect(() => {
-    if (!searching || chosen.current) return;
-    const here = counts[activeRef.current];
-    if (searchable.has(activeRef.current) && here !== 0 && here != null) return;
-    const next = tabs.find(entry => searchable.has(entry.id) && counts[entry.id] > 0)?.id;
-    if (next && next !== activeRef.current) onTabChange(next);
-  }, [searching, counts, searchable, tabs, onTabChange]);
+  }, [firstSearchable]);
   // / (each new count once, when the panel is open: a reopened or remounted panel takes no focus) opens the search.
   const searched = useRef(focusSearch);
   const [focusAsked, setFocusAsked] = useState(0);
@@ -378,8 +403,8 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   // title flows straight into its list: the head a list row's height (28px), the title on the rows' icons' line (the
   // inset, `--panel-inset`, as a tab's name is), the list 4px under it. Several are pills over the rule.
   const single = tabs.length === 1 ? tabs[0] : null;
-  const compactHead = Boolean(single) && !searchOpen;
-  const countOf = id => (searching && searchable.has(id) ? counts[id] ?? null : null);
+  // The search box takes the row it opens in, as it is (a title's 28px with no rule, or the tabs' 32px over theirs).
+  const compactHead = Boolean(single);
 
   // The row's tabs as they fit it, measured (`fitTabs`): a hidden ruler draws every tab as the row would, and the row
   // says how wide it is; both are watched, so a resize, a translation or a count measures again.
@@ -396,8 +421,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
     const next = fitTabs({ ids: [...widths.keys()], widths, room, more, gap: TAB_GAP_PX, active: activeRef.current });
     setFitted(current => (current && current.visible.join() === next.visible.join() && current.hidden.join() === next.hidden.join() ? current : next));
   }, []);
-  const countKey = ids.map(id => countOf(id) ?? "").join();
-  useLayoutEffect(() => { measure(); }, [measure, ids.join(), tabs.map(entry => entry.label).join(), countKey, active, single, open, hidden, searchOpen]);
+  useLayoutEffect(() => { measure(); }, [measure, ids.join(), tabs.map(entry => entry.label).join(), active, single, open, hidden, searchOpen]);
   useLayoutEffect(() => {
     if (typeof ResizeObserver === "undefined" || !row.current) return undefined;
     const observer = new ResizeObserver(() => measure());
@@ -408,10 +432,9 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   const visible = fitted ? fitted.visible.filter(id => ids.includes(id)) : ids;
   const hiddenTabs = fitted ? tabs.filter(entry => fitted.hidden.includes(entry.id)) : [];
 
-  const tabbed = useMemo(() => ({ tabbed: true, activeSection: active, searching, register, loadingTabs: rowless }), [active, searching, register, rowless]);
+  const tabbed = useMemo(() => ({ tabbed: true, activeSection: displayed, searching, register, loadingTabs: rowless }), [displayed, searching, register, rowless]);
   const ids_ = id => ({ tab: `flat-panel-tab-${id}`, panel: `flat-panel-body-${id}` });
   const tabName = (entry, on, ruled = false) => {
-    const count = countOf(entry.id);
     return <>
       {/* The open tab's name is medium weight; every tab is as wide as its name in that weight (an unseen copy holds
           it), so choosing one moves nothing. */}
@@ -421,7 +444,6 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
         {changed[entry.id] && !ruled ? <ChangedDot className="-right-[5px] -top-px" /> : null}
         <span className={cn("col-start-1 row-start-1", on && "font-medium")} data-flat-panel-tab-name={ruled ? undefined : ""}>{entry.label}</span>
       </span>
-      {count !== null ? <span className="ml-1 tabular-nums text-muted-foreground" data-flat-panel-tab-count={ruled ? undefined : ""}>{count}</span> : null}
     </>;
   };
   const TAB_CLASS = "flex h-7 shrink-0 items-center whitespace-nowrap rounded-md px-2 text-ui transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
@@ -461,12 +483,10 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
           data-flat-panel-more-menu="">
           {hiddenTabs.map(entry => {
             const Icon = entry.icon || TAB_ICONS[entry.id];
-            const count = countOf(entry.id);
             return <DropdownMenuItem key={entry.id} onSelect={() => chooseTab(entry.id)} data-flat-panel-more-tab={entry.id}
               aria-label={changed[entry.id] ? t("flatPanel.tabChanged", { name: entry.label }) : undefined} data-changed={changed[entry.id] ? "" : undefined}>
               {Icon ? <Icon className="size-4" /> : <span className="size-4 shrink-0" aria-hidden="true" />}
               <span className="relative flex-1"><span className="relative">{entry.label}{changed[entry.id] ? <ChangedDot className="-right-[5px] -top-px" /> : null}</span></span>
-              {count !== null ? <span className="tabular-nums text-muted-foreground" data-flat-panel-tab-count="">{count}</span> : null}
             </DropdownMenuItem>;
           })}
         </DropdownMenuContent>
@@ -482,22 +502,22 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   const searchBox = searchOpen ? <TreeFilterInput label={searchLabel} placeholder={t("flatPanel.searchPlaceholder")} value={query} onChange={setQuery} onKeyDown={onSearchKeyDown}
     inputRef={input} dense onDismiss={closeSearch} dismissLabel={t("flatPanel.closeSearch")} className="min-w-0 flex-1 px-0 shadow-none" data-flat-panel-search=""
     style={SEARCH_BOX_HANG} /> : null;
-  const activeCount = searching && searchable.has(active) ? counts[active] : null;
+  // Nothing found: one line, where the one tree finds nothing, or where no searched tab does.
+  const nothing = searching && (grouped ? tabs.every(entry => !searchable.has(entry.id) || counts[entry.id] === 0) : counts[displayed] === 0);
   const aside = <PanelSurface mode={page ? "page" : "push"} label={label} open={open} hidden={hidden} peek={peek} peekLeaving={peekLeaving} onPeekExited={onPeekExited}
     asideRef={surfaceRef} {...surfaceProps}
-    width={drawnWidth} grip={page ? null : grip} gripLabel={t("flatPanel.resize")} onKeyDown={onPanelKeyDown} data-flat-panel={mode} headRule={!single || searchOpen} headCompact={compactHead}
-    headStack={searchOpen && !single} headRef={head} headInsets={HEAD_INSETS} headProps={{ "data-flat-panel-head": "", "data-searching": searchOpen ? "" : undefined }} scrollerRef={scroller}
+    width={drawnWidth} grip={page ? null : grip} gripLabel={t("flatPanel.resize")} onKeyDown={onPanelKeyDown} data-flat-panel={mode} headRule={!single} headCompact={compactHead}
+    headRef={head} headInsets={HEAD_INSETS} headProps={{ "data-flat-panel-head": "", "data-searching": searchOpen ? "" : undefined }} scrollerRef={scroller}
     scrollerProps={{ "data-flat-panel-scroller": "" }}
     head={<>
     {/* The head, one row as Figma's Layers panel's, the same on a phone: the tabs (or one tab's title) across its
         width, ⋯ where some do not fit, and the search's icon at its right end; its rule 8px under it (none under one
-        tab's title). With the search open the row is its box, the X in the icon's place, and the tabs stand under it. */}
-      {searchOpen && !single ? <div className="flex h-7 items-center">{searchBox}</div> : null}
-      {searchOpen && single ? searchBox : null}
+        tab's title). With the search open the row IS its box, the X in the icon's place: no tabs, no title. */}
+      {searchOpen ? searchBox : null}
       {single && !searchOpen ? <h2 id={ids_(single.id).tab} className="flex h-7 min-w-0 flex-1 items-center truncate px-2 text-ui font-medium text-foreground" data-flat-panel-heading=""
         aria-label={changed[single.id] ? t("flatPanel.tabChanged", { name: single.label }) : undefined} data-changed={changed[single.id] ? "" : undefined}>
         <span className="relative min-w-0 truncate">{single.label}{changed[single.id] ? <ChangedDot className="-right-[5px] -top-px" /> : null}</span></h2> : null}
-      {!single ? <div className="flex min-w-0 flex-1 items-center gap-1">
+      {searchOpen ? null : !single ? <div className="flex min-w-0 flex-1 items-center gap-1">
         {tabRow}
         {searchButton}
       </div> : searchButton}
@@ -505,14 +525,19 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
       <FlatPanelContext.Provider value={panel}>
         <div ref={body} className={cn("group/body flex flex-col px-(--panel-inset) py-2", compactHead && "pt-1")} data-flat-panel-body="">
           {sections ? <ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider> : tabs.map(entry => {
-            const shown = entry.id === active;
-            return <section key={entry.id} role="tabpanel" id={ids_(entry.id).panel} aria-label={entry.label}
-              aria-labelledby={ids_(entry.id).tab} hidden={!shown} aria-busy={rowless.has(entry.id) || undefined} data-flat-panel-section={entry.id}>
+            // Searching several tabs, each that finds something is a group of the one list, under its name and count.
+            const group = grouped && groups.includes(entry.id);
+            const shown = grouped ? group : entry.id === displayed;
+            return <section key={entry.id} role={searchOpen ? undefined : "tabpanel"} id={ids_(entry.id).panel} aria-label={entry.label}
+              aria-labelledby={searchOpen ? undefined : ids_(entry.id).tab} hidden={!shown} aria-busy={rowless.has(entry.id) || undefined}
+              data-flat-panel-section={entry.id} data-flat-panel-group={group ? "" : undefined}>
+              {group ? <TreeRowHeading as="h3" data-flat-panel-group-heading={entry.id}>
+                {entry.label}<span className="ml-1 tabular-nums" data-flat-panel-group-count="">{counts[entry.id]}</span></TreeRowHeading> : null}
               <FlatPanelTab panel={panel} id={entry.id} shown={shown}>{entry.content}</FlatPanelTab>
               {rowless.has(entry.id) ? <FlatPanelRowsLoading /> : null}
             </section>;
           })}
-          {activeCount === 0 ? <p className="py-6 text-center text-muted-foreground" data-flat-panel-empty="">{t("flatPanel.nothingMatches", { query: query.trim() })}</p> : null}
+          {nothing ? <p className="py-6 text-center text-muted-foreground" data-flat-panel-empty="">{t("flatPanel.nothingMatches", { query: query.trim() })}</p> : null}
         </div>
       </FlatPanelContext.Provider>
   </PanelSurface>;

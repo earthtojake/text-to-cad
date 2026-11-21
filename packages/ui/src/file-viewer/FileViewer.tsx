@@ -14,7 +14,7 @@ import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { I18nProvider, translator } from "../i18n/index.js";
 import { mayTakeKeyboard } from "./takeKeyboard.js";
 import { FilePanelContext, filePanelOf, withFilePanel } from "./filePanel.js";
-import { DEFAULT_PANEL_WIDTH, PanelFrameContext, PanelTogglesContext, sidebarCollapsed, sidebarWant } from "./panelToggles.js";
+import { PanelFrameContext, PanelTogglesContext, clampPanelWidth, sidebarLayout } from "./panelToggles.js";
 import { NavbarSlotsContext, NavbarViewSlotContext } from "./navbarSlots.js";
 import type { PanelToggles } from "./panelToggles.js";
 
@@ -123,11 +123,12 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, filePanel, reload, t, setPanelToggles, frameSaid]);
 
   // The panel before the view is up — the file read, or the view's chunk loading, or the view mounted but its toggle not
-  // said yet: the navbar has its toggle from the page's first frame, in the state the view will open it in (the
-  // file's choice for this session, else open where the model keeps 640px beside it: `sidebars.js`), drawn
-  // disabled: the view's own opening over a narrow width is its frame's and cannot be handed to it, so a press here
-  // could not be kept as it would be. Open, the panel's frame stands in its place, at its width, its body empty
-  // (`data-panel-loading`), so nothing moves as the view takes over. A file that will not open has neither.
+  // said yet: the navbar has its toggle from the page's first frame, in the state the view will open it in (the one
+  // rule, `sidebarLayout`: the person's choice on the file for this session at any width, else open where the model
+  // keeps 640px beside the default-width panel), drawn disabled: a press is the view's to take and keep (its frame
+  // writes the choice to the file's entry), so one here does nothing. Open, the panel's frame stands in its place, at the width the
+  // view will draw (the kept one within its bounds, `clampPanelWidth`), its body empty (`data-panel-loading`), so
+  // nothing moves as the view takes over. A file that will not open has neither.
   const bodyBox = useRef<HTMLDivElement | null>(null);
   const [bodyWidth, setBodyWidth] = useState(0);
   const pending = Boolean(path) && (loaded.status === "loading" || (loaded.status === "ready" && saidToggles?.key !== key));
@@ -152,8 +153,8 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     }
     return {};
   }, [pending, path, filePath, state.renderers]);
-  const pendingWidth = keptPanel.width ?? DEFAULT_PANEL_WIDTH;
-  const pendingOpen = pending && !mobile && sidebarWant(keptPanel.open) && !sidebarCollapsed(bodyWidth, pendingWidth);
+  const pendingWidth = clampPanelWidth(keptPanel.width);
+  const pendingOpen = pending && !mobile && sidebarLayout({ frameWidth: bodyWidth, choice: keptPanel.open, has: true }).mode === "push";
   const pendingToggles = useMemo<PanelToggles | null>(() => (pending ? { left: { open: pendingOpen, disabled: true,
     label: t(pendingOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: appearance.platform === "darwin" ? "⌘\\" : "Ctrl+\\", toggle: () => {} } } : null),
     [pending, pendingOpen, appearance.platform, t]);

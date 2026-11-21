@@ -56,12 +56,11 @@ const KEY_NUDGE_PX = 16;
  * The panel's width from its grip: the person's, dragged on its right edge (rightward, wider) or nudged by the arrow
  * keys, written once as the drag lets go. The width drawn is `width` as it is (the
  * default, or what the person last chose): nothing else, the view's width included, changes it. `minWidth` and
- * `maxWidth` bound the grip alone, as it moves; a `maxWidth` not known yet (the view not measured: `Infinity`) holds it
- * at the width it has, so no key or drag ever makes a width that is not a number of pixels (End's `Infinity`).
+ * `maxWidth` bound the grip alone, as it moves (fixed bounds, `sidebars.js`).
  * @param {{ width: number, minWidth: number, maxWidth: number, onWidthChange(width: number): void }} options
  */
 export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
-  const widest = Math.max(minWidth, Number.isFinite(maxWidth) ? maxWidth : width);
+  const widest = Math.max(minWidth, maxWidth);
   const [draft, setDraft] = useState(null);
   const drawnWidth = draft ?? width;
   const drag = useRef(null);

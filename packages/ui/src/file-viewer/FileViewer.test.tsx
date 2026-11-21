@@ -67,6 +67,17 @@ it('has the panel\'s toggle from a document page\'s first frame, in the state it
   render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{ renderers: { [JSON.stringify([ID, 'framed'])]: { panel: { open: false } } } }} onStateChange={() => {}} />);
   expect(look()).toEqual(['false', 'true', false, '']);
   cleanup();
+  // The view's own rule (`sidebars.js`): with no choice, an 800px view (under 640px + the default 232px) has it
+  // collapsed; the person's choice, open, holds there all the same, its frame at the width the view will draw (a
+  // stored 660px within the grip's 480px bound).
+  const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 800, height: 700, top: 0, left: 0, right: 800, bottom: 700, x: 0, y: 0, toJSON() {} } as DOMRect);
+  render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{}} onStateChange={() => {}} layout="desktop" />);
+  expect(look()).toEqual(['false', 'true', false, '']);
+  cleanup();
+  render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{ renderers: { [JSON.stringify([ID, 'framed'])]: { panel: { open: true, width: 660 } } } }} onStateChange={() => {}} layout="desktop" />);
+  expect([...look(), document.querySelector<HTMLElement>('aside[data-panel-loading]')?.style.width]).toEqual(['true', 'true', true, '', '480px']);
+  rect.mockRestore();
+  cleanup();
   // A file that will not open has neither.
   render(<FileViewer file={ID} host={{ ...host, files: { id: 'gone', stat: async () => { throw new Error('gone'); } } } as any} renderers={[framed]} state={{}} onStateChange={() => {}} />);
   await screen.findByText('gone');

@@ -48,10 +48,11 @@ export function usePanelToggles(toggles) {
   }, [publish, toggles]);
 }
 
-// Where the view's panel starts open (`renderers/kit/shell/sidebars.js`, which re-exports these): here, so the file
-// viewer draws the toggle the view will have before any renderer is loaded.
+// Where the view's panel is open, and how wide (`renderers/kit/shell/sidebars.js`, which re-exports these and says the
+// rule in full): here, so the file viewer draws the toggle, and the panel's frame, the view will have before any
+// renderer is loaded.
 
-/** The least width the model's area keeps with the panel open beside it; narrower, the panel starts collapsed. */
+/** The least width the model's area keeps beside the default-width panel; narrower, a file with no choice of the person's has it collapsed. */
 export const MIN_MODEL_WIDTH = 640;
 /**
  * The panel's width where none is given (`FlatPanel.jsx`'s `FLAT_PANEL_DEFAULT_WIDTH`): one fixed number, never the
@@ -61,6 +62,10 @@ export const MIN_MODEL_WIDTH = 640;
  * fourth tab is ⋯'s.
  */
 export const DEFAULT_PANEL_WIDTH = 232;
+/** The narrowest the grip takes the panel (`FlatPanel.jsx`'s `FLAT_PANEL_MIN_WIDTH`). */
+export const MIN_PANEL_WIDTH = 200;
+/** The widest the grip takes the panel, at any window width: on the 8px grid, about twice the default. */
+export const MAX_PANEL_WIDTH = 480;
 
 /**
  * Whether the view's width collapses the panel on its own: open, it would leave the model under `MIN_MODEL_WIDTH`
@@ -70,5 +75,21 @@ export function sidebarCollapsed(frameWidth, panelWidth = DEFAULT_PANEL_WIDTH) {
   return frameWidth > 0 && frameWidth - panelWidth < MIN_MODEL_WIDTH;
 }
 
-/** The person's choice as the file's entry keeps it (`filePanel.js`'s `open`): open (true) or closed (false), absent for the default, open. */
-export const sidebarWant = kept => kept !== false;
+/**
+ * Where the panel is: `"push"` (beside the model, the model narrower for it) or `"closed"`; and whether that is the
+ * view's doing (`auto`: the person has made no choice on this file, so the view's width decides).
+ *
+ * @param {{ frameWidth: number, choice?: boolean, has: boolean }} state
+ *   `choice`: the person's, on this file (`filePanel.js`'s `open`): open (true), closed (false), or none (absent): then
+ *   the view's width decides, against the default width (`sidebarCollapsed`).
+ * @returns {{ mode: "push" | "closed", auto: boolean }}
+ */
+export function sidebarLayout({ frameWidth, choice, has }) {
+  const auto = typeof choice !== "boolean";
+  const open = Boolean(has) && (auto ? !sidebarCollapsed(frameWidth) : choice);
+  return { mode: open ? "push" : "closed", auto };
+}
+
+/** A width as the panel draws it: the person's (or the default), within the fixed bounds, whatever was stored. */
+export const clampPanelWidth = (width, minWidth = MIN_PANEL_WIDTH) =>
+  Math.round(Math.min(MAX_PANEL_WIDTH, Math.max(minWidth, Number(width) || DEFAULT_PANEL_WIDTH)));

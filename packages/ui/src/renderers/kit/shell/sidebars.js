@@ -6,43 +6,34 @@
 // - Pinned open, it always pushes: it takes its width beside the model, the model's area the narrower for it (the
 //   model centred in what is left). The one thing that overlays the model is a peek of the collapsed panel, a mouse
 //   resting on its toggle (`usePanelPeek.js`), which this module never sees: it pushes nothing and is kept nowhere.
-// - It starts open only where the model keeps `MIN_MODEL_WIDTH` beside it (the view at least that and the panel's width:
-//   872px with the 232px panel), and collapsed below. That collapse is the width's, never
-//   written, so widening the view brings back the person's choice. Opened over it by the person, it pushes (kept for
-//   now, nowhere else: `opened`).
-// - What is kept is what the person chose (opened or closed it), for the file, for this browser session
-//   (the file's entry in the tab's settings: `file-viewer/filePanel.js`).
+// - Until the person opens or closes it on a file, it follows the view: open where the model keeps `MIN_MODEL_WIDTH`
+//   beside the default-width panel (the view at least that and 232px: 872px, whatever width the grip has set, so a
+//   drag never collapses the panel under the grip), collapsed below, and again
+//   as the window is resized across that line. Once they have opened or closed it on that file (its toggle, its key,
+//   a peek pinned), their choice holds there at any width: no window opens or collapses it again. A peek is no choice.
+//   Another file follows the view until it has a choice of its own.
+// - What is kept is what the person chose (opened or closed it) and the width they dragged it to, for the file, for
+//   this browser session (the file's entry in the tab's settings: `file-viewer/filePanel.js`).
+// - Its width is the person's, between fixed bounds, the same at any window width: 232px at first
+//   (`DEFAULT_PANEL_WIDTH`), from 200px (`FlatPanel.jsx`'s `FLAT_PANEL_MIN_WIDTH`) to `MAX_PANEL_WIDTH`. A panel the
+//   person pins open in a narrow window may leave the model little room: that is their choice.
 //
 // Importing this module has no environmental effects.
 
-// Where the panel starts open, the one rule the file viewer's toggle before the view is up shares (`file-viewer/panelToggles.js`).
-import { DEFAULT_PANEL_WIDTH, MIN_MODEL_WIDTH, sidebarCollapsed, sidebarWant } from "../../../file-viewer/panelToggles.js";
+// The rule itself (`MIN_MODEL_WIDTH`, `DEFAULT_PANEL_WIDTH`, `MAX_PANEL_WIDTH`, `sidebarCollapsed`, `sidebarLayout`,
+// `clampPanelWidth`) is the file viewer's (`file-viewer/panelToggles.js`), re-exported here: its toggle and the panel's
+// empty frame before the view is up follow the one rule the view's frame then follows.
+import { DEFAULT_PANEL_WIDTH, MAX_PANEL_WIDTH, MIN_MODEL_WIDTH, MIN_PANEL_WIDTH, clampPanelWidth, sidebarCollapsed, sidebarLayout }
+  from "../../../file-viewer/panelToggles.js";
 
-export { DEFAULT_PANEL_WIDTH, MIN_MODEL_WIDTH, sidebarCollapsed, sidebarWant };
-
-/**
- * Where the panel is: `"push"` (beside the model, the model narrower for it) or `"closed"`; and whether it is
- * collapsed only because the view is narrow (`auto`).
- *
- * @param {{ frameWidth: number, panelWidth?: number, want: boolean, has: boolean, opened?: boolean }} state
- *   `want`: what the person chose (or the default, open). `opened`: the person opened it over the width's collapse,
- *   kept for now and nowhere else.
- * @returns {{ mode: "push" | "closed", auto: boolean }}
- */
-export function sidebarLayout({ frameWidth, panelWidth, want, has, opened = false }) {
-  const wanted = Boolean(has && want);
-  const open = wanted && (!sidebarCollapsed(frameWidth, panelWidth) || opened === true);
-  return { mode: open ? "push" : "closed", auto: wanted && !open };
-}
+export { DEFAULT_PANEL_WIDTH, MAX_PANEL_WIDTH, MIN_MODEL_WIDTH, MIN_PANEL_WIDTH, clampPanelWidth, sidebarCollapsed, sidebarLayout };
 
 /**
- * What a press on the panel's toggle (its button, or its key) changes: `want` (kept, the person's choice) and `opened`
- * (opened over the width's collapse, kept nowhere). An open panel closes, and the close is kept; a closed one opens and
- * pushes, the choice to have it open kept, and where the width had collapsed it, it is opened over that.
+ * A press on the panel's toggle (its button, its key, a peek's pin): the person's choice, kept for the file from now
+ * on whatever the view's width — open where the panel is shut, shut where it is open.
  * @param {Parameters<typeof sidebarLayout>[0]} state
- * @returns {{ want: boolean, opened: boolean, kept: boolean }}  `kept`: whether `want` changed (and is to be written).
+ * @returns {{ open: boolean }}
  */
 export function toggleSidebar(state) {
-  if (sidebarLayout(state).mode === "push") return { want: false, opened: false, kept: true };
-  return { want: true, opened: sidebarCollapsed(state.frameWidth, state.panelWidth), kept: !state.want };
+  return { open: sidebarLayout(state).mode !== "push" };
 }
