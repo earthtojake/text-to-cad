@@ -514,6 +514,49 @@ class MeasuresTest(unittest.TestCase):
                 self.assertEqual(reports[0], reports[1])
                 self.assertNotIn("partial_sections", {key for key, value in reports[0].items() if value})
 
+    def test_each_process_s_measuring_code_holds_every_module_its_measurement_imports(self) -> None:
+        """A process's measuring code (``_measuring.DFM``) holds every module of the library its files import, but
+        the declared boundary (``_measuring.BOUNDARY``), and every B-rep measurement (``cad.build123d._dfm_*``, a
+        cut file's ``_dfm_dxf`` apart) is a process's: an edit to what measures changes that process's digest."""
+        import ast
+
+        from cad.engine import _measuring
+
+        root = Path(_measuring.__file__).resolve().parent.parent
+
+        def module(place: str) -> str:
+            return "cad." + place[:-len(".py")].replace("/", ".").removesuffix(".__init__")
+
+        def is_module(name: str) -> bool:
+            path = root.parent.joinpath(*name.split("."))
+            return path.with_suffix(".py").is_file() or (path / "__init__.py").is_file()
+
+        def imported(place: str) -> set[str]:
+            package = module(place).split(".")
+            package = package if place.endswith("__init__.py") else package[:-1]
+            found: set[str] = set()
+            for node in ast.walk(ast.parse((root / place).read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Import):
+                    found.update(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom):
+                    base = ".".join([*package[:len(package) - node.level + 1], *([node.module] if node.module else [])]
+                                    ) if node.level else str(node.module)
+                    found.update(f"{base}.{alias.name}" if is_module(f"{base}.{alias.name}") else base
+                                 for alias in node.names)
+            return {name for name in found if name == "cad" or name.startswith("cad.")}
+
+        for process, own in _measuring.DFM.items():
+            places = (*_measuring.DFM_COMMON, *own)
+            held = {module(place) for place in places} | set(_measuring.BOUNDARY)
+            for place in places:
+                with self.subTest(process=process, place=place):
+                    self.assertTrue((root / place).is_file())
+                    self.assertEqual(imported(place) - held, set(), "imported, and neither measuring code nor boundary")
+        listed = {*_measuring.DFM_COMMON, *(place for own in _measuring.DFM.values() for place in own)}
+        measurers = {f"build123d/{path.name}" for path in (root / "build123d").glob("_dfm_*.py")}
+        self.assertEqual(measurers - listed, {"build123d/_dfm_dxf.py"})
+        self.assertEqual(set(_measuring.DFM), set(manufacturing.PROCESSES))
+
 
 class GeometryTest(unittest.TestCase):
     @classmethod
