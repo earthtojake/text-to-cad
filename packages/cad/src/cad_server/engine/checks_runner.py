@@ -54,6 +54,7 @@ from cad.engine.frames import failed_type
 from cad.engine.worker import CHECK_SECONDS, check_limits, resident_of
 
 from cad_server.engine.checks import Checks, Pool, Withdrawn, digest
+from cad_server.engine.measurements import Measurements, build_token, file_token, is_record, model_token
 from cad_server.engine.supervisor import Gone
 
 __all__ = ["FAILURES", "SECONDS", "STOPPED", "SUPERSEDED", "Asked", "Limits", "Runner", "State", "file_key",
@@ -172,8 +173,9 @@ class _Try:
     """One try of a check, of its document as it was when the try began: the request's source (``spec``) and
     ``check`` and what measures in its caller (``measures``); the document's id, for one the engine holds; its
     key among the checks (``document``) and its version then (``before``: a model's generation, the digest of a
-    file's bytes; None for none); the id and version of it that outlive the engine (``durable``); and how many
-    times it had been deleted (``since``)."""
+    file's bytes; None for none); the id and version of it that outlive the engine (``durable``); how many
+    times it had been deleted (``since``); and, for a manufacturing check, what the kept measurements name that
+    version by (``token``: ``measurements.model_token``, ``build_token`` or ``file_token``; None for none)."""
 
     spec: dict[str, Any]
     check: dict[str, Any]
@@ -183,13 +185,16 @@ class _Try:
     before: str | None
     durable: tuple[str, str] | None
     since: int
+    token: tuple[str, ...] | None = None
 
 
 class Runner:
     """The engine's manufacturing checks (the module): ``check`` answers one, ``reap``, ``halt`` and the watchdog
-    stop them, ``status`` lists them. Of the daemon it takes what it cannot know: ``store`` (the kept results) and
-    ``pool`` (the checks processes' slots); ``lease(slot)`` and ``release(process)``, a slot's checks process for
-    one request; ``version(ident)``, a model document's generation (None: no such document; ``ValueError``: a
+    stop them, ``status`` lists them. Of the daemon it takes what it cannot know: ``store`` (the interference
+    check's kept results, by a document's version), ``measurements`` (the manufacturing processes' kept
+    measurements, by what was measured; by default a store in memory alone) and ``pool`` (the checks
+    processes' slots); ``lease(slot)`` and ``release(process)``, a slot's checks process for one check's
+    requests; ``version(ident)``, a model document's generation (None: no such document; ``ValueError``: a
     refusal); ``read(ident)``, the document as a checks process reads it -- ``({"path"}, b"")`` for a file's,
     ``({"document", "name"}, its xbf bytes)`` for a model's -- or ``ValueError``; ``durable(ident, version)``,
     the version of it that outlives the engine with its id, or None; ``stopping()``, whether the engine stops;
@@ -199,8 +204,10 @@ class Runner:
                  version: Callable[[str], str | None], read: Callable[[str], tuple[dict[str, Any], bytes]],
                  durable: Callable[[str, str | None], tuple[str, str] | None],
                  stopping: Callable[[], bool] = lambda: False, limits: Limits | None = None,
-                 resident: Callable[[int | None], float | None] = resident_of) -> None:
+                 resident: Callable[[int | None], float | None] = resident_of,
+                 measurements: Measurements | None = None) -> None:
         self.store, self.pool = store, pool
+        self.measurements = measurements if measurements is not None else Measurements()
         self._lease, self._release, self._version, self._read, self._durable = lease, release, version, read, durable
         self.stopping, self.limits, self.resident = stopping, limits or Limits(), resident
         self.lock = threading.Lock()
@@ -252,6 +259,13 @@ class Runner:
         if known is not None and not measures_for(measures, known):
             told(nobody)  # other code or libraries than the checks processes': never measured to be thrown away
             return
+        # A manufacturing process's check is kept by what was measured (``_content``); the interference check, which
+        # keeps its own answers by the pairs it measured, by its document's version (``_versioned``).
+        content = check.get("process") != INTERFERENCE
+        if content and not _digests(measures):
+            told(nobody)  # no word of the code that measures each process: nothing of its is kept or found here
+            return
+        self.store.listed()  # once: what an earlier release kept by a document's version is removed, never read
         key = Checks.key(check, release(), measures.get("code"))
         ident = str(spec["id"]) if "id" in spec else None
         what = {"type": check.get("type"), "process": check.get("process"),
@@ -266,15 +280,19 @@ class Runner:
                 if ident is not None:
                     document, before = f"model:{ident}", self._version(ident)
                     durable = self._durable(ident, before)
+                    token = (None if before is None else
+                             model_token(*durable) if durable is not None else build_token(ident, before))
                 else:
                     path = str(spec["path"])
                     document, before = file_key(path), digest(Path(path))
                     durable = None if before is None else (file_id(os.path.normcase(os.path.realpath(path))), before)
+                    token = None if before is None else file_token(before, path)
             except ValueError as error:
                 told(_refused(error))
                 return
-            attempt = _Try(spec, check, measures, ident, document, before, durable,
-                           self.store.epoch(durable[0] if durable is not None else ident))
+            since = (self.measurements.epoch(ident) if content else
+                     self.store.epoch(durable[0] if durable is not None else ident))
+            attempt = _Try(spec, check, measures, ident, document, before, durable, since, token if content else None)
             same = (document, before, key) if before is not None else None
             with self.lock:
                 # Under one lock with a check's end (which keeps its result, then leaves ``running``) and with
@@ -303,7 +321,8 @@ class Runner:
                 told(_attached(running.answer))
                 return
             try:
-                answer = self._versioned(asked, attempt, key, serves, told)
+                answer = (self._content(asked, attempt, told) if content else
+                          self._versioned(asked, attempt, key, serves, told))
                 if answer is None:
                     # A build landed as its bytes were read: nothing is measured of a version gone.
                     reads += 1
@@ -327,6 +346,161 @@ class Runner:
                     if same is not None and self.running.get(same) is asked:
                         self.running.pop(same)
                 asked.finished.set()
+
+    def _content(self, asked: Asked, attempt: _Try, told: Callable[[dict[str, Any]], None]) -> dict[str, Any] | None:
+        """One try of a manufacturing check, kept by what was measured (``measurements.Measurements``): its
+        answer; None where a build landed as its document's bytes were read, so nothing was asked of them.
+
+        What the document's version holds is its content record: the one kept for it (its alias), else the one
+        a checks process says of it (``describe``: read, nothing measured), kept from then on. The record says
+        what the check asks, kernel-free (``kept.asked``): the process named -- the one the parts declare, for
+        a check given none -- its options, and so the one measurement it reads (``kept.measure_key``); or that
+        there is nothing to measure or the check is refused, answered from the record. That measurement's
+        report is the one kept for it, else measured -- in the process that described the document, where one
+        did, for the process named and with the options its measurement reads alone -- and kept unless its
+        measurer says it is not to be (``_keepable``). Either way the answer is this check's own: its process,
+        its options as resolved, and after the report's findings the one that says a process was declared.
+
+        A describing is part of the check's life: under its lease, stopped and limited as its measuring is.
+        A report is kept under the key of the record its measurer says it measured (``content_key``); where
+        that is not the record the check was resolved from -- its alias told wrong, its file was rewritten
+        between its describing and its measuring -- nothing of it is kept or answered, the alias is forgotten
+        and the check asked again, as of a document that changed."""
+        from cad._internal.dfm import kept
+        from cad.engine.contract import measures_for
+        from cad.engine.previous import version as release
+
+        check, measures, store = attempt.check, attempt.measures, self.measurements
+        superseded = {"failed": SUPERSEDED, "reason": State.SUPERSEDED.value}
+        token = attempt.token
+        # What an answer made here of the store alone says beside its result, as a checks process's does.
+        here = {"release": release(), **({"digest": attempt.before} if attempt.ident is None else {})}
+
+        def answered(checked: dict[str, Any], reused: bool = False) -> dict[str, Any]:
+            return {"done": {"reports": [], "files": [], "checked": checked, **({"reused": True} if reused else {})}}
+
+        def asks(record: dict[str, Any]) -> dict[str, Any]:
+            """What the check asks of a document of ``record`` (``kept.asked``), with its measurement's key
+            (``measure``) and whom a kept result of it must have been measured by (``by``): the digest of the
+            code that measures its process in the caller, and the caller's libraries."""
+            try:
+                ask = kept.asked(record, check)
+            except Exception as error:  # noqa: BLE001 - the check's own failure: its words, as a process says one
+                return {"failed": f"{type(error).__name__}: {error}", "reason": "error"}
+            if "process" in ask:
+                code = measures["dfm"][ask["process"]]
+                ask["measure"] = kept.measure_key(check["type"], ask["process"], bool(check.get("candidates")),
+                                                  ask["resolved"], code)
+                ask["by"] = {"code": code, "libraries": measures["libraries"]}
+            return ask
+
+        def mine(ask: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
+            """``report`` as this check's ``measured``: for its process and options, the finding that says its
+            process was declared after the report's own, where it was."""
+            if ask["declared"] is not None:
+                report = {**report, "findings": [*(report.get("findings") or ()), ask["declared"]]}
+            return {"process": ask["process"], "resolved": ask["resolved"], "report": report}
+
+        def found(record: dict[str, Any], ask: dict[str, Any], said: dict[str, Any]) -> dict[str, Any] | None:
+            """The check's answer from the record and what is kept, ``said`` beside it; None for a measurement
+            still to make."""
+            if "failed" in ask:
+                return ask
+            if "process" not in ask:
+                return answered({**ask, **said})  # nothing to measure, or refused: the record says so
+            result = store.get(record["key"], ask["measure"], lambda by: measures_for(ask["by"], by))
+            if result is None:
+                return None
+            return answered({"measured": mine(ask, result["report"]), **said}, reused=True)
+
+        def known() -> dict[str, Any] | None:
+            """The record kept for the try's version, where what described it describes for the caller."""
+            return store.content(token, lambda by: measures_for(measures, by)) if token is not None else None
+
+        record = known()
+        ask: dict[str, Any] = {}
+        if record is not None:
+            ask = asks(record)
+            answer = found(record, ask, here)
+            if answer is not None:
+                return answer
+        if self.stopping():
+            return {"failed": STOPPED, "reason": State.STOPPED.value, "stopped": True}
+        try:
+            read = self._read_at(attempt)
+        except ValueError as error:
+            return _refused(error)
+        if read is None:
+            return None
+        source, payload = read
+        order = {"id": 1, "op": "export", "source": source, "destinations": [], "cwd": None}
+        try:
+            with self._leased(asked, attempt.document, told) as request:
+                # While it waited for its process, another check may have described this version, or kept the
+                # measurement this one reads: each is looked for once more before the process is asked for it.
+                if record is None:
+                    record = known()
+                    if record is not None:
+                        ask = asks(record)
+                if record is not None:
+                    answer = found(record, ask, here)
+                else:
+                    answer = request({**order, "check": {"describe": True, "type": check["type"],
+                                                         "token": asked.token, "measures": measures}}, payload, more=True)
+                    described = _checked(answer)
+                    if described is None:
+                        return answer  # it failed there, or that process describes for another: nothing was measured
+                    if described.get("changed"):
+                        return superseded  # a file rewritten while it was read: of no version at all
+                    store.counted(read=bool(described.get("read")))
+                    record = described.get("content")
+                    if record is None:
+                        return answer  # a document that does not read: said as its check's answer, nothing kept
+                    if not is_record(record):
+                        return {"failed": "the checks process described the document as no content record",
+                                "reason": "error"}
+                    by = described.get("measures")
+                    if attempt.ident is None:  # a file's alias is of the bytes that were described
+                        token = file_token(described["digest"], attempt.spec["path"]) if isinstance(
+                            described.get("digest"), str) else None
+                    if token is not None and isinstance(by, dict):
+                        store.name(token, record, {"code": by.get("code"), "libraries": by.get("libraries")},
+                                   since=attempt.since)
+                    ask = asks(record)
+                    answer = found(record, ask, {name: said for name, said in described.items() if name != "content"})
+                if answer is not None:
+                    return answer
+                with self.lock:
+                    asked.what["process"] = ask["process"]
+                answer = request({**order, "check": {
+                    "type": check["type"], "process": ask["process"],
+                    "resolved": kept.measuring(ask["process"], ask["resolved"]),
+                    "candidates": bool(check.get("candidates")), "token": asked.token, "measures": measures}}, payload)
+        except _Ended as ended:
+            return ended.answer
+        measured = _checked(answer)
+        if measured is None:
+            return answer  # the measuring failed there, or that process measures for another
+        _current, moved = self._stood(attempt, measured)
+        if not measured.get("changed"):
+            self.store.counted(read=bool(measured.get("read")))
+        if moved:
+            return superseded
+        if not (isinstance(measured.get("measured"), dict) and isinstance(measured["measured"].get("report"), dict)):
+            return answer  # no part a process makes, a document that did not read: as said, never kept
+        if measured.get("content_key") != record["key"]:
+            # It measured other parts than the record says: the alias told wrong, or the file was rewritten since
+            # it was described. Nothing of it stands for this check: asked again, of the document as it reads now.
+            if token is not None:
+                store.forget(token)
+            return superseded
+        by = measured.get("measures")
+        made = ({"code": by["dfm"].get(ask["process"]), "libraries": by.get("libraries")}
+                if isinstance(by, dict) and isinstance(by.get("dfm"), dict) else None)
+        if _keepable(measured) and made is not None and measures_for(ask["by"], made):
+            store.keep(record["key"], ask["measure"], {"report": measured["measured"]["report"]}, made)
+        said = {name: value for name, value in measured.items() if name not in ("measured", "content_key", "transient")}
+        return answered({"measured": mine(ask, measured["measured"]["report"]), **said})
 
     def _versioned(self, asked: Asked, attempt: _Try, key: str, serves: Callable[[Any], bool],
                    told: Callable[[dict[str, Any]], None]) -> dict[str, Any] | None:
@@ -587,8 +761,8 @@ class Runner:
                      "seconds": round(now - asked.began, 1), "attached": not asked.abandoned(),
                      "callers": asked.there(), "waiting": asked.process is None}
                     for asked in sorted(self.asked.values(), key=lambda asked: asked.began)]
-        return {**self.store.status(), "asked": len(rows), "pool": self.pool.status(), "limits": self.limits.status(),
-                "running": rows}
+        return {**_counts(self.store.status(), self.measurements.status()), "asked": len(rows),
+                "pool": self.pool.status(), "limits": self.limits.status(), "running": rows}
 
 
 # The check that is no manufacturing process's but runs as one does (``cad._internal.interference``): which parts of
@@ -668,7 +842,50 @@ def _attached(answer: dict[str, Any]) -> dict[str, Any]:
 
 
 def _clean(checked: dict[str, Any]) -> bool:
-    """Whether a check's answer is a result to keep: one fully measured -- never a document that did not read,
-    a refusal, or a family not measured, which the next check may measure."""
+    """Whether an interference check's answer is a result to keep: one fully measured -- never a document that
+    did not read, a refusal, or pairs left unmeasured, which the next check goes on from."""
     report = (checked.get("measured") or {}).get("report")
     return isinstance(report, dict) and not report.get("partial") and not report.get("partial_sections")
+
+
+def _keepable(checked: dict[str, Any]) -> bool:
+    """Whether a manufacturing check's answer holds a measurement to keep: a report, with every family
+    measured or not -- a family its code cannot measure of those parts it cannot measure the next time either
+    -- unless its measurer says it ``transient``: made otherwise on a machine less busy (a search that ran out
+    of its seconds, a family that ran out of memory), which the next check may measure whole. Never a document
+    that did not read, nor one with no part a process makes."""
+    measured = checked.get("measured")
+    return (isinstance(measured, dict) and isinstance(measured.get("report"), dict)
+            and not checked.get("transient"))
+
+
+def _checked(answer: dict[str, Any]) -> dict[str, Any] | None:
+    """What a checks process answered of a check (``done``'s ``checked``), or None: it failed there, or
+    measures for another caller than this one."""
+    done = answer.get("done")
+    checked = done.get("checked") if isinstance(done, dict) else None
+    return checked if isinstance(checked, dict) else None
+
+
+def _digests(measures: dict[str, Any]) -> bool:
+    """Whether a caller says the code that measures each manufacturing process in it (``contract.measuring``'s
+    ``dfm``), which a kept measurement is found and kept by, and its libraries."""
+    from cad._internal.dfm import PROCESSES
+
+    said = measures.get("dfm")
+    return (isinstance(said, dict) and isinstance(measures.get("libraries"), dict)
+            and all(isinstance(said.get(process), str) for process in PROCESSES))
+
+
+def _counts(versions: dict[str, Any], content: dict[str, Any]) -> dict[str, Any]:
+    """The two stores' counts as one (``checks.Checks``' and ``measurements.Measurements``'): what each holds
+    and reused summed, in memory and on disk, with the aliases held and the documents described."""
+    found = {**versions, **{name: versions[name] + content[name]
+                            for name in ("held", "bytes", "reused", "restored", "read")},
+             "aliases": content["aliases"], "described": content["described"]}
+    listed = [disk for disk in (versions["disk"], content["disk"]) if disk is not None]
+    held = [disk["held"] for disk in listed if disk["held"] is not None]
+    found["disk"] = None if not listed else {
+        "held": sum(held) if held else None, "bytes": sum(disk["bytes"] for disk in listed),
+        **({"aliases": content["disk"]["aliases"]} if content["disk"] is not None else {})}
+    return found

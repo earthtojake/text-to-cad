@@ -724,8 +724,9 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
           given: dict[str, Any] | None, label: Path, *, local: bool = True, strict: bool = False) -> CheckResult | None:
     """A B-rep's check through the engine (``cad.engine.api.check``): measured in memory in one of the
     engine's checks processes -- a model's from the bytes the engine holds of it, a STEP's or an xbf's from its
-    file, each read once -- or answered from the result the engine kept for an unchanged document, then
-    finished here.
+    file, each read once -- or answered from the measurement the engine kept of the same parts measured the
+    same way, whatever document they were measured of, then finished here: the rules and the verdict are this
+    call's, never kept.
 
     None -- measured by this caller instead (``_here``), as before the engine measured checks -- for a file when no
     engine can be reached, when the engine is of a release that measures no check in memory, or when another
@@ -742,7 +743,8 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
     if process is None and (printer := check["given"].get("printer")) is not None:
         from cad._internal.dfm.printing import printer_settings
 
-        # The engine's cache key must include the settings its worker will use.
+        # The printer's settings as this caller reads them, where the file is named: the engine resolves the
+        # declared process's options with them (``kept.asked``), and so keeps the check by what they resolve to.
         check["printer_settings"] = printer_settings(printer)
     is_file = isinstance(source, (str, os.PathLike)) and label.is_absolute()
     try:

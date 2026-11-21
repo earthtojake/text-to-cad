@@ -606,6 +606,19 @@ def _described(source: dict, payload: bytes | None = None) -> dict:
                           "check": {"describe": True, "type": "xbf", "measures": measuring()}})["checked"]
 
 
+def _checked(source: dict, process: str | None, payload: bytes | None = None, **resolved: object) -> dict:
+    """What a checks process answers a check of ``source`` for ``process`` (``worker._check``), handed the options
+    its measurement reads alone, as the engine hands them."""
+    from cad._internal.dfm import kept
+    from cad.engine import worker
+    from cad.engine.contract import measuring
+
+    options = manufacturing.options("xbf", process, resolved) if process is not None else None
+    return worker._check({"source": source, "payload": payload, "check": {
+        "type": "xbf", "process": process, "candidates": False, "measures": measuring(),
+        "resolved": kept.measuring(process, options) if process is not None else None}})["checked"]
+
+
 class ContentTest(unittest.TestCase):
     """What a measurement reads of a document (``_dfm_brep.content``), answered by a checks process asked to
     describe it: a model's document and its xbf alike, changed by what a measurement reads and by nothing else."""
@@ -658,6 +671,21 @@ class ContentTest(unittest.TestCase):
                 self.assertNotEqual(self._content(result)["key"], content["key"])
         self.assertEqual(_described({"path": str(self.folder / "missing.xbf")})["unmeasured"]["code"],
                          "document_unreadable")
+
+    def test_a_check_says_the_key_of_the_parts_it_measured_and_measures_for_the_process_it_is_given(self) -> None:
+        """A report is kept under the record of the very parts it was measured of, which its measurer says
+        (``content_key``): the one a describing of the same document says. And a check is measured for a process
+        named: the one the parts declare is read from the record by whoever asks."""
+        path, payload = _saved(self.folder, self._block(), "block")
+        content = _described({"path": str(path)})["content"]
+        held = {"document": "block-id", "name": "block", "version": "1"}
+        for source, bytes_of in (({"path": str(path)}, None), (held, payload)):
+            with self.subTest(source=sorted(source)):
+                checked = _checked(source, "cnc", bytes_of)
+                self.assertEqual((checked["content_key"], checked["measured"]["process"]), (content["key"], "cnc"))
+                self.assertEqual(set(checked["measured"]["resolved"]), {"axes", "turning", "tools", "stock"})
+        with self.assertRaisesRegex(ValueError, "the process it names"):
+            _checked({"path": str(path)}, None)
 
     def test_a_triangulation_a_part_was_read_with_is_in_its_content(self) -> None:
         """A measurement keeps a mesh fine enough where it finds one, so the mesh a part was read with is read."""

@@ -246,19 +246,24 @@ def measure_declared(document_type: str, source: Any, given: dict[str, Any],
 
 
 def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]:
-    """The check one of the engine's checks processes runs of a document it holds (``source``, an
-    ``export.Source``: a STEP's or an xbf's file, a held document's bytes), as ``check`` asks it
-    (``{"type", "process", "resolved", "candidates", "given"}``, its options resolved by the caller,
-    ``manufacturing.options``), measured in memory (``_dfm_brep.of_source``). Plain data, which the caller
-    finishes (``manufacturing.finish``): ``{"measured": {"process", "resolved", "report"}}``; ``{"unmeasured":
-    {"code", "message"}}``; ``{"refused": words}`` for what ``manufacturing.declared`` refuses (the command
-    line's to fix). ``read``: what a reading failure is said as, ``failed to read ...``.
+    """The check of a document its process holds (``source``, an ``export.Source``: a STEP's or an xbf's file,
+    a held document's bytes -- one of the engine's checks processes today), as ``check`` asks it (``{"type", "process", "resolved",
+    "candidates"}``: the process named, and of its resolved options those its measurement reads,
+    ``kept.measuring``), measured in memory (``_dfm_brep.of_source``). Plain data: ``{"measured": {"process",
+    "resolved", "report"}, "content_key"}``, the report with the key of the content record of the very parts
+    it was measured of (``_dfm_brep.content``), so whoever keeps the report keeps it under what was measured,
+    whatever it took the document to hold; or ``{"unmeasured": {"code", "message"}}``. ``read``: what a reading
+    failure is said as, ``failed to read ...``.
 
-    Its measurements equal ``measure``'s and ``measure_declared``'s of the same document read from a file."""
+    A check given no process is not asked of it: whoever asks reads the process the parts declare from the
+    document's record (``described``, ``kept.asked``) and names it here. Its measurements equal ``measure``'s
+    and ``measure_declared``'s of the same document read from a file."""
     from cad._internal.dfm import Unmeasured
-    from cad._internal.refused import ArgumentRefused
 
     document_type, process = check["type"], check.get("process")
+    if process is None:
+        raise ValueError("a check is measured for the process it names: the one a document's parts declare is "
+                         "read from its content record (cad._internal.dfm.kept.asked) before it is asked")
     candidates = bool(check.get("candidates"))
     try:
         try:
@@ -267,17 +272,12 @@ def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]
             raise
         except Exception as error:  # noqa: BLE001 - a document that does not read is the check's answer
             raise Unmeasured("document_unreadable", f"failed to read {read or 'the document'}: {error}") from None
-        if process is None:
-            process, resolved, report = _declared(document, document_type, dict(check.get("given") or {}),
-                                                  candidates, document_type, printer_snapshot=check.get("printer_settings"))
-        else:
-            resolved = dict(check["resolved"])
-            report = _measured(document, document_type, process, resolved, candidates)
+        key = _dfm_brep.content(document)["key"]
+        resolved = dict(check["resolved"])
+        report = _measured(document, document_type, process, resolved, candidates)
     except Unmeasured as failure:
         return {"unmeasured": {"code": failure.code, "message": failure.message}}
-    except ArgumentRefused as refused:
-        return {"refused": str(refused)}
-    return {"measured": {"process": process, "resolved": resolved, "report": report}}
+    return {"measured": {"process": process, "resolved": resolved, "report": report}, "content_key": key}
 
 
 def described(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]:

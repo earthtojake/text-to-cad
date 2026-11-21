@@ -691,9 +691,12 @@ class Daemon:
         from cad_server.engine import registry
         from cad_server.engine.checks import Checks, Pool, pool_size
         from cad_server.engine.checks_runner import Limits, Runner
+        from cad_server.engine.measurements import Measurements
 
-        # The manufacturing checks (``checks_runner``): their kept results, in memory and in the cache folder,
-        # and the checks processes that measure them, a check's limits said where a setting is no number.
+        # The manufacturing checks (``checks_runner``): what is kept of them, in memory and in the cache folder
+        # -- a manufacturing process's measurements by what was measured (``measurements``), the interference
+        # check's results by its document's version (``checks``) -- and the checks processes that measure them,
+        # a check's limits said where a setting is no number.
         size, said = pool_size()
         limits = Limits.of_environment(self.supervisor.memory)
         for line in (said, *limits.notes):
@@ -703,9 +706,11 @@ class Daemon:
             Checks(folder=self._checks_folder), Pool(self.supervisor, size, said),
             lease=lambda slot: self.supervisor.lease("checks", slot, {}),
             release=self.supervisor.release, version=self._check_version, read=self._check_document,
-            durable=self._durable, stopping=lambda: self.draining or self.stopping.is_set(), limits=limits)
-        # Told of each document the registry deletes, under its lock (``Registry.delete``): its kept checks go.
-        registry.FORGOTTEN.append(self.checks.store.deleted)
+            durable=self._durable, stopping=lambda: self.draining or self.stopping.is_set(), limits=limits,
+            measurements=Measurements(self._checks_folder))
+        # Told of each document the registry deletes, under its lock (``Registry.delete``): its kept checks go,
+        # and what the kept measurements say its versions hold (the measurements are no document's, and stay).
+        registry.FORGOTTEN.extend((self.checks.store.deleted, self.checks.measurements.deleted))
 
     def touch(self) -> None:
         self.last = time.monotonic()
@@ -1207,8 +1212,9 @@ class Daemon:
         return {"document": ident, "name": doc.structure.get("name") or ident}, doc.xbf
 
     def _checks_folder(self) -> Any:
-        """The engine's registry, in whose cache folder the kept checks' results are written under its lock of
-        their document (``checks.Disk``), or None: no cache folder."""
+        """The engine's registry, in whose cache folder what is kept of the checks is written, what is a
+        document's under its lock of that document (``checks.Disk``, ``measurements.Measurements``), or None: no
+        cache folder."""
         held = self.models.cache.registry()
         return None if held is None or held.cache is None else held
 
@@ -2015,8 +2021,9 @@ class Daemon:
         from cad_server.engine import registry
 
         self.checks.halt()  # every check answered that the engine stopped, its checks process killed
-        if self.checks.store.deleted in registry.FORGOTTEN:
-            registry.FORGOTTEN.remove(self.checks.store.deleted)
+        for told in (self.checks.store.deleted, self.checks.measurements.deleted):
+            if told in registry.FORGOTTEN:
+                registry.FORGOTTEN.remove(told)
         # The documents built or read in the last idle window, saved first, best effort (``cache``).
         self.models.cache.final()
         _halt()  # a making of the base under way: its uv goes with the engine

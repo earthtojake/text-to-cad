@@ -28,7 +28,7 @@ from unittest import mock
 
 from tests.python.support import engine_daemon
 from tests.python.support.manufacturing_fixtures import (JOIN_SECONDS, MEASURES, MODELS, Checking, Fixture, _counts,
-                                                         _plain, _until, box, held_check, held_engine)
+                                                         _plain, _until, box, held_check, held_engine, record)
 
 
 def setUpModule() -> None:
@@ -294,11 +294,11 @@ class Supervised:
 class Engine:
     """What a ``Runner`` takes of its daemon, in a test's hands: a model document (``DOC``, at ``versions``),
     files, the checks processes its pool's slots lease (a killed one's place taken by a fresh one) and what each
-    answers (``answer``: by default the check measured by what its caller says measures); ``holding``: every
-    request waits until ``let_go``."""
+    answers (``answer``: by default the document described, or the check measured, by what its caller says
+    measures); ``holding``: every request waits until ``let_go``."""
 
     def __init__(self, size: int = 1, limits: Any = None, resident: Any = lambda _pid: None,
-                 store: Any = None) -> None:
+                 measurements: Any = None) -> None:
         from cad_server.engine.checks import Checks, Pool
         from cad_server.engine.checks_runner import Limits, Runner
 
@@ -312,13 +312,15 @@ class Engine:
         self.changed = threading.Condition()
         self.holding = self.stopping = False
         self.answer = self.measured
+        self.report: dict[str, Any] = {}  # what a measured report says beside the version it is of
         self.pool = Pool(Supervised(self), size)
         # Each asked of the engine as it is then: a test puts its own ``lease``, ``release`` or ``document``.
-        self.runner = Runner(Checks() if store is None else store, self.pool, lease=lambda slot: self.lease(slot),
+        self.runner = Runner(Checks(), self.pool, lease=lambda slot: self.lease(slot),
                              release=lambda process: self.release(process),
                              version=lambda ident: self.versions.get(ident), read=lambda ident: self.document(ident),
                              durable=lambda ident, version: (ident, f"r-{version}") if version else None,
-                             stopping=lambda: self.stopping, limits=limits or Limits(None), resident=resident)
+                             stopping=lambda: self.stopping, limits=limits or Limits(None), resident=resident,
+                             measurements=measurements)
 
     def release(self, process: Process) -> None:
         self.released.append(process)
@@ -334,14 +336,25 @@ class Engine:
         return {"document": ident, "name": "plate"}, b"bytes"
 
     def measured(self, order: dict[str, Any], **more: Any) -> dict[str, Any]:
+        """A checks process's answer: what the document holds (asked to ``describe``: a record of its own for
+        each version of a model and for each digest of a file), else its check measured, of that record."""
         from cad.engine.previous import version
         from cad_server.engine.checks import digest
 
         source, check = order["source"], order["check"]
         file = {"digest": digest(Path(source["path"]))} if "path" in source else {}
+        said = {"release": version(), "read": True, "measures": check["measures"], **file, **more}
+        content = record(geometry=str(source.get("version") or said.get("digest")))
+        if check.get("describe"):
+            return {"id": 1, "done": {"reports": [], "files": [], "checked": {"content": content, **said}}}
         return {"id": 1, "done": {"reports": [], "files": [], "checked": {
-            "measured": {"process": check.get("process"), "resolved": {}, "report": {"of": source.get("version")}},
-            "release": version(), "read": True, "measures": check["measures"], **file, **more}}}
+            "measured": {"process": check.get("process"), "resolved": check.get("resolved"),
+                         "report": {"of": source.get("version"), **self.report}},
+            "content_key": content["key"], **said}}}
+
+    def orders(self, describe: bool = False) -> list[dict[str, Any]]:
+        """The orders asked of the checks processes so far: those to measure, or those to ``describe``."""
+        return [order for _slot, order, _payload in self.requests if bool(order["check"].get("describe")) == describe]
 
     def request(self, source: dict[str, Any], measures: Any = MEASURES, caller: str | None = None,
                 **check: Any) -> dict[str, Any]:
@@ -382,6 +395,13 @@ class Engine:
 DOC = str(uuid.UUID(int=7))
 
 
+def _options(process: str) -> dict[str, Any]:
+    """A model's check of ``process`` with its options as they resolve by default."""
+    from cad._internal import manufacturing
+
+    return manufacturing.options("model", process, {})
+
+
 class RunnerTest(unittest.TestCase):
     """A check's life in the engine (``checks_runner.Runner``), through its own methods, on an engine of the
     test's (``Engine``): what the daemon gives it and the checks processes it leases are the test's, nothing
@@ -404,15 +424,17 @@ class RunnerTest(unittest.TestCase):
         engine = Engine()
         answers = [engine.check({"id": DOC}) for _ in range(3)]
         self.assertEqual([answer["done"].get("reused", False) for answer in answers], [False, True, True])
-        self.assertEqual((len(engine.requests), engine.read), (1, [DOC]), "measured, and its bytes read, once")
-        _slot, order, payload = engine.requests[0]
-        self.assertEqual((order["source"], payload), ({"document": DOC, "name": "plate", "version": "v1"}, b"bytes"),
-                         "from the bytes the engine holds, at their version")
+        self.assertEqual((len(engine.orders(describe=True)), len(engine.orders()), engine.read), (1, 1, [DOC]),
+                         "described and measured, and its bytes read, once")
+        for _slot, order, payload in engine.requests:
+            self.assertEqual((order["source"], payload), ({"document": DOC, "name": "plate", "version": "v1"}, b"bytes"),
+                             "from the bytes the engine holds, at their version")
         self.assertNotIn("measures", answers[1]["done"]["checked"], "kept without what only its first caller is told")
         engine.check({"id": DOC}, process="sheet")
-        self.assertEqual(len(engine.requests), 2, "another check of it is measured")
+        self.assertEqual((len(engine.orders(describe=True)), len(engine.orders())), (1, 2),
+                         "another check of it is measured, of a document the engine knows already")
         counts = engine.runner.status()
-        self.assertEqual((counts["measured"], counts["reused"], counts["asked"]), (2, 2, 0))
+        self.assertEqual((counts["measured"], counts["reused"], counts["described"], counts["asked"]), (2, 2, 1, 0))
 
     def test_another_release_other_code_or_no_word_of_what_measures_is_answered_at_once_unmeasured(self) -> None:
         engine = Engine()
@@ -421,15 +443,17 @@ class RunnerTest(unittest.TestCase):
                        {"measures": {**MEASURES, "libraries": {**MEASURES["libraries"], "numpy": "2.1.0"}}}):
             with self.subTest(unlike=unlike):
                 self.assertNotIn("checked", engine.check({"id": DOC}, **unlike)["done"])
-        self.assertEqual((len(engine.requests), engine.runner.status()["reused"]), (1, 0), "nothing measured or served")
-        bare = {"code": MEASURES["code"], "libraries": {}}
+        self.assertNotIn("checked", engine.check({"id": DOC}, measures={"code": MEASURES["code"], "libraries": {}})["done"],
+                         "no word of the code that measures each process")
+        self.assertEqual((len(engine.orders()), engine.runner.status()["reused"]), (1, 0), "nothing measured or served")
+        bare = {**MEASURES, "libraries": {}}
         self.assertTrue(engine.check({"id": DOC}, measures=bare)["done"]["reused"], "no kernel: served its code's")
 
     def test_a_kept_result_serves_every_caller_its_measurer_measures_for_across_a_restart(self) -> None:
         """A result a script's check kept is served, after a restart (nothing known yet of what measures), to the
         ``cad`` command, which names no library, and to the script again; a caller of another library's version
         is measured again, and its result serves the command from then on."""
-        from cad_server.engine.checks import Checks
+        from cad_server.engine.measurements import Measurements
         from cad_server.engine.registry import Folder
 
         folder = Folder(tempfile.mkdtemp(prefix="engine-dfm-restart-"))
@@ -437,11 +461,12 @@ class RunnerTest(unittest.TestCase):
         measured: list[Any] = []
 
         def ask(measures: dict[str, Any]) -> dict[str, Any]:
-            engine = Engine(store=Checks(folder=lambda: folder))  # a fresh engine on the same cache folder
-            engine.answer = lambda order: (measured.append(order["check"]["measures"]), engine.measured(order))[1]
-            return engine.check({"id": DOC}, measures=measures)["done"]
+            engine = Engine(measurements=Measurements(lambda: folder))  # a fresh engine on the same cache folder
+            done = engine.check({"id": DOC}, measures=measures)["done"]
+            measured.extend(order["check"]["measures"] for order in engine.orders())
+            return done
 
-        bare = {"code": MEASURES["code"], "libraries": {}}
+        bare = {**MEASURES, "libraries": {}}
         newer = {**MEASURES, "libraries": {**MEASURES["libraries"], "numpy": "2.1.0"}}
         self.assertNotIn("reused", ask(MEASURES))
         for measures in (bare, MEASURES):
@@ -450,6 +475,141 @@ class RunnerTest(unittest.TestCase):
         self.assertNotIn("reused", ask(newer), "another numpy: measured again")
         self.assertTrue(ask(bare).get("reused"))
         self.assertEqual(measured, [MEASURES, newer])
+
+    def test_a_measurement_is_kept_by_what_it_reads_whoever_asks_it_and_however(self) -> None:
+        """Two checks that differ only by an option their measurement does not read are one measurement: asked
+        at once, the second, which waited for the first's process, finds the document described and the
+        measurement kept, and answers its own options. The process the parts declare, read from the record,
+        is the same measurement as that process given, the finding that says so after the report's own; and a
+        record with no part, or parts that declare no process, is answered from the record, nothing measured."""
+        from cad._internal.dfm import kept
+
+        engine = Engine()
+        engine.holding = True
+        file = self.file()
+        first = engine.ask(file, resolved={"material": "aluminum", "axes": 3})
+        _until(self, lambda: engine.states() == ["measuring"], "the first is described")
+        second = engine.ask(file, resolved={"material": "steel", "axes": 3})
+        _until(self, lambda: engine.states() == ["measuring", "waiting"], "another check, waiting for the process")
+        engine.let_go()
+        answers = [thread.result(self)["done"] for thread in (first, second)]
+        self.assertEqual([answer.get("reused", False) for answer in answers], [False, True])
+        self.assertEqual([answer["checked"]["measured"]["resolved"]["material"] for answer in answers],
+                         ["aluminum", "steel"], "each its own options")
+        self.assertEqual((len(engine.orders(describe=True)), len(engine.orders())), (1, 1), "described and measured once")
+        self.assertEqual(engine.orders()[0]["check"]["resolved"], {"axes": 3}, "handed the options it reads alone")
+        self.assertNotIn("reused", engine.check(file, resolved={"material": "steel", "axes": 4})["done"],
+                         "an option it reads: another measurement")
+
+        declared = {"material": {"name": "Aluminum"}, "process": {"process": "machined", "skin": None, "pitch_mm": None}}
+        empty = {**record(), "parts": []}
+        contents = {"declared": record(geometry="d", material=declared), "none": record(geometry="n"),
+                    "empty": {**empty, "key": kept.content_key(empty)}}
+        holds = {"now": "declared"}
+        measured = engine.measured
+
+        def answer(order: dict[str, Any]) -> dict[str, Any]:
+            found = measured(order)
+            checked = found["done"]["checked"]
+            if "content" in checked:
+                checked["content"] = contents[holds["now"]]
+            else:
+                checked["content_key"] = contents[holds["now"]]["key"]
+            return found
+
+        engine.answer = answer
+        engine.requests.clear()
+        given = engine.check({"id": DOC}, type="model", process="cnc", resolved=_options("cnc"))["done"]
+        asked = engine.check({"id": DOC}, type="model", process=None, resolved=None, given={})["done"]
+        self.assertEqual((given.get("reused", False), asked.get("reused", False), len(engine.orders())), (False, True, 1))
+        self.assertEqual((asked["checked"]["measured"]["process"], asked["checked"]["measured"]["resolved"]),
+                         ("cnc", _options("cnc")))
+        said = asked["checked"]["measured"]["report"]["findings"]
+        self.assertEqual(([finding["code"] for finding in said], list(asked["checked"]["measured"]["report"])[-1]),
+                         (["process_declared"], "findings"), "after the report's own, as a measurement puts it")
+        self.assertEqual({**asked["checked"]["measured"]["report"], "findings": None},
+                         {**given["checked"]["measured"]["report"], "findings": None})
+        for now, version, said in (("none", "v2", "refused"), ("empty", "v3", "unmeasured")):
+            with self.subTest(holds=now):
+                holds["now"], engine.versions[DOC] = now, version
+                answered = engine.check({"id": DOC}, type="model", process=None, resolved=None, given={})["done"]["checked"]
+                self.assertIn(said, answered)
+                again = engine.check({"id": DOC}, type="model", process=None, resolved=None, given={})["done"]["checked"]
+                self.assertEqual(again[said], answered[said], "from the record, with no process asked")
+        self.assertEqual((len(engine.orders()), len(engine.orders(describe=True))), (1, 3), "nothing more measured")
+
+    def test_a_measurement_of_other_parts_than_its_record_says_is_asked_again_and_the_record_forgotten(self) -> None:
+        """The measurer says the key of the parts it measured. Where that is not the record the check was
+        resolved from -- the version's alias told wrong, a file rewritten between its describing and its
+        measuring -- nothing of it is kept or answered: the alias is forgotten and the check asked again, of
+        the document as a process reads it now."""
+        from cad_server.engine.measurements import model_token
+
+        engine = Engine()
+        kept, token, stale = engine.runner.measurements, model_token(DOC, "r-v1"), record(geometry="stale")
+        kept.name(token, stale, {"code": MEASURES["code"], "libraries": MEASURES["libraries"]})
+        answer = engine.check({"id": DOC})["done"]
+        self.assertEqual((answer["checked"]["measured"]["report"], answer.get("reused", False)), ({"of": "v1"}, False))
+        self.assertEqual((len(engine.orders()), len(engine.orders(describe=True))), (2, 1),
+                         "measured, found to be of other parts, described, measured")
+        self.assertEqual((kept.content(token), engine.runner.status()["held"]), (record(geometry="v1"), 1),
+                         "the record as it reads, and the one measurement of it")
+        self.assertTrue(engine.check({"id": DOC})["done"]["reused"])
+
+    def test_a_measurement_is_kept_whatever_it_could_not_measure_unless_it_is_transient(self) -> None:
+        """A report with a family not measured is what its code makes of those parts, and is kept; one its
+        measurer says is transient -- a search out of its time, a family out of memory -- is answered and not
+        kept, so the next check measures it again."""
+        engine = Engine()
+        engine.report = {"partial": True, "partial_sections": ["holes"]}
+        part = self.file()
+        first, again = engine.check(part)["done"], engine.check(part)["done"]
+        self.assertEqual((first.get("reused", False), again.get("reused", False)), (False, True))
+        self.assertEqual(again["checked"]["measured"], first["checked"]["measured"])
+
+        other = self.file("other.step")
+        engine.answer = lambda order: engine.measured(order, **({} if order["check"].get("describe") else {"transient": True}))
+        answers = [engine.check(other)["done"] for _ in range(2)]
+        self.assertEqual([answer.get("reused", False) for answer in answers], [False, False], "measured each time")
+        self.assertEqual(answers[0]["checked"]["measured"]["report"]["partial_sections"], ["holes"], "and answered")
+        self.assertNotIn("transient", answers[0]["checked"])
+        engine.answer = engine.measured
+        self.assertEqual([engine.check(other)["done"].get("reused", False) for _ in range(2)], [False, True])
+        self.assertEqual((len(engine.orders()), len(engine.orders(describe=True))), (4, 2))
+
+    def test_a_measurement_kept_under_another_release_is_served_by_its_process_s_code_and_libraries(self) -> None:
+        """A release that changes none of a process's measuring code finds what the one before it measured: the
+        document is described again (the library's code is another), nothing is measured, and the answer says
+        the release that serves it. A release whose measuring code for that process differs measures again."""
+        from cad.engine import previous
+        from cad_server.engine.measurements import Measurements
+        from cad_server.engine.registry import Folder
+
+        folder = Folder(tempfile.mkdtemp(prefix="engine-dfm-release-"))
+        self.addCleanup(shutil.rmtree, folder.root, True)
+
+        def ask(release: str, measures: dict[str, Any], process: str = "cnc") -> tuple[dict[str, Any], Engine]:
+            with mock.patch.object(previous, "version", return_value=release):
+                engine = Engine(measurements=Measurements(lambda: folder))  # a fresh engine on the same cache folder
+                return engine.check({"id": DOC}, measures=measures, process=process)["done"], engine
+
+        first, _engine = ask("1.0.0", MEASURES)
+        later = {**MEASURES, "code": "c0de-of-1.0.1"}
+        served, engine = ask("1.0.1", later)
+        self.assertEqual((first.get("reused", False), served.get("reused", False)), (False, True))
+        self.assertEqual((len(engine.orders(describe=True)), len(engine.orders())), (1, 0), "read once, nothing measured")
+        self.assertEqual((served["checked"]["release"], served["checked"]["measured"]),
+                         ("1.0.1", first["checked"]["measured"]))
+        again, engine = ask("1.0.1", later)
+        self.assertEqual((again.get("reused", False), engine.requests), (True, []), "and no process from then on")
+        other, engine = ask("1.0.2", {**later, "dfm": {**MEASURES["dfm"], "cnc": "c0de-cnc-edited"}})
+        self.assertEqual((other.get("reused", False), len(engine.orders())), (False, 1), "its measuring code differs")
+        sheet, _engine = ask("1.0.0", MEASURES, "sheet")
+        unlike, engine = ask("1.0.2", {**later, "dfm": {**MEASURES["dfm"], "cnc": "c0de-cnc-edited"}}, "sheet")
+        self.assertEqual((sheet.get("reused", False), unlike.get("reused", False), len(engine.orders())), (False, True, 0),
+                         "another process's code changed: this one's measurement stands")
+        newer = {**later, "libraries": {**MEASURES["libraries"], "OCP": "8.0.2"}}
+        self.assertEqual(ask("1.0.1", newer)[0].get("reused", False), False, "other libraries: measured again")
 
     def test_a_document_built_again_is_read_again_before_it_is_measured_and_superseded_after(self) -> None:
         from cad_server.engine.checks_runner import READS, SUPERSEDED
@@ -478,7 +638,7 @@ class RunnerTest(unittest.TestCase):
         engine.answer = built_under_it
         engine.requests.clear()
         self.assertEqual(engine.check({"id": DOC}, process="sheet"), {"failed": SUPERSEDED, "reason": "superseded"})
-        self.assertEqual(len(engine.requests), READS, "asked again of each version, each one gone as it answered")
+        self.assertEqual(len(engine.orders()), READS, "asked again of each version, each one gone as it answered")
         engine.answer = engine.measured
         self.assertNotIn("reused", engine.check({"id": DOC}, process="sheet")["done"], "nothing of it was kept")
 
@@ -519,19 +679,19 @@ class RunnerTest(unittest.TestCase):
         engine.let_go()
         answers = [first.result(self), second.result(self)]
         self.assertEqual([answer["done"]["checked"]["measured"]["report"] for answer in answers], [{"of": "v2"}] * 2)
-        self.assertEqual((len(engine.requests), engine.runner.store.status()["measured"]), (2, 1),
+        self.assertEqual((len(engine.orders()), engine.runner.store.status()["measured"]), (1, 1),
                          "measured once for both, and the version gone counted as no measurement")
         self.assertTrue(engine.check({"id": DOC})["done"]["reused"], "kept under the generation it was measured at")
 
         engine.holding = True
         gone = threading.Event()
         abandoned = engine.ask({"id": DOC}, gone, process="sheet")
-        _until(self, lambda: len(engine.requests) == 3, "a check measures")
+        _until(self, lambda: len(engine.orders()) == 2, "a check measures")
         gone.set()
         engine.versions[DOC] = "v3"
         engine.runner.built(DOC)
         self.assertEqual(abandoned.result(self), {"failed": SUPERSEDED, "reason": "superseded"})
-        self.assertEqual((len(engine.requests), len(engine.killed), engine.runner.status()["asked"]), (3, 2, 0),
+        self.assertEqual((len(engine.requests), len(engine.killed), engine.runner.status()["asked"]), (4, 2, 0),
                          "stopped, and asked again for no one")
 
     def test_an_abandoned_check_gives_its_process_to_one_someone_waits_for_and_no_other_does(self) -> None:
@@ -569,9 +729,9 @@ class RunnerTest(unittest.TestCase):
         engine.let_go()
         for thread in (second, third, fourth):
             self.assertIn("checked", thread.result(self)["done"])
-        self.assertEqual([order["source"]["path"] for _key, order, _payload in engine.requests],
+        self.assertEqual([order["source"]["path"] for order in engine.orders(describe=True)],
                          [files[index]["path"] for index in (0, 1, 3, 2)], "the one someone waits for first")
-        self.assertEqual(engine.runner.store.status()["held"], 3, "nothing kept of the one stopped")
+        self.assertEqual(engine.runner.status()["held"], 3, "nothing kept of the one stopped")
 
     def test_a_stop_never_reaches_a_process_its_check_no_longer_has(self) -> None:
         """The engine stopping at the moment a check lets its process go, the next check's from then on: nothing is
@@ -596,7 +756,7 @@ class RunnerTest(unittest.TestCase):
 
         engine.lease = stopped_as_it_started
         self.assertEqual(engine.check(self.file("other.step")), {"failed": STOPPED, "reason": "stopped", "stopped": True})
-        self.assertEqual((engine.killed, len(engine.requests), len(engine.released)), ([], 1, 2))
+        self.assertEqual((engine.killed, len(engine.orders()), len(engine.released)), ([], 1, 2))
 
     def test_the_engine_stopping_answers_every_check_stopped(self) -> None:
         from cad_server.engine.checks_runner import STOPPED
@@ -650,7 +810,7 @@ class RunnerTest(unittest.TestCase):
         self.assertIn("over a check's time limit of 1e-09 s", answer["failed"])
         self.assertIn("CAD_ENGINE_CHECK_SECONDS", answer["failed"])
         self.assertEqual(second.result(self)["reason"], "over_time", "and its slot is the next check's")
-        self.assertEqual((engine.runner.status()["asked"], engine.runner.store.status()["held"]), (0, 0))
+        self.assertEqual((engine.runner.status()["asked"], engine.runner.status()["held"]), (0, 0))
 
     def test_a_setting_that_is_no_number_keeps_the_default_and_zero_is_no_limit(self) -> None:
         from cad_server.engine.checks_runner import SECONDS, Limits
@@ -710,13 +870,13 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual((engine.read, engine.requests), ([], []))
 
     def test_a_check_s_record_is_cleared_whatever_its_store_raises(self) -> None:
-        from cad_server.engine.checks import Checks
+        from cad_server.engine.measurements import Measurements
 
-        class Broken(Checks):
-            def get(self, *_args: Any, **_kwargs: Any) -> Any:
+        class Broken(Measurements):
+            def content(self, *_args: Any, **_kwargs: Any) -> Any:
                 raise OSError("disk gone")
 
-        engine = Engine(store=Broken())
+        engine = Engine(measurements=Broken())
         with self.assertRaises(OSError):
             engine.check({"id": DOC})
         self.assertEqual((engine.runner.asked, engine.runner.running), ({}, {}))

@@ -64,8 +64,12 @@ BYTES = 64 * 2**20
 # At most this many results kept on disk, and this many bytes of them.
 DISK_LIMIT = 1024
 DISK_BYTES = 256 * 2**20
-# The format of a result's file on disk: another is a file that does not read.
-FORMAT = 1
+# The format of a result's file on disk: another is a file that does not read. 2 holds the interference check's
+# results alone: a manufacturing process's are kept by what was measured (``measurements``), and a file of
+# format 1, which held either, is removed as the store is listed (``Disk._indexed``).
+FORMAT = 2
+# How a result's file of this format begins, as ``Disk.keep`` writes it.
+_HEAD = b'{"format":%d,' % FORMAT
 
 
 def digest(path: Path) -> str | None:
@@ -120,7 +124,7 @@ class Disk:
 
     def _indexed(self, held: Any) -> dict[str, tuple[int, float]]:
         """The index (call with the lock held): every result's file, listed and stated once per cache folder,
-        nothing read, the half-written files there swept."""
+        its first bytes alone read, the half-written files there and the files of another format swept."""
         root = getattr(held, "root", held)
         if self.index is not None and root == self.root:
             return self.index
@@ -143,11 +147,30 @@ class Disk:
                     continue
                 try:
                     stat = held.path(inside).stat()
+                    with open(held.path(inside), "rb") as handle:
+                        head = handle.read(len(_HEAD))
                 except OSError:
+                    continue
+                if head != _HEAD:
+                    # An earlier format's (a manufacturing check's result, kept elsewhere now), or no result at
+                    # all: never read again, so removed rather than left to gather.
+                    try:
+                        held.remove(inside)
+                        os.rmdir(held.path(self._inside(ident)))
+                    except (OSError, ValueError):
+                        pass  # its folder holds another, or went already
                     continue
                 self.index[inside] = (stat.st_size, stat.st_mtime)
                 self.bytes += stat.st_size
         return self.index
+
+    def listed(self) -> None:
+        """The store listed now, where it was not: what a stopped engine left half written, and every file
+        of an earlier format, removed (``_indexed``)."""
+        held, _locks = self._held()
+        if held is not None:
+            with self.lock:
+                self._indexed(held)
 
     def _remove(self, held: Any, inside: str) -> None:
         try:
@@ -342,6 +365,11 @@ class Checks:
             self.bytes += len(text)
             while self.kept and (len(self.kept) > self.limit or self.bytes > self.budget):
                 self.bytes -= len(self.kept.popitem(last=False)[1][1])
+
+    def listed(self) -> None:
+        """The results on disk listed, where they were not yet (``Disk.listed``)."""
+        if self.disk is not None:
+            self.disk.listed()
 
     def counted(self, read: bool = False) -> None:
         """One check measured in a process, kept or not; ``read``: it read its document, none held."""
