@@ -6,29 +6,24 @@ import { Button } from "@cad/ui/primitives/button";
  * open, CAD not running, a link that no longer works, the page's first answer not coming (`settings-ui.md`,
  * "Status screens").
  *
- * Quiet, as the loading indicator it stands in the place of (`loading/LoadingStep.jsx`): no tinted tile, nothing
- * decorative. One 22rem column centred in the area, left-aligned on one line: the title in the chrome's text, its one
- * plain 16px glyph hanging to its left in the muted ink, the explanation 4px under it in the muted ink (wide enough
- * that a two-sentence explanation wraps into two lines, `text-pretty` keeping a last word from standing alone), then,
- * 12px under it, the action as a small quiet button (`StatusAction`), its box on the same line as the text. In the
- * app's theme: a page state has no viewport to take a Background from.
+ * Quiet, as the loading indicator it stands in the place of (`loading/LoadingStep.jsx`): no icon, no tinted tile,
+ * nothing decorative. One 22rem column centred in the area, left-aligned on one line: the title in the chrome's text,
+ * the explanation 4px under it in the muted ink (wide enough that a two-sentence explanation wraps into two lines,
+ * `text-pretty` keeping a last word from standing alone), then, 12px under it, the action as a small quiet button
+ * (`StatusAction`), its box on the same line as the text. In the app's theme: a page state has no viewport to take a
+ * Background from.
  *
  * @param {object} props
- * @param {import("react").ElementType} [props.icon] A lucide glyph.
  * @param {string} props.title
  * @param {string} [props.description]
  * @param {import("react").ReactNode} [props.action] A `StatusAction`.
  * @param {string} [props.className]
- * @param {"muted"|"warn"} [props.tone]  Kept for callers; every state is drawn alike, the words saying how serious it is.
  */
-export function EmptyState({ icon: Icon, title, description, action, className, tone: _tone = "muted" }) {
+export function EmptyState({ title, description, action, className }) {
   return (
     <div className={cn("flex h-full min-h-0 items-center justify-center px-8", className)} data-status-screen="">
       <div className="flex w-[22rem] max-w-full flex-col items-start text-left text-ui">
-        <p className="relative text-foreground" data-status-title="">
-          {Icon ? <Icon className="absolute top-0.5 -left-6 size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" /> : null}
-          {title}
-        </p>
+        <p className="text-foreground" data-status-title="">{title}</p>
         {description ? <p className="mt-1 text-pretty text-muted-foreground [overflow-wrap:anywhere]">{description}</p> : null}
         {action ? <div className="mt-3">{action}</div> : null}
       </div>

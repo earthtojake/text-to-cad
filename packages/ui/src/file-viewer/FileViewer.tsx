@@ -1,5 +1,4 @@
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
-import { FileText } from "lucide-react";
 import { isDocumentId } from "@cad/core/lib/cadRefs.js";
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
@@ -23,7 +22,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error, _info: ErrorInfo) { this.props.onError?.(error); }
-  render() { return this.state.error ? <EmptyState icon={FileText} title={this.props.title} description={this.state.error.message} tone="warn" /> : this.props.children; }
+  render() { return this.state.error ? <EmptyState title={this.props.title} description={this.state.error.message} /> : this.props.children; }
 }
 
 /**
@@ -185,7 +184,7 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
       <div className="min-w-0 flex-1">{loading}</div>
     </div> : loading;
   }
-  else if (loaded.status === "error") body = presentation?.error?.({ message: loaded.message, missing: loaded.missing, error: loaded.error, reload: reloadCurrent }) ?? <EmptyState icon={FileText} title={t("file.openFailed")} description={loaded.message} tone="warn" />;
+  else if (loaded.status === "error") body = presentation?.error?.({ message: loaded.message, missing: loaded.missing, error: loaded.error, reload: reloadCurrent }) ?? <EmptyState title={t("file.openFailed")} description={loaded.message} />;
   else body = rendererBody;
   const shownActions = navActions?.key === key && ready ? navActions.actions : [];
   const trailing = shownActions.length ? <>

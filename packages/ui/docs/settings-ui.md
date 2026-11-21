@@ -393,8 +393,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   component every full-area state draws: a file that does not exist or is not held, one that would not open, CAD not
   running and a link that no longer works in the web app, the page's first answer not coming): one 22rem column,
   never wider than the room less 32px either side, centred where the indicator stands and left-aligned on one line —
-  the title in `text-ui` foreground with its one plain 16px glyph hanging 24px to its left in the muted ink (no tinted
-  tile, no tone colour: the words say how serious it is), the explanation 4px under it in `text-ui` muted, wrapping
+  the title in `text-ui` foreground (no icon, no tinted tile, no tone colour: the words say how serious it is), the
+  explanation 4px under it in `text-ui` muted, wrapping
   into even lines (`text-pretty`), and 12px under that the action as a small quiet button (`StatusAction`: 28px,
   `text-ui`, a hairline border, no shadow), its box on the text's line. In the app's theme, light or dark: a page state
   has no viewport, so no Background. The viewport's alert card (a load the model may survive, with Details and Retry)

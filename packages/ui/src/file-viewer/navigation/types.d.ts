@@ -1,5 +1,5 @@
 /** Package-owned contracts for the shared navigation primitives. */
-import type { ComponentType, ElementType, ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { FileSource } from "../types.js";
 
 /* -------------------------------------------------------------------- */
@@ -57,13 +57,10 @@ export function parentFolder(path: string): string;
 
 /** The one status screen, used by every full-area state in both apps: quiet, a 22rem column centred in the area. */
 export const EmptyState: ComponentType<{
-  icon?: ElementType;
   title: string;
   description?: string;
   action?: ReactNode;
   className?: string;
-  /** Kept for callers: every state is drawn alike, its words saying how serious it is. */
-  tone?: "muted" | "warn";
 }>;
 /** A status screen's action: the panel's small quiet button. */
 export const StatusAction: ComponentType<import("react").ButtonHTMLAttributes<HTMLButtonElement>>;

@@ -1,4 +1,3 @@
-import { FileWarning } from 'lucide-react';
 import { EmptyState } from '@cad/ui/navigation';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -26,7 +25,7 @@ function StartingView({ error }: { error?: Error }) {
   const locale = resolveLocale(navigator.languages ?? [navigator.language]);
   return <I18nProvider locale={locale}><div className="relative h-svh overflow-hidden bg-background">{error && isEngineGone(error)
     ? <EngineStopped locale={locale} refused={isEngineRefused(error)} />
-    : error ? <EmptyState icon={FileWarning} title={translateIn(locale, 'app.start.notAnswering')} description={error.message} tone="warn" />
+    : error ? <EmptyState title={translateIn(locale, 'app.start.notAnswering')} description={error.message} />
     : <ViewerLoadingOverlay viewerLoading />}</div></I18nProvider>;
 }
 

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ExportControls } from '../export/ExportControls.js';
-import { FileWarning } from 'lucide-react';
 import type { CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
@@ -250,7 +249,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
       ? <MissingCadFile file={path} entry={entry} reload={reload} action={goHome}
         title={isDocumentId(path) ? t(NOT_HELD_TITLES[String((error as { state?: unknown } | null)?.state)] ?? "file.notHeld") : t("file.missing")}
         description={isDocumentId(path) ? message : undefined} />
-      : <EmptyState icon={FileWarning} title={t("file.openFailed")} description={message} tone="warn" action={goHome} />,
+      : <EmptyState title={t("file.openFailed")} description={message} action={goHome} />,
   }), [library, layout, changeLayout, path, picture, host.fileActions, entry, goHome, t, settings.viewportBackground]);
   // What a person does on the screen is counted for the host (`usage/controls.js`); never what a picture drawn
   // out of sight does, which is outside it.
