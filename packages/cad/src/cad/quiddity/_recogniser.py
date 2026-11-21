@@ -5,7 +5,8 @@ one module that imports quiddity. It speaks frames on its standard input and out
 
 * out, first: ``{"quiddity": "<its version>"}`` once quiddity is imported, or ``{"reason": "not_installed",
   "detail": ...}`` where this Python has none, and it ends;
-* in: one part's STEP, its bytes; an empty frame, or the end of the input, ends it;
+* in: one part's STEP, its bytes; an empty frame, or the end of the input, ends it at once, in the middle of a
+  part too, so a recogniser never outlives the process that asked it;
 * out, for each: ``{"document": <quiddity's recognition document>, "anchors": <its anchors>}``, both quiddity's
   own, untouched (``quiddity.recognise``'s ``document``; ``quiddity.anchors``: a point it proves on each face, by
   which the parent checks whose face is whose), or ``{"reason": "refused" | "failed", "detail": ...}``: quiddity's
@@ -20,7 +21,9 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import sys
+import threading
 from typing import Any
 
 from cad.quiddity._frames import read, send
@@ -57,11 +60,18 @@ def main() -> int:
         send(frames_out, {"reason": "not_installed", "detail": f"{type(error).__name__}: {error}"})
         return 0
     send(frames_out, {"quiddity": str(quiddity.__version__)})
+    parts: queue.SimpleQueue[bytes] = queue.SimpleQueue()
+
+    def handed() -> None:
+        """Each part as it is handed over; at the input's end the process ends at once, whatever quiddity is in
+        the middle of: its asker is gone, or done, and no answer has anyone to read it."""
+        while step := read(frames_in):
+            parts.put(step)
+        os._exit(0)
+
+    threading.Thread(target=handed, name="cad-quiddity-parts", daemon=True).start()
     while True:
-        step = read(frames_in)
-        if not step:
-            return 0
-        send(frames_out, _one(quiddity, step))
+        send(frames_out, _one(quiddity, parts.get()))
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ quiddity is a stand-in (``tests/python/support/quiddity_stand_in.py``).
 from __future__ import annotations
 
 import importlib.util
+import sys
 import tomllib
 import unittest
 from typing import Any
@@ -45,6 +46,17 @@ class ProcessTest(StandIn):
         self.assertRegex(answered[5]["detail"], r"^quiddity's process ended while it had the part \(exit 7\)")
         self.assertEqual(answered[6], good)
         self.assertEqual(answered[7], {"reason": "refused", "detail": "an empty STEP", "quiddity": "0.0.0"})
+
+    def test_a_recogniser_ends_with_its_asker_in_the_middle_of_a_part_too(self) -> None:
+        self.stand_in(STAND_IN)
+        child = _process._Child(sys.executable, _process._child_env(repo_path("packages", "cad", "src")))
+        self.addCleanup(child.end, kill=True)
+        self.assertEqual(child.frame(_process.READY_S), {"quiddity": "0.0.0"})
+        self.assertTrue(child.hand(b"hang"))
+        # Its asker goes, with no word and no kill: the pipe closes, and the part it would never finish with it.
+        child.process.stdin.close()
+        self.assertEqual(child.process.wait(timeout=_process.READY_S), 0)
+        self.assertIsNone(child.frame(_process.READY_S), "no answer, and its output's end")
 
     def test_an_import_that_fails_is_said_once_and_no_process_is_started_again(self) -> None:
         self.stand_in(UNIMPORTABLE)

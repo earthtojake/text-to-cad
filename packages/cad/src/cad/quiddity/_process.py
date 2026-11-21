@@ -9,7 +9,8 @@ imports quiddity: the recogniser is a child interpreter (``python -m cad.quiddit
 quiddity alone), handed each part's STEP over a pipe and answering each in turn, nothing written to disk. A part
 it has not answered ``timeout_s`` after it was asked is given up: the child is stopped, that part says
 ``timed_out``, and the parts after it go to a new child. A child that ends while a part is with it says
-``stopped``, with the end of what it printed, and the rest go to a new one likewise.
+``stopped``, with the end of what it printed, and the rest go to a new one likewise. A child ends with its
+input: one whose asker has gone, however it went, stops in the middle of whatever part it has.
 
 **Where quiddity is.** An integration runs where its extra is installed: the child is this interpreter where this
 environment holds quiddity (one installed with ``cad[quiddity]``, a checkout's development environment), else the
