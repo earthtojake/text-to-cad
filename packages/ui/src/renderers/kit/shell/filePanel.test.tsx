@@ -77,13 +77,13 @@ it("each file keeps its own panel — open or closed, its width, its tab — and
   stackWrites.length = 0;
   const kept = { state: {} };
   let page = tab(kept);
-  expect(await panel()).toEqual({ open: true, width: 256, tab: null });
+  expect(await panel()).toEqual({ open: true, width: 232, tab: null });
   press('300'); press('layers'); press('toggle');
   expect(await panel()).toEqual({ open: false, width: 300, tab: 'layers' });
   // Another file: its own panel, at the defaults, not the first file's.
   await page.show(B);
   await screen.findByTestId('panel');
-  expect(await panel()).toEqual({ open: true, width: 256, tab: null });
+  expect(await panel()).toEqual({ open: true, width: 232, tab: null });
   press('260');
   expect(await panel()).toEqual({ open: true, width: 260, tab: null });
   // Each is in its own file's view, and nothing in the tab's settings.
@@ -165,9 +165,9 @@ it("draws one width at every view width; the grip alone leaves the model 640px",
     return <div ref={frameRef} data-frame=""><output data-testid="width">{flat.width}</output><output data-testid="max">{flat.maxWidth}</output></div>;
   }
   render(<Capped />);
-  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['256', '384']);
+  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['232', '384']);
   resize(700);
-  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['256', '200']);
+  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['232', '200']);
   resize(1440);
-  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['256', '800']);
+  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['232', '800']);
 });

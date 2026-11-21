@@ -167,10 +167,14 @@ async function tabIds(pane) {
     [...new Set(nodes.map(node => node.getAttribute('data-flat-panel-section') || node.id.replace(/^flat-panel-body-/, '')).filter(Boolean))]);
 }
 async function chooseTab(page, pane, id) {
+  // The row's fit settles after a choice (a tab from ⋯ takes the last shown one's place): read it once it has.
+  await settle(page);
   const tab = pane.locator(`[data-flat-panel] [data-flat-panel-tab="${id}"]`);
   if (await tab.count()) { await tab.click(); return; }
   const more = pane.locator('[data-flat-panel] [data-flat-panel-more]');
   if (await more.count()) {
+    // A menu still closing from the last choice takes no press: open it once it has gone.
+    await page.locator('[data-flat-panel-more-menu]').waitFor({ state: 'detached' });
     await more.click();
     await page.locator(`[data-flat-panel-more-tab="${id}"]`).click();
   }
@@ -194,7 +198,8 @@ function offInset({ clientWidth, items }) {
   }
   const lines = Map.groupBy(items.filter(item => item.kind !== 'box'), item => `${item.where}@${item.line}`);
   for (const line of lines.values()) {
-    const last = line.filter(item => !item.held).reduce((a, b) => (b.right > a.right ? b : a), { right: -Infinity });
+    // A row's words (its name, its count) run on from its glyph: only its actions end on the right inset.
+    const last = line.filter(item => !item.held && !(item.kind === 'text' && item.path.includes('row'))).reduce((a, b) => (b.right > a.right ? b : a), { right: -Infinity });
     if (last.left > clientWidth / 2 && !near(last.right, right)) off.push(['a line not ending on the right inset', last]);
     // A line of one text ending on the right inset is right-aligned (Parameters' status over Reset and Save).
     const first = line.reduce((a, b) => (b.left < a.left ? b : a));
@@ -232,7 +237,7 @@ for (const file of Object.keys(FILES)) {
     const { page, pane, errors } = await open(t, file);
     for (const { tab, clientWidth, items } of await report(page, pane, file)) {
       assert.ok(items.length > 0, `${file}, ${tab}: something measured`);
-      assert.equal(clientWidth, 255, `${file}, ${tab}: the 256px panel, inside its 1px rule`);
+      assert.equal(clientWidth, 231, `${file}, ${tab}: the 232px panel, inside its 1px rule`);
       assert.deepEqual(offInset({ clientWidth, items }), [], `${file}, ${tab}: every piece on the inset`);
     }
     // The navbar's panel toggle's icon, over the panel, on the same line.
@@ -259,7 +264,7 @@ for (const file of Object.keys(FILES)) {
       await pane.locator('aside[data-panel-peek]').waitFor();
       await settle(page);
       const peeked = await page.evaluate(measurePanel);
-      assert.deepEqual([peeked.clientWidth, offInset(peeked)], [255, []], 'the peeked panel on the inset');
+      assert.deepEqual([peeked.clientWidth, offInset(peeked)], [231, []], 'the peeked panel on the inset');
       assert.ok((await gaps()).every(gap => gap >= 2), `peeked, a card clear of the frame's edges: ${await gaps()}`);
       // The same tab's content, where the pinned panel drew it.
       const at = ({ items }) => items.filter(item => item.where === 'body' || item.path === 'tab').map(item => [item.text, item.kind, Math.round(item.left * 2) / 2, item.line]);

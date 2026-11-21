@@ -225,12 +225,14 @@ function HarnessSurface({ view, data }) {
     </TreeRowSurface>
   </li>)}</ul>;
   // The view's panel: a tree, a Reference and, while posing, Position; the tool stack: the kept panel.
-  // `panel-qdd.harness` is the qdd actuator's four tabs, in English: Model, Params, Joints and Motion (a mechanism's).
+  // `panel-qdd.harness` is the qdd actuator's four tabs, in English: Model, Params, Joints and Motion (a mechanism's);
+  // `panel-qdd-three.harness` the widest three of them a model can have, Model, Params and Motion.
   const qdd = view.file.name.startsWith("panel-qdd");
+  const three = view.file.name.startsWith("panel-qdd-three");
   const sidebar = qdd ? <>
       <ToolPanel id="tree" title="Model" label="Harness tree" fit="tree" collapsible={false}>{realRows(12, "Row")}</ToolPanel>
       <ToolPanel id="parameters" title="Params" label="Harness parameters" fit="details">{rows(4, "Param")}</ToolPanel>
-      <ToolPanel id="position" title="Joints" label="Harness position" fit="details" collapsible={false}>{rows(4, "Joint")}</ToolPanel>
+      {three ? null : <ToolPanel id="position" title="Joints" label="Harness position" fit="details" collapsible={false}>{rows(4, "Joint")}</ToolPanel>}
       <ToolPanel id="animation" title="Motion" label="Harness animation" fit="details">{rows(2, "Clip")}</ToolPanel>
     </> : withPanel ? <>
       <ToolPanel id="tree" label="Harness tree" fit="tree" resizable collapsible={false}

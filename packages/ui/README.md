@@ -295,7 +295,7 @@ Edit's chip list (each reference its kind and key facts: `kit/inspector/inspect.
 the canvas is the frame's (`kit/shell/ViewFrame.jsx`). Pinned open, the panel always pushes the model aside; collapsed, a mouse
 resting on its toggle peeks it over the model, a floating card 4px in from the edges, its content where the docked
 panel's is, pushing nothing, kept nowhere and pinned only by the toggle (`kit/shell/usePanelPeek.js`); a view
-that would leave the model under 640px beside it starts it collapsed, never written (`kit/shell/sidebars.js`); it is 256px wide until its grip
+that would leave the model under 640px beside it starts it collapsed, never written (`kit/shell/sidebars.js`); it is 232px wide (budgeted for three tabs) until its grip
 sets another width, its toggle the navbar's first control, before the logo (`file-viewer/panelToggles.js`; ⌘\); on a
 phone the toggle opens it as a sheet from the left (`primitives/sheet.jsx`).
 Its tabs stay mounted, so a tree keeps its scroll and expansion;

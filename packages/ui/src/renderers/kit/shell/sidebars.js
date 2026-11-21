@@ -7,7 +7,7 @@
 //   model centred in what is left). The one thing that overlays the model is a peek of the collapsed panel, a mouse
 //   resting on its toggle (`usePanelPeek.js`), which this module never sees: it pushes nothing and is kept nowhere.
 // - It starts open only where the model keeps `MIN_MODEL_WIDTH` beside it (the view at least that and the panel's width:
-//   896px with the 256px panel), and collapsed below. That collapse is the width's, never
+//   872px with the 232px panel), and collapsed below. That collapse is the width's, never
 //   written, so widening the view brings back the person's choice. Opened over it by the person, it pushes (kept for
 //   now, nowhere else: `opened`).
 // - What is kept is what the person chose (opened or closed it), for the file, for this browser session
@@ -19,9 +19,12 @@
 export const MIN_MODEL_WIDTH = 640;
 /**
  * The panel's width where none is given (`FlatPanel.jsx`'s `FLAT_PANEL_DEFAULT_WIDTH`): one fixed number, never the
- * view's or the tabs', room for the usual tabs (Model, Params, Joints, Motion) and the search's icon without the ⋯.
+ * view's or the tabs', budgeted for three tabs: the least width on the 8px grid where every three tabs a file can have
+ * (a model's Model and two of Params, Joints and Motion; a board's Parts, Nets and Layers; a schematic's Parts, Nets and
+ * Hierarchy) stand in English beside the search's icon with no ⋯ (the widest, Model, Params and Motion, needs 225px). A
+ * fourth tab is ⋯'s.
  */
-export const DEFAULT_PANEL_WIDTH = 256;
+export const DEFAULT_PANEL_WIDTH = 232;
 
 /**
  * Whether the view's width collapses the panel on its own: open, it would leave the model under `MIN_MODEL_WIDTH`

@@ -837,7 +837,7 @@ structure. Every rule here, and why:
 - **Pinned, it always pushes.** Open, it takes its width beside the model, the model's area the narrower for it (the
   model centred in what is left); nothing pinned overlays the model at any width, and Escape and a press on the model
   mean what they always mean. **A peek is the one thing that overlays**: it floats over the view at the docked panel's
-  place and width (the file's, or the 256px default) and pushes nothing — the canvas keeps its size and the camera does
+  place and width (the file's, or the 232px default) and pushes nothing — the canvas keeps its size and the camera does
   not move — because a glance at the tree should not resize the picture; the strip and Quick Edit stay centred on the
   window, over it, as over the docked panel. **A peek is a card**, so it reads as hovering, as Codex's and other apps'
   unpinned sidebars do: its surface stands 4px in (`PanelSurface.jsx`'s `PANEL_PEEK_GAP_PX`) from the window's left
@@ -849,7 +849,7 @@ structure. Every rule here, and why:
   card, clipped to its rounded inside; 4px leaves a row's fill, 8px out from the content line, 3px of the card's inside
   at the left and 4px at the right. Pinned, the panel is as it always was: full height, touching the edges, its rule at
   its right. **A narrow pane starts it collapsed**: it starts open only where the model's area keeps 640px beside
-  it (`sidebars.js`'s `MIN_MODEL_WIDTH`), so the view at least 640px and the panel's width (896px with the 256px
+  it (`sidebars.js`'s `MIN_MODEL_WIDTH`), so the view at least 640px and the panel's width (872px with the 232px
   panel), and collapsed below. **That
   collapse isn't remembered**, so widening the view brings back the person's choice; opened over it, it pushes. The
   strip and Quick Edit stay centred on the window, over the panel (the hard rule above).
@@ -894,12 +894,16 @@ structure. Every rule here, and why:
   between the last tab shown and ⋯. No other button stands in it (the panel's toggle is the navbar's,
   [The panel](#the-panel)). The row is 32px, 8px over it and 8px under it to its rule, which runs the panel's width: the
   rule stands on the strip's bottom line (the strip 8px down and 40px tall). **A tab never shrinks, and the panel keeps
-  its width**: the tabs keep their whole width and padding (no truncation, no ellipsis, no wrap). The qdd actuator's
-  four (Model, Params, Joints, Animation) fit the 256px panel in English; **the tabs that do not fit are ⋯'s items**
+  its width**: the tabs keep their whole width and padding (no truncation, no ellipsis, no wrap). **The panel is
+  budgeted for three tabs**: a file seldom has four at once, so every three a file can have — a model's Model and two of
+  Params, Joints and Motion, a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy — fit the default
+  width in English beside the search's icon, the widest (Model, Params, Motion) with 7.5px to spare; a fourth, and a
+  translation that runs longer (Japanese's model tabs), is ⋯'s. **The tabs that do not fit are ⋯'s items**
   (`FlatPanel.jsx`'s `fitTabs`, measured on a hidden ruler of every tab and the row's own width as a ResizeObserver
   sees them, no fixed breakpoint), in order, each with its icon (and, searching, its count); **the open tab always
   shows**: where it would be in ⋯ it takes the last shown tab's place. Nothing in the row scrolls. The panel's width is
-  its own: one fixed default (256px, `sidebars.js`'s `DEFAULT_PANEL_WIDTH`), or what the person's grip set it to, never
+  its own: one fixed default (232px, `sidebars.js`'s `DEFAULT_PANEL_WIDTH`: the least width on the 8px grid where every
+  three tabs fit, so the panel takes no more of the model than three need), or what the person's grip set it to, never
   the view's or what the tabs need; the grip alone is bounded as it moves (200px, and the model kept 640px). A narrow
   view collapses the panel; it never shrinks it.
 - **A tab's changed dot**: Params, Joints and Animation carry a dot (`kit/tools/ChangedDot.jsx`: 4px, `--brand-icon`)
@@ -925,12 +929,13 @@ structure. Every rule here, and why:
   the tab's place, and no rule under the head, so the title flows straight into its list. **The title is a list row**:
   the head 28px tall (a row's height, not the 32px tab row), 8px over it and nothing under it (`PanelSurface`'s
   `headCompact`), its name on the rows' icons' line, the panel's inset where a row's chevron or icon starts (the head's
-  padding, the inset less 5px, and the title's own 5px, a pill's), and the list 4px under it (the
+  padding, the inset less 8px, and the title's own 8px, a pill's), and the list 4px under it (the
   body's `pt-1`), so no gap stands between the title and its first row. The search's icon stands at the row's right
   end. Several tabs are pills over the rule.
-- **Its tabs**, the head's row, pills as Figma's right panel draws them (Design / Prototype): 28px, 5px
-  of padding either side and 2px between pills (Model, Params, Joints and Motion, with the search's icon, fit the 256px
-  panel; at the grip's 200px the last go into ⋯), the first pill's box 5px before the inset so its name stands on it,
+- **Its tabs**, the head's row, pills as Figma's right panel draws them (Design / Prototype), with Figma's room: 28px, 8px
+  of padding either side and 4px between pills, so two names stand 20px apart (`FlatPanel.jsx`'s `TAB_PAD_PX`,
+  `TAB_GAP_PX`); three fit the 232px panel, and at the grip's 200px the last go into ⋯. The first pill's box hangs 8px
+  out past the inset, as a selected row's fill does, so its name stands on it,
   the search's icon (in its 28px button, 7px of it either side) ending on the right inset; the open one a rounded pill on the accent's subtle fill, its name the foreground's at
   medium weight, the others muted on no fill (the accent's half fill and the foreground on hover); each as
   wide as its name in medium weight, so choosing one moves nothing; the head's rule 8px under them; a board's **Parts**, **Nets** then **Layers**, a schematic's **Parts**, **Nets** then, for more than one
@@ -944,7 +949,7 @@ structure. Every rule here, and why:
   file's name over its parameters, a status line ("12 matches", "Saved"), a settings label; a value, a switch and a
   row's last action end on the right inset — and so does the navbar's panel toggle's icon, over it. A box drawn round
   what is read hangs out past the inset by its own padding, so what it holds stays on it: a row's fill (hover,
-  selected) by half the inset (8px in from the panel's edge), a tab's pill by its 5px, the head's icon buttons and a
+  selected) by half the inset (8px in from the panel's edge), a tab's pill by its 8px, the head's icon buttons and a
   number field's outline by their 7px. The panel owns the line: its body pads by the inset, and it sets the rows'
   `--tree-row-pad` and `--tree-row-hang` (half the inset) and `--tree-row-actions-pad` (half the inset less 2px), which
   the one row reads (`PanelSurface.jsx`, `primitives/tree-row.jsx`); no section and no list pads itself. Every rule runs the
@@ -1102,7 +1107,7 @@ structure. Every rule here, and why:
   reveal on a hover of the view's edge, and a pick on the picture never opens it; a mouse resting on its toggle peeks it,
   over the view and pushing nothing, until the pointer has left both ([The panel](#the-panel)).
   ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search with the keyboard in the box, while the view has
-  the keyboard. Docked, open or collapsed is the person's, and so is its width (256px at first; from a grip on its
+  the keyboard. Docked, open or collapsed is the person's, and so is its width (232px at first; from a grip on its
   right edge, Left/Right by 16px, from 200px to what leaves the model 640px, and, before the view is measured, no
   wider than it is). **All of the panel's state is
   the file's**, as its camera and its layers are: open or collapsed, the width and the tab are kept in
@@ -1179,7 +1184,7 @@ slot (`TreeRowGlyph`, `TreeRowToggle`), its name and detail (`TreeRowName`, `Tre
 (`TreeRowActions`); a heading over a run of rows (`TreeRowHeading`); a long list mounted as it scrolls
 (`VirtualRows`); a search's lit match (`TreeFilterHighlight`, `TreeFilterMatch` for a plain substring
 search) and its count (`TreeSearchStatus`). No view sets a text size of its own (`text-tiny`,
-`text-ui`): every row, detail, count and heading is the panel's 12px (`tree-row.test.tsx` holds it). In the panel's numbers (256px wide, its body padded by the inset, 16px):
+`text-ui`): every row, detail, count and heading is the panel's 12px (`tree-row.test.tsx` holds it). In the panel's numbers (232px wide, its body padded by the inset, 16px):
 
 - **The box**: 28px (36px on a phone), the background 8px from each edge, its radius and its hover,
   selected and cursor fills; the panel's 12px text (`dense`), the name at full strength.
