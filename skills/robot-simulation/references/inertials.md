@@ -71,7 +71,7 @@ sub-assembly with the datasheet's weight, or `point_mass()` where the CAD leaves
 ## When Inertials Are Required
 
 - Simulation and dynamics consumers (MuJoCo and other physics engines, torque control): every physical link needs a valid `inertial`. Inertial data is simulation-critical: very small, zero, negative, or guessed inertias are high risk.
-- Visualization-only or kinematics-only consumers (RViz, CAD Viewer, MoveIt kinematic planning): inertials are optional but still recommended so the model stays simulator-ready.
+- Visualization-only or kinematics-only consumers (RViz, the viewer, MoveIt kinematic planning): inertials are optional but still recommended so the model stays simulator-ready.
 - Frame-only links (`base_footprint`, optical frames, TCP markers): intentionally omit `inertial` and mark the link frame-only in the ledger.
 
 Do not give movable physical links zero or missing mass for a simulation target; most engines misbehave. If mass is unknown, use a documented assumed density or assumed total mass distributed by volume, and say so in the ledger: a split by volume puts each link's centre of mass too far from its joints where the hardware's mass is in its motors ([A Link Drawn as One Plain Solid](#a-link-drawn-as-one-plain-solid)).
