@@ -170,7 +170,8 @@ The web page uses bounded version waits; the MCP page asks with `wait=0` so a
 version check occupies no host call slot while waiting for an edit. The same
 router handles reads tunneled through `cad_http`, in process. Document buffers
 and routes retain the raw-file response headers and engine authentication.
-The wire format is the engine README's **Wire format** section.
+The wire format is the engine's **Wire format** page
+(`packages/cad/src/cad_server/engine/docs/wire-format.md`).
 
 The browser host constructs a `CadClient` from `@cad/core/client` and
 injects it into the viewer renderers. Catalog subscriptions share the client's

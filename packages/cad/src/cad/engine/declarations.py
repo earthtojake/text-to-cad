@@ -12,7 +12,7 @@ drive of every revolute or linear joint of that label on the assembly or below i
 (a revolute joint) or N (a linear one), its speed in rad/s or m/s, SI as the description is: the
 drive's data sheet. ISO 10303-105 names which values a pair is driven in (``actuated_kinematic_pair``)
 and no bound on the drive, so the limits are a fact of the machine that is not kinematics, which is
-why they are declared here and not in the AP242 mechanism (the package's law 13).
+why they are declared here and not in the AP242 mechanism (the package's law 12).
 
 **Mass.** ``mass(shape, grams)`` says what a part or an assembly weighs, all of it: its solids keep
 the density ratios their materials give them and are scaled alike until they, with every point mass

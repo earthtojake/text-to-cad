@@ -566,8 +566,7 @@ scripts/install/dev_install.py codex          # run it in the Codex app
 `scripts/test/test-js.sh --select mcp` is what CI runs: the type check, the tests,
 then the build. A build names itself in the app menu (`vite.config.mjs`, through
 `@cad/ui/build-id`): the release's own build shows `v<VERSION>`, any other
-`v<VERSION>-dev.<commit>`, the commit of the checkout it was built from. Every host
-`dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent Apps"). A checkout's `cad mcp` serves `apps/mcp/dist` when it exists
+`v<VERSION>-dev.<commit>`, the commit of the checkout it was built from. `scripts/install/dev_install.py --help` lists every host it takes (CONTRIBUTING.md, "Test In Agent Apps"). A checkout's `cad mcp` serves `apps/mcp/dist` when it exists
 (`CAD_MCP_APP_DIR` overrides it); a wheel serves `cad_server/_runtime/mcp`,
 built by `scripts/bundle/bundle.sh`.
 

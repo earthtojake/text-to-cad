@@ -5,7 +5,7 @@ command, what `cad run` runs a program in, and setting up and updating as 0.11.0
 How text-to-cad installs and updates today is in [docs/install.md](../install.md); the releases after
 0.11.11 need no migration.
 
-Each change names its tier of the compatibility law ([law 15](../../packages/cad/README.md#the-design-laws),
+Each change names its tier of the compatibility law ([law 14](../../packages/cad/README.md#the-design-laws),
 "Compatibility, by who pays for a break"), which says what a change of its kind keeps working.
 
 ## The skills (tier 1)

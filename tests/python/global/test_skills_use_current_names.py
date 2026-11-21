@@ -1,7 +1,7 @@
 """Skills spell the library's names as they are now: no alias of the library's earlier spellings.
 
 An alias (``cad._internal.aliases``) is kept out of every document but the migration guide, and an agent
-reads the skills each session, so they cut over hard (law 15). The table is read from its source with
+reads the skills each session, so they cut over hard (law 14). The table is read from its source with
 ``ast``, nothing imported: an alias added to it is held out of every skill the moment it is added.
 """
 
