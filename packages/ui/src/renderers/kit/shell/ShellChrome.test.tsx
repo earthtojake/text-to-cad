@@ -670,6 +670,8 @@ it("Preview is in Render: the strip, the view's controls, the stack and the pane
   // The editor's viewport as the view has settled: its pending view update applied (the stand-in acknowledges it at once).
   await act(async () => { await Promise.resolve(); });
   const editor = viewportProps.current;
+  // View's cube, as its button wears it before Preview: Preview settings wears the same one.
+  const cube = document.querySelector('[data-view-menu] svg')!.innerHTML;
   await enterPreview(user);
   const chrome = document.querySelector<HTMLElement>('[data-preview-chrome]')!;
   expect([chrome.hidden, chrome.hasAttribute('inert')]).toEqual([true, true]);
@@ -688,6 +690,7 @@ it("Preview is in Render: the strip, the view's controls, the stack and the pane
   expect(previewBar()!.className).toMatch(/\bh-10\b/);
   const corner = previewBar()!;
   expect(within(corner).getByRole('button', { name: 'Exit preview' }).querySelector('svg.lucide-x')).not.toBeNull();
+  expect(within(corner).getByRole('button', { name: 'Preview settings' }).querySelector('svg')!.innerHTML).toBe(cube);
   // Preview draws Render in a view of its own; the editor's viewport is asked for nothing new.
   expect([inPreview(), previewProps.current.renderMode, previewProps.current.projection, viewportProps.current.renderMode]).toEqual([true, true, 'perspective', false]);
   const unchanged = () => ['renderMode', 'renderConfiguration', 'displaySettings', 'quality', 'projection', 'themeSettings', 'appearance']

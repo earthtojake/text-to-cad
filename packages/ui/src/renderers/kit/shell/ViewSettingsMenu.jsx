@@ -79,9 +79,9 @@ function groupStates(groups) {
 /**
  * View's icon, a cube on every file: the projection on screen's (the Perspective or Orthographic cube its options wear;
  * projection is the setting changed most), and the plain cube, Orthographic's, where the view has no projection (a
- * board in 2D, a schematic, a drawing).
+ * board in 2D, a schematic, a drawing). Preview's bar's settings toggle wears the same one (`usePreviewFrame.jsx`).
  */
-function currentIcon(groups) {
+export function viewIcon(groups) {
   const projection = groups.find(group => group.id === "projection");
   return projection?.options.find(option => option.value === projection.value)?.Icon || OrthographicProjectionIcon;
 }
@@ -119,7 +119,7 @@ function ViewChoice({ group, mobile, boundary }) {
 
 /**
  * **View**: how the picture is looked at, the navbar's one button for every kind of file (`NavbarViewControls.jsx`), left
- * of Preview; outside a navbar, a tile at the strip's end (`StripViewMenu`). Its icon is a cube (`currentIcon`), no
+ * of Preview; outside a navbar, a tile at the strip's end (`StripViewMenu`). Its icon is a cube (`viewIcon`), no
  * chevron, its name and tooltip "View" (no tooltip on a phone). One stock DropdownMenu under it, on a desktop and on a
  * phone alike: each choice a submenu (a 3D view's Projection ▸, Display ▸, Background ▸; a board's Side ▸, Mode ▸,
  * Display ▸, in 3D Projection ▸, and Background ▸; a drawing's Background ▸), its row the group's name with, muted at
@@ -146,7 +146,7 @@ export function ViewMenu({ groups, onReset = null, disabled = false, boundary = 
     onOpenChange?.(open);
   };
   if (!groups.length && !reset) return null;
-  const Icon = currentIcon(groups);
+  const Icon = viewIcon(groups);
   const display = groups.find(group => group.id === "display");
   const choices = groups.filter(group => !group.toggle), toggles = groups.filter(group => group.toggle);
   return <DropdownMenu modal={false} onOpenChange={openChange}>

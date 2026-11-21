@@ -183,6 +183,8 @@ function PreviewBar({ name, controls, idle, scheme }) {
     className={cn("pointer-events-none absolute inset-x-0 top-0 z-30 flex h-10 items-center justify-between gap-2 px-2", scheme, PREVIEW_FADE_CLASS,
       shown ? "opacity-100" : "opacity-0")}>
     <span data-preview-name="" className={cn("min-w-0 truncate px-1 text-sm text-muted-foreground [text-shadow:0_0_6px_var(--background)]", reach)}>{name}</span>
-    {controls ? <div data-preview-controls="" className={cn("flex shrink-0 items-center gap-1", reach)}>{controls}</div> : null}
+    {/* Its controls stand where the navbar's view buttons stood (`NavbarViewControls.jsx`): 2px apart, so Preview
+        settings' cube is where View's was. */}
+    {controls ? <div data-preview-controls="" className={cn("flex shrink-0 items-center gap-0.5", reach)}>{controls}</div> : null}
   </div>;
 }

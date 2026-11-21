@@ -14,7 +14,7 @@ import AnimationSection from "../tools/playbar/AnimationSection.jsx";
 import { DisplayMenuItems } from "./DisplayPopover.jsx";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import NavbarViewControls, { useNavbarViewControls } from "./NavbarViewControls.jsx";
-import { StripViewMenu, ViewMenu, viewGroups3d } from "./ViewSettingsMenu.jsx";
+import { StripViewMenu, ViewMenu, viewGroups3d, viewIcon } from "./ViewSettingsMenu.jsx";
 import { animationControlsHaveContent } from "../tools/playbar/AnimationTimeControl.js";
 import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
 import ShellViewport from "./ShellViewport.jsx";
@@ -235,6 +235,8 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     // Over a mark or a measurement the part under it hears nothing of the pointer.
     if (over) event.stopPropagation();
   };
+  // The view's settings as View draws them (`ViewSettingsMenu.jsx`), and the cube its button wears: Preview settings' too.
+  const viewGroups = viewGroups3d({ mode: frame.displayMode, projection: frame.projection, grid: frame.grid, background: frame.background, t, used: controls.used });
   // Preview's frame (`usePreviewFrame.jsx`): its cover, entering and leaving it, the host's navbar stepping aside, its
   // bar and settings panel, its view over the editor's (`PreviewView.jsx`) and its button. What moves its picture on
   // purpose is its Orbit, or its routine playing.
@@ -242,7 +244,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     stageColor: frame.stageColor, viewportScheme: frame.viewport.scheme, View: PreviewView, view: previewView, desired: frame.previewDesiredScene,
     sceneScaleMode: frame.sceneScaleMode, viewRef: frame.previewViewRef, moving: shell.orbiting || previewView?.animation?.playing === true,
     orbit: orbitPlaying, onOrbitChange: shell.setOrbiting, orbitSpeed: frame.previewOrbitSpeed, onOrbitSpeedChange: frame.setPreviewOrbitSpeed,
-    render: frame.previewSettings, disabled: shell.idle, mobile });
+    render: frame.previewSettings, disabled: shell.idle, mobile, ViewIcon: viewIcon(viewGroups) });
   const previewIdle = previewFrame.idle, previewScheme = previewFrame.scheme;
   // The drawing tools' sub-toolbar, one row under the strip while Draw is the tool: what it draws with, what the next mark
   // looks like, and Undo, Redo and Clear (`annotation/toolbar.jsx`). The annotation itself has no
@@ -344,7 +346,6 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const inNavbar = useNavbarViewControls();
   // Display's mode on screen, as its More row's icon on a phone with no navbar.
   const DisplayIcon = (frame.displayMode?.options?.find(option => option.value === frame.displayMode.value) || frame.displayMode?.options?.[0])?.Icon;
-  const viewGroups = viewGroups3d({ mode: frame.displayMode, projection: frame.projection, grid: frame.grid, background: frame.background, t, used: controls.used });
   const viewControls = shell.previewable && !previewing;
   const viewSettings = viewControls && inNavbar ? <NavbarViewControls>
     <ViewMenu groups={viewGroups} onReset={goHome} disabled={shell.idle} boundary={frame.hostElement} />

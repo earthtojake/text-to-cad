@@ -324,6 +324,13 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 - **Preview** is the navbar's last view button under a file's navbar (`data-view-preview`), right of View, a phone's too; elsewhere it ends the tool strip, after View, for a 3D file and for a board (`data-view-controls`, `FloatingToolBar`'s `views`):
   lucide's Play (a play triangle), the way into Preview — a mode of the whole view, not a setting of it. It
   is no tool: pressing it leaves the tool in hand as it is. Outside a navbar, on a phone it is a row of the strip's More.
+  **View's cube and Preview's triangle are one pair, drawn to one optical size** (`kit/shell/PreviewIcon.jsx`,
+  `kit/camera/ProjectionModeIcons.js`): both on a 24-unit grid in the same icon box (16px in the navbar and on the
+  strip, a touch strip's 18px), both in the cube's stroke (1.45 units: 0.97px at 16px, where lucide's own 2 would be
+  1.33px), the triangle at 15/16 of lucide's size so its drawn height is the cube's (12.5px of ink each at 16px; its
+  width 11.25px to the cube's 12px), each centred in its 28px tile (the triangle a little right of centre, as lucide
+  places it, where its weight reads centred), the tiles 2px apart. Lucide's Play as it comes stood a pixel taller and
+  a third heavier than the cube beside it.
 - **The view's corner** (`kit/shell/ViewCorner.jsx`), at the **top-right**, is where the picture is
   looked at from, never a tool. A **3D view's** is the cube: its faces,
   edges and corners turn the view, its darker right-front-top corner to the usual isometric view, and Zoom to
@@ -2010,8 +2017,12 @@ inert); leaving Preview gives the host's chrome back as it was.
 
 In the navbar's place, over the view's top edge, is **Preview's bar**: the navbar's row (40px, a
 phone's 48px) on no surface, the model showing through, with the file's or model's name at its
-left as plain words, muted as its controls are (no logo, menu, dropdown or glyph), and at its right **Preview settings** (a
-sliders icon, pressed while its panel is open, a second press closing it) and the way out, an X
+left as plain words, muted as its controls are (no logo, menu, dropdown or glyph), and at its right **Preview settings** (View's
+cube, the one the file's View button wears — the projection's, or the plain cube where the view has none
+(`ViewSettingsMenu.jsx`'s `viewIcon`) — at View's size, 16px in a 28px tile, and in View's place: 2px left of the
+bar's last control, as View stands 2px left of Preview in the navbar, so the cube does not move as Preview opens;
+how the picture is looked at is the cube's, in Preview as outside it; its name and tooltip stay "Preview settings";
+pressed while its panel is open, a second press closing it) and the way out, an X
 (**Exit preview**), their hints below them; nothing else, in every host (no Full size,
 no Quick Edit). **It and the playbar are drawn in the backdrop's ink, never the app's** (`PreviewChrome.jsx`'s
 `backdropScheme`: the `.light` or `.dark` token scope by Preview's Background colour, else the viewport's canvas),

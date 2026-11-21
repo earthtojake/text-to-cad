@@ -20,6 +20,7 @@ import { promptView } from "../../annotation/views.js";
 import FlatViewFrame, { flatViewTools } from "../kit/shell/FlatViewFrame.jsx";
 import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
 import { useFlatPreview } from "../kit/shell/useFlatPreview.jsx";
+import { projectionGroup, viewIcon } from "../kit/shell/ViewSettingsMenu.jsx";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
 import { exitIsolateEntry, menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
@@ -233,7 +234,9 @@ function BoardSurface({ view, data }) {
   [previewable, previewLayout, previewOutline, thickness, boardParts, models, previewClient, showModels, colorScheme, previewComplete]);
   const preview = useFlatPreview({ fileView: view, modelKey: file, viewport, restored: stored, View: BoardPreview, view: previewView,
     stageColor: boardPalette(colorScheme).background, sceneScaleMode: VIEWER_SCENE_SCALE.CAD, offered: previewable, available: previewable && shown, mobile,
-    partColours: false, onRecordChange: save });
+    partColours: false, onRecordChange: save,
+    // Preview settings wears View's cube: the 3D camera's projection's while the board is in 3D, the plain one in 2D.
+    ViewIcon: viewIcon([projectionGroup(previewable && dimension === "3d" ? { value: projection } : null)].filter(Boolean)) });
   const previewing = preview.previewing;
 
   // ---- tools ----------------------------------------------------------------

@@ -463,7 +463,9 @@ test('Preview draws the board lit in a view of its own: its cover lifts on the s
   await pane.locator('[data-navbar-view-controls] [data-view-menu] + [data-view-preview]').click();
   await pane.locator('[data-preview-cover]').waitFor();
   await page.waitForFunction(() => document.querySelector('[data-preview-view] canvas') && !document.querySelector('[data-preview-cover]'));
-  // Render's studio, in perspective, round the slab with the part's body on it, its floor under the board's back.
+  // Render's studio, in perspective, round the slab with the part's body on it (in under the cover, or, where the
+  // cover stopped waiting for it, as it lands), its floor under the board's back.
+  await page.waitForFunction(() => window.__cadStage()?.bounds?.max[2] > 1);
   const { stage, camera } = await page.evaluate(() => ({ stage: window.__cadStage(), camera: window.__cadCamera() }));
   assert.ok(stage.studioGround, `the studio: ${JSON.stringify(stage)}`);
   assert.equal(camera.projection, 'perspective');

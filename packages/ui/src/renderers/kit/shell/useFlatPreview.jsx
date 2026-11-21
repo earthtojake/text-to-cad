@@ -38,11 +38,12 @@ const previewControl = (group, field) => `preview_${group}_${field.replace(/[A-Z
  * @param {boolean} options.offered  The view offers Preview at all (its picture can be shown in 3D): its button is drawn.
  * @param {boolean} options.available  The view can be previewed now (its picture is in): the button is live.
  * @param {boolean} options.mobile
+ * @param {import("react").ComponentType<object>} [options.ViewIcon]  The cube the view's View button wears: Preview settings'.
  * @param {boolean} [options.partColours]
  * @param {(record: { preview: object, playback: object }) => void} [options.onRecordChange]
  */
 export function useFlatPreview({ fileView, modelKey, viewport, restored, View, view, stageColor, sceneScaleMode, offered, available, mobile,
-  partColours = true, onRecordChange = null }) {
+  partColours = true, onRecordChange = null, ViewIcon = undefined }) {
   const controls = useControlUsage();
   const colorScheme = viewport.scheme;
   const state = usePreviewState();
@@ -100,6 +101,6 @@ export function useFlatPreview({ fileView, modelKey, viewport, restored, View, v
   const viewRef = useRef(null);
   const frame = usePreviewFrame({ previewing, setPreviewing, modelKey, fileView, hostElement, stageColor, viewportScheme: colorScheme,
     View, view, desired, sceneScaleMode, viewRef, moving: orbiting, orbit: orbiting, onOrbitChange: setOrbiting,
-    orbitSpeed: playback.orbitSpeed, onOrbitSpeedChange: setOrbitSpeed, render, disabled: !available, mobile });
+    orbitSpeed: playback.orbitSpeed, onOrbitSpeedChange: setOrbitSpeed, render, disabled: !available, mobile, ViewIcon });
   return { ...frame, offered, rootRef, viewRef, record };
 }
