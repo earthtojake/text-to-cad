@@ -93,10 +93,11 @@ export const community = {
   items: [
     {
       title: "Studio",
-      body: "An open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand.",
+      body: "A community app by Amy: an open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand.",
       links: [
         { text: "Website", href: "https://texttocad.studio" },
         { text: "GitHub", href: "https://github.com/amywork777/studio" },
+        { text: "Creator", href: "https://github.com/amywork777" },
       ],
     },
     {
