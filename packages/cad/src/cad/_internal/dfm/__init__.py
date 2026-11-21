@@ -13,6 +13,8 @@ are compared with the measurements every result carries.
 Every process module has:
 
 - ``OPTIONS``: its own options and their defaults (``None``: not given, measured or the rules' default);
+- ``MEASURES``: the options its measurement reads (its own or ``COMMON``'s), the only ones the integration's
+  ``measure`` is handed (``kept``); the rest are its rules' alone;
 - ``RULES``: its one table of rules, a ``rules.RuleSet``;
 - ``MEASURED_FROM``: ``("brep", "mesh")``, the sources it measures (a mesh-only figure says so);
 - ``validate(resolved, document_type)``: ``ArgumentRefused`` naming the fix for a value out of range (its

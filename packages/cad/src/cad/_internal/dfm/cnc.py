@@ -27,9 +27,13 @@ from cad._internal.dfm._common import mm, not_applicable, occurrence_count
 from cad._internal.dfm.rules import OWN, Rule, RuleSet, Source
 from cad.results import CheckFinding
 
-__all__ = ["MEASURED_FROM", "OPTIONS", "RULES", "context", "findings", "summary", "validate"]
+__all__ = ["MEASURED_FROM", "MEASURES", "OPTIONS", "RULES", "context", "findings", "summary", "validate"]
 
 OPTIONS: dict[str, Any] = {"axes": 3, "turning": False, "tools": None, "stock": None}
+#: The options its measurement reads (``kept.measuring``): the axes and turning decide how a part is set up and
+#: reached, the tools what reaches a corner, a slot or a hole, the stock what is cut away. The material is the
+#: rules' alone.
+MEASURES = ("axes", "turning", "tools", "stock")
 MEASURED_FROM = ("brep",)
 
 _ACCESSED = "2026-11-06"

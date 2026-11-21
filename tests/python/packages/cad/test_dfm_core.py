@@ -443,6 +443,78 @@ def _pocketed() -> bd.Part:
     return part
 
 
+def _bracket() -> bd.Part:
+    """A 2 mm sheet bent once, 2 mm inside: a part with a bend to unfold."""
+    corner = (bd.Align.MIN,) * 3
+    part = bd.Box(40, 30, 2, align=corner) + bd.Box(2, 30, 25, align=corner)
+    for at, radius in ((2.0, 2.0), (0.0, 4.0)):
+        part = bd.fillet([edge for edge in part.edges().filter_by(bd.Axis.Y)
+                          if abs(edge.center().X - at) < 1e-6 and abs(edge.center().Z - at) < 1e-6], radius)
+    part.label = "bracket"
+    return part
+
+
+class MeasuresTest(unittest.TestCase):
+    """What a measurement reads of the options: its process's ``MEASURES`` alone (``kept.Measuring``)."""
+
+    #: Each process's options its rules alone read, each given another value than its default.
+    RULES_ALONE = {"cnc": {"material": "steel"}, "sheet": {"bend_radius": 3.0, "kerf": 0.2, "sheet_size": "1000x500"},
+                   "molding": {"material": "pp", "cavities": 4}, "printing": {"material": "petg"}}
+
+    def test_a_process_declares_the_options_it_measures_with_and_is_handed_those_alone(self) -> None:
+        from cad._internal import dfm
+        from cad._internal.dfm import kept
+
+        for process in dfm.PROCESSES:
+            with self.subTest(process=process):
+                measures = dfm.module(process).MEASURES
+                self.assertEqual(len(set(measures)), len(measures))
+                self.assertLessEqual(set(measures), set(dfm.module(process).OPTIONS) | set(dfm.COMMON))
+                # every other option but units (a B-rep's are its own) is given another value below
+                self.assertEqual(set(self.RULES_ALONE[process]),
+                                 (set(dfm.module(process).OPTIONS) | set(dfm.COMMON)) - set(measures) - {"units"})
+                resolved = manufacturing.options("step", process, {})
+                self.assertEqual(kept.measuring(process, resolved), {name: resolved[name] for name in measures})
+        handed = kept.Measuring("cnc", {"axes": 5, "material": "steel"})
+        self.assertEqual((dict(handed), handed["axes"], handed.get("tools"), "tools" in handed),
+                         ({"axes": 5}, 5, None, False), "a declared name reads as a dict's")
+        for read in (lambda: handed["material"], lambda: handed.get("material"), lambda: "units" in handed):
+            with self.assertRaisesRegex(KeyError, "not read by a cnc measurement"):
+                read()
+        self.assertEqual(handed.undeclared, {"material", "units"})
+
+    def test_a_read_of_an_option_its_process_does_not_declare_fails_the_measurement(self) -> None:
+        """Even where the family that read it caught the refusal, as each process's families catch their own."""
+        from unittest import mock
+
+        from cad.build123d import _dfm_check, _dfm_cnc
+
+        def measure(document: brep.Document, options: dict, candidates: bool) -> dict:
+            try:
+                options.get("material")
+            except Exception:  # noqa: BLE001 - a family's own catch
+                pass
+            return {}
+
+        with mock.patch.object(_dfm_cnc, "measure", measure), self.assertRaisesRegex(
+                RuntimeError, "the cnc measurement read material, which cad._internal.dfm.cnc.MEASURES does not declare"):
+            _dfm_check._measured(brep.parts_of(_pocketed()), "step", "cnc", manufacturing.options("step", "cnc", {}),
+                                 False)
+
+    def test_an_option_the_rules_alone_read_leaves_the_report_as_it_was(self) -> None:
+        from cad.build123d import _dfm_check
+
+        for process, other in self.RULES_ALONE.items():
+            made = _bracket if process == "sheet" else _pocketed
+            with self.subTest(process=process):
+                # each measured on a shape of its own: a measurement meshes the shape it measures
+                reports = [_dfm_check._measured(brep.parts_of(made()), "step", process,
+                                                manufacturing.options("step", process, given), False)
+                           for given in ({}, other)]
+                self.assertEqual(reports[0], reports[1])
+                self.assertNotIn("partial_sections", {key for key, value in reports[0].items() if value})
+
+
 class GeometryTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

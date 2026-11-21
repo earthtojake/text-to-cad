@@ -5,7 +5,8 @@ STEP, an xbf or a document the engine holds, once its options are resolved (``ca
 
 The document is read as the engine reads it (``_dfm_brep.read``); the process's module measures it
 (``_dfm_cnc``, ``_dfm_sheet``, ``_dfm_molding``, ``_dfm_printing``: each ``measure(document, options,
-candidates)``, a report of plain data, facts alone); the type side makes the result of the report: the
+candidates)``, a report of plain data, facts alone, handed the options its process declares it reads alone:
+``kept.Measuring``); the type side makes the result of the report: the
 process's findings and the rules' verdicts (``manufacturing.finish``). Given no process
 (``measure_declared``), the document is read first and measured for the process its parts declare, the
 options resolved for it then (``manufacturing.declared``).
@@ -185,13 +186,20 @@ def _scale(document: _dfm_brep.Document, document_type: str, report: dict[str, A
 
 def _measured(document: _dfm_brep.Document, document_type: str, process: str, options: dict[str, Any],
               candidates: bool) -> dict[str, Any]:
-    from cad._internal.dfm import Unmeasured
+    """The report of ``document`` for ``process``, measured with the options its measurement reads alone
+    (``kept.Measuring``): a read of any other fails it (``RuntimeError``), even one a family caught."""
+    from cad._internal.dfm import Unmeasured, kept
 
     if not document.parts:
         raise Unmeasured("document_empty", "the document holds no part with a face to measure")
     doubt = _integrity(document, process)
     module = importlib.import_module(f"cad.build123d._dfm_{process}")
-    report = module.measure(document, options, candidates)
+    measuring = kept.Measuring(process, options)
+    report = module.measure(document, measuring, candidates)
+    if measuring.undeclared:
+        raise RuntimeError(f"the {process} measurement read {', '.join(sorted(measuring.undeclared))}, which "
+                           f"cad._internal.dfm.{process}.MEASURES does not declare: declare it, or leave it to the "
+                           "rules")
     _scale(document, document_type, report)
     found = [*doubt, *(report.pop("findings", None) or ())]
     if document.empty:
