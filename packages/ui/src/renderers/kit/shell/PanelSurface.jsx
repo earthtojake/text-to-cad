@@ -19,6 +19,8 @@ import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 // buttons), 8px under it to its rule. A head that is one title (`headCompact`) is a list row's height instead (28px),
 // 8px over it and nothing under it, so its list starts the body's 4px under it.
 export const PANEL_SURFACE_PX = 8;
+/** A peeking panel's elevation over the view: the floating chrome's shadow (`lib/floatingSurface.js`'s `shadow-md`). */
+export const PANEL_PEEK_ELEVATION_CLASS = "shadow-md";
 const HALF_INSET = "calc(var(--panel-inset) / 2)";
 // A row's fill hangs half the inset out past the line and its glyph stands half the inset into it; its last action's
 // glyph ends the inset from the panel's right (half the inset, less that button's own 2px).
@@ -85,17 +87,19 @@ export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
  *   width: number, grip: ReturnType<typeof usePanelWidth>["grip"] | null, gripLabel: string, head: import("react").ReactNode, headRule?: boolean, headCompact?: boolean,
  *   headRef?: import("react").Ref<HTMLDivElement>, headProps?: object, headInsets?: { start: number, end: number },
  *   scrollerRef?: import("react").Ref<HTMLElement>, scrollerProps?: object, onKeyDown?: (event: KeyboardEvent) => void,
- *   children?: import("react").ReactNode }} props
+ *   children?: import("react").ReactNode, peek?: boolean, asideRef?: import("react").Ref<HTMLElement> }} props
  *   `headInsets`: how far the head's first and last boxes hang out past the inset (their own padding: a tab's pill's,
- *   an icon button's), so what they hold stands on it. Other props (`data-*`) go on the `<aside>`.
+ *   an icon button's), so what they hold stands on it. `peek`: a collapsed panel shown over the view, at its docked
+ *   place and width, taking no room (`data-panel-peek`, elevated). Other props (`data-*`, handlers) go on the `<aside>`.
  */
 export function PanelSurface({ mode, label, open, hidden = false, width, grip, gripLabel, head, headRule = true, headCompact = false, headStack = false, headRef, headProps = {},
-  headInsets = NO_HEAD_INSETS, scrollerRef, scrollerProps = {}, onKeyDown, children, ...props }) {
+  headInsets = NO_HEAD_INSETS, scrollerRef, scrollerProps = {}, onKeyDown, peek = false, asideRef, children, ...props }) {
   const page = mode === "page";
-  return <aside aria-label={label} data-panel-surface={page ? "page" : "docked"} data-open={open ? "" : undefined} hidden={!open || hidden}
-    onKeyDown={onKeyDown} {...props}
+  return <aside ref={asideRef} aria-label={label} data-panel-surface={page ? "page" : "docked"} data-open={open ? "" : undefined} hidden={!open || hidden}
+    data-panel-peek={peek && open && !hidden ? "" : undefined} onKeyDown={onKeyDown} {...props}
     className={cn("flex min-h-0 flex-col bg-sidebar text-ui text-foreground",
-      mode === "push" && "relative h-full shrink-0 border-r border-border",
+      mode === "push" && !peek && "relative h-full shrink-0 border-r border-border",
+      mode === "push" && peek && cn("absolute inset-y-0 left-0 z-40 border-r border-border", PANEL_PEEK_ELEVATION_CLASS),
       page && "absolute inset-0 z-50")}
     style={page ? PANEL_ROW_VARIABLES : { ...PANEL_ROW_VARIABLES, width }}>
     {head === null ? null : <div ref={headRef} className={cn("box-content flex shrink-0 gap-1 border-b", headStack ? "flex-col items-stretch" : "items-center", headStack ? null : headCompact ? "h-7" : "h-8", headRule ? "border-border" : "border-transparent")}

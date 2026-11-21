@@ -39,13 +39,15 @@ import { TOOL_PANEL_WIDTH } from '../../../../dist/renderers/kit/tools/toolStack
 import { SETTINGS_PANEL_SURFACE_CLASS, FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from '../../../../dist/lib/floatingSurface.js';
 import { ControlUsageProvider } from '../../../../dist/usage/controls.js';
 import { PanelTogglesContext } from '../../../../dist/file-viewer/panelToggles.js';
+import { FilePanelContext } from '../../../../dist/file-viewer/filePanel.js';
+import { PANEL_PEEK_DELAY_MS } from '../../../../dist/renderers/kit/shell/usePanelPeek.js';
 
 // The panel's toggle, as the navbar draws it (`file-viewer/panelToggles.js`): what the frame says, as a button.
 function NavbarToggles({ children }: { children: React.ReactNode }) {
   const [toggles, setToggles] = React.useState<any>(null);
   return <PanelTogglesContext.Provider value={setToggles}>
     {toggles?.left ? <button type="button" aria-label={toggles.left.label} aria-expanded={toggles.left.open}
-      data-navbar-panel="left" onClick={toggles.left.toggle} /> : null}
+      data-navbar-panel="left" onClick={toggles.left.toggle} {...(toggles.left.hover ?? null)} /> : null}
     {children}
   </PanelTogglesContext.Provider>;
 }
@@ -90,13 +92,16 @@ function tabSettings(initial: object = {}) {
 }
 type Settings = ReturnType<typeof tabSettings>;
 function frame({ name = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, appearance = { colorScheme: 'light' } as object, notice = null as React.ReactNode, viewer = false, data = {} as object,
-  usage = null as ((counts: { control: string; count: number; seconds: number }[]) => void) | null } = {}) {
+  usage = null as ((counts: { control: string; count: number; seconds: number }[]) => void) | null,
+  filePanel = null as { panel: object; change(panel: object): void } | null } = {}) {
   const props = { source: { id: 'one' }, file: { path: `/models/${name}`, name, kind: 'file' }, document: null, notice,
     onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences }, ...data } };
   // `viewer`: inside a viewer's element, as FileViewer draws it, where the viewer's keys are its own.
   const element = () => {
+    // `filePanel`: the file's panel as a file viewer keeps it (`filePanel.js`), what the panel writes there.
+    const renderer = <HarnessRenderer {...(props as any)} />;
     const shell = <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}><NavbarToggles>
-      <HarnessRenderer {...(props as any)} /></NavbarToggles></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
+      {filePanel ? <FilePanelContext.Provider value={filePanel}>{renderer}</FilePanelContext.Provider> : renderer}</NavbarToggles></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
     // `usage`: the host's count of the controls a person used (`usage/controls.js`).
     const counted = usage ? <ControlUsageProvider report={usage}>{shell}</ControlUsageProvider> : shell;
     if (!viewer) return counted;
@@ -192,6 +197,91 @@ it("⌘\\ (Ctrl+\\) shows and hides the panel; \\ alone does nothing, the panel 
   expect(flatPanel().hidden).toBe(true);
   fireEvent.keyDown(view, { key: '\\', code: 'Backslash', metaKey: true });
   expect([flatPanel().hidden, strip().closest('[hidden]')]).toEqual([false, null]);
+});
+
+// The collapsed panel's peek (`usePanelPeek.js`): a mouse resting on the navbar's toggle shows it over the view, pushing
+// nothing, until the pointer has been away from both for the delay; the pointer may travel from the toggle into it.
+// It is never kept: the file's panel is written only by a choice (the hide here, the pin by a click).
+function peeking() {
+  vi.useFakeTimers();
+  const writes: object[] = [];
+  const kept = { panel: {}, change(next: object) { writes.push(next); kept.panel = next; } };
+  frame({ viewer: true, filePanel: kept });
+  fireEvent.click(screen.getByRole('button', { name: 'Hide panel' }));
+  const toggle = () => document.querySelector<HTMLElement>('[data-navbar-panel="left"]')!;
+  const wait = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+  const peeked = () => !flatPanel().hidden && flatPanel().hasAttribute('data-panel-peek');
+  return { writes, toggle, wait, peeked };
+}
+const mouse = { pointerType: 'mouse' };
+
+it("a mouse resting on the collapsed panel's toggle peeks it over the view after the delay, and it goes once the pointer has left both for the delay", () => {
+  const { writes, toggle, wait, peeked } = peeking();
+  expect(writes).toEqual([{ open: false }]);
+  fireEvent.pointerEnter(toggle(), mouse);
+  wait(PANEL_PEEK_DELAY_MS - 1);
+  expect(flatPanel().hidden).toBe(true);
+  wait(1);
+  // Over the view, the view's panel still collapsed (nothing pushed), its toggle still saying so.
+  expect([peeked(), flatPanel().className.split(' ').includes('absolute'), document.querySelector('[data-cad-surface]')!.getAttribute('data-sidebar'),
+    toggle().getAttribute('aria-expanded')]).toEqual([true, true, 'closed', 'false']);
+  // From the toggle into the panel: it stays while the pointer is in it, however long.
+  fireEvent.pointerLeave(toggle(), mouse);
+  wait(PANEL_PEEK_DELAY_MS - 100);
+  fireEvent.pointerEnter(flatPanel(), mouse);
+  wait(PANEL_PEEK_DELAY_MS * 4);
+  fireEvent.click(tab('Reference'));
+  expect([peeked(), shownTab()]).toEqual([true, 'Reference']);
+  fireEvent.pointerLeave(flatPanel(), mouse);
+  wait(PANEL_PEEK_DELAY_MS - 1);
+  expect(peeked()).toBe(true);
+  wait(1);
+  expect(flatPanel().hidden).toBe(true);
+  // Only the hide was written; the tab is the file's as a choice always is.
+  expect(writes.map(write => (write as any).open)).toEqual([false, false]);
+  vi.useRealTimers();
+});
+
+it("no peek with a button held, nor for a finger; Escape puts it away before the tool in hand, and so does a press on the model", () => {
+  const { toggle, wait, peeked } = peeking();
+  fireEvent.pointerEnter(toggle(), { pointerType: 'mouse', buttons: 1 });
+  wait(PANEL_PEEK_DELAY_MS * 2);
+  fireEvent.pointerLeave(toggle(), mouse);
+  fireEvent.pointerEnter(toggle(), { pointerType: 'touch' });
+  wait(PANEL_PEEK_DELAY_MS * 2);
+  expect(flatPanel().hidden).toBe(true);
+  fireEvent.pointerLeave(toggle(), { pointerType: 'touch' });
+  fireEvent.click(tool('Draw'));
+  fireEvent.pointerEnter(toggle(), mouse);
+  wait(PANEL_PEEK_DELAY_MS);
+  expect(peeked()).toBe(true);
+  const view = document.querySelector<HTMLElement>('[data-slot="cad-file-view"]')!;
+  fireEvent.keyDown(view, { key: 'Escape' });
+  expect([flatPanel().hidden, tool('Draw').getAttribute('aria-pressed')]).toEqual([true, 'true']);
+  fireEvent.keyDown(view, { key: 'Escape' });
+  expect(tool('Draw').getAttribute('aria-pressed')).toBe('false');
+  fireEvent.pointerLeave(toggle(), mouse);
+  fireEvent.pointerEnter(toggle(), mouse);
+  wait(PANEL_PEEK_DELAY_MS);
+  expect(peeked()).toBe(true);
+  fireEvent.pointerDown(document.querySelector('[data-mock-viewport] canvas')!, { button: 0 });
+  expect(flatPanel().hidden).toBe(true);
+  vi.useRealTimers();
+});
+
+it("a click on the toggle while it peeks pins it: open, pushing and kept, as a click on a collapsed panel always is", () => {
+  const { writes, toggle, wait, peeked } = peeking();
+  fireEvent.pointerEnter(toggle(), mouse);
+  wait(PANEL_PEEK_DELAY_MS);
+  expect(peeked()).toBe(true);
+  fireEvent.click(toggle());
+  expect([flatPanel().hidden, flatPanel().hasAttribute('data-panel-peek'), document.querySelector('[data-cad-surface]')!.getAttribute('data-sidebar'),
+    toggle().getAttribute('aria-expanded'), writes.at(-1)]).toEqual([false, false, 'push', 'true', { open: true }]);
+  // Pinned, the pointer leaving puts nothing away.
+  fireEvent.pointerLeave(toggle(), mouse);
+  wait(PANEL_PEEK_DELAY_MS * 2);
+  expect(flatPanel().hidden).toBe(false);
+  vi.useRealTimers();
 });
 
 it("on a phone the panel is a sheet from the left behind the navbar's toggle, closed at the start, and the strip is centred in the view", async () => {

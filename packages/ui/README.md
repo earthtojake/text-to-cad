@@ -88,7 +88,8 @@ the explorer's rows (`ModelList.jsx`, `FolderExplorer.jsx`),
 17.5rem wide, no taller than 28rem or the room below it, with no resize handle. It
 floats over the view and never resizes it or moves its tools. A file's controls are
 the viewer's own: the tool strip at the view's top centre, the tool in hand's sub-toolbar
-under it, and the one panel docked at its left, the canvas the narrower for it while it pushes it aside.
+under it, and the one panel docked at its left, the canvas the narrower for it while it pushes it aside (a mouse
+resting on its collapsed toggle peeks it over the view instead, pushing nothing).
 FileViewer is mobile below 600px of its own width; progress indicators use this same
 breakpoint. The panel never scrolls sideways: Position's labels truncate to preserve its
 sliders and inputs.
@@ -290,8 +291,9 @@ Animation (`ToolPanel`s; their rows `kit/inspector/panelRows.jsx`), then Search,
 the tabs' place (one tab is a plain title, a row high, its list right under it) — its lists at its full height, in one
 12px text size and 28px rows, a row's one glyph on the 16px line and its name 32px in. What is picked is read in Quick
 Edit's chip list (each reference its kind and key facts: `kit/inspector/inspect.js`'s descriptions); the hover tip over
-the canvas is the frame's (`kit/shell/ViewFrame.jsx`). The panel always pushes the model aside; a view that would leave the
-model under 640px beside it starts it collapsed, never written (`kit/shell/sidebars.js`); it is 256px wide until its grip
+the canvas is the frame's (`kit/shell/ViewFrame.jsx`). Pinned open, the panel always pushes the model aside; collapsed, a mouse
+resting on its toggle peeks it over the model, pushing nothing and kept nowhere (`kit/shell/usePanelPeek.js`); a view
+that would leave the model under 640px beside it starts it collapsed, never written (`kit/shell/sidebars.js`); it is 256px wide until its grip
 sets another width, its toggle the navbar's first control, before the logo (`file-viewer/panelToggles.js`; ⌘\); on a
 phone the toggle opens it as a sheet from the left (`primitives/sheet.jsx`).
 Its tabs stay mounted, so a tree keeps its scroll and expansion;

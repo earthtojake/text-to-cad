@@ -20,7 +20,8 @@ import { DEFAULT_PANEL_WIDTH, MIN_MODEL_WIDTH } from "./sidebars.js";
  * every line of text not after an icon, and every row's one glyph starts.
  *
  * - **Collapsed, it goes completely**, nothing of it left over the model: its toggle is the navbar's
- *   (`file-viewer/panelToggles.js`). ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search.
+ *   (`file-viewer/panelToggles.js`). ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search. A mouse resting
+ *   on the toggle shows it over the view (`peek`, `usePanelPeek.js`), the same panel, pushing nothing.
  * - **Search** is the panel's one query over its tree-like tabs (`isStructureTab`: the `tree` section, every tab
  *   handed in but one marked `search: false`), never Parameters, Joints or Animation: an icon at the head row's right
  *   end, there only where some tab is searchable. Pressed (or /), the row is the search box, its X where the icon was,
@@ -213,10 +214,13 @@ export function FlatPanelSectionScope({ id, children }) {
  * @param {{ mode: "docked" | "page", open: boolean, onClose(): void, label: string,
  *   searchLabel: string, tabs: { id: string, label: string, content: import("react").ReactNode, search?: boolean, icon?: import("react").ComponentType }[],
  *   tab: string, onTabChange(id: string): void, width: number, maxWidth: number, onWidthChange(width: number): void,
- *   focusSearch: number }} props
- *   `focusSearch`: a count; each new value opens the search with the keyboard in its box (/).
+ *   focusSearch: number, peek?: boolean, surfaceRef?: import("react").Ref<HTMLElement>, surfaceProps?: object | null }} props
+ *   `focusSearch`: a count; each new value opens the search with the keyboard in its box (/). `peek`: the collapsed
+ *   panel shown over the view on a rest on its toggle (`usePanelPeek.js`), its surface `surfaceRef` and its pointer
+ *   handlers `surfaceProps`.
  */
-export default function FlatPanel({ mode, open, onClose, label, searchLabel, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, hidden = false }) {
+export default function FlatPanel({ mode, open, onClose, label, searchLabel, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, hidden = false,
+  peek = false, surfaceRef, surfaceProps = null }) {
   const { t } = useI18n();
   const page = mode === "page";
   const [searchOpen, setSearchOpen] = useState(false);
@@ -447,7 +451,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
     inputRef={input} dense onDismiss={closeSearch} dismissLabel={t("flatPanel.closeSearch")} className="min-w-0 flex-1 px-0 shadow-none" data-flat-panel-search=""
     style={SEARCH_BOX_HANG} /> : null;
   const activeCount = searching && searchable.has(active) ? counts[active] : null;
-  const aside = <PanelSurface mode={page ? "page" : "push"} label={label} open={open} hidden={hidden}
+  const aside = <PanelSurface mode={page ? "page" : "push"} label={label} open={open} hidden={hidden} peek={peek} asideRef={surfaceRef} {...surfaceProps}
     width={drawnWidth} grip={page ? null : grip} gripLabel={t("flatPanel.resize")} onKeyDown={onPanelKeyDown} data-flat-panel={mode} headRule={!single || searchOpen} headCompact={compactHead}
     headStack={searchOpen && !single} headRef={head} headInsets={HEAD_INSETS} headProps={{ "data-flat-panel-head": "", "data-searching": searchOpen ? "" : undefined }} scrollerRef={scroller}
     scrollerProps={{ "data-flat-panel-scroller": "" }}
