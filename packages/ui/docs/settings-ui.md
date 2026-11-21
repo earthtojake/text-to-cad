@@ -272,9 +272,10 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   `TOP_STRIP_BUTTON_CLASS`, `TOP_STRIP_SHAPE_CLASS`; `ToolModeMenu.jsx`; `FloatingToolBar`, `data-cad-toolbar`);
   the strip's colours and surface its own. A tool's sub-toolbar under it takes the same proportions (below; the
   drawing tools' two rows of seven 72px), and so do the panel's head buttons and the navbar's panel toggle (below); the corner's
-  zoom is 28px tall (below), and Preview's playbar keeps its 24px buttons. **The toolbar and the Quick Edit bar are centred on
-  the window, always; panels never move them; where they meet a panel they sit above it** (`ViewFrame.jsx`'s top
-  layer, `data-view-top-layer`, over the panel). A person finds the strip where it always is,
+  zoom is 28px tall (below), and Preview's playbar keeps its 24px buttons. **The toolbar is centred on
+  the window, always; panels never move it; where it meets a panel it sits above it** (`ViewFrame.jsx`'s top
+  layer, `data-view-top-layer`, over the panel). The Quick Edit bar is too, except where a pinned panel would reach
+  under it: then it is centred on the model's area beside the panel (see [Quick Edit](#quick-edit)). A person finds the strip where it always is,
   whatever is open beside it; a strip that slid with each panel moved under the pointer as a panel came and went.
   A file with no tools and no 3D view has no strip. On a phone
   ([mobile](#the-views-panel-and-the-tool-stack)) the tiles are 36px with 18px icons, a chevron
@@ -294,8 +295,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 - **Tool stack** under the sub-toolbar, in the same centred column: a renderer's own
   `toolPanels`, where it hands any (see
   [The view's panel and the tool stack](#the-views-panel-and-the-tool-stack)). The column
-  stops clear of Quick Edit's row (`VIEWPORT_STACK_BOTTOM`, 84px off the bottom), so it never runs past the
-  view.
+  stops clear of Quick Edit's bar (`VIEWPORT_STACK_BOTTOM`, 84px off the bottom, or the bar's measured top,
+  `--cad-quick-edit-reserve`, where its attachments' row or a longer note make it higher), so it never runs past the
+  view or over the bar.
 - **The panel**, the view's one sidebar, docked at the left: its tabs, with one search over the tree-like ones (an icon at
   the head row's right end) — first the file's structure (a
   STEP's Model, a robot's Links, a board's Parts, Nets and Layers, a drawing's Layers), then, only where the file has
@@ -304,10 +306,10 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   sidebar](#a-phones-sidebar)).
   Every file has it, from the view's first frame (a GLB's, a 3MF's and an STL's Model too, a row at the least). What is
   selected is read in Quick Edit's chip list.
-- **Quick Edit** at the bottom, 16px up, centred on the window as the strip is, over the panel where it meets it:
-  400px wide at most, else the window less 16px a side (`QUICK_EDIT_MAX_PX`, `QUICK_EDIT_MARGIN_PX`), a STEP's or a
-  robot's: the bar of the note a person writes to their agent, there only while something is picked or drawn
-  (see [Quick Edit](#quick-edit)). **The bottom row is Quick Edit's alone**: nothing of the corner stands there.
+- **Quick Edit** at the bottom, 16px up, centred on the window as the strip is (on the model's area where a pinned
+  panel would reach under it): 400px wide at most, else the window less 16px a side (`QUICK_EDIT_MAX_PX`,
+  `QUICK_EDIT_MARGIN_PX`): the bar of the note a person writes to their agent, always there, one row, its attachments
+  a row above it while something is picked or drawn (see [Quick Edit](#quick-edit)). **The bottom row is Quick Edit's alone**: nothing of the corner stands there.
 - **View cube** at the **top-right**, its 6rem box 2px from the right edge (the host's corner variable, 2px unset;
   `VIEWPORT_CORNER_INSET_PX`) and 8px off the top, its top on the strip's (`VIEWPORT_CUBE_TOP`). The box is the whole
   drawing (`ViewPlaneControl.js`'s 0–100 view box): the cube, and its X, Y and Z lines from one corner just outside it,
@@ -847,7 +849,7 @@ structure. Every rule here, and why:
   mean what they always mean. **A peek is the one thing that overlays**: it floats over the view at the docked panel's
   place and width (the file's, or the 232px default) and pushes nothing — the canvas keeps its size and the camera does
   not move — because a glance at the tree should not resize the picture; the strip and Quick Edit stay centred on the
-  window, over it, as over the docked panel. **A peek is a card**, so it reads as hovering, as Codex's and other apps'
+  window, over it. **A peek is a card**, so it reads as hovering, as Codex's and other apps'
   unpinned sidebars do: its surface stands 4px in (`PanelSurface.jsx`'s `PANEL_PEEK_GAP_PX`) from the window's left
   edge, the navbar's bottom and the view's bottom, its right edge 4px short of the docked panel's, with the floating
   chrome's own rounded corners (the strip's 10px), border and shadow (`shadow-md`), on the chrome's colour. **Nothing
@@ -862,8 +864,8 @@ structure. Every rule here, and why:
   collapses the panel under the grip), collapsed below, and it follows the window as it
   is resized across that line; what the width does is never kept. **Once they open or close it on a file** (its
   toggle, its key, a peek pinned), **their choice holds there at any width**: no window re-opens or re-collapses it. A
-  peek is no choice. Another file follows the view until it has a choice of its own. The strip and Quick Edit stay
-  centred on the window, over the panel (the hard rule above).
+  peek is no choice. Another file follows the view until it has a choice of its own. The strip stays
+  centred on the window, over the panel (the hard rule above); Quick Edit too, or beside a pinned panel it would cover.
 - **What is kept is the person's choice, per file, for the session** (the file's entry in the tab's settings,
   `filePanel.js`: `open`, `width`, `tab`): open or closed, the width they dragged it to (kept as it is closed,
   reopened and peeked) and the tab; a record from when the view had a right panel (`right`, `rightWidth`, `sections`),
@@ -1167,8 +1169,8 @@ Its panels follow these rules:
 - **One grip, on a resizable panel only**: its bottom-right corner, moving
   its width and cap at once, a separator in the tab order named after its panel (Left/Right
   nudge the width and Up/Down the cap by 16px, Home and End take both to their bounds). A folded panel has no grip: there is no height to set.
-- **Never past the viewer.** The column stops clear of Quick Edit's row
-  (`VIEWPORT_STACK_BOTTOM`, 84px off the bottom). When the panels need more, a `"tree"` panel
+- **Never past the viewer.** The column stops clear of Quick Edit's bar
+  (`VIEWPORT_STACK_BOTTOM`, 84px off the bottom, or the bar's measured top where that is higher). When the panels need more, a `"tree"` panel
   gives way first, down to 128px or its content, then the `"details"` panels together, each in
   proportion to its height, down to 96px or its content; a `"fixed"` panel keeps its height.
   If what cannot give way still does not fit, the column itself scrolls — a panel is never cut.
@@ -1880,36 +1882,60 @@ Quick Edit is always available in an interactive CAD view. It has no enable/disa
 control or persisted preference; stale settings cannot suppress it.
 
 Quick Edit is a person's note to their agent about the file on screen, and the
-one way the viewer hands it over: a bar at the view's bottom, on the floating surface the
-tool strip has (its radius and padding at the strip's V1 proportions), two rows like a chat's
-input. It is there only while it has something to carry or a note to keep: nothing stands in
-for it otherwise, not even a button. Only a view whose picks and annotations a note can carry
-has it (a STEP's, a robot's); a compact host gets none, and Preview puts it away with the
-tools. While the view loads it is out of sight, its note and its state kept. It is essential,
-so no setting turns it off.
+one way the viewer hands it over: a bar at the view's bottom, like a chat's input. **It is
+always there** in a view that has it, nothing picked or not: at rest ONE row, the note ("Describe
+a change…") with its buttons at the right, on the quiet chrome surface (the playbar's: 70%, a
+faint border, no shadow; `data-quick-edit-quiet`), and on the tool strip's floating surface (its
+radius and padding at the strip's V1 proportions) once it is used: the keyboard in it, a note
+written or something attached. **When something is attached a row of attachments comes above
+the note** and the note does not move: the bar grows upward, its bottom edge and the note's box
+where they were. The bar has no X and no close: nothing it would hide is gone by hiding it, and
+a bar that came and went was a target that was not there when wanted. Only a view whose picks
+and annotations a note can carry has it (a STEP's, a GLB's, a mesh's, a robot's, a board's or a
+schematic's once its index is loaded, a DXF's); a compact host gets none, and Preview puts it
+away with the tools. While the view loads it is out of sight, its note and its state kept. It is
+essential, so no setting turns it off.
 
-The bar stands 16px off the view's bottom. **The toolbar and the Quick Edit bar are centred on the window, always;
-panels never move them; where they meet a panel they sit above it.** Its width is 400px at most, else the window less
+The bar stands 16px off the view's bottom. **The toolbar is centred on the window, always, and so is the Quick Edit bar where it clears
+a pinned panel; panels never move the toolbar.** Where a pinned panel would reach under the bar
+(a narrow window), the bar is centred on the model's area right of the panel instead, at the
+same width rule on that area, so it never covers the panel's rows; a peek moves nothing, the
+bar centred on the window over it. The tool column on the right stops clear of the bar's top, whatever
+its height (`--cad-quick-edit-reserve`, measured, never less than 84px). Its width is 400px at most, else the window less
 16px a side (on a phone the window less 8px a side, whatever its width), measured by the one frame every view mounts (`ViewFrame.jsx`'s `QUICK_EDIT_MAX_PX` and
 `QUICK_EDIT_MARGIN_PX`, written to `--cad-quick-edit-left` and `--cad-quick-edit-width`), in the top layer over both
 panels and an overlaid one. Why: the bar is where the person writes, and it stays where their eyes left it whatever
 opens beside it; a bar that moved or shrank with each panel was a different target every time.
 
-Its first row is the context: what goes with the note, as chips (below), one row of them, the
-rest under **+N more**, whose list opens above it; then, at the row's right end, an X. The file always goes and is not named. Its second row is the note ("Describe a
-change…") with the buttons at its right. The note is a comfortable line at rest and grows
-upward, line by line, as it is written (never on focus), to six lines, then scrolls; the bar's
-border is blue while the note has the keyboard. Where the bar is narrow its chips give way to
-**+N more** sooner and Copy Prompt drops its words for its icon (only where the window makes the bar narrower than 400px).
+Its attachment row is the context: what goes with the note, as chips (below), one row of them, the
+rest under **+N more**, whose list opens above it. The file always goes and is not named. The
+note is one comfortable line at rest and grows upward, line by line, as it is written (never on
+focus), to **four lines** (92px: `QUICK_EDIT_NOTE_MAX_PX`, 4 × 20px lines and its 12px of padding),
+then scrolls. Why four: the bar is now always over the model, and at six (132px, before) a long
+note covered a quarter of a laptop's view; four keep a paragraph in sight and the rest a scroll
+away. The bar's border is blue while the note has the keyboard. Where the bar is narrow its chips
+give way to **+N more** sooner.
 
-On a phone (`docked`) the bar is the same two rows across the view's full width, 8px in a side, never capped at 400px,
+**The note spans the bar's width and the buttons stand in its bottom-right corner, in room the
+note keeps free on every line**: the buttons' width, 6px, and the scrollbar's 8px lane
+(`paddingRight`, from the button count, never from words, so it holds for any host's buttons
+and any locale). Text never runs under a button, and a button never covers text. While the note
+scrolls its scrollbar is the chrome's thin overlay (`ScrollArea`, 8px) at the bar's inner right
+edge, the full height of the note, and the buttons step left by its lane so they never cover its
+thumb; while it does not, the buttons sit at the edge. Why this and not buttons in a column of
+their own beside the note: a column of its own put the scrollbar between the text and the
+buttons, in the bar's middle; why not buttons on a row under the note: one row at rest would
+become two. One line at rest stays one row, buttons beside the text; from two lines the text
+wraps short of the buttons and the buttons stay at the bottom, by the last line.
+
+On a phone (`docked`) the bar is the same one row, and two with attachments, across the view's full width, 8px in a side, never capped at 400px,
 above the safe area, at a finger's sizes (36px buttons, the note's text a step up). A pick never brings up the
 keyboard there: the note is a tap away. A tap on a chip opens its card (above the chip) and
 copies nothing: the card's title copies. On a desktop a card opens above its chip too, and a
 click on the chip copies it.
 
-The bar follows what it would carry: it opens when something is picked or annotated, and
-closes when that goes. **Every geometry reference is ONE chip** (`ReferenceChips.jsx`'s `groupedChips`, the same in
+The attachment row follows what the note would carry: it comes when something is picked or
+annotated, and goes when that goes. **Every geometry reference is ONE chip** (`ReferenceChips.jsx`'s `groupedChips`, the same in
 every view): "5 refs" for several, whatever their kinds (parts, faces, edges, a board's pads and nets, a drawing's
 entities), and a single pick its own chip by its own name ("output_flange"); the annotation (the drawing) and the
 measurements keep chips of their own. **A press on the geometry chip (or a rest of the pointer) opens its list**, the
@@ -1931,14 +1957,14 @@ Backspace, Delete or typing replaces it as it would selected text. Its chips are
 **Annotation** (its X clears the ink), then the selection. The Annotation chip does not copy
 references or write files. Copy Prompt, Queue and Send
 include their data in the snapshot packet; only selection chips copy individual references.
-The X dismisses the bar: its note goes, and the bar stays away until what it would carry
-changes (another pick, a pick undone, ink drawn or cleared); the selection and the annotations
-are kept, and so are measurements, which are not Quick Edit's. A note that has gone (Queue,
-Send) clears what it carried, the selection (as a press on the model's background does) and the
-annotations, so the bar goes; Copy Prompt keeps it all, since nothing has gone yet.
-Escape in an empty bar is the viewer's Escape (clearing the selection, and so the bar);
-in a bar with a note it only hands the keyboard back to the model. Coming into sight and being
-dismissed are counted (`quick_edit_shown`, `quick_edit_dismissed`), as its buttons are.
+Attachments go by their chips' X (the geometry chip's drops every reference, the Annotation
+chip's clears the ink, a picked measurement's drops that pick), by Escape, and by a note going.
+A note that has gone (Queue, Send) clears what it carried, the selection (as a press on the
+model's background does) and the annotations, so the attachment row goes and the bar is one row
+again; Copy Prompt keeps it all, since nothing has gone yet. There is no "clear all": a press on
+the model's background, or Escape, is that. Escape in an empty note is the viewer's Escape
+(clearing the selection, and so its chips); in a note with text it only hands the keyboard back
+to the model. Attachments coming are counted (`quick_edit_shown`, once a view), as its buttons are.
 
 The person's picks put the keyboard in the note on a desktop, each one (a pick right after their
 primary press in this view), and so does a first annotation stroke once the pen lifts. No
@@ -1946,14 +1972,14 @@ live command selects (every renderer declines `select`), so nothing but a person
 
 The buttons, left to right, are only those the host can carry out, and the rightmost
 is the primary one, which Enter presses (Shift+Enter is a new line). They are the
-`Button` primitive in its own shape — 28px squares with its rounded corners, each an
-icon with a name and a hint above it — and every one is solid: the primary in the `default`
-variant, the others in `secondary`. Where Copy Prompt is the only one (a host that
-takes no message, as the web), it is a button in words, "Copy Prompt" with its icon
-first — at the bar's full 400px too: its 8px sides and 4px gap, and the note at least 12rem beside it, keep the words
-and the icon in the bar — its icon alone only where the window makes the bar narrower than that (`@container`: the
-bar's content under 24rem, a window under about 430px, a phone's). Why: the bar at its full width read as icon-only, a
-square nobody knew was Copy.
+`Button` primitive in its own shape — 28px squares with its rounded corners (36px on a phone),
+icons only, each with its name (its accessible name) and a hint above it — and every one is
+solid: the primary in the `default` variant, the others in `secondary`. Where Copy Prompt is
+the only one (a host that takes no message, as the web), it is the copy glyph alone, primary,
+its tooltip "Copy Prompt": words beside it took a third of the note's row and put the scrollbar
+between the text and the button, and a 28px primary square reads as the bar's action without
+them. Where the host is a composer it is Copy Prompt (secondary) and Queue (primary), side by side,
+4px apart.
 While there is no note they are disabled, dimmed but still drawn:
 
 - **Copy Prompt** (copy icon), always. It copies the note as text: its references
@@ -1978,7 +2004,7 @@ then draws a view with `cad <type> snapshot <document> <out.png> --annotation <f
 --camera authored`.
 
 
-Queue and Send clear the note and what it carries, and so close the box, once the
+Queue and Send clear the note and what it carries, and so the attachment row, once the
 note has gone. Copy Prompt keeps it all, since nothing has gone yet: its button
 shows a tick for a moment. A failure keeps the note and says why in the box. The message is
 one format, sent, queued or copied: what the person wrote; then, once, what the view itself has

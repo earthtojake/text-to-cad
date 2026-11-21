@@ -262,7 +262,7 @@ test('an STL opens in Select, its one body the file: display settings, orbit, ho
 
   // An STL is in no unit: Select picks its bodies, nothing to measure; it is drawn on and cut.
   await meshTools(pane, STL_TOOLS);
-  assert.equal(await pane.locator('[data-quick-edit-box]').count(), 0, 'Quick Edit opens on a mark, never by itself');
+  assert.deepEqual([await pane.locator('[data-quick-edit-box]').count(), await pane.locator('[data-quick-edit-context]').count()], [1, 0], 'Quick Edit is there, one row: nothing attached until a mark');
   assert.equal(await pane.locator('[data-navbar-view-controls]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
     'an STL is 3D: Preview is the navbar\'s, after Display');
 

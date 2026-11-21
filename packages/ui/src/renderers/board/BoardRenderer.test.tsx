@@ -357,8 +357,8 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   expect(tabBody(pane, 'layers').hidden).toBe(true);
   // The Layers tab is the layer list alone.
   expect(within(tabBody(pane, 'layers')).queryAllByRole('combobox')).toEqual([]);
-  // Nothing is picked yet: no Quick Edit.
-  expect(box(pane)).toBeNull();
+  // Nothing is picked yet: Quick Edit is its one row, with no attachments.
+  expect([box(pane) !== null, box(pane)!.querySelector('[data-quick-edit-context]')]).toEqual([true, null]);
 
   dispose();
 });
@@ -434,7 +434,7 @@ it('a tap picks the most specific thing: a pad, then copper, then nothing; Shift
   const controller = await controllerOf(view);
   tap(pane, [34.175, 15]);
   expect(selected(controller)).toEqual(['#R1.1']);
-  const quickEdit = await waitFor(() => { expect(box(pane)).not.toBeNull(); return box(pane)!; });
+  const quickEdit = await waitFor(() => { expect(box(pane)!.querySelector('[data-quick-edit-context]')).not.toBeNull(); return box(pane)!; });
   const chips = () => [...box(pane)!.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(button => button.getAttribute('aria-label'));
   expect(chips()).toEqual(['R1.1', 'Remove R1.1']);
   // A click on the chip opens its list, the pad's row and its key facts; a press on its name there copies its reference,
@@ -608,7 +608,7 @@ it("a drag under Select draws the shared box: over bare board it names the area 
   expect(overPad.slice(0, 2)).toEqual(['Copy Reference', 'Deselect']);
   expect(overPad.at(-2)).toBe('Zoom to fit');
   await closeMenu();
-  const quickEdit = await waitFor(() => { expect(box(pane)).not.toBeNull(); return box(pane)!; });
+  const quickEdit = await waitFor(() => { expect(box(pane)!.querySelector('[data-quick-edit-context]')).not.toBeNull(); return box(pane)!; });
   // A pad and an area: two references, one chip ("2 refs").
   expect([...quickEdit.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(button => button.getAttribute('aria-label')))
     .toEqual(['2 refs', 'Remove 2 refs']);
@@ -961,11 +961,11 @@ it("Measure snaps to pad centres, in millimetres, as its row's chip, and opens n
   tap(pane, [35.8, 14.9]);
   const row = await within(pane).findByRole('toolbar', { name: 'Measurements' });
   expect(within(row).getByRole('button', { name: 'Measurement 1: 1.65 mm' })).toBeTruthy();
-  expect(box(pane)).toBeNull();
+  expect(box(pane)!.querySelector('[data-quick-edit-context]')).toBeNull();
   // Select takes a measurement first, so the note's pick is D1.1, off the measurement's ends.
   fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Select' }));
   tap(pane, [20, 24.825]);
-  const quickEdit = await waitFor(() => { expect(box(pane)).not.toBeNull(); return box(pane)!; });
+  const quickEdit = await waitFor(() => { expect(box(pane)!.querySelector('[data-quick-edit-context]')).not.toBeNull(); return box(pane)!; });
   const note = within(quickEdit).getByRole('textbox', { name: 'Describe your changes' });
   note.textContent = 'Move this pad.';
   fireEvent.input(note);

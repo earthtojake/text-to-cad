@@ -229,8 +229,8 @@ it("a DXF's strip is Select (in hand), Draw and Measure, its zoom the corner's p
   await waitFor(() => expect(inPane.getByRole('button', { name: 'View' }).getAttribute('data-view-background')).toBe('dark'));
   // A drawing always has its Layers (open, or its pill where the view starts it collapsed), one layer its one row.
   expect(pane.querySelector('[data-flat-panel], [data-flat-panel-pill]')).not.toBeNull();
-  // Nothing is picked, drawn or measured yet: Quick Edit is not there, and nothing went anywhere.
-  expect(pane.querySelector('[data-quick-edit-box]')).toBeNull();
+  // Nothing is picked, drawn or measured yet: Quick Edit is its one row, with no attachments, and nothing went anywhere.
+  expect([pane.querySelector('[data-quick-edit-box]') !== null, pane.querySelector('[data-quick-edit-context]')]).toEqual([true, null]);
   expect(inPane.queryByRole('button', { name: 'Take snapshot' })).toBeNull();
   expect(delivered).toHaveLength(0);
 
@@ -482,7 +482,7 @@ it('a measurement on a drawing is Measure\'s row\'s chip, and opens no Quick Edi
   tap(100, 0);
   const row = await screen.findByRole('toolbar', { name: 'Measurements' });
   expect(within(row).getByRole('button', { name: 'Measurement 1: 100.00 mm' })).toBeTruthy();
-  expect(screen.queryByRole('region', { name: 'Quick Edit' })).toBeNull();
+  expect(screen.getByRole('region', { name: 'Quick Edit' }).querySelector('[data-quick-edit-context]')).toBeNull();
   expect(promptFiles.create).not.toHaveBeenCalled();
   dispose();
 });

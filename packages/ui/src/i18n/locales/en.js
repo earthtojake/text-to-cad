@@ -650,7 +650,6 @@ export default {
   "chip.group.object": "{count} objects",
   "chip.group.reference": "{count} references",
   "chip.group.item": "{count} items",
-  "quickEdit.close": "Close Quick Edit",
   "quickEdit.describeLabel": "Describe your changes",
   "quickEdit.copyPrompt": "Copy Prompt",
   "quickEdit.copyPromptHint": "Copy prompt",

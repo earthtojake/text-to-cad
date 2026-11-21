@@ -31,7 +31,7 @@ Every file has a panel on the left, with tabs: the file's structure first (a mod
 
 Preview is a full-page mode that draws the model rendered and plays its animations from a bar under it. Every 3D file has it, and so does a board.
 
-On a STEP or a robot, pick something, draw or measure, and Quick Edit appears at the bottom of the view. Write a note, use Copy Prompt and paste it into your agent: the prompt names the file and what you picked.
+Quick Edit is the bar at the bottom of the view. Pick something or draw, and what goes with your note appears as chips above it. Write a note, use Copy Prompt and paste it into your agent: the prompt names the file and what you picked.
 
 ## Live updates
 

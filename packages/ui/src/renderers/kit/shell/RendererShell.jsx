@@ -90,7 +90,7 @@ const DOUBLE_PRESS_MS = 600;
  *   renderer that hands none has no Quick Edit: only a view whose picks and annotations a note can
  *   carry offers one. `onClearReferences`: the renderer's clear of that selection, as a press on the
  *   background makes it; a note that has gone (Queue, Send) calls it, and clears Annotate's ink too.
- *   Quick Edit's X only puts the bar away, the selection kept.
+ *   Quick Edit has no X: its chips' X drop what they carry.
  *   `copySelection`: the viewer's copy key (⌘C / Ctrl+C) while the renderer's own tool is up and
  *   something is selected (Annotate's copies the view with its ink); null when there is nothing to copy.
  *   `zoomToSelection`: `{ run(), available }`, the zoom menu's Zoom to selection (`ZoomControl.jsx`): what

@@ -626,7 +626,6 @@ export default {
   "chip.group.object": "オブジェクト {count} 個",
   "chip.group.reference": "参照 {count} 件",
   "chip.group.item": "項目 {count} 件",
-  "quickEdit.close": "クイック編集を閉じる",
   "quickEdit.describeLabel": "変更内容を入力",
   "quickEdit.copyPrompt": "プロンプトをコピー",
   "quickEdit.copyPromptHint": "プロンプトをコピー",

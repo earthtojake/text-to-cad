@@ -626,7 +626,6 @@ export default {
   "chip.group.object": "객체 {count}개",
   "chip.group.reference": "참조 {count}개",
   "chip.group.item": "항목 {count}개",
-  "quickEdit.close": "빠른 편집 닫기",
   "quickEdit.describeLabel": "변경 사항 설명",
   "quickEdit.copyPrompt": "프롬프트 복사",
   "quickEdit.copyPromptHint": "프롬프트 복사",
