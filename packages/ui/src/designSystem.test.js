@@ -128,7 +128,8 @@ test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1
   assert.match(row, /NAVBAR_ROW_CLASS = "flex h-10 shrink-0 items-center gap-2 border-b px-2"/);
   assert.match(row, /NAVBAR_CONTROL_CLASS = "size-7 /);
   assert.match(navbar, /cn\(NAVBAR_ROW_CLASS, "relative border-border /);
-  assert.match(navbar, /"cad-navbar-logo w-7 justify-start px-1\.5"/);
+  // A desktop's mark on the 16px line; a phone's centred in its 36px tile.
+  assert.match(navbar, /"cad-navbar-logo w-7", mobile \? "justify-center px-0" : "justify-start px-1\.5"/);
   assert.match(navbar, /const NAV_ITEM_CLASS = "flex h-7 /);
 });
 

@@ -8,8 +8,8 @@ import { Switch } from "@cad/ui/primitives/switch";
 import { cn } from "@cad/ui/utils";
 import { hasOpenPopup } from "../../../lib/popups.js";
 import { DEFAULT_PANEL_WIDTH } from "../shell/sidebars.js";
-import { PANEL_PEEK_ELEVATION_CLASS, PANEL_PEEK_GAP_PX, PANEL_PEEK_RADIUS_PX, peekSlideClass } from "../shell/PanelSurface.jsx";
-import { useSlidingCard } from "../shell/usePanelPeek.js";
+import { PANEL_PEEK_ELEVATION_CLASS, PANEL_PEEK_GAP_PX, PANEL_PEEK_IN_RIGHT_CLASS, PANEL_PEEK_OUT_RIGHT_CLASS, PANEL_PEEK_RADIUS_PX, useSlidingCard }
+  from "../../../file-viewer/panelPeek.js";
 import { FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetColorPicker } from "../inspector/FileSheet.js";
 import { PANEL_ACTION_CLASS } from "../inspector/PanelActions.jsx";
 import { SliderField } from "../inspector/SliderField.jsx";
@@ -19,8 +19,9 @@ import { SliderField } from "../inspector/SliderField.jsx";
  * docked at the view's right edge, the sidebar's peek card's mirror. Its box is the peek card's at the default sidebar
  * width (`DEFAULT_PANEL_WIDTH`, less `PANEL_PEEK_GAP_PX` on each side), its surface the peek card's (its border, the
  * sidebar's colour, its shadow and radius), and it slides in from the right edge and back out as the peek does from the
- * left (`PanelSurface.jsx`'s `peekSlideClass`). Its content stands as far inside its edge as the peek card's does: the
- * panel's inset less the gap (12px), on all four sides.
+ * left (`file-viewer/panelPeek.js`'s `PANEL_PEEK_IN_RIGHT_CLASS` and `PANEL_PEEK_OUT_RIGHT_CLASS`, the peek's durations and
+ * easing). Its content stands as far inside its edge as the peek card's does: the panel's inset less the gap (12px), on
+ * all four sides.
  *
  * Inside, the card is drawn from `sections`, each a list of rows, with ONE hairline between sections and none between
  * rows: 24px controls on a 32px pitch (8px apart), the rule 12px from what is seen on either side of it. A row is
@@ -85,7 +86,7 @@ export function SettingsCardDock({ open, className = "", style = undefined, chil
   if (!slide.shown) return null;
   return <div className={cn("pointer-events-none absolute flex min-h-0 flex-col items-end", className)}
     style={{ right: SETTINGS_CARD_GAP_PX, bottom: SETTINGS_CARD_GAP_PX, ...style }} data-open={open ? "" : undefined} {...props}>
-    <div className={cn("flex max-h-full min-h-0 max-w-full flex-col", peekSlideClass("right", slide.leaving))} inert={slide.leaving}
+    <div className={cn("flex max-h-full min-h-0 max-w-full flex-col", slide.leaving ? PANEL_PEEK_OUT_RIGHT_CLASS : PANEL_PEEK_IN_RIGHT_CLASS)} inert={slide.leaving}
       data-settings-card-slide={slide.leaving ? "out" : "in"}
       onAnimationEnd={event => { if (slide.leaving && event.target === event.currentTarget) slide.exited(); }}>{children}</div>
   </div>;

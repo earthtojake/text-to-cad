@@ -8,6 +8,7 @@ import { FileViewer, defineFileRenderer } from '../../dist/file-viewer/index.js'
 import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../../dist/primitives/dropdown-menu.js';
 import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 import { usePanelToggles } from '../../dist/file-viewer/panelToggles.js';
+import { PANEL_PEEK_DELAY_MS } from '../../dist/file-viewer/panelPeek.js';
 import { ModelLibrary } from '../../dist/library/ModelLibrary.js';
 import { readFileSync } from 'node:fs';
 
@@ -57,10 +58,10 @@ it('has the panel\'s toggle from a document page\'s first frame, in the state it
   const toggle = () => document.querySelector<HTMLElement>('[data-navbar-panel="left"]');
   const look = () => [toggle()?.getAttribute('aria-expanded'), toggle()?.getAttribute('aria-disabled'), Boolean(document.querySelector('aside[data-panel-loading]')), fileName().textContent];
   const view = render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{}} onStateChange={() => {}} />);
-  // The first frame: the toggle, open and not pressable yet, the panel's frame in its place, and no id for a name. The
+  // The first frame: the toggle, open and pressable already, the panel's frame in its place, and no id for a name. The
   // frame is drawn as the view's loading panel is: the head's one block (a bar for the title not known yet), then the
   // placeholder rows, busy (their places against the view's are `PanelInset.browser.test.mjs`'s).
-  expect(look()).toEqual(['true', 'true', true, '']);
+  expect(look()).toEqual(['true', null, true, '']);
   const frame = document.querySelector('aside[data-panel-loading]')!;
   expect([frame.getAttribute('aria-busy'), Boolean(frame.querySelector('[data-panel-head] [data-panel-loading-title]')),
     frame.querySelectorAll('[data-tree-row-placeholder]').length, within(frame as HTMLElement).getByRole('status').textContent]).toEqual(['true', true, 6, 'Loading']);
@@ -70,23 +71,59 @@ it('has the panel\'s toggle from a document page\'s first frame, in the state it
   view.unmount();
   // The file's choice for this session, closed: the toggle says so, and no frame is drawn.
   render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{ renderers: { [JSON.stringify([ID, 'framed'])]: { panel: { open: false } } } }} onStateChange={() => {}} />);
-  expect(look()).toEqual(['false', 'true', false, '']);
+  expect(look()).toEqual(['false', null, false, '']);
   cleanup();
   // The view's own rule (`sidebars.js`): with no choice, an 800px view (under 640px + the default 232px) has it
   // collapsed; the person's choice, open, holds there all the same, its frame at the width the view will draw (a
   // stored 660px within the grip's 480px bound).
   const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 800, height: 700, top: 0, left: 0, right: 800, bottom: 700, x: 0, y: 0, toJSON() {} } as DOMRect);
   render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{}} onStateChange={() => {}} layout="desktop" />);
-  expect(look()).toEqual(['false', 'true', false, '']);
+  expect(look()).toEqual(['false', null, false, '']);
   cleanup();
   render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{ renderers: { [JSON.stringify([ID, 'framed'])]: { panel: { open: true, width: 660 } } } }} onStateChange={() => {}} layout="desktop" />);
-  expect([...look(), document.querySelector<HTMLElement>('aside[data-panel-loading]')?.style.width]).toEqual(['true', 'true', true, '', '480px']);
+  expect([...look(), document.querySelector<HTMLElement>('aside[data-panel-loading]')?.style.width]).toEqual(['true', null, true, '', '480px']);
   rect.mockRestore();
   cleanup();
   // A file that will not open has neither.
   render(<FileViewer file={ID} host={{ ...host, files: { id: 'gone', stat: async () => { throw new Error('gone'); } } } as any} renderers={[framed]} state={{}} onStateChange={() => {}} />);
   await screen.findByText('gone');
   expect(toggle()).toBeNull();
+});
+
+it('peeks the stand-in panel from a page\'s first frame, a mouse resting on the collapsed toggle, and a press there pins it as the view\'s toggle does', async () => {
+  const ID = '906f6bff-80e7-5331-b842-dd377b720a7b';
+  let answer = () => {};
+  const slow = { ...host, files: { id: 'slow', stat: (path: string) => new Promise(resolve => {
+    answer = () => resolve({ path, name: 'qdd_actuator', kind: 'file', extension: 'xbf', size: 1, navigationPath: null }); }) } };
+  const framed = defineFileRenderer({ id: 'framed', priority: 1, matches: () => true, prepare: async () => ({ data: null }),
+    load: async () => ({ default: () => { usePanelToggles(React.useMemo(() => ({ left: { open: true, label: 'Hide panel', toggle() {} } }), [])); return <p>shown</p>; } }) });
+  const toggle = () => document.querySelector<HTMLElement>('[data-navbar-panel="left"]')!;
+  const writes: unknown[] = [];
+  vi.useFakeTimers();
+  try {
+    // The file's choice, collapsed: nothing of the panel over the page until a mouse rests on the toggle.
+    render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{ renderers: { [JSON.stringify([ID, 'framed'])]: { panel: { open: false } } } }}
+      onStateChange={next => writes.push(next)} layout="desktop" />);
+    expect(document.querySelector('aside[data-panel-loading]')).toBeNull();
+    fireEvent.pointerEnter(toggle(), { pointerType: 'mouse' });
+    act(() => { vi.advanceTimersByTime(PANEL_PEEK_DELAY_MS - 1); });
+    expect(document.querySelector('aside[data-panel-peek]')).toBeNull();
+    act(() => { vi.advanceTimersByTime(1); });
+    const card = document.querySelector<HTMLElement>('aside[data-panel-peek][data-panel-loading]')!;
+    expect([Boolean(card.querySelector('[data-panel-peek-card]')), Boolean(card.querySelector('[data-panel-head] [data-panel-loading-title]')),
+      card.querySelectorAll('[data-tree-row-placeholder]').length, toggle().getAttribute('aria-expanded')]).toEqual([true, true, 6, 'false']);
+    // A press pins it: the stand-in docked in its place, open, the peek gone.
+    fireEvent.click(toggle());
+    expect([toggle().getAttribute('aria-expanded'), document.querySelector('aside[data-panel-peek]'), Boolean(document.querySelector('aside[data-panel-loading]'))])
+      .toEqual(['true', null, true]);
+  } finally {
+    vi.useRealTimers();
+  }
+  // The view opens with that choice and writes it, as its own toggle would.
+  await act(async () => answer());
+  await screen.findByText('shown');
+  const last = writes.at(-1) as { renderers: Record<string, { panel?: { open?: boolean } }> };
+  expect(last.renderers[JSON.stringify([ID, 'framed'])].panel).toEqual({ open: true });
 });
 
 it('draws the navbar over every file, named by its name, and over the home with only its menu, Back and Forward, the host\'s actions; never over a view shown small', async () => {

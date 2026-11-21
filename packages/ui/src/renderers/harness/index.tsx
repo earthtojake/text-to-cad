@@ -98,7 +98,10 @@ function workspace(id: string, store: TabStore) {
     search: async () => ({ paths: [file], truncated: false })
   };
   const destination = { kind: (window as unknown as { __cadPromptDestination?: 'clipboard' }).__cadPromptDestination || 'composer' as const, available: true };
-  const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); } }, environment: { colorScheme, platform: keyboardPlatform, locale },
+  // `?home=1`: a host with a home and the file's ⋯ (Copy path), as the web viewer is, so the navbar's left end is whole.
+  const homed = new URLSearchParams(location.search).get('home') === '1';
+  const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); }, ...(homed ? { home() {} } : null) },
+    ...(homed ? { fileActions: { platform: keyboardPlatform, perform: { 'copy-path': async () => {} } } } : null), environment: { colorScheme, platform: keyboardPlatform, locale },
     clipboard: { writeText: async text => { promptMessages.push(await text); }, writeImage: async () => {} },
     promptFiles: createHttpPromptFiles({ origin: `${location.origin}/${id}` }),
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async context => {

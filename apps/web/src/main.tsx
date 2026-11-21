@@ -1,17 +1,13 @@
-import { FileWarning } from 'lucide-react';
-import { EmptyState } from '@cad/ui/navigation';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createCrashReporter, isEngineGone, isEngineRefused } from '@cad/core/client';
-import { ViewerLoadingOverlay } from '@cad/ui/file-viewer/presentation';
+import { createCrashReporter } from '@cad/core/client';
 import { createTabStore } from '@cad/ui/tab-store';
-import { I18nProvider, resolveLocale, translateIn } from '@cad/ui/i18n';
 import { createWebCadClient } from './host/cadClient.js';
 import { keepAddressLink } from './host/addressLink.js';
 import { reloadOnStaleBuild } from './host/staleBuild.js';
 import App from './App';
 import { readDocumentId } from './client/workbench/fileParam.js';
-import { EngineStopped } from './EngineStopped';
+import { StartingView } from './StartingView';
 import { sessionTabRecord } from './persistence/tabRecord';
 import faviconUrl from './client/assets/favicon.png';
 import './client/styles/globals.css';
@@ -19,16 +15,6 @@ import './client/styles/globals.css';
 // The tab's one store, over this tab's sessionStorage: everything the viewer keeps lives in it,
 // survives a reload and goes with the tab (`docs/storage.md`).
 const tabStore = createTabStore(sessionTabRecord(window.sessionStorage));
-
-/** What the page shows while it asks the server what it is, and if the server does not answer. */
-function StartingView({ error }: { error?: Error }) {
-  // Before the server answers there is no kept choice to read: the browser's language.
-  const locale = resolveLocale(navigator.languages ?? [navigator.language]);
-  return <I18nProvider locale={locale}><div className="relative h-svh overflow-hidden bg-background">{error && isEngineGone(error)
-    ? <EngineStopped locale={locale} refused={isEngineRefused(error)} />
-    : error ? <EmptyState icon={FileWarning} title={translateIn(locale, 'app.start.notAnswering')} description={error.message} tone="warn" />
-    : <ViewerLoadingOverlay viewerLoading />}</div></I18nProvider>;
-}
 
 const element = document.getElementById('root');
 if (!element) throw new Error('Missing #root mount point.');
@@ -63,7 +49,9 @@ function dispose() {
 function onPageHide(event: PageTransitionEvent) { if (!event.persisted) dispose(); }
 window.addEventListener('pagehide', onPageHide);
 if (import.meta.hot) import.meta.hot.dispose(dispose);
-root.render(<StartingView />);
+// The app's frame from the first paint (`StartingView`: the file viewer in its opening phase), while the server says
+// what it is.
+root.render(<StartingView tabStore={tabStore} />);
 // The document the URL names is asked for beside the description, into the client's catalog, so its
 // page's first frame has its name where the server says it in time; the paint never waits for it
 // (a slow answer, a document that is gone): its name's place stays empty until the catalog answers.
@@ -76,5 +64,5 @@ void Promise.all([client.serverInfo({ signal: controller.signal }),
   if (controller.signal.aborted) return;
   root.render(<StrictMode><App client={client} server={server} tabStore={tabStore} language={language} /></StrictMode>);
 }).catch(error => {
-  if (!controller.signal.aborted) root.render(<StartingView error={error} />);
+  if (!controller.signal.aborted) root.render(<StartingView error={error} tabStore={tabStore} />);
 });

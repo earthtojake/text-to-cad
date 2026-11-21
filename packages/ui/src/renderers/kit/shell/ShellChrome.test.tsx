@@ -51,7 +51,7 @@ function NavbarToggles({ children }: { children: React.ReactNode }) {
     {children}
   </PanelTogglesContext.Provider>;
 }
-import { peekSlideClass } from '../../../../dist/renderers/kit/shell/PanelSurface.js';
+import { PANEL_PEEK_IN_RIGHT_CLASS, PANEL_PEEK_OUT_RIGHT_CLASS } from '../../../../dist/file-viewer/panelPeek.js';
 import { createAnimationClock } from '../../../../dist/renderers/kit/tools/playbar/animationClock.js';
 import { writeFileView } from '../../../../dist/renderers/kit/shell/fileView.js';
 
@@ -132,9 +132,9 @@ function drag(handle: Element, [dx, dy]: [number, number], { release = true } = 
 it("the strip is at the top centre with the stack under it; the view's panel is docked at the left, open, a tab per section, the first shown, and nothing is stored until a person changes it", () => {
   const { preferences } = frame();
   // The strip and the stack under it, 8px down from the viewer's top, centred on the whole view,
-  // stopping 8px above the cube's line (the cube's box 8px off the bottom).
+  // stopping clear of Quick Edit's row, 84px off the bottom (`VIEWPORT_STACK_BOTTOM`).
   // The panels never move it: it stands over them, centred on the window (`ViewFrame.jsx`'s top layer).
-  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', right: '8px', bottom: 'calc(84px)' });
+  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', right: '8px', bottom: '84px' });
   expect(document.querySelector('[data-cad-tool-groups]')!.closest('[data-view-top-layer]')).not.toBeNull();
   // The panel (`FlatPanel.jsx`), a board's: the search over its tabs, a tab per section in their order, the first shown.
   expect([flatPanel().getAttribute('data-flat-panel'), flatPanel().hidden]).toEqual(['docked', false]);
@@ -501,7 +501,7 @@ it("a 3D view's Display is the navbar's toggle, left of Preview: its card Projec
   expect(cardSections(card)).toEqual([[['projection', 'Orthographic']], [['display', 'Solid'], ['background', 'Light'], ['grid', 'false']]]);
   expect(within(card).getAllByRole('combobox').map(box => box.getAttribute('aria-label'))).toEqual(['Projection', 'Style', 'Background']);
   // It slides in from the view's right edge, as the sidebar's peek does from the left: the peek's own motion.
-  expect(card.closest('[data-settings-card-slide]')!.className).toContain(peekSlideClass('right', false));
+  expect(card.closest('[data-settings-card-slide]')!.className).toContain(PANEL_PEEK_IN_RIGHT_CLASS);
   expect(reset().hasAttribute('disabled')).toBe(true);
   // A change shows at once, and the card stays open while the person works.
   await choose(user, card, 'Projection', 'Perspective');
@@ -842,10 +842,10 @@ it("Preview settings is pressed while its card is open and a second press closes
   const out = () => document.querySelector<HTMLElement>('[data-settings-card-slide="out"]');
   await user.click(button());
   expect([button().getAttribute('aria-pressed'), previewSettings() !== null]).toEqual(['true', true]);
-  expect(previewSettings()!.closest('[data-settings-card-slide]')!.className).toContain(peekSlideClass('right', false));
+  expect(previewSettings()!.closest('[data-settings-card-slide]')!.className).toContain(PANEL_PEEK_IN_RIGHT_CLASS);
   await user.click(button());
   expect([button().getAttribute('aria-pressed'), previewSettings(), out()!.hasAttribute('inert'), out()!.className]).toEqual(['false', null, true,
-    expect.stringContaining(peekSlideClass('right', true))]);
+    expect.stringContaining(PANEL_PEEK_OUT_RIGHT_CLASS)]);
   await waitFor(() => expect(document.querySelector('[data-preview-panel]')).toBeNull());
   // Its own X closes it too, and the button is no longer pressed.
   await user.click(button());

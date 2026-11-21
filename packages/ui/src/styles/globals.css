@@ -84,6 +84,10 @@
 [data-viewer-layout="mobile"] :is([data-viewer-navbar], [data-preview-bar]) { height: 48px; }
 [data-viewer-layout="mobile"] :is([data-viewer-navbar], [data-preview-bar]) :is(button, a) { min-height: 36px; min-width: 36px; }
 [data-viewer-layout="mobile"] [data-preview-panel] { --preview-bar-height: 48px; }
+/* While a phone's sidebar sheet is open (modal: the page under it takes no press), the navbar above it stays usable:
+   its toggle shuts the sheet, and a press on Display, Preview or the name closes it and does what it does
+   (`usePhoneSheetPlace.js`). */
+:root:has([data-panel-sheet]) [data-viewer-navbar] { pointer-events: auto; }
 [data-viewer-layout="mobile"] [data-select-trigger], [data-viewer-layout="mobile"] [data-slot="select-trigger"] { min-height: 36px; }
 /* A slider anywhere on a phone (the slider control, in the panel or a tool's row, and the scrubber):
  * a 36px band to press in — the band takes the finger, so the thumb need only be seen: 16px. The selected ink's
@@ -144,10 +148,23 @@
   animation: cad-progress-slide 1.15s ease-in-out infinite;
 }
 
+/* Waiting (the connection lost): held where it is. */
+[data-paused] .cad-progress-indeterminate {
+  animation-play-state: paused;
+}
+
+/* No motion (the host's Reduce motion, `data-still`, or the system's): an indeterminate bar does not slide; it stands
+   across the track, faint, so it claims no share of the work. */
+[data-still] .cad-progress-indeterminate {
+  width: 100%;
+  animation: none;
+  opacity: 0.45;
+}
 @media (prefers-reduced-motion: reduce) {
   .cad-progress-indeterminate {
-    animation-duration: 2.4s;
-    animation-timing-function: linear;
+    width: 100%;
+    animation: none;
+    opacity: 0.45;
   }
 }
 

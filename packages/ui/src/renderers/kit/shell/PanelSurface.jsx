@@ -4,6 +4,8 @@ import { cn } from "@cad/ui/utils";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 // The surface's metrics, shared with the file viewer's stand-in drawn before the view is up (`file-viewer/FileViewer.tsx`).
 import { PANEL_HEAD_ROW_PX, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX } from "../../../file-viewer/panelToggles.js";
+import { PANEL_PEEK_ASIDE_CLASS, PANEL_PEEK_CARD_CLASS, PANEL_PEEK_CARD_STYLE, PANEL_PEEK_CONTENT_STYLE, PANEL_PEEK_ELEVATION_CLASS, PANEL_PEEK_GAP_PX,
+  PANEL_PEEK_IN_LEFT_CLASS, PANEL_PEEK_OUT_LEFT_CLASS, panelPeekMotionClass } from "../../../file-viewer/panelPeek.js";
 
 // The surface the view's one panel is (`FlatPanel.jsx`, at the view's left): the chrome's colour, the navbar's (a step
 // off the canvas, so the frame reads apart from the picture), its 1px rule on its right side, its type scope
@@ -20,38 +22,9 @@ import { PANEL_HEAD_ROW_PX, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX } from "../../
 // Vertically the panel is on one 8px step: 8px over the head's row (`PANEL_HEAD_ROW_PX`, 32px: the tabs, a lone title
 // or the search box, and the 28px buttons), 8px under it to its rule, whatever the row holds.
 export { PANEL_HEAD_ROW_PX, PANEL_SURFACE_PX };
-/** A peeking panel's elevation over the view: the floating chrome's shadow (`lib/floatingSurface.js`'s `shadow-md`). */
-export const PANEL_PEEK_ELEVATION_CLASS = "shadow-md";
-/**
- * A peeking panel is a card floating over the view (as other apps' unpinned sidebars are), so it reads as
- * hovering: its surface stands this far in from the window's left edge, the navbar's bottom and the view's bottom, its
- * right edge this far short of the docked panel's, with the floating chrome's rounded corners (the strip's 10px), border
- * and shadow, on the chrome's colour. Its content does not move: the panel's box is the docked one, and the card is drawn
- * behind it, its content clipped to the card's inside, so every tab, row and control stands where it does docked. 4px
- * leaves a row's fill (8px out from the content line) 3px of the card's inside at the left and 4px at the right.
- */
-export const PANEL_PEEK_GAP_PX = 4;
-export const PANEL_PEEK_RADIUS_PX = 10;
-// In the panel's padding box (its right 1px is the docked panel's rule, kept transparent so the content's width holds).
-const PEEK_CARD_STYLE = Object.freeze({ inset: `${PANEL_PEEK_GAP_PX}px ${PANEL_PEEK_GAP_PX - 1}px ${PANEL_PEEK_GAP_PX}px ${PANEL_PEEK_GAP_PX}px`,
-  borderRadius: PANEL_PEEK_RADIUS_PX });
-// The content, clipped to the card's inside (within its 1px border): the head's rule, a scrolled row and the sticky
-// actions foot end inside the card, never past its rounded corners.
-const PEEK_CONTENT_STYLE = Object.freeze({ clipPath: `inset(${PANEL_PEEK_GAP_PX + 1}px ${PANEL_PEEK_GAP_PX}px ${PANEL_PEEK_GAP_PX + 1}px ${PANEL_PEEK_GAP_PX + 1}px round ${PANEL_PEEK_RADIUS_PX - 1}px)` });
-/**
- * A peek arrives sliding in from the window's left edge and goes sliding back out, the card and all it holds moving as
- * one (a transform: nothing is laid out again, the view under it untouched), at the chrome's menus' pace (tw-animate's
- * 150ms, eased out coming in and in going out). Where motion is not welcome it appears and goes (`motion-reduce`).
- */
-const PEEK_SLIDE_CLASSES = Object.freeze({
-  left: Object.freeze({ in: "animate-in slide-in-from-left duration-150 ease-out motion-reduce:animate-none",
-    out: "animate-out slide-out-to-left fill-mode-forwards duration-150 ease-in motion-reduce:animate-none" }),
-  // The mirror, for a card docked at the view's right edge (`kit/view-settings/SettingsCard.jsx`).
-  right: Object.freeze({ in: "animate-in slide-in-from-right duration-150 ease-out motion-reduce:animate-none",
-    out: "animate-out slide-out-to-right fill-mode-forwards duration-150 ease-in motion-reduce:animate-none" })
-});
-/** The peek's slide, in from `edge` ("left" or "right") or, `leaving`, back out to it: one motion for every card that peeks. */
-export const peekSlideClass = (edge, leaving) => PEEK_SLIDE_CLASSES[edge][leaving ? "out" : "in"];
+// A peek's card, its gap, its look and its slide: the file viewer's (`file-viewer/panelPeek.js`), the ONE source, shared
+// with the stand-in it draws before the view is up and with any card that mirrors the peek.
+export { PANEL_PEEK_ELEVATION_CLASS, PANEL_PEEK_GAP_PX, PANEL_PEEK_IN_LEFT_CLASS as PEEK_IN_CLASS, PANEL_PEEK_OUT_LEFT_CLASS as PEEK_OUT_CLASS };
 const NO_HEAD_INSETS = Object.freeze({ start: 0, end: 0 });
 const KEY_NUDGE_PX = 16;
 
@@ -114,11 +87,11 @@ export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
  *   `headInsets`: how far the head's first and last boxes hang out past the inset (their own padding: a tab's pill's,
  *   an icon button's), so what they hold stands on it. `peek`: a collapsed panel shown over the view, at its docked
  *   place and width, taking no room (`data-panel-peek`): a card inside that box (`PANEL_PEEK_GAP_PX`), its content where
- *   the docked panel's is, sliding in; `peekLeaving`, that peek sliding out (`data-panel-peek-leaving`), and
- *   `onPeekExited` once it is out. Other props (`data-*`, handlers) go on the `<aside>`.
+ *   the docked panel's is, sliding in (unless `peekEntered`: it already stands, taken over from the file viewer's
+ *   stand-in); `peekLeaving`, that peek sliding out (`data-panel-peek-leaving`), and `onPeekExited` once it is out. Other props (`data-*`, handlers) go on the `<aside>`.
  */
 export function PanelSurface({ mode, label, open, hidden = false, width, grip, gripLabel, head, headRule = true, headRef, headProps = {},
-  headInsets = NO_HEAD_INSETS, scrollerRef, scrollerProps = {}, onKeyDown, peek = false, peekLeaving = false, onPeekExited, asideRef, children, ...props }) {
+  headInsets = NO_HEAD_INSETS, scrollerRef, scrollerProps = {}, onKeyDown, peek = false, peekLeaving = false, peekEntered = false, onPeekExited, asideRef, children, ...props }) {
   const page = mode === "page";
   const peeking = mode === "push" && peek;
   const headNode = head === null ? null : <div ref={headRef} className={cn("box-content flex shrink-0 items-center gap-1 border-b", headRule ? "border-border" : "border-transparent")}
@@ -133,13 +106,13 @@ export function PanelSurface({ mode, label, open, hidden = false, width, grip, g
     onAnimationEnd={peeking && peekLeaving ? event => { if (event.target === event.currentTarget) onPeekExited?.(); } : undefined}
     className={cn("flex min-h-0 flex-col text-ui text-foreground", !peeking && "bg-sidebar",
       mode === "push" && !peek && "relative h-full shrink-0 border-r border-border",
-      peeking && "absolute inset-y-0 left-0 z-40 border-r border-transparent", peeking && peekSlideClass("left", peekLeaving),
+      peeking && PANEL_PEEK_ASIDE_CLASS, peeking && panelPeekMotionClass({ leaving: peekLeaving, entered: peekEntered }),
       page && "absolute inset-0 z-50")}
     style={page ? PANEL_ROW_VARIABLES : { ...PANEL_ROW_VARIABLES, width }}>
     {peeking ? <>
-      <div aria-hidden="true" className={cn("pointer-events-none absolute border border-border bg-sidebar", PANEL_PEEK_ELEVATION_CLASS)} style={PEEK_CARD_STYLE}
+      <div aria-hidden="true" className={PANEL_PEEK_CARD_CLASS} style={PANEL_PEEK_CARD_STYLE}
         data-panel-peek-card="" />
-      <div className="relative flex min-h-0 flex-1 flex-col" style={PEEK_CONTENT_STYLE}>{headNode}{scroll}</div>
+      <div className="relative flex min-h-0 flex-1 flex-col" style={PANEL_PEEK_CONTENT_STYLE}>{headNode}{scroll}</div>
     </> : <>{headNode}{scroll}</>}
     {/* No grip on a phone's page, nor on a peek: a peek is passing, so its width is not the person's to set there. */}
     {page || peeking || !grip ? null : <div role="separator" aria-orientation="vertical" aria-label={gripLabel} tabIndex={0}

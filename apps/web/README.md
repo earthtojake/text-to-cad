@@ -32,6 +32,7 @@ this app. The Python wheel consumes only the production build.
 src/
   App.tsx               the CadViewer's browser host: URL, history, title, appearance, the file menu and the library
   main.tsx              host/client bootstrap and cleanup
+  StartingView.tsx      the page while it asks its server what it is: the app's own frame, inert
   host/                 browser clipboard, prompt delivery, the app menu's links, reload under a new server
   persistence/          the tab record in sessionStorage
   client/               appearance control and styling
@@ -189,6 +190,16 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
   `<meta name="google" content="notranslate">`, in `index.html`): the viewer speaks its own locales, and a
   browser's page translation rewrites text nodes React owns, so React's next commit throws `NotFoundError` and
   the page can go blank. The CAD app's two pages say the same. Only `classList` touches `<html>`'s class.
+- **The page's frame is there from its first paint, and nothing in it moves as the app takes over.** Before the
+  script runs, `index.html` draws the navbar's bar (40px, a phone's 48px under 600px; its colour and border read from
+  the stylesheet's tokens, `--sidebar` and `--border`, in the tab's theme its inline script set; `src/shell.test.mjs`
+  holds it to the navbar's own). While the page asks the server what it is (`main.tsx`), it draws the app's own frame
+  as the app's first frame does (`StartingView.tsx`): the real file viewer, inert and asking nothing, its file a
+  source whose every question never answers — the navbar with the panel's toggle, the logo, the name's empty place,
+  its menu and the ⋯; for a document's URL the panel's stand-in (the file's kept choice in this tab's record) and the
+  loading indicator under the navbar on the viewport's Background; for the home's, the home's navbar over the page's
+  background and the indicator. Its words are labels and the loading line the page has always shown in the browser's
+  language: the person's own comes with the server's description, so nothing else is said before it.
 - **Vite's transform cache can outlive HMR and hard reloads.** If a source
   edit does not show up, restart the dev server and delete
   `node_modules/.vite`.
@@ -292,15 +303,6 @@ temporary fixtures and a private server/cache; it runs exactly what CI runs
 `--only format|camera` runs one gate, and `--out /tmp/viewer-review` retains
 screenshots and bounded failure diagnostics; the runner cleans up its project and
 processes on exit.
-
-### Branded loading indicator
-
-`@cad/ui/loading-icon` exports the decorative `LoadingIcon` independently of
-the CAD renderer, so a host can show loading feedback without eagerly importing the
-CAD surface. `size` controls its pixel dimensions (default 96), `className` its
-placement, and `active={false}` uses the still pose. The host owns status text.
-It also stays still for OS/app reduced motion and hidden documents. See
-the UI package's asset documentation for asset provenance and regeneration.
 
 ## Current viewer behavior
 
@@ -523,8 +525,8 @@ server says it in time; the paint never waits for it, and until the catalog answ
 title "text-to-cad". Moving between documents, the name is the home's card's, or the one a document had when it
 was shown before, until the catalog's; a file opened by its path and not found is named by its path's last segment.
 Appearance (System, Light, Dark) is the app menu's Theme row, the tab's choice (`colorScheme`,
-over a file and on the home); the page has no light/dark button of its own. The original animated mark remains the shared LoadingIcon
-for loading states. The C and CAD marks are the UI package's; the favicons are this
+over a file and on the home); the page has no light/dark button of its own. Loading states are the UI package's one
+indicator, a step line over a thin bar, with no mark. The C and CAD marks are the UI package's; the favicons are this
 app's, exported alongside the docs brand assets. See
 [the brand recipe](../../scripts/brand/README.md).
 

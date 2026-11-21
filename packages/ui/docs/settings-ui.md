@@ -99,9 +99,14 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   own single-colour mark where one is published under a licence the package can ship (provenance:
   `src/assets/README.md`), else Lucide's `AppWindow`, never a mark drawn by hand; **Browser** `Globe`,
   the file manager `Folder`, **Default app** `ExternalLink`. No ⋯ where there is nothing. The home has no file and no ⋯. The name has
-  no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
+  no right-click menu and there are no crumbs. On a desktop the left's controls sit edge to edge, spaced
   by their own padding alone: the logo, Back, Forward and the ⋯ in 28px buttons, and the name
-  4px in from its edges. Right,
+  4px in from its edges. On a phone they are the row's 36px tiles, all on its middle line: the first (the toggle) on
+  the row's 8px inset, each 4px from the next (the gap between the navbar's icon buttons, `NAVBAR_CONTROLS_CLASS`),
+  the logo's mark centred in its tile, and the name's button as tall, sized by its text, its text and chevron 10px in
+  from its edges as an icon is in its tile. A fill comes only under a pointer that hovers (Tailwind's `hover:`, inside
+  `@media (hover: hover)`) or while a control's menu is open, and the ring only for keyboard focus (`:focus-visible`),
+  so a finger's tap leaves neither behind. Right,
   only what a host or a file adds, in this order: first, while
   a person has put an alert card away, the card's own icon (a circle
   with an exclamation mark, red for an error and amber for a warning, named and hinted by
@@ -288,7 +293,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 - **Tool stack** under the sub-toolbar, in the same centred column: a renderer's own
   `toolPanels`, where it hands any (see
   [The view's panel and the tool stack](#the-views-panel-and-the-tool-stack)). The column
-  stops clear of Quick Edit's row (`VIEWPORT_STACK_BOTTOM`, 68px and 16px off the bottom), so it never runs past the
+  stops clear of Quick Edit's row (`VIEWPORT_STACK_BOTTOM`, 84px off the bottom), so it never runs past the
   view.
 - **The panel**, the view's one sidebar, docked at the left: its tabs, with one search over the tree-like ones (an icon at
   the head row's right end) — first the file's structure (a
@@ -302,11 +307,12 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   400px wide at most, else the window less 16px a side (`QUICK_EDIT_MAX_PX`, `QUICK_EDIT_MARGIN_PX`), a STEP's or a
   robot's: the bar of the note a person writes to their agent, there only while something is picked or drawn
   (see [Quick Edit](#quick-edit)). **The bottom row is Quick Edit's alone**: nothing of the corner stands there.
-- **View cube** at the **top-right**, its 68px box 12px from the right edge and 12px off the top (the corner's inset:
-  the host's corner variable, 2px unset, and `CUBE_GUTTER_PX`; `VIEWPORT_CUBE_TOP`), the cube drawn as before, scaled
-  uniformly, its drawing cropped to the cube (`ViewPlaneControl.js`'s view box), its X, Y and Z lines on its own edges
-  nearest the camera (X and Y the bottom's near edges, Z the upright edge at their corner), each drawn from its negative
-  end to its positive one and lettered just inside its positive end, so nothing it draws sticks out past the cube.
+- **View cube** at the **top-right**, its 6rem box 2px from the right edge (the host's corner variable, 2px unset;
+  `VIEWPORT_CORNER_INSET_PX`) and 8px off the top, its top on the strip's (`VIEWPORT_CUBE_TOP`). The box is the whole
+  drawing (`ViewPlaneControl.js`'s 0–100 view box): the cube, and its X, Y and Z lines from one corner just outside it,
+  each past its positive face, lettered a little past its end, every letter kept inside the box however the cube turns
+  (the view's edge would cut one off). The cube stands well inside its box, so at rest its right edge is 22px from the
+  view's and the Z letter's top 16px down, a little inside a flat view's zoom (12px and 14px).
   The cube has enlarged face/edge/corner hit areas and neutral hover and XYZ guides, and it stands alone in its corner
   (**The view's corner**, below). A host whose own control floats over that corner lowers it clear with
   `--cad-viewport-corner-top`, the room that control takes from the top edge. A host can instead anchor it at the
@@ -314,9 +320,11 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   corner follows it there (**The corner at the left**, below).
   Codex's tab presentation uses this for all its views, clear of its floating chat button.
   Preview omits it, and so does a phone. **The strip and the cube**: the strip is centred on the window and the cube
-  hugs the right edge, so they meet only where the window is narrower than the strip and about 200px (under 600px for
-  a 3D file's strip, which is a phone's layout, with no cube); where they would, the strip, in the layer over the
-  corner (`data-view-top-layer`), stands over the cube: a tool is never under anything.
+  hugs the right edge, so they meet only where the window is narrower than the strip and about 200px (the cube's box
+  takes 98px from the right edge, its drawing at rest 84px; under 600px for a 3D file's strip, which is a phone's layout, with no cube); where they would, the strip, in the layer over the
+  corner (`data-view-top-layer`), stands over the cube: a tool is never under anything. **Display's card draws over
+  the 6rem cube**: open, it docks 4px under the navbar at the view's right edge, 224px wide, so it covers the cube's
+  whole box, on the top layer's z after it ([Layering](#layering)); closed, the cube is back as it was.
 - **The host's notice** (a question it asks once) stands under the corner, at the right, an inset under the corner's
   control (the cube, or the zoom) (`ViewportTopRight`, `--cad-corner-below`, the frame's measure of the corner); at the top-right itself
   where the host anchors the corner at the left.
@@ -341,7 +349,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   type scale's `text-tiny` and tabular digits with a small chevron, no − or + and no Home, on a faint resting surface
   (the foreground at 6%, a step more under the pointer and while its menu is open) so it reads as a control over the
   drawing, the digits haloed in the viewport's background; 28px tall, its middle on the tool strip's middle line, its
-  outer edge on the cube box's line (`chromeInset.js`'s `CORNER_INSET_PX`, 12px from the right; `viewCornerLayout`'s
+  outer edge the corner's inset from the right (`chromeInset.js`'s `CORNER_INSET_PX`, 12px; `viewCornerLayout`'s
   `pill`). Its menu, under it, is the zoom's commands alone ([The zoom](#camera-animation-and-preview)). A board in 3D
   keeps its zoom, which zooms its camera: there is no cube, and its way back is the zoom's fit. The corner's
   controls stand bare on the picture, so they take **the viewport's theme** (below), not the app's. A phone has no
@@ -365,6 +373,32 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   preparing, so it has none to offer: a failed update is the alert card's, whose Retry reloads) — and
   nothing while the alert card says why the view's chrome is gone. It is renderer chrome: the navbar
   carries no status. On mobile it is a tappable progress icon whose popover names what is loading.
+- **Loading is one quiet indicator** (`loading/LoadingStep.jsx`), the same wherever a file loads — the page's own
+  phase before any view is up (a CAD host's cover, `file-viewer/presentation`'s `ViewerLoadingOverlay`, or the file
+  viewer's own where the host has none), each view's cover (`ViewFrame.jsx`'s, a 3D view's and a flat one's), a 3D
+  view's display-mode change (`ShellViewport.jsx`) and Preview's cover: **one step line** — what is happening now, in
+  `text-ui`, muted, its count at the right in tabular figures — **over the thin progress bar** (3px, its share where
+  the step has one, a sliding third where it has none), 8px between them, 240px wide and never wider than the room
+  less 16px either side, centred in the viewport's area (not the page), at the same place in the page's phase and the
+  view's so nothing moves as one hands over to the other. No mark, no spinner, no headline: the navbar names the file
+  and the panel's placeholder rows say it is loading. What a lost connection adds ("Waiting for a response.
+  Retrying…", the bar held) and a step's detail after ten seconds hang under the bar, 8px apart, in the same type,
+  so the step line and the bar never move as they come and go. Where less motion is asked for (the host's Reduce
+  motion, or the system's) the bar does not move: an indeterminate one stands across its track, faint. The cover is
+  on the viewport's Background where the host knows it ([Background](#the-viewports-theme-background)); Preview's
+  cover keeps Preview's own backdrop. The update status above is the one loading line that stays a pill with its
+  spinning glyph: it sits beside a live picture, where a bar would read as the picture's own.
+- **Status screens are the loading indicator's quiet sibling** (`file-viewer/navigation/EmptyState.jsx`, the one
+  component every full-area state draws: a file that does not exist or is not held, one that would not open, CAD not
+  running and a link that no longer works in the web app, the page's first answer not coming): one 22rem column,
+  never wider than the room less 32px either side, centred where the indicator stands and left-aligned on one line —
+  the title in `text-ui` foreground (no icon, no tinted tile, no tone colour: the words say how serious it is), the
+  explanation 4px under it in `text-ui` muted, wrapping
+  into even lines (`text-pretty`), and 12px under that the action as a small quiet button (`StatusAction`: 28px,
+  `text-ui`, a hairline border, no shadow), its box on the text's line. In the app's theme, light or dark: a page state
+  has no viewport, so no Background. The viewport's alert card (a load the model may survive, with Details and Retry)
+  is the card over the view, not this. The web app's not-running screen still covers the page whole, the frame
+  beneath it inert and isolated.
 
 ## Tools and lifecycle
 
@@ -783,7 +817,8 @@ structure. Every rule here, and why:
 
 - **Its toggle is the navbar's** (`file-viewer/panelToggles.js`: the frame says it, `FileViewer` hands it to the navbar,
   and draws it, in the state the view will open with and not pressable yet, from a document page's first frame until
-  the view is up: [the host contract](viewer-host.md)),
+  the view is up — a host's page before its viewer can mount too, which draws this phase inert: [the host
+  contract](viewer-host.md)),
   **the navbar's first control, before the logo**: the strip's 28px tile, its icon the sidebar's (`SidebarIcon`: a
   rounded rectangle, 14 × 12 in the 16px box, its corners 3px, and a short line inside near its left edge, half its
   height, centred, at lucide's stroke), **the same neutral button whether the panel is open or shut** — no pressed
@@ -797,7 +832,10 @@ structure. Every rule here, and why:
   viewer's: it hides nothing.
 - **Collapsed, it leaves nothing over the model**: its toggle in the navbar, or its key, brings it back; nothing opens
   on a hover of the view's **edge** (no hot zone, no rail). **A mouse resting on its toggle peeks it**
-  (`kit/shell/usePanelPeek.js`, as VS Code's and Linear's unpinned sidebars show themselves): collapsed by the person or
+  (`file-viewer/panelPeek.js`, as VS Code's and Linear's unpinned sidebars show themselves), **from the page's first frame**:
+  the file viewer holds the one peek, so while the file still loads a rest on the toggle peeks the stand-in (its
+  placeholder head and rows, the same card, place, delay and slide), and the view, arriving, takes that card over where
+  it stands, with no flicker and no second slide (a press on the stand-in pins or unpins as the view's toggle does). Collapsed by the person or
   by a narrow view, the panel shows after the pointer has rested on the toggle 500ms (`PANEL_PEEK_DELAY_MS`), never
   while a mouse button is held (a drag passing over it), and never for a pointer that cannot rest (a finger: a phone's,
   or a touch screen's press, is a click) nor on keyboard focus — ⌘\ is the keyboard's way to it. It goes once the
@@ -812,9 +850,12 @@ structure. Every rule here, and why:
   (or its key, ⌘\) pins it — open, pushing and kept, as a click on a collapsed panel always is (a click with no peek
   up opens it, as ever); nothing done inside it pins it, neither a pick, a tab, a search nor a slider, so moving off a
   peek always closes it. A peek is never kept: the file's `open` is the person's pin or close alone. **It slides**: in
-  from the window's left edge as it opens and back out as it goes, the card and all it holds as one (a transform, at the
-  menus' 150ms, eased out coming and in going: nothing laid out again, the canvas and camera untouched), removed once
-  it is out; the pointer back on the toggle or the card while it slides out brings it back. Pinned from a peek it does
+  from the window's left edge as it opens and back out as it goes, the card and all it holds as one (a transform: nothing
+  laid out again, the canvas and camera untouched), removed once it is out. **Its timings**, all `panelPeek.js`'s, the
+  one source every card mirroring it takes: the rest before it opens, 500ms (`PANEL_PEEK_DELAY_MS`); the slide in,
+  100ms eased out (`PANEL_PEEK_IN_MS`); the grace once the pointer has left the toggle and the card before it goes,
+  the same 500ms; the slide out, 80ms eased in (`PANEL_PEEK_OUT_MS`; should its end go unheard, it is removed after
+  `PANEL_PEEK_EXIT_FALLBACK_MS`, 180ms); the pointer back on the toggle or the card while it slides out brings it back. Pinned from a peek it does
   not slide (the card becomes the docked panel in place), and where less motion is asked for it appears and goes. Once
   it is up, **the toggle's tooltip goes**, and stays away while it is: the panel is showing, which is what the tip
   offered.
@@ -1141,8 +1182,8 @@ Its panels follow these rules:
 - **One grip, on a resizable panel only**: its bottom-right corner, moving
   its width and cap at once, a separator in the tab order named after its panel (Left/Right
   nudge the width and Up/Down the cap by 16px, Home and End take both to their bounds). A folded panel has no grip: there is no height to set.
-- **Never past the viewer.** The column stops 8px above the cube's line
-  (`VIEWPORT_STACK_BOTTOM`, `calc(68px + 16px)`). When the panels need more, a `"tree"` panel
+- **Never past the viewer.** The column stops clear of Quick Edit's row
+  (`VIEWPORT_STACK_BOTTOM`, 84px off the bottom). When the panels need more, a `"tree"` panel
   gives way first, down to 128px or its content, then the `"details"` panels together, each in
   proportion to its height, down to 96px or its content; a `"fixed"` panel keeps its height.
   If what cannot give way still does not fit, the column itself scrolls — a panel is never cut.
@@ -1347,8 +1388,10 @@ button ([Preview](#camera-animation-and-preview)). Each is the sidebar's peek ca
   its radius (`PANEL_PEEK_RADIUS_PX`). Its type is the panel's (`data-panel-surface="card"`: 12/16 at a desktop's
   pointer and a phone's alike).
 - **Motion.** The peek's own, mirrored: it slides in from the right edge and back out to it, at the peek's duration and
-  easing, gone at once where motion is not welcome (`PanelSurface.jsx`'s `peekSlideClass("right", leaving)`,
-  `usePanelPeek.js`'s `useSlidingCard`). Closing, it slides out inert and is gone at the slide's end.
+  easing (in, 100ms eased out; out, 80ms eased in), gone at once where motion is not welcome: `panelPeek.js`'s
+  `PANEL_PEEK_IN_RIGHT_CLASS` and `PANEL_PEEK_OUT_RIGHT_CLASS`, its in and out classes from the right, and its
+  `useSlidingCard`, so [its timings](#the-views-panel-and-the-tool-stack) are the card's with nothing to keep in step.
+  Closing, it slides out inert and is gone at the slide's end (or after `PANEL_PEEK_EXIT_FALLBACK_MS`).
 - **Padding.** One inset on all four sides, the peek card's content inset (the panel's inset less the gap: 12px from
   the card's edge): the title's left edge and its capitals' top, the X's glyph (its right edge, centred on the title's
   capitals; its 24px hit area hangs into the padding), every label's left edge, every control's right edge, Reset's
@@ -1409,14 +1452,19 @@ sheet.
 ### A phone's sidebar
 
 On a phone the navbar's panel toggle (its first control) opens the view's panel as a standard mobile sidebar: shadcn's
-**Sheet** from the left, 85% of the screen wide and 20rem at most, over the model with the Sheet's scrim, starting
-closed each time (kept nowhere). In it **the desktop's panel, the same components at the same sizes, gaps and type**:
+**Sheet** from the left, 85% of the screen wide and 20rem at most, **under the navbar** (its top the navbar's bottom
+edge, so the toggle, the name, Display and Preview stay in sight and usable), over the strip, the model and Quick Edit,
+with **no scrim** and **no animation**: it is there, and gone, at once (the Sheet's `scrim={false}` and
+`animated={false}`, `usePhoneSheetPlace.js`), starting closed each time (kept nowhere). In it **the desktop's panel, the same components at the same sizes, gaps and type**:
 its head (the tabs, ⋯, the search's icon; no Back), its search, its tree rows (`primitives/tree-row.jsx`: the same 4px
 gap, 12px glyph slot, 16x20 actions 2px apart, 6px from the right; the row's own touch height, 36px, the one thing a
 phone changes in it) and every tab's content (`FlatPanel`'s `mode: "page"`). Only what a phone cannot do differs: a
 row's actions are always shown, as nothing hovers (`globals.css`'s `[data-panel-surface="page"]`). A tap outside it, a
 swipe back to the left (the sheet's `onSwipeClose`: 48px towards its edge, more across than along it), Escape or the
-toggle again close it; ⌘\ too. Nothing hovers, so a phone has no peek.
+toggle again close it; ⌘\ too. A tap on the picture lands on the Sheet's overlay, kept but clear, so it closes the sheet
+and reaches nothing under it; a tap on Display, Preview or the name closes it and does what it does (Display's
+closes the sheet and opens its card, one tap; `globals.css` keeps the navbar pressable over the open sheet). Focus moves into it
+as it opens and back to the toggle as it closes. Nothing hovers, so a phone has no peek.
 
 ## Display settings and section primitives
 
@@ -1505,8 +1553,8 @@ Three interface sizes and one heading, each on a fixed line height, as Figma's U
 | Role | Size / line height / weight | Token |
 | --- | --- | --- |
 | Tooltips, shortcut hints (a menu's, a tooltip's key), small metadata (a tile's age, the app menu's version, a value badge, the zoom's percentage, a status under the view) | 11 / 16, regular | `text-tiny` |
-| The view's panel and the settings cards (every step of the scale inside them: `--cad-text-panel`, [One surface, one text size](#the-views-panel-and-the-tool-stack); Display's and Preview's [cards](#the-settings-cards), a card's title and section headings at 500), Quick Edit, the sub-toolbars and their popovers, the tool stack's panels, and every menu, dropdown, select, context menu and toast | 12 / 16, regular (a menu's label too) | `text-xs` |
-| App chrome: the navbar and the file's name, dialogs (What's new), the Home's body | 13 / 20, regular | `text-ui` (`text-sm`, `text-base`) |
+| The view's panel and the settings cards (every step of the scale inside them: `--cad-text-panel`, [One surface, one text size](#the-views-panel-and-the-tool-stack); Display's and Preview's [cards](#the-settings-cards), a card's title and section headings at 500), Quick Edit (its chips, hints and buttons), the sub-toolbars and their popovers, the tool stack's panels, and every menu, dropdown, select, context menu and toast | 12 / 16, regular (a menu's label too) | `text-xs` |
+| App chrome: the navbar and the file's name, dialogs (What's new), the Home's body, the text a person types in Quick Edit's note (and its placeholder), floating or docked, and the loading indicator's step line | 13 / 20, regular | `text-ui` (`text-sm`, `text-base`) |
 | The one heading: the CAD app's notice title (the Home's **Recent** is the navbar's, 13/20 at 500) | 15 / 20, semibold | `text-heading` |
 
 A phone takes one step up on the same line heights: 12, 13 and 14px, the heading 16px
@@ -1887,7 +1935,7 @@ so no setting turns it off.
 
 The bar stands 16px off the view's bottom. **The toolbar and the Quick Edit bar are centred on the window, always;
 panels never move them; where they meet a panel they sit above it.** Its width is 400px at most, else the window less
-16px a side (8px on a phone), measured by the one frame every view mounts (`ViewFrame.jsx`'s `QUICK_EDIT_MAX_PX` and
+16px a side (on a phone the window less 8px a side, whatever its width), measured by the one frame every view mounts (`ViewFrame.jsx`'s `QUICK_EDIT_MAX_PX` and
 `QUICK_EDIT_MARGIN_PX`, written to `--cad-quick-edit-left` and `--cad-quick-edit-width`), in the top layer over both
 panels and an overlaid one. Why: the bar is where the person writes, and it stays where their eyes left it whatever
 opens beside it; a bar that moved or shrank with each panel was a different target every time.
@@ -1899,8 +1947,8 @@ upward, line by line, as it is written (never on focus), to six lines, then scro
 border is blue while the note has the keyboard. Where the bar is narrow its chips give way to
 **+N more** sooner and Copy Prompt drops its words for its icon (only where the window makes the bar narrower than 400px).
 
-On a phone (`docked`) the bar is the same two rows across the view, 8px in, above the safe
-area, at a finger's sizes (36px buttons, the note's text a step up). A pick never brings up the
+On a phone (`docked`) the bar is the same two rows across the view's full width, 8px in a side, never capped at 400px,
+above the safe area, at a finger's sizes (36px buttons, the note's text a step up). A pick never brings up the
 keyboard there: the note is a tap away. A tap on a chip opens its card (above the chip) and
 copies nothing: the card's title copies. On a desktop a card opens above its chip too, and a
 click on the chip copies it.

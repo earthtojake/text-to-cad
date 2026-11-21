@@ -77,6 +77,43 @@ const settle = page => page.evaluate(() => new Promise(resolve => requestAnimati
 // temporary harness.
 const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 20 0 0\nvertex 0 20 0\nendloop\nendfacet\nendsolid triangle\n';
 
+// A phone's navbar, its left end (`ViewerNavbar.jsx`): the toggle, the logo, the name and its ⋯, each 36px tall on one
+// line, the first on the row's 8px inset, 4px between neighbours; a finger's tap leaves no fill or ring behind.
+test('a phone\'s navbar starts regular: 36px controls 4px apart from the row\'s inset, and a tap leaves no fill or ring', async (t) => {
+  const origin = await serve(t);
+  const context = await browser.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true, isMobile: true });
+  t.after(() => context.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await page.goto(`${origin}/?file=panel.harness&home=1`);
+  await page.addStyleTag({ content: '#root > div { width: 390px !important; height: 700px !important; }' });
+  const pane = page.getByTestId('one');
+  await pane.locator('[data-viewer-navbar] [data-testid="file-actions"]').waitFor();
+  const SELECTORS = ['[data-navbar-panel="left"]', '[data-navbar-menu]', '[data-file-name]', '[data-testid="file-actions"]'];
+  const row = () => pane.locator('[data-viewer-navbar]').evaluate((bar, selectors) => {
+    const top = bar.getBoundingClientRect();
+    const boxes = selectors.map(selector => bar.querySelector(selector).getBoundingClientRect());
+    return { left: Math.round(boxes[0].left - top.left), heights: boxes.map(box => Math.round(box.height)), widths: [0, 1, 3].map(at => Math.round(boxes[at].width)),
+      gaps: boxes.slice(1).map((box, at) => Math.round(box.left - boxes[at].right)), centred: boxes.every(box => Math.abs(box.top + box.height / 2 - (top.top + top.height / 2)) < 1) };
+  }, SELECTORS);
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-viewer-navbar]').getBoundingClientRect().height === 48);
+  assert.deepEqual(await row(), { left: 8, heights: [36, 36, 36, 36], widths: [36, 36, 36], gaps: [4, 4, 4], centred: true }, 'the left end, regular');
+  const marks = selector => pane.locator(`[data-viewer-navbar] ${selector}`).evaluate(element => {
+    const style = getComputedStyle(element);
+    return { fill: style.backgroundColor, ring: element.matches(':focus-visible') };
+  });
+  for (const selector of ['[data-navbar-menu]', '[data-file-name]']) {
+    await pane.locator(`[data-viewer-navbar] ${selector}`).tap();
+    await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'open', selector);
+    await page.touchscreen.tap(200, 500);
+    await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'closed', selector);
+    // Its colour transition (`transition-colors`) run out: what is left is what stays.
+    await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAnimations()
+      .every(animation => animation.playState === 'finished'), selector);
+    assert.deepEqual(await marks(selector), { fill: 'rgba(0, 0, 0, 0)', ring: false }, `${selector}: no fill or ring after a tap`);
+  }
+});
+
 test('a phone\'s tools centre on the viewport as space runs out; its Display and Preview are the navbar\'s', async (t) => {
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
@@ -186,21 +223,39 @@ for (const [what, file, route, groups] of [['a 3D view', 'panel.harness', undefi
     const phone = await measure();
     assert.ok(Math.abs(phone.strip - phone.view) <= 1, `on a phone the strip is at the view's centre: ${phone.strip} of ${phone.view}`);
     assert.equal(await pane.locator('[data-flat-panel], [data-zoom-pill], [data-view-cube]').count(), 0, 'a phone has no docked panel, pill or cube');
-    // Its panel is a sheet from the left, over the model with a scrim, opened by the navbar's toggle; a tap outside shuts it.
+    // Its panel is a sheet from the left under the navbar, over the model with no scrim and no slide, opened by the
+    // navbar's toggle; a tap outside shuts it, at once, and focus goes back to the toggle.
     await pane.locator('[data-navbar-panel="left"]').click();
     const sheet = page.locator('[data-panel-sheet]');
     await sheet.waitFor();
-    // In from the left edge, once it has slid in.
-    await page.waitForFunction(() => Math.round(document.querySelector('[data-panel-sheet]').getBoundingClientRect().left) === 0);
+    const placed = await page.evaluate(() => {
+      const box = document.querySelector('[data-panel-sheet]').getBoundingClientRect();
+      const overlay = document.querySelector('[data-slot="sheet-overlay"]');
+      const style = getComputedStyle(document.querySelector('[data-panel-sheet]'));
+      return { left: Math.round(box.left), top: Math.round(box.top), navbar: Math.round(document.querySelector('[data-testid="one"] [data-viewer-navbar]').getBoundingClientRect().bottom),
+        scrim: overlay ? getComputedStyle(overlay).backgroundColor : null, animation: style.animationName, focused: document.activeElement?.closest('[data-panel-sheet]') !== null };
+    });
+    assert.deepEqual(placed, { left: 0, top: placed.navbar, navbar: placed.navbar, scrim: 'rgba(0, 0, 0, 0)', animation: 'none', focused: true },
+      `in at once at the left edge, its top the navbar's bottom, nothing dimmed, focus in it: ${JSON.stringify(placed)}`);
     assert.equal(await sheet.locator('[data-flat-panel]').getAttribute('data-flat-panel'), 'page');
-    await settle(page);
     await page.mouse.click(380, 300);
-    await sheet.waitFor({ state: 'detached' });
-    // Display opens its card, the desktop's (no bottom sheet), its rows the file's; a tap outside leaves it open, as a
-    // person working in the view leaves it; its X puts it away.
+    assert.equal(await sheet.count(), 0, 'gone at once');
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-navbar-panel')), 'left', 'focus back on the toggle');
+    // The navbar's toggle, in sight above it, shuts it too.
+    await pane.locator('[data-navbar-panel="left"]').click();
+    await sheet.waitFor();
+    await pane.locator('[data-navbar-panel="left"]').click();
+    await settle(page);
+    assert.equal(await sheet.count(), 0, 'the toggle shuts it');
+    // Display opens its card, the desktop's (no bottom sheet), its rows the file's. Pressed over the open sheet, it shuts
+    // the sheet and opens its card, the one press; a tap outside leaves the card open, as a person working in the view
+    // leaves it; its X puts it away.
+    await pane.locator('[data-navbar-panel="left"]').click();
+    await sheet.waitFor();
     await pane.locator('[data-display-settings]').click();
     const card = page.locator('[data-display-settings-card]');
     await card.waitFor();
+    assert.equal(await sheet.count(), 0, 'Display, pressed over the sheet, shut it');
     assert.deepEqual(await card.locator('[data-settings-row]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-settings-row'))), groups);
     assert.equal(await page.locator('[data-slot=drawer-content]').count(), 0, 'no bottom sheet');
     await settle(page);
@@ -846,19 +901,19 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.equal(await overlay.count(), 0, 'a plain load covers nothing');
   assert.equal(await card.count(), 0, 'and raises nothing');
 
-  // THE CUBE IS THE TOP-RIGHT CORNER'S: its 68px box (square: one uniform scale) 12px off the top and 12px from the
-  // right, and the bottom row is Quick Edit's alone: the tool stack stops clear of it. The cube stands alone in its
-  // corner; View and Preview are the navbar's, at its right end, View left of Preview; the strip is the tools alone, no
-  // rule. The bottom middle is the host's (a composer, on some).
+  // THE CUBE IS THE TOP-RIGHT CORNER'S: its 6rem box (square: one uniform scale; the cube, its axes and their letters)
+  // 8px off the top and 2px from the right, and the bottom row is Quick Edit's alone: the tool stack stops clear of it.
+  // The cube stands alone in its corner; View and Preview are the navbar's, at its right end, View left of Preview; the
+  // strip is the tools alone, no rule. The bottom middle is the host's (a composer, on some).
   const frameBox = await canvasElement.boundingBox();
   const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
   const stackBox = await pane.locator('[data-cad-tool-groups]').boundingBox();
   const offTop = cubeBox.y - frameBox.y;
-  assert.deepEqual([Math.round(cubeBox.width), Math.round(cubeBox.height)], [68, 68], 'the cube\'s box, 68px square');
-  assert.ok(Math.abs(offTop - 12) < 0.5, `the view cube sits 12px off the top: ${offTop}px`);
+  assert.deepEqual([Math.round(cubeBox.width), Math.round(cubeBox.height)], [96, 96], 'the cube\'s box, 6rem square');
+  assert.ok(Math.abs(offTop - 8) < 0.5, `the view cube sits 8px off the top: ${offTop}px`);
   const offRight = frameBox.x + frameBox.width - cubeBox.x - cubeBox.width;
-  assert.ok(Math.abs(offRight - 12) < 0.5, `the view cube stands 12px from the right edge: ${offRight}px`);
-  assert.ok(stackBox.y + stackBox.height <= frameBox.y + frameBox.height - 68 - 16 + 0.5, 'the tool stack stops clear of Quick Edit\'s row');
+  assert.ok(Math.abs(offRight - 2) < 0.5, `the view cube stands 2px from the right edge: ${offRight}px`);
+  assert.ok(stackBox.y + stackBox.height <= frameBox.y + frameBox.height - 84 + 0.5, 'the tool stack stops clear of Quick Edit\'s row');
   assert.equal(await pane.locator('[data-cad-toolbar] [data-view-controls]').count(), 0, 'nothing of the view on the strip');
   assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     ['Display', 'Preview'], 'Display and Preview, the navbar\'s');
@@ -1195,7 +1250,7 @@ test('the strip and Quick Edit stay centred on the view at 1440, 867 and 620 wit
 // Copy Prompt, Quick Edit's one action where the host takes no message (the web's), keeps its words at the bar's full
 // 400px — its text and its icon side by side inside the button, beside the note — and drops them for its icon only
 // where the window makes the bar narrower.
-test('Copy Prompt keeps its words at the 400px bar, and is its icon alone only where the window is narrower than the bar', async (t) => {
+test('Copy Prompt keeps its words at the 400px bar and a phone\'s full-width one, and is its icon alone only where the window is narrower than the bar', async (t) => {
   const origin = await serve(t);
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   t.after(() => page.close());
@@ -1214,10 +1269,11 @@ test('Copy Prompt keeps its words at the 400px bar, and is its icon alone only w
     return { actions: actions.length, bar: Math.round(bar.getBoundingClientRect().width), words: getComputedStyle(words).display !== 'none' && text.width > 0,
       inside: text.right <= box.right + 0.5 && icon.right <= text.left + 0.5, text: words.textContent };
   });
-  for (const width of [1440, 432]) {
+  // 400px on a desktop; a phone's (432px) the window's full width less 8px a side, uncapped.
+  for (const [width, bar] of [[1440, 400], [432, 416]]) {
     await page.locator('#root > div').first().evaluate((element, width) => element.style.setProperty('width', `${width}px`, 'important'), width);
     await settle(page);
-    assert.deepEqual(await read(), { actions: 1, bar: 400, words: true, inside: true, text: 'Copy Prompt' }, `${width}: Copy Prompt in words`);
+    assert.deepEqual(await read(), { actions: 1, bar, words: true, inside: true, text: 'Copy Prompt' }, `${width}: Copy Prompt in words`);
   }
   await page.locator('#root > div').first().evaluate(element => element.style.setProperty('width', '380px', 'important'));
   await settle(page);
@@ -1306,7 +1362,7 @@ test('three tabs and the search fit the 232px panel with no ⋯; a fourth is ⋯
 });
 
 // Display's card (`DisplaySettings.jsx`, `kit/view-settings/SettingsCard.jsx`), as a page lays it out: the sidebar's peek
-// card mirrored at the view's right edge (the same box, gaps and content inset), over the cube; its dropdowns one width;
+// card mirrored at the view's right edge (the same box, gaps and content inset), over the whole 6rem cube; its dropdowns one width;
 // nothing in it cut short.
 test('Display\'s card is the peek card\'s mirror at the view\'s right edge, over the cube: the same gaps, width and inset, its dropdowns one width, nothing cut', async (t) => {
   const origin = await serve(t);
@@ -1329,18 +1385,28 @@ test('Display\'s card is the peek card\'s mirror at the view\'s right edge, over
     const firstLabel = rect(card.querySelector('[data-settings-label]'));
     const peekLabel = rect(document.querySelector('[data-panel-peek] [data-flat-panel-tab-name]'));
     const cube = rect(document.querySelector('[data-view-cube]'));
-    const over = document.elementFromPoint(cube.left + cube.width / 2, cube.top + cube.height / 2);
+    // What the cube draws (its faces, edges, axes and letters), which stands inside its box: the box's outer 2px at
+    // the right is the corner inset's, past the card's 4px gap, and holds nothing.
+    const ink = [...document.querySelectorAll('[data-view-cube] svg :is(polygon, line, circle, text)')].map(rect)
+      .filter(r => r.width || r.height);
+    const drawn = { left: Math.min(...ink.map(r => r.left)), top: Math.min(...ink.map(r => r.top)),
+      right: Math.max(...ink.map(r => r.right)), bottom: Math.max(...ink.map(r => r.bottom)) };
+    const points = [[0.5, 0.5], [0, 0], [1, 0], [0, 1], [1, 1]].map(([x, y]) =>
+      [drawn.left + 1 + x * (drawn.right - drawn.left - 2), drawn.top + 1 + y * (drawn.bottom - drawn.top - 2)]);
     const cut = [...card.querySelectorAll('[data-settings-label], [data-settings-value-label], [data-settings-title]')]
       .filter(element => element.scrollWidth > element.clientWidth).map(element => element.textContent);
     return { card: [box.left, box.top, box.width], right: view.right - box.right, peek: [peek.left - view.left, peek.top, peek.width],
       inset: firstLabel.left - box.left, peekInset: peekLabel.left - peek.left,
-      widths: [...card.querySelectorAll('[data-settings-select]')].map(trigger => rect(trigger).width), cut, overCube: card.contains(over) };
+      widths: [...card.querySelectorAll('[data-settings-select]')].map(trigger => rect(trigger).width), cut,
+      cube: cube.width, drawn: [drawn.left - box.left, drawn.top - box.top, box.right - drawn.right, box.bottom - drawn.bottom], overCube: points.every(([x, y]) => card.contains(document.elementFromPoint(x, y))) };
   });
   assert.deepEqual([at.card[1], at.card[2], at.right], [at.peek[1], at.peek[2], at.peek[0]], `the peek card's box, mirrored: ${JSON.stringify(at)}`);
   assert.deepEqual([at.inset, at.peekInset], [12, 12], 'the content 12px in, as the peek card\'s is');
   assert.ok(at.widths.length === 3 && at.widths.every(width => Math.abs(width - at.widths[0]) < 0.5) && at.widths[0] >= (at.card[2] - 24) / 2 - 0.5,
     `the dropdowns one width, half the content at least: ${at.widths}`);
   assert.deepEqual(at.cut, [], 'no label or value cut short');
-  assert.equal(at.overCube, true, 'the card over the cube');
+  assert.equal(at.cube, 96, 'the cube\'s 6rem box');
+  assert.ok(at.drawn.every(room => room >= 0), `all the cube draws inside the card's box: ${JSON.stringify(at)}`);
+  assert.equal(at.overCube, true, `the card over all the cube draws, its centre and its four corners: ${JSON.stringify(at)}`);
   assert.deepEqual(errors, []);
 });

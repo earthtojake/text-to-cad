@@ -28,3 +28,6 @@ export function ViewerLoadingOverlay({ viewerLoading, progress, background = nul
   return createElement('div', { className: `contents ${scheme}`, 'data-viewport-scheme': scheme },
     createElement(Overlay, { loading: { opening: viewerLoading, headline: "Opening model", progress }, operationKey: "preparing-document" }));
 }
+
+/** The one loading indicator (`settings-ui.md`, "Loading"), for what a host draws itself in the app's theme: its home while it starts. */
+export { default as LoadingStep } from '../loading/LoadingStep.jsx';

@@ -86,6 +86,10 @@ it("the loading covers, the page's and the view's, are on the viewport's Backgro
     const view = render(<div className="dark"><ViewFrame file="part.step" mobile={false} compact={false} chromeHidden tools={[]} layout={{}} onLayoutChange={() => {}}
       viewport={{ scheme: background }} loading={{ opening: true }}>{null}</ViewFrame></div>);
     expect([scheme(page.container), scheme(view.container)]).toEqual([background, background]);
+    // The one indicator: a step line over a progress bar, and no mark.
+    const indicator = view.container.querySelector('[data-viewer-loading]')!;
+    expect([indicator.querySelector('[data-loading-step]')?.textContent, Boolean(indicator.querySelector('[role="progressbar"]')),
+      indicator.querySelectorAll('img, picture, svg').length]).toEqual(['Preparing view', true, 0]);
     cleanup();
   }
   vi.unstubAllGlobals();

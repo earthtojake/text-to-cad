@@ -22,10 +22,6 @@
       "types": "./dist/file-viewer/navigation/index.d.ts",
       "import": "./dist/file-viewer/navigation/index.js"
     },
-    "./loading-icon": {
-      "types": "./dist/loading/LoadingIcon.d.ts",
-      "import": "./dist/loading/LoadingIcon.js"
-    },
     "./utils": {
       "types": "./dist/lib/utils.d.ts",
       "import": "./dist/lib/utils.js"

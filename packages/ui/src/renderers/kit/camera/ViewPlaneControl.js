@@ -25,13 +25,8 @@ const HOVER_FILL = "color-mix(in oklch, var(--background) 55%, var(--foreground)
 // SVG units: the cube's half-size on screen, and where its centre sits.
 const SCALE = 21;
 const CENTER = 50;
-// The cube's box, the view box cropped to the cube: its silhouette at most √3 half-sizes from the centre (36.4 units),
-// with room for a corner's dot and an edge's stroke, so the cube fills its box and nothing it draws leaves it.
-const VIEW_BOX_MIN = 12;
-const VIEW_BOX_SIZE = 100 - 2 * VIEW_BOX_MIN;
-
-// An axis's letter, by its edge, kept inside the box by more than half its glyph.
-const inBox = value => Math.min(100 - VIEW_BOX_MIN - 4, Math.max(VIEW_BOX_MIN + 4, value));
+// An axis label's centre, kept inside the 0–100 view box by more than half its 10-unit glyph.
+const inBox = value => Math.min(94, Math.max(6, value));
 
 function normalizeCssLength(value, fallback = "") {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) return `${value}px`;
@@ -150,7 +145,6 @@ function ViewPlaneControl({
   isLoading,
   meshData,
   viewPlaneOffsetRight,
-  viewPlaneGutter = 0,
   viewPlaneOffsetLeft,
   viewPlaneOffsetBottom = 16,
   viewPlaneOffsetTop,
@@ -218,20 +212,23 @@ function ViewPlaneControl({
       return { ...corner, x, y, facing: view[2] };
     })
     .filter((corner) => corner.facing > 0.05);
-  // The axes lie on the cube's own edges, nothing past its silhouette: each along the edge parallel to it nearest the
-  // camera on the bottom (X and Y the bottom's near edges; Z the upright edge at their corner), drawn from its negative end
-  // to its positive one, as an axis points, and lettered just inside its positive end, off the edge away from the centre.
-  const near = [0, 1].map(index => (orientation[["x", "y", "z"][index]][2] >= 0 ? 1 : -1));
-  const corner = [near[0], near[1], -1];
+  // Anchor all three axes to one model-space corner, just outside the cube.
+  // Their projection follows the cube edges, extending past each positive face.
+  const axisOrigin = [-1.08, -1.08, -1.08];
+  const [axisX, axisY] = toScreen(toView(orientation, axisOrigin));
   const triad = ["x", "y", "z"].map((axis, index) => {
-    const from = [...corner], to = [...corner];
-    from[index] = -1;
-    to[index] = 1;
-    const [x0, y0] = toScreen(toView(orientation, from));
-    const [x, y] = toScreen(toView(orientation, to));
-    const along = [x0 + (x - x0) * 0.82, y0 + (y - y0) * 0.82];
-    const off = [along[0] - CENTER, along[1] - CENTER], length = Math.hypot(...off) || 1;
-    return { axis, x0, y0, x, y, lx: inBox(along[0] + off[0] / length * 5), ly: inBox(along[1] + off[1] / length * 5), visible: true };
+    const end = [...axisOrigin];
+    end[index] = 1.4;
+    const [x, y] = toScreen(toView(orientation, end));
+    const dx = x - axisX, dy = y - axisY;
+    const length = Math.hypot(dx, dy);
+    const fallback = axis === "x" ? [1, 0] : axis === "y" ? [0, -1] : [-0.7, -0.7];
+    const direction = length > 1 ? [dx / length, dy / length] : fallback;
+    // The two adjacent faces determine whether this edge lies behind the cube.
+    const visible = ["x", "y", "z"].some((other) => other !== axis && orientation[other][2] < 0);
+    // A label sits a little past its axis's end, but never outside the cube's own box: in a corner
+    // of the view the box's edge is the view's, which would cut it off.
+    return { axis, x, y, lx: inBox(x + direction[0] * 7), ly: inBox(y + direction[1] * 7), visible };
   });
 
   const hoveredPick = VIEW_CUBE_EDGES.find(edge => edge.id === hoveredId) || VIEW_CUBE_CORNERS.find(corner => corner.id === hoveredId);
@@ -304,9 +301,7 @@ function ViewPlaneControl({
       className="pointer-events-none absolute z-30 flex flex-col items-center gap-0" data-view-cube=""
       style={{ ...(viewPlaneOffsetLeft != null ? { left: `${viewPlaneOffsetLeft}px` } : {
         left: "var(--cad-viewport-corner-left, auto)", right: `var(--cad-viewport-corner-right, ${viewPlaneOffsetRight}px)` }),
-        ...(viewPlaneOffsetTop != null ? { top: viewPlaneOffsetTop } : { bottom }),
-        // Its box stands `viewPlaneGutter` in from the host's corner variable, at either side it anchors.
-        ...(viewPlaneGutter ? { paddingLeft: `${viewPlaneGutter}px`, paddingRight: `${viewPlaneGutter}px` } : null) }}
+        ...(viewPlaneOffsetTop != null ? { top: viewPlaneOffsetTop } : { bottom }) }}
     >
       {viewPlaneHeader ? (
         <div className="pointer-events-auto" onPointerDown={(event) => event.stopPropagation()}>
@@ -318,7 +313,7 @@ function ViewPlaneControl({
         style={sizeStyle}
         onPointerDown={(event) => { event.stopPropagation(); startDrag(event); }}
       >
-        <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox={`${VIEW_BOX_MIN} ${VIEW_BOX_MIN} ${VIEW_BOX_SIZE} ${VIEW_BOX_SIZE}`} aria-label={t("viewCube.label")}>
+        <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" aria-label={t("viewCube.label")}>
           {faces.map((face) => {
             const active = activeViewPlaneFace === face.id;
             const hovered = hoveredId === face.id;
@@ -376,10 +371,10 @@ function ViewPlaneControl({
             );
           })}
           <g aria-hidden="true" pointerEvents="none">
-            {triad.map(({ axis, x0, y0, x, y, lx, ly, visible }) => (
+            {triad.map(({ axis, x, y, lx, ly, visible }) => (
               <g key={axis} opacity={visible ? 1 : 0.4}>
-                <line x1={x0} y1={y0} x2={x} y2={y} stroke={AXIS_COLORS[axis]} strokeWidth="1.7" strokeLinecap="round" />
-                <text x={lx} y={ly} textAnchor="middle" dominantBaseline="central" fontSize="8" fontWeight="600" fill={AXIS_COLORS[axis]} data-view-cube-axis-label="">
+                <line x1={axisX} y1={axisY} x2={x} y2={y} stroke={AXIS_COLORS[axis]} strokeWidth="1.7" strokeLinecap="round" />
+                <text x={lx} y={ly} textAnchor="middle" dominantBaseline="central" fontSize="10" fontWeight="600" fill={AXIS_COLORS[axis]}>
                   {axis.toUpperCase()}
                 </text>
               </g>

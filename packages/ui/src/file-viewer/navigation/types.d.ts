@@ -1,5 +1,5 @@
 /** Package-owned contracts for the shared navigation primitives. */
-import type { ComponentType, ElementType, ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { FileSource } from "../types.js";
 
 /* -------------------------------------------------------------------- */
@@ -55,16 +55,15 @@ export function folderTrail(path: string): { name: string; path: string }[];
 /** The folder holding `path`. */
 export function parentFolder(path: string): string;
 
-/** The one empty state, used by every pane in both apps. */
+/** The one status screen, used by every full-area state in both apps: quiet, a 22rem column centred in the area. */
 export const EmptyState: ComponentType<{
-  icon: ElementType;
   title: string;
   description?: string;
   action?: ReactNode;
   className?: string;
-  /** `warn` is for a missing prerequisite, not an idle state. */
-  tone?: "muted" | "warn";
 }>;
+/** A status screen's action: the panel's small quiet button. */
+export const StatusAction: ComponentType<import("react").ButtonHTMLAttributes<HTMLButtonElement>>;
 
 export function fuzzyMatch(
   needle: string,
