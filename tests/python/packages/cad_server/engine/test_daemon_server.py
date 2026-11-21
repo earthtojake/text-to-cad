@@ -1055,6 +1055,42 @@ class OwnFilesTest(unittest.TestCase):
         self.assertTrue(places.names(held, path), "the lock is on the file the name names")
         self.assertIsNone(places.lock(path), "and it is held: no second daemon takes it")
 
+    def test_a_lock_file_being_removed_is_opened_once_it_is_gone(self) -> None:
+        # Windows refuses to open a lock file while its last holder removes it; a start at that moment is
+        # not refused by the system, one refused throughout is, and elsewhere a refusal is the system's at once.
+        import builtins
+
+        from cad.engine import places
+        from cad.engine.atomic_replace import RETRY_DELAYS_SECONDS
+
+        path = Path(tempfile.mkdtemp(prefix="eng-lock-")) / "x.lock"
+        self.addCleanup(shutil.rmtree, path.parent, True)
+        real = builtins.open
+        refused = PermissionError(13, "Permission denied")
+
+        def refusing(times: int):
+            left = [times]
+
+            def opener(file, *args, **kwargs):
+                if str(file) == str(path) and left[0]:
+                    left[0] -= 1
+                    raise refused
+                return real(file, *args, **kwargs)
+
+            return opener
+
+        with mock.patch.object(places, "WINDOWS", True), mock.patch.object(places.time, "sleep") as slept:
+            with mock.patch("builtins.open", refusing(2)):
+                places._opened(path).close()
+            self.assertEqual([call.args[0] for call in slept.call_args_list], list(RETRY_DELAYS_SECONDS[:2]))
+            with mock.patch("builtins.open", refusing(len(RETRY_DELAYS_SECONDS) + 1)), \
+                    self.assertRaises(PermissionError):
+                places._opened(path)
+        with mock.patch.object(places, "WINDOWS", False), mock.patch.object(places.time, "sleep") as slept, \
+                mock.patch("builtins.open", refusing(1)), self.assertRaises(PermissionError):
+            places._opened(path)
+        slept.assert_not_called()
+
 
 class StateDirSpellingTest(unittest.TestCase):
     def test_a_server_started_under_a_dotted_spelling_is_found_and_stopped_under_the_plain_one(self) -> None:

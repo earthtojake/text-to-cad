@@ -380,7 +380,10 @@ it again.
   data); `cad server stop` stops the server and any older one still running. At most
   `CAD_ENGINE_WORKERS` workers live (default: the machine's cores); a worker is retired only
   when the workers' memory is over `CAD_ENGINE_WORKER_RSS_MB`, never for idleness,
-  and its script's next run starts cold. `CAD_ENGINE_DIR` moves the
+  and its script's next run starts cold. A build whose worker stays past
+  `CAD_ENGINE_WORKER_CEILING_MB` (default: half the machine's memory) for two of the
+  server's checks, half a minute apart, is stopped, and its error says so; the server reads
+  the setting when it starts. `CAD_ENGINE_DIR` moves the
   server's door and lock (one server per folder).
 
 ## Progress and the report

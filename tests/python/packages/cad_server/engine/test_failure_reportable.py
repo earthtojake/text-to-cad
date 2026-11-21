@@ -94,8 +94,14 @@ class FailureReportableTest(unittest.TestCase):
         asserted = {**self.failed("asserted"), "model": "parts.py::asserted"}
         daemon.Daemon._built(engine, mock.Mock(progress={"job": "parts.py::plate"}), {"done": {"reports": [asserted]}})
         self.assertIs(server.built.call_args.args[0]["id:parts.py::asserted"]["reportable"], False)
-        daemon.Daemon._built(engine, mock.Mock(progress={"job": "parts.py::plate"}), {"failed": "the worker exited (-11)"})
+        died = mock.Mock(progress={"job": "parts.py::plate"}, overran=None)
+        daemon.Daemon._built(engine, died, {"failed": "the worker exited (-11)"})
         self.assertIs(server.built.call_args.args[0]["id:parts.py::plate"]["reportable"], True)
+        # One the engine stopped past the ceiling on one process did not die of cadgen's code: the model is the one
+        # to change, so its page offers no report (``Supervisor.overrun``).
+        stopped = mock.Mock(progress={"job": "parts.py::plate"}, overran="the engine stopped it at 9.0 GiB of memory")
+        daemon.Daemon._built(engine, stopped, {"failed": "the worker exited (-9): the engine stopped it"})
+        self.assertIs(server.built.call_args.args[0]["id:parts.py::plate"]["reportable"], False)
 
 
 if __name__ == "__main__":

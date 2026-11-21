@@ -59,6 +59,10 @@ retired at once, and none started while it lasts), idle processes and standbys a
 order their declarations rank them -- the standby's rank, then each service's, a watched process's
 ``watched_rank`` -- least recently used first within a rank; a process that never said its memory is
 skipped, a busy one never taken. Each retired is drained when its service drains, then stopped.
+A busy process past the ceiling on one process (``ceiling()``, in MiB; None: none) at two rounds of
+``overrun`` running, during one request, is killed instead, and its request says why: its memory
+measured from outside (``measure``, the system's count of it), since a busy process says its own only
+when it answers.
 
 **A standby** (``Standby``, ``enable_standby``, ``stand``): a process of a service with its kernel
 loaded and nothing to serve, started on a thread when its service is enabled, the system is not
@@ -83,8 +87,10 @@ its own ``stop`` kills one still being started, which reads nothing until it is 
 loading the kernel), so none outlives the daemon.
 
 Locks: the supervisor's, then ``watched``'s (the server's watch lock), never the other way.
-``drain``, ``launch``, ``stop``, ``memory``, a process's own lock and the hooks are called with
-the supervisor's lock not held. Constructing a supervisor starts no process and no thread.
+``drain``, ``launch``, ``stop``, ``memory``, ``ceiling``, ``measure``, a process's own lock and the
+hooks are called with the supervisor's lock not held; ``overrun`` signals a process's kill with it held,
+waiting for nothing, so that no release comes between its decision and the kill. Constructing a
+supervisor starts no process and no thread.
 """
 
 from __future__ import annotations
@@ -275,6 +281,10 @@ class Process:
         # characters since the running request began, or its last lines.
         self.tail = ""
         self.said: list[str] = []
+        self.overran: str | None = None  # why its supervisor killed it mid-request (``Supervisor.overrun``)
+        # The request a round of ``Supervisor.overrun`` last read it past the ceiling in (its ``requests`` and
+        # ``began``), or None: a second reading past it in the same request kills it.
+        self.over: tuple[int, float] | None = None
         self.tail_lock = threading.Lock()
         self.stderr_thread: threading.Thread | None = None
 
@@ -477,7 +487,8 @@ class Process:
                 answer = self.answers.get()
                 if answer is None:
                     code = self.popen.wait()
-                    raise self._gone(self._words("exited", code=code), during=True, code=code)
+                    said = self._words("exited", code=code)
+                    raise self._gone(f"{said}: {self.overran}" if self.overran else said, during=True, code=code)
                 self.requests += 1
                 self.rss = answer.pop("rssMb", self.rss)
                 if answer.pop("retire", False):
@@ -529,10 +540,14 @@ class Process:
         except Exception:  # noqa: BLE001
             self.kill()
 
-    def kill(self) -> None:
-        """Killed, and its stdin let go (its readers close the rest at its end)."""
+    def kill(self, wait: bool = True) -> None:
+        """Killed, and its stdin let go (its readers close the rest at its end); not ``wait``: signalled
+        alone, at once, which its supervisor does holding its lock (``Supervisor.overrun``) -- the request
+        it ran waits for its end, and its stop lets its stdin go."""
         try:
             self.popen.kill()
+            if not wait:
+                return
             self.popen.wait(timeout=STOP_SECONDS)
         except Exception:  # noqa: BLE001 - gone already, or past waiting for
             pass
@@ -597,13 +612,16 @@ class Supervisor:
     too for a lease that names its caller's Python; ``watched``
     says whether a page watches what a process holds; ``drain`` is asked of each process of a service
     that drains before it is stopped; ``memory`` is the cap on their resident memory together (MiB,
-    or None); ``pressed`` whether the system is under memory pressure now; ``on_progress`` and
-    ``on_event`` the daemon's hooks, every process's."""
+    or None); ``ceiling`` the most one busy process may hold (MiB, or None), by ``measure``, the
+    system's count of a pid's memory (``overrun``); ``pressed`` whether the system is under memory
+    pressure now; ``on_progress`` and ``on_event`` the daemon's hooks, every process's."""
 
     def __init__(self, cap: int, services: tuple[Service, ...] | list[Service], *, launch: Launch | None = None,
                  watched: Callable[[Any], bool] = lambda _process: False,
                  drain: Callable[[Any], None] = lambda _process: None,
                  memory: Callable[[], float | None] = lambda: None,
+                 ceiling: Callable[[], float | None] = lambda: None,
+                 measure: Callable[[int], float | None] = lambda _pid: None,
                  pressed: Callable[[], bool] = lambda: False,
                  on_progress: Callable[[Any, dict[str, Any]], None] = lambda _process, _frame: None,
                  on_event: dict[str, Callable[[Any, Any, bytes], None]] | None = None) -> None:
@@ -613,6 +631,8 @@ class Supervisor:
         self.watched = watched
         self.drain = drain
         self.memory = memory
+        self.ceiling = ceiling
+        self.measure = measure
         self.pressed = pressed
         self.on_progress = on_progress
         self.on_event = dict(on_event or {})
@@ -979,6 +999,39 @@ class Supervisor:
         for held in chosen:
             self._retire(held, drain=id(held) not in standing)
         return chosen
+
+    def overrun(self) -> list[Any]:
+        """The ceiling on one process: ``shed`` never takes a busy process, and a build in native code
+        cannot stop itself, so a process whose memory, as the system counts it (``measure``), is past
+        ``ceiling`` at two rounds running, during one request, is killed, and its request fails saying
+        why. A peak that comes back down within a round is never taken for a runaway, and a runaway
+        runs up to two rounds; a reading under the ceiling, or another request, starts the count again
+        (``Process.over``). Each process is measured with the lock not held, then decided and signalled
+        under it, only while it is still busy with the request it was measured in: one whose request
+        ended meanwhile, let go and idle, its documents not drained, is never killed. The killed."""
+        limit = self.ceiling()
+        if limit is None:
+            return []
+        with self.lock:
+            busy = [(process, (process.requests, process.began)) for process in self.table.values()
+                    if process.leased and process.began is not None and process.pid is not None]
+        read = [(process, request, self.measure(process.pid)) for process, request in busy]
+        killed = []
+        with self.lock:
+            for process, request, held in read:
+                if not process.leased or (process.requests, process.began) != request:
+                    continue  # its request ended while it was measured
+                if held is None or held <= limit:
+                    process.over = None
+                elif process.over != request:
+                    process.over = request
+                else:
+                    process.overran = (f"the engine stopped it at {held / 1024:.1f} GiB of memory, over the "
+                                       f"{limit / 1024:.1f} GiB one process may hold "
+                                       f"(CAD_ENGINE_WORKER_CEILING_MB, read when the engine starts)")
+                    process.kill(wait=False)
+                    killed.append(process)
+        return killed
 
     # --- the grant ---------------------------------------------------------------------------
 

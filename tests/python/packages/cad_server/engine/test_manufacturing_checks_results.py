@@ -111,6 +111,28 @@ class SameResultTest(unittest.TestCase):
 class KeptResultTest(unittest.TestCase):
     """The same check of the same document version is the engine's kept result: no process measures it."""
 
+    def test_rewritten_printer_settings_change_the_engine_check_key(self) -> None:
+        from cad._internal import manufacturing
+        from cad.engine import api
+        from cad_server.engine.checks import Checks
+
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(api, "check", return_value=None) as check:
+            printer = Path(folder) / "printer.json"
+            source = Path(folder) / "part.xbf"
+            source.touch()
+            given = {"printer": str(printer)}
+            for width in (200, 250):
+                printer.write_text(json.dumps({"printable_area": ["0x0", f"{width}x200"], "printable_height": "200"}),
+                                   encoding="utf-8")
+                for process in (None, "printing"):
+                    manufacturing.through_engine("xbf", source, process, given, False)
+            before, explicit_before, after, explicit_after = (call.args[1] for call in check.call_args_list)
+            self.assertNotEqual(Checks.key(before, "test"), Checks.key(after, "test"))
+            self.assertNotEqual(Checks.key(explicit_before, "test"), Checks.key(explicit_after, "test"))
+            printer.unlink()  # The measuring process does not need the caller's file.
+            options = manufacturing.options("xbf", "printing", after["given"], printer_snapshot=after["printer_settings"])
+            self.assertEqual(options["build_volume"], "250x200x200")
+
     def test_a_check_is_kept_by_its_document_version_and_its_options(self) -> None:
         import build123d as bd
 

@@ -31,8 +31,13 @@ memory-pressure signal (``serve.Pressure``), idle processes are retired in the o
 declarations rank them, least recently used first within a rank: the standby, then render processes,
 then the workers no page watches, and a watched one only when no other is left. A process that says,
 answering, that it alone is over the cap (``retire``: ``worker.retirement``) is retired once its
-request is done. Before a worker is stopped, every document of it the server does not hold is taken
-from it (``models.Models.drain``): a document outlives its worker. A retired script's next build is a
+request is done. A busy one is never retired, but one whose memory, as the system counts it, is past
+the ceiling on one process (``CAD_ENGINE_WORKER_CEILING_MB``, ``worker.memory_ceiling_mb``) at two
+``tend`` rounds running, during one request, is killed, and its request fails saying why, as a build
+out of memory (``Supervisor.overrun``, ``_overran``): a build in native code cannot stop itself, and
+one that runs away would take the machine. Before a worker is stopped,
+every document of it the server does not hold is taken from it (``models.Models.drain``): a document
+outlives its worker. A retired script's next build is a
 fresh worker's, a restart. Each such document is also kept in the engine's cache once it is idle, at
 its drain and at shutdown (``cache``), so a restart of the daemon opens it at once.
 
@@ -616,7 +621,7 @@ class Daemon:
         self.unsaid = ""
         self.refusal: PortHeld | None = None  # its named port held by another process: it stops (``serve``)
         from cad.engine.serve import Pressure
-        from cad.engine.worker import rss_cap_mb
+        from cad.engine.worker import footprint_mb, memory_ceiling_mb, rss_cap_mb
 
         # The system's memory-pressure signal, the server's too once it runs (``serve``): under it the
         # supervisor sheds the standby and its least recently used processes (``Supervisor.shed``); as
@@ -627,6 +632,7 @@ class Daemon:
         # watches, the progress that wakes pages, and the cache's ``saved``.
         self.supervisor = Supervisor(cap or worker_cap(), SERVICES, watched=self.connected,
                                      drain=lambda process: self.models.drain(process), memory=rss_cap_mb,
+                                     ceiling=memory_ceiling_mb, measure=footprint_mb,
                                      pressed=self.pressure.under, on_progress=self.progressed,
                                      on_event={"saved": lambda process, header, payload:
                                                self.models.cache.saved(process, header, payload)})
@@ -896,8 +902,10 @@ class Daemon:
                         "progress": frame}
         if "failed" in answer:
             frame = worker.progress or {}
-            # The worker itself failed -- it died, or answered no report: cadgen's to fix, to report.
-            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "reportable": True,
+            # The worker itself failed -- it died, or answered no report: cadgen's to fix, to report; but one the
+            # engine stopped past the ceiling on one process, whose model is the one to change (``_overran``).
+            reportable = not getattr(worker, "overran", None)
+            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "reportable": reportable,
                                "progress": frame}
                         for path in [*outcomes, *self.models.paths(worker, frame.get("job"))]}
         if outcomes:
@@ -1352,7 +1360,7 @@ class Daemon:
                 except Gone as error:
                     # One that exited mid-request is not asked again, nor one that never said it was ready.
                     if attempt == 2 or error.during or error.unready:
-                        failed = {"failed": self._where(error, worker), **_unstarted(error)}
+                        failed = {"failed": self._where(error, worker), **_unstarted(error), **_overran(worker)}
                         if worker is not None and not request.get("expected"):
                             self._built(worker, failed, verb=True)
                         send(failed)
@@ -1623,13 +1631,15 @@ class Daemon:
                         # A build is never run twice, nor waited for twice on a worker that never said
                         # it was ready: refused in that one line.
                         if attempt == 2 or error.during or error.unready:
-                            failed = {"failed": self._where(error, worker), **_unstarted(error)}
+                            stopped = _overran(worker)
+                            failed = {"failed": self._where(error, worker), **_unstarted(error), **stopped}
                             if worker is not None:
                                 self._built(worker, failed)
                             # A worker that died under the build: its exit status, where the system said one.
+                            # One the engine stopped past the ceiling did not die: its build ran out of memory.
                             told.update(answer=failed, fresh=fresh, seconds=time.monotonic() - began,
-                                        died=(error.code if error.code is not None else True) if error.during
-                                        else None)
+                                        died=(error.code if error.code is not None else True)
+                                        if error.during and not stopped else None)
                             send(failed)
                             return
                     except RuntimeError as error:
@@ -1914,7 +1924,8 @@ class Daemon:
         """What the engine looks after, each ``TEND_SECONDS``: never the process, and nothing by how
         long anything has been idle. A killed client's pipes are swept, and the processes' memory is
         held to its cap and the system's pressure (``Supervisor.shed``: a worker's documents drained
-        first, so they stay held); the memory budget sends unwatched documents out of memory, least recently used
+        first, so they stay held), and a busy one to the ceiling on one process (``Supervisor.overrun``);
+        the memory budget sends unwatched documents out of memory, least recently used
         first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
         once it has waited a window (``_send_counts``); the version check's feed is read in the background where it
         is due (``updates.refresh``), and cad updated where that is due and nothing is in flight
@@ -1932,6 +1943,7 @@ class Daemon:
         if self.door is not None:
             self.door.sweep()
         self.supervisor.shed(self.pressure.under())
+        self.supervisor.overrun()
         self.models.prune()
         _send_counts()
         if self.draining or self.stopping.is_set():
@@ -2042,6 +2054,14 @@ def _unstarted(error: Gone) -> dict[str, str]:
     in, which its caller counts as that (``no_kernel``), never as a refusal. One gone during the work (it died under
     it) is said in its words alone, which say its exit status."""
     return {} if error.during else failed_type(error)
+
+
+def _overran(worker: Process | None) -> dict[str, str]:
+    """A worker the engine stopped past the ceiling on one process (``Supervisor.overrun``) answered by a type, a
+    build out of memory's (``MemoryError``): a limit on the machine's memory reached, which telemetry counts as that
+    (``memory``) and its page does not offer to report -- never a worker that died under the work, nor a mistake
+    in cadgen's code. Nothing for any other worker."""
+    return {"type": "MemoryError"} if worker is not None and getattr(worker, "overran", None) else {}
 
 
 def _no_kernel(error: BaseException) -> bool:
