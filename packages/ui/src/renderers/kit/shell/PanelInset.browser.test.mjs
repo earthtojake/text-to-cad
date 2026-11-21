@@ -243,6 +243,15 @@ for (const file of Object.keys(FILES)) {
     assert.ok(Math.abs(toggle - INSET) <= 0.5, `${file}: the navbar's toggle's icon at ${toggle}px`);
     // The collapsed panel peeking over the view (a mouse resting on its toggle) is the same panel, on the same lines.
     if (file === 'hinge.step') {
+      // The surface's gaps to the view's frame (left, top, bottom): pinned it touches the edges; peeked it is a card
+      // standing in from them, its content where the pinned panel's is.
+      const gaps = () => page.evaluate(() => {
+        const pane = document.querySelector('[data-testid="one"]'), frame = pane.querySelector('[data-cad-surface]').getBoundingClientRect();
+        const surface = (pane.querySelector('[data-panel-peek-card]') ?? pane.querySelector('aside[data-flat-panel]')).getBoundingClientRect();
+        return [surface.left - frame.left, surface.top - frame.top, frame.bottom - surface.bottom].map(value => Math.round(value * 2) / 2);
+      });
+      const pinned = await page.evaluate(measurePanel);
+      assert.deepEqual(await gaps(), [0, 0, 0], 'pinned, the panel touches the frame\'s edges');
       // Closed by a click, the pointer still on the toggle: it peeks only once the pointer comes to rest on it again.
       await pane.locator('[data-navbar-panel="left"]').click();
       await page.mouse.move(900, 600);
@@ -251,6 +260,10 @@ for (const file of Object.keys(FILES)) {
       await settle(page);
       const peeked = await page.evaluate(measurePanel);
       assert.deepEqual([peeked.clientWidth, offInset(peeked)], [255, []], 'the peeked panel on the inset');
+      assert.ok((await gaps()).every(gap => gap >= 2), `peeked, a card clear of the frame's edges: ${await gaps()}`);
+      // The same tab's content, where the pinned panel drew it.
+      const at = ({ items }) => items.filter(item => item.where === 'body' || item.path === 'tab').map(item => [item.text, item.kind, Math.round(item.left * 2) / 2, item.line]);
+      assert.deepEqual(at(peeked), at(pinned), 'nothing in the peeked panel moves');
     }
     assert.deepEqual(errors, []);
   });

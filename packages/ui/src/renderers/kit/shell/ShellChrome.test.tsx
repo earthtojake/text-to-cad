@@ -269,6 +269,45 @@ it("no peek with a button held, nor for a finger; Escape puts it away before the
   vi.useRealTimers();
 });
 
+it("only the toggle pins a peek: a tab, a pick or / inside it pins nothing; the keyboard in it does not hold it (it goes, the keyboard handed to the toggle), a popup opened from it does", () => {
+  const { writes, toggle, wait, peeked } = peeking();
+  const view = document.querySelector<HTMLElement>('[data-slot="cad-file-view"]')!;
+  const peek = () => {
+    fireEvent.pointerEnter(toggle(), mouse);
+    wait(PANEL_PEEK_DELAY_MS);
+    fireEvent.pointerLeave(toggle(), mouse);
+    fireEvent.pointerEnter(flatPanel(), mouse);
+    expect(peeked()).toBe(true);
+  };
+  peek();
+  // A tab chosen and the search opened by / (its box taking the keyboard): still a peek, nothing pinned or kept open.
+  fireEvent.click(tab('Reference'));
+  fireEvent.keyDown(view, { key: '/' });
+  const box = flatPanel().querySelector<HTMLInputElement>('[data-flat-panel-search] input')!;
+  expect([peeked(), document.activeElement === box, document.querySelector('[data-cad-surface]')!.getAttribute('data-sidebar'), toggle().getAttribute('aria-expanded')])
+    .toEqual([true, true, 'closed', 'false']);
+  // The pointer leaving it, the keyboard still in its box: it goes after the delay, the keyboard handed to the toggle.
+  fireEvent.pointerLeave(flatPanel(), mouse);
+  wait(PANEL_PEEK_DELAY_MS);
+  expect([flatPanel().hidden, document.activeElement === toggle()]).toEqual([true, true]);
+  // A popup opened from it (a dropdown's trigger saying so, as Radix's does) holds it, the pointer being in that popup;
+  // closed, the delay runs.
+  peek();
+  const trigger = Object.assign(document.createElement('button'), { type: 'button' });
+  trigger.setAttribute('aria-haspopup', 'menu');
+  trigger.setAttribute('aria-expanded', 'true');
+  flatPanel().querySelector('[data-flat-panel-body]')!.append(trigger);
+  fireEvent.pointerLeave(flatPanel(), mouse);
+  wait(PANEL_PEEK_DELAY_MS * 3);
+  expect(peeked()).toBe(true);
+  trigger.setAttribute('aria-expanded', 'false');
+  wait(PANEL_PEEK_DELAY_MS);
+  expect(flatPanel().hidden).toBe(true);
+  trigger.remove();
+  expect(writes.some(write => (write as any).open === true)).toBe(false);
+  vi.useRealTimers();
+});
+
 it("a click on the toggle while it peeks pins it: open, pushing and kept, as a click on a collapsed panel always is", () => {
   const { writes, toggle, wait, peeked } = peeking();
   fireEvent.pointerEnter(toggle(), mouse);
