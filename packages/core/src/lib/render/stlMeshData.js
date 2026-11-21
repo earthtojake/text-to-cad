@@ -65,13 +65,69 @@ export function buildMeshDataFromStlGeometry(geometry, { toCreasedNormals } = {}
   }
 }
 
+// A binary STL is an 80-byte header, a count of facets, then 50 bytes a facet.
+const STL_HEADER_BYTES = 84;
+const STL_FACET_BYTES = 50;
+// As far into a file as its text is looked for: a byte order mark and some blank lines.
+const STL_TEXT_PROBE_BYTES = 1024;
+
+const count = value => value.toLocaleString("en-US");
+
+function startsWithSolid(bytes, offset) {
+  return offset + 5 <= bytes.length && String.fromCharCode(...bytes.subarray(offset, offset + 5)) === "solid";
+}
+
+// Where an STL's text begins when blank space (or a byte order mark) comes before it, else -1.
+function stlTextStart(bytes) {
+  let offset = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0;
+  const end = Math.min(bytes.length, STL_TEXT_PROBE_BYTES);
+  while (offset < end && (bytes[offset] === 0x20 || (bytes[offset] >= 0x09 && bytes[offset] <= 0x0d))) offset += 1;
+  return startsWithSolid(bytes, offset) ? offset : -1;
+}
+
+/**
+ * The bytes three's STLLoader can read, or an error that says what is wrong with the file.
+ *
+ * STLLoader reads a file as binary unless "solid" is in its first few bytes, and takes the
+ * facet count a binary file states on trust: it allocates for that many facets before it reads
+ * one. So a file that is cut short, or is text that does not begin with "solid", or is no STL
+ * at all, failed with whatever the browser says of the allocation or of the read past the end
+ * ("invalid array length", "Array buffer allocation failed", "Offset is outside the bounds of
+ * the DataView"), which names nothing a person can act on.
+ *
+ * A file whose count fits its size is handed over as it is, trailing bytes and all. One that
+ * cannot be binary is text when "solid" follows blank space, and is read from there.
+ */
+export function readableStlBuffer(buffer) {
+  const bytes = new Uint8Array(buffer);
+  // STLLoader's own test for text: "solid" within a byte order mark's length of the start.
+  let loaderReadsText = false;
+  for (let offset = 0; offset < 5; offset += 1) loaderReadsText ||= startsWithSolid(bytes, offset);
+  const text = loaderReadsText ? 0 : stlTextStart(bytes);
+  // STLLoader reads the count at byte 80 before it looks for text, so a shorter file fails there.
+  if (bytes.length < STL_HEADER_BYTES) {
+    throw new Error(text >= 0
+      ? `This STL file holds no triangles: it is ${count(bytes.length)} bytes.`
+      : `This is not an STL file: it is ${count(bytes.length)} bytes, and a binary STL is at least ${STL_HEADER_BYTES}.`);
+  }
+  if (loaderReadsText) return buffer;
+  const facets = new DataView(buffer).getUint32(80, true);
+  const stated = STL_HEADER_BYTES + facets * STL_FACET_BYTES;
+  if (stated <= bytes.length) return buffer;
+  if (text >= 0) return buffer.slice(text);
+  throw new Error(
+    `This is not a complete STL file: its header counts ${count(facets)} triangles (${count(stated)} bytes), `
+    + `and the file is ${count(bytes.length)} bytes. It may be cut short, or be another kind of file named .stl.`
+  );
+}
+
 export async function buildMeshDataFromStlBuffer(buffer) {
   const [{ STLLoader }, { toCreasedNormals }] = await Promise.all([
     import("three/examples/jsm/loaders/STLLoader.js"),
     import("three/examples/jsm/utils/BufferGeometryUtils.js"),
   ]);
   const loader = new STLLoader();
-  const geometry = loader.parse(buffer);
+  const geometry = loader.parse(readableStlBuffer(buffer));
   try {
     return buildMeshDataFromStlGeometry(geometry, { toCreasedNormals });
   } finally {
