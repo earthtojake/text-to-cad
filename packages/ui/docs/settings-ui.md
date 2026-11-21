@@ -1765,8 +1765,9 @@ a **draft**, the tab's own, until **Save**. While a draft differs the view draws
 - **Telling the agent.** Each value saved is remembered by the view (its name, its value before and
   after, its script) for as long as the file is on screen, and the next Quick Edit message, sent,
   queued or copied, says them once, after what the person wrote and before the file, as one plain
-  line: "Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py)", the script by its
-  name, never its path; saves of one parameter that follow on from each other read as one change.
+  line: "Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py); the script holds these
+  values and is built at them: read it again before you edit it, and keep them", the script by its
+  name, never its path, and what the agent does with them, so the line explains itself; saves of one parameter that follow on from each other read as one change.
   Once that message has gone the list is forgotten; a message that failed keeps it for the next. A
   message sent while another that carries it is still on its way carries none of it, so it is never
   said twice. A message sent while drafts are drawn (a preview) says so every time, after the saved

@@ -63,15 +63,15 @@ test("a new version of the document takes the drafts it now holds, and keeps the
 test("what was saved from the page is one line for the agent, a parameter's saves read as one change", () => {
   assert.equal(savedParametersNote([]), "");
   assert.equal(savedParametersNote([{ name: "wall", from: 2.0, to: 2.5, file: "/home/a/project/bracket.py" }]),
-    "Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py)");
+    "Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py); the script holds these values and is built at them: read it again before you edit it, and keep them");
   assert.equal(savedParametersNote([
     { name: "wall", from: 2, to: 2.5, file: "C:\\parts\\bracket.py" }, { name: "holes", from: 6, to: 8, file: "C:\\parts\\bracket.py" },
     { name: "wall", from: 2.5, to: 3, file: "C:\\parts\\bracket.py" },
-  ]), "Saved from the viewer since your last edit: wall 2 -> 3 (bracket.py), holes 6 -> 8 (bracket.py)");
+  ]), "Saved from the viewer since your last edit: wall 2 -> 3 (bracket.py), holes 6 -> 8 (bracket.py); the script holds these values and is built at them: read it again before you edit it, and keep them");
   // Saved back to where it began: nothing to say. A value the script changed in between: two changes.
   assert.equal(savedParametersNote([{ name: "wall", from: 2, to: 3, file: "a.py" }, { name: "wall", from: 3, to: 2, file: "a.py" }]), "");
   assert.equal(savedParametersNote([{ name: "wall", from: 2, to: 3, file: "a.py" }, { name: "wall", from: 4, to: 5 }]),
-    "Saved from the viewer since your last edit: wall 2 -> 3 (a.py), wall 4 -> 5");
+    "Saved from the viewer since your last edit: wall 2 -> 3 (a.py), wall 4 -> 5; the script holds these values and is built at them: read it again before you edit it, and keep them");
 });
 
 test("values on screen and not saved are one line for the agent, the script's value beside each", () => {

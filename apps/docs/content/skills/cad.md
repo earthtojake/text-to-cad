@@ -15,7 +15,7 @@ The `cad` skill turns a request for a part or an assembly into a Python script w
 
 ## How it works
 
-A model is a function with no parameters, decorated with `@model`, that returns a build123d shape. Its dimensions are the arguments of a plain helper, and each configuration is a `@model` of its own, with its own id and page. Units are millimetres and +Z is up.
+A model is a function with no arguments, decorated with `@model`, that returns a build123d shape. Its dimensions are the arguments of a plain helper, and each configuration is a `@model` of its own, with its own id and page. Units are millimetres and +Z is up.
 
 ```python
 import build123d as bd
@@ -51,6 +51,8 @@ cad run src/bracket.py
 ```
 
 Each call in `__main__` prints how its model built, its `id:` and its `view:` page. The id comes from the script's path and the function's name, so it is the same on every run and the open page follows it. A warm worker in the server keeps every kernel operation the script ran: a comment re-runs nothing, and a changed dimension re-runs only what reads it. Your agent checks each change with `cad model snapshot "$ID" tmp/review.png` and an `assert` on the dimensions you gave, and resolves a face you picked in the viewer with `cad model inspect`.
+
+A number you are likely to tune, such as a wall, a fit or a hole count, can be declared as a parameter at the top of the script, with its range and unit: `WALL = model.param("wall", 2.0, min=1, max=5, unit="mm")`. The viewer's Params tab lists the model's parameters: change one there and save it, and the number is rewritten in the script and the model rebuilt. Or ask your agent, which runs `cad model set "$ID" wall=2.5` to do the same.
 
 An assembly's body calls each part model, places it, labels it and returns a `Compound`. Each part keeps its own document and id, and the labels name each placement in the viewer's tree, in references and in exports.
 
@@ -121,7 +123,7 @@ def gasket():
     return cut.sketch
 ```
 
-A drawing with more than one CAM operation returns a `Compound` whose children's labels are their layers (`CUT`, `ENGRAVE`). From a 3D part, the drawing script calls the model and uses `flat_pattern(shape, coordinate=, kerf=)`; a vendor STEP is read with `step.read` first. Kerf is added with `offset_profile` or `kerf=`, never by hand-offsetting coordinates.
+A drawing with more than one CAM operation returns a `Compound` whose children's labels are their layers (`CUT`, `ENGRAVE`). From a 3D part, the drawing script calls the model and lays one of its faces on z=0 with build123d's own calls (`Plane(face).to_local_coords(face)`); a bent part is unrolled with `unfold(shape, k_factor=)` from `cad.build123d`, which can put the bend lines on a `BEND` layer; a vendor STEP is read with `step.read` first. Kerf is added with build123d's `offset`, never by hand-offsetting coordinates.
 
 `cad model export "$ID" DXF/gasket.dxf` runs the drawing checks and refuses the file if one fails: units are set, nothing is drawn twice, no entity has zero length, every cut profile closes, and something is drawn. The file is in millimetres, arcs stay arcs and holes stay circles, and an unchanged drawing exports an identical file on any machine. `cad dxf snapshot` draws the file itself, and the viewer opens it as a read-only 2D drawing with its layers.
 
@@ -196,6 +198,7 @@ Each finding carries a rule id, the measured `value`, the `limit`, the `source` 
 
 - "Make a 60 by 40 mm mounting plate, 4 mm thick, with four 4.5 mm holes 6 mm in from the corners."
 - "Add a hinge to the lid of the enclosure, 0 to 110 degrees, and name two poses, shut and open."
+- "Make the bracket's wall thickness and hole count something I can tune, then make the wall 2.5 mm."
 - "Make a 4 second explode animation of the hinged box and export it as a GLB."
 - "Make the flat pattern of this plate as a DXF for a laser. It is 3 mm 5052 aluminium and I want 0.15 mm kerf compensation."
 - "Can this bracket be CNC milled from 6061 on a 3-axis mill? My shop has 3, 6 and 10 mm end mills."
@@ -212,7 +215,7 @@ Each finding carries a rule id, the measured `value`, the `limit`, the `source` 
 - A linkage that closes a loop (a four-bar, a slider-crank) is kept but not posed: there is no solver.
 - `ranges` does not sweep a cylindrical or spherical joint, and interference checks only the poses it is given.
 - This is kinematics, not dynamics. Simulating a robot is the [robot-simulation](/docs/robot-simulation) skill.
-- `flat_pattern` lays out a flat plate, not a folded part.
+- A face laid flat is a flat plate's profile. A folded part is unrolled with `unfold`, by a K-factor: without the shop's, the flat is not a production blank.
 - The drawing checks show a well-formed cut layout, not that a shop can cut it (the [sendcutsend](/docs/sendcutsend) skill).
 
 ## The skill

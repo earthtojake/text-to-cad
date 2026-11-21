@@ -175,10 +175,11 @@ const baseName = file => String(file || "").replace(/\\/g, "/").split("/").pop()
 
 /**
  * What a page tells an agent of the values a person saved from it, as one line of plain text for the
- * next message: each parameter's value before and after, and the script it is in by its name
- * ("Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py)"). Saves of one parameter
- * that follow on from each other read as one change, and a value saved back to where it began is
- * left out. "" for nothing to say.
+ * next message: each parameter's value before and after, the script it is in by its name, and what the
+ * agent does with them ("Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py); the
+ * script holds these values and is built at them: read it again before you edit it, and keep them"),
+ * so the line alone says what it means. Saves of one parameter that follow on from each other read as
+ * one change, and a value saved back to where it began is left out. "" for nothing to say.
  * @param {readonly { name: string, from: number, to: number, file?: string }[]} saved  In the order saved.
  * @returns {string}
  */
@@ -193,7 +194,7 @@ export function savedParametersNote(saved) {
   }
   const said = changes.filter(change => change.from !== change.to)
     .map(change => `${change.name} ${change.from} -> ${change.to}${change.file ? ` (${change.file})` : ""}`);
-  return said.length ? `Saved from the viewer since your last edit: ${said.join(", ")}` : "";
+  return said.length ? `Saved from the viewer since your last edit: ${said.join(", ")}; the script holds these values and is built at them: read it again before you edit it, and keep them` : "";
 }
 
 /**

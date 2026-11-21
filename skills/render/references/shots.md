@@ -14,9 +14,8 @@ snippet continues SKILL.md's skeleton (`scene`, `model`, `camera`, `aim`, `HERE`
 
 ## Draft then final
 
-Look at a draft before every final. An EEVEE frame at the final's size takes about 2 s; read it
-for framing, the camera's height, the light's direction and anything missing. Then the final in
-Cycles, with the same scene. One script does both:
+One script draws both, the same scene in each engine: `cad run render.py` the draft, and
+`cad run render.py --final` the final once the draft is right.
 
 ```python
 import sys
@@ -27,23 +26,15 @@ scene.render.filepath = str(HERE / ("hero.png" if final else "hero-draft.png"))
 bpy.ops.render.render(write_still=True)
 ```
 
-`cad run render.py` draws the draft; `cad run render.py --final` the final, once the draft is
-right. Where glass, a lens, a diffuser or a glow matters, draft in Cycles at 32 to 64 samples too:
-EEVEE draws those differently.
-
 ## Stills of a pose
 
-A motion's pose or an animation's moment is a frame of its clip. Frames count from 0 at the
-model's fps, so second `t` is frame `round(t * model.fps)`:
+Frames count from 0 at the model's fps, so second `t` of a clip is frame `round(t * model.fps)`:
 
 ```python
 model.play("explode")
 scene.frame_set(round(1.5 * model.fps))  # 1.5 s in
 bpy.ops.render.render(write_still=True)
 ```
-
-`model.play(None)` puts every part back where cad placed it. Framing a pose that moves parts
-outside the model's box takes `model.bounds()` at that frame.
 
 ## Turntables
 
@@ -75,8 +66,8 @@ Then render it as a film (below). The camera's `TRACK_TO` constraint still aims 
 
 ## Films
 
-A clip plays from frame 0 to its duration (`model.play` sets the scene's range); a turntable sets
-its own. The film is one mp4 (H.264, High profile, yuv420p, which every player and site takes):
+The film is the scene's range, which `model.play` sets to its clip and a turntable sets itself,
+as one mp4 (H.264, High profile, yuv420p, which every player and site takes):
 
 ```python
 model.play("sweep")
@@ -89,10 +80,9 @@ scene.render.filepath = str(HERE / "sweep.mp4")
 bpy.ops.render.render(animation=True)
 ```
 
-A clip plays once; a player loops the mp4, which runs smoothly only when the clip ends where it
-starts (a motion that returns to its first configuration). Check three
-frames as EEVEE stills (`scene.frame_set(...)` then `write_still=True`) before the whole film:
-a film costs every frame's render, and a Cycles film on the CPU is hours.
+A player loops the mp4, which runs smoothly only when the clip ends where it starts (a motion
+that returns to its first configuration). On the CPU a Cycles film takes hours unless its samples
+are few ([engines](scene-script.md#engines-and-the-gpu)).
 
 ## Motion blur and depth of field
 
@@ -100,11 +90,12 @@ a film costs every frame's render, and a Cycles film on the CPU is hours.
 scene.render.use_motion_blur = True  # EEVEE and Cycles: a moving part and a turning camera blur
 camera.data.dof.use_dof = True
 camera.data.dof.focus_object = aim  # or a part: model.objects["arm/head"]
-camera.data.dof.aperture_fstop = 2.8  # smaller is a shallower focus
+camera.data.dof.aperture_fstop = 8  # smaller is a shallower focus
 ```
 
 Motion blur multiplies EEVEE's time a frame (a 24-frame 360p turntable with it took 17 s on an M1
-Max). A small model at a shallow f-stop blurs almost everything: start at f/8 for a hand-sized part.
+Max). A small model at a shallow f-stop blurs almost everything: f/8 is a start for a hand-sized
+part.
 
 ## Glow
 
@@ -139,8 +130,7 @@ tree.links.new(layers.outputs["Image"], glare.inputs["Image"])
 tree.links.new(glare.outputs["Image"], tree.nodes.new("NodeGroupOutput").inputs[0])
 ```
 
-On a machine with no graphics driver, set `scene.render.compositor_device = "CPU"` first: the
-compositor's default device is the GPU, and without one the render ends the process
+With no graphics driver, set `scene.render.compositor_device = "CPU"` first
 ([no graphics driver](scene-script.md#no-graphics-driver)).
 
 ## A .blend for a person

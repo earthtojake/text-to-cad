@@ -63,7 +63,10 @@ The text-to-cad plugin gives your agent local workflows to generate 3D models as
 
 Projects built on top of text-to-cad, and projects that text-to-cad uses.
 
-- **Studio**: An open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand. [Website](https://texttocad.studio) · [GitHub](https://github.com/amywork777/studio)
+- **Studio**: A community app by @amywork777: an open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand. [Website](https://texttocad.studio) · [GitHub](https://github.com/amywork777/studio)
+- **build123d**: The Python CAD library text-to-cad's models are written in: parts and assemblies as code, with sketches, features and joints, built on OpenCASCADE. [Docs](https://build123d.readthedocs.io) · [GitHub](https://github.com/gumyr/build123d)
+- **OpenCASCADE**: The open-source geometry kernel under build123d: it builds the solids and reads and writes the STEP files. [Website](https://dev.opencascade.org) · [GitHub](https://github.com/Open-Cascade-SAS/OCCT)
+- **kicode**: KiCad's command line, kicad-cli, and its Python client, KiPy, in one Python package: the headless KiCad that text-to-cad's circuit boards run on, with nothing else of KiCad installed. Unofficial: not made or supported by the KiCad project. [PyPI](https://pypi.org/project/kicode/) · [GitHub](https://github.com/earthtojake/kicode)
 
 ## 🛠️ Contributing
 

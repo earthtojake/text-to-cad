@@ -241,7 +241,7 @@ it('the next Quick Edit carries what was saved, once, by the script\'s name; a l
   };
   await copy(1);
   await copy(2);
-  const block = 'Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py)';
+  const block = 'Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py); the script holds these values and is built at them: read it again before you edit it, and keep them';
   // After what the person wrote (nothing here) and before the file: said once, then not again.
   expect(copied[0]).toBe(`${block}\n\n${copied[1]}`);
   expect(copied[1]).not.toContain('Saved from the viewer');

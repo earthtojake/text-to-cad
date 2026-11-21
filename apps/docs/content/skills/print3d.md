@@ -1,6 +1,6 @@
 ---
 title: print3d
-description: The print3d skill slices a part into printer-ready G-code with OrcaSlicer and hands it to your printer's app; it never starts a print.
+description: The print3d skill slices a part into printer-ready G-code with OrcaSlicer and hands it to your printer's app.
 ---
 
 The `print3d` skill slices a part into printer-ready G-code with OrcaSlicer and hands the result to your printer's app. For a Bambu Lab printer that is Bambu Connect or Bambu Studio, where you press Print yourself. Whether a part will print well at all is a separate question, answered by the printing check in the `cad` skill's [manufacturing checks](/docs/cad#manufacturing-checks), for example `cad model dfm "$ID" --process printing --technology fdm`.
@@ -14,21 +14,14 @@ cad model export "$ID" part.3mf
 cad step export part.step part.3mf
 ```
 
-`cad orcaslicer` finds your printer's presets: from your own OrcaSlicer folders first, then from OrcaSlicer's built-in profiles. Your agent prefers the presets you print with and never invents one, because a wrong bed size or temperature can damage a printer. It also writes complete presets, since OrcaSlicer's command line does not fill in a preset's parent settings:
+OrcaSlicer's command line slices with the settings it is given: a printer, a process and a filament preset. The sure way to give them is a project you saved from the OrcaSlicer app (File > Save Project): the `.3mf` holds its models and every setting, and slices as it is. Your own preset files work too. Your agent uses the presets you print with and never invents one, because a wrong bed size or temperature can damage a printer.
 
-```bash
-cad orcaslicer presets machine --match "MK4S"
-cad orcaslicer complete --printer "Prusa MK4S 0.4 nozzle" \
-  --process "0.20mm SPEED @MK4S 0.4" --filament "Prusa Generic PLA @MK4S" \
-  --out presets
-```
-
-OrcaSlicer then slices with those presets (`<orca>` is the OrcaSlicer command), and writes `plate_1.gcode` and `model.gcode.3mf`. One setting can be overridden with `--<setting>=<value>`, such as `--layer-height=0.16`:
+OrcaSlicer (`<orca>` is its command) writes `plate_1.gcode` and `model.gcode.3mf`. One setting can be overridden with `--<setting>=<value>`, such as `--layer-height=0.16`:
 
 ```bash
 <orca> model.stl \
   --load-settings "presets/process.json;presets/printer.json" \
-  --load-filaments presets/filament-1.json \
+  --load-filaments presets/filament.json \
   --arrange 1 --slice 0 \
   --outputdir /absolute/path/to/out --export-3mf model.gcode.3mf
 ```
@@ -42,11 +35,11 @@ Before the hand-off, `<orca> model.stl --info` gives the model's size, which mus
 
 ## Limits
 
-- Your agent never starts, pauses or cancels a print, never reads printer status and never asks for an access code. Bambu Lab's firmware takes those from other software only through Bambu Connect or Developer Mode, which is LAN-only and disconnects the printer from Bambu Cloud.
+- Today the skill hands a print to Bambu Connect or Bambu Studio, where you start it: it does not start, pause or cancel a print or read printer status, and it never asks for an access code. Bambu Lab's firmware takes those from other software only through Bambu Connect or Developer Mode, which is LAN-only and disconnects the printer from Bambu Cloud.
 - It cannot see your printer. Before you press Print, check the printer, plate type, nozzle, filament and AMS mapping, a clear build plate, and that someone is nearby for the first layer.
 - Bambu Connect accepts a plain `.gcode` only if it was sliced with that printer's Bambu profile. If it refuses one, slice in Bambu Studio.
 - A printer with no OrcaSlicer profile needs you to choose settings in the app.
-- OrcaSlicer 2.5 and later keeps its built-in presets in a form `cad orcaslicer` cannot read. Then your own presets are used, or the model opens in the OrcaSlicer app for you to pick settings.
+- A preset as OrcaSlicer stores it holds only its differences from the built-in preset it inherits from, and whether the command line fills those in depends on its version; from OrcaSlicer 2.5 the built-in presets are binary caches. So the settings a slice used are read back from its G-code, and where they are not yours, slicing without the app needs a project you saved from it; otherwise the model opens in the OrcaSlicer app for you to pick settings.
 
 ## Ask for it
 
