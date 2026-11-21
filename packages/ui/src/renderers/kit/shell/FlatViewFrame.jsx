@@ -75,7 +75,7 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, se
  *   `surface`: the frame's own data attributes, which say what is drawn (`{ "data-drawing-surface": "" }`).
  *   `quickEdit`: null for a view whose picture has nothing a note could carry.
  *   `inspect`: what is picked and how the view describes it: the frame's Selected pane and hover tip (`ViewFrame.jsx`).
- *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's pill, at the bottom-right where a 3D view's cube stands,
+ *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's pill, at the top-right where a 3D view's cube stands,
  *   and the zoom's keys either way; while the picture is shown in 3D, the 3D view's (`viewportZoom`).
  *   `views`: the view's own controls (`FloatingToolBar.js`'s `ViewportViewControl`s), left to right at the strip's end; one
  *   with a `cornerTile` stands in the corner's stack instead on a desktop (`ViewCornerStack.jsx`).

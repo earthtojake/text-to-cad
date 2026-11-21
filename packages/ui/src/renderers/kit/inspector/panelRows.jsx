@@ -7,9 +7,9 @@ import { Switch } from "@cad/ui/primitives/switch";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 
-// The right panel's two settings rows, ONE each, so every control of a kind looks alike wherever it stands (View's
-// Display and Grid, Joints' Position, Animation's Clip, Speed, Loop and Autoplay; `docs/settings-ui.md`, "The two
-// panels"). Both are 28px on the panel's lines: the label (muted, `FieldLabel`) on its inset (`--panel-inset`, the
+// The view's panel's two settings rows, ONE each, so every control of a kind looks alike wherever it stands (Joints'
+// Position, Animation's Clip, Speed, Loop and Autoplay; `docs/settings-ui.md`, "The panel"). Both are 28px on the
+// panel's one inset: the label (muted, `FieldLabel`) on its inset (`--panel-inset`, the
 // body's padding: a row pads nothing), the control ending on its right inset.
 
 /** A settings row's dropdown, Joints' Position's: bordered, as wide as its value (6rem at least), its value the foreground. */

@@ -12,11 +12,10 @@ import { normalizeViewportBackground, resolveViewportTheme } from "@cad/core/lib
  * `ViewFrame` the theme so what it draws over the picture (labels, chips, the cube, the corner's
  * bare buttons) takes it too; `setBackground` is Display's Background.
  *
- * @param {"light"|"dark"} _uiScheme  The app's (the viewport no longer follows it).
  * @param {{ viewportBackground?: string } | null | undefined} preferences  The tab's settings.
  * @param {((patch: object) => void) | null | undefined} onPreferenceChange
  */
-export function useViewportTheme(_uiScheme, preferences, onPreferenceChange = null) {
+export function useViewportTheme(preferences, onPreferenceChange = null) {
   const background = normalizeViewportBackground(preferences?.viewportBackground);
   const setBackground = useCallback(value => onPreferenceChange?.({ viewportBackground: normalizeViewportBackground(value) }), [onPreferenceChange]);
   return useMemo(() => ({ ...resolveViewportTheme(background), setBackground }), [background, setBackground]);

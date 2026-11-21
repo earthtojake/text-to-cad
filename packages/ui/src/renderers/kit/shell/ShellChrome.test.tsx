@@ -451,7 +451,7 @@ it('a host showing the view small gets the model alone: no tools, no view action
   expect(viewportProps.current.viewCube).toBe(false);
 });
 
-it("the corner's stack over the cube is Display, Projection and Home, Preview ends the strip; Display's menu holds the modes, Grid and the Background (Light, Dark, Theme), Projection switches on a press, and Grid leaves the drawing tools and kept tools in place", async () => {
+it("the corner's stack over the cube is Display, Projection and Home, Preview ends the strip; Display's menu holds the modes, Grid and the Background (Light, Dark), Projection switches on a press, and Grid leaves the drawing tools and kept tools in place", async () => {
   const user = userEvent.setup({ skipHover: true });
   const goHome = vi.fn(() => true);
   viewportHandle.current = { goHome };

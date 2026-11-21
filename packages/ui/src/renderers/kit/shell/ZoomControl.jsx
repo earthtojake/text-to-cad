@@ -53,21 +53,21 @@ export default function ZoomPill({ zoom, style = null }) {
   const shown = `${Math.round(percent).toLocaleString()}%`;
   const side = useViewCornerSide();
   return <div className={PILL_CLASS} style={style ?? viewCornerLayout(side).pill} data-zoom-pill="">
-    <ToolbarButton label={t("zoom.out")} shortcut={keys.out} tooltipSide="top" className={CORNER_BUTTON_CLASS} onClick={() => zoom.zoomBy(1 / ZOOM_FACTOR)}>
+    <ToolbarButton label={t("zoom.out")} shortcut={keys.out} tooltipSide="bottom" className={CORNER_BUTTON_CLASS} onClick={() => zoom.zoomBy(1 / ZOOM_FACTOR)}>
       <Minus aria-hidden="true" />
     </ToolbarButton>
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <ToolbarButton label={t("zoom.current", { percent: shown })} tooltip={t("zoom.label")} tooltipSide="top" className={PERCENT_CLASS} data-zoom-control="">
+        <ToolbarButton label={t("zoom.current", { percent: shown })} tooltip={t("zoom.label")} tooltipSide="bottom" className={PERCENT_CLASS} data-zoom-control="">
           <span className="w-full text-center">{shown}</span>
         </ToolbarButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align={viewCornerAway(side).align} sideOffset={6} collisionPadding={8} aria-label={t("zoom.label")}
+      <DropdownMenuContent side="bottom" align={viewCornerAway(side).align} sideOffset={6} collisionPadding={8} aria-label={t("zoom.label")}
         className={cn(FLOATING_SURFACE_CLASS, "w-48 data-[state=closed]:animate-none!")}>
         <ZoomMenuItems zoom={zoom} />
       </DropdownMenuContent>
     </DropdownMenu>
-    <ToolbarButton label={t("zoom.in")} shortcut={keys.in} tooltipSide="top" className={CORNER_BUTTON_CLASS} onClick={() => zoom.zoomBy(ZOOM_FACTOR)}>
+    <ToolbarButton label={t("zoom.in")} shortcut={keys.in} tooltipSide="bottom" className={CORNER_BUTTON_CLASS} onClick={() => zoom.zoomBy(ZOOM_FACTOR)}>
       <Plus aria-hidden="true" />
     </ToolbarButton>
   </div>;

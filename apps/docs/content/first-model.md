@@ -92,7 +92,7 @@ The agent runs `cad model export` with the model's id:
 cad model export "$ID" STEP/bracket.step STL/bracket.stl
 ```
 
-`$ID` is the `id:` line from the run. The format comes from the file's suffix, and `GLB` and `3MF` work the same way. You can also use Export in the viewer's file menu, which hands you a browser download. An STL for printing a part with fits takes a tolerance, which [exports](repo:skills/cad/references/exports.md) explains.
+`$ID` is the `id:` line from the run. The format comes from the file's suffix, and `GLB` and `3MF` work the same way. You can also use Export in the viewer's **⋯** menu, beside the file's name, which hands you a browser download. An STL for printing a part with fits takes a tolerance, which [exports](repo:skills/cad/references/exports.md) explains.
 
 ## Where to go next
 

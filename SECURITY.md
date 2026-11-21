@@ -86,7 +86,7 @@ files on this computer. Do not bind
 a non-loopback `--host` unless you mean to offer exactly that to everyone who
 can reach the port.
 
-**The one route that writes code.** A model's Parameters Save in the CAD Viewer
+**The one route that writes code.** A model's Parameters Save in the viewer
 (`POST /api/v1/documents/model/<id>/parameters`) is the one page route that
 writes a file the server later runs as Python: the model's own script, which it
 then builds again. It is behind the same Host check, guard header and

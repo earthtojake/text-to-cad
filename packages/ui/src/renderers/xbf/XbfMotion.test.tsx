@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
+import { DEFAULT_PANEL_WIDTH } from '../../../dist/renderers/kit/shell/sidebars.js';
 import AnimationSection from '../../../dist/renderers/kit/tools/playbar/AnimationSection.js';
 import XbfPositionSection, { useXbfPose } from '../../../dist/renderers/xbf/XbfPositionSection.js';
 import { useXbfMotion } from '../../../dist/renderers/xbf/useXbfMotion.js';
@@ -78,7 +79,7 @@ function Harness({ mechanism = kinematics, scene }: { mechanism?: any, scene: { 
     <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
       sections={<XbfPositionSection kinematics={mechanism} motion={motion?.enabled ? motion : null} values={pose.values} couplings={pose.couplings}
         preset={pose.preset} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />}
-      tab="position" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
+      tab="position" onTabChange={() => {}} width={DEFAULT_PANEL_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
     <AnimationSection runtime={motion} kind="motion" autoplay={false} onAutoplayChange={() => {}} />
   </div>;
 }

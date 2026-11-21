@@ -103,7 +103,7 @@ cad model interference "$ID" --fit pin base
 
 `--fit` names a pair meant to overlap, such as a pin in a bore. Exit 0 is clear, 1 means a pair shares volume, and 3 means a pair could not be measured, which is not a pass.
 
-An explode, a reveal or a showcase is `animation()`, a set of glTF channels on parts and no part of the mechanism. The viewer's Position panel poses the joints, with your states as presets, and a playbar plays the sequences. In a GLB every configuration sequence becomes a named animation clip and every `animation()` is baked in, for Blender, three.js and the viewer to play. STEP, STL and 3MF carry placements only.
+An explode, a reveal or a showcase is `animation()`, a set of glTF channels on parts and no part of the mechanism. The viewer's Joints tab poses the joints, with your states as presets, and its Motion tab plays the sequences. In a GLB every configuration sequence becomes a named animation clip and every `animation()` is baked in, for Blender, three.js and the viewer to play. STEP, STL and 3MF carry placements only.
 
 ## DXF profiles and flat patterns
 

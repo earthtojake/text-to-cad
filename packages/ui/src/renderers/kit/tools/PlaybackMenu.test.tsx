@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import PlaybackMenu from '../../../../dist/renderers/kit/tools/PlaybackMenu.js';
 import { AnimationTimeControl, animationControlsHaveContent } from '../../../../dist/renderers/kit/tools/playbar/AnimationTimeControl.js';
 import { createAnimationClock } from '../../../../dist/renderers/kit/tools/playbar/animationClock.js';
+import { DEFAULT_PANEL_WIDTH } from '../../../../dist/renderers/kit/shell/sidebars.js';
 
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -154,7 +155,7 @@ it("the Animation tab's dot is on exactly while its Reset is, and its preference
   const { default: AnimationSection } = await import('../../../../dist/renderers/kit/tools/playbar/AnimationSection.js');
   const { default: FlatPanel } = await import('../../../../dist/renderers/kit/shell/FlatPanel.js');
   const panel = (runtime: object) => <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
-    sections={<AnimationSection runtime={runtime} autoplay={false} onAutoplayChange={() => {}} />} tab="animation" onTabChange={() => {}} width={240} maxWidth={480}
+    sections={<AnimationSection runtime={runtime} autoplay={false} onAutoplayChange={() => {}} />} tab="animation" onTabChange={() => {}} width={DEFAULT_PANEL_WIDTH} maxWidth={480}
     onWidthChange={() => {}} focusSearch={0} />;
   const state = () => {
     const reset = document.querySelector<HTMLButtonElement>('[data-animation-reset]')!, heading = document.querySelector<HTMLElement>('[data-flat-panel-heading]')!;
@@ -171,6 +172,6 @@ it("the Animation tab's dot is on exactly while its Reset is, and its preference
   rerender(panel(routine({ clock: createAnimationClock(), enabled: true, elapsedSec: 3, onRelease: vi.fn() }) as any));
   rerender(<FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
     sections={<AnimationSection runtime={routine({ clock: createAnimationClock(), enabled: true, elapsedSec: 3 })} disabled autoplay={false} onAutoplayChange={() => {}} />}
-    tab="animation" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />);
+    tab="animation" onTabChange={() => {}} width={DEFAULT_PANEL_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />);
   expect(state()).toEqual([false, false, false, null]);
 });

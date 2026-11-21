@@ -146,7 +146,7 @@ beside the appearance and the home's layout; the panel — open or collapsed by 
 view's width made is not kept), its width and its tab — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
 into the renderer's record by `FileViewer`).
 The model area is drawn in **the viewport's theme**, not the host's `colorScheme`: the person's Background
-(`settings.viewportBackground` of the tab record: Light by default, Dark, Theme), resolved by
+(`settings.viewportBackground` of the tab record: Light by default, or Dark), resolved by
 `kit/look/useViewportTheme.js` over `@cad/core/lib/viewportTheme.js`; a renderer draws its scene and its picture in
 its `scheme` and hands it to its frame, which scopes the canvas box and the corner to it
 (`settings-ui.md#the-viewports-theme-background`). A host's appearance still themes the chrome.

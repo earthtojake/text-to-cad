@@ -67,7 +67,7 @@ clipped. Native HTML `title` attributes are not used for interface tooltips.
 The token uses rems so a host's UI scaling still works without changing the
 normal 16px root or shrinking layout spacing.
 
-The model area takes the person's Background (Light by default, Dark, Theme: following the app's), never the app's theme: the
+The model area takes the person's Background (Light by default, or Dark), never the app's theme: the
 scene, its overlays and a 2D view's paper are drawn in the viewport's theme (`@cad/core/lib/viewportTheme.js`, the
 scene's colours written once), the chrome in the app's ([the palette and the viewport's theme](docs/settings-ui.md#the-palette)).
 Every control's label is `FieldLabel` (muted), its value the foreground.

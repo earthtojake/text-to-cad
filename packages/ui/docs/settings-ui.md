@@ -250,14 +250,16 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 - **Tool strip** at the top centre, 8px down, never wider than the view less 8px at each
   side (it wraps before it would be): the tools, left to right, **one row with no rule** (a tool's `group`
   orders it: the tools that pick, Select, Draw (a plain button) and Measure; then the model's effects, Explode and Clip),
-  then **the view's own controls on the strip** (`data-view-controls`, `FloatingToolBar`'s `views`), directly
-  after the last tool, in every host, with a navbar or without: a 3D file's **Preview**; a board has none (its
-  Display, Flip and 2D/3D are the corner's). The tools are what you do to the model, the view's controls how you look at it. A 3D view's
+  then, outside a file's navbar (a host's inline card), **the view's own controls on the strip** (`data-view-controls`,
+  `FloatingToolBar`'s `views`), directly after the last tool: a 3D file's **Preview**; a board has none. Under a file's
+  navbar the strip is its tools alone: the view's settings and Preview are the navbar's (the design note above). The
+  tools are what you do to the model, the view's controls how you look at it. Outside a navbar a 3D view's
   **Display**, **Projection** and **Home**, and a board's Display, Side and 2D/3D, are **the corner's stack**
   (**The view's corner**, below): view settings, as Figma keeps them out of its toolbar. **What goes on the
   screen is what is changed often**: a tool, the corner's buttons and the cube, the zoom.
   What is changed now and then goes in the view's panel or behind a menu: a board's layers and layer display
-  are its Layers tab's, Grid is Display's menu's and so is a board's projection in 3D, Zoom to selection
+  are its Layers tab's, Grid is the View menu's (outside a navbar Display's menu's, and so is a board's projection in
+  3D), Zoom to selection
   and Zoom to 100% the zoom's menu's. **Figma's toolbar's proportions at a 28px tile** (Figma measured: a 48px
   bar, 13px corners, 32px buttons with 5px corners; ours a size down, every measure from the tile): a 40px bar with
   its 1px border, (40 − 2 − 28) / 2 = 5px in, 28px tiles with corners 5/32 of a tile (4px) and 16px icons, an even
@@ -334,8 +336,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   looked at from, never a tool. A **3D view's** is the cube: its faces,
   edges and corners turn the view, its darker right-front-top corner to the usual isometric view, and Zoom to
   fit (F, a double-click on empty space under Select, the view's menu) frames what is shown from where it is
-  looked at. Under it stands **the corner's stack** (`kit/shell/ViewCornerStack.jsx`, `data-view-corner-stack`), top
-  to bottom: **Display**, the mode on screen's sphere, its menu the display modes (each with its icon), **Grid**, and the
+  looked at. Under a file's navbar the cube keeps only its **Home**, attached to it (**View cube**, above): the view's
+  settings are View ▾'s. Outside a navbar (a host's inline card), under it stands **the corner's stack**
+  (`kit/shell/ViewCornerStack.jsx`, `data-view-corner-stack`), top to bottom: **Display**, the mode on screen's sphere, its menu the display modes (each with its icon), **Grid**, and the
   viewport's **Background** — Light and Dark, each with its icon (`DisplayPopover.jsx`'s
   `DisplayMenuItems`; Grid leaves the menu open); **Projection**, the one state button that switches on a click
   (`ProjectionToggle.jsx`); then **Home** (lucide's House, no key: F is Zoom to fit; telemetry `view_home`), the view
@@ -352,10 +355,12 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   anchors the corner at the left mirrors it there. A phone has none: no cube, no zoom and no Home on its picture
   (gestures alone), its view's settings and **Reset view** the View menu's ([The View
   menu](#the-view-menu)). A
-  **board's** corner is its zoom pill and under it (`stackUnderPill`: 8px under the pill, the same right inset) the
-  stack: **Display** (its presets, each with its icon; in 3D the camera's projection; then the Background), **Side**
-  (Flip) and **2D/3D**, and in 3D **Home**, the cube's way back where there is no cube (from the side the camera is
-  on); in 2D the zoom's 100% is that job. Side and 2D/3D are counted as `board_side` and `board_dimension`; its strip
+  **board's** corner is its zoom pill. Under a file's navbar that is all of it but, in 3D, **Home** beside the pill
+  (`viewCornerLayout`'s `pillHome`, 4px left of it), the cube's way back where there is no cube (from the side the
+  camera is on); its Side, Mode, Display, Projection and Background are the View menu's. Outside a navbar the pill has
+  under it (`stackUnderPill`: 8px under the pill, the same right inset) the stack: **Display** (its presets, each with
+  its icon; in 3D the camera's projection; then the Background), **Side** (Flip) and **2D/3D**, and in 3D **Home**. In
+  2D the zoom's 100% is Home's job. Side and 2D/3D are counted as `board_side` and `board_dimension`; its strip
   is its tools alone.
   A **flat view's** corner is its **zoom** (`ZoomControl.jsx`), at the top-right, drawn as the corner's stack is: a row
   of bare 24px buttons on no tile, border or shadow — −, the 40px percentage in the type scale's `text-tiny` and tabular
@@ -400,14 +405,22 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 
 | File | Tool strip, left to right |
 | --- | --- |
-| STEP | Select, Draw, Measure; Explode (two or more parts), Clip, the navbar View ▾ and Preview, Home attached to the cube |
-| URDF / SRDF | Select, Draw, Measure; Clip, the navbar View ▾ and Preview, Home attached to the cube |
-| GLB | Select, Draw, Measure; Explode (several rigid nodes that draw), Clip, the navbar View ▾ and Preview, Home attached to the cube |
-| 3MF | Select, Draw, Measure; Clip, the navbar View ▾ and Preview, Home attached to the cube |
-| STL | Select (in hand: its bodies), Draw; Clip, the navbar View ▾ and Preview, Home attached to the cube |
-| DXF | Select (in hand: a tap picks an entity, a plain drag draws [the box](#box-selection); a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom), Draw, Measure; no view controls: a drawing is 2D |
-| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a plain drag draws [the box](#box-selection), naming the area on the view's working layer where it takes nothing; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane’s smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Draw, Measure; the zoom pill in the corner, Display, Flip and 2D/3D (in 3D Home) the stack under it |
-| KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a plain drag draws [the box](#box-selection), taking what it touches; the rest are a board's drags; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Draw, Measure; no view controls (no layers, and its colours are the theme's). |
+| STEP | Select, Draw, Measure; Explode (two or more parts), Clip |
+| URDF / SRDF | Select, Draw, Measure; Clip |
+| GLB | Select, Draw, Measure; Explode (several rigid nodes that draw), Clip |
+| 3MF | Select, Draw, Measure; Clip |
+| STL | Select (in hand: its bodies), Draw; Clip |
+| DXF | Select (in hand: a tap picks an entity, a plain drag draws [the box](#box-selection); a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom), Draw, Measure |
+| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a plain drag draws [the box](#box-selection), naming the area on the view's working layer where it takes nothing; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane’s smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Draw, Measure |
+| KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a plain drag draws [the box](#box-selection), taking what it touches; the rest are a board's drags; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Draw, Measure |
+
+The view's controls are not on the strip under a file's navbar: they are the navbar's **View ▾** ([The View
+menu](#the-view-menu-and-a-phones-sheets): a 3D view's Display, Projection, Background and Grid; a board's Side, Mode,
+Display, in 3D Projection, and Background; a drawing's and a schematic's Background) and a 3D view's **Preview**, and
+the picture keeps the camera's: a 3D view's cube with its **Home** attached, a flat view's zoom pill (a board's in 3D
+with Home beside it). Outside a navbar (a host's inline card) a 3D view's Display, Projection and Home are the corner's
+stack under the cube and Preview ends the strip, and a board's Display, Flip and 2D/3D (in 3D Home) are the stack under
+its zoom pill ([The view's corner](#ownership-and-layout)).
 
 There is no activity dot, and no rule on the strip. The view's controls are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
 its knobs are Select's, while Select's filter picks Position, and its controls are the
@@ -1218,8 +1231,8 @@ dimension, a fab note, ink) is drawn as it falls, on a see-through plane round t
 height, so nothing the 2D view shows is lost. It is the view's other canvas in the same
 frame (`ViewFrame.jsx`, through the flat views' `FlatViewFrame.jsx`), never another view: the strip, the panel and its tabs, Quick Edit, the
 selection, the ink, the measurements and the corner are the same mounted components, with the same
-names, in both: the strip's view controls and the zoom pill stand where they stood, and the pill zooms the 3D camera.
-There is no cube (a board turns over by Flip), and Projection is Display's menu's. The key **3** switches,
+names, in both: View ▾ and the zoom pill stand where they stood, and the pill zooms the 3D camera.
+There is no cube (a board turns over by Flip), and Projection is the View menu's (outside a navbar Display's menu's). The key **3** switches,
 as KiCad's Alt+3 opens its 3D view.
 
 A board whose file names its stack-up's colours (`(stackup ... (color "Black") ... (copper_finish "ENIG"))`)
@@ -1244,7 +1257,7 @@ which), and so does every snapshot. A board that saved no stack-up colours looks
 | The parts | each footprint's 3D model (a STEP from the board's folder, KiCad's installed 3D library or `CAD_KICAD_3DMODELS`; a `.wrl` name read as the `.step` beside it) in its authored colours under the stage's lights; a missing one a see-through block a millimetre tall on its outline, in the theme's muted ink. A press on a body picks its part (with Footprints ticked), in front of the face; a picked or hovered part's body takes the highlight; isolating fades the bodies that are not it |
 | Flip (⇧F) | a camera move, as KiCad's 3D viewer's F and Altium's Bottom Side are: it turns the camera over the board's left-to-right axis, which way is up kept, so the back is seen as the 2D view's back, mirrored left to right; eased as every camera move is, round its target (`kit/camera/runtimeCamera.js`), never through the board: from straight above or below the board turns over about its own top-to-bottom axis, the one the 2D view mirrors across, its eye passing the side it leans to (the screen's right where it leans to neither), and near there the same way. Its icon is the side the camera is on, so it changes as the camera passes the board's plane, turned by Flip or by hand, and a file reopened in 3D shows its camera's side |
 | Zoom pill | the same pill, zooming the 3D camera: the 3D views' percentage (100% the board framed whole at the camera's angle, as 3D opens), −, +, its menu and the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) |
-| Projection | Display's menu's, after a rule under the presets: Orthographic or Perspective, kept with the file's view |
+| Projection | the View menu's **Projection ▸** (outside a navbar Display's menu's, after a rule under the presets): Orthographic or Perspective, orthographic by default, kept per file with its 3D camera (its view's `board3d`) |
 | A panel shown or hidden | the canvas takes what the panel leaves, the camera centred in it; the strip stays at the view's centre |
 
 Entering 3D opens head on, on the window the 2D view shows, from the side it shows (in perspective too,
@@ -1326,15 +1339,17 @@ menu has a Display row that opens the same list (`DisplayMenuItems`) under it, i
 label. Checks sit at the row's right end. Choosing a mode closes the menu; ticking Grid
 toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
-DXF view has no Display or Preview control. A native KiCad board's view settings are its strip's end —
-Flip, 2D/3D and Display (its presets) — and its Layers tab's layer
-display (see [A flat view's panel](#the-views-panel-and-the-tool-stack)); in 3D its Display's list ends,
-after a separator, with **Projection** (a muted label, then Orthographic and Perspective, a
-`DropdownMenuRadioGroup`: choosing one closes the menu, as a mode does); it has no Preview.
-It follows the theme as every view does: the app's own canvas
-(white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
+DXF view has no Display or Preview control. A native KiCad board's view settings are rows of the navbar's View menu —
+Side ▸, Mode ▸ (2D/3D), Display ▸ (its presets), in 3D Projection ▸, and Background ▸ ([The View
+menu](#the-view-menu-and-a-phones-sheets)) — and its Layers tab's layer
+display (see [A flat view's panel](#the-views-panel-and-the-tool-stack)); outside a navbar they are the stack under
+its zoom pill (Display, Flip and 2D/3D), and in 3D its Display's list ends, after a separator, with **Projection** (a
+muted label, then Orthographic and Perspective, a `DropdownMenuRadioGroup`: choosing one closes the menu, as a mode
+does); it has no Preview.
+It is drawn in the viewport's theme as every view is (the person's Background, [below](#the-viewports-theme-background)):
+its canvas (the light or the dark one) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
-net dim with it (`board2d/boardOverlay.js`), and its layer swatches; a switch of theme draws it
+net dim with it (`board2d/boardOverlay.js`), and its layer swatches; a switch of Background draws it
 again in the browser, from the payload it holds. A net in focus (selected, or lit by a reference)
 steps the rest of the board back lightly, more than half its contrast kept, so the board still reads
 as a board round the lit net; what is isolated steps it back further. The lit net's copper (its tracks,
@@ -1357,8 +1372,8 @@ mode draws a model (and a tile of floor grid for Grid). Render is no display mod
 draws the model in Render whatever the file's mode, with its own settings (see
 [Preview](#camera-animation-and-preview)). Per-file storage keeps the mode and the grid;
 old-shaped stored display settings are dropped setting by setting, never migrated.
-Projection is a menu of its own, shared, orthographic by default; Preview's Render resolves
-to perspective while preserving the shared choice.
+Projection is a menu of its own, orthographic by default, kept per file with its Display (`display.camera`);
+Preview's Render resolves to perspective while preserving the file's choice.
 
 Preview's settings panel (`PreviewSettings.jsx`, its body `PreviewRenderSettings.jsx`) is
 the one settings form: Orbit, then Render's Part colours, Lighting, Background and Floor.
@@ -2003,10 +2018,11 @@ a live `setDisplaySettings` refuses it as it refuses any mode it does not know, 
 left in it reads as the defaults. Render settings edited in Preview are the file's Render settings;
 leaving returns the tools view to the file's mode.
 
-**Routines** play, in the tools view, from the panel's **Animation** tab (`kit/tools/playbar/AnimationSection.jsx`),
+**Routines** play, in the tools view, from the panel's **Animation** tab (**Motion** for an engine document's motions;
+`kit/tools/playbar/AnimationSection.jsx`),
 last of its tabs, for a file with routines only (an engine document's motions, a STEP's where it has any, a GLB's
 animations; none: no tab), and nothing of them is on the tool strip or under the model: there is no playbar in the
-tools view. Its rows are the panel's own (`kit/inspector/panelRows.jsx`, 28px, the panel's 8 and 16px lines), top to bottom:
+tools view. Its rows are the panel's own (`kit/inspector/panelRows.jsx`, 28px, on the panel's one 16px inset, `--panel-inset`), top to bottom:
 - **Clip**: a bordered dropdown as Joints' Position is, the routine's name alone (no duration), every routine in its
   menu (one too); a choice plays it from its start.
 - **The transport**: **Play** or **Pause** (the strip's 28px tile, its icon turning in place) at the row's left, the

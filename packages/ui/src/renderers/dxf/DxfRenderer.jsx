@@ -77,9 +77,9 @@ function DxfSurface({ view, data }) {
   const drawing = payload.drawing;
   const units = useMemo(() => drawingUnits(drawing?.units), [drawing]);
   const { onStateChange } = view;
-  // The viewport's theme (`kit/look/useViewportTheme.js`): the person's Background over the app's light or dark.
+  // The viewport's theme (`kit/look/useViewportTheme.js`): the person's Background, whatever the app's light or dark.
   // The picture — its paper, its strokes, the marks over it — is drawn in its scheme; the chrome keeps the app's.
-  const viewport = useViewportTheme(view.appearance?.colorScheme === "dark" ? "dark" : "light", workspace.services.preferences, workspace.services.onPreferenceChange);
+  const viewport = useViewportTheme(workspace.services.preferences, workspace.services.onPreferenceChange);
   // Its view settings, the navbar's View (`kit/shell/ViewSettingsMenu.jsx`): a drawing's one, the viewport's Background.
   const usage = useControlUsage();
   const viewGroups = [backgroundGroup({ value: viewport.background, onChange: viewport.setBackground }, t, usage.used)];

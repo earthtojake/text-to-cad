@@ -203,11 +203,11 @@ export function useRendererShell({
   const destination = usePromptDestination();
   const promptAvailable = destination.available;
   const composer = destination.kind === "composer";
-  const { onStateChange, appearance } = view;
-  // The viewport's theme (`look/useViewportTheme.js`): the person's Background over the app's light or
+  const { onStateChange } = view;
+  // The viewport's theme (`look/useViewportTheme.js`): the person's Background, whatever the app's light or
   // dark. Everything drawn in the model area — the scene, its grid, edges and lights, the cube, the
   // labels over it, Preview's studio — is in its `scheme`, never the app's; the chrome keeps the app's.
-  const viewport = useViewportTheme(appearance?.colorScheme === "dark" ? "dark" : "light", services.preferences, services.onPreferenceChange);
+  const viewport = useViewportTheme(services.preferences, services.onPreferenceChange);
   const colorScheme = viewport.scheme;
   const ownPreview = usePreviewState();
   const previewState = preview || ownPreview;

@@ -490,7 +490,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     they do (`dfm`, `interference`, `solve`, `ranges`, `set`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
     `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, `cad.model.set`, ...), one to one with the commands that
     call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`, `cad model set`; the
-    CAD Viewer's Parameters Save is `set`'s too, the same code: law 31; the preview a page shows before it
+    viewer's Parameters Save is `set`'s too, the same code: law 31; the preview a page shows before it
     saves is no operation and no command, since nothing but that page reads it); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
     are commands only, with no function of the library. Every successful server-backed build reports its id and localhost
@@ -668,7 +668,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     worker that loaded the script keeps, in memory alone, where each default is spelled -- the bytes of the
     literal and the digest of the file they were read in -- served while that worker lives, as provenance is
     (law 7). A value changes only in the code: by hand, or by `cad model set ID wall=2.5` (`cad.model.set`, and
-    the CAD Viewer's Parameters Save, one path). It writes a parameter of the model's own script whose default
+    the viewer's Parameters Save, one path). It writes a parameter of the model's own script whose default
     is a plain number, only once the script's bytes on disk are the ones its last run read, nothing else of the
     file, and then runs that run again in the model's warm worker; a build at the new values that breaks a model
     (one that built before, or now fails otherwise than it did) puts the bytes back and builds again, so the

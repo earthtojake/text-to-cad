@@ -145,9 +145,9 @@ function BoardSurface({ view, data }) {
   const controls = useControlUsage();
   const document = useBoardDocument({ workspace, path: view.file.path });
   const { file, plot, index, sheet, layered, shown, alert } = document;
-  // The viewport's theme (`kit/look/useViewportTheme.js`): the person's Background over the app's light or dark.
+  // The viewport's theme (`kit/look/useViewportTheme.js`): the person's Background, whatever the app's light or dark.
   // The picture — its paper, its strokes, the marks over it — is drawn in its scheme; the chrome keeps the app's.
-  const viewport = useViewportTheme(view.appearance?.colorScheme === "dark" ? "dark" : "light", workspace.services.preferences, workspace.services.onPreferenceChange);
+  const viewport = useViewportTheme(workspace.services.preferences, workspace.services.onPreferenceChange);
   const colorScheme = viewport.scheme;
   // How thick the board is (its file's stack-up; KiCad's default where it names none), and its parts' 3D models table.
   const thickness = plot?.board?.thickness > 0 ? plot.board.thickness : BOARD_THICKNESS_MM;

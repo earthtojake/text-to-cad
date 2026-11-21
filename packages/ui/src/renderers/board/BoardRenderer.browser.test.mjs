@@ -178,8 +178,7 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
   const pane = page.getByTestId('one');
   await frame(pane);
   // In 2D the corner, at the top-right (the bottom row is Quick Edit's): the zoom, a row of bare buttons touching, 88 x 24,
-  // 12px in from the pane's right and top edges, and under it the stack, Display, the side and 2D/3D, 24px each, 4px
-  // apart, its right edge on the pill's, 8px under it.
+  // 12px in from the pane's right and top edges; the view's settings are the navbar's View ▾.
   const controls = () => pane.evaluate(element => [...element.querySelectorAll('[data-navbar-view-controls] button'), ...element.querySelectorAll('[data-zoom-pill]')]
     .map(control => { const { x, y, width, height } = control.getBoundingClientRect(); return { x, y, width, height }; }));
   const flat = await controls();
@@ -190,6 +189,11 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
     [88, 24, 12, 12], 'the zoom: a row of bare buttons touching, 88 x 24, 12px in from the top-right corner');
   // View ▾: the navbar's 28px button, over the view, not on it.
   assert.deepEqual(flat.slice(0, 1).map(button => [button.height, button.y + button.height <= stage.y]), [[28, true]], 'the view settings the navbar\'s');
+  // The percentage opens the zoom's menu under the pill: the side the menu was placed on, collisions weighed.
+  await pane.locator('[data-zoom-pill] [data-zoom-control]').click();
+  assert.equal(await page.getByRole('menu', { name: 'Zoom' }).getAttribute('data-side'), 'bottom', 'the zoom\'s menu under the pill');
+  await page.keyboard.press('Escape');
+  await page.getByRole('menu', { name: 'Zoom' }).waitFor({ state: 'detached' });
   await toggleView(pane, 'dimension');
   await page.waitForFunction(() => document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible'));
   // Toggled to 3D on a board just opened: the board in 3D, never the view's "Could not display that file".
@@ -460,13 +464,17 @@ test('3D entered from the 2D bottom eases to Home’s tilt under the board, Flip
   assert.ok(eased.position[2] < -1.6 && eased.target[2] > eased.position[2], `the eye under the board, looking up at it: ${eased.position} to ${eased.target}`);
   assert.deepEqual(await page.evaluate(() => { const sides = [...window.__sides]; window.__sides = null; return sides; }), ['bottom'], 'Flip said the bottom on every frame');
   await pane.locator('[data-board-3d][data-board-faces~="bottom"]').waitFor();
+  // Home, where 3D opened, is a fit: a rebuild that changes the box fits it again, eased (`kit/camera/cameraTouch.js`).
+  // The camera taken (one handed to the view is the person's), still under the board, a rebuild keeps it exactly.
+  await page.evaluate(() => window.cadHarness.a.controller.setCamera({ position: [10, -55, -40], target: [35.825, -15, 0], up: [0, 0, 1] }));
+  await page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling && !camera.untouched && camera.position[2] < 0; });
   const before = await camera();
   // The file saved again, a little thinner: a new plot, so a new stage, under the camera where it was.
   const plot = structuredClone(BOARD);
   plot.board.thickness = 1.2;
   served = { plot, models: null, revision: 'r2' };
   await page.evaluate(() => window.cadHarness.a.client.refresh());
-  await page.waitForFunction(() => window.__cadCamera?.()?.originalBounds?.min?.[2] === -1.2);
+  await page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera?.originalBounds?.min?.[2] === -1.2 && !camera.settling; });
   const after = await camera();
   assert.ok(after.position.every((value, axis) => Math.abs(value - before.position[axis]) < 1e-6), 'the camera did not move');
   await pane.locator('[data-board-3d][data-board-faces~="bottom"]').waitFor();
