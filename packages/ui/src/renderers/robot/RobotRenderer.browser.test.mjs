@@ -196,14 +196,14 @@ async function open(t, file, { panel = true } = {}) {
     },
     // A selection is React state: it is on screen a render after whatever changed it.
     waitPressed: count => page.waitForFunction(wanted => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === wanted, count),
-    // The view's controls: the navbar's (View, Preview).
+    // The view's controls: the navbar's (Display, Preview).
     viewControls: () => pane.locator('[data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label').split(':')[0])),
-    // View: the navbar's, its menu (Projection, Display, Background, Show grid, Reset view), a dropdown over the view.
+    // Display: the navbar's, its card (Projection | Style, Background, Show grid) docked at the view's right edge.
     async openDisplay() {
-      await pane.locator('[data-navbar-view-controls] [data-view-menu]').click();
+      await pane.locator('[data-navbar-view-controls] [data-display-settings]').click();
       await robot.displayPanel().waitFor();
     },
-    displayPanel: () => page.locator('[role=menu][aria-label="View"]'),
+    displayPanel: () => page.locator('[data-display-settings-card]'),
     // The tool stack's panels on screen, top to bottom, by their accessible names.
     stack: () => pane.locator('[data-cad-tool-stack] [data-tool-panel]').evaluateAll(panels => panels
       .filter(panel => panel.getClientRects().length > 0).map(panel => panel.getAttribute('aria-label'))),
@@ -279,7 +279,7 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: Position']);
   assert.equal(await robot.tool('Explode').count(), 0, 'a robot is posed, never exploded');
   // The navbar's View and Preview, for a robot as for any 3D file; no rule.
-  assert.deepEqual(await robot.viewControls(), ['View', 'Preview']);
+  assert.deepEqual(await robot.viewControls(), ['Display', 'Preview']);
   assert.equal(await tools.locator('[data-strip-rule]').count(), 0, 'no rule');
   assert.equal(await tools.locator('[data-view-controls]').count(), 0, 'the strip ends at Clip: the view\'s settings are the navbar\'s');
   // Display's menu is shut as the file opens: nothing is over the model.
@@ -556,12 +556,12 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   await robot.openPosition();
   assert.equal(await robot.linksPanel().isVisible(), true, 'Links stay while Select picks Position');
   assert.deepEqual(await robot.chips(), ['upper_arm'], 'the selection stays while Select picks Position');
-  // Display is a dropdown over the viewer, never a panel: the sidebar stays as it is, and so does
-  // what Select picks; a second press puts it away.
+  // Display is a card over the viewer, never a panel of the sidebar's: the sidebar stays as it is, and so does
+  // what Select picks.
   await robot.openDisplay();
   assert.deepEqual([await robot.sidebar(), await robot.stack()], [['Links', 'Joint controls'], []]);
   assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: Position']);
-  // Put away by Escape, as every menu is.
+  // Put away by Escape.
   await page.keyboard.press('Escape');
   await robot.displayPanel().waitFor({ state: 'detached' });
 
@@ -714,7 +714,7 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   await robot.openSection('Links');
   assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: everything']);
   await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).waitFor();
-  assert.equal(await robot.displayPanel().count(), 0, 'it comes back with Display\'s menu shut (a menu is kept nowhere)');
+  assert.equal(await robot.displayPanel().count(), 0, 'it comes back with Display\'s card shut (it is kept nowhere)');
   await robot.openSection('Joints');
   await robot.jointField('shoulder').waitFor();
   assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue(), await robot.jointField('nod').inputValue()], ['25', '200', '12']);

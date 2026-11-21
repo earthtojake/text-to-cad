@@ -1,5 +1,5 @@
 /**
- * Preview's icon, a play triangle (lucide's Play, its path), drawn to stand beside View's cube
+ * Preview's icon, a play triangle (lucide's Play, its path), drawn to stand beside Display's cube
  * (`../camera/ProjectionModeIcons.js`) as one pair: on the same 24-unit grid, in the cube's stroke (1.45 units, where
  * lucide's own is 2), and at 15/16 of lucide's size, so the triangle is as tall on screen as the cube (18 units of
  * path against the cube's 17, each with its stroke) at whatever size the pair is drawn — the navbar's and the

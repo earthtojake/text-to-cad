@@ -15,11 +15,13 @@ import { ViewerElementContext, ViewerHostContext } from "../../../host/context.j
 import { Sheet, SheetContent, SheetTitle } from "@cad/ui/primitives/sheet";
 import { usePhoneSheetPlace } from "./usePhoneSheetPlace.js";
 import { sidebarLayout, toggleSidebar } from "./sidebars.js";
-import { usePanelPeek } from "./usePanelPeek.js";
+import { PanelPeekContext, usePanelPeek } from "./usePanelPeek.js";
+import { useTouchGestures } from "../viewport/touchGestures.js";
 import { hasOpenPopup } from "../../../lib/popups.js";
 import { ViewCornerSideProvider, viewCornerSide } from "./ViewCorner.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 import { ViewportTopRight } from "./ViewportTopRight.jsx";
+import { SETTINGS_CARD_GAP_PX, SETTINGS_CARD_LAYER_CLASS, SettingsCardDock } from "../view-settings/SettingsCard.jsx";
 import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 
 /**
@@ -59,7 +61,9 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   `--cad-quick-edit-width`, from the view's left), and how far its top stands off the view's bottom
  *   (`--cad-quick-edit-reserve`), which the tool stack's column stops clear of, the bar one row or two.
  * - **The navbar's view settings** (`navbar`: what a view portals into the file's navbar, `NavbarViewControls.jsx`),
- *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's alone).
+ *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's alone), and **Display's
+ *   card** (`card`: `{ open, content }`, `DisplaySettings.jsx`'s), docked under the navbar at the view's right edge,
+ *   over the corner and the strip's layer (`docs/settings-ui.md`, "Layering").
  * - **The corner** (`corner`, the view's top-right — the cube, or a flat view's zoom — or its
  *   top-left where the host anchors the cube there: the side read off the root with the measure, `viewCornerSide`, and said to everything in
  *   the corner, `ViewCornerSideProvider`), **the bottom centre** (`bottomCentre`, a
@@ -106,7 +110,7 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
 export default function ViewFrame({ rootRef = null, surface = null, className = "", rootHandlers = null, stageColor = undefined,
   canvasBoxRef = null, busy = undefined, children, underlay = null, overlays = null, file, mobile, compact, chromeHidden, failed = undefined, previewing = false, selecting = false,
   preview = null, tools, views = [], toolRow = null, toolStack = null, status = null, panel = null, panelControl = null,
-  layout, onLayoutChange, corner = null, navbar = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
+  layout, onLayoutChange, corner = null, navbar = null, card = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
   contextMenu = null, onCanvasPress = null, inspect = null, viewport = null }) {
   const { t } = useI18n();
   // The viewport's theme (`look/useViewportTheme.js`): what stands on the picture — the canvas box (labels, chips,
@@ -116,12 +120,18 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   const scheme = viewport?.scheme === "dark" ? "dark" : viewport ? "light" : null;
   const toolsHidden = chromeHidden || compact;
   // The view catching up, said as every view says it, unless the card says why the chrome is gone.
-  const statusNode = !status || (chromeHidden && alert?.alert) ? null : <div className="pointer-events-none flex max-w-full items-center gap-2" data-viewport-status="">
+  // It says what the picture is doing, over the picture: in its scheme (Preview's backdrop's while Preview is up), never
+  // the app's, under the strip as at the top centre.
+  const statusScheme = previewing ? (preview?.scheme ?? scheme) : scheme;
+  const statusNode = !status || (chromeHidden && alert?.alert) ? null : <div className={cn("pointer-events-none flex max-w-full items-center gap-2", statusScheme)}
+    data-viewport-status="" data-scheme={statusScheme ?? undefined}>
     {status.preview ? <ViewPreviewLabel /> : null}
     <ViewUpdateStatus status={status.update ?? IDLE_STATUS} onRetry={status.onRetry ?? undefined} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
   </div>;
   const ownRoot = useRef(null);
   const root = rootRef ?? ownRoot;
+  // A finger's double tap and long press on the picture, said as a double-click and a right-click (`touchGestures.js`).
+  useTouchGestures(root);
   const stageRef = useRef(null);
   const topControls = useRef(null);
   const quickEditRow = useRef(null);
@@ -148,8 +158,13 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   stateRef.current = sidebarState;
   // A choice the person made is kept, for the file, and holds at any width; what the width does is never kept.
   const change = flat.change;
-  // A peek (`usePanelPeek.js`): the collapsed panel over the view while a mouse rests on its toggle; never kept.
-  const peek = usePanelPeek({ enabled: has && !mobile && !previewing && mode === "closed" });
+  // A peek (`usePanelPeek.js`): the collapsed panel over the view while a mouse rests on its toggle; never kept. Inside a
+  // file viewer it is the page's one peek (`PanelPeekContext`), up from the first frame, its enabled state what this
+  // frame says with its toggle (`peekable`); outside one, the frame's own.
+  const peekable = has && !mobile && !previewing && mode === "closed";
+  const pagePeek = useContext(PanelPeekContext);
+  const ownPeek = usePanelPeek({ enabled: !pagePeek && peekable });
+  const peek = pagePeek ?? ownPeek;
   const closePeek = peek.close;
   const toggle = useCallback(() => {
     const current = stateRef.current;
@@ -187,7 +202,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   // While the file loads (the frame's chrome hidden, the panel there): a structure tab with no row yet shows placeholders.
   const panelLoading = has && chromeHidden;
   const panelNode = has && !mobile ? <FlatPanel mode="docked" open={mode !== "closed" || peek.shown} peek={mode === "closed" && peek.shown}
-    peekLeaving={peek.leaving} onPeekExited={peek.exited} loading={panelLoading}
+    peekLeaving={peek.leaving} peekEntered={peek.entered} onPeekExited={peek.exited} loading={panelLoading}
     surfaceRef={peek.panelRef} surfaceProps={peek.panelHandlers} hidden={previewing} onClose={toggle}
     label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab}
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
@@ -213,8 +228,9 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   const showToggle = has && !previewing;
   const toggles = useMemo(() => (!showToggle ? null : {
     left: { open: panelOpen, label: t(panelOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: flatPanelShortcut(platform), toggle,
-      hover: mobile ? null : peek.toggleHandlers, peeking: peek.peeking }
-  }), [showToggle, panelOpen, platform, toggle, t, mobile, peek.toggleHandlers, peek.peeking]);
+      // Whether it may peek, once the frame has measured its width (before, its mode is not yet known: not said).
+      hover: mobile ? null : peek.toggleHandlers, peeking: peek.peeking, peekable: flat.frameWidth > 0 ? peekable : undefined }
+  }), [showToggle, panelOpen, platform, toggle, t, mobile, peek.toggleHandlers, peek.peeking, peekable, flat.frameWidth > 0]);
   // Leaving a phone's width (or Preview) puts its sheet away.
   useLayoutEffect(() => { if (!mobile || previewing) setSheetOpen(false); }, [mobile, previewing]);
   usePanelToggles(toggles);
@@ -334,7 +350,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
         {chromeHidden || previewing || !contextMenu ? null : <ViewportContextMenu {...contextMenu} />}
         <div className={cn("contents", scheme)}><ViewerLoadingOverlay loading={loading} operationKey={file} /></div>
         {/* The alert card, last: over the tools, which a warning the view survives keeps on screen. */}
-        {previewing || !alert ? null : <ViewerAlertCard {...alert} file={alert.file ?? file} />}
+        {previewing || !alert ? null : <div className={cn("contents", scheme)} data-view-alert-scope=""><ViewerAlertCard {...alert} file={alert.file ?? file} /></div>}
       </div>
       {/* The strip's column and Quick Edit's bar: centred on the whole view (the bar on the model's area where it would
           stand over a pinned panel), and over the panels where they meet (a layer of their own over the panels, an overlaid one too); hidden and inert in Preview,
@@ -359,6 +375,8 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
               bottom: mobile ? `calc(${INSET} + env(safe-area-inset-bottom, 0px))` : 2 * VIEWPORT_INSET_PX }}>{quickEdit}</div>}
         </ToolbarTooltipScope>
       </div>
+      {card && !toolsHidden && !previewing ? <SettingsCardDock open={card.open} className={SETTINGS_CARD_LAYER_CLASS} style={{ top: SETTINGS_CARD_GAP_PX }}
+        data-display-settings-dock="">{card.content}</SettingsCardDock> : null}
     </div>
     </InspectContext.Provider>
   );

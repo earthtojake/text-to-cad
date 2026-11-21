@@ -11,10 +11,9 @@ import { AnnotationToolbar } from "../../../annotation/toolbar.jsx";
 import ToolStack from "../tools/ToolStack.jsx";
 import PreviewPlaybar from "../tools/playbar/PreviewPlaybar.jsx";
 import AnimationSection from "../tools/playbar/AnimationSection.jsx";
-import { DisplayMenuItems } from "./DisplayPopover.jsx";
-import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import NavbarViewControls, { useNavbarViewControls } from "./NavbarViewControls.jsx";
-import { StripViewMenu, ViewMenu, viewGroups3d, viewIcon } from "./ViewSettingsMenu.jsx";
+import { useDisplaySettings, viewGroups3d } from "./DisplaySettings.jsx";
+import { DISPLAY_DEFAULTS } from "../view-settings/viewerDisplaySettings.js";
 import { animationControlsHaveContent } from "../tools/playbar/AnimationTimeControl.js";
 import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
 import ShellViewport from "./ShellViewport.jsx";
@@ -26,12 +25,6 @@ import AnnotationSelectionBar from "../tools/annotate/AnnotationSelectionBar.jsx
 import ViewFrame from "./ViewFrame.jsx";
 import { useControlUsage } from "../../../usage/controls.js";
 
-// The projection on screen, as an icon (a row of a phone's More, where the host has no navbar).
-function ProjectionIcon({ value }) {
-  const Icon = value === "perspective" ? PerspectiveProjectionIcon : OrthographicProjectionIcon;
-  return <Icon />;
-}
-
 // Two presses on the same ink this close together are one double-click.
 const DOUBLE_PRESS_MS = 600;
 
@@ -42,7 +35,7 @@ const DOUBLE_PRESS_MS = 600;
  * its cover, its bar and its button), for a file with routines its panel's Animation tab
  * (`AnimationSection.jsx`; no playbar under the model), the
  * tool stack, and Preview's own chrome (its playbar among it); its corner is the viewport's cube alone (the view's
- * settings are View's, in the navbar beside Preview). The same
+ * settings are Display's, in the navbar beside Preview). The same
  * structure, classes and data attributes for every renderer: hosts, stylesheets and tests key on
  * them. The toolbar is for using tools, the sidebar for reading the file: a tool's own controls are
  * panels in the tool stack, shown by the tool they belong to; what there is to read of the file (a
@@ -235,8 +228,9 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     // Over a mark or a measurement the part under it hears nothing of the pointer.
     if (over) event.stopPropagation();
   };
-  // The view's settings as View draws them (`ViewSettingsMenu.jsx`), and the cube its button wears: Preview settings' too.
-  const viewGroups = viewGroups3d({ mode: frame.displayMode, projection: frame.projection, grid: frame.grid, background: frame.background, t, used: controls.used });
+  // The view's settings as Display's card draws them (`DisplaySettings.jsx`).
+  const viewGroups = viewGroups3d({ mode: frame.displayMode, projection: frame.projection, grid: frame.grid, background: frame.background,
+    defaults: DISPLAY_DEFAULTS, t, used: controls.used });
   // Preview's frame (`usePreviewFrame.jsx`): its cover, entering and leaving it, the host's navbar stepping aside, its
   // bar and settings panel, its view over the editor's (`PreviewView.jsx`) and its button. What moves its picture on
   // purpose is its Orbit, or its routine playing.
@@ -244,7 +238,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     stageColor: frame.stageColor, viewportScheme: frame.viewport.scheme, View: PreviewView, view: previewView, desired: frame.previewDesiredScene,
     sceneScaleMode: frame.sceneScaleMode, viewRef: frame.previewViewRef, moving: shell.orbiting || previewView?.animation?.playing === true,
     orbit: orbitPlaying, onOrbitChange: shell.setOrbiting, orbitSpeed: frame.previewOrbitSpeed, onOrbitSpeedChange: frame.setPreviewOrbitSpeed,
-    render: frame.previewSettings, disabled: shell.idle, mobile, ViewIcon: viewIcon(viewGroups) });
+    render: frame.previewSettings, disabled: shell.idle, mobile });
   const previewIdle = previewFrame.idle, previewScheme = previewFrame.scheme;
   // The drawing tools' sub-toolbar, one row under the strip while Draw is the tool: what it draws with, what the next mark
   // looks like, and Undo, Redo and Clear (`annotation/toolbar.jsx`). The annotation itself has no
@@ -336,33 +330,18 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const quickEdit = references ? <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden} docked={mobile}
     resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt}
     notes={promptNotes} onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
-  // The view's own controls: **View** (`ViewSettingsMenu.jsx`: Projection, Display, Background, Show grid, then Reset
-  // view, what Home was) and **Preview**, a play triangle, in that order: the file's navbar's right end, a phone's too;
-  // in a host's inline card (no navbar) the strip's end, and on a phone rows of its More with the zoom. The picture's
-  // corner is the cube alone.
-  // Reset view: the view the file opened with, framed whole from the opening direction, eased (`ShellViewport.jsx`'s
-  // `goHome`), counted as Home always was (`view_home`).
-  const goHome = () => { controls.used("view_home"); frame.viewerRef.current?.goHome?.(); };
+  // The view's own controls: **Display** (`DisplaySettings.jsx`: its button, and its card docked at the view's right edge)
+  // and **Preview**, a play triangle, in that order: the file's navbar's right end, a phone's too; in a host's inline card
+  // (no navbar) the strip's end, and on a phone rows of its More with the zoom. The picture's corner is the cube alone.
   const inNavbar = useNavbarViewControls();
-  // Display's mode on screen, as its More row's icon on a phone with no navbar.
-  const DisplayIcon = (frame.displayMode?.options?.find(option => option.value === frame.displayMode.value) || frame.displayMode?.options?.[0])?.Icon;
   const viewControls = shell.previewable && !previewing;
+  const display = useDisplaySettings({ groups: viewControls ? viewGroups : [], onReset: frame.resetDisplay, disabled: shell.idle,
+    closeKey: frame.modelKey, closed: previewing });
   const viewSettings = viewControls && inNavbar ? <NavbarViewControls>
-    <ViewMenu groups={viewGroups} onReset={goHome} disabled={shell.idle} boundary={frame.hostElement} />
+    {display.navbarButton}
     {previewFrame.navbarButton}
   </NavbarViewControls> : null;
-  const views = viewControls && !inNavbar ? [
-    ...(mobile ? [
-      // A phone's More has no room for a menu of submenus: Projection a row that switches it, Display's list (its modes,
-      // Show grid and the Background) under its row, then the zoom.
-      { id: "projection", label: t("projection.label"), icon: <ProjectionIcon value={frame.projection.value} />, disabled: shell.idle,
-        onSelect: () => frame.projection.onChange(frame.projection.value === "perspective" ? "orthographic" : "perspective") },
-      { id: "display", label: t("display.label"), icon: DisplayIcon ? <DisplayIcon /> : null, disabled: shell.idle,
-        submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} background={frame.background} /> },
-      zoomViewControl(zoom, { t, disabled: shell.idle })
-    ] : [{ id: "view", label: t("view.menu"), tile: <StripViewMenu groups={viewGroups} onReset={goHome} disabled={shell.idle} boundary={frame.hostElement} /> }]),
-    previewFrame.stripView
-  ] : [];
+  const views = viewControls && !inNavbar ? [display.stripView, ...(mobile ? [zoomViewControl(zoom, { t, disabled: shell.idle })] : []), previewFrame.stripView] : [];
   // Under Select a press on the canvas picks, front to back: the renderer's own overlays (a
   // measurement), then the annotation's mark (and the marks drawn with it), then a part. Shift adds or
   // takes away; a press that picks one kind lets go of the others, unless Shift keeps them.
@@ -414,7 +393,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
       tools={tools} views={views} toolRow={toolRow} status={updateStatus}
       toolStack={<ToolStack hidden={previewing} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{toolPanels}</ToolStack>}
       panel={panel} panelControl={frame.panelControl} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}
-      notice={view.notice} quickEdit={quickEdit} navbar={viewSettings}
+      notice={view.notice} quickEdit={quickEdit} navbar={viewSettings} card={display.card}
       // A file with routines: in the tools view, its Animation tab (above), no playbar; in Preview, Preview's
       // playbar, its own routine.
       bottomCentre={<>

@@ -55,7 +55,9 @@ The record is `{ version, settings, files }`:
 Appearance applies before the first paint: the inline script in
 [index.html](../index.html) reads the same key and applies `settings.appearance`
 to the document, so a tab left in Dark never paints light and flips. A new tab
-has no record and follows the OS.
+has no record and follows the OS. The page's starting frame (`src/StartingView.tsx`, while the server
+is asked what it is) reads the record too: the file's kept panel choice and the viewport's Background,
+so its stand-in panel and cover are the ones the app opens with.
 
 Writes are whole and synchronous: the shell writes a file's view a moment after
 each change and once more on unmount (the page's `pagehide` unmounts the app), the

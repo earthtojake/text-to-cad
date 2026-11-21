@@ -1,8 +1,7 @@
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
-import { FileText } from "lucide-react";
 import { isDocumentId } from "@cad/core/lib/cadRefs.js";
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ErrorInfo, ReactNode } from "react";
+import type { ErrorInfo, ReactNode, RefObject } from "react";
 import { Button } from "../primitives/button.jsx";
 import LoadingStep from "../loading/LoadingStep.jsx";
 import { EmptyState, ViewerNavbar } from "./navigation/index.js";
@@ -18,12 +17,13 @@ import { PANEL_HEAD_ROW_PX, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX, PanelFrameCon
 import { TreeRowsLoading } from "../primitives/tree-row.jsx";
 import { NavbarSlotsContext, NavbarViewSlotContext } from "./navbarSlots.js";
 import type { PanelToggles } from "./panelToggles.js";
+import { PANEL_PEEK_ASIDE_CLASS, PANEL_PEEK_CARD_CLASS, PANEL_PEEK_CARD_STYLE, PANEL_PEEK_CONTENT_STYLE, PanelPeekContext, panelPeekMotionClass, usePanelPeek } from "./panelPeek.js";
 
 class RenderBoundary extends Component<{ children: ReactNode; title: string; onError?: (error: Error) => void }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error, _info: ErrorInfo) { this.props.onError?.(error); }
-  render() { return this.state.error ? <EmptyState icon={FileText} title={this.props.title} description={this.state.error.message} tone="warn" /> : this.props.children; }
+  render() { return this.state.error ? <EmptyState title={this.props.title} description={this.state.error.message} /> : this.props.children; }
 }
 
 /**
@@ -99,7 +99,14 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // its record as it opened, and merged into every record its renderer writes, so a renderer that
   // writes its view wholesale never drops it. One holder per file opened: a departing renderer's last
   // write carries its own file's panel.
-  const opened = useMemo(() => ({ record: rendererState as JsonValue | undefined, panel: filePanelOf(rendererState) as object }), [openedKey]);
+  // A choice the person made on the stand-in toggle while the file loaded (`pageChoice`, below) is the view's from its
+  // first frame, and written with its first record.
+  const pageChoice = useRef<{ key: unknown; open: boolean } | null>(null);
+  const opened = useMemo(() => {
+    const panel = filePanelOf(rendererState) as { open?: boolean };
+    const choice = pageChoice.current?.key === key ? pageChoice.current : null;
+    return { record: rendererState as JsonValue | undefined, panel: choice ? { ...panel, open: choice.open } : panel as object, chosen: Boolean(choice) };
+  }, [openedKey]);
   // A departing renderer flushes its last per-file state during unmount. That write belongs to its
   // own key even after another file opens; whether it is kept is the host's (`CadViewer` keeps the
   // file on screen's alone, and drops this one once it has landed).
@@ -126,8 +133,9 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // The panel before the view is up — the file read, or the view's chunk loading, or the view mounted but its toggle not
   // said yet: the navbar has its toggle from the page's first frame, in the state the view will open it in (the one
   // rule, `sidebarLayout`: the person's choice on the file for this session at any width, else open where the model
-  // keeps 640px beside the default-width panel), drawn disabled: a press is the view's to take and keep (its frame
-  // writes the choice to the file's entry), so one here does nothing. Open, the panel's frame stands in its place, at the
+  // keeps 640px beside the default-width panel), pressable as the view's is: a press pins or unpins it, the person's
+  // choice on the file, which the view opens with and writes (`pageToggle`); collapsed, a mouse resting on it peeks the
+  // stand-in over the page (`panelPeek.js`, the view's own peek, which the view takes over). Open, the panel's frame stands in its place, at the
   // width the view will draw (the kept one within its bounds, `clampPanelWidth`; `data-panel-loading`), drawn as the
   // view's own panel is while its file loads: the head's one block (a bar where a lone title's name will be: the tabs are
   // not known yet) over its rule, and the placeholder rows (`TreeRowsLoading`) where the first rows will stand, on the
@@ -157,11 +165,40 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     return {};
   }, [pending, path, filePath, state.renderers]);
   const pendingWidth = clampPanelWidth(keptPanel.width);
-  const pendingOpen = pending && !mobile && sidebarLayout({ frameWidth: bodyWidth, choice: keptPanel.open, has: true }).mode === "push";
-  const pendingToggles = useMemo<PanelToggles | null>(() => (pending ? { left: { open: pendingOpen, disabled: true,
-    label: t(pendingOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: appearance.platform === "darwin" ? "⌘\\" : "Ctrl+\\", toggle: () => {} } } : null),
-    [pending, pendingOpen, appearance.platform, t]);
-  const panelToggles = saidToggles?.key === key && loaded.status === "ready" ? saidToggles.toggles : pendingToggles;
+  // The person's choice on the stand-in toggle, for this file, until the view takes it (`opened`, above).
+  const [pageOpen, setPageOpen] = useState<{ key: unknown; open: boolean } | null>(null);
+  const choice = pageOpen?.key === key ? pageOpen.open : keptPanel.open;
+  const pendingOpen = pending && !mobile && sidebarLayout({ frameWidth: bodyWidth, choice, has: true }).mode === "push";
+  // The page's one peek (`panelPeek.js`), from its first frame: the stand-in's while the file loads, the view's frame's
+  // once it says its toggle (`PanelPeekContext`), so a card up as the view arrives stays up. Enabled as the toggle
+  // drawn now says: the view's (`peekable`), else the stand-in's, collapsed on a desktop.
+  const said = saidToggles?.key === key && loaded.status === "ready";
+  // A view's frame says it once it has measured its width; until then the peek stays as the stand-in had it.
+  const saidPeekable = said ? (saidToggles?.toggles ? saidToggles.toggles.left?.peekable : false) : undefined;
+  const peekEnabled = useRef(false);
+  peekEnabled.current = typeof saidPeekable === "boolean" ? saidPeekable : said ? peekEnabled.current : pending && !mobile && !pendingOpen;
+  const peek = usePanelPeek({ enabled: peekEnabled.current });
+  const closePeek = peek.close;
+  // A press on the stand-in does what the view's toggle does: pins or unpins the panel (a peek, if up, becomes the
+  // docked panel in place), the person's choice on this file, which the view opens with and writes (`opened`).
+  const pageToggle = useCallback(() => {
+    closePeek(false, true);
+    const open = !pendingOpen;
+    pageChoice.current = { key, open };
+    setPageOpen({ key, open });
+  }, [closePeek, pendingOpen, key]);
+  const pendingToggles = useMemo<PanelToggles | null>(() => (pending ? { left: { open: pendingOpen,
+    label: t(pendingOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: appearance.platform === "darwin" ? "⌘\\" : "Ctrl+\\", toggle: pageToggle,
+    hover: mobile ? null : peek.toggleHandlers, peeking: peek.peeking, peekable: !mobile && !pendingOpen } } : null),
+    [pending, pendingOpen, appearance.platform, t, pageToggle, mobile, peek.toggleHandlers, peek.peeking]);
+  const panelToggles = said ? saidToggles.toggles : pendingToggles;
+  // The view's first record carries a choice made on the stand-in.
+  useEffect(() => {
+    if (loaded.status !== "ready" || !opened.chosen) return;
+    opened.chosen = false;
+    pageChoice.current = null;
+    writeView();
+  }, [loaded.status, opened, writeView]);
   // A view with no frame (none said it is one as it rendered: `PanelFrameContext`) has no toggle, from its first frame.
   useLayoutEffect(() => {
     if (loaded.status === "ready" && framed.current !== key) setSaidToggles(previous => (previous?.key === key ? previous : { key, toggles: null }));
@@ -173,19 +210,31 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     // The host's own cover where it has one (a CAD host's is on the viewport's Background), else the one indicator, in
     // the app's theme: a host that knows no viewport has none to follow.
     const loading = presentation?.loading ?? <div className="flex h-full items-center justify-center px-4"><LoadingStep label={t("file.opening")} /></div>;
+    const standIn = <>
+      <div aria-hidden="true" className="box-content flex shrink-0 items-center border-b border-border px-(--panel-inset)"
+        style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX, height: PANEL_HEAD_ROW_PX }} data-panel-head="">
+        <span className="block h-2 w-12 rounded-full bg-muted-foreground/20 motion-safe:animate-pulse" data-panel-loading-title="" />
+      </div>
+      <div className="flex flex-col px-(--panel-inset)" style={{ paddingTop: PANEL_SURFACE_PX }}><TreeRowsLoading label={t("spinner.loading")} /></div>
+    </>;
     body = pendingOpen ? <div className="flex h-full min-h-0">
       <aside aria-busy="true" className="relative flex h-full shrink-0 flex-col border-r border-border bg-sidebar text-ui" style={{ ...PANEL_ROW_VARIABLES, width: pendingWidth }}
-        data-panel-loading="">
-        <div aria-hidden="true" className="box-content flex shrink-0 items-center border-b border-border px-(--panel-inset)"
-          style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX, height: PANEL_HEAD_ROW_PX }} data-panel-head="">
-          <span className="block h-2 w-12 rounded-full bg-muted-foreground/20 motion-safe:animate-pulse" data-panel-loading-title="" />
-        </div>
-        <div className="flex flex-col px-(--panel-inset)" style={{ paddingTop: PANEL_SURFACE_PX }}><TreeRowsLoading label={t("spinner.loading")} /></div>
-      </aside>
+        data-panel-loading="">{standIn}</aside>
       <div className="min-w-0 flex-1">{loading}</div>
+    </div> : peek.shown ? <div className="relative h-full min-h-0">
+      {loading}
+      {/* Collapsed, a rest on the stand-in toggle peeks the stand-in, as the view's panel peeks (`PanelSurface.jsx`): the
+          same card, place, width and slide, which the view takes over where it stands. */}
+      <aside ref={peek.panelRef as RefObject<HTMLElement>} aria-busy="true" {...peek.panelHandlers}
+        className={`flex min-h-0 flex-col text-ui text-foreground ${PANEL_PEEK_ASIDE_CLASS} ${panelPeekMotionClass({ leaving: peek.leaving, entered: peek.entered })}`}
+        style={{ ...PANEL_ROW_VARIABLES, width: pendingWidth }} data-panel-loading="" data-panel-peek="" data-panel-peek-leaving={peek.leaving ? "" : undefined}
+        onAnimationEnd={peek.leaving ? event => { if (event.target === event.currentTarget) peek.exited(); } : undefined}>
+        <div aria-hidden="true" className={PANEL_PEEK_CARD_CLASS} style={PANEL_PEEK_CARD_STYLE} data-panel-peek-card="" />
+        <div className="relative flex min-h-0 flex-1 flex-col" style={PANEL_PEEK_CONTENT_STYLE}>{standIn}</div>
+      </aside>
     </div> : loading;
   }
-  else if (loaded.status === "error") body = presentation?.error?.({ message: loaded.message, missing: loaded.missing, error: loaded.error, reload: reloadCurrent }) ?? <EmptyState icon={FileText} title={t("file.openFailed")} description={loaded.message} tone="warn" />;
+  else if (loaded.status === "error") body = presentation?.error?.({ message: loaded.message, missing: loaded.missing, error: loaded.error, reload: reloadCurrent }) ?? <EmptyState title={t("file.openFailed")} description={loaded.message} />;
   else body = rendererBody;
   const shownActions = navActions?.key === key && ready ? navActions.actions : [];
   const trailing = shownActions.length ? <>
@@ -245,7 +294,7 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const navbar = (Boolean(path) || home) && !appearance.compact && chrome !== "bare" && previewing !== key;
   const homeSlotRefs = useMemo(() => ({ left: setHomeLeft, right: setHomeRight }), []);
   const homeSlots = useMemo(() => (navbar && !path && home ? { left: homeLeft, right: homeRight } : null), [navbar, path, home, homeLeft, homeRight]);
-  return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><NavbarSlotsContext.Provider value={homeSlots}><NavbarViewSlotContext.Provider value={navbar && path ? viewSlot : null}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={layout ? undefined : mobile ? "mobile" : "desktop"} data-viewer-pinned-layout={layout} tabIndex={-1}>
+  return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><NavbarSlotsContext.Provider value={homeSlots}><NavbarViewSlotContext.Provider value={navbar && path ? viewSlot : null}><PanelPeekContext.Provider value={peek}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={layout ? undefined : mobile ? "mobile" : "desktop"} data-viewer-pinned-layout={layout} tabIndex={-1}>
     {navbar ? (path
       ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name || name} kind={model ? "model" : "file"} explorer={explorer} recent={recentMenu} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}
         panels={panelToggles} viewSlot={setViewSlot} />
@@ -254,5 +303,5 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
       <div ref={bodyBox} className="min-w-0 flex-1 overflow-hidden">{body}</div>
       {overlay}
     </div>
-  </div></NavbarViewSlotContext.Provider></NavbarSlotsContext.Provider></ViewerElementContext.Provider></ViewerHostContext.Provider></ViewerMobileContext.Provider></I18nProvider>;
+  </div></PanelPeekContext.Provider></NavbarViewSlotContext.Provider></NavbarSlotsContext.Provider></ViewerElementContext.Provider></ViewerHostContext.Provider></ViewerMobileContext.Provider></I18nProvider>;
 }

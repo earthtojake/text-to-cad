@@ -137,8 +137,8 @@ relative viewport below it. The generic FileViewer knows nothing about export jo
 
 The controls of a CAD renderer (an engine document's, GLB, mesh, robot) are its own, over the viewport: its
 tool strip, the tool in hand's sub-toolbar and its docked panel (a phone's sheet), its view's settings (under a
-file's navbar one View menu and Preview, the same on a phone; without one Projection, Display and Preview over the
-picture) and, in Preview, Preview's own bar (`settings-ui.md#camera-animation-and-preview`); a
+file's navbar Display, whose card docks at the view's right edge, and Preview, the same on a phone; without one Display
+and Preview at the strip's end) and, in Preview, Preview's own bar (`settings-ui.md#camera-animation-and-preview`); a
 DXF's are its own canvas's. Nothing a renderer does opens or closes the explorer (only the
 file's name opens that). The layout a person gives the tool stack's panels is one
 of the tab's settings (`settings.toolStack` of the tab record, `@cad/ui/tab-store`),
@@ -205,8 +205,8 @@ render loops. These actions use existing host capabilities for effects. What a
 person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 
 A renderer's controls for the view are the renderer's own: the viewer's for a 3D view, under a file's navbar
-portalled into its view slot (View, then Preview), the cube alone at the top-right; without a navbar View and Preview
-at its strip's end;
+portalled into its view slot (Display, then Preview), the cube alone at the top-right; without a navbar Display and
+Preview at its strip's end;
 and in Preview its bar's Preview settings and Exit preview, the navbar hidden. The host draws none of them. The host's `captureRequest`
 command is the same capture: to a composer destination it delivers the view and
 the selection through `promptContext.deliver`. Neither route detects the platform.
@@ -535,8 +535,13 @@ not). Before the view is up (its file being read, its chunk loading, or its fram
 `FileViewer` draws the toggle the view will have, from a document page's first frame, by the view's own rule
 (`panelToggles.js`'s `sidebarLayout`, which `sidebars.js` re-exports): the file's choice kept for this session (its view
 in `state.renderers`, by its own path or the host's `filePath`) at any width, else open where the model keeps 640px
-beside the default-width panel, closed on a phone; `aria-disabled` until the view takes it over, as a press is the
-view's to keep. Open, the panel's frame stands in its place at the width the view will draw (the kept one within the
+beside the default-width panel, closed on a phone; pressable from the first frame: a press pins or unpins it, the
+person's choice on the file, which the view opens with and writes as its own toggle would. A host with a phase before
+it can mount the viewer (the web page's, while it asks its server what it is) draws that first frame with `FileViewer`
+itself, inert: a `files` source whose `stat` never answers keeps it in this phase, asking nothing, so the navbar, the
+stand-in and the cover stand where the viewer then draws them. Collapsed, a mouse resting
+on it peeks the stand-in over the page (`panelPeek.js`: the page's one peek, which `FileViewer` holds and hands to the
+view's frame, `PanelPeekContext`, so a card up as the view arrives stays up, taken over where it stands). Open, the panel's frame stands in its place at the width the view will draw (the kept one within the
 grip's bounds, `clampPanelWidth`; `data-panel-loading`), drawn as the view's panel is while its file loads: the head's
 one block (a bar where a lone title's name will stand) over its rule, then the placeholder rows, busy, on the same lines
 (`panelToggles.js`'s metrics), so nothing moves as the view mounts; a view with no frame (none says so as it renders,
@@ -642,13 +647,14 @@ on that file; a mouse resting on its toggle peeks
 it over the model as a floating card, pushing nothing, and only the toggle pins it), Quick Edit's bar always at the bottom, one row (its attachments a row above it while something is picked), centred on the window as the strip is
 (the panel never moves the strip; where they meet it the strip sits above it, and the bar centres on the model's area beside a pinned panel), the bottom row Quick Edit's alone, and at the
 top-right the camera's own control alone: the view cube (a 6rem box, 2px from the right edge and 8px off the top), or a flat view's
-"100%" zoom dropdown. Under a file's navbar the view's settings are its right end for every kind of file — **View**,
-one menu (a 3D view's Projection, Display, Background, Show grid and Reset view; a board's Side, Mode, Display, in 3D
-Projection, Background and Reset view; a drawing's Background, `ViewSettingsMenu.jsx`), then a 3D view's or a board's Preview: the
+"100%" zoom dropdown. Under a file's navbar the view's settings are its right end for every kind of file — **Display**,
+a toggle whose card docks under the navbar at the view's right edge, over the cube (a 3D view's Projection | Style,
+Background, Show grid; a board's Side, Mode, in 3D Projection | Style, Background; a drawing's Background,
+`DisplaySettings.jsx`), then a 3D view's or a board's Preview: the
 file viewer draws a view slot there (`file-viewer/navbarSlots.js`'s `NavbarViewSlotContext`) and the view portals them
-in (`NavbarViewControls.jsx`). On a phone the slot holds the same View and Preview, the picture has no cube or zoom,
+in (`NavbarViewControls.jsx`). On a phone the slot holds the same Display and Preview, the picture has no cube or zoom,
 and the panel is a sheet from the left (shadcn's Sheet, portalled into the viewer's element:
-`ViewerElementContext`), so a host keeps the viewer's element round its view. A host that shows the view with no navbar has View and Preview at the strip's end (a
+`ViewerElementContext`), so a host keeps the viewer's element round its view. A host that shows the view with no navbar has Display and Preview at the strip's end (a
 phone, their rows in its More). A host that anchors the corner at the left (`--cad-viewport-corner-left`) moves the cube
 or the zoom with it, mirrored at the top-left. A host's one notice goes through the shell too: `notice` is drawn at the top-right,
 under the corner (an inset under its lowest control; at the top itself where the corner is at the left), once the

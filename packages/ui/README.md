@@ -276,10 +276,10 @@ Draw (one plain button; its row under the strip holds the freehand and shape too
 Select (its nodes), Draw, Measure, Explode (several parts) and Clip; a 3MF's Select (its
 objects), Draw, Measure and Clip; an STL's Select (its bodies), Draw and Clip.
 No rule parts the strip, at Figma's toolbar's proportions (48px, 32px tiles). The view's settings are the navbar's,
-for every kind of file: **View** (a cube, no chevron; one menu of submenus, `kit/shell/ViewSettingsMenu.jsx`, ending
-with Reset view where there is a camera to bring back), then a 3D view's Preview, and a board's. The corner at the top-right keeps
-only the camera's own control: a 3D view's cube, or a flat view's one "100%" zoom dropdown. Without a navbar View and
-Preview end the strip. A phone's picture has no corner control. The bottom row is Quick Edit's alone. The tool in hand's
+for every kind of file: **Display** (the plain cube, no chevron; a toggle whose card, `kit/shell/DisplaySettings.jsx`,
+docks under the navbar at the view's right edge, the sidebar's peek card mirrored), then a 3D view's Preview, and a
+board's. The corner at the top-right keeps only the camera's own control: a 3D view's cube, or a flat view's one "100%"
+zoom dropdown. Without a navbar Display and Preview end the strip. A phone's picture has no corner control. The bottom row is Quick Edit's alone. The tool in hand's
 controls are one row under the strip, its sub-toolbar (`kit/tools/SubToolbar.jsx`):
 the drawing tools' colour, stroke width, placement and history; Measure's chips. Explode's and
 Clip's slider rows open in a popover from their tiles, taking up no tool.
@@ -348,7 +348,7 @@ a submenu of Browser where the host has one and Finder, File Explorer or File ma
 Export, a submenu of the formats; a model's Copy path and file manager act on its script). They share one look: transparent until the
 pointer is on them or their menu is open, with no tooltip. At the right is only what a host
 or a file adds: a dismissed alert's icon, the host's actions (the
-CAD app's Full size), after the view's own, which it portals into the navbar's view slot (View, then a 3D view's
+CAD app's Full size), after the view's own, which it portals into the navbar's view slot (Display, then a 3D view's
 Preview). A host whose own frame is its navigation shows
 the view alone (`chrome: "bare"`, the CAD app's file handler), with no navbar at all. With no
 file a view shows the host's home, the model library, under the same navbar (its logo and menu,

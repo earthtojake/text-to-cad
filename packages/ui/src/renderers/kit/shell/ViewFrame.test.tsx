@@ -74,22 +74,46 @@ it("the hover tip takes the view's short words where it has them, and never runs
 });
 
 
-// A file's loading covers are drawn on the viewport's Background as the person has it, whatever the app's theme: the
-// page's own (`file-viewer/presentation`'s, before any view is up) and the view's, so nothing flashes between them and
-// the picture. The cover's scheme is the class over it, which sets its canvas and its ink.
-it("the loading covers, the page's and the view's, are on the viewport's Background, Light or Dark", async () => {
+// What belongs to the picture is in the picture's scheme, whatever the app's theme (`settings-ui.md`, "The viewport's
+// scheme"): the page's loading cover (`file-viewer/presentation`'s, before any view is up), the view's, Preview's (on
+// Preview's own backdrop, where its Background is set), the update status and the alert card. Each one's scheme is the
+// class over it, which sets its canvas and its ink.
+it("the loading covers, Preview's, the update status and the alert card are in the viewport's scheme, never the app's", async () => {
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
   const { ViewerLoadingOverlay } = await import('../../../../dist/file-viewer/presentation.js');
-  const scheme = (root: Element) => root.querySelector('.cad-loading-overlay')!.closest('.light, .dark')!.classList.contains('light') ? 'light' : 'dark';
-  for (const background of ['light', 'dark']) {
-    const page = render(<div className="dark"><ViewerLoadingOverlay viewerLoading background={background} /></div>);
-    const view = render(<div className="dark"><ViewFrame file="part.step" mobile={false} compact={false} chromeHidden tools={[]} layout={{}} onLayoutChange={() => {}}
-      viewport={{ scheme: background }} loading={{ opening: true }}>{null}</ViewFrame></div>);
-    expect([scheme(page.container), scheme(view.container)]).toEqual([background, background]);
+  const { usePreviewFrame } = await import('../../../../dist/renderers/kit/shell/usePreviewFrame.js');
+  const schemeOf = (node: Element | null) => node?.closest('.light, .dark')?.classList.contains('light') ? 'light' : node ? 'dark' : null;
+  // Preview's cover, as the frame draws it the moment Preview is entered: on Preview's backdrop (`background`, its
+  // Background setting, off by default) over a view whose viewport is `scheme`.
+  const Preview = ({ scheme, background }: { scheme: string; background: object }) => usePreviewFrame({ previewing: true, setPreviewing() {},
+    modelKey: 'part.step', fileView: { file: { name: 'part.step' } }, hostElement: null, stageColor: scheme === 'dark' ? '#1f1f1f' : '#f5f5f5',
+    viewportScheme: scheme, View: () => null, view: null, desired: { view: { background } }, sceneScaleMode: 'cad', viewRef: { current: null },
+    moving: false, orbit: false, onOrbitChange() {}, orbitSpeed: 1, onOrbitSpeedChange() {}, render: null, disabled: false, mobile: false }).frame.overlays;
+  // A dark app over a Light Background, and a light app over a Dark one: each cover, the status and the card take the
+  // viewport's, whatever the app's.
+  for (const [app, background] of [['dark', 'light'], ['light', 'dark']]) {
+    const page = render(<div className={app}><ViewerLoadingOverlay viewerLoading background={background} /></div>);
+    const view = render(<div className={app}><ViewFrame file="part.step" mobile={false} compact={false} chromeHidden tools={[]} layout={{}} onLayoutChange={() => {}}
+      viewport={{ scheme: background }} loading={{ opening: true }} status={{ update: { pending: false, error: 'the GPU went away' } }}>{null}</ViewFrame></div>);
+    const alerted = render(<div className={app}><ViewFrame file="part.step" mobile={false} compact={false} chromeHidden={false} tools={[]} layout={{}} onLayoutChange={() => {}}
+      viewport={{ scheme: background }} status={{ update: { pending: false, error: 'the GPU went away' } }}
+      alert={{ alert: { severity: 'warning', title: 'Some parts are missing', message: 'two' }, hasContent: true }}>{null}</ViewFrame></div>);
+    const preview = render(<div className={app}><Preview scheme={background} background={{ enabled: false, color: '#ffffff', opacity: 1 }} /></div>);
+    expect([schemeOf(page.container.querySelector('.cad-loading-overlay')), schemeOf(view.container.querySelector('.cad-loading-overlay')),
+      schemeOf(view.container.querySelector('[data-viewport-status]')), schemeOf(alerted.container.querySelector('[data-viewport-status]')),
+      schemeOf(alerted.container.querySelector('[role="alert"]')), schemeOf(preview.container.querySelector('[data-preview-cover] [data-loading-step]'))])
+      .toEqual([background, background, background, background, background, background]);
     // The one indicator: a step line over a progress bar, and no mark.
     const indicator = view.container.querySelector('[data-viewer-loading]')!;
     expect([indicator.querySelector('[data-loading-step]')?.textContent, Boolean(indicator.querySelector('[role="progressbar"]')),
       indicator.querySelectorAll('img, picture, svg').length]).toEqual(['Preparing view', true, 0]);
+    cleanup();
+  }
+  // Preview's Background set: its cover is that colour, in its ink, whatever the viewport's and the app's.
+  for (const [scheme, color, ink] of [['light', '#202020', 'dark'], ['dark', '#f0f0f0', 'light']]) {
+    const preview = render(<div className={scheme === 'light' ? 'dark' : 'light'}><Preview scheme={scheme} background={{ enabled: true, color, opacity: 1 }} /></div>);
+    const cover = preview.container.querySelector('[data-preview-cover]') as HTMLElement;
+    expect([cover.style.backgroundColor, schemeOf(cover.querySelector('[data-loading-step]'))]).toEqual([color === '#202020' ? 'rgb(32, 32, 32)' : 'rgb(240, 240, 240)', ink]);
     cleanup();
   }
   vi.unstubAllGlobals();

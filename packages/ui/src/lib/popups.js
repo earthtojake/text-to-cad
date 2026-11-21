@@ -12,3 +12,12 @@ const OPEN_POPUP_TRIGGER = '[aria-haspopup][aria-expanded="true"], [role="combob
 export function hasOpenPopup(element) {
   return Boolean(element?.querySelector(OPEN_POPUP_TRIGGER));
 }
+
+/**
+ * The keyboard is in something that spends its own Escape (`data-escape-owner`: Display's card, and its button while
+ * the card is open): a view's Escape ladder leaves the key to it.
+ * @param {EventTarget | null | undefined} target
+ */
+export function ownsEscape(target) {
+  return typeof Element !== "undefined" && target instanceof Element && Boolean(target.closest("[data-escape-owner]"));
+}

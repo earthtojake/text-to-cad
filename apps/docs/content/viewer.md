@@ -19,7 +19,7 @@ With no file it opens the home in your browser. With a file it opens that file's
 
 ## What it shows
 
-Each kind of file gets its own tools, on a strip at the top of the view. How you look at the file is the **View** menu, a cube at the right end of the navbar, left of **Preview** (for a 3D view: projection, display mode, background, show grid and reset view; for a board: side, 2D or 3D, display and background, and in 3D projection and reset view). The top right of the view keeps only the camera: a 3D view's view cube, or a flat view's zoom, one "100%" menu.
+Each kind of file gets its own tools, on a strip at the top of the view. How you look at the file is the **Display** card, opened by the cube at the right end of the navbar, left of **Preview**: it slides in at the right of the view and stays open while you work (for a 3D view: projection, style, background and show grid; for a board: side, 2D or 3D, in 3D projection, style and background), with a Reset that puts the file's own settings back. The top right of the view keeps only the camera: a 3D view's view cube, or a flat view's zoom, one "100%" menu.
 
 - **Models, STEP and xbf**: select faces, edges and parts, measure, explode an assembly, clip it, and read its structure in the view's panel. Selection and measurement are exact because the server holds the B-rep (the solid's exact surfaces).
 - **Meshes (GLB, STL, 3MF)**: orbit and clip; an STL lists its bodies, Body 1 to Body N. A GLB or 3MF can also be measured, but only approximately, on triangles.

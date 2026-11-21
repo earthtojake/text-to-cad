@@ -195,10 +195,9 @@ unchanged after a runtime replacement does not.
 
 ## Where the controls live
 
-Display is a dropdown from the Display tile at the strip's end (the current mode's sphere,
-between Projection and Preview: `kit/shell/DisplayPopover.jsx`), present for every 3D file:
-the offered modes (`DisplayModeOptions.js`), then the Grid switch. On a phone it is the
-More menu's Display submenu, the same list. Preview, a view of its own over the editor's,
+Display is a card opened by the navbar's Display button, left of Preview (`kit/shell/DisplaySettings.jsx`), present
+for every 3D file: its Style the offered modes (`DisplayModeOptions.js`), then the Background and the Grid switch. On a
+phone it is the same card. Preview, a view of its own over the editor's,
 draws the model in Render whatever the file's mode (the store's `renderScene()`, as
 `kit/viewport/previewViewScene.js` draws it), and the tools view never does. Preview's own
 settings are its settings panel (`kit/shell/PreviewSettings.jsx`: Orbit, then

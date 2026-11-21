@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePromptDestination, useViewerHost, ViewerElementContext } from "../../../host/context.js";
-import { hasOpenPopup } from "../../../lib/popups.js";
+import { hasOpenPopup, ownsEscape } from "../../../lib/popups.js";
 import { useAnnotationSession } from "../../../annotation/session.js";
 import { promptViews } from "../../../annotation/views.js";
 import { useAlertDismissal } from "../status/ViewerAlertCard.jsx";
@@ -88,7 +88,7 @@ export function useFlatTools({ toolModes, file, revision, ready }) {
  *   snapshot packet carries of the prompt's references into `file` (its `references`, which `cad <type> snapshot --job`
  *   lights as the view did), where the view's packets carry them; null for none.
  * @param {((event: KeyboardEvent) => boolean) | null} [options.onViewKey]  A single key of the view's own (a
- *   view drawn flat or in 3D switching between them, or one seen from two sides turning over: View's Mode
+ *   view drawn flat or in 3D switching between them, or one seen from two sides turning over: Display's Mode
  *   and Side keys, 3 and ⇧F), tried before the tools' letters; true when it took it.
  * @param {boolean} [options.previewing]  The view is in Preview: its tools are put away, and so are their keys.
  * @param {(() => void) | null} [options.leavePreview]  Escape's, while it is.
@@ -225,7 +225,7 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     escapeActive: Boolean(previewing || selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
     onEscape(event) {
       // A popup opened in this viewer (a menu, a Select, a colour picker) owns Escape before Preview.
-      if (hasOpenPopup(viewerElement?.current)) return;
+      if (hasOpenPopup(viewerElement?.current) || ownsEscape(event.target)) return;
       if (previewing) { leavePreview?.(); return; }
       // The drawing tools' layer spends its own Escape (its editor, the stroke in hand).
       if (annotating && event.target instanceof Element && event.target.closest("[data-cad-annotation-overlay]")) return;

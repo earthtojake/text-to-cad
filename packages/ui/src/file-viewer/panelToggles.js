@@ -13,11 +13,13 @@ import { createContext, useContext, useEffect } from "react";
  * @property {string} label  Its name now ("Hide panel", "Show panel").
  * @property {string} [shortcut]  Its key, for the tooltip ("⌘\\").
  * @property {() => void} toggle
- * @property {boolean} [disabled]  Drawn, in the state the view will open its panel in, but not pressable yet: the file
- *   viewer's own, while the view is not up (`FileViewer.tsx`). It looks the same; a press does nothing.
+ * @property {boolean} [disabled]  Drawn but not pressable (`aria-disabled`): it looks the same; a press does nothing.
  * @property {object | null} [hover]  Its pointer handlers (`onPointerEnter`, `onPointerLeave`, `onPointerDown`): a mouse
- *   resting on it peeks the collapsed panel (`renderers/kit/shell/usePanelPeek.js`).
+ *   resting on it peeks the collapsed panel (`panelPeek.js`).
  * @property {boolean} [peeking]  The panel peeks: the toggle's tooltip is closed while it does.
+ * @property {boolean} [peekable]  The panel is collapsed where it can peek (a desktop's, not in Preview): the page's one peek
+ *   (`panelPeek.js`) is enabled while the toggle drawn says so; not said (undefined) while the frame has not measured
+ *   its width, the peek staying as it was.
  *
  * @typedef {{ left?: PanelToggle | null }} PanelToggles  The panel's toggle (`left`: the panel is the left sidebar).
  */

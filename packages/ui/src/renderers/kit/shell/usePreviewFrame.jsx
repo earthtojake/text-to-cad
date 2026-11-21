@@ -9,9 +9,9 @@ import { useI18n } from "@cad/ui/i18n";
 import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
 import { useControlUsage } from "../../../usage/controls.js";
 import { useStripButtonClass } from "../tools/FloatingToolBar.js";
-import { OrthographicProjectionIcon } from "../camera/ProjectionModeIcons.js";
-import { backdropScheme, usePreviewIdle } from "../tools/PreviewChrome.jsx";
+import { backdropScheme, relativeLuminance, usePreviewIdle } from "../tools/PreviewChrome.jsx";
 import { PreviewIcon } from "./PreviewIcon.jsx";
+import { DisplayIcon } from "./DisplaySettings.jsx";
 import { NAVBAR_VIEW_PLACE } from "./NavbarViewControls.jsx";
 import PreviewSettings from "./PreviewSettings.jsx";
 import { previewCoverStep } from "./previewCover.js";
@@ -49,14 +49,14 @@ function ViewControl({ label, disabled = false, tooltipSide = "top", onClick, ch
  *   (`previewCover.js`) — unless the view is `moving` (Orbit, a routine playing), which has nothing to wait for — or
  *   at most a few seconds. Then it fades from the finished picture. Leaving needs none.
  * - **The host's navbar** steps aside while Preview is up (`fileView.onPreviewChange`).
- * - **Preview's bar and panel** (`PreviewChrome`'s props): the file's name, Preview settings (a toggle, in View's cube,
- *   `ViewIcon`, at View's size: how the picture is looked at, in Preview as outside it; the panel Orbit and its speed,
+ * - **Preview's bar and panel** (`PreviewChrome`'s props): the file's name, Preview settings (a toggle, in Display's cube,
+ *   `DisplayIcon`, at its size: how the picture is looked at, in Preview as outside it; the panel Orbit and its speed,
  *   then `render`, Render's own settings) and Exit preview, in the backdrop's ink, gone while the pointer rests
  *   (`usePreviewIdle` over `hostElement`).
  * - **Preview's view**, the frame's underlay: `View` (`PreviewView.jsx`, or a view's own around it) mounted while
  *   Preview is up, handed `view`, the scene to draw (`desired`), `viewRef` and the Orbit.
- * - **The Preview button**, a play triangle drawn to pair with View's cube (`PreviewIcon.jsx`): the navbar's
- *   (`navbarButton`, after View) and the strip's last entry where there is no navbar (`stripView`: its tile, and its
+ * - **The Preview button**, a play triangle drawn to pair with Display's cube (`PreviewIcon.jsx`): the navbar's
+ *   (`navbarButton`, after Display) and the strip's last entry where there is no navbar (`stripView`: its tile, and its
  *   row of a phone's More).
  *
  * @param {object} options
@@ -65,7 +65,7 @@ function ViewControl({ label, disabled = false, tooltipSide = "top", onClick, ch
  * @param {string} options.modelKey  The file on screen: another leaves Preview.
  * @param {object} options.fileView  The renderer's props: the file's name, `onPreviewChange`.
  * @param {HTMLElement | null} options.hostElement  The frame's root: where the pointer resting is watched.
- * @param {string} options.stageColor  The cover's colour: the view's own, as it was.
+ * @param {string} options.stageColor  The view's canvas colour: the cover's where Preview's Background is not set.
  * @param {"light" | "dark"} options.viewportScheme  The viewport's scheme, where Preview's Background says nothing.
  * @param {import("react").ComponentType<object>} options.View  Preview's view.
  * @param {object | null} options.view  What `View` draws (`RendererShell`'s `previewView`); null: nothing to mount yet.
@@ -77,14 +77,12 @@ function ViewControl({ label, disabled = false, tooltipSide = "top", onClick, ch
  * @param {(orbit: boolean) => void} options.onOrbitChange
  * @param {number | null | undefined} options.orbitSpeed
  * @param {(speed: number) => void} options.onOrbitSpeedChange
- * @param {import("react").ReactNode} options.render  Render's own settings (`PreviewRenderSettings`).
+ * @param {object} options.render  Render's own settings and their writes (`PreviewRenderSettings.jsx`'s `render`).
  * @param {boolean} options.disabled  No model yet: the button and the settings wait.
  * @param {boolean} options.mobile
- * @param {import("react").ComponentType<{ className?: string }>} [options.ViewIcon]  The cube View's button wears for
- *   this view (`ViewSettingsMenu.jsx`'s `viewIcon`): Preview settings' icon; the plain cube where none is handed.
  */
 export function usePreviewFrame({ previewing, setPreviewing, modelKey, fileView, hostElement, stageColor, viewportScheme, View, view, desired,
-  sceneScaleMode, viewRef, moving, orbit, onOrbitChange, orbitSpeed, onOrbitSpeedChange, render, disabled, mobile, ViewIcon = OrthographicProjectionIcon }) {
+  sceneScaleMode, viewRef, moving, orbit, onOrbitChange, orbitSpeed, onOrbitSpeedChange, render, disabled, mobile }) {
   const { t } = useI18n();
   const controls = useControlUsage();
   // Preview's settings panel: closed as Preview opens, until its button brings it out.
@@ -177,7 +175,7 @@ export function usePreviewFrame({ previewing, setPreviewing, modelKey, fileView,
   const preview = { active: previewing, name, idle, panelOpen, scheme,
     controls: <>
       <BarControl label={t("preview.settings")} active={panelOpen} disabled={disabled}
-        onClick={() => { if (!panelOpen) controls.used("preview_settings"); setPanelOpen(open => !open); }} data-preview-settings=""><ViewIcon className="size-4" /></BarControl>
+        onClick={() => { if (!panelOpen) controls.used("preview_settings"); setPanelOpen(open => !open); }} data-preview-settings=""><DisplayIcon className="size-4" aria-hidden="true" /></BarControl>
       <BarControl label={t("preview.exit")} onClick={leave}><X className="size-3.5" aria-hidden="true" /></BarControl>
     </>,
     panel: <PreviewSettings orbit={orbit} onOrbitChange={onOrbitChange}
@@ -189,16 +187,21 @@ export function usePreviewFrame({ previewing, setPreviewing, modelKey, fileView,
       sceneScaleMode={sceneScaleMode} viewRef={viewRef} onPresented={setPresented}
       orbit={orbit} orbitSpeed={orbitSpeed ?? 1} />
   </div> : null;
-  // Preview coming together underneath: the view as it was, held, until the picture is ready.
-  const overlays = <div aria-hidden={!covered} data-preview-cover={covered ? "" : undefined}
-    className={cn("absolute inset-0 z-40 flex items-center justify-center",
+  // Preview coming together underneath, covered on what Preview is about to show: its own backdrop (its Background, where
+  // it is set and opaque enough to read on), else the view's canvas, as it was; in that backdrop's ink (`scheme`: the
+  // Background's, else the viewport's), never the app's.
+  const backdrop = desired?.view?.background;
+  const coverColor = backdrop?.enabled !== false && Number(backdrop?.opacity ?? 1) >= 0.5 && relativeLuminance(backdrop?.color) !== null
+    ? backdrop.color : stageColor;
+  const overlays = <div aria-hidden={!covered} data-preview-cover={covered ? "" : undefined} data-scheme={scheme}
+    className={cn("absolute inset-0 z-40 flex items-center justify-center", scheme,
       // At once over the press, so nothing of preview shows first; it fades only as it lifts.
       covered ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0 transition-opacity duration-300 motion-reduce:transition-none")}
-    style={{ backgroundColor: stageColor }}>
+    style={{ backgroundColor: coverColor }}>
     {/* The one indicator (`loading/LoadingStep.jsx`) on Preview's own backdrop. */}
     {covered ? <LoadingStep label={t("preview.preparing")} className="mx-4" /> : null}
   </div>;
-  // The button, a play triangle: the navbar's, after View, or the strip's last entry (its tile, and its row of a phone's More).
+  // The button, a play triangle: the navbar's, after Display, or the strip's last entry (its tile, and its row of a phone's More).
   const navbarButton = <ToolbarButton label={t("preview.label")} tooltipSide="bottom" tooltip={!mobile} disabled={disabled} onClick={enter} className={NAVBAR_VIEW_PLACE.className} data-view-preview="">
     <PreviewIcon />
   </ToolbarButton>;

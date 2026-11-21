@@ -53,7 +53,8 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   // Display and Projection.
   'display_solid', 'display_shaded', 'display_parts', 'display_xray', 'display_hidden_line', 'display_wireframe',
   'display_grid', 'projection_orthographic', 'projection_perspective',
-  // The viewport's Background (Display's), and Home (the corner's: the view as the file opened).
+  // The viewport's Background (Display's), and Home, the View menu's Reset view until Display's card replaced the menu:
+  // no view sends it now, but older releases do.
   'viewport_background_light', 'viewport_background_dark', 'viewport_background_theme', 'view_home',
   // Preview's settings.
   'preview_settings', 'preview_orbit', 'preview_orbit_speed', 'preview_parts_color_mode', 'preview_parts_colors',

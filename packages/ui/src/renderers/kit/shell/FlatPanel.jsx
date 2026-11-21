@@ -235,16 +235,16 @@ function rowlessTabs(body, searchable) {
  * @param {{ mode: "docked" | "page", open: boolean, onClose(): void, label: string,
  *   searchLabel: string, tabs: { id: string, label: string, content: import("react").ReactNode, search?: boolean, icon?: import("react").ComponentType }[],
  *   tab: string, onTabChange(id: string): void, width: number, maxWidth: number, onWidthChange(width: number): void,
- *   focusSearch: number, peek?: boolean, peekLeaving?: boolean, onPeekExited?: () => void, surfaceRef?: import("react").Ref<HTMLElement>,
+ *   focusSearch: number, peek?: boolean, peekLeaving?: boolean, peekEntered?: boolean, onPeekExited?: () => void, surfaceRef?: import("react").Ref<HTMLElement>,
  *   surfaceProps?: object | null, loading?: boolean }} props
  *   `focusSearch`: a count; each new value opens the search with the keyboard in its box (/). `peek`: the collapsed
  *   panel shown over the view on a rest on its toggle (`usePanelPeek.js`), its surface `surfaceRef` and its pointer
- *   handlers `surfaceProps`; `peekLeaving`, that peek sliding out, `onPeekExited` once it has. `loading`: the view's file
+ *   handlers `surfaceProps`; `peekLeaving`, that peek sliding out, `peekEntered`, one already standing (no slide in), `onPeekExited` once it has. `loading`: the view's file
  *   is still loading: a structure tab with no row yet shows placeholder rows (`FlatPanelRowsLoading`), busy, until its
  *   rows arrive.
  */
 export default function FlatPanel({ mode, open, onClose, label, searchLabel, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, hidden = false,
-  peek = false, peekLeaving = false, onPeekExited, surfaceRef, surfaceProps = null, loading = false }) {
+  peek = false, peekLeaving = false, peekEntered = false, onPeekExited, surfaceRef, surfaceProps = null, loading = false }) {
   const { t } = useI18n();
   const page = mode === "page";
   const [searchOpen, setSearchOpen] = useState(false);
@@ -504,7 +504,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
     style={SEARCH_BOX_HANG} /> : null;
   // Nothing found: one line, where the one tree finds nothing, or where no searched tab does.
   const nothing = searching && (grouped ? tabs.every(entry => !searchable.has(entry.id) || counts[entry.id] === 0) : counts[displayed] === 0);
-  const aside = <PanelSurface mode={page ? "page" : "push"} label={label} open={open} hidden={hidden} peek={peek} peekLeaving={peekLeaving} onPeekExited={onPeekExited}
+  const aside = <PanelSurface mode={page ? "page" : "push"} label={label} open={open} hidden={hidden} peek={peek} peekLeaving={peekLeaving} peekEntered={peekEntered} onPeekExited={onPeekExited}
     asideRef={surfaceRef} {...surfaceProps}
     width={drawnWidth} grip={page ? null : grip} gripLabel={t("flatPanel.resize")} onKeyDown={onPanelKeyDown} data-flat-panel={mode} headRule
     headRef={head} headInsets={HEAD_INSETS} headProps={{ "data-flat-panel-head": "", "data-searching": searchOpen ? "" : undefined }} scrollerRef={scroller}

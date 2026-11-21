@@ -24,6 +24,7 @@ import { selects } from "../kit/tools/select/selectFilter.js";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
 import { usePointerPick } from "../kit/tools/select/usePointerPick.js";
 import { prefersCoarsePointer } from "../kit/viewport/dom.js";
+import { DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX } from "../kit/viewport/touchGestures.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { createClickActivation } from "./clickActivation.js";
 import XbfMeasureOverlay from "./XbfMeasure.jsx";
@@ -827,7 +828,9 @@ const COARSE_TAP_SLOP_PX = 12;
  * activates as a STEP's did (`clickActivation.js`): at once, but for the second click of a
  * double-click, which the `dblclick` owns (`onDoublePick`, told whether the first click picked),
  * and a tap under a tool a pick would leave (`deferRef`: Explode, Clip), which waits the
- * double-click window. A coarse pointer has no double-click: every tap picks at once.
+ * double-click window. A finger double-clicks too: its double tap arrives as a `dblclick`
+ * (`kit/viewport/touchGestures.js`), and as a finger's press carries no count from the browser, the
+ * second tap of one is counted here by the same window.
  */
 function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, deferRef, pointerTypeRef }) {
   const { hostRef, runtimeRef, viewerReadyTick } = viewport;
@@ -835,9 +838,7 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
   callbacks.current = { onPick, onDoublePick };
   // The browser's count of the press just released in its click sequence (`detail`: 2 for a double-click's second).
   const countRef = useRef(0);
-  const doubleClick = useMemo(() => !prefersCoarsePointer(), []);
-  const activation = useMemo(() => createClickActivation({ commit: (found, options) => callbacks.current.onPick(found, options), doubleClick }),
-    [doubleClick]);
+  const activation = useMemo(() => createClickActivation({ commit: (found, options) => callbacks.current.onPick(found, options) }), []);
   useEffect(() => {
     const host = hostRef.current;
     if (!enabled || !host) return undefined;
@@ -846,6 +847,8 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
     const onCanvas = event => event.target === runtimeRef.current?.renderer?.domElement;
     const touches = new Set();
     let press = null;
+    // The last finger's tap, by which the next is counted as a double tap's second.
+    let lastTap = null;
     // Heard before the pick's own listeners: the press's count is known when it is taken.
     const down = (event) => {
       pointerTypeRef.current = event.pointerType || "";
@@ -856,8 +859,10 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
       }
       // A right press is the viewport's menu: no click waits through it either.
       if (event.button !== 0) { if (event.button === 2) activation.cancel(); return; }
+      const second = event.pointerType === "touch" && lastTap && event.timeStamp - lastTap.at <= DOUBLE_TAP_MS
+        && Math.hypot(event.clientX - lastTap.x, event.clientY - lastTap.y) <= DOUBLE_TAP_SLOP_PX;
       press = onCanvas(event) ? { x: event.clientX, y: event.clientY, pointerId: event.pointerId, pointerType: event.pointerType || "",
-        count: Number(event.detail) || 0, moved: false } : null;
+        count: event.pointerType === "touch" ? (second ? 2 : 1) : Number(event.detail) || 0, moved: false } : null;
     };
     // The mouse event behind the press carries the browser's count.
     const mouseDown = (event) => { if (press && event.button === 0) press.count = Math.max(press.count, Number(event.detail) || 0); };
@@ -871,7 +876,9 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
       if (!started || event.button !== 0 || event.pointerId !== started.pointerId) return;
       countRef.current = started.count;
       // A press that was no tap (a drag of the camera): a fresh gesture's forgets an earlier click.
-      if (started.moved || Math.hypot(event.clientX - started.x, event.clientY - started.y) > slop(started.pointerType)) activation.miss(started.count);
+      const missed = started.moved || Math.hypot(event.clientX - started.x, event.clientY - started.y) > slop(started.pointerType);
+      if (missed) activation.miss(started.count);
+      if (started.pointerType === "touch") lastTap = missed || started.count >= 2 ? null : { x: event.clientX, y: event.clientY, at: event.timeStamp };
     };
     const cancel = (event) => {
       touches.delete(event.pointerId);
@@ -889,7 +896,7 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
     host.addEventListener("pointermove", move, true);
     host.addEventListener("pointerup", up, true);
     host.addEventListener("pointercancel", cancel, true);
-    if (doubleClick) host.addEventListener("dblclick", dblclick);
+    host.addEventListener("dblclick", dblclick);
     return () => {
       host.removeEventListener("pointerdown", down, true);
       host.removeEventListener("mousedown", mouseDown, true);
@@ -900,7 +907,7 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
       // A click still waiting belongs to the tool it was made under.
       activation.cancel();
     };
-  }, [enabled, hostRef, runtimeRef, viewerReadyTick, pointerTypeRef, activation, doubleClick]);
+  }, [enabled, hostRef, runtimeRef, viewerReadyTick, pointerTypeRef, activation]);
   usePointerPick({
     viewport, scene, enabled, onHover,
     onPick: (found, modifiers) => activation.tap(countRef.current, found, modifiers, { wait: Boolean(deferRef.current) }),

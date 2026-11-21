@@ -185,7 +185,7 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     reload: () => { reloadWhenClean(() => window.location.reload()); },
     ask: () => client.serverInfo({ fresh: true }).then(info => info, error => (isEngineRefused(error) ? { refused: true } : null)) });
   const refused = askedRefused ?? readRefused;
-  return <div className="relative flex h-svh flex-col overflow-hidden">{engineGone ? <EngineStopped locale={locale} refused={refused} /> : null}
+  return <div className="fixed inset-0 flex flex-col overflow-hidden">{engineGone ? <EngineStopped locale={locale} refused={refused} /> : null}
     {/* The engine gone, its notice is the page's one: what is under it (a view's own "can't reach"
         card among it) is out of reach and unheard until it is back, and out of sight: the page is a stacking
         context of its own (`isolate`), so no layer of a view's (its tool strip and Quick Edit's bar stand at

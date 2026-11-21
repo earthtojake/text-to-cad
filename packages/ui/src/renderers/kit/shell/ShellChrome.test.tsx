@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-// The shell's chrome — the strip, the tool stack, the view's panel, the view's actions, Display's dropdown and preview —
+// The shell's chrome — the strip, the tool stack, the view's panel, the view's actions, Display's card and preview —
 // under the smallest renderer that mounts it (`renderers/shell-harness`), with the WebGL viewport
 // replaced by an empty box: nothing asserted here is drawn by it. What the viewport is handed is
 // recorded, so a test can read what the shell asked of it, and a view update it is handed is
@@ -36,7 +36,7 @@ import { ViewerElementContext, ViewerHostContext } from '../../../../dist/host/c
 import { testHost } from '../../../../dist/host/testing/host.js';
 import { ViewerMobileContext } from '../../../../dist/file-viewer/responsive.js';
 import { TOOL_PANEL_WIDTH } from '../../../../dist/renderers/kit/tools/toolStackLayout.js';
-import { SETTINGS_PANEL_SURFACE_CLASS, FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from '../../../../dist/lib/floatingSurface.js';
+import { FLOATING_CHROME_SURFACE_CLASS } from '../../../../dist/lib/floatingSurface.js';
 import { ControlUsageProvider } from '../../../../dist/usage/controls.js';
 import { PanelTogglesContext } from '../../../../dist/file-viewer/panelToggles.js';
 import { FilePanelContext } from '../../../../dist/file-viewer/filePanel.js';
@@ -51,7 +51,7 @@ function NavbarToggles({ children }: { children: React.ReactNode }) {
     {children}
   </PanelTogglesContext.Provider>;
 }
-import { SIDEBAR_SLIDE_CLASS } from '../../../../dist/renderers/kit/tools/PreviewChrome.js';
+import { PANEL_PEEK_IN_RIGHT_CLASS, PANEL_PEEK_OUT_RIGHT_CLASS } from '../../../../dist/file-viewer/panelPeek.js';
 import { createAnimationClock } from '../../../../dist/renderers/kit/tools/playbar/animationClock.js';
 import { writeFileView } from '../../../../dist/renderers/kit/shell/fileView.js';
 
@@ -383,25 +383,32 @@ it("on a phone the panel is a sheet from the left behind the navbar's toggle, cl
   expect(screen.queryByRole('button', { name: 'Drawing tools' })).toBeNull();
 });
 
-// The view's settings: View (`ViewSettingsMenu.jsx`), one menu of submenus: the navbar's, or the strip's end with none.
-const viewButton = () => screen.getByRole('button', { name: 'View' });
-const viewMenu = () => document.querySelector<HTMLElement>('[role=menu][aria-label="View"]');
-const openView = async () => {
-  fireEvent.pointerDown(viewButton(), { button: 0, ctrlKey: false, pointerType: 'mouse' });
-  await waitFor(() => expect(viewMenu()).not.toBeNull());
-  return viewMenu()!;
-};
-async function closeView(user: ReturnType<typeof userEvent.setup>) {
-  await user.keyboard('{Escape}');
-  await waitFor(() => expect(viewMenu()).toBeNull());
+// The view's settings: Display (`DisplaySettings.jsx`), a toggle whose card docks under the navbar at the view's right
+// edge: the navbar's button, or the strip's end with none.
+const displayButton = () => screen.getByRole('button', { name: 'Display' });
+// The card while it is open (one closed slides out, inert, until it is gone).
+const displayCard = () => document.querySelector<HTMLElement>('[data-settings-card-slide="in"] [data-display-settings-card]');
+async function openDisplay(user: ReturnType<typeof userEvent.setup>) {
+  if (!displayCard()) await user.click(displayButton());
+  return displayCard()!;
 }
-const gridItem = () => within(viewMenu()!).getByRole('menuitemcheckbox', { name: 'Show grid' });
-// A submenu of View, opened by a press on its row.
-const viewSub = (id: string) => {
-  fireEvent.click(viewMenu()!.querySelector<HTMLElement>(`[data-view-sub="${id}"]`)!);
-  return document.querySelector<HTMLElement>(`[data-view-sub-content="${id}"]`)!;
+// A card's dropdown, by its name: an option chosen from its list.
+async function choose(user: ReturnType<typeof userEvent.setup>, card: HTMLElement, name: string, option: string) {
+  await user.click(within(card).getByRole('combobox', { name }));
+  await user.click(screen.getByRole('option', { name: option }));
+}
+// A card's rows, section by section (the hairline between them): each row's id and what it shows.
+const cardSections = (card: HTMLElement) => {
+  const sections: string[][][] = [[]];
+  for (const node of card.querySelector('[data-settings-card-body]')!.children) {
+    if (node.hasAttribute('data-settings-rule')) { sections.push([]); continue; }
+    const control = node.querySelector('[role=combobox], [role=switch]')!;
+    sections.at(-1)!.push([node.getAttribute('data-settings-row')!, control.getAttribute('role') === 'switch' ? control.getAttribute('aria-checked')!
+      : control.querySelector('[data-settings-value-label]')!.textContent!]);
+  }
+  return sections;
 };
-const backgroundItem = (value: string) => viewSub('background').querySelector<HTMLElement>(`[data-display-background="${value}"]`);
+const gridSwitch = () => within(displayCard()!).getByRole('switch', { name: 'Show grid' });
 // A control by its name, whatever it says it is set to.
 const named = (button: Element) => button.getAttribute('aria-label')!.split(':')[0];
 // The view's controls, View then Preview: the navbar's right end, or the strip's end where there is no navbar.
@@ -417,7 +424,7 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   frame();
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['View', 'Preview']);
+  expect(barButtons()).toEqual(['Display', 'Preview']);
   stage('finding');
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
@@ -425,23 +432,23 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   expect(viewportProps.current.isLoading).toBe(true);
   stage('idle');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['View', 'Preview']);
-  // With nothing to work on yet, the strip is idle together, and so are the navbar's View and Preview.
+  expect(barButtons()).toEqual(['Display', 'Preview']);
+  // With nothing to work on yet, the strip is idle together, and so are the navbar's Display and Preview.
   stage('unready');
   expect(strip()).toEqual(['Select', 'Draw', 'Keep', 'Pose']);
-  const idle = (name: string) => (['Preview', 'View'].includes(name) ? screen.getByRole('button', { name }) : tool(name)).hasAttribute('disabled');
-  expect(['Select', 'Draw', 'View', 'Preview'].map(idle)).toEqual([true, true, true, true]);
+  const idle = (name: string) => (['Preview', 'Display'].includes(name) ? screen.getByRole('button', { name }) : tool(name)).hasAttribute('disabled');
+  expect(['Select', 'Draw', 'Display', 'Preview'].map(idle)).toEqual([true, true, true, true]);
   stage('idle');
-  expect(['Select', 'Draw', 'View', 'Preview'].map(idle)).toEqual([false, false, false, false]);
+  expect(['Select', 'Draw', 'Display', 'Preview'].map(idle)).toEqual([false, false, false, false]);
 });
 
 it("Display and Preview are a 3D view's, as its renderer declares: a view that does not declare it has neither, not disabled ones, and a request for Preview leaves it as it is", () => {
   // Preview asked for from outside the strip, as a link or a host request would.
   const ask = () => act(() => { fireEvent.click(document.querySelector('[data-harness-ask-preview]')!); });
-  // A 3D view (the harness's, declared `previewable`): the view's controls, View then Preview, and a request
+  // A 3D view (the harness's, declared `previewable`): the view's controls, Display then Preview, and a request
   // enters it.
   frame();
-  expect(barButtons()).toEqual(['View', 'Preview']);
+  expect(barButtons()).toEqual(['Display', 'Preview']);
   ask();
   expect(inPreview()).toBe(true);
   cleanup();
@@ -450,7 +457,7 @@ it("Display and Preview are a 3D view's, as its renderer declares: a view that d
   frame({ name: 'flat.harness' });
   expect(barButtons()).toEqual([]);
   expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
-  expect([screen.queryByRole('button', { name: 'View' }), document.querySelector('[data-view-corner-stack]')]).toEqual([null, null]);
+  expect([screen.queryByRole('button', { name: 'Display' }), document.querySelector('[data-view-corner-stack]')]).toEqual([null, null]);
   expect(document.querySelector('[data-strip-rule]')).toBeNull();
   ask();
   expect(inPreview()).toBe(false);
@@ -470,67 +477,60 @@ it('a load the model did not survive leaves only the card saying so, and a faile
   expect(viewportProps.current.viewCube).toBe(false);
   stage('failed');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['View', 'Preview']);
+  expect(barButtons()).toEqual(['Display', 'Preview']);
   expect(viewportProps.current.viewCube).toBe(true);
 });
 
-// A 3D view's settings under a file's navbar (`ViewSettingsMenu.jsx`): View then Preview at its right end, on a desktop
-// and a phone alike; ONE menu, a choice a submenu (Projection ▸, Display ▸, Background ▸), each row its name and the
-// choice's name muted, no icon; Show grid a check row of the menu itself; Reset view last; no bottom sheet.
-it("a 3D view's View is the navbar's, left of Preview: one menu of submenus, Show grid and Reset view, the same on a phone", async () => {
+// A 3D view's settings under a file's navbar (`DisplaySettings.jsx`): Display then Preview at its right end, on a desktop
+// and a phone alike; Display a toggle (pressed while its card is open), its card under the navbar at the view's right
+// edge: Projection | Style, Background, Show grid, and Reset, which puts the file's own settings back, never the Background.
+it("a 3D view's Display is the navbar's toggle, left of Preview: its card Projection | Style, Background, Show grid and Reset, which leaves the Background; Escape, the X and the button close it, the same on a phone", async () => {
+  const user = userEvent.setup({ skipHover: true });
   const host = testHost({ links: viewerLinks({ version: '0.7.5' }), environment: { colorScheme: 'light', platform: 'darwin' },
     files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop()!, kind: 'file', extension: 'harness', size: 1 }) } });
   const viewer = (layout?: 'mobile') => <FileViewer file="/models/one.harness" host={host as any} renderers={[createHarnessRenderer({ preferences: tabSettings() })]}
     state={{}} onStateChange={() => {}} layout={layout as any} />;
   const right = () => [...document.querySelectorAll('[data-navbar-view] [data-navbar-view-controls] > *')].map(node => node.getAttribute('aria-label'));
-  const openView = async () => {
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'View' }), { button: 0, ctrlKey: false, pointerType: 'mouse' });
-    return waitFor(() => { const found = document.querySelector<HTMLElement>('[role=menu][aria-label="View"]'); expect(found).not.toBeNull(); return found!; });
-  };
-  // The menu's top level: each submenu's row (its id, its value, whether it shows the value's icon), the check rows, Reset view.
-  const top = (menu: HTMLElement) => ({
-    subs: [...menu.querySelectorAll<HTMLElement>('[data-view-sub]')].map(row => [row.getAttribute('data-view-sub'), row.querySelector('[data-view-sub-value]')!.textContent,
-      Boolean(row.querySelector('svg:not(.lucide-chevron-right)'))]),
-    toggles: [...menu.querySelectorAll<HTMLElement>('[data-view-toggle]')].map(row => [row.textContent, row.getAttribute('aria-checked'), Boolean(row.querySelector('svg'))]),
-    reset: menu.querySelector('[data-view-reset]')?.textContent ?? null, labels: menu.querySelectorAll('[data-slot=dropdown-menu-label]').length
-  });
-  // A submenu opened by a press on its row: its options, each its name, whether it is ticked and whether it has its icon.
-  const sub = (menu: HTMLElement, id: string) => {
-    fireEvent.click(menu.querySelector<HTMLElement>(`[data-view-sub="${id}"]`)!);
-    const content = document.querySelector<HTMLElement>(`[data-view-sub-content="${id}"]`)!;
-    return { content, rows: [...content.querySelectorAll<HTMLElement>('[role=menuitemradio]')].map(item => [item.textContent, item.getAttribute('aria-checked'),
-      Boolean(item.querySelector('svg:not(.lucide-check)'))]) };
-  };
+  const pressed = () => [displayButton().getAttribute('aria-pressed'), displayButton().getAttribute('aria-expanded')];
+  const reset = () => within(displayCard()!).getByRole('button', { name: 'Reset' });
   const view = render(viewer());
   await screen.findByRole('button', { name: 'Preview' });
-  expect([right(), screen.getByRole('button', { name: 'View' }).querySelector('.lucide-chevron-down')]).toEqual([['View', 'Preview'], null]);
-  let menu = await openView();
-  expect(top(menu)).toEqual({ subs: [['projection', 'Orthographic', false], ['display', 'Solid', false], ['background', 'Light', false]],
-    toggles: [['Show grid', 'false', false]], reset: 'Reset view', labels: 0 });
-  expect(sub(menu, 'projection').rows).toEqual([['Perspective', 'false', true], ['Orthographic', 'true', true]]);
-  expect(sub(menu, 'background').rows).toEqual([['Light', 'true', true], ['Dark', 'false', true]]);
-  // Show grid leaves the menu open; a projection chosen closes it and switches the view.
-  fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: 'Show grid' }));
-  expect(within(menu).getByRole('menuitemcheckbox', { name: 'Show grid' }).getAttribute('aria-checked')).toBe('true');
-  fireEvent.click(sub(menu, 'projection').content.querySelector<HTMLElement>('[data-display-projection="perspective"]')!);
-  await waitFor(() => expect(document.querySelector('[role=menu][aria-label="View"]')).toBeNull());
-  expect(screen.getByRole('button', { name: 'View' }).getAttribute('data-view-projection')).toBe('perspective');
+  expect([right(), displayButton().querySelector('.lucide-chevron-down'), pressed(), displayCard()]).toEqual([['Display', 'Preview'], null, ['false', 'false'], null]);
+  let card = await openDisplay(user);
+  expect([pressed(), card.getAttribute('aria-label'), within(card).getByRole('heading', { level: 3 }).textContent]).toEqual([['true', 'true'], 'Display', 'Display']);
+  expect(cardSections(card)).toEqual([[['projection', 'Orthographic']], [['display', 'Solid'], ['background', 'Light'], ['grid', 'false']]]);
+  expect(within(card).getAllByRole('combobox').map(box => box.getAttribute('aria-label'))).toEqual(['Projection', 'Style', 'Background']);
+  // It slides in from the view's right edge, as the sidebar's peek does from the left: the peek's own motion.
+  expect(card.closest('[data-settings-card-slide]')!.className).toContain(PANEL_PEEK_IN_RIGHT_CLASS);
+  expect(reset().hasAttribute('disabled')).toBe(true);
+  // A change shows at once, and the card stays open while the person works.
+  await choose(user, card, 'Projection', 'Perspective');
+  await user.click(gridSwitch());
+  await choose(user, card, 'Background', 'Dark');
+  expect([displayButton().getAttribute('data-view-projection'), displayCard() !== null, reset().hasAttribute('disabled')]).toEqual(['perspective', true, false]);
+  // Reset: the file's own settings as a file with no saved record has them; the Background, the person's, left.
+  await user.click(reset());
+  expect(cardSections(displayCard()!)).toEqual([[['projection', 'Orthographic']], [['display', 'Solid'], ['background', 'Dark'], ['grid', 'false']]]);
+  expect(reset().hasAttribute('disabled')).toBe(true);
+  // Escape in it closes it and hands the keyboard back to the button; the button and the X close it too.
+  act(() => within(displayCard()!).getByRole('combobox', { name: 'Style' }).focus());
+  await user.keyboard('{Escape}');
+  expect([displayCard(), pressed(), document.activeElement]).toEqual([null, ['false', 'false'], displayButton()]);
+  await user.click(displayButton());
+  await user.click(displayButton());
+  expect(displayCard()).toBeNull();
+  await user.click(displayButton());
+  await user.click(within(displayCard()!).getByRole('button', { name: 'Close display settings' }));
+  expect(displayCard()).toBeNull();
   view.unmount();
   cleanup();
-  // A phone: View and Preview in the navbar, no cube and nothing in the corner; the same menu; no Drawer.
+  // A phone: Display and Preview in the navbar, no cube and nothing in the corner; the same card.
   render(viewer('mobile'));
   await screen.findByRole('button', { name: 'Preview' });
   expect([right(), viewportProps.current.viewCube, document.querySelector('[data-zoom-pill]'), document.querySelector('[data-view-corner]')])
-    .toEqual([['View', 'Preview'], false, null, null]);
-  menu = await openView();
-  expect(top(menu)).toEqual({ subs: [['projection', 'Orthographic', false], ['display', 'Solid', false], ['background', 'Light', false]],
-    toggles: [['Show grid', 'false', false]], reset: 'Reset view', labels: 0 });
-  expect(document.querySelector('[data-vaul-drawer], [data-slot=drawer-content], [data-view-sheet]')).toBeNull();
-  const modes = sub(menu, 'display');
-  expect(modes.rows).toEqual([['Solid', 'true', true]]);
-  fireEvent.click(sub(menu, 'projection').content.querySelector<HTMLElement>('[data-display-projection="perspective"]')!);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'View' }).getAttribute('data-view-projection')).toBe('perspective'));
-  await waitFor(() => expect(document.querySelector('[role=menu][aria-label="View"]')).toBeNull());
+    .toEqual([['Display', 'Preview'], false, null, null]);
+  card = await openDisplay(user);
+  expect(cardSections(card)).toEqual([[['projection', 'Orthographic']], [['display', 'Solid'], ['background', 'Light'], ['grid', 'false']]]);
 });
 
 it("a dismissed alert's own icon, at the navbar's right, brings its card back; it goes with the card's return, and when the alert clears", async () => {
@@ -546,9 +546,9 @@ it("a dismissed alert's own icon, at the navbar's right, brings its card back; i
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
   // View then Preview at the row's right (its panel's toggle is the row's first control, at its left); the strip holds
   // neither.
-  const view = ['View', 'Preview'];
+  const view = ['Display', 'Preview'];
   expect([right(), barButtons(), document.querySelector('[role=group][aria-label="Interaction tools"] [data-view-controls]')])
-    .toEqual([view, ['View', 'Preview'], null]);
+    .toEqual([view, ['Display', 'Preview'], null]);
   expect(document.querySelectorAll('[data-viewer-navbar] [data-view-controls] button')).toHaveLength(0);
   stage('failed');
   expect(card()!.textContent).toContain('Harness update failed');
@@ -605,56 +605,41 @@ it('a host showing the view small gets the model alone: no tools, no view action
   expect(viewportProps.current.viewCube).toBe(false);
 });
 
-it("with no navbar View and Preview end the strip and the corner is the cube alone; View wears the projection's icon, its menu Projection, Display, Background, Show grid and Reset view, its rows no icons and its options theirs; Show grid leaves the drawing tools and kept tools in place", async () => {
+it("with no navbar Display and Preview end the strip and the corner is the cube alone; Display is the plain cube, its card stays open while a tool is taken up, and Preview and another file close it", async () => {
   const user = userEvent.setup({ skipHover: true });
-  const goHome = vi.fn(() => true);
-  viewportHandle.current = { goHome };
   const { remount } = frame();
-  expect([strip(), barButtons()]).toEqual([['Select', 'Draw', 'Keep', 'Pose'], ['View', 'Preview']]);
+  expect([strip(), barButtons()]).toEqual([['Select', 'Draw', 'Keep', 'Pose'], ['Display', 'Preview']]);
   // No rule on the strip.
   expect(document.querySelector('[data-strip-rule]')).toBeNull();
   // The corner is the cube alone: nothing of the frame's stands beside or under it.
   expect([viewportProps.current.viewCube, document.querySelector('[data-view-corner]')!.childElementCount]).toEqual([true, 0]);
-  // View: the projection on screen's cube, no chevron, the strip's own tile.
-  expect([viewButton().querySelector('.lucide-chevron-down'), Boolean(viewButton().closest('[data-view-controls]'))]).toEqual([null, true]);
-  const glyph = (node: Element) => node.querySelector('svg:not(.lucide-check)')!.innerHTML;
-  const projectionGlyph = (value: string) => glyph(viewSub('projection').querySelector(`[data-display-projection="${value}"]`)!);
-  // View's menu: each choice a submenu whose row is its name and, at its right, its value (no icon), Show grid a check
-  // row (no icon), Reset view last (no icon); the options each with its icon, the one on screen ticked.
-  const menu = await openView();
-  expect(glyph(viewButton())).toBe(projectionGlyph('orthographic'));
-  expect([...menu.querySelectorAll<HTMLElement>('[data-view-sub]')].map(item => [item.getAttribute('data-view-sub'), item.querySelector('[data-view-sub-value]')!.textContent,
-    Boolean(item.querySelector('svg:not(.lucide-chevron-right)'))])).toEqual([['projection', 'Orthographic', false], ['display', 'Solid', false], ['background', 'Light', false]]);
-  expect([gridItem().getAttribute('aria-checked'), Boolean(gridItem().querySelector('svg')), menu.querySelector('[data-view-reset]')!.textContent,
-    Boolean(menu.querySelector('[data-view-reset] svg'))]).toEqual(['false', false, 'Reset view', false]);
-  const options = (id: string) => [...viewSub(id).querySelectorAll<HTMLElement>('[role=menuitemradio]')].map(item => [item.textContent, item.getAttribute('aria-checked'),
-    Boolean(item.querySelector('svg:not(.lucide-check)'))]);
-  expect([options('display'), options('background')]).toEqual([[['Solid', 'true', true]], [['Light', 'true', true], ['Dark', 'false', true]]]);
-  // Reset view does what Home did: the view the file opened with.
-  fireEvent.click(menu.querySelector<HTMLElement>('[data-view-reset]')!);
-  await waitFor(() => expect(viewMenu()).toBeNull());
-  expect(goHome).toHaveBeenCalledTimes(1);
-  // A projection chosen closes the menu and switches the view, and View's icon with it.
-  await openView();
-  fireEvent.click(viewSub('projection').querySelector<HTMLElement>('[data-display-projection="perspective"]')!);
-  await waitFor(() => expect(viewMenu()).toBeNull());
-  expect(viewButton().getAttribute('data-view-projection')).toBe('perspective');
-  await openView();
-  expect(glyph(viewButton())).toBe(projectionGlyph('perspective'));
-  await closeView(user);
+  // Display: the plain cube, whatever the projection, no chevron, the strip's own tile, a toggle.
+  const glyph = () => displayButton().querySelector('svg')!.innerHTML;
+  const cube = glyph();
+  expect([displayButton().querySelector('.lucide-chevron-down'), Boolean(displayButton().closest('[data-view-controls]')), displayButton().getAttribute('aria-pressed')])
+    .toEqual([null, true, 'false']);
+  const card = await openDisplay(user);
+  await choose(user, card, 'Projection', 'Perspective');
+  expect([displayButton().getAttribute('data-view-projection'), glyph(), displayButton().getAttribute('aria-pressed')]).toEqual(['perspective', cube, 'true']);
+  // The drawing tools and the kept controls taken up while it is open: it stays, and they stay as they were as the grid goes on.
   await user.click(tool('Keep'));
   await user.click(tool('Draw'));
   const stack = shown();
   const controls = screen.getByRole('toolbar', { name: 'Annotation controls' });
-  // Show grid toggles and leaves the menu open, and the drawing tools and the kept controls stay as they were.
-  await openView();
-  await user.click(gridItem());
-  expect(gridItem().getAttribute('aria-checked')).toBe('true');
-  await closeView(user);
-  expect([shown(), screen.getByRole('toolbar', { name: 'Annotation controls' })]).toEqual([stack, controls]);
+  await user.click(gridSwitch());
+  expect([displayCard() !== null, gridSwitch().getAttribute('aria-checked'), shown(), screen.getByRole('toolbar', { name: 'Annotation controls' })])
+    .toEqual([true, 'true', stack, controls]);
   expect([tool('Draw').getAttribute('aria-pressed'), tool('Keep').getAttribute('aria-pressed')]).toEqual(['true', 'true']);
+  // Preview closes it, and its settings button wears Display's cube.
+  await user.click(screen.getByRole('button', { name: 'Preview' }));
+  await screen.findByRole('button', { name: 'Exit preview' });
+  expect([displayCard(), within(previewBar()!).getByRole('button', { name: 'Preview settings' }).querySelector('svg')!.innerHTML]).toEqual([null, cube]);
+  await user.click(screen.getByRole('button', { name: 'Exit preview' }));
+  expect([displayCard(), displayButton().getAttribute('aria-pressed')]).toEqual([null, 'false']);
+  // Another file (the view mounted again) opens with it closed: it is never kept.
+  await openDisplay(user);
   remount();
-  expect(barButtons()).toEqual(['View', 'Preview']);
+  expect([barButtons(), displayCard()]).toEqual([['Display', 'Preview'], null]);
 });
 
 // Preview, entered as its tile enters it: the view covered first, then Preview under the cover.
@@ -662,12 +647,11 @@ async function enterPreview(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Preview' }));
   await screen.findByRole('button', { name: 'Exit preview' });
 }
-const previewSettings = () => screen.queryByRole('region', { name: 'Preview settings' });
+const previewSettings = () => document.querySelector<HTMLElement>('[data-settings-card-slide="in"] [data-preview-settings-panel]');
 
-it("three surfaces: the strip and the stack share the chrome surface, Preview's settings are more opaque, a dropdown the most; the docked panel is the chrome's colour, the navbar's, its tabs no surface of their own", async () => {
+it("the strip and the stack share the chrome surface; the docked panel and the settings cards are the chrome's colour, the navbar's, the panel's tabs no surface of their own", async () => {
   const user = userEvent.setup({ skipHover: true });
   frame();
-  expect(new Set([FLOATING_CHROME_SURFACE_CLASS, SETTINGS_PANEL_SURFACE_CLASS, FLOATING_SURFACE_CLASS]).size).toBe(3);
   const classes = (element: Element) => element.className.split(/\s+/);
   const has = (element: Element, surface: string) => surface.split(' ').every(name => classes(element).includes(name));
   expect(has(screen.getByRole('group', { name: 'Interaction tools' }), FLOATING_CHROME_SURFACE_CLASS)).toBe(true);
@@ -678,12 +662,11 @@ it("three surfaces: the strip and the stack share the chrome surface, Preview's 
   expect(has(panel('Harness tree')!, FLOATING_CHROME_SURFACE_CLASS)).toBe(false);
   // There is one panel: nothing docked at the right.
   expect(document.querySelectorAll('aside').length).toBe(1);
-  // View's menu, a dropdown, the most opaque.
-  expect(has(await openView(), FLOATING_SURFACE_CLASS)).toBe(true);
-  await closeView(user);
+  // Display's card, the peek card's surface: the chrome's colour.
+  expect(classes(await openDisplay(user)).includes('bg-sidebar')).toBe(true);
   await enterPreview(user);
   await user.click(screen.getByRole('button', { name: 'Preview settings' }));
-  expect(has(previewSettings()!, SETTINGS_PANEL_SURFACE_CLASS)).toBe(true);
+  expect(classes(previewSettings()!).includes('bg-sidebar')).toBe(true);
 });
 
 it("Preview is in Render: the strip, the view's controls, the stack and the panel step aside; its bar holds the file's name, its settings (Orbit and Render's) and the way out, which brings back the tool in hand and the file's own mode", async () => {
@@ -694,8 +677,8 @@ it("Preview is in Render: the strip, the view's controls, the stack and the pane
   // The editor's viewport as the view has settled: its pending view update applied (the stand-in acknowledges it at once).
   await act(async () => { await Promise.resolve(); });
   const editor = viewportProps.current;
-  // View's cube, as its button wears it before Preview: Preview settings wears the same one.
-  const cube = document.querySelector('[data-view-menu] svg')!.innerHTML;
+  // Display's cube, as its button wears it before Preview: Preview settings wears the same one.
+  const cube = document.querySelector('[data-display-settings] svg')!.innerHTML;
   await enterPreview(user);
   const chrome = document.querySelector<HTMLElement>('[data-preview-chrome]')!;
   expect([chrome.hidden, chrome.hasAttribute('inert')]).toEqual([true, true]);
@@ -723,8 +706,8 @@ it("Preview is in Render: the strip, the view's controls, the stack and the pane
   // Its settings are closed as it opens; they are Orbit, then Preview's own look, the file's.
   expect(previewSettings()).toBeNull();
   await user.click(within(corner).getByRole('button', { name: 'Preview settings' }));
-  expect(within(previewSettings()!).getAllByRole('heading').map(heading => heading.textContent)).toEqual(expect.arrayContaining(['Settings', 'Orbit']));
-  const floor = () => within(previewSettings()!).getByRole('checkbox', { name: 'Floor', exact: true });
+  expect(within(previewSettings()!).getAllByRole('heading').map(heading => heading.textContent)).toEqual(['Settings', 'Part colours', 'Lighting', 'Background']);
+  const floor = () => within(previewSettings()!).getByRole('switch', { name: 'Floor', exact: true });
   expect(floor().getAttribute('aria-checked')).toBe('true');
   fireEvent.click(floor());
   expect([inPreview(), chrome.hidden]).toEqual([true, true]);
@@ -732,7 +715,7 @@ it("Preview is in Render: the strip, the view's controls, the stack and the pane
   expect(chrome.hidden).toBe(false);
   // Preview's view is gone, and the editor's is as it was: nothing Preview did reached it.
   expect([inPreview(), previewProps.current, viewportProps.current.suspended, unchanged()]).toEqual([false, null, false, []]);
-  expect(barButtons()).toEqual(['View', 'Preview']);
+  expect(barButtons()).toEqual(['Display', 'Preview']);
   // The tools view is as it was: the panel back, the tool in hand, its section's tab with it.
   expect(flatPanel().hidden).toBe(false);
   expect(tabNames()).toEqual(['Harness tree', 'Reference', 'Joints']);
@@ -848,21 +831,22 @@ it("Preview's bar is its name and its two controls alone; it and the playbar go 
   }
 });
 
-it("Preview settings is pressed while its panel is open and a second press closes it; the panel slides in and out from the view's right edge", async () => {
+it("Preview settings is pressed while its card is open and a second press closes it; the card slides in from the view's right edge as the peek does", async () => {
   const user = userEvent.setup({ skipHover: true });
   frame();
   await enterPreview(user);
   const button = () => within(previewBar()!).getByRole('button', { name: 'Preview settings' });
-  const panel = () => document.querySelector<HTMLElement>('[data-preview-panel]')!;
-  // Closed: off the edge, out of reach and out of the accessibility tree; the button not pressed.
-  expect([button().getAttribute('aria-pressed'), previewSettings(), panel().hasAttribute('inert'), panel().className]).toEqual(
-    ['false', null, true, expect.stringContaining('translate-x-[calc(100%+1rem)]')]);
-  expect(panel().className).toContain(SIDEBAR_SLIDE_CLASS);
+  // Closed: no card, the button not pressed.
+  expect([button().getAttribute('aria-pressed'), previewSettings(), document.querySelector('[data-preview-panel]')]).toEqual(['false', null, null]);
+  // Closing, it slides back out, inert, and is gone at the slide's end (or, its end unheard, just after).
+  const out = () => document.querySelector<HTMLElement>('[data-settings-card-slide="out"]');
   await user.click(button());
-  expect([button().getAttribute('aria-pressed'), previewSettings() !== null, panel().hasAttribute('data-open')]).toEqual(['true', true, true]);
-  expect(panel().className).not.toContain('translate-x-[calc(100%+1rem)]');
+  expect([button().getAttribute('aria-pressed'), previewSettings() !== null]).toEqual(['true', true]);
+  expect(previewSettings()!.closest('[data-settings-card-slide]')!.className).toContain(PANEL_PEEK_IN_RIGHT_CLASS);
   await user.click(button());
-  expect([button().getAttribute('aria-pressed'), previewSettings(), panel().hasAttribute('data-open')]).toEqual(['false', null, false]);
+  expect([button().getAttribute('aria-pressed'), previewSettings(), out()!.hasAttribute('inert'), out()!.className]).toEqual(['false', null, true,
+    expect.stringContaining(PANEL_PEEK_OUT_RIGHT_CLASS)]);
+  await waitFor(() => expect(document.querySelector('[data-preview-panel]')).toBeNull());
   // Its own X closes it too, and the button is no longer pressed.
   await user.click(button());
   await user.click(within(previewSettings()!).getByRole('button', { name: 'Close preview settings' }));
@@ -889,17 +873,19 @@ it("under a FileViewer the navbar steps aside for Preview's bar, and is back as 
   expect([navbar() !== null, previewBar()]).toEqual([true, null]);
 });
 
-// Preview's Orbit, in its settings: off at every entry, its speed a row of Orbit's there while it is on.
+// Preview's Orbit, in its settings: off at every entry, its speed a slider of Orbit's there while it is on, its stops the
+// playbar's speeds.
 function previewOrbit(user: ReturnType<typeof userEvent.setup>) {
-  const orbit = () => within(previewSettings()!).getByRole('checkbox', { name: 'Orbit' });
-  const speed = () => within(previewSettings()!).getByRole('combobox', { name: 'Orbit speed' }).textContent;
+  const orbit = () => within(previewSettings()!).getByRole('switch', { name: 'Orbit' });
+  const speed = () => within(previewSettings()!).getByRole('textbox', { name: 'Orbit speed value' }).getAttribute('value') ?? '';
   return {
     orbit,
     enter: async () => { await enterPreview(user); await user.click(screen.getByRole('button', { name: 'Preview settings' })); },
     speedOnceOn: async () => { if (orbit().getAttribute('aria-checked') !== 'true') await user.click(orbit()); return speed(); },
     async choose(value: string) {
-      await user.click(within(previewSettings()!).getByRole('combobox', { name: 'Orbit speed' }));
-      await user.click(screen.getByRole('option', { name: value }));
+      const field = within(previewSettings()!).getByRole('textbox', { name: 'Orbit speed value' });
+      await user.click(field);
+      await user.keyboard(`{Control>}a{/Control}${value}{Enter}`);
     }
   };
 }
@@ -910,12 +896,12 @@ it("Preview opens still: Orbit, in its settings, turns the camera, and a speed c
   const states: any[] = [];
   const view = frame({ onStateChange: state => states.push(state) });
   await enter();
-  expect([orbit().getAttribute('aria-checked'), previewProps.current.orbit, within(previewSettings()!).queryByRole('combobox', { name: 'Orbit speed' })]).toEqual(['false', false, null]);
+  expect([orbit().getAttribute('aria-checked'), previewProps.current.orbit, within(previewSettings()!).queryByRole('slider', { name: 'Orbit speed' })]).toEqual(['false', false, null]);
   await user.click(orbit());
   expect([orbit().getAttribute('aria-checked'), previewProps.current.orbit]).toEqual(['true', true]);
   // A fresh file orbits at 1×; 2× chosen.
-  expect(await speedOnceOn()).toBe('1×');
-  await choose('2×');
+  expect(await speedOnceOn()).toBe('1');
+  await choose('2');
   expect(previewProps.current.orbitSpeed).toBe(2);
   // Leaving and coming back: still again, at 2×.
   await user.click(screen.getByRole('button', { name: 'Exit preview' }));
@@ -952,9 +938,8 @@ it("what a person uses is counted for the host by name: a tool taken up and how 
   fireEvent.click(tool('Draw'));
   now += 5_000;
   fireEvent.click(tool('Select'));
-  await openView();
-  await user.click(gridItem());
-  await closeView(user);
+  await openDisplay(user);
+  await user.click(gridSwitch());
   await enterPreview(user);
   // Preview's bar: its settings opened (a use, no seconds), then its way out.
   await user.click(within(previewBar()!).getByRole('button', { name: 'Preview settings', exact: true }));
@@ -970,7 +955,7 @@ it("what a person uses is counted for the host by name: a tool taken up and how 
   vi.restoreAllMocks();
 });
 
-it("the model area follows the viewport's Background, not the app's theme: Light in a dark app draws the scene, the cube and what stands on the picture light, the chrome dark; Dark from View's Background, and Light again", async () => {
+it("the model area follows the viewport's Background, not the app's theme: Light in a dark app draws the scene, the cube and what stands on the picture light, the chrome dark; Dark from Display's Background, and Light again", async () => {
   const user = userEvent.setup({ skipHover: true });
   const { preferences } = frame({ appearance: { colorScheme: 'dark' } });
   const box = () => document.querySelector<HTMLElement>('[data-cad-canvas-box]')!;
@@ -983,15 +968,15 @@ it("the model area follows the viewport's Background, not the app's theme: Light
   expect(screen.getByRole('group', { name: 'Interaction tools' }).closest('.light')).toBeNull();
   // The light viewport's scene stands on its gradient, top to bottom, whatever the app's theme.
   expect([viewportProps.current.themeSettings.background.type, viewportProps.current.themeSettings.background.solidColor]).toEqual(['linear', '#dfe2e5']);
-  // View's Background: Dark, then Light again, each the person's, kept in the tab's settings.
-  await openView();
-  fireEvent.click(backgroundItem('dark')!);
+  // Display's Background: Dark, then Light again, each the person's, kept in the tab's settings; Light and Dark alone.
+  const card = await openDisplay(user);
+  await user.click(within(card).getByRole('combobox', { name: 'Background' }));
+  expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Light', 'Dark']);
+  await user.click(screen.getByRole('option', { name: 'Dark' }));
   await waitFor(() => expect(viewportProps.current.appearance).toBe('dark'));
   expect([preferences.getSnapshot().viewportBackground, box().classList.contains('dark'), viewportProps.current.themeSettings.background]).toEqual(['dark', true,
     expect.objectContaining({ type: 'solid', solidColor: '#1e1e1e' })]);
-  await openView();
-  expect(backgroundItem('theme')).toBeNull();
-  fireEvent.click(backgroundItem('light')!);
+  await choose(user, card, 'Background', 'Light');
   await waitFor(() => expect(preferences.getSnapshot().viewportBackground).toBe('light'));
   await waitFor(() => expect(viewportProps.current.appearance).toBe('light'));
 });

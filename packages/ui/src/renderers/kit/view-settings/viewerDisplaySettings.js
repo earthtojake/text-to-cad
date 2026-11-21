@@ -2,6 +2,13 @@ import { normalizePreviewSettings, normalizeViewSettings, resolveViewSettings } 
 
 import { buildStepClipPatch } from "@cad/core/lib/viewer/clipPlane.js";
 
+// A file's display with no saved record, resolved: what Display's Reset puts back (its Style, the grid and the
+// camera's projection; never the Background, the person's).
+const BLANK = resolveViewSettings({});
+export const DISPLAY_DEFAULTS = Object.freeze({ mode: BLANK.mode, grid: BLANK.grid.enabled, projection: BLANK.camera.projection });
+/** The patch that puts a display's Style, grid and projection back to `DISPLAY_DEFAULTS`. */
+export const DISPLAY_RESET_PATCH = Object.freeze({ mode: DISPLAY_DEFAULTS.mode, grid: DISPLAY_DEFAULTS.grid, camera: { projection: DISPLAY_DEFAULTS.projection } });
+
 // A patch merges into what is there, in the same shape: `mode` picks the mode and `grid` switches
 // the grid; the shared groups merge field by field.
 export function mergeViewerDisplaySettings(current, patch) {
