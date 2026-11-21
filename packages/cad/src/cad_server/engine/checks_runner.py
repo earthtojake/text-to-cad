@@ -3,14 +3,16 @@ checks process, and stopped when it must be.
 
 Every check is measured in a checks process (``checks.Pool``), from a file's path or from the bytes of the
 document the engine holds -- never in a model's warm worker, so a check holds up no build, inspection or
-view of its document, and a build never has a check to cancel. Each asked check has one ``State``, changed
-under the runner's one lock:
+view of its document, and a build never has a check to cancel. Which process measures is the runner's choice
+alone: what it asks of one -- to describe a document, to measure it -- and every key it keeps a result by say
+nothing of where they run. Each asked check has one ``State``, changed under the runner's one lock:
 
 - ``ASKED``: what was kept of it is looked for, and its document read.
 - ``WAITING``: for a slot of the pool; it holds no process.
 - ``STARTING``: a slot is its own, and the slot's checks process is leased, started where none lives.
-- ``MEASURING``: that process is its own (``Asked.process``), its request sent.
-- ``ANSWERED``: its process answered, or was lost.
+- ``MEASURING``: that process is its own (``Asked.process``), from its first request to its last -- a describing
+  of its document, then its measuring -- so its limits and every stop count them as one.
+- ``ANSWERED``: its process answered all it was asked, or was lost.
 - stopped by the engine, each the reason its callers are told (``FAILURES``): ``CANCELLED`` (every caller of
   it gone, its process given to a check someone waits for), ``STOPPED`` (the engine stops), ``OVER_TIME`` and
   ``OVER_MEMORY`` (past a check's own limits, ``Limits``), ``SUPERSEDED`` (its model was built again under it,
@@ -34,6 +36,17 @@ so it holds neither its slot nor its callers for a result no one can use. While 
 the check is then asked again, of the document as it is now (``READS`` times at most: a document built again
 under each answers ``superseded``); with none it ends there. A build that changes nothing keeps its generation,
 and one of another model is another document: neither stops a check.
+
+**What is kept.** A manufacturing process's check by what was measured (``_content``,
+``measurements.Measurements``): the record of what its document's version holds, which a checks process
+describes once and the store remembers, says with no kernel which measurement the check reads, and that
+measurement's report is found or made and kept under the record's key and its own -- so every check that reads
+the same parts the same way finds it, whatever document, path, declared process or option its rules alone read
+it came with, and each answers its own process, options and findings. The interference check, which keeps each
+pair's answer itself, by its document's version and the whole check (``_versioned``, ``checks.Checks``). Under
+the one lock a check's end keeps its result before it leaves ``running``, so the same check asked next finds it
+kept or joins it; two checks that only read one measurement are no one check there, and each looks once more for
+what the other kept as it gets its process.
 """
 
 from __future__ import annotations
@@ -224,17 +237,19 @@ class Runner:
         """A manufacturing check (an ``export`` request with ``check``, ``api.check``) of the document the
         request names, answered through ``send``; ``gone``: set once its caller has hung up.
 
-        The same check of the same version is answered from what was kept (``reused``), in memory, else on
-        disk, with no process asked and none of the document's bytes read; one asked while it runs waits for it
-        and answers with its answer, saying so, so it is measured once. Else it is measured in a checks process
-        of the server's own library, when that is the caller's (its release, ``caller``, and what measures in
-        it, ``measures``: ``contract.measures_for``): another's is answered at once with no ``checked``, and
-        its caller measures the document its own way. A version is a model's generation, read before its bytes
-        and again after the check, or the digest of the bytes a file's check measured: a result is kept under
-        the version it was measured at, or not at all, and a check whose document moved on under it is stopped
-        (``built``) and asked again of the document as it is now while a caller of it is there, ``READS`` times
-        at most, then answers ``superseded`` (the module). A check runs to its end whoever asked it: its caller going leaves it running and its
-        result kept, unless a check whose caller is there needs its slot (``reap``)."""
+        A check whose measurement was kept is answered from it (``reused``), in memory, else on disk, with no
+        process asked and none of the document's bytes read where the engine knows what the version holds
+        (``_content``: a manufacturing process's, by what was measured; ``_versioned``: the interference
+        check's, by its document's version); the same check asked while it runs waits for it and answers with
+        its answer, saying so, so it is measured once. Else it is measured in a checks process of the server's
+        own library, when that is the caller's (its release, ``caller``, and what measures in it, ``measures``:
+        ``contract.measures_for``): another's is answered at once with no ``checked``, and its caller measures
+        the document its own way. A version is a model's generation, read before its bytes and again after the
+        check, or the digest of a file's bytes: nothing is kept of a check whose document moved on under it,
+        which is stopped (``built``) and asked again of the document as it is now while a caller of it is
+        there, ``READS`` times at most, then answers ``superseded`` (the module). A check runs to its end
+        whoever asked it: its caller going leaves it running and its result kept, unless a check whose caller
+        is there needs its slot (``reap``)."""
         from cad.engine.contract import measures_for
         from cad.engine.ids import file_id
         from cad.engine.previous import version as release

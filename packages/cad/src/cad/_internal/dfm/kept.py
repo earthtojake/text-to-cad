@@ -116,8 +116,8 @@ def declares(content: dict[str, Any]) -> list[tuple[str, Any]]:
 
 
 def asked(content: dict[str, Any], check: dict[str, Any]) -> dict[str, Any]:
-    """What ``check`` (``{"type", "process", "resolved", "candidates", "given", "printer_settings"}``, as a checks
-    process is handed it) asks of the document a content record says, its process named: ``{"process",
+    """What ``check`` (``{"type", "process", "resolved", "candidates", "given", "printer_settings"}``, as the
+    engine is asked it) asks of the document a content record says, its process named: ``{"process",
     "resolved", "declared"}`` -- the process and options given, ``declared`` None; or, given none, the process
     the parts declare and the options resolved for it (``manufacturing.declared`` over ``declares``), with the
     finding that says so (``declared``, which a report's findings end with, as ``_dfm_check`` ends them). A

@@ -45,8 +45,10 @@ processes it can be checked for (``processes_for``: a mesh printing, a DXF sheet
 a mesh asked for another is refused with the reason and the fix (``_MESH_REFUSED``: check the STEP or the model). The standard library alone: the server's command resolves the options here before it starts
 an environment that holds the integration. An xbf or a model given no process is checked for the one its
 parts declare (``part.material = metals.aluminum(process=machined())``): the options every process shares
-are checked here, and the integration reads the document, takes the declared process and resolves the rest
-(``declared``) before it measures. A STEP keeps no process, so one given none is refused here.
+are checked here, and the declared process is taken and the rest resolved for it (``declared``) once the
+document is read -- by the engine, from the record of what its parts declare (``dfm.kept.asked``), or by the
+integration that reads it where the engine measures nothing for this caller. A STEP keeps no process, so one
+given none is refused here.
 """
 
 from __future__ import annotations

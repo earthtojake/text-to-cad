@@ -28,13 +28,15 @@ element of a document this worker built (``doc``, its id) (``build.made_by``): i
 build too, from the last build that named the document -- so a page asking about an
 element never waits on a build.
 
-An ``export`` request with ``check`` (``{"type", "process", "resolved", "candidates", "given", "token"}``,
-``api.check``) and no destinations is a manufacturing check, which the daemon asks of its checks processes
-alone -- this program started for a slot of the daemon's pool, never a model's worker -- of a file (``path``)
-or of the bytes of a document the engine holds (``document``, its bytes after the line), measured in memory
-(``_check``: the integration ``cad.registry.manufacturing_check`` names) and answered ``{"id", "done":
-{"checked": ...}}``; one whose ``check`` says ``describe`` is read alike and measured nowhere, its ``checked``
-holding what a measurement of it would read (``content``). Nothing stops a check from within: the daemon holds it
+An ``export`` request with ``check`` (``{"type", "process", "resolved", "candidates", "token"}``: the process
+named, and of its options those its measurement reads) and no destinations is a manufacturing check, which the
+daemon asks of its checks processes alone -- this program started for a slot of the daemon's pool, never a
+model's worker -- of a file (``path``) or of the bytes of a document the engine holds (``document``, its bytes
+after the line), measured in memory (``_check``: the integration ``cad.registry.manufacturing_check`` names) and
+answered ``{"id", "done": {"checked": ...}}``, the ``checked`` saying beside the report the key of the record
+of what it measured (``content_key``); one whose ``check`` says ``describe`` is read alike and measured nowhere,
+its ``checked`` holding what a measurement of it would read (``content``), which is how the daemon learns what a
+version of a document holds, and from it which process a check given none is for. Nothing stops a check from within: the daemon holds it
 to its limits from outside and kills the process of one it stops, which holds nothing but what it read for checks.
 A checks process over its memory cap after a check drops what it read (``shed``) and, still over it, is retired as
 a worker is after a build.

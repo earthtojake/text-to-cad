@@ -1,27 +1,25 @@
-"""The manufacturing checks' results the daemon keeps, so the same check of an unchanged document
-measures nothing (``Checks``, ``Disk``), and the checks processes that measure every check (``Pool``). A
-check's life -- asked, waiting, measuring, answered or stopped -- is ``checks_runner.Runner``'s.
+"""The results the daemon keeps of a check by its document's version (``Checks``, ``Disk``) -- the interference
+check's, which keeps each pair's answer by the two parts' geometries itself -- and the checks processes that
+measure every check (``Pool``). A manufacturing process's check is kept another way, by what was measured
+(``measurements.Measurements``); a check's life -- asked, waiting, measuring, answered or stopped -- is
+``checks_runner.Runner``'s.
 
 A result is kept under its document and the version of it that was measured: a model document by its
 id and its generation (``models.Models``' ``version``: a token of its build's own, kept by a run that
 changed nothing in the worker that holds it, new for anything else), a file by its path and the digest of
-its bytes. Beside that, the check itself: the document type, the process, the resolved options, the
-candidates flag and, with no process, the options given, the release of the library that measured it, the
-caller's (the engine measures nothing in another's), and the digest of that library's code
-(``contract.measuring``'s ``code``), so a checkout's edited copy of a release and the published one never share
-a result. What measured it -- that code and the versions of the libraries a check measures with, the measuring
-process's ``contract.measuring`` -- is kept with the result (``by``), and the result is served to a caller that
-process measures for (``contract.measures_for``: one of other library versions is measured again, the new
-result in the old one's place; a caller with no kernel, which names no library, is served whatever its code
-measured), so who asks -- a command with no kernel, a script, a restarted engine that has heard from no
+its bytes. Beside that, the check itself: the document type, the process, the resolved options, the release of
+the library that measured it, the caller's (the engine measures nothing in another's), and the digest of that
+library's code (``contract.measuring``'s ``code``), so a checkout's edited copy of a release and the published
+one never share a result. What measured it -- that code and the versions of the libraries a check measures with,
+the measuring process's ``contract.measuring`` -- is kept with the result (``by``), and the result is served to a
+caller that process measures for (``contract.measures_for``: one of other library versions is measured again,
+the new result in the old one's place; a caller with no kernel, which names no library, is served whatever its
+code measured), so who asks -- a command with no kernel, a script, a restarted engine that has heard from no
 process yet -- never decides whether a kept result is found. Only a clean result is kept: never a
-document that did not read, a refusal, or a family not measured. A document holds the
+document that did not read, a refusal, or a check that left a pair unmeasured. A document holds the
 results of one version alone: a result of another version is dropped the moment one of the new version
 is kept or asked for, so none outlives the document it describes. In memory the store is bounded by
-``LIMIT`` results and ``BYTES`` of them (their JSON), the least recently used going first. A part of an
-assembly left untouched by an edit is measured again with the rest: a check measures the document whole (its
-findings, build volume and rules are the document's), so per-part reuse would be a second, finer key, not
-this one.
+``LIMIT`` results and ``BYTES`` of them (their JSON), the least recently used going first.
 
 **On disk** (``Disk``): each kept result is written beside the engine's model cache, under its document's
 folder there as every view derived from a document is (``<cache>/documents/<id>/checks/``: a model's id, a
@@ -35,12 +33,14 @@ document keeps one version's (a result of another version is removed as one of t
 whole store is held to ``DISK_LIMIT`` results and ``DISK_BYTES``, the least recently used (by its time on disk,
 set again by each read) going first. One that does not read -- not JSON, not the shape written, another
 version's or check's under its name -- is removed, never served, and a document's ``checks/`` folder left empty
-goes with its last. The files are listed once, at the store's first use (the half-written ones a stopped engine
-left, ``*.json.*.tmp``, swept then); one found gone since -- its folder wiped, or removed with its document's
-unreadable cache file -- leaves the list as it is asked for. A cache folder that cannot be written keeps nothing
-on disk: each result kept tries its own write, and nothing is remembered of the failure. A result is written
-under the registry's lock of its document (``Registry.lock``), which its deletion holds, and a document deleted
-since its check began (``Checks.deleted``, told by ``Registry.delete``) keeps nothing.
+goes with its last. The files are listed once, at the store's first use or as the first check is asked
+(``listed``): the half-written ones a stopped engine left, ``*.json.*.tmp``, are swept then, and so is every
+file that is not of this format (``FORMAT``) -- the one before it held a manufacturing check's result too, which
+nothing reads again. One found gone since -- its folder wiped, or removed with its document's unreadable cache
+file -- leaves the list as it is asked for. A cache folder that cannot be written keeps nothing on disk: each
+result kept tries its own write, and nothing is remembered of the failure. A result is written under the
+registry's lock of its document (``Registry.lock``), which its deletion holds, and a document deleted since its
+check began (``Checks.deleted``, told by ``Registry.delete``) keeps nothing.
 """
 
 from __future__ import annotations

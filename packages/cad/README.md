@@ -187,14 +187,21 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    program's; both this user's alone);
    never geometry and never source. In the
    platform's cache folder (`~/.cache/cad`, on Windows too) it keeps, under `documents/`, the
-   engine's cache for documents, and nowhere else there: each model document's bytes as it last
+   engine's cache for documents: each model document's bytes as it last
    built them, its own file, never a declared or exported xbf (the same bytes), made again by a run
    of its script (a shape's by the program that handed it over), so a restart opens every project
    at once; and, for a file document, the views derived from its bytes under that document, keyed by
    those bytes (a KiCad board's plot, its refilled pours, its DRC and its kept exports:
    `documents/<id>/kicad/<key>/`), so a changed file is a new entry and nothing stale is served --
    every one regenerable, kept until the document is deleted (`cad delete`, the home's Delete), which
-   deletes it with them -- nothing evicts it; under `pycache/` the bytecode its own processes compile of the libraries they load
+   deletes it with them, and evicted by nothing but a document's kept interference checks
+   (`documents/<id>/checks/`), which are held to bounds; and beside it what is derived from content
+   rather than from one document, each regenerable and removed by `cad cache clean`: under `checks/` a
+   manufacturing check's measurements, held to bounds, by what was measured (the parts' geometry, names,
+   placements and declared materials, the options its measurement reads and the code that measures),
+   which outlive any one document and which deleting a document does not remove (its own entries there,
+   which say what a version of it holds, go with it); and `interference/`, `hulls/` and `mjcf/` likewise,
+   each by what it was made of; under `pycache/` the bytecode its own processes compile of the libraries they load
    (`PYTHONPYCACHEPREFIX`), regenerable too, so nothing is written
    beside a library or a model; and under `base/` the environment the engine's kernel processes run in, the
    base, `cad[build123d]` at its release, made by uv from its cache on first need, and
@@ -210,7 +217,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
    sidecar, record of a build beside a model, index, memo, mesh or parsed document (but the file
-   documents' derived views above, in the document cache), and no derived file beside an input. A model whose document -- in its warm worker, else the cache -- holds the closure the
+   documents' derived views and what is kept by content above, in the cache folder), and no derived file
+   beside an input. A model whose document -- in its warm worker, else the cache -- holds the closure the
    model has now is not run, whatever files it declares: they are exports of the document, written
    after it. Explicit viewer exports write only the requested
    artifact to managed temporary storage for delivery; no source or intermediate XBF
@@ -249,7 +257,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    is cold but for its document in the cache -- every model's alike, taken whole by its key or not
    at all; a declared file, its xbf too, is never a source -- and what a restart shows without a build
    is the engine's document cache (law 2): the last built state, never a step of a build. A file
-   document's derived views kept under law 2 are views of its bytes, not a build cache.
+   document's derived views kept under law 2 are views of its bytes, and a check's kept measurements
+   facts about parts already built: neither is a build cache.
 6. **One document per model, with one id.** *Every document.* Every called model makes one document, and a call
    returns its handle (`.id`, `.url`, `.name`, `.shape`, `.export`, `.snapshot`), never a bare
    shape. Every id is one formula, `uuid5(NAMESPACE, canonical(scope) + "::" + name)`
@@ -949,8 +958,10 @@ document): an option refused by name, a file of another type or not there, a doc
 **Facts, then verdicts.** A STEP, an xbf or a model's document is measured exactly on its B-rep (the
 `build123d` integration), each finding at a face ref that `cad xbf inspect DOC REF` resolves
 (`plate/face 7`) -- in one of the engine's checks processes: a file read once, a model from the bytes the engine
-holds of it, the same check of an unchanged document answered from the result the engine kept; a mesh by the `trimesh` integration (`cad[trimesh]`), by its caller, each at `x, y, z` in
-millimetres.
+holds of it, and a check that reads the same parts the same way answered from the measurement the engine kept,
+whatever differs beside (the file's path, an option its rules alone read such as a CNC part's material, a
+colour, a process declared rather than given): its rules judge it again, and nothing is measured; a mesh by the
+`trimesh` integration (`cad[trimesh]`), by its caller, each at `x, y, z` in millimetres.
 The measurements are facts and always reported (`measurements`). The verdicts are general: each process has
 one table of rules: general practice from published design guides, each rule citing its guide as the
 evidence, and cad's own floors where no guide states a limit, each labelled as its own -- no rule
