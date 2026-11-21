@@ -897,7 +897,8 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   with no flat flange: sheet (`parts.rolled`), which this check does not unroll, so its `bends` are not
   measured and the check is `NOT CHECKED`, never an error of the part's. A face touching both faces of a pair
   is a cut edge; a cone between a skin and a coaxial
-  hole wall is a countersink. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
+  hole wall is a countersink, and so is the cone of a hole sunk through the full thickness (to a knife edge at
+  the far skin, or past it): it touches both skins, no wall is left, and its hole is its small end. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
   most `t` along it, a cone, torus or sphere about its normal; along an ellipse or a spline, a face with no
   axis to read whose sampled normals all face the skin's side, at a slant to it somewhere; within the sheet)
   is an `edge_break`, and a face square to the skin (a plane across it, a cylinder about its normal, a face
@@ -965,6 +966,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   wide across its bends too, not 48, and a hole with a full-round rim is its narrowest.
   A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
   rim, the flat's the hole under it (a plate countersunk from both sides has one whichever side unfolds).
+  A rim that runs off the outline, into a cutout or into another rim is no whole circle of the skin's, and
+  the cone no whole turn there: the edges between two passes of its seam are laid as one outline, less the
+  hole, which is read from the cone's small end; the wire that rim is part of is no hole of its own and is
+  read back from the flat.
   `cad.build123d.unfold(shape, thickness=, k_factor=, material=, bend_lines=False)` returns it
   (`bend_lines=True`: a Compound of `CUT` and `BEND` children, one DXF layer each, `BEND` empty for a flat
   plate), and raises `ValueError`
