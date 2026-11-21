@@ -21,6 +21,10 @@ leaves its point, so such a hole is not ``drilled``, whatever its diameter.
 1 3/4 in; number gauges #80-#1; letters A-Z. A hole over the series' largest is milled, not drilled. A
 diameter within 0.005 mm of one is that drill. **Tap drills** (ISO 262 coarse pitches, tap drill = nominal
 minus pitch): a hole at one is reported as that thread's candidate, a fact, not a verdict.
+
+This is the detector. Where a recogniser reads a part's holes (``_dfm_cnc_recognised``: quiddity's records), each
+is still described here, on the faces and about the bore its record names (``_described``), with what closes it
+as the record says in place of the rays' reading.
 """
 
 from __future__ import annotations
@@ -284,7 +288,7 @@ def _grooves(model: Model, group: set[int], hole: dict[str, Any],
 
 def _describe(model: Model, group: set[int], radius: float, said: dict[str, Any] | None = None) -> dict[str, Any]:
     """The hole the faces of ``group`` are about their cylinders of ``radius``, its bore (the module's **A hole**).
-    ``said``: what closes it, where a caller knows it from a record of the hole -- ``bottom``
+    ``said``: what closes it as a recognised hole's record reads it (``_dfm_cnc_recognised``) -- ``bottom``
     (``through``, ``flat`` or ``drill_point``) and, of a blind one, ``into`` (the way along the axis from its
     opening into it) -- in place of the rays' reading of through or blind, which takes a floor that is no face of
     the hole's own (a plane wider than the bore, one a round joins to the wall) for no floor at all. The floor is

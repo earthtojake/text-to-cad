@@ -13,7 +13,11 @@ the machine frame's. The families, and how each is measured:
 - ``holes`` (``_dfm_cnc_holes``): concave cylinders and their coaxial neighbours; diameter, depth (the drilled
   length below any counterbore; ``overall_depth_mm`` the whole), blind or through by an exact ray along the
   axis, the floor (drill point and its angle, or flat), counterbores (each with its own depth to diameter),
-  countersinks, the standard drill each diameter is.
+  countersinks, the standard drill each diameter is. Which faces are one hole, its bore, and what closes it
+  are quiddity's where its features are available for the part (``_dfm_cnc_recognised``: asked once for every
+  part measured itself, each hole still measured by this detector, which keeps the holes quiddity does not
+  claim and every hole of a part it is not available for); ``recognised_by`` says which read each, and the
+  family's ``recognition`` what answered, what fell back and where the two differ.
 - ``pockets``: one cavity model (``_pockets``). Every planar face that meets, by a concave edge (or through
   a concave root fillet), a face that rises from it is a pocket's floor; a face rises where it lies along the
   floor's normal or is drafted back from it (``Model.rises``, ``DRAFT_MAX_DEG``), so a drafted, lofted or
@@ -126,7 +130,7 @@ from cad._internal.dfm import Unmeasured
 from cad._internal.dfm import cnc as rules_side
 from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG
 from cad.build123d import _dfm_brep as brep
-from cad.build123d._dfm_cnc_holes import holes as find_holes
+from cad.build123d import _dfm_cnc_recognised as recognised
 from cad.build123d._dfm_cnc_holes import threads as find_threads
 from cad.build123d._dfm_cnc_model import (LIFT, RUNS_UP, SAME, WORLD, Model, Stations, about, directions_for,
                                           edge_normals, framed, machine_frame, nearest_world, stations, stations_at,
@@ -230,8 +234,11 @@ def _solids(part: brep.Part) -> list[brep.Part]:
     return found
 
 
-def measure(document: brep.Document, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
-    """The cnc report of ``document``: facts alone, every family's ``items`` at a ref."""
+def measure(document: brep.Document, options: dict[str, Any], candidates: bool, *,
+            recognise: bool = True) -> dict[str, Any]:
+    """The cnc report of ``document``: facts alone, every family's ``items`` at a ref. ``recognise`` False asks no
+    recogniser: every hole is the detector's own (``recognised_by`` ``cad``) and the ``holes`` family says no
+    ``recognition`` -- the check as it measures where quiddity is not available, to compare the two by."""
     if not document.parts:
         raise Unmeasured("document_empty", "the document has no part to measure")
     # every occurrence is a part to make, counted and located once each (``brep.every_occurrence``): the
@@ -263,6 +270,12 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     lost: dict[int, dict[str, set[int]]] = {}
     missed: dict[int, dict[int, int]] = {}
     owners: list[brep.Part] = []  # per model: the part it stands for (a copy's own, for its refs)
+    # quiddity's features of every part that is measured itself, asked once for them all (one recogniser's
+    # process a check); per model, what read its holes (a copy's is its first's), and the parts' own
+    plan = _measured_themselves(parts, copies) if recognise else []
+    features = dict(zip(plan, recognised.asked(parts[index] for index in plan)))
+    notes: list[dict[str, Any] | None] = []
+    noted: list[dict[str, Any] | None] = []
     for index, part in enumerate(parts):
         copy = copies.get(index)
         if len(part.faces()) > FACE_BUDGET:
@@ -301,6 +314,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
             lost[len(models) - 1] = {name: set(faces) for name, faces in lost.get(first, {}).items()}
             missed[len(models) - 1] = dict(missed.get(first, {}))
             owners.append(part)
+            notes.append(notes[first])
             continue
         try:
             surfaces = [brep.surface(face) for face in part.faces()]
@@ -328,8 +342,11 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         before = {name: len(items) for name, items in families.items()}
         totals = _shares(scalars)
         lost[len(models) - 1] = {}
-        _measure_part(model, len(models) - 1, axes, turning, tools, stock, families, scalars, failed,
-                      lost[len(models) - 1])
+        if recognise and index not in features:  # measured after all (the first of its geometry did not read)
+            features[index] = recognised.asked([part])[0]
+        notes.append(_measure_part(model, len(models) - 1, axes, turning, tools, stock, families, scalars, failed,
+                                   lost[len(models) - 1], features.get(index), rotation))
+        noted.append(notes[-1])
         shares[len(models) - 1] = _minus(_shares(scalars), totals)
         missed[len(models) - 1] = brep.failed_ordinals(model.part, [model.screen], [model.screen.faces])
         for name, items in families.items():
@@ -400,6 +417,8 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         unmeasured = sorted({owners[m].ref("face", ordinal) for m, by in lost.items() for ordinal in by.get(name, ())})
         if unmeasured:
             family["unmeasured_faces"] = unmeasured
+        if name == "holes" and recognise:
+            family["recognition"] = recognised.summary(notes, noted, items)
         for item in family["items"]:
             if item.get("unreached_mm"):
                 # the stretch of an edge no tool reaches, where it lies in the part's own coordinates
@@ -416,6 +435,25 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     if unintersected:
         report["findings"] = unintersected
     return report
+
+
+def _measured_themselves(parts: list[brep.Part], copies: dict[int, brep.Copy]) -> list[int]:
+    """The parts ``measure`` measures themselves, by index: every part within ``FACE_BUDGET`` but a copy of one
+    measured before it that stands the same way round (``measure``'s own loop, where each of them reads)."""
+    found: list[int] = []
+    seen: set[tuple[int, bool]] = set()
+    for index, part in enumerate(parts):
+        if len(part.faces()) > FACE_BUDGET:
+            continue
+        copy = copies.get(index)
+        if copy is not None:
+            if (copy.of, copy.proper) in seen:
+                continue
+            seen.add((copy.of, copy.proper))
+        else:
+            seen.add((index, True))
+        found.append(index)
+    return found
 
 
 def _one_cause(model: Model, index: int, state: dict[str, Any], families: dict[str, list[dict[str, Any]]],
@@ -605,10 +643,12 @@ def _to_part(value: Any, rotation: np.ndarray, key: str | None = None) -> Any:
 def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tuple[float, ...] | None,
                   stock: tuple[float, float, float] | None, families: dict[str, list[dict[str, Any]]],
                   scalars: dict[str, dict[str, Any]], failed: dict[str, str],
-                  lost: dict[str, set[int]] | None = None) -> None:
+                  lost: dict[str, set[int]] | None = None, features: dict[str, Any] | None = None,
+                  rotation: np.ndarray | None = None) -> dict[str, Any] | None:
     """One part's families into ``families`` and ``scalars`` (a family that raised into ``failed``), and into
     ``lost`` the faces each family's rays the kernel failed to intersect (ordinals: its figures there are not
-    measured)."""
+    measured). ``features``: quiddity's result for the part (None: not asked), ``rotation`` what turned the part
+    into ``model``'s frame; answers what read its holes (``_dfm_cnc_recognised.holes``' note)."""
     state: dict[str, Any] = {"axes": axes, "tools": tools, "stock": stock, "turning": turning}
     lost = {} if lost is None else lost
 
@@ -626,8 +666,8 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
             for family in _RAN.get(name, (name,)) if new else ():
                 lost.setdefault(family, set()).update(new)
 
-    found = run("holes", lambda: find_holes(model))
-    holes, hole_faces = found if found else ([], set())
+    found = run("holes", lambda: recognised.holes(model, features, rotation))
+    holes, hole_faces, note = found if found else ([], set(), None)
     state["hole_faces"] = hole_faces
     families.setdefault("holes", []).extend(holes)
     families.setdefault("counterbores", []).extend(bore for hole in holes for bore in hole["_counterbores"])
@@ -758,6 +798,7 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
             for name in ("turned_diameters", "bores", "grooves", "live_tooling", "pockets", "internal_corners"):
                 failed.setdefault(name, failed["turning"])
     _one_cause(model, index, state, families, holes, found_pockets, turning)
+    return note
 
 
 # --- voids -----------------------------------------------------------------------------------------------
