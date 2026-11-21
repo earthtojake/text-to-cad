@@ -1,6 +1,6 @@
 ---
 name: print3d
-description: Prints a part - slices an `.stl`, `.3mf` or `.obj` into printer-ready G-code with OrcaSlicer, headless or in the app, with built-in profiles for most FDM printers (Prusa, Bambu Lab, Creality, Voron), and sends it to a Bambu Lab printer through Bambu Connect or Bambu Studio. Use when the person wants a model sliced or printed. Never starts a print; whether a part will print is the cad skill's check.
+description: Gets a part 3D printed - slices an .stl, .3mf or .obj into G-code with OrcaSlicer and, for a Bambu Lab printer, hands it to Bambu's own app. Use when the person wants a model sliced, printed or sent to their printer (Prusa, Bambu Lab, Creality, Voron and most FDM printers). Whether a part will print well is the cad skill's check.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -9,8 +9,8 @@ metadata:
 # 3D printing
 
 Get a part printed: slice it for the person's printer and hand the result to the printer's own app.
-The agent never contacts or controls a printer and never starts a print. Designing the part, and
-checking whether it will print (walls, overhangs, supports, orientation), is the cad skill's.
+Designing the part, and checking whether it will print (walls, overhangs, supports, orientation), is
+the cad skill's.
 
 ## Start with the task
 
@@ -114,9 +114,8 @@ opens a model with `open -a BambuStudio <file>` on macOS (some installs name it 
 its File menu on Windows, or `bambu-studio <file>` on Linux.
 
 Before the person presses Print, tell them what to check: the printer, plate type, nozzle, filament
-and AMS mapping, a clear build plate, and someone nearby for the first layer. Never report a print as
-started: the agent cannot see the printer. Starting, pausing or cancelling prints and reading printer
-status are out of scope.
+and AMS mapping, a clear build plate, and someone nearby for the first layer. This hand-off shows the
+agent nothing of the printer, so do not report a print as started.
 
 ## Any other printer
 

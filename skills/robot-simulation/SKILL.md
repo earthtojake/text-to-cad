@@ -1,6 +1,6 @@
 ---
 name: robot-simulation
-description: Robot and world descriptions (URDF, SRDF, MJCF) for ROS, MoveIt and MuJoCo. Use to generate a robot description or a MuJoCo scene from a CAD model's joints, materials and collision, or to write and review a `.urdf`, `.srdf` or MJCF `.xml` by hand (links, joints, inertials, meshes, MoveIt groups, MuJoCo classes, actuators, keyframes, model health). Not the CAD part itself, which the `cad` skill makes, nor a simulation run.
+description: Writes and reviews robot and world descriptions (URDF, SRDF, MJCF) for ROS, MoveIt and MuJoCo. Use to generate a robot description or a MuJoCo scene from a CAD model's joints, or to write, edit or check a .urdf, .srdf or MJCF .xml by hand. Not for the CAD part itself, which the cad skill makes, and it runs no simulation.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad

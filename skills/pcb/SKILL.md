@@ -1,6 +1,6 @@
 ---
 name: pcb
-description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) and their schematics (.kicad_sch) - parts and nets, ERC, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files, the netlist and BOM, or STEP for enclosure design. Shows boards and schematics in the text-to-cad viewer.
+description: Designs, edits and reviews KiCad circuit boards and schematics (.kicad_pcb, .kicad_sch). Use for any request about a PCB, a schematic or a circuit - parts and nets, placement and routing, ERC and DRC, a review before ordering from JLCPCB, PCBWay or another fab, and fabrication files, a BOM, a netlist or a STEP of the board. Not for the enclosure or other mechanical parts, which the cad skill makes.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -172,8 +172,8 @@ the result and the fix. Then the coverage: checks run, and checks not run with w
 
 The result is **pass** (measured, within a cited limit), **fail** (a measured violation or a KiCad
 error), **review** (a risk a person decides) or **unverified** (evidence or the fab's rule is missing).
-No findings is not a manufacturability approval. A review alone asks for no edits and no order: fix
-only when asked, recheck the neighbours of every fix, and never order on the person's behalf.
+No findings is not a manufacturability approval. A review alone asks for no edits: fix only when
+asked, and recheck the neighbours of every fix.
 
 Export only the deliverables asked for, from the revision you checked
 ([manufacturing](references/manufacturing.md)). A DRC or ERC error blocks writing fabrication files

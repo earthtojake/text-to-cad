@@ -1,6 +1,6 @@
 ---
 name: sendcutsend
-description: Review DXF and STEP/STP uploads for SendCutSend.com orders using its ordering guide, catalog, and specs. Use only for SendCutSend.com preflight reports covering upload readiness, selected material/SKU/thickness/service availability, and service-specific checks for laser cutting, CNC routing, bending, tapping, countersinking, hardware insertion, and finishing.
+description: Checks DXF and STEP files against SendCutSend.com's ordering guide, catalog and specs before an order. Use when the person names SendCutSend or is preparing an order there, to say whether a file will upload, whether the chosen material, thickness and services are offered, and what laser cutting, CNC routing, bending, tapping, hardware or finishing require. Not for designing the part or its flat pattern, which the cad skill does.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad

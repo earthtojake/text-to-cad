@@ -1,6 +1,6 @@
 ---
 name: engineering-drawing
-description: Make an engineering drawing of a part as a PDF - orthographic views with hidden lines and centre marks, real dimensions, hole callouts, notes and a title block on ISO sheets, all projected from the part's geometry so the drawing follows the model. Use when the user asks for a drawing, a dimensioned sheet, shop or manufacturing drawings, a print, or "2D views of this part". Not for DXF cut layouts or flat patterns.
+description: Makes an engineering drawing of a part as a PDF, projected from its 3D geometry so the drawing follows the model, with dimensioned orthographic views, hole callouts, notes and a title block. Use when the person asks for a drawing, a dimensioned sheet, shop or manufacturing drawings, a blueprint, or "2D views of this part". Not for DXF cut layouts or flat patterns, which the cad skill makes.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad

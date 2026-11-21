@@ -1,6 +1,6 @@
 ---
 name: fea
-description: Checks whether a part or an assembly of bonded parts holds under its loads, as a linear static stress study of a STEP, an xbf or a text-to-cad model, meshed by netgen and solved by CalculiX, giving peak von Mises stress, safety factor against yield and deflection drawn on the part. Use when the person asks whether a part will hold, break or is strong enough, how much it bends or sags, where it is most stressed, how much load it takes, how to make it stronger or lighter without failing, or for FEA, a stress analysis or a strength simulation. Static loads and steady g-loads only.
+description: Checks whether a part, or an assembly of bonded parts, is strong enough under its loads, as a linear static stress study (FEA). Use when the person asks whether a part will hold, break or bend too much, where it is most stressed, how much load it takes, how to make it stronger or lighter, or for FEA, a stress analysis or a strength simulation. Reports peak stress, safety factor against yield and deflection. Static loads only, not vibration, buckling, heat, fatigue or impact.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad

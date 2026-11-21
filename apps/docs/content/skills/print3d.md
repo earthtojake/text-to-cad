@@ -1,6 +1,6 @@
 ---
 title: print3d
-description: The print3d skill slices a part into printer-ready G-code with OrcaSlicer and hands it to your printer's app; it never starts a print.
+description: The print3d skill slices a part into printer-ready G-code with OrcaSlicer and hands it to your printer's app.
 ---
 
 The `print3d` skill slices a part into printer-ready G-code with OrcaSlicer and hands the result to your printer's app. For a Bambu Lab printer that is Bambu Connect or Bambu Studio, where you press Print yourself. Whether a part will print well at all is a separate question, answered by the printing check in the `cad` skill's [manufacturing checks](/docs/cad#manufacturing-checks), for example `cad model dfm "$ID" --process printing --technology fdm`.
@@ -35,7 +35,7 @@ Before the hand-off, `<orca> model.stl --info` gives the model's size, which mus
 
 ## Limits
 
-- Your agent never starts, pauses or cancels a print, never reads printer status and never asks for an access code. Bambu Lab's firmware takes those from other software only through Bambu Connect or Developer Mode, which is LAN-only and disconnects the printer from Bambu Cloud.
+- Today the skill hands a print to Bambu Connect or Bambu Studio, where you start it: it does not start, pause or cancel a print or read printer status, and it never asks for an access code. Bambu Lab's firmware takes those from other software only through Bambu Connect or Developer Mode, which is LAN-only and disconnects the printer from Bambu Cloud.
 - It cannot see your printer. Before you press Print, check the printer, plate type, nozzle, filament and AMS mapping, a clear build plate, and that someone is nearby for the first layer.
 - Bambu Connect accepts a plain `.gcode` only if it was sliced with that printer's Bambu profile. If it refuses one, slice in Bambu Studio.
 - A printer with no OrcaSlicer profile needs you to choose settings in the app.

@@ -1,6 +1,6 @@
 ---
 name: render
-description: Renders photoreal images and videos of a text-to-cad model, a STEP or an xbf with Blender, for people to look at, such as a hero shot, a README picture, a product post, a turntable or a film of a model's motion or animation. Exports a GLB, loads it with cad.blender, lights and frames it in a bpy script that `cad run` runs, drafts in EEVEE and finishes in Cycles on the GPU, and can save a .blend. Not for checking geometry, which a snapshot does.
+description: Renders photoreal images and videos of a text-to-cad model, a STEP or an xbf with Blender - a hero shot, a product or README picture, a turntable, or a film of a model's motion. Use when the person wants a picture or a video for people to look at. Not for checking geometry, which the cad skill's snapshot does.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad

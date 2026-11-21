@@ -226,9 +226,9 @@ part of a rewrite, a tidy-up or a fix that happens to reach them. Propose the ch
   sits in every agent's context on every turn beside every other skill's. The A/B bench hands an
   agent its skill, so it does not test this: propose a description with the requests it should and
   should not load for.
-- **A line that says what the agent does not do on a person's behalf** (print3d never contacts a
-  printer or starts a print; pcb never orders a board). Adding one, removing one and weakening one
-  are each a decision about the product, not wording.
+- **A line that says what the agent does not do on a person's behalf** (start a print, place an
+  order, spend money). Adding one, removing one and weakening one are each a decision about the
+  product, not wording.
 
 ## Checklist
 
