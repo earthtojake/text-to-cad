@@ -14,7 +14,7 @@ Treat SendCutSend's ordering guide, catalog JSON, and specs JSON as evidence fee
 
 ## Setup
 
-Written for `cad==0.11.14`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+Written for `cad==0.11.15`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
 0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
 If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
