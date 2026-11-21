@@ -61,3 +61,14 @@ it('names a host\'s tab CAD and gives it the blue brand mark, as the page\'s own
   expect(blue - red).toBeGreaterThan(120);
   expect(blue - green).toBeGreaterThan(40);
 });
+
+it.each(['index.html', 'shell.html'])('%s asks browsers not to translate the app', (page) => {
+  // The app is translated into its locales by its own strings. A browser's page translation (Chrome's wraps each
+  // text node in <font> elements) moves and removes nodes React owns, and React's next commit throws NotFoundError
+  // and can leave the card blank. The page asks the browser not to translate it; a test cannot hold that one obeys.
+  const html = readFileSync(fileURLToPath(new URL(`../${page}`, import.meta.url)), 'utf8');
+  const root = html.match(/<html\b[^>]*>/u)?.[0] ?? '';
+  expect(root).toMatch(/\btranslate="no"/u);
+  expect(root).toMatch(/\bclass="notranslate"/u);
+  expect(html).toMatch(/<meta name="google" content="notranslate"\s*\/?>/u);
+});

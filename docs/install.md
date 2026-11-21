@@ -468,6 +468,8 @@ newest plugin's skills may ask for a newer cad.
 A computer on 0.10.0 to 0.11.11 is brought over once, by the updater those releases shipped: it
 installs the new cad with uv. Where the install command was used on that computer, it runs it once
 more and turns on the plugin's automatic updates; where it was not, your apps are left as they are.
+That run is done once cad is installed: an app that failed in it is tried again as on any computer
+([The plugin](#the-plugin)), at most three times for one release.
 From then on, both update as above. A computer on an older release moves when you run the install
 command.
 

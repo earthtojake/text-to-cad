@@ -539,7 +539,8 @@ ARRIVAL_OUTCOMES = {"setup": frozenset({"ok", "failed"}), "serving": frozenset({
 # (``uv``), no network for what uv's cache lacks (``network``), a folder it may not write (``denied``: the causes
 # ``cad setup`` met), anything else (``other``) -- and a hand-over's -- the
 # program it ran said nothing of how it went (``no_report``), its setup failed (``setup``), what it updates did not
-# take the update (``app``), anything else (``other``).
+# take the update (``app``: 0.11.12 to 0.11.14 alone; later releases count such a hand-over as done), anything else
+# (``other``).
 ARRIVAL_FAILURES = {"setup": frozenset({"uv", "network", "denied", "other"}),
                     "handover": frozenset({"no_report", "setup", "app", "other"})}
 MAX_ATTEMPTS = 1000  # a hand-over's attempts, and an update's tries, past this many are counted as this many
