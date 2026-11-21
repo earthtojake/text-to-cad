@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle, X } from "lucide-react";
+import { X } from "lucide-react";
+import LoadingStep from "../../../loading/LoadingStep.jsx";
 import { Button } from "@cad/ui/primitives/button";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
@@ -194,9 +195,8 @@ export function usePreviewFrame({ previewing, setPreviewing, modelKey, fileView,
       // At once over the press, so nothing of preview shows first; it fades only as it lifts.
       covered ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0 transition-opacity duration-300 motion-reduce:transition-none")}
     style={{ backgroundColor: stageColor }}>
-    {covered ? <span role="status" className="flex items-center gap-2 text-tiny text-muted-foreground">
-      <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />{t("preview.preparing")}
-    </span> : null}
+    {/* The one indicator (`loading/LoadingStep.jsx`) on Preview's own backdrop. */}
+    {covered ? <LoadingStep label={t("preview.preparing")} className="mx-4" /> : null}
   </div>;
   // The button, a play triangle: the navbar's, after View, or the strip's last entry (its tile, and its row of a phone's More).
   const navbarButton = <ToolbarButton label={t("preview.label")} tooltipSide="bottom" tooltip={!mobile} disabled={disabled} onClick={enter} className={NAVBAR_VIEW_PLACE.className} data-view-preview="">

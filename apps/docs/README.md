@@ -145,7 +145,7 @@ mark's build, with Replay, and provides downloadable C, CAD, TEXTTOCAD and stack
 SVGs, PNGs and animated SVGs, followed by the original animated loading-icon playground.
 `LogoBuild` (`src/components/logo-build.tsx`) shows a build: a plain `<img>`, since the animation
 is the SVG's own SMIL, inside a `<picture>` whose reduced-motion source is the static mark. The
-original mesh, animation and the shared UI loading assets stay unchanged.
+original mesh and animation stay unchanged (the viewer no longer draws a loading mark: the playground is this site's alone).
 
 The source vectors are committed in `public/brand/`. After editing them, run
 `node scripts/brand/export-logos.mjs` from the repository root to refresh PNGs,

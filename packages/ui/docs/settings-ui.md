@@ -374,6 +374,21 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   preparing, so it has none to offer: a failed update is the alert card's, whose Retry reloads) — and
   nothing while the alert card says why the view's chrome is gone. It is renderer chrome: the navbar
   carries no status. On mobile it is a tappable progress icon whose popover names what is loading.
+- **Loading is one quiet indicator** (`loading/LoadingStep.jsx`), the same wherever a file loads — the page's own
+  phase before any view is up (a CAD host's cover, `file-viewer/presentation`'s `ViewerLoadingOverlay`, or the file
+  viewer's own where the host has none), each view's cover (`ViewFrame.jsx`'s, a 3D view's and a flat one's), a 3D
+  view's display-mode change (`ShellViewport.jsx`) and Preview's cover: **one step line** — what is happening now, in
+  `text-ui`, muted, its count at the right in tabular figures — **over the thin progress bar** (3px, its share where
+  the step has one, a sliding third where it has none), 8px between them, 240px wide and never wider than the room
+  less 16px either side, centred in the viewport's area (not the page), at the same place in the page's phase and the
+  view's so nothing moves as one hands over to the other. No mark, no spinner, no headline: the navbar names the file
+  and the panel's placeholder rows say it is loading. What a lost connection adds ("Waiting for a response.
+  Retrying…", the bar held) and a step's detail after ten seconds hang under the bar, 8px apart, in the same type,
+  so the step line and the bar never move as they come and go. Where less motion is asked for (the host's Reduce
+  motion, or the system's) the bar does not move: an indeterminate one stands across its track, faint. The cover is
+  on the viewport's Background where the host knows it ([Background](#the-viewports-theme-background)); Preview's
+  cover keeps Preview's own backdrop. The update status above is the one loading line that stays a pill with its
+  spinning glyph: it sits beside a live picture, where a bar would read as the picture's own.
 
 ## Tools and lifecycle
 
@@ -1494,7 +1509,7 @@ Three interface sizes and one heading, each on a fixed line height, as Figma's U
 | --- | --- | --- |
 | Tooltips, shortcut hints (a menu's, a tooltip's key), small metadata (a tile's age, the app menu's version, a value badge, the zoom's percentage, a status under the view) | 11 / 16, regular | `text-tiny` |
 | The view's panel (every step of the scale inside it: `--cad-text-panel`, [One surface, one text size](#the-views-panel-and-the-tool-stack)), Quick Edit (its chips, hints and buttons), the sub-toolbars and their popovers, Preview's settings, the tool stack's panels, and every menu, dropdown, select, context menu and toast | 12 / 16, regular (a menu's label too) | `text-xs` |
-| App chrome: the navbar and the file's name, dialogs (What's new), the Home's body, and the text a person types in Quick Edit's note (and its placeholder), floating or docked | 13 / 20, regular | `text-ui` (`text-sm`, `text-base`) |
+| App chrome: the navbar and the file's name, dialogs (What's new), the Home's body, the text a person types in Quick Edit's note (and its placeholder), floating or docked, and the loading indicator's step line | 13 / 20, regular | `text-ui` (`text-sm`, `text-base`) |
 | The one heading: the CAD app's notice title (the Home's **Recent** is the navbar's, 13/20 at 500) | 15 / 20, semibold | `text-heading` |
 
 A phone takes one step up on the same line heights: 12, 13 and 14px, the heading 16px
