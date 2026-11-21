@@ -463,8 +463,8 @@ def _skirt_cuts():
                                      (xm, sy * O.TRAY_BOLT_Y, O.TRAY_FLANGE_Z + 30.0), 7.4))
     n1, s1 = O.skirt_normal(1), O.skirt_slope_dir(1)
     fc = O.skirt_point(1, O.FILTER_X, O.FILTER_Z)
-    for dx in (-66.0, 66.0):
-        for ds in (-36.0, 40.0):
+    for dx in O.FILTER_EAR_DX:
+        for ds in O.FILTER_EAR_DS:
             pt = (fc[0] + dx, fc[1] + ds * s1[1], fc[2] + ds * s1[2])
             out.append(_drill(pt, (-n1[0], -n1[1], -n1[2]), 20.0, 9.2))
     n2 = O.skirt_normal(2)
