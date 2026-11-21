@@ -106,18 +106,52 @@ def write_document(doc: Any, path: Path) -> None:
     _settle(Path(path), changed_styles)
 
 
+#: Every parameter of the kernel's writer that one shape's bytes depend on (``shape_bytes``), each at the value the
+#: kernel starts with but the unit and the schema, which are ``write_document``'s: whole numbers (the precision
+#: mode, average; the assembly mode, auto; curves on surfaces, written; a vertex as a compound; no non-manifold
+#: topology; tessellated geometry only where there is no B-rep), a length (the precision's value, unused in the
+#: average mode) and words. The kernel keeps them for the process, and whatever else writes a STEP there changes
+#: them (build123d's own export sets the curves and the precision mode), so they are set for each writing and
+#: put back after it.
+_SHAPE_WHOLE = {"write.precision.mode": 0, "write.step.assembly": 2, "write.surfacecurve.mode": 1,
+                "write.step.vertex.mode": 0, "write.step.nonmanifold": 0, "write.step.tessellated": 2}
+_SHAPE_LENGTHS = {"write.precision.val": 1e-3}
+_SHAPE_WORDS = {"write.step.unit": "MM", "write.step.schema": SCHEMA,
+                "write.step.product.name": "Open CASCADE STEP translator"}
+
+
+@contextmanager
+def _shape_settings() -> Iterator[None]:
+    """The kernel's writer set to write one shape (``_SHAPE_WHOLE``, ``_SHAPE_LENGTHS``, ``_SHAPE_WORDS``), and
+    as it was found again after: call with a writer made, under the kernel's lock."""
+    from OCP.Interface import Interface_Static
+
+    kinds = ((_SHAPE_WHOLE, Interface_Static.IVal_s, Interface_Static.SetIVal_s),
+             (_SHAPE_LENGTHS, Interface_Static.RVal_s, Interface_Static.SetRVal_s),
+             (_SHAPE_WORDS, Interface_Static.CVal_s, Interface_Static.SetCVal_s))
+    found = [(put, name, read(name)) for values, read, put in kinds for name in values]
+    try:
+        for values, _read, put in kinds:
+            for name, value in values.items():
+                put(name, value)
+        yield
+    finally:
+        for put, name, value in found:
+            put(name, value)
+
+
 def shape_bytes(shape: Any) -> bytes:
     """One shape's STEP, in memory: its geometry alone (a solid, or a compound of them), where it stands, in
     millimetres, by the kernel's plain writer under the settings ``write_document`` writes with -- no document,
     so no names, colours or materials, and no file. What a reader of one part's geometry is handed (the
-    quiddity integration's recogniser, ``cad.quiddity``). The same shape writes the same bytes: the header's
-    time is ``WRITTEN_STAMP``, and the product, which the kernel names from a counter of the process's, on from
-    every STEP it wrote before, is named by its place in the file (``_products``). ``OSError`` where the kernel's
-    writer does not write it."""
+    quiddity integration's recogniser, ``cad.quiddity``). The same shape writes the same bytes, whatever the
+    process wrote before and however: every parameter of the writer its bytes depend on is set for the writing
+    (``_shape_settings``), the header's time is ``WRITTEN_STAMP``, and the product, which the kernel names from a
+    counter of the process's, on from every STEP it wrote before, is named by its place in the file
+    (``_products``). ``OSError`` where the kernel's writer does not write it."""
     import io
 
     from OCP.IFSelect import IFSelect_RetDone
-    from OCP.Interface import Interface_Static
     from OCP.Message import Message
     from OCP.STEPControl import STEPControl_AsIs, STEPControl_Writer
 
@@ -127,14 +161,13 @@ def shape_bytes(shape: Any) -> bytes:
         _quiet(Message)
         # The writer defines the translator's parameters: set them once it exists.
         writer = STEPControl_Writer()
-        Interface_Static.SetCVal_s("write.step.unit", "MM")
-        Interface_Static.SetCVal_s("write.step.schema", SCHEMA)
-        if writer.Transfer(getattr(shape, "wrapped", shape), STEPControl_AsIs) != IFSelect_RetDone:
-            raise OSError("the kernel could not write the shape as STEP")
-        _stamp(writer.Model())
-        stream = io.BytesIO()
-        if writer.WriteStream(stream) != IFSelect_RetDone:
-            raise OSError("the kernel could not write the shape as STEP")
+        with _shape_settings():
+            if writer.Transfer(getattr(shape, "wrapped", shape), STEPControl_AsIs) != IFSelect_RetDone:
+                raise OSError("the kernel could not write the shape as STEP")
+            _stamp(writer.Model())
+            stream = io.BytesIO()
+            if writer.WriteStream(stream) != IFSelect_RetDone:
+                raise OSError("the kernel could not write the shape as STEP")
     return _products(stream.getvalue())
 
 

@@ -62,6 +62,41 @@ class ShapeBytesTest(unittest.TestCase):
         self.assertIn(f"'{WRITTEN_STAMP}'".encode(), self.data[:1024])
         self.assertIn(b"PRODUCT('1','1'", self.data)
 
+    def test_the_bytes_do_not_depend_on_how_the_process_wrote_a_step_before_and_its_settings_are_left(self) -> None:
+        """The kernel keeps its writer's parameters for the process, and build123d's own export changes two of
+        them (curves on surfaces, the precision mode): one shape's bytes are the same after it, and after every
+        other parameter they depend on was changed, and each is left as it was found."""
+        from OCP.Interface import Interface_Static
+
+        with tempfile.TemporaryDirectory(prefix="step-shape-bytes-") as folder:
+            bd.export_step(bd.Box(1, 2, 3), os.path.join(folder, "box.step"), write_pcurves=False,
+                           precision_mode=bd.PrecisionMode.GREATEST)
+        self.assertEqual((Interface_Static.IVal_s("write.surfacecurve.mode"),
+                          Interface_Static.IVal_s("write.precision.mode")), (0, 1), "build123d's export changed them")
+        self.assertEqual(shape_bytes(self.shape), self.data)
+        whole = {"write.precision.mode": -1, "write.step.assembly": 1, "write.surfacecurve.mode": 0,
+                 "write.step.vertex.mode": 1, "write.step.nonmanifold": 1, "write.step.tessellated": 0}
+        words = {"write.step.unit": "INCH", "write.step.schema": "AP203", "write.step.product.name": "another's"}
+        was = {name: Interface_Static.IVal_s(name) for name in whole} | {
+            name: Interface_Static.CVal_s(name) for name in words} | {
+            "write.precision.val": Interface_Static.RVal_s("write.precision.val")}
+        try:
+            for name, value in whole.items():
+                Interface_Static.SetIVal_s(name, value)
+            for name, value in words.items():
+                Interface_Static.SetCVal_s(name, value)
+            Interface_Static.SetRVal_s("write.precision.val", 0.5)
+            self.assertEqual(shape_bytes(self.shape), self.data)
+            self.assertEqual({name: Interface_Static.IVal_s(name) for name in whole}, whole, "left as found")
+            self.assertEqual({name: Interface_Static.CVal_s(name) for name in words}, words)
+            self.assertEqual(Interface_Static.RVal_s("write.precision.val"), 0.5)
+        finally:
+            for name in whole:
+                Interface_Static.SetIVal_s(name, was[name])
+            for name in words:
+                Interface_Static.SetCVal_s(name, was[name])
+            Interface_Static.SetRVal_s("write.precision.val", was["write.precision.val"])
+
     def test_the_kernel_reads_back_the_faces_in_their_order_where_the_part_stands(self) -> None:
         written, read = surfaces(self.shape), surfaces(read_back(self.data))
         self.assertEqual(len(read), len(written))
