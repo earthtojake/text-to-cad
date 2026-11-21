@@ -888,7 +888,7 @@ structure. Every rule here, and why:
   dense, placeholder "Search", its accessible name what it searches — "Search the board", "Search the schematic",
   "Search the drawing", "Search the model"), its X (**Close search**) where the icon was: one row, no tabs, no title,
   no counts, no ⋯ — there is no point in tabs while searching. **Nothing under it moves**: the box takes the row as
-  it is (a single tab's title row, 28px with no rule; the tabs' row, 32px over its rule), at the same height, place and
+  it is (the head's one block, a title's or the tabs', 32px over its rule), at the same height, place and
   padding, so the body's top and every row under it stay at their pixel, open or shut (`PanelInset.browser.test.mjs`
   measures it, in the docked panel and the peek card alike); its magnifier starts on the inset and its X's glyph
   ends on the right inset, as every icon in the panel does. Like Figma's layer search it is **no box**: no border,
@@ -905,17 +905,19 @@ structure. Every rule here, and why:
   the query gone, and the head and the body are what they were — the tab that was open, scrolled where it was: the
   search never changes which tab is open.
 - **One tab is a title.** A panel with a single tab (a Model with nothing to Position or set, a drawing's Layers, a board
-  read without its index) draws no pill: its name, a plain title at the tabs' size and the open tab's weight (500) in
-  the tab's place, and no rule under the head, so the title flows straight into its list. **The title is a list row**:
-  the head 28px tall (a row's height, not the 32px tab row), 8px over it and nothing under it (`PanelSurface`'s
-  `headCompact`), its name on the rows' icons' line, the panel's inset where a row's chevron or icon starts (the head's
-  padding, the inset less 8px, and the title's own 8px, a pill's), and the list 4px under it (the
-  body's `pt-1`), so no gap stands between the title and its first row. The search's icon stands at the row's right
-  end. Several tabs are pills over the rule.
-- **Its tabs**, the head's row, pills as Figma's right panel draws them (Design / Prototype), with Figma's room: 28px, 8px
-  of padding either side and 4px between pills, so two names stand 20px apart (`FlatPanel.jsx`'s `TAB_PAD_PX`,
-  `TAB_GAP_PX`); three fit the 232px panel, and at the grip's 200px the last go into ⋯. The first pill's box hangs 8px
-  out past the inset, as a selected row's fill does, so its name stands on it,
+  read without its index, or a file whose other tabs have not arrived yet) draws no pill: its name, a plain title at the
+  tabs' size and the open tab's weight (500) in the tab's place. **The head is one geometry, whatever it holds**: the
+  title stands in the tabs' block — the same 32px row, 8px over it and 8px under it to the same rule — its name on the
+  panel's inset at the tab labels' line (the head's padding, the inset less 6px, and the title's own 6px, a pill's).
+  So the body's top is at one pixel for a lone title, for tabs and for the search box, and nothing under the head moves
+  when a file's tabs arrive after it has loaded (its title first, then Params, Joints, Motion; a board's Nets and
+  Layers) or when the search opens. The search's icon stands at the row's right end.
+- **Its tabs**, the head's row, pills as Figma's right panel draws them (Design / Prototype): 28px, 6px
+  of padding either side and 4px between pills, so two names stand 16px apart (`FlatPanel.jsx`'s `TAB_PAD_PX`,
+  `TAB_GAP_PX`); three fit the 232px panel, and at the grip's 200px the last go into ⋯. The 6px is the pill's padding
+  above and below its 16px line too, so a pill is as padded across as it is tall, and the open pill stands as far from
+  the panel's left edge as from its top (10px pinned, 6px from the peek card's), and 10px over the rule. The first
+  pill's box hangs 6px out past the inset, so its name stands on it,
   the search's icon (in its 28px button, 7px of it either side) ending on the right inset; the open one a rounded pill on the accent's subtle fill, its name the foreground's at
   medium weight, the others muted on no fill (the accent's half fill and the foreground on hover); each as
   wide as its name in medium weight, so choosing one moves nothing; the head's rule 8px under them; a board's **Parts**, **Nets** then **Layers**, a schematic's **Parts**, **Nets** then, for more than one
@@ -929,7 +931,7 @@ structure. Every rule here, and why:
   file's name over its parameters, a status line ("12 matches", "Saved"), a settings label; a value, a switch and a
   row's last action end on the right inset — and so does the navbar's panel toggle's icon, over it. A box drawn round
   what is read hangs out past the inset by its own padding, so what it holds stays on it: a row's fill (hover,
-  selected) by half the inset (8px in from the panel's edge), a tab's pill by its 8px, the head's icon buttons and a
+  selected) by half the inset (8px in from the panel's edge), a tab's pill by its 6px, the head's icon buttons and a
   number field's outline by their 7px. The panel owns the line: its body pads by the inset, and it sets the rows'
   `--tree-row-pad` and `--tree-row-hang` (half the inset) and `--tree-row-actions-pad` (half the inset less 2px), which
   the one row reads (`PanelSurface.jsx`, `primitives/tree-row.jsx`); no section and no list pads itself. Every rule runs the

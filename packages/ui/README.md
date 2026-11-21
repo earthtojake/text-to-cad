@@ -289,7 +289,7 @@ an .xbf's Model, a robot's Links; a board's Parts, Nets and Layers, a
 schematic's Parts, Nets and Hierarchy, a drawing's Layers), then, only where the file has them, its Parameters, Joints and
 Animation (`ToolPanel`s; their rows `kit/inspector/panelRows.jsx`), then Search, an icon that turns the head's row into the one search box, in the tabs' (or the title's) place, nothing under
 it moving, its results one tree's hits or, where several tabs are searched (a board's, a schematic's), one list grouped
-by tab (one tab is a plain title, a row high, its list right under it) — its lists at its full height, in one
+by tab (one tab is a plain title, in the tabs' own block, so the head never changes height) — its lists at its full height, in one
 12px text size and 28px rows, a row's one glyph on the 16px line and its name 32px in. What is picked is read in Quick
 Edit's chip list (each reference its kind and key facts: `kit/inspector/inspect.js`'s descriptions); the hover tip over
 the canvas is the frame's (`kit/shell/ViewFrame.jsx`). Pinned open, the panel always pushes the model aside; collapsed, a mouse

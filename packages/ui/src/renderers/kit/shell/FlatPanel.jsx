@@ -368,12 +368,11 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   // The search goes with the last tab it covers.
   useEffect(() => { if (searchOpen && firstSearchable === undefined) closeSearch(); }, [searchOpen, firstSearchable, closeSearch]);
 
-  // One tab is a plain title, the open tab's name in its place (no pill, no fill), and the head's rule goes, so the
-  // title flows straight into its list: the head a list row's height (28px), the title on the rows' icons' line (the
-  // inset, `--panel-inset`, as a tab's name is), the list 4px under it. Several are pills over the rule.
+  // One tab is a plain title, the open tab's name in its place (no pill, no fill), on the tabs' row and in its block —
+  // the same 32px row, 8px above and below it, the same rule — so the head is ONE geometry whatever it holds (a lone
+  // title, the tabs, the search box), and nothing under it moves as a file's tabs arrive after its title or the search
+  // opens: the body's top stands at one pixel. Its name stands on the inset, on the tab labels' line.
   const single = tabs.length === 1 ? tabs[0] : null;
-  // The search box takes the row it opens in, as it is (a title's 28px with no rule, or the tabs' 32px over theirs).
-  const compactHead = Boolean(single);
 
   // The row's tabs as they fit it, measured (`fitTabs`): a hidden ruler draws every tab as the row would, and the row
   // says how wide it is; both are watched, so a resize, a translation or a count measures again.
@@ -415,7 +414,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
       </span>
     </>;
   };
-  const TAB_CLASS = "flex h-7 shrink-0 items-center whitespace-nowrap rounded-md px-2 text-ui transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
+  const TAB_CLASS = "flex h-7 shrink-0 items-center whitespace-nowrap rounded-md px-1.5 text-ui transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
   const ICON_BUTTON_CLASS = "grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 aria-expanded:bg-accent aria-expanded:text-foreground [&_svg]:size-3.5";
   const tabButton = entry => {
     const on = entry.id === active;
@@ -474,7 +473,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   // Nothing found: one line, where the one tree finds nothing, or where no searched tab does.
   const nothing = searching && (grouped ? tabs.every(entry => !searchable.has(entry.id) || counts[entry.id] === 0) : counts[displayed] === 0);
   const aside = <PanelSurface mode={page ? "page" : "push"} label={label} open={open} hidden={hidden} peek={peek} asideRef={surfaceRef} {...surfaceProps}
-    width={drawnWidth} grip={page ? null : grip} gripLabel={t("flatPanel.resize")} onKeyDown={onPanelKeyDown} data-flat-panel={mode} headRule={!single} headCompact={compactHead}
+    width={drawnWidth} grip={page ? null : grip} gripLabel={t("flatPanel.resize")} onKeyDown={onPanelKeyDown} data-flat-panel={mode} headRule
     headRef={head} headInsets={HEAD_INSETS} headProps={{ "data-flat-panel-head": "", "data-searching": searchOpen ? "" : undefined }} scrollerRef={scroller}
     scrollerProps={{ "data-flat-panel-scroller": "" }}
     head={<>
@@ -482,7 +481,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
         width, ⋯ where some do not fit, and the search's icon at its right end; its rule 8px under it (none under one
         tab's title). With the search open the row IS its box, the X in the icon's place: no tabs, no title. */}
       {searchOpen ? searchBox : null}
-      {single && !searchOpen ? <h2 id={ids_(single.id).tab} className="flex h-7 min-w-0 flex-1 items-center truncate px-2 text-ui font-medium text-foreground" data-flat-panel-heading=""
+      {single && !searchOpen ? <h2 id={ids_(single.id).tab} className="flex h-7 min-w-0 flex-1 items-center truncate px-1.5 text-ui font-medium text-foreground" data-flat-panel-heading=""
         aria-label={changed[single.id] ? t("flatPanel.tabChanged", { name: single.label }) : undefined} data-changed={changed[single.id] ? "" : undefined}>
         <span className="relative min-w-0 truncate">{single.label}{changed[single.id] ? <ChangedDot className="-right-[5px] -top-px" /> : null}</span></h2> : null}
       {searchOpen ? null : !single ? <div className="flex min-w-0 flex-1 items-center gap-1">
@@ -491,7 +490,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
       </div> : searchButton}
     </>}>
       <FlatPanelContext.Provider value={panel}>
-        <div ref={body} className={cn("group/body flex flex-col px-(--panel-inset) py-2", compactHead && "pt-1")} data-flat-panel-body="">
+        <div ref={body} className="group/body flex flex-col px-(--panel-inset) py-2" data-flat-panel-body="">
           {sections ? <ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider> : tabs.map(entry => {
             // Searching several tabs, each that finds something is a group of the one list, under its name and count.
             const group = grouped && groups.includes(entry.id);
@@ -510,12 +509,14 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   return aside;
 }
 
-/** A tab's pill's padding either side of its name, Figma's (`px-2` in `TAB_CLASS`, and the one tab's title's). */
-const TAB_PAD_PX = 8;
-/** The room between two tabs of the head's row: with the pills' padding, 20px between two names. */
+/** A tab's pill's padding either side of its name (`px-1.5` in `TAB_CLASS`, and the one tab's title's): the same as above
+ * and below its 16px line in the 28px pill, so the pill is as padded across as it is tall, and its box stands as far
+ * from the panel's left edge as from its top (10px; 6px inside the peek card). */
+const TAB_PAD_PX = 6;
+/** The room between two tabs of the head's row: with the pills' padding, 16px between two names. */
 const TAB_GAP_PX = 4;
 /** How far the head's boxes hang out past the panel's inset (`--panel-inset`), so what they hold stands on it: a tab's
- * pill (and the one tab's title in its place) by its own padding (`TAB_PAD_PX`, as a selected row's fill hangs 8px), the
+ * pill (and the one tab's title in its place) by its own padding (`TAB_PAD_PX`), the
  * icon buttons at the row's end (⋯, the search) by theirs (a 14px glyph in a 28px button: 7px). */
 const HEAD_INSETS = Object.freeze({ start: TAB_PAD_PX, end: 7 });
 /** Where the open search box's icon and its X's glyph stand in from its edges (`TreeFilterInput`, dense: its 12px icon
