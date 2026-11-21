@@ -56,9 +56,8 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   less its inset, above its safe area. The measure writes where it stands (`--cad-quick-edit-left`,
  *   `--cad-quick-edit-width`, from the view's left).
  * - **The navbar's view settings** (`navbar`: what a view portals into the file's navbar, `NavbarViewControls.jsx`),
- *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's, but for `phoneCorner`).
- * - **The corner** (`corner`, the view's top-right — the cube and its row, or a flat view's zoom pill and the stack under
- *   it; on a phone `phoneCorner`, a 3D view's View tile alone — or its
+ *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's alone).
+ * - **The corner** (`corner`, the view's top-right — the cube, or a flat view's zoom — or its
  *   top-left where the host anchors the cube there: the side read off the root with the measure, `viewCornerSide`, and said to everything in
  *   the corner, `ViewCornerSideProvider`), **the bottom centre** (`bottomCentre`, a
  *   playbar), the renderer's `underlay` (between the canvas and the chrome: Preview's view) and its
@@ -104,7 +103,7 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
 export default function ViewFrame({ rootRef = null, surface = null, className = "", rootHandlers = null, stageColor = undefined,
   canvasBoxRef = null, busy = undefined, children, underlay = null, overlays = null, file, mobile, compact, chromeHidden, failed = undefined, previewing = false, selecting = false,
   preview = null, tools, views = [], toolRow = null, toolStack = null, status = null, panel = null, panelControl = null,
-  layout, onLayoutChange, corner = null, phoneCorner = null, navbar = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
+  layout, onLayoutChange, corner = null, navbar = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
   contextMenu = null, onCanvasPress = null, inspect = null, viewport = null }) {
   const { t } = useI18n();
   // The viewport's theme (`look/useViewportTheme.js`): what stands on the picture — the canvas box (labels, chips,
@@ -232,7 +231,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
       const rows = [...controls.children].map(row => row.getBoundingClientRect()).filter(box => box.height > 0);
       const top = controls.getBoundingClientRect().top;
       frame.style.setProperty("--cad-tools-bottom", `${Math.round(VIEWPORT_INSET_PX * 2 + Math.max(top, ...rows.map(box => box.bottom)) - top)}px`);
-      // The corner at the top-right (the cube or the zoom pill, the stack under it): the host's notice stands under it,
+      // The corner at the top-right (the cube or the zoom): the host's notice stands under it,
       // an inset away. A corner the host anchors at the left leaves the top-right to the notice.
       const corner = () => [...stage.querySelectorAll(CORNER_CONTROLS)].map(element => element.getBoundingClientRect()).filter(box => box.height > 0);
       const cornerBoxes = viewCornerSide(frame) === "right" ? corner() : [];
@@ -296,9 +295,9 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
         </div>
         {underlay}
         <PreviewChrome active={false} {...preview}>
-          {toolsHidden || previewing || (mobile && !phoneCorner) ? null : <ViewCornerSideProvider value={cornerSide}>
+          {toolsHidden || previewing || mobile ? null : <ViewCornerSideProvider value={cornerSide}>
             {/* The corner's buttons stand bare on the picture: in the viewport's theme, so they and their halo read on it. */}
-            <div className={cn("contents", scheme)} data-view-corner="">{mobile ? phoneCorner : corner}</div>
+            <div className={cn("contents", scheme)} data-view-corner="">{corner}</div>
           </ViewCornerSideProvider>}
           {/* What the view portals into the file's navbar (its view settings), on a desktop and a phone alike. */}
           {toolsHidden || previewing ? null : navbar}
@@ -350,9 +349,9 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
 // and the strip would wrap at half the view. No panel moves it; it stands over them.
 const INSET = `${VIEWPORT_INSET_PX}px`;
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, right: INSET, bottom: VIEWPORT_STACK_BOTTOM });
-// What stands in the top-right corner: the corner's controls (the cube, a flat view's zoom pill, the stack under
-// either), and the host's notice under them (not its column).
-const CORNER_CONTROLS = "[data-view-cube], [data-zoom-pill], [data-view-corner-stack]";
+// What stands in the top-right corner: the corner's control (the cube, or a flat view's zoom), and the host's notice
+// under it (not its column).
+const CORNER_CONTROLS = "[data-view-cube], [data-zoom-pill]";
 const CORNER_BOXES = `[data-viewport-top-right] [data-viewport-notice], ${CORNER_CONTROLS}`;
 const MEASURED = ["--cad-tools-bottom", "--cad-top-right-left", "--cad-corner-below", "--cad-quick-edit-left", "--cad-quick-edit-width"];
 // Quick Edit's bar: 400px at most, centred on the whole view; narrower only with the view, 16px in from each side.

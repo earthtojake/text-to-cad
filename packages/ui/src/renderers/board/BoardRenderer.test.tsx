@@ -299,9 +299,10 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
     .map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Draw', 'Measure']);
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   expect(within(tools).getByRole('button', { name: 'Filter: everything' })).toBeTruthy();
-  // Its view settings are the navbar's, at its right end — View ▾, one menu: Side, Mode, Display, Background — the
-  // navbar's 28px button; the corner holds the zoom alone, and nothing of the view is on the strip, which has no rule.
-  expect(viewButtons(pane)).toEqual(['View']);
+  // Its view settings are the navbar's, at its right end — View, the plain cube, no chevron, one menu: Side, Mode,
+  // Display, Background — the navbar's 28px button; the corner holds the zoom alone, and nothing of the view is on the
+  // strip, which has no rule.
+  expect([viewButtons(pane), displayButton(pane).querySelector('.lucide-chevron-down')]).toEqual([['View'], null]);
   expect([viewValue(pane, 'side'), viewValue(pane, 'dimension'), viewValue(pane, 'display')]).toEqual(['top', '2d', 'board']);
   for (const button of cornerStack(pane)!.querySelectorAll('button')) expect(button.className.includes('size-7')).toBe(true);
   expect([cornerStack(pane)!.closest('[data-viewer-navbar]') !== null, pane.querySelector('[data-view-corner-stack]')]).toEqual([true, null]);
@@ -309,9 +310,12 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   // the other), Mode (2D ticked, 3 on 3D), Display's presets each with its icon, the one on screen checked; then the
   // Background, Light and Dark, each its icon.
   await userEvent.setup({ skipHover: true, pointerEventsCheck: 0 }).click(displayButton(pane));
-  const rowsOf = (await openMenu('View')).querySelectorAll<HTMLElement>('[data-view-sub]');
+  const viewMenu = await openMenu('View');
+  const rowsOf = viewMenu.querySelectorAll<HTMLElement>('[data-view-sub]');
   expect([...rowsOf].map(row => [row.getAttribute('data-view-sub'), row.querySelector('[data-view-sub-value]')!.textContent, Boolean(row.querySelector('svg:not(.lucide-chevron-right)'))]))
     .toEqual([['side', 'Top', false], ['dimension', '2D', false], ['display', 'Board', false], ['background', 'Light', false]]);
+  // In 2D there is nothing to reset: the zoom's Zoom to fit brings the board back.
+  expect(viewMenu.querySelector('[data-view-reset]')).toBeNull();
   expect([viewRows('data-board-side-option'), viewRows('data-board-dimension-option')])
     .toEqual([[['Top', 'true', ''], ['Bottom', 'false', '⇧F']], [['2D', 'true', ''], ['3D', 'false', '3']]]);
   fireEvent.keyDown(document.querySelector('[role=menu][aria-label="View"]')!, { key: 'Escape' });
@@ -319,16 +323,10 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   expect(await presets(pane)).toEqual([['Board', 'true', true], ['Copper', 'false', true], ['Assembly', 'false', true], ['Placement', 'false', true]]);
   expect(await displayChoices(userEvent.setup({ skipHover: true, pointerEventsCheck: 0 }), pane)).toEqual([['Light', 'true', true], ['Dark', 'false', true]]);
   expect(tools.querySelector('[data-strip-rule], [data-view-controls]')).toBeNull();
-  // The zoom: bare 24px buttons on no surface, a row of − 100% +.
-  const classes = (element: Element) => [...element.classList];
+  // The zoom: one control, "100%" and its chevron, not the strip's chrome; no − or +.
   const surface = FLOATING_CHROME_SURFACE_CLASS.split(' ');
   const pill = pane.querySelector<HTMLElement>('[data-zoom-pill]')!;
-  expect(pill.querySelector('[data-zoom-control]')!.textContent).toBe('100%');
-  expect(surface.some(name => pill.classList.contains(name))).toBe(false);
-  for (const button of [...pill.querySelectorAll<HTMLElement>('button')]) {
-    expect(classes(button)).toContain('size-6');
-    expect(surface.some(name => button.classList.contains(name)), button.getAttribute('aria-label') || '').toBe(false);
-  }
+  expect([[...pill.querySelectorAll('button')].map(button => button.textContent), surface.some(name => pill.classList.contains(name))]).toEqual([['100%'], false]);
   expect(within(pane).queryByRole('button', { name: 'Home' })).toBeNull();
   for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Joints', 'Animation', 'Settings']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
@@ -1169,7 +1167,7 @@ it("2D/3D is one view: the strip, its view controls, the panel and the corner st
   // What the strip (its view controls among it), the panel and the corner (its pill) are, by their names and by the elements themselves.
   const controls = () => ({
     strip: strip(pane), panel: panel(pane), views: cornerStack(pane), pill: pane.querySelector<HTMLElement>('[data-zoom-pill]'),
-    names: [...pane.querySelectorAll<HTMLElement>('[data-cad-tool-groups] button, [data-flat-panel] [role=tab], [data-zoom-pill] button, [data-navbar-view-controls] button:not([data-view-home])')]
+    names: [...pane.querySelectorAll<HTMLElement>('[data-cad-tool-groups] button, [data-flat-panel] [role=tab], [data-zoom-pill] button, [data-navbar-view-controls] button')]
       .map(button => (button.getAttribute('aria-label') || button.textContent)!.replace(/^(View|Display mode): .*/, '$1'))
   });
   const flat = controls();
@@ -1189,11 +1187,14 @@ it("2D/3D is one view: the strip, its view controls, the panel and the corner st
   for (const key of ['strip', 'panel', 'views', 'pill'] as const) expect(solid[key], key).toBe(flat[key]);
   expect(displayButton(pane)).toBe(dimension);
   expect(viewValue(pane, 'dimension')).toBe('3d');
-  // The corner is the one it was: the pill (the 3D camera's zoom now), and no cube or Projection of a 3D view's; Home beside
-  // the zoom, the cube's way back, which eases to the opening view from the side the camera is on.
+  // The corner is the one it was: the zoom (the 3D camera's now), and no cube, Home or Projection of a 3D view's. The way
+  // back is View's last row in 3D, Reset view: what the board's Home was, easing to the opening view.
   expect(viewport3d.props.viewCube).toBe(false);
-  expect(within(pane).queryByRole('button', { name: /^Projection/ })).toBeNull();
-  expect(pane.querySelector('[data-view-corner-home] [data-view-home]')).not.toBeNull();
+  expect([within(pane).queryByRole('button', { name: /^Projection/ }), pane.querySelector('[data-view-home]')]).toEqual([null, null]);
+  const homes = viewport3d.calls.filter(call => call === 'goHome').length;
+  await user.click(displayButton(pane));
+  fireEvent.click((await openMenu('View')).querySelector<HTMLElement>('[data-view-reset]')!);
+  await waitFor(() => expect(viewport3d.calls.filter(call => call === 'goHome').length).toBe(homes + 1));
   // The pick and the measurement are where they were; a camera is the 3D view's to pose.
   expect(selected(controller)).toEqual(['#R1.2']);
   fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Measure' }));

@@ -3,14 +3,14 @@ import { useI18n } from "@cad/ui/i18n";
 import { useNavbarViewSlot } from "../../../file-viewer/navbarSlots.js";
 
 /**
- * The view's settings in the file's navbar, at its right end (`file-viewer/navbarSlots.js`): how the picture is
- * looked at — **View ▾** (`ViewSettingsMenu.jsx`'s `ViewMenu`: Display, Projection, Background and Grid, or a board's
- * Side, Mode, Display and Background, one menu of submenus, the same on a desktop and a phone), then a 3D view's
- * **Preview**, last — as the navbar's own 28px buttons, their tooltips and menus under them. The picture keeps only
- * the camera's controls in its top-right corner (the cube and its Home, or a flat view's zoom; a phone's none:
- * gestures and the menu's Reset view). Outside a file viewer's navbar (a host's inline card)
- * there is no slot, and a view keeps its settings over its picture as before (`ViewCornerStack.jsx`, Preview at the
- * strip's end, a phone's in its More): `useNavbarViewControls` says which.
+ * The view's settings in the file's navbar, at its right end (`file-viewer/navbarSlots.js`), for every kind of file:
+ * **View** (`ViewSettingsMenu.jsx`'s `ViewMenu`: a cube, one menu of submenus — a 3D view's Projection, Display,
+ * Background, Show grid and Reset view; a board's Side, Mode, Display, in 3D Projection, Background and Reset view; a
+ * drawing's Background — the same on a desktop and a phone), then a 3D view's **Preview**, last — as the navbar's own
+ * 28px buttons, their tooltips and menus under them. The picture keeps only the camera's own control in its top-right
+ * corner (the cube, or a flat view's zoom; a phone's none: gestures and View's Reset view). Outside a file viewer's
+ * navbar (a host's inline card) there is no slot, and View and Preview end the strip (a phone's More holds its rows):
+ * `useNavbarViewControls` says which.
  */
 
 /** A navbar view button: the navbar's 28px, its 16px glyph, muted until under the pointer or open. */

@@ -19,7 +19,7 @@ With no file it opens the home in your browser. With a file it opens that file's
 
 ## What it shows
 
-Each kind of file gets its own tools, on a strip at the top of the view. A 3D view has a view cube at the top right, and under it **Home** and the **View** menu (projection, display mode, background and grid), which shows the projection you are in; **Preview** is at the right end of the navbar. A flat view keeps its zoom at the top right, and its **View** menu at the right end of the navbar.
+Each kind of file gets its own tools, on a strip at the top of the view. How you look at the file is the **View** menu, a cube at the right end of the navbar, left of **Preview** (for a 3D view: projection, display mode, background, show grid and reset view; for a board: side, 2D or 3D, display and background). The top right of the view keeps only the camera: a 3D view's view cube, or a flat view's zoom, one "100%" menu.
 
 - **Models, STEP and xbf**: select faces, edges and parts, measure, explode an assembly, clip it, and read its structure in the view's panel. Selection and measurement are exact because the server holds the B-rep (the solid's exact surfaces).
 - **Meshes (GLB, STL, 3MF)**: orbit and clip; an STL lists its bodies, Body 1 to Body N. A GLB or 3MF can also be measured, but only approximately, on triangles.

@@ -30,27 +30,6 @@ const CENTER = 50;
 const VIEW_BOX_MIN = 12;
 const VIEW_BOX_SIZE = 100 - 2 * VIEW_BOX_MIN;
 
-/**
- * Where the cube's drawing (its faces' outline, as drawn from `direction`, the camera's place looking at the cube with Z
- * up) stands in its box, in px of a box `size` px square: `{ left, top, right, bottom }` from the box's top-left. What
- * stands against the drawn cube (the corner's Home, `viewportLayout.js`) is placed from it, not from the box.
- * @param {readonly number[]} direction
- * @param {number} [size]
- */
-export function cubeInkBox(direction, size = 68) {
-  const length = Math.hypot(...direction) || 1;
-  const back = direction.map(value => value / length);
-  const cross = ([ax, ay, az], [bx, by, bz]) => [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
-  const rightRaw = cross([0, 0, 1], back);
-  const rightLength = Math.hypot(...rightRaw) || 1;
-  const right = rightRaw.map(value => value / rightLength);
-  const up = cross(back, right);
-  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const points = [-1, 1].flatMap(a => [-1, 1].flatMap(b => [-1, 1].map(c => [CENTER + dot(right, [a, b, c]) * SCALE, CENTER - dot(up, [a, b, c]) * SCALE])));
-  const px = units => (units - VIEW_BOX_MIN) * size / VIEW_BOX_SIZE;
-  return { left: px(Math.min(...points.map(([x]) => x))), top: px(Math.min(...points.map(([, y]) => y))),
-    right: px(Math.max(...points.map(([x]) => x))), bottom: px(Math.max(...points.map(([, y]) => y))) };
-}
 // An axis's letter, by its edge, kept inside the box by more than half its glyph.
 const inBox = value => Math.min(100 - VIEW_BOX_MIN - 4, Math.max(VIEW_BOX_MIN + 4, value));
 

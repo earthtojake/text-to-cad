@@ -751,23 +751,24 @@ function BoardSurface({ view, data }) {
   const solid = dimension === "3d" && layered && plot;
   // The board in 3D is mounted while it is the view, and while it leaves (`closing3d`).
   const mounted3d = (dimension === "3d" || closing3d) && layered && plot;
-  // In 3D, Display's menu ends with the camera's projection, a setting changed seldom (`settings-ui.md`).
-  const views = layered ? boardViewControls({ t, used: controls.used, display, sheet, onChange: setDisplay, disabled: !shown, dimension, onDimensionChange: switchDimension,
-    onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null,
-    background: { value: viewport.background, onChange: viewport.setBackground },
-    onHome: solid ? () => { controls.used("view_home"); view3dRef.current?.home?.(); } : null }) : [];
-  // The same settings as the navbar's View draws them (`kit/shell/ViewSettingsMenu.jsx`): Side, Mode, Display, in 3D Projection,
-  // and Background; a phone's View menu's Reset view is 3D's Home, or 2D's fit.
+  // In 3D, Reset view: the camera back where the 3D view opened (what its Home was, counted as Home always was).
+  const home3d = solid ? () => { controls.used("view_home"); view3dRef.current?.home?.(); } : null;
+  // The board's settings as View draws them (`kit/shell/ViewSettingsMenu.jsx`): Side, Mode, Display, in 3D Projection,
+  // and Background, then in 3D Reset view; a phone's Reset view is 3D's, or 2D's fit. A phone with no navbar has them
+  // as rows of its More (`boardViewControls`).
   const viewGroups = layered ? boardViewGroups({ t, used: controls.used, display, sheet, onChange: setDisplay, dimension, onDimensionChange: switchDimension,
     onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null,
     background: { value: viewport.background, onChange: viewport.setBackground } }) : null;
-  const resetView = solid ? () => { controls.used("view_home"); view3dRef.current?.home?.(); } : () => zoom.fit?.();
+  const views = layered ? boardViewControls({ t, used: controls.used, display, sheet, onChange: setDisplay, disabled: !shown, dimension, onDimensionChange: switchDimension,
+    onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null,
+    background: { value: viewport.background, onChange: viewport.setBackground }, onReset: home3d }) : [];
+  const resetView = home3d || (() => zoom.fit?.());
   // The parts the 3D view stands models on: the index's (page millimetres, as the stage's outline is), each with its models.
   const boardParts = useMemo(() => (index ? [...index.parts.values()] : null), [index]);
   return (
     <FlatViewFrame surface={BOARD_SURFACE} viewport={viewport} containerRef={containerRef} busy={document.loading || document.updating}
       file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} loading={document.loading} loadingLabel={t("board.text.reading_board")}
-      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={views} viewGroups={viewGroups} onResetView={resetView}
+      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={views} viewGroups={viewGroups} onResetView={resetView} cameraReset={home3d}
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={activeCanvasRef} contextMenuItems={contextMenuItems}

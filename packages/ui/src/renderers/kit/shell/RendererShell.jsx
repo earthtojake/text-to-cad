@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { House, LoaderCircle, Play, SlidersHorizontal, X } from "lucide-react";
+import { LoaderCircle, Play, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
@@ -20,9 +20,10 @@ import { AnnotationToolbar } from "../../../annotation/toolbar.jsx";
 import ToolStack from "../tools/ToolStack.jsx";
 import PreviewPlaybar from "../tools/playbar/PreviewPlaybar.jsx";
 import AnimationSection from "../tools/playbar/AnimationSection.jsx";
-import { CornerTile, CubeRow } from "./ViewCornerStack.jsx";
+import { DisplayMenuItems } from "./DisplayPopover.jsx";
+import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import NavbarViewControls, { NAVBAR_VIEW_PLACE, useNavbarViewControls } from "./NavbarViewControls.jsx";
-import { ViewMenu, viewGroups3d } from "./ViewSettingsMenu.jsx";
+import { StripViewMenu, ViewMenu, viewGroups3d } from "./ViewSettingsMenu.jsx";
 import { animationControlsHaveContent } from "../tools/playbar/AnimationTimeControl.js";
 import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
 import ShellViewport from "./ShellViewport.jsx";
@@ -49,6 +50,12 @@ function BarControl({ label, active = undefined, disabled = false, onClick, chil
       className={NAVBAR_CONTROL_CLASS} {...props}>{children}</Button>
   </TooltipHint>;
 }
+// The projection on screen, as an icon (a row of a phone's More, where the host has no navbar).
+function ProjectionIcon({ value }) {
+  const Icon = value === "perspective" ? PerspectiveProjectionIcon : OrthographicProjectionIcon;
+  return <Icon />;
+}
+
 function ViewControl({ label, disabled = false, tooltipSide = "top", onClick, children }) {
   return <ToolbarButton label={label} tooltipSide={tooltipSide} disabled={disabled} onClick={onClick} className={useStripButtonClass()}>
     {children}
@@ -64,8 +71,8 @@ const DOUBLE_PRESS_MS = 600;
  * it — its viewport (`ShellViewport`) as the canvas, Preview's view over it and Preview's cover, the
  * strip's Preview at its end, for a file with routines its panel's Animation tab
  * (`AnimationSection.jsx`; no playbar under the model), the
- * tool stack, and Preview's own chrome (its playbar among it); its corner is the viewport's cube with its row under it
- * (Home and View: `ViewCornerStack.jsx`'s `CubeRow`; a phone's View alone). The same
+ * tool stack, and Preview's own chrome (its playbar among it); its corner is the viewport's cube alone (the view's
+ * settings are View's, in the navbar beside Preview). The same
  * structure, classes and data attributes for every renderer: hosts, stylesheets and tests key on
  * them. The toolbar is for using tools, the sidebar for reading the file: a tool's own controls are
  * panels in the tool stack, shown by the tool they belong to; what there is to read of the file (a
@@ -428,31 +435,34 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const quickEdit = references ? <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden} docked={mobile}
     resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt}
     notes={promptNotes} onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
-  // The view's own controls, how the file is looked at, stand with the camera's: on a desktop, with or without a file's
-  // navbar, the row under the cube (`ViewCornerStack.jsx`'s `CubeRow`): Home, then View (`ViewSettingsMenu.jsx`: Display,
-  // Projection, Background and Grid), its menu under the row, never over the cube. A phone has no cube: View stands alone
-  // in the corner, its menu ending with Reset view (Home). Preview, a play triangle, ends the file's navbar, or, in a
-  // host's inline card (no navbar), the strip; a phone's strip keeps the zoom in its More.
-  // Home: the view the file opened with, framed whole from the opening direction, eased (`ShellViewport.jsx`'s `goHome`).
+  // The view's own controls: **View** (`ViewSettingsMenu.jsx`: Projection, Display, Background, Show grid, then Reset
+  // view, what Home was) and **Preview**, a play triangle, in that order: the file's navbar's right end, a phone's too;
+  // in a host's inline card (no navbar) the strip's end, and on a phone rows of its More with the zoom. The picture's
+  // corner is the cube alone.
+  // Reset view: the view the file opened with, framed whole from the opening direction, eased (`ShellViewport.jsx`'s
+  // `goHome`), counted as Home always was (`view_home`).
   const goHome = () => { controls.used("view_home"); frame.viewerRef.current?.goHome?.(); };
   const inNavbar = useNavbarViewControls();
+  // Display's mode on screen, as its More row's icon on a phone with no navbar.
+  const DisplayIcon = (frame.displayMode?.options?.find(option => option.value === frame.displayMode.value) || frame.displayMode?.options?.[0])?.Icon;
   const viewGroups = viewGroups3d({ mode: frame.displayMode, projection: frame.projection, grid: frame.grid, background: frame.background, t, used: controls.used });
   const viewControls = shell.previewable && !previewing;
   const viewSettings = viewControls && inNavbar ? <NavbarViewControls>
+    <ViewMenu groups={viewGroups} onReset={goHome} disabled={shell.idle} boundary={frame.hostElement} />
     <ToolbarButton label={t("preview.label")} tooltipSide="bottom" tooltip={!mobile} disabled={shell.idle} onClick={enterPreview} className={NAVBAR_VIEW_PLACE.className} data-view-preview="">
       <Play aria-hidden="true" />
     </ToolbarButton>
   </NavbarViewControls> : null;
-  const cornerControls = viewControls && !mobile ? <CubeRow>{place => <>
-    <ToolbarButton label={t("view.home")} tooltipSide={place.tooltipSide} disabled={shell.idle} onClick={goHome} className={place.className} data-view-home="">
-      <House aria-hidden="true" />
-    </ToolbarButton>
-    <ViewMenu groups={viewGroups} disabled={shell.idle} boundary={frame.hostElement} tile="corner" className={place.className} placement={place.menu} />
-  </>}</CubeRow> : null;
-  const phoneCorner = viewControls && mobile ? <CornerTile>{className => <ViewMenu groups={viewGroups} onReset={goHome} disabled={shell.idle}
-    boundary={frame.hostElement} tile="phone" className={className} />}</CornerTile> : null;
   const views = viewControls && !inNavbar ? [
-    ...(mobile ? [zoomViewControl(zoom, { t, disabled: shell.idle })] : []),
+    ...(mobile ? [
+      // A phone's More has no room for a menu of submenus: Projection a row that switches it, Display's list (its modes,
+      // Show grid and the Background) under its row, then the zoom.
+      { id: "projection", label: t("projection.label"), icon: <ProjectionIcon value={frame.projection.value} />, disabled: shell.idle,
+        onSelect: () => frame.projection.onChange(frame.projection.value === "perspective" ? "orthographic" : "perspective") },
+      { id: "display", label: t("display.label"), icon: DisplayIcon ? <DisplayIcon /> : null, disabled: shell.idle,
+        submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} background={frame.background} /> },
+      zoomViewControl(zoom, { t, disabled: shell.idle })
+    ] : [{ id: "view", label: t("view.menu"), tile: <StripViewMenu groups={viewGroups} onReset={goHome} disabled={shell.idle} boundary={frame.hostElement} /> }]),
     { id: "preview", label: t("preview.label"), icon: <Play aria-hidden="true" />, disabled: shell.idle, onSelect: enterPreview,
       tile: <ViewControl label={t("preview.label")} disabled={shell.idle} onClick={enterPreview}><Play aria-hidden="true" /></ViewControl> }
   ] : [];
@@ -524,7 +534,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
       preview={preview} tools={tools} views={views} toolRow={toolRow} status={updateStatus}
       toolStack={<ToolStack hidden={previewing} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{toolPanels}</ToolStack>}
       panel={panel} panelControl={frame.panelControl} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}
-      notice={view.notice} quickEdit={quickEdit} corner={cornerControls} phoneCorner={phoneCorner} navbar={viewSettings}
+      notice={view.notice} quickEdit={quickEdit} navbar={viewSettings}
       // Preview: a view of its own over the editor's, mounted while it is open.
       underlay={previewing && previewView ? <div className="pointer-events-auto absolute inset-0 z-[1]" data-preview-view="">
         <PreviewView view={previewView} desired={frame.previewDesiredScene} modelKey={frame.modelKey}

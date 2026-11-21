@@ -21,8 +21,7 @@ the host's `links` and the `appSettings` `CadViewer` hands it — and the name m
 under the file's name: Models and Files, the file explorer). The view's one frame (`kit/shell/ViewFrame.jsx`, which
 every renderer mounts, 2D or 3D) owns the scene's chrome: the tool strip and the view's controls at its end (a 3D
 view's Preview), the sub-toolbar of the tool in hand under it, the update status, the view's one
-panel, Quick Edit, the view's corner at the top-right (the cube and its row under it, or a flat view's zoom pill and the
-corner's stack under it) and Preview, with Preview's own
+panel, Quick Edit, the view's corner at the top-right (the cube, or a flat view's zoom) and Preview, with Preview's own
 bar in the navbar's place. Renderers supply
 their tools, their tools' rows, their panel's sections and their document state; the shell never
 inspects a format's parts, joints or topology. No pick or tool opens or closes the explorer.
@@ -113,18 +112,19 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   navbar action but that icon. The person's own settings, the theme among them, are never here: they are the app
   menu's.
 
-  *Design note: how the file is looked at stands with the camera.* A **3D view's** settings are on the picture, with
-  the camera's controls: **one row under the cube**, **Home** then **View** (`ViewCornerStack.jsx`'s `CubeRow`), View
-  ONE menu of every view setting, grouped ([The View menu](#the-view-menu-and-a-phones-sheets)), with a file's navbar
-  or without one. Why (the owner's decision): one place for how the file is looked at — turning it (the cube), going
-  back (Home) and how it is drawn (View) — where a person's eye already is; the open menu drops under the row and never
-  covers the cube; and the navbar keeps what is the file's: its name, its menu and **Preview**, last (the navbar's 28px
-  button; outside a navbar Preview ends the strip). On a phone (no cube) View is the corner's tile alone, its menu
-  ending with Reset view (Home), and the navbar's right end is Preview. **Flat views have not moved yet**: under a
-  file's navbar a board's, a drawing's and a schematic's settings are still the navbar's **View ▾** (its icon and a
-  chevron, the same menu), the picture keeping their zoom pill (and a board's 3D Home beside it); outside a navbar a
-  board's are the corner's stack under its zoom, and a phone's View ▾ is the navbar's. The strip is only tools (Select,
-  Draw, Measure, Explode, Clip) wherever the view's settings are.
+  *Design note: the view's settings are the navbar's, the picture keeps the camera's own control.* How the file is
+  looked at is ONE button, **View** (`ViewSettingsMenu.jsx`), at the navbar's right end for every kind of file, left
+  of **Preview** where the file has one (host actions after them): a cube for its icon (a 3D view's, and a board's in
+  3D, the projection on screen's; a flat view's the plain cube, Orthographic's), no chevron, its name and tooltip
+  "View", ONE menu of every view setting, grouped ([The View menu](#the-view-menu-and-a-phones-sheets)), ending with
+  **Reset view** where the view has a camera to bring back. The picture keeps only the camera's own control in its
+  top-right corner: a 3D view's cube, alone; a flat view's zoom, one "100%" dropdown (a board's in 2D and in 3D, a
+  schematic's, a drawing's). Why (the owner's decision): one place and one icon for how the file is looked at, on every
+  file, where every file keeps it, beside Preview; and the picture stays clear — nothing of the view's settings stands
+  over the model, and the corner is the camera's alone. The strip is only tools (Select, Draw, Measure, Explode, Clip).
+  On a phone the navbar's right end is the same View and Preview, the same menu, and the picture has no corner control
+  at all (gestures: a pinch zooms; Reset view brings the view back). Where there is no navbar (a host's inline card),
+  View and Preview end the strip, in that order, in every kind of view; that host's phone has their rows in its More.
   What a host or the file adds (an alert's icon, the host's actions) is the navbar's right end too, the host's after the
   view's; what can be done with the document (copy its path, open it elsewhere, export it) is its ⋯, beside its name.
   The view's settings act on the
@@ -253,16 +253,12 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   side (it wraps before it would be): the tools, left to right, **one row with no rule** (a tool's `group`
   orders it: the tools that pick, Select, Draw (a plain button) and Measure; then the model's effects, Explode and Clip),
   then, outside a file's navbar (a host's inline card), **the view's own controls on the strip** (`data-view-controls`,
-  `FloatingToolBar`'s `views`), directly after the last tool: a 3D file's **Preview**; a board has none. Under a file's
-  navbar the strip is its tools alone: Preview is the navbar's, a 3D view's settings the cube's row's, a flat view's the
-  navbar's (the design note above). The tools are what you do to the model, the view's controls how you look at it. A
-  3D view's **Home** and **View** are **the cube's row**, and, outside a navbar, a board's Display, Side and 2D/3D are
-  **the corner's stack** under its zoom (**The view's corner**, below): view settings, as Figma keeps them out of its
-  toolbar. **What goes on the
-  screen is what is changed often**: a tool, the corner's buttons and the cube, the zoom.
+  `FloatingToolBar`'s `views`), directly after the last tool: **View** (the strip's tile), then a 3D file's
+  **Preview**. Under a file's navbar the strip is its tools alone: View and Preview are the navbar's (the design note
+  above). The tools are what you do to the model, the view's controls how you look at it, as Figma keeps them out of
+  its toolbar. **What goes on the screen is what is changed often**: a tool, the cube, the zoom.
   What is changed now and then goes in the view's panel or behind a menu: a board's layers and layer display
-  are its Layers tab's, Grid is the View menu's (a board's outside a navbar, Display's menu's, and so is its projection
-  in 3D), Zoom to selection
+  are its Layers tab's, Show grid is the View menu's (a phone with no navbar, Display's list's), Zoom to selection
   and Zoom to 100% the zoom's menu's. **Figma's toolbar's proportions at a 28px tile** (Figma measured: a 48px
   bar, 13px corners, 32px buttons with 5px corners; ours a size down, every measure from the tile): a 40px bar with
   its 1px border, (40 − 2 − 28) / 2 = 5px in, 28px tiles with corners 5/32 of a tile (4px) and 16px icons, an even
@@ -312,13 +308,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   uniformly, its drawing cropped to the cube (`ViewPlaneControl.js`'s view box), its X, Y and Z lines on its own edges
   nearest the camera (X and Y the bottom's near edges, Z the upright edge at their corner), each drawn from its negative
   end to its positive one and lettered just inside its positive end, so nothing it draws sticks out past the cube.
-  Under it, 4px under its box, stands **its row**: **Home** then **View**, 24px tiles 4px apart (the corner's
-  bare-icon buttons with the viewport's halo), centred under the cube **as drawn**, not its box: the cube is drawn from
-  the view the file opens with (`DEFAULT_VIEW_DIRECTION`, the view Home goes back to; `ViewPlaneControl.js`'s
-  `cubeInkBox`, `viewportLayout.js`'s `CUBE_INK`), inset in its box, and the row's middle is the drawing's
-  (`viewCornerLayout`'s `cubeRow`, `data-view-cube-row`; mirrored where the corner is at the left), so the three read as
-  one control.
-  The cube has enlarged face/edge/corner hit areas and neutral hover and XYZ guides, and its row under it
+  The cube has enlarged face/edge/corner hit areas and neutral hover and XYZ guides, and it stands alone in its corner
   (**The view's corner**, below). A host whose own control floats over that corner lowers it clear with
   `--cad-viewport-corner-top`, the room that control takes from the top edge. A host can instead anchor it at the
   top-left with `--cad-viewport-corner-left: 2px` and `--cad-viewport-corner-right: auto`, and the whole
@@ -328,67 +318,38 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   hugs the right edge, so they meet only where the window is narrower than the strip and about 200px (under 600px for
   a 3D file's strip, which is a phone's layout, with no cube); where they would, the strip, in the layer over the
   corner (`data-view-top-layer`), stands over the cube: a tool is never under anything.
-- **The host's notice** (a question it asks once) stands under the corner, at the right, an inset under its lowest
-  control (the cube's row, a flat view's stack, a phone's View) (`ViewportTopRight`, `--cad-corner-below`, the frame's measure of the corner); at the top-right itself
+- **The host's notice** (a question it asks once) stands under the corner, at the right, an inset under the corner's
+  control (the cube, or the zoom) (`ViewportTopRight`, `--cad-corner-below`, the frame's measure of the corner); at the top-right itself
   where the host anchors the corner at the left.
-- **Preview** is the navbar's last view button under a file's navbar (`data-view-preview`), a phone's too; elsewhere it ends the tool strip, for a 3D file (`data-view-controls`, `FloatingToolBar`'s `views`):
+- **Preview** is the navbar's last view button under a file's navbar (`data-view-preview`), right of View, a phone's too; elsewhere it ends the tool strip, after View, for a 3D file (`data-view-controls`, `FloatingToolBar`'s `views`):
   lucide's Play (a play triangle), the way into Preview — a mode of the whole view, not a setting of it. It
   is no tool: pressing it leaves the tool in hand as it is. Outside a navbar, on a phone it is a row of the strip's More.
 - **The view's corner** (`kit/shell/ViewCorner.jsx`), at the **top-right**, is where the picture is
   looked at from, never a tool. A **3D view's** is the cube: its faces,
   edges and corners turn the view, its darker right-front-top corner to the usual isometric view, and Zoom to
   fit (F, a double-click on empty space under Select, the view's menu) frames what is shown from where it is
-  looked at. Under it stands **its row** (**View cube**, above; `ViewCornerStack.jsx`'s `CubeRow`), with a file's navbar
-  or without: **Home** (lucide's House, no key: F is Zoom to fit; telemetry `view_home`), the view the file opened with —
-  framed whole from the opening direction, eased (`ShellViewport.jsx`'s `goHome`) — then **View**, the view's settings
-  ([The View menu](#the-view-menu)): the projection on screen's icon (the Perspective or Orthographic icon its options
-  wear; the owner's call, as projection is the setting a 3D view's is changed most), no chevron, tooltip and name "View",
-  its menu under the row with its end on the cube box's (8px in from the window at the most), so it never covers the
-  cube. The corner's buttons are single buttons 4px apart — no group surface, no tile, border or shadow at rest: 24px
-  buttons, 14px icons at the muted foreground (62%); under the pointer a faint fill (the foreground at 9%); on, its
-  menu open, the foreground at 14% and the icon at full strength. The corner's buttons stand bare on the picture, so
-  they take **the viewport's theme** (below), not the app's: over the model each glyph has a halo of the viewport's
-  background (three soft drop shadows, 1, 2 and 3px), so it reads on a dark part on a light viewport and a light one on
-  a dark, where a bare icon vanished, and a light viewport in the dark app draws them dark on light. The cube keeps its
-  labels and lines inside its box in every view, so nothing meets; tooltips open under the row. A host that anchors the
-  corner at the left mirrors it there. A phone has no cube, no zoom and no Home on its picture (gestures alone): its
-  corner is **View** alone, the phone's 36px tile at the corner's inset (`ViewCornerStack.jsx`'s `CornerTile`,
-  `data-view-corner-tile`), the same menu with **Reset view** last ([The View menu](#the-view-menu)).
-  A
-  **board's** corner is its zoom pill. Under a file's navbar that is all of it but, in 3D, **Home** beside the pill
-  (`viewCornerLayout`'s `pillHome`, 4px left of it), the cube's way back where there is no cube (from the side the
-  camera is on); its Side, Mode, Display, Projection and Background are the View menu's. Outside a navbar the pill has
-  under it (`stackUnderPill`: 8px under the pill, the same right inset) the stack: **Display** (its presets, each with
-  its icon; in 3D the camera's projection; then the Background), **Side** (Flip) and **2D/3D**, and in 3D **Home**. In
-  2D the zoom's 100% is Home's job. Side and 2D/3D are counted as `board_side` and `board_dimension`; its strip
-  is its tools alone.
-  A **flat view's** corner is its **zoom** (`ZoomControl.jsx`), at the top-right, drawn as the corner's stack is: a row
-  of bare 24px buttons on no tile, border or shadow — −, the 40px percentage in the type scale's `text-tiny` and tabular
-  digits, and +, touching, so the three read as one control, each its full target — the icons and the digits at the
-  muted foreground with the stack's halo of the theme's background so they read over the drawing, the same faint fill
-  under the pointer and the stronger one while its menu is open; its menu and tooltips open under it. It stands the
-  corner's inset from the right and the top edges (`chromeInset.js`'s `CORNER_INSET_PX`, 12px), its right edge on the
-  stack's. A board in 3D keeps its zoom, which zooms its camera: there is no cube. A drawing's (DXF) and a schematic's
-  corner is the zoom alone. A state of how the model is looked at is
-  **one state button** (`kit/shell/StateButton.jsx`), the one control every such state is drawn with, as
-  Blender's viewport gizmo shows its projection and Flux its flip: Projection, and a board's 2D/3D and Flip. Its icon
-  is the state on screen; its name says that state ("Projection:
-  Orthographic", "View: 2D", "Side: Top"), so the name changes with it and it is a plain button, never a
-  toggle with `aria-pressed` (the W3C APG button pattern); its tooltip says what a press does ("Switch to
-  Perspective", "Switch to 3D", "View from bottom"), with its key where it has one. It switches between its
-  states and never marks one as selected: no state is drawn in the strip's pressed fill or any other, so a
-  board seen from the bottom reads by Flip's icon alone, as an orthographic camera does by Projection's (a
-  phone's More row is a menu's, ticked while the state holds). A phone has no corner: its view's controls
-  are rows of the strip's More, in the strip's order (Projection, Display, the zoom's, Preview; a
-  board's View from bottom and 3D view, ticked while they are, each with the icon its tile shows for that
-  state, then Display, whose choices in 3D end with the projection, and the zoom's). A view drawn
-  as a picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and
-  Preview's own controls are its bar's (see [Preview](#camera-animation-and-preview)).
+  looked at; it stands alone, nothing under or beside it. Its way back to the view the file opened with — framed whole
+  from the opening direction, eased (`ShellViewport.jsx`'s `goHome`; telemetry `view_home`) — is View's **Reset view**
+  ([The View menu](#the-view-menu)), no longer a Home button on the picture. A **flat view's** corner — a board's, in 2D
+  and in 3D, a schematic's, a drawing's — is its **zoom** (`ZoomControl.jsx`): ONE dropdown, the percentage in the
+  type scale's `text-tiny` and tabular digits with a small chevron, no − or + and no Home, on a faint resting surface
+  (the foreground at 6%, a step more under the pointer and while its menu is open) so it reads as a control over the
+  drawing, the digits haloed in the viewport's background; 28px tall, its middle on the tool strip's middle line, its
+  outer edge on the cube box's line (`chromeInset.js`'s `CORNER_INSET_PX`, 12px from the right; `viewCornerLayout`'s
+  `pill`). Its menu, under it, is the zoom's commands alone ([The zoom](#camera-animation-and-preview)). A board in 3D
+  keeps its zoom, which zooms its camera: there is no cube, and its way back is View's Reset view. The corner's
+  controls stand bare on the picture, so they take **the viewport's theme** (below), not the app's. A phone has no
+  corner control (no cube, no zoom: a pinch zooms, and View's Reset view brings the view back). The side, 2D/3D and a
+  board's presets are View's submenus (Side ▸, Mode ▸, Display ▸), counted as `board_side` and `board_dimension`; with
+  no navbar a phone has them as rows of the strip's More, in the strip's order (a 3D view's Projection, Display, the
+  zoom's, Preview; a board's View from bottom and 3D view, ticked while they are, then Display, whose choices in 3D end
+  with the projection, in 3D Reset view, then the zoom's). A view drawn as a picture, or one that is loading or failed
+  to load, has none of them. In Preview the strip is gone and Preview's own controls are its bar's (see
+  [Preview](#camera-animation-and-preview)).
 - **The corner at the left** (`viewportLayout.js`'s `viewCornerLayout`): a host that anchors the cube at the
-  top-left (`--cad-viewport-corner-left`) moves all of the corner there, as one group mirrored: the cube or the pill
-  the corner's inset from the left edge, the stack under it, the tooltips and menus opening to the
-  right; `--cad-viewport-corner-top` lowers it all either way. The pill is placed from the host's corner
-  variable as the cube's box is, so a host that moves the corner moves the pill with it.
+  top-left (`--cad-viewport-corner-left`) moves the corner there, mirrored: the cube or the zoom the corner's inset
+  from the left edge, the zoom's menu opening to the right; `--cad-viewport-corner-top` lowers it either way. The zoom
+  is placed from the host's corner variable as the cube's box is, so a host that moves the corner moves the zoom with it.
 - **A file's routines are the panel's Animation tab** in the tools view (see [Preview](#camera-animation-and-preview)):
   nothing of them is on the strip or under the model, and a file without routines has no tab. In Preview, Preview's
   own playbar under the model. Nothing else sits at the bottom centre.
@@ -414,12 +375,12 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a plain drag draws [the box](#box-selection), naming the area on the view's working layer where it takes nothing; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane’s smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Draw, Measure |
 | KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a plain drag draws [the box](#box-selection), taking what it touches; the rest are a board's drags; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Draw, Measure |
 
-The view's controls are not on the strip under a file's navbar. A 3D view's are the cube's row, **Home** and **View**
-([The View menu](#the-view-menu-and-a-phones-sheets): Projection, Display, Background and Grid), with or without a
-navbar, and its **Preview** is the navbar's (outside one, it ends the strip). A flat view's are still the navbar's
-**View ▾** (a board's Side, Mode, Display, in 3D Projection, and Background; a drawing's and a schematic's Background),
-the picture keeping its zoom pill (a board's in 3D with Home beside it); outside a navbar a board's Display, Flip and
-2D/3D (in 3D Home) are the stack under its zoom pill ([The view's corner](#ownership-and-layout)).
+The view's controls are not on the strip under a file's navbar: they are the navbar's **View** and a 3D view's
+**Preview**, View left of Preview, for every kind of file ([The View menu](#the-view-menu-and-a-phones-sheets): a 3D
+view's Projection, Display, Background, Show grid and Reset view; a board's Side, Mode, Display, in 3D Projection,
+Background and in 3D Reset view; a drawing's and a schematic's Background), and the picture keeps the camera's own
+control: a 3D view's cube, a flat view's zoom. Outside a navbar (a host's inline card) View and Preview end the strip
+([The view's corner](#ownership-and-layout)).
 
 There is no activity dot, and no rule on the strip. The view's controls are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
 its knobs are Select's, while Select's filter picks Position, and its controls are the
@@ -1060,30 +1021,23 @@ structure. Every rule here, and why:
   folds are the search's own, as its hits are: they hold while it is up, however the query is edited (a
   layer folded stays folded as long as the search keeps it), and clearing the search drops them, so the
   layers come back folded and open exactly as the person left them before searching.
-- **A board's view controls**: under a file's navbar its View ▾ (`board/BoardDisplay.jsx`'s `boardViewGroups`: Side,
-  Mode, its Display presets, in 3D Projection, then Background; [The View menu](#the-view-menu-and-a-phones-sheets)),
-  the same menu on a phone, and in 3D its Home beside the zoom pill. Outside a navbar (`boardViewControls`)
-  the corner's stack under its zoom pill (each control's `cornerTile`, by `cornerRank`: Display — its presets, in 3D the projection, then the
-  Background — then Side, then 2D/3D, then in 3D Home), there on a phone the strip's More, the same in 2D and 3D: **Flip**, the side it
-  is seen from (KiCad's View ▸ Flip Board View), a state button, the board as two stacked layers (Lucide's
-  `layers-2`), the side it is seen from solid: the upper layer while it is seen from the top, the same glyph
-  mirrored, the lower layer solid, from the bottom (`board/boardSideIcons.jsx`; "Side: Top", its hint "View from
-  bottom ⇧F"); like Projection it has no selected state, its icon the side on screen and no pressed or lit fill
-  from either side; a press or ⇧F turns it over. From the bottom the board is mirrored, its back layers on top.
-  **2D/3D** (below, [A board in 3D](#a-board-in-3d)), a state button too, its glyph the words: **2D** while the
-  board is flat and **3D** in 3D, as KiCad, EasyEDA and the maps apps label their 3D switch (a square would read
-  as the strip's Shapes; `kit/shell/TextGlyph.jsx`, a word drawn as an icon on Lucide's grid, semibold, its
-  figures tabular, in the tile's colour; "View: 2D", its hint "Switch to 3D 3"). **Display**, the tile every 3D view has for it
-  (`kit/shell/DisplayPopover.jsx`, its menu the presets as one radio group — Board, Copper, Assembly,
-  Placement — the one on screen ticked, and Custom, ticked and not a choice, while the Layers tab's eyes have
-  left the preset's set; in 3D, after a rule, the camera's **Projection**, changed seldom, so here and not on
-  the screen). The rest of how a
+- **A board's view controls** are View's (`board/BoardDisplay.jsx`'s `boardViewGroups`), the navbar's on a desktop
+  and a phone, or the strip's end with no navbar: **Side ▸** (Top, Bottom; ⇧F, KiCad's View ▸ Flip Board View: the
+  board as two stacked layers, Lucide's `layers-2`, the side it is seen from solid, `board/boardSideIcons.jsx`; from the
+  bottom the board is mirrored, its back layers on top), **Mode ▸** (2D, 3D; 3, below, [A board in
+  3D](#a-board-in-3d): its glyphs the words, as KiCad, EasyEDA and the maps apps label their 3D switch,
+  `kit/shell/TextGlyph.jsx`, a word drawn as an icon on Lucide's grid), **Display ▸** (its presets as one radio group —
+  Board, Copper, Assembly, Placement — the one on screen ticked, and Custom, ticked and not a choice, while the Layers
+  tab's eyes have left the preset's set), in 3D **Projection ▸**, then **Background ▸**, and in 3D, after a separator,
+  **Reset view** (what the board's 3D Home was: the camera back where 3D opened, eased; `view_home`). With no navbar a
+  phone has them as rows of its More (`boardViewControls`: View from bottom and 3D view, ticked while they are on,
+  then Display, its row opening the presets under it, in 3D then Projection, then in 3D Reset view). The rest of how a
   board is drawn is changed now and then, so it is the Layers tab's, as KiCad's Appearance panel has it,
   in the settings form's rows: under the layers, **Layer display**: **Others** (KiCad's high-contrast
   modes, a Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and
   with a copper layer active every drill and via through it, stay at full strength; **Ctrl+H** (⌘H)
   cycles them while the board has the keyboard), **Pours** (a checkbox, while copper is drawn), and
-  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the side, the mode and the presets are the View menu's submenus (outside a navbar, rows of the strip's More: View from bottom and 3D view ticked while they are on, then Display, its row opening the presets under it, in 3D then Projection). All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
+  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the side, the mode and the presets are the View menu's submenus too. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
   snapshot --display` draws too. A schematic has none: its colours are the theme's.
 
 - **The Hierarchy** (`schematic/SheetsSection.jsx`), KiCad's Hierarchy Navigator: the root (by its
@@ -1156,8 +1110,9 @@ Its panels follow these rules:
 - **Surfaces.** Four, defined once (`lib/floatingSurface.js`), each the popover's colour (a step
   off the app's background, lighter in the dark theme) with one border, nearly opaque, so chrome
   reads over any canvas — a flat view's, which is the app's own background, and a 3D scene's alike:
-  the tool strip, its sub-toolbars, the stack's panels, a collapsed panel's pill and a flat view's zoom
-  pill share `FLOATING_CHROME_SURFACE_CLASS` (90%, a small blur, a medium shadow); Preview's settings panel,
+  the tool strip, its sub-toolbars, the stack's panels and a collapsed panel's pill share
+  `FLOATING_CHROME_SURFACE_CLASS` (a flat view's zoom has a faint surface of its own, [The view's
+  corner](#ownership-and-layout)) (90%, a small blur, a medium shadow); Preview's settings panel,
   mostly text, `SETTINGS_PANEL_SURFACE_CLASS` (92%); every menu and popover over the viewport, the app
   menu and Display included, `FLOATING_SURFACE_CLASS` (95%, blurred).
 - **Scrolling.** Every scroll region in the viewer's chrome — the view's panel, a panel's
@@ -1260,8 +1215,9 @@ dimension, a fab note, ink) is drawn as it falls, on a see-through plane round t
 height, so nothing the 2D view shows is lost. It is the view's other canvas in the same
 frame (`ViewFrame.jsx`, through the flat views' `FlatViewFrame.jsx`), never another view: the strip, the panel and its tabs, Quick Edit, the
 selection, the ink, the measurements and the corner are the same mounted components, with the same
-names, in both: View ▾ and the zoom pill stand where they stood, and the pill zooms the 3D camera.
-There is no cube (a board turns over by Flip), and Projection is the View menu's (outside a navbar Display's menu's). The key **3** switches,
+names, in both: View and the zoom stand where they stood, and the zoom zooms the 3D camera. There is no cube (a board
+turns over by Side ▸) and no Home on the picture: Projection is the View menu's, and so is Reset view, the way back to
+where 3D opened. The key **3** switches,
 as KiCad's Alt+3 opens its 3D view.
 
 A board whose file names its stack-up's colours (`(stackup ... (color "Black") ... (copper_finish "ENIG"))`)
@@ -1285,8 +1241,9 @@ which), and so does every snapshot. A board that saved no stack-up colours looks
 | Display, the Layers tab | the same Display: both faces redraw; the Layers' 3D models eye shows or hides the parts' bodies |
 | The parts | each footprint's 3D model (a STEP from the board's folder, KiCad's installed 3D library or `CAD_KICAD_3DMODELS`; a `.wrl` name read as the `.step` beside it) in its authored colours under the stage's lights; a missing one a see-through block a millimetre tall on its outline, in the theme's muted ink. A press on a body picks its part (with Footprints ticked), in front of the face; a picked or hovered part's body takes the highlight; isolating fades the bodies that are not it |
 | Flip (⇧F) | a camera move, as KiCad's 3D viewer's F and Altium's Bottom Side are: it turns the camera over the board's left-to-right axis, which way is up kept, so the back is seen as the 2D view's back, mirrored left to right; eased as every camera move is, round its target (`kit/camera/runtimeCamera.js`), never through the board: from straight above or below the board turns over about its own top-to-bottom axis, the one the 2D view mirrors across, its eye passing the side it leans to (the screen's right where it leans to neither), and near there the same way. Its icon is the side the camera is on, so it changes as the camera passes the board's plane, turned by Flip or by hand, and a file reopened in 3D shows its camera's side |
-| Zoom pill | the same pill, zooming the 3D camera: the 3D views' percentage (100% the board framed whole at the camera's angle, as 3D opens), −, +, its menu and the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) |
-| Projection | the View menu's **Projection ▸** (outside a navbar Display's menu's, after a rule under the presets): Orthographic or Perspective, orthographic by default, kept per file with its 3D camera (its view's `board3d`) |
+| The zoom | the same "100%" dropdown, zooming the 3D camera: the 3D views' percentage (100% the board framed whole at the camera's angle, as 3D opens), its menu and the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) |
+| Projection | the View menu's **Projection ▸** (a phone with no navbar, Display's list's, after a rule under the presets): Orthographic or Perspective, orthographic by default, kept per file with its 3D camera (its view's `board3d`) |
+| Reset view | the View menu's last row in 3D: the camera back where 3D opened, eased, from the side it is on (what its Home was; `view_home`) |
 | A panel shown or hidden | the canvas takes what the panel leaves, the camera centred in it; the strip stays at the view's centre |
 
 Entering 3D opens head on, on the window the 2D view shows, from the side it shows (in perspective too,
@@ -1308,42 +1265,44 @@ Projection follows the presets.
 ## The View menu and a phone's sheets
 
 One description of the view's settings (`kit/shell/ViewSettingsMenu.jsx`: groups, each `{ id, label, value, options,
-onChange }` or a switch), drawn by ONE component, the same dropdown on a desktop and a phone: a group's `onChange` is
-what counts it (`display_<mode>`, `projection_<value>`, `display_grid`, `viewport_background_<choice>`, `board_side`,
-`board_dimension`, `view_home`: the names the buttons it replaced sent). Each file type's rows, top to bottom:
+onChange }` or a switch), drawn by ONE component, the same dropdown on a desktop and a phone, for every kind of file:
+a group's `onChange` is what counts it (`display_<mode>`, `projection_<value>`, `display_grid`,
+`viewport_background_<choice>`, `board_side`, `board_dimension`, and Reset view's `view_home`: the names the buttons
+it replaced sent). Each file type's rows, top to bottom:
 
 | File | Rows |
 | --- | --- |
-| A 3D view (a model, STEP, mesh, robot) | Projection ▸ (Perspective, Orthographic), Display ▸ (its modes), Background ▸, Grid |
-| A board | Side ▸ (Top, Bottom), Mode ▸ (2D, 3D), Display ▸ (its presets), in 3D Projection ▸, Background ▸ |
+| A 3D view (a model, STEP, mesh, robot) | Projection ▸ (Perspective, Orthographic), Display ▸ (its modes), Background ▸, Show grid, Reset view |
+| A board | Side ▸ (Top, Bottom), Mode ▸ (2D, 3D), Display ▸ (its presets), in 3D Projection ▸, Background ▸, in 3D Reset view |
 | A drawing (DXF) or a schematic | Background ▸ |
 
-On a phone (no cube) **Reset view** ends each: a 3D view's Home, a flat view's fit, a board's 3D Home in 3D.
+On a phone **Reset view** ends each: a 3D view's and a board's in 3D as on a desktop, a flat view's fit.
 
 ### The View menu
 
-A **3D view's** settings are **View**, a tile of the row under its cube, with a file's navbar or without one: Home's
-24px, the projection on screen's icon (the owner's call: projection is the setting a 3D view's is changed most, so the
-tile shows it, as Projection ▸ is the menu's first row), no chevron, its tooltip "View" (none on a phone) — on a phone
-the corner's 36px tile alone ([The view's corner](#ownership-and-layout)). Its menu opens under the row, its end on the
-cube box's (8px in from the window at the most), so it never covers the cube. **Flat views have not moved yet**: under
-a file's navbar a board's, a drawing's and a schematic's are still ONE button at the navbar's right end, **View ▾**: a
-board's preset's icon (the sliders where the view has no modes) and a chevron, the navbar's 28px button, its tooltip
-"View" (none on a phone), its menu under it, its end on the button's (on a phone, on the screen's right edge, 8px in,
-so its submenus have the room at its left). Either menu is a stock shadcn DropdownMenu, at least 13rem wide, in the
-menus' type (`text-xs`, 16px lines; a phone's one step up, as every menu's). **A choice is a submenu**
-(`DropdownMenuSub`): its row the group's name at the left and, at the right, the choice's name muted and the chevron —
-**no icon on the menu's own rows** (the owner found them clunky; the value says the choice) (`data-view-sub`,
-`data-view-sub-value`); its submenu (`DropdownMenuSubContent`, `data-view-sub-content`) the options, each with its icon
-(a row with none keeps an icon's room), the one on screen ticked at the right, a key shown on the choice it would make
-(a board's ⇧F on the other side, 3 on the other mode). A submenu opens beside its row on the side with room (Radix
-flips it: the left, as View stands at the screen's right), on hover or a press, so a tap opens it on a phone; on a
-phone it overlaps its parent's left edge by 16px so it stays on the 375px screen, never past its edge (its width capped
-at the room there). **Grid** is a check row of the menu itself (`DropdownMenuCheckboxItem`: its name, the tick at the
-right while on), after a separator, and leaves the menu open; **Reset view**, a phone's, its name alone, last after a
-separator. A choice closes the menu. The button says each group's value to a host or a test (`data-view-<group>`,
-`data-display-mode`). Projection, Side and 2D/3D are not buttons of their own: changed now and then, they are
-submenus of the one menu. There is no bottom sheet.
+The view's settings are ONE button, **View**, at the navbar's right end for every kind of file, left of Preview where
+the file has one, on a desktop and a phone alike (with no navbar, a tile at the strip's end, before Preview): the
+navbar's 28px button, icon only, no chevron, a cube — a 3D view's, and a board's in 3D, the projection on screen's (the
+Perspective or Orthographic cube its options wear: projection is the setting changed most, the owner's call), a flat
+view's the plain cube (Orthographic's) — its name and tooltip "View" (no tooltip on a phone). Its menu is a stock
+shadcn DropdownMenu under it, its end on the button's (on a phone, on the screen's right edge, 8px in, so its submenus
+have the room at its left), at least 13rem wide, in the menus' type (`text-xs`, 16px lines; a phone's one step up, as
+every menu's). **A choice is a submenu** (`DropdownMenuSub`): its row the group's name at the left and, at the right,
+the choice's name muted and the chevron — **no icon on the menu's own rows** (the owner found them clunky; the value
+says the choice) (`data-view-sub`, `data-view-sub-value`); its submenu (`DropdownMenuSubContent`,
+`data-view-sub-content`) the options, each with its icon (a row with none keeps an icon's room), the one on screen
+ticked at the right, a key shown on the choice it would make (a board's ⇧F on the other side, 3 on the other mode). A
+submenu opens beside its row on the side with room (Radix flips it: the left, as View stands at the screen's right),
+on hover or a press, so a tap opens it on a phone; on a phone it overlaps its parent's left edge by 16px so it stays on
+the 375px screen, never past its edge (its width capped at the room there). **Show grid** is a check row of the menu
+itself (`DropdownMenuCheckboxItem`: its name, the tick at the right while on), after a separator, and leaves the menu
+open. **Reset view** (`data-view-reset`) is the last row, after a separator, its name alone: the view the file opened
+with, framed whole from the opening direction, eased — what the cube's and a board's 3D Home did, its telemetry still
+`view_home`. "Reset view" is the name because it resets the orientation as well as the framing, and it was already
+this product's name for it (the phone's row, in every locale); **Zoom to fit** (F, the context menu, the zoom's menu)
+keeps the orientation and frames what is shown, and stays a command of its own. A choice closes the menu. The button
+says each group's value to a host or a test (`data-view-<group>`, `data-display-mode`). Projection, Side and 2D/3D are
+not buttons of their own: changed now and then, they are submenus of the one menu. There is no bottom sheet.
 
 ### A phone's sidebar
 
@@ -1359,27 +1318,18 @@ toggle again close it; ⌘\ too. Nothing hovers, so a phone has no peek.
 
 ## Display settings and section primitives
 
-Display is not a tool. It is a submenu of the View menu, a 3D view's always and a board's under a file's navbar, on a
-desktop and a phone ([The View menu](#the-view-menu-and-a-phones-sheets)); a board's outside a navbar is the first
-button of the corner's stack under its zoom ([The view's corner](#ownership-and-layout)), and a phone's More row: its
-button shows the preset's icon (Solid's) and
-opens a stock shadcn dropdown menu, to the corner's away side, its top on the button's
-(`DisplayPopover.jsx`): a muted **Display** label, the modes as a `DropdownMenuRadioGroup`, each with its icon,
-a separator, then **Grid**, a `DropdownMenuCheckboxItem` that leaves the menu open, then (a board in 3D) the camera's
-**Projection**, then, after a separator, the viewport's **Background**
-(a muted label, then **Light** and **Dark**, each with its icon — the sun, the moon — a
-`DropdownMenuRadioGroup`; telemetry `viewport_background_<choice>`). On a phone the strip's **More**
-menu has a Display row that opens the same list (`DisplayMenuItems`) under it, in More itself, with no
-label. Checks sit at the row's right end. Choosing a mode closes the menu; ticking Grid
-toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
-pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
-DXF view has no Display or Preview control. A native KiCad board's view settings are rows of the navbar's View menu —
-Side ▸, Mode ▸ (2D/3D), Display ▸ (its presets), in 3D Projection ▸, and Background ▸ ([The View
-menu](#the-view-menu-and-a-phones-sheets)) — and its Layers tab's layer
-display (see [A flat view's panel](#the-views-panel-and-the-tool-stack)); outside a navbar they are the stack under
-its zoom pill (Display, Flip and 2D/3D), and in 3D its Display's list ends, after a separator, with **Projection** (a
-muted label, then Orthographic and Perspective, a `DropdownMenuRadioGroup`: choosing one closes the menu, as a mode
-does); it has no Preview.
+Display is not a tool. It is a submenu of the View menu, on a desktop and a phone ([The View
+menu](#the-view-menu-and-a-phones-sheets)): its options the file's modes, each with its icon (a board's presets), the
+one on screen ticked; choosing one closes the menu. Show grid is a row of the View menu itself, and the viewport's
+**Background** (**Light** and **Dark**, each with its icon — the sun, the moon; telemetry
+`viewport_background_<choice>`) its own submenu. Where the host has no navbar, a phone's strip **More** has a Display
+row that opens one list (`DisplayPopover.jsx`'s `DisplayMenuItems`) under it, in More itself: the modes, a separator,
+**Show grid** (which leaves the list open), (a board in 3D) the camera's **Projection**, then, after a separator, the
+Background. Checks sit at the row's right end. Clicking outside or pressing Escape closes it. Opening it leaves the
+active tool and its controls in place. A DXF view's View menu is Background alone, and it has no Preview. A native
+KiCad board's view settings are rows of View — Side ▸, Mode ▸ (2D/3D), Display ▸ (its presets), in 3D Projection ▸,
+Background ▸ and Reset view ([The View menu](#the-view-menu-and-a-phones-sheets)) — and its Layers tab's layer display
+(see [A flat view's panel](#the-views-panel-and-the-tool-stack)); it has no Preview.
 It is drawn in the viewport's theme as every view is (the person's Background, [below](#the-viewports-theme-background)):
 its canvas (the light or the dark one) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
@@ -1400,7 +1350,7 @@ its own colour), **X-ray**, **Hidden line** and **Wireframe**, filtered by the v
 injected capabilities (`viewFeaturesForKind`, `@cad/core/common/viewSettings.js`; the
 rows and icons `DisplayModeOptions.js`): a STEP assembly
 offers all six, a STEP part file all but Parts, and a file without CAD edges (STL, 3MF, GLB,
-a robot) Solid, with Parts when it has several parts, objects or links. **Grid** draws the
+a robot) Solid, with Parts when it has several parts, objects or links. **Show grid** draws the
 measuring grid in every mode, off by default. Each row has its icon, the sphere drawn as the
 mode draws a model (and a tile of floor grid for Grid). Render is no display mode: Preview
 draws the model in Render whatever the file's mode, with its own settings (see
@@ -1967,13 +1917,14 @@ the tool's (the frame says Select is up, `data-cad-selecting`, and `kit/viewport
 every view's context-menu items and the zoom's menu's (below); the live `resetCamera` command takes
 the same fit path.
 
-**The zoom.** A flat view shows it, as canvas tools do (tldraw's, Excalidraw's, Miro's): its corner's
-pill (`kit/shell/ZoomControl.jsx`, a floating toolbar drawn as the strip is: [The view's corner](#ownership-and-layout)),
-− and + either side of the zoom as a percentage in tabular digits at a fixed width, and the percentage, pressed, its menu — Zoom in, Zoom out (half again, and back), Zoom to
-100%, then Zoom to fit and Zoom to selection, each with its key, as Figma's: ⌘+ and ⌘- (Ctrl+= and
+**The zoom.** A flat view shows it, as Figma does: its corner's one control (`kit/shell/ZoomControl.jsx`: [The view's
+corner](#ownership-and-layout)), the zoom as a percentage in tabular digits at a fixed width with a small chevron, no −
+or +, pressed opening its menu — the zoom's commands alone: Zoom in, Zoom out (half again, and back), Zoom to
+100%, then Zoom to fit and Zoom to selection, each with its key (no key hints on a touch screen), as Figma's: ⌘+ and ⌘- (Ctrl+= and
 Ctrl+- elsewhere; the plain + and - too), ⇧0, F (⇧1 too) and ⇧2. A 3D view shows no percentage, as CAD
 tools do not: F, a double-click on empty space under Select and the view's menu frame it, and the
-same keys zoom it. A board in 3D keeps its pill, which reads and steps its 3D camera
+same keys zoom it. The wheel, a pinch, a double-click and the keys zoom a flat view as before. A board in 3D keeps its
+zoom, which reads and steps its 3D camera
 (`viewportZoom`, the 3D views' own zoom). On a phone there is no zoom control: a pinch zooms, and the View menu's Reset
 view fits (outside a navbar, the zoom is More's Zoom row, its choices opening under it). **100% is the
 model as authored, framed whole**: a flat view's fit, a 3D view's rest box (`restBounds`; a board's
@@ -2194,14 +2145,11 @@ strip's buttons (Preview among them; a tool with a key shows it after its name,
 muted), the drawing row's tools (each with its key), the corner's buttons (the zoom's),
 the navbar's right-hand controls (an
 alert's icon, the host's actions: the CAD app's Full size), Preview's bar (Preview
-settings, Exit preview) are hinted by name — the strip's and the zoom pill's hints above their
-buttons, the others' below; a state button
-(Projection, a board's 2D/3D and Flip) is hinted by what a press does ("Switch to Perspective",
-"View from top ⇧F"), its key after it as a tool's is; there is no hint on the navbar's left (the logo,
+settings, Exit preview) are hinted by name — the strip's hints above their buttons, the others' below (the
+zoom's and View's under them); there is no hint on the navbar's left (the logo,
 the file's name and the ⋯ say what they are), on Display's settings button, Playback settings, an X,
 the transport (play, pause, the scrubber), the drawing row's settings or labelled text
-buttons (Quick Edit's alone say what they do). A disabled, selected or expanded control has none (a state button
-lit for its state is none of these: it keeps its hint, as a press on it still does something), but for a
+buttons (Quick Edit's alone say what they do). A disabled, selected or expanded control has none, but for a
 control off for a reason the person can act on, whose hint says why and what to do (the [Parameters](#parameters)
 tab's Save, a parameter declared elsewhere: `TooltipHint`'s `explainsDisabled`, on a wrapper that takes the
 pointer and the keyboard for it); pressing or leaving cancels a

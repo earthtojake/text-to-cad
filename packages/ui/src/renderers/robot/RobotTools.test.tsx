@@ -252,11 +252,11 @@ it('robot Select opens in hand, before Draw, Measure and Clip: it picks links an
 it('a robot\'s Display leaves Select the tool, and a pose set by hand stays when Select\'s filter puts the knobs away', async () => {
   const robot = await openRobot();
   const user = userEvent.setup();
-  // View is no tool: its menu's rows (here Grid), the cube's row's, leave Select the tool, with its knobs.
-  await user.click(within(robot.pane.querySelector<HTMLElement>('[data-view-cube-row]')!).getByRole('button', { name: 'View' }));
+  // View is no tool: its menu's rows (here Show grid), the navbar's, leave Select the tool, with its knobs.
+  await user.click(within(robot.pane.querySelector<HTMLElement>('[data-navbar-view-controls]')!).getByRole('button', { name: 'View' }));
   const menu = await waitFor(() => { const found = document.querySelector<HTMLElement>('[role=menu][aria-label="View"]'); expect(found).not.toBeNull(); return found!; });
-  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Grid' }));
-  expect([within(menu).getByRole('menuitemcheckbox', { name: 'Grid' }).getAttribute('aria-checked'), robot.toolNames(), robot.knobs()]).toEqual(['true', SELECT_IN_HAND, 1]);
+  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Show grid' }));
+  expect([within(menu).getByRole('menuitemcheckbox', { name: 'Show grid' }).getAttribute('aria-checked'), robot.toolNames(), robot.knobs()]).toEqual(['true', SELECT_IN_HAND, 1]);
   await user.keyboard('{Escape}');
 
   // A pose off its default stays in the section when the filter puts the knobs away; its Pose row
@@ -272,14 +272,14 @@ it('a robot\'s Display leaves Select the tool, and a pose set by hand stays when
   robot.client.dispose();
 });
 
-it("a robot is a 3D view: Preview the navbar's, Home and View under the cube, the strip ending at Clip, no rule", async () => {
+it("a robot is a 3D view: View and Preview the navbar's, the corner the cube alone, the strip ending at Clip, no rule", async () => {
   const robot = await openRobot();
   const strip = within(robot.pane).getByRole('group', { name: 'Interaction tools' });
   // One row, no rule: the tools, Clip last; nothing of the view on it.
   expect([strip.querySelectorAll('[data-strip-rule]').length, strip.querySelector('[data-view-controls]'), [...strip.querySelectorAll('button')].at(-1)?.getAttribute('aria-label')]).toEqual([0, null, 'Clip']);
-  // Preview is the navbar's; the view's settings stand with the camera's, Home and View under the cube.
-  expect([...robot.pane.querySelectorAll('[data-viewer-navbar] [data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Preview']);
-  expect([...robot.pane.querySelectorAll('[data-view-cube-row] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Home', 'View']);
+  // The view's settings are the navbar's, View then Preview; the corner holds nothing beside the cube.
+  expect([...robot.pane.querySelectorAll('[data-viewer-navbar] [data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['View', 'Preview']);
+  expect(robot.pane.querySelector('[data-view-corner]')!.childElementCount).toBe(0);
   robot.client.dispose();
 });
 
@@ -317,15 +317,14 @@ it('robot Links and Joints are the panel\'s two tabs, whatever Select picks: Lin
   robot.client.dispose();
 });
 
-it('on a phone a robot\'s panel is a sheet behind the navbar\'s toggle, closed at the start: no pill, the strip, Preview, View in the corner', async () => {
+it('on a phone a robot\'s panel is a sheet behind the navbar\'s toggle, closed at the start: no pill, the strip, View and Preview', async () => {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
     { x: 0, y: 0, left: 0, top: 0, right: 390, bottom: 844, width: 390, height: 844, toJSON: noop } as DOMRect);
   const robot = await openRobot({ phone: true });
   expect(robot.pane.querySelector('[data-viewer-layout]')!.getAttribute('data-viewer-layout')).toBe('mobile');
   expect(within(robot.pane).getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
   expect([within(robot.pane).getByRole('button', { name: 'Show panel' }).getAttribute('aria-expanded'), robot.pane.querySelector('[data-flat-panel]')]).toEqual(['false', null]);
-  expect([[...robot.pane.querySelectorAll('[data-viewer-navbar] [data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label')),
-    [...robot.pane.querySelectorAll('[data-view-corner-tile] button')].map(button => button.getAttribute('aria-label'))]).toEqual([['Preview'], ['View']]);
+  expect([...robot.pane.querySelectorAll('[data-viewer-navbar] [data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['View', 'Preview']);
   robot.client.dispose();
 });
 

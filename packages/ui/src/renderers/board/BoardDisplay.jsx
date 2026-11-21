@@ -9,11 +9,9 @@ import {
   FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetSettingRow, FileSheetSettingsSection, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
-import { CircuitBoard, Cpu, House, Route, SquareDashed } from "lucide-react";
-import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
-import DisplayPopover, { DisplayMenuItems } from "../kit/shell/DisplayPopover.jsx";
+import { CircuitBoard, Cpu, Route, RotateCcw, SquareDashed } from "lucide-react";
+import { DisplayMenuItems } from "../kit/shell/DisplayPopover.jsx";
 import { backgroundGroup, displayGroup, projectionGroup } from "../kit/shell/ViewSettingsMenu.jsx";
-import StateButton from "../kit/shell/StateButton.jsx";
 import { textGlyphIcon } from "../kit/shell/TextGlyph.jsx";
 import { SolidModeIcon } from "../kit/view-settings/DisplayModeOptions.js";
 import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
@@ -134,84 +132,46 @@ const FlatGlyph = textGlyphIcon("2D");
 const SolidGlyph = textGlyphIcon("3D");
 
 /**
- * The board's view controls on the screen (`FloatingToolBar.js`'s `ViewportViewControl`), the ones
- * switched often enough to keep there: the strip's end, after its rule, left to right — the state buttons
- * first, the menu last, as a 3D view's strip ends in Projection then Display — each the strip's own tile,
- * the same in 2D and in 3D, and on a phone rows of the strip's More, in the same order —
- *
- * - **Flip**, the side it is seen from (KiCad's View ▸ Flip Board View): the view's state button
- *   (`kit/shell/StateButton.jsx`, Projection's), with no selected state, in no pressed or lit fill from
- *   either side: the board as two stacked layers, the side it is seen from solid (`boardSideIcons.jsx`), its
- *   name the side ("Side: Bottom"), its tooltip what a press does ("View from top", and its key, ⇧F). From
- *   the bottom the board is mirrored, its back layers on top; in 3D the camera turns over to the other side
- *   (`onSide`), and the button follows the camera, whichever side of the board's plane it is on. On a phone
- *   More's row View from bottom, ticked while it is (a menu's idiom, not the button's);
- * - **2D/3D**, the board drawn flat or as a board in 3D: the same state button, its glyph the words
- *   (`kit/shell/TextGlyph.jsx`), **2D** while it is flat and **3D** in 3D, its name the state ("View: 2D"),
- *   its tooltip what a press does ("Switch to 3D", and its key, 3); on a phone More's row 3D view, its glyph
- *   **3D**, ticked in 3D;
- * - **Display**, the Display tile a 3D view's strip has for it, its menu the presets (`boardPresetMode`;
- *   on a phone More's submenu) and, in 3D, the camera's projection (`projection`), changed seldom, so
- *   there and not a button of its own.
+ * The board's view controls as the rows of a phone's More (`FloatingToolBar.js`'s `ViewportViewControl`s), where the
+ * host shows the view with no navbar (everywhere else they are View's, `boardViewGroups`): **View from bottom**, ticked
+ * while it is (KiCad's View ▸ Flip Board View; ⇧F); **3D view**, its glyph the word 3D, ticked in 3D (3); **Display**,
+ * its presets (`boardPresetMode`) and, in 3D, the camera's projection, opened under its row; in 3D **Reset view**, the
+ * board's way back to where its 3D view opened (`onReset`). From the bottom the board is mirrored, its back layers on
+ * top; in 3D the camera turns over to the other side (`onSide`).
  *
  * The rest of how the board is drawn — its layers and its layer display — is the Layers tab's
  * (`LayersSection.jsx`), opened now and then.
  * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet?: object | null, onChange(display: object): void,
  *   dimension?: "2d" | "3d", onDimensionChange?: ((dimension: "2d" | "3d") => void) | null,
  *   onSide?: ((side: "top" | "bottom") => void) | null, projection?: { value: string, onChange(value: string): void } | null,
- *   disabled?: boolean, boundary?: HTMLElement | null, t?: Function }} options
+ *   background?: object | null, onReset?: (() => void) | null, disabled?: boolean, t?: Function }} options
  *   `onSide`: what choosing a side does where it is more than the Display's (a 3D view turns its camera to it).
  *   `projection`: the 3D camera's, while the board is in 3D; null in 2D, which has none.
  */
 export function boardViewControls({ display, sheet = null, onChange, dimension = "2d", onDimensionChange = null, onSide = null, projection = null,
-  background = null, onHome = null, disabled = false, boundary = null, t = english, used = null }) {
+  background = null, onReset = null, disabled = false, t = english, used = null }) {
   const below = display.side === "bottom";
-  // The side and 2D/3D, however they are switched (the corner's buttons, More, their keys), are counted as the person's
+  // The side and 2D/3D, however they are switched (View's submenus, More, their keys), are counted as the person's
   // use of them (`board_side`, `board_dimension`: `usage/controls.js`).
   const flip = () => { used?.("board_side"); const next = below ? "top" : "bottom"; if (onSide) onSide(next); else onChange({ ...display, side: next }); };
   const solid = dimension === "3d";
   const switchDimension = () => { used?.("board_dimension"); onDimensionChange(solid ? "2d" : "3d"); };
   const presets = boardPresetMode({ display, sheet, onChange, t });
-  const [flat, inThreeD] = [t("board.text.view_2d"), t("board.text.view_3d")];
-  // Each state's icon: the board's two layers, the side facing the viewer solid, from the top or the bottom;
-  // the words 2D for the board flat and 3D for it in 3D.
-  // Each a view control of the corner's (`cornerTile`, `ViewCornerStack.jsx`), over the zoom pill, in 2D and 3D alike:
-  // Display at the top, then the side, then 2D/3D, then in 3D Home nearest the pill (`cornerRank`); a phone's More
-  // keeps them as rows.
-  const homeButton = (place = {}) => <ToolbarButton label={t("view.home")} tooltipSide={place.tooltipSide ?? "top"} disabled={disabled} onClick={onHome}
-    className={place.className ?? undefined} data-view-home=""><House aria-hidden="true" /></ToolbarButton>;
-  const sideButton = (place = {}) => <StateButton icon={below ? BoardBottomSideIcon : BoardTopSideIcon} label={t("board.text.side_current", { side: t(below ? "board.text.bottom" : "board.text.top") })}
-    tooltip={t(below ? "board.text.view_from_top" : "board.text.view_from_bottom")} shortcut={BOARD_FLIP_SHORTCUT}
-    disabled={disabled} onPress={flip} data-board-side={below ? "bottom" : "top"} className={place.className} tooltipSide={place.tooltipSide} />;
-  const dimensionButton = (place = {}) => <StateButton icon={solid ? SolidGlyph : FlatGlyph} label={t("board.text.dimension_current", { mode: solid ? inThreeD : flat })}
-    tooltip={t("board.text.dimension_switch", { mode: solid ? flat : inThreeD })} shortcut={BOARD_DIMENSION_SHORTCUT}
-    disabled={disabled} onPress={switchDimension} data-board-dimension={solid ? "3d" : "2d"} className={place.className} tooltipSide={place.tooltipSide} />;
   return [
-    { id: "side", label: t("board.text.view_from_bottom"), icon: <BoardBottomSideIcon />, disabled, active: below, onSelect: flip,
-      tile: sideButton(), cornerTile: sideButton, cornerRank: 1 },
-    ...(onDimensionChange ? [{
-      id: "dimension", label: t("board.text.view_in_3d"), icon: <SolidGlyph />, disabled, active: solid, onSelect: switchDimension,
-      tile: dimensionButton(), cornerTile: dimensionButton, cornerRank: 2
-    }] : []),
+    { id: "side", label: t("board.text.view_from_bottom"), icon: <BoardBottomSideIcon />, disabled, active: below, onSelect: flip },
+    ...(onDimensionChange ? [{ id: "dimension", label: t("board.text.view_in_3d"), icon: <SolidGlyph />, disabled, active: solid, onSelect: switchDimension }] : []),
     { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled,
-      tile: <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection} background={background} icon={SolidModeIcon} />,
-      // On a desktop it is the navbar's, first of the view's settings (`NavbarViewControls.jsx`; outside a file viewer's
-      // navbar, the corner's, over the zoom pill).
-      cornerTile: place => <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection} background={background} icon={SolidModeIcon}
-        className={place.className} tooltipSide={place.tooltipSide} side={place.side} align={place.align} chevron={place.chevron === true} />, cornerRank: 0,
       submenu: () => <DisplayMenuItems mode={presets} projection={projection} background={background} /> },
-    // In 3D, Home, nearest the zoom: the board's 3D view has no cube to come back by (2D's 100% is the zoom's).
-    ...(onHome ? [{ id: "home", label: t("view.home"), icon: <House aria-hidden="true" />, disabled, onSelect: onHome,
-      // A camera control: under a file's navbar it stays on the picture, beside the zoom (`cornerCamera`).
-      tile: homeButton(), cornerTile: homeButton, cornerRank: 3, cornerCamera: true }] : [])
+    ...(onReset ? [{ id: "reset", label: t("view.reset"), icon: <RotateCcw aria-hidden="true" />, disabled, onSelect: onReset }] : [])
   ];
 }
 
 /**
- * The board's view settings as the navbar's View ▾ draws them (`kit/shell/ViewSettingsMenu.jsx`, on a desktop and a
- * phone alike), top to bottom: **Side** (Top, Bottom; ⇧F), **Mode** (2D, 3D; 3), its **Display** presets (`boardPresetMode`),
- * in 3D the camera's **Projection**, and the **Background**. A side or a mode chosen is counted as the buttons count it
- * (`board_side`, `board_dimension`), and does what they do (`onSide` turns a 3D view's camera over).
+ * The board's view settings as View draws them (`kit/shell/ViewSettingsMenu.jsx`: the navbar's, on a desktop and a
+ * phone alike, or the strip's end with no navbar), top to bottom: **Side** (Top, Bottom; ⇧F), **Mode** (2D, 3D; 3), its
+ * **Display** presets (`boardPresetMode`), in 3D the camera's **Projection**, and the **Background** (in 3D then Reset
+ * view, the frame's). A side or a mode chosen is counted as the More rows count it (`board_side`, `board_dimension`), and
+ * does what they do (`onSide` turns a 3D view's camera over).
  * @param {Parameters<typeof boardViewControls>[0]} options
  */
 export function boardViewGroups({ display, sheet = null, onChange, dimension = "2d", onDimensionChange = null, onSide = null, projection = null,

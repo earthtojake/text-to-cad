@@ -202,8 +202,8 @@ render loops. These actions use existing host capabilities for effects. What a
 person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 
 A renderer's controls for the view are the renderer's own: the viewer's for a 3D view, under a file's navbar
-portalled into its view slot (Preview), and Home and View in one row under the cube at the top-right (a phone's View
-alone in the corner); without a navbar Preview at its strip's end and the same row under the cube;
+portalled into its view slot (View, then Preview), the cube alone at the top-right; without a navbar View and Preview
+at its strip's end;
 and in Preview its bar's Preview settings and Exit preview, the navbar hidden. The host draws none of them. The host's `captureRequest`
 command is the same capture: to a composer destination it delivers the view and
 the selection through `promptContext.deliver`. Neither route detects the platform.
@@ -626,17 +626,16 @@ top centre of the window, ending in Preview (a 3D view's), the tool in hand's su
 the model aside (collapsed on its own where it would leave the model under 640px; a mouse resting on its toggle peeks
 it over the model as a floating card, pushing nothing, and only the toggle pins it), Quick Edit's bar at the bottom centred on the window as the strip is
 (the panel never moves either; where they meet it they sit above it), the bottom row Quick Edit's alone, and at the
-top-right the view cube (a 68px box at the corner's 12px inset) with, centred under the drawn cube, one row: Home and
-**View** (one menu: Projection, Display, Background and Grid, `ViewSettingsMenu.jsx`), with a navbar or without; or a
-flat view's zoom pill. Under a file's navbar its right end holds a 3D view's Preview, and a flat view's settings,
-still its **View ▾** (a board's Side, Mode, Display and Background; a drawing's Background): the file viewer draws a
-view slot there (`file-viewer/navbarSlots.js`'s `NavbarViewSlotContext`) and the view portals them in
-(`NavbarViewControls.jsx`). On a phone the slot holds Preview (a flat view's View ▾), a 3D view's corner its View tile
-alone (its menu ending with Reset view), the picture has no cube or zoom,
+top-right the camera's own control alone: the view cube (a 68px box at the corner's 12px inset), or a flat view's
+"100%" zoom dropdown. Under a file's navbar the view's settings are its right end for every kind of file — **View**,
+one menu (a 3D view's Projection, Display, Background, Show grid and Reset view; a board's Side, Mode, Display, in 3D
+Projection, Background and Reset view; a drawing's Background, `ViewSettingsMenu.jsx`), then a 3D view's Preview: the
+file viewer draws a view slot there (`file-viewer/navbarSlots.js`'s `NavbarViewSlotContext`) and the view portals them
+in (`NavbarViewControls.jsx`). On a phone the slot holds the same View and Preview, the picture has no cube or zoom,
 and the panel is a sheet from the left (shadcn's Sheet, portalled into the viewer's element:
-`ViewerElementContext`), so a host keeps the viewer's element round its view. A host that shows the view with no navbar keeps them on the picture: a 3D view's
-row of Home and View under the cube, a board's Display, Side and 2D/3D stacked under its zoom pill, Preview at the strip's end. A host that anchors the corner at the left (`--cad-viewport-corner-left`) moves the row and the
-stack with it, mirrored at the top-left. A host's one notice goes through the shell too: `notice` is drawn at the top-right,
+`ViewerElementContext`), so a host keeps the viewer's element round its view. A host that shows the view with no navbar has View and Preview at the strip's end (a
+phone, their rows in its More). A host that anchors the corner at the left (`--cad-viewport-corner-left`) moves the cube
+or the zoom with it, mirrored at the top-left. A host's one notice goes through the shell too: `notice` is drawn at the top-right,
 under the corner (an inset under its lowest control; at the top itself where the corner is at the left), once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
 it while it stands; the home never shows it. The CAD app's file handler hands its corner (Full
@@ -675,9 +674,8 @@ floats over the view's top-right corner sets `--cad-viewport-corner-top` to the 
 it takes from the top edge, and the view's whole corner sits that much lower. To choose the
 opposite corner instead, set `--cad-viewport-corner-left: 2px` and
 `--cad-viewport-corner-right: auto`; their defaults are `auto` and the cube's right inset (2px). All of
-the corner follows, as one group mirrored at the top-left: the cube, a flat view's zoom pill (placed
-from the same variable, the corner's inset from the edge) and the stack under either, its tooltips and menus opening
-away from the corner
+the corner follows, mirrored at the top-left: the cube, or a flat view's zoom (placed from the same variable, the
+corner's inset from the edge), its menu opening away from the corner
 (`viewportLayout.js`'s `viewCornerLayout`).
 Codex's tab presentation uses the left corner across sidebar, thread and file views (clear of its chat button).
 The shared viewer consumes these layout values without identifying the host.

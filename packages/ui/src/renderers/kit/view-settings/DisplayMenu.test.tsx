@@ -4,29 +4,34 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { STEP_PART_VIEW_FEATURES, viewFeaturesForKind } from '@cad/core/common/viewSettings.js';
 import { createViewSettingsStore } from './viewSettingsStore.js';
-import DisplayPopover from '../../../../dist/renderers/kit/shell/DisplayPopover.js';
+import { DisplayMenuItems } from '../../../../dist/renderers/kit/shell/DisplayPopover.js';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../../../../dist/primitives/dropdown-menu.js';
 import { DISPLAY_MODE_OPTIONS } from '../../../../dist/renderers/kit/view-settings/DisplayModeOptions.js';
 
 Object.assign(globalThis, { React });
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 let store: ReturnType<typeof createViewSettingsStore>;
-// The Display tile as the shell wires it (`useRendererShell`): the modes the file offers, and the Grid switch.
+// Display's list in a menu of its own, as a phone's More opens it (`DisplayMenuItems`, wired as `useRendererShell` wires
+// it): the modes the file offers, and the Show grid switch.
 function Harness({ features }: { features?: any }) {
   [store] = React.useState(() => createViewSettingsStore({ camera: { focalLength: 80 }, clip: { enabled: true, at: 4 } }));
   React.useLayoutEffect(() => { if (features) store.configure({ features }); }, [features]);
   const { scene } = React.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const offered = features?.modes ?? DISPLAY_MODE_OPTIONS.map((option: any) => option.value);
-  return <><button>Outside</button><DisplayPopover
-    mode={{ value: scene.view.mode, options: DISPLAY_MODE_OPTIONS.filter((option: any) => offered.includes(option.value)), onChange: store.selectMode }}
-    grid={{ value: scene.view.grid.enabled, onChange: store.setGrid }} /></>;
+  return <><button>Outside</button><DropdownMenu modal={false}>
+    <DropdownMenuTrigger data-display-mode={scene.view.mode}>Display</DropdownMenuTrigger>
+    <DropdownMenuContent aria-label="Display">
+      <DisplayMenuItems mode={{ value: scene.view.mode, options: DISPLAY_MODE_OPTIONS.filter((option: any) => offered.includes(option.value)), onChange: store.selectMode }}
+        grid={{ value: scene.view.grid.enabled, onChange: store.setGrid }} />
+    </DropdownMenuContent>
+  </DropdownMenu></>;
 }
-const trigger = () => screen.getByRole('button', { name: /^Display mode:/ });
-// The menu's accessible name is its tile's ("Display mode: Solid"); its own label is Display.
+const trigger = () => screen.getByRole('button', { name: 'Display' });
 const menu = () => document.querySelector<HTMLElement>('[role=menu][aria-label="Display"]')!;
 const shown = () => document.querySelector('[role=menu][aria-label="Display"]');
 
-it("is one simple list: the modes, a rule, then the Grid switch, and nothing else to set", async () => {
+it("is one simple list: the modes, a rule, then the Show grid switch, and nothing else to set", async () => {
   const user = userEvent.setup({ skipHover: true });
   render(<Harness />);
   await user.click(trigger());
@@ -39,11 +44,11 @@ it("is one simple list: the modes, a rule, then the Grid switch, and nothing els
   for (const item of modes) expect(item.querySelector('svg')).not.toBeNull();
   expect(modes[0].querySelector('span.absolute')!.className).toContain('right-2');
   const separator = within(root).getByRole('separator');
-  const grid = within(root).getByRole('menuitemcheckbox', { name: 'Grid' });
+  const grid = within(root).getByRole('menuitemcheckbox', { name: 'Show grid' });
   expect(grid.getAttribute('aria-checked')).toBe('false');
   expect(modes.at(-1)!.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(separator.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  // No settings page: no per-mode settings, no projection (Projection's own tile), nothing else.
+  // No settings page: no per-mode settings, no projection (Projection is a row of its own), nothing else.
   expect(within(root).queryAllByRole('menuitem')).toEqual([]);
   expect(within(root).queryByRole('button')).toBeNull();
   expect(within(root).queryByRole('menuitemradio', { name: 'Perspective' })).toBeNull();
@@ -51,7 +56,7 @@ it("is one simple list: the modes, a rule, then the Grid switch, and nothing els
   await waitFor(() => expect(shown()).toBeNull());
 });
 
-it('a mode chosen is the mode on screen and closes the list; Grid switches on and off in any mode, leaving it open', async () => {
+it('a mode chosen is the mode on screen and closes the list; Show grid switches on and off in any mode, leaving it open', async () => {
   const user = userEvent.setup({ skipHover: true });
   render(<Harness />);
   await user.click(trigger());
@@ -59,7 +64,6 @@ it('a mode chosen is the mode on screen and closes the list; Grid switches on an
   await waitFor(() => expect(shown()).toBeNull());
   expect(store.getSnapshot().display).toEqual({ mode: 'parts', camera: { focalLength: 80 }, clip: { enabled: true, at: 4 } });
   expect(store.getSnapshot().scene.view.surfaces.colorMode).toBe('by-part');
-  expect(trigger().getAttribute('aria-label')).toBe('Display mode: Parts');
   expect(trigger().getAttribute('data-display-mode')).toBe('parts');
   for (const mode of ['X-ray', 'Wireframe']) {
     await user.click(trigger());
@@ -67,15 +71,15 @@ it('a mode chosen is the mode on screen and closes the list; Grid switches on an
     await waitFor(() => expect(shown()).toBeNull());
   }
   await user.click(trigger());
-  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Grid' }));
+  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Show grid' }));
   expect(shown()).not.toBeNull();
-  expect(screen.getByRole('menuitemcheckbox', { name: 'Grid' }).getAttribute('aria-checked')).toBe('true');
+  expect(screen.getByRole('menuitemcheckbox', { name: 'Show grid' }).getAttribute('aria-checked')).toBe('true');
   expect([store.getSnapshot().display.mode, store.getSnapshot().display.grid, store.getSnapshot().scene.view.grid.enabled]).toEqual(['wireframe', true, true]);
-  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Grid' }));
+  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Show grid' }));
   expect([store.getSnapshot().display.grid, store.getSnapshot().scene.view.grid.enabled]).toEqual([undefined, false]);
 });
 
-it('lists only the modes the file offers: a part file no Parts; a mesh Solid, and Parts with several parts; Grid always', async () => {
+it('lists only the modes the file offers: a part file no Parts; a mesh Solid, and Parts with several parts; Show grid always', async () => {
   const user = userEvent.setup({ skipHover: true });
   const listed = async (features: any) => {
     render(<Harness features={features} />);
@@ -85,9 +89,9 @@ it('lists only the modes the file offers: a part file no Parts; a mesh Solid, an
     cleanup();
     return items;
   };
-  expect(await listed(STEP_PART_VIEW_FEATURES)).toEqual(['Solid', 'Shaded', 'X-ray', 'Hidden line', 'Wireframe', 'Grid']);
-  expect(await listed(viewFeaturesForKind('stl', { parts: 1 }))).toEqual(['Solid', 'Grid']);
-  expect(await listed(viewFeaturesForKind('3mf', { parts: 4 }))).toEqual(['Solid', 'Parts', 'Grid']);
+  expect(await listed(STEP_PART_VIEW_FEATURES)).toEqual(['Solid', 'Shaded', 'X-ray', 'Hidden line', 'Wireframe', 'Show grid']);
+  expect(await listed(viewFeaturesForKind('stl', { parts: 1 }))).toEqual(['Solid', 'Show grid']);
+  expect(await listed(viewFeaturesForKind('3mf', { parts: 4 }))).toEqual(['Solid', 'Parts', 'Show grid']);
 });
 
 it('keyboard: the arrows walk the list and Enter chooses', async () => {
