@@ -1,29 +1,44 @@
-"""A part's holes as a recogniser reads them (``_dfm_cnc``): quiddity's records of the part's holes
-(``cad.quiddity``), each measured by this library's own detector (``_dfm_cnc_holes``), which also finds the holes
-quiddity does not claim and every hole of a part it was not available for.
+"""A part's holes with a recogniser's reading of what closes them (``_dfm_cnc``): the detector's holes
+(``_dfm_cnc_holes``), each matched to quiddity's record of the same hole (``cad.quiddity``) where there is one,
+and corrected by it in the one place the detector is known to misread, where the kernel bears the record out.
 
-**Who says what.** quiddity says which faces are one hole, which of its cylinders is the bore, and what closes it:
-``through``, ``flat`` or ``drill_point``. Every figure of the item is still measured here, on those faces, by the
-kernel (``_dfm_cnc_holes._describe``): the diameter is the bore cylinder's own radius (quiddity publishes it to five
-decimals, and a rule compares to a nanometre), the depth the bore's axis between its two ends, the counterbores the
-hole's other cylinders, the countersinks its cones, a drill point's angle its cone's, the opening the end quiddity's
-axis comes in from. So an item means what it meant, whichever read the hole; ``recognised_by`` says which
-(``quiddity``, or ``cad`` for the detector alone).
+**What a record changes.** The detector reads a hole through or blind by a ray each way along its axis, and
+takes a floor that is no face of the hole's own -- a plane wider than the bore, one a round joins to the wall,
+the floor of a recess with another hole in it -- for no floor at all: such a hole reads through. quiddity reads
+those blind. So where the detector reads a hole through and the record of that same hole says it is closed, and
+a ray into the hole along the record's axis meets a face of the part within a diameter of where the hole's
+cylinders end, the hole is blind: its opening the end the record's axis comes in from, its floor the face the ray
+meets (``flat`` where the record says flat and that face is a plane, ``drill_point`` where it says a point and it
+is a cone, ``other`` where it says flat and it is neither: a ball nose), described again on the same faces
+(``_dfm_cnc_holes._describe``). Nothing else of a hole is the record's to say: its faces, its bore and its
+diameter, its depths, counterbores, countersinks and grooves are the detector's, measured on the kernel, as
+they were. ``recognised_by`` says ``quiddity`` for a hole whose record was taken, corrected or not, and ``cad``
+for one the detector reads alone.
 
-**Which records are taken.** A record of the ``holes`` family, ``verified``, of the release these readings were
-measured against (``QUIDDITY``), whose bore is a hole as this library means one: its cylinders sweep ``FULL_ROUND``
-about the axis together and nothing stands inside them (``_dfm_cnc_holes._cored``). The others are declined, each
-said with its reason (``DECLINED``): quiddity calls a channel open along its side a hole, and marks the outer wall
-of an annular groove as one it has a better record for.
+**Which records are taken.** One the kernel's own geometry does not contradict, and no other; where it is not
+taken the detector's reading of those faces stands, exactly as it was, and the record is said declined with the
+reason (``DECLINED``):
 
-**One hole, once** (by faces). The detector runs on every part, whatever quiddity found: no hole found is not no
-hole there, and quiddity leaves faces unexplained (a hole whose wall is a cone has no record). A hole of the
-detector's none of whose faces a taken record names is kept as it is. One that shares a face with a taken record
-is that record's hole and is not reported again: the record's faces are the hole's, with the detector's faces of it
-that no record names (the plane of a counterbore's step, a seat's cone that a keyway splits: the hole's still, as
-the detector reads them), and where two records meet one of the detector's holes those faces go with the first. A
-face is one hole's: a record that names a face an earlier one took is declined. ``bottom`` ``unknown`` is no
-reading of quiddity's, so there the detector's ray along the axis says what closes the hole.
+- the record itself: ``unproved`` (its evidence is not ``verified``), ``superseded`` (quiddity names another
+  record of its own for those walls: an annular groove's);
+- no hole of the detector's is about its faces: ``open`` (its bore does not go round, under ``FULL_ROUND``:
+  quiddity calls a channel open along its side a hole), ``cored`` (something stands inside its bore), else
+  ``unmatched``;
+- it is not one hole of the detector's, whole: ``spans`` (its faces lie in several of the detector's holes: the
+  two stretches of a hole another hole crosses are two holes here, each as deep as a drill goes in it),
+  ``beyond`` (it names a face that hole does not hold), ``shared`` (another record, taken or not, names a face
+  of that hole: a hole is handed to a record whole or not at all), ``other_bore`` (its bore is not that hole's
+  narrowest full cylinder: a counterbore is never narrower than its bore);
+- the rays contradict what it says closes the hole (``contradicted``): it says through and a ray meets the
+  hole's own floor; it says closed and the ray into the hole leaves the part, or meets nothing within a diameter
+  of the hole's end, or the hole's own floor is at the end it calls the opening; it says a point and the floor is
+  no cone, or flat and the floor is a cone.
+
+``bottom`` ``unknown`` is no reading of quiddity's: the record is taken and the detector's reading stands.
+
+**No hole found is not no hole there.** The detector runs on every part, whatever quiddity found, and a hole of
+its own that no record names is kept as it is: quiddity leaves faces unexplained, and a bore sealed inside the
+part is an interior void to it.
 
 **What is said of it** (``summary``, the ``holes`` family's ``recognition``): the library and the release that
 answered, the holes and the parts by who read them, each part quiddity was not available for with the reason
@@ -42,31 +57,35 @@ from cad.build123d import _dfm_brep as brep
 from cad.build123d import _dfm_cnc_holes as detector
 from cad.build123d._dfm_cnc_model import Model, unit
 
-__all__ = ["DECLINED", "MOMENTARY", "QUIDDITY", "asked", "holes", "summary"]
+__all__ = ["DECLINED", "QUIDDITY", "REPEATABLE", "asked", "holes", "summary"]
 
 #: The release of quiddity whose records are taken: which faces a record names and what its fields mean are that
 #: release's, and these readings were measured against it (the extra pins it). A part another release answers
 #: for is read by the detector alone (``other_release``), so the code that measures says the release that reads.
 QUIDDITY = "0.5.5"
-#: Why a record of quiddity's is not taken as a hole: its evidence is not ``verified``; quiddity itself names
-#: another record of its own for those walls (``superseded_by``: an annular groove's); its bore does not go round
-#: (under ``FULL_ROUND``: a channel open along its side); something stands inside its bore (an annular cavity's
-#: outer wall); it names a face an earlier record took.
-DECLINED = ("unproved", "superseded", "open", "cored", "shared")
-#: The reasons a part has no features that are the moment's or this environment's, not the part's: no environment
-#: that holds quiddity could be made, another release answered, the recogniser's process ended or ran out of
-#: time. The same check may read the part's holes with quiddity next time, so its report is not ``repeatable``.
-MOMENTARY = ("not_installed", "other_release", "stopped", "timed_out")
+#: Why a record of quiddity's is not taken (the module's **Which records are taken**).
+DECLINED = ("unproved", "superseded", "open", "cored", "unmatched", "spans", "beyond", "shared", "other_bore",
+            "contradicted")
+#: The reasons a part has no features that are a function of the part and of ``QUIDDITY`` alone (and of the
+#: platform, which a computer's own store of results does not change): the same check reads the same again. Any
+#: other -- no environment that holds quiddity, another release's answer, a process that ended, ran out of time
+#: or of memory, an answer or a failure of the machinery that asks -- is the moment's or this environment's,
+#: and a report with one is not ``repeatable``: no result to keep for another check.
+REPEATABLE = ("no_wheel", "no_faces", "unwritten", "too_many_faces", "refused", "failed", "unknown_schema",
+              "unverified")
 #: A record's diameter is a cylinder's within this (mm): quiddity publishes five decimals.
 NEAR_MM = 1e-3
-#: The closings quiddity reads; any other word of its (``unknown``) is no reading.
-_BOTTOMS = ("through", "flat", "drill_point")
+#: A hole a record says is closed has its floor within this many bore diameters of where its cylinders end: past
+#: a floor's round, a drill's point or a ball's nose, and short of the far wall of whatever a through hole opens
+#: into.
+FLOOR_DIAMETERS = 1.0
 
 
 def asked(parts: Iterable[brep.Part]) -> list[dict[str, Any]]:
     """quiddity's features of each of ``parts`` (``cad.quiddity.features_of``: one recogniser's process for them
-    all), in order: a result that says ``available``, or why the part has none (its ``reason``). Nothing raises: a
-    call that does is every part's ``failed``."""
+    all), in order: a result that says ``available``, or why the part has none (its ``reason``; ``other_release``
+    for anything another release than ``QUIDDITY`` answered). Nothing raises: a call that does is every part's
+    ``unanswered``."""
     parts = list(parts)
     if not parts:
         return []
@@ -77,19 +96,21 @@ def asked(parts: Iterable[brep.Part]) -> list[dict[str, Any]]:
         if len(found) != len(parts):
             raise ValueError(f"{len(found)} answers for {len(parts)} parts")
     except Exception as error:  # noqa: BLE001 -- a recogniser that cannot be asked costs no check its holes
-        said = {"available": False, "quiddity": None, "reason": "failed",
+        said = {"available": False, "quiddity": None, "reason": "unanswered",
                 "detail": " ".join(f"quiddity could not be asked: {type(error).__name__}: {error}".split())}
         return [dict(said) for _ in parts]
     return [_of_release(result) for result in found]
 
 
 def _of_release(result: dict[str, Any]) -> dict[str, Any]:
-    """``result``, or where another release than ``QUIDDITY`` answered it, why it is not read."""
+    """``result``, or where another release than ``QUIDDITY`` answered it -- features or none -- that it is not
+    read: what another release says of a part, and why it says nothing, is that environment's."""
     version = result.get("quiddity")
-    if not result.get("available") or version == QUIDDITY:
+    if version is None or version == QUIDDITY:
         return result
+    was = "" if result.get("available") else f" ({result.get('reason')}: {result.get('detail')})"
     return {"available": False, "quiddity": version, "reason": "other_release",
-            "detail": f"quiddity {version} answered, and its records are read as quiddity {QUIDDITY}'s"}
+            "detail": f"quiddity {version} answered{was}, and its records are read as quiddity {QUIDDITY}'s"}
 
 
 def holes(model: Model, features: dict[str, Any] | None,
@@ -103,16 +124,16 @@ def holes(model: Model, features: dict[str, Any] | None,
     note: dict[str, Any] = {"part": model.part.name, "by": "cad", "version": features.get("quiddity"),
                             "reason": None, "detail": None, "declined": [], "disagreements": []}
     if not features.get("available"):
-        note.update(reason=str(features.get("reason") or "failed"), detail=str(features.get("detail") or ""))
+        note.update(reason=str(features.get("reason") or "unanswered"), detail=str(features.get("detail") or ""))
         return _by(found, "cad"), holed, note
     try:
-        merged = _merged(model, found, features, np.eye(3) if rotation is None else np.asarray(rotation), note)
+        read = _read(model, found, features, np.eye(3) if rotation is None else np.asarray(rotation), note)
     except Exception as error:  # noqa: BLE001 -- records that do not read against the part cost it no hole
-        note.update(reason="failed", declined=[], disagreements=[],
+        note.update(reason="misread", declined=[], disagreements=[],
                     detail=f"quiddity's holes could not be read against the part: {type(error).__name__}: {error}")
         return _by(found, "cad"), holed, note
     note["by"] = "quiddity"
-    return merged, {face for hole in merged for face in hole["_faces"]}, note
+    return read, holed, note
 
 
 def _by(found: list[dict[str, Any]], who: str) -> list[dict[str, Any]]:
@@ -121,91 +142,126 @@ def _by(found: list[dict[str, Any]], who: str) -> list[dict[str, Any]]:
     return found
 
 
-def _merged(model: Model, found: list[dict[str, Any]], features: dict[str, Any], rotation: np.ndarray,
-            note: dict[str, Any]) -> list[dict[str, Any]]:
-    """The holes of the part: each taken record's, measured here, and the detector's (``found``) that no taken
-    record meets (the module's **One hole, once**), in the detector's order, a record's hole where the first of
-    the detector's it meets stood and one it alone found last."""
+def _read(model: Model, found: list[dict[str, Any]], features: dict[str, Any], rotation: np.ndarray,
+          note: dict[str, Any]) -> list[dict[str, Any]]:
+    """The detector's holes (``found``), in its order and on its faces, each with who read it: the hole a taken
+    record closes described again with that floor, every other as it is (the module's **Which records are
+    taken**); the records declined and the disagreements into ``note``."""
     superseded = {record["id"] for record in features["records"]
                   if isinstance(record.get("parameters"), dict) and record["parameters"].get("superseded_by")}
-    owner: dict[int, int] = {}
-    declined: set[int] = set()
-    taken: list[dict[str, Any]] = []
+    at = {face: n for n, hole in enumerate(found) for face in hole["_faces"]}
+    entries = []
+    named: dict[int, int] = {}  # each of the detector's holes: how many records name a face of it
     for record in features["holes"]:
         steps = [step for step in (record["counterbore"], record["spotface"], *record["outer_counterbores"]) if step]
         cones = [*((record["countersink"],) if record["countersink"] else ()), *record["mouth_chamfers"]]
         bore = sorted(face for face in record["faces"] if model.surface(face).kind == "cylinder"
                       and abs(float(model.surface(face).radius) - record["diameter_mm"] / 2.0) <= NEAR_MM)
-        claimed = {*record["faces"], *(face for part in (*steps, *cones) for face in part["faces"])}
         if not bore:
             raise ValueError(f"{record['id']} names no cylinder of its diameter, {record['diameter_mm']:g} mm")
-        radius = round(float(model.surface(bore[0]).radius), 6)
-        why = None
+        claimed = {*record["faces"], *(face for part in (*steps, *cones) for face in part["faces"])}
+        meets = sorted({at[face] for face in claimed if face in at})
+        for n in meets:
+            named[n] = named.get(n, 0) + 1
+        entries.append({"record": record, "bore": bore, "claimed": claimed, "steps": steps, "cones": cones,
+                        "meets": meets})
+    read = list(found)
+    taken: set[int] = set()
+    contested: set[int] = set()
+
+    def differs(where: str, field: str, quiddity: Any, cad: Any) -> None:
+        note["disagreements"].append({"location": where, "field": field, "quiddity": quiddity, "cad": cad})
+
+    for entry in entries:
+        record, bore, meets = entry["record"], entry["bore"], entry["meets"]
+        hole = found[meets[0]] if meets else None
+        where = hole["location"] if hole is not None else model.ref(bore[0])
+        said = None
         if record["evidence_status"] != "verified":
             why = "unproved"
         elif record["id"] in superseded:
             why = "superseded"
-        elif any(face in owner for face in claimed):
+        elif hole is None:
+            why = "open" if not _goes_round(model, bore) else "cored" if detector._cored(
+                model, set(bore), round(float(model.surface(bore[0]).radius), 6)) else "unmatched"
+            differs(where, "hole", True, False)
+        elif len(meets) > 1:
+            why = "spans"
+            differs(where, "holes", 1, len(meets))
+        elif not entry["claimed"] <= set(hole["_faces"]):
+            why = "beyond"
+            differs(where, "faces", len(entry["claimed"]), len(hole["_faces"]))
+        elif named[meets[0]] > 1:
             why = "shared"
-        elif not any(hole["_radius"] == radius and set(bore) <= set(hole["_faces"]) for hole in found):
-            # no hole of the detector's about this bore: is it one, as the detector means a hole?
-            if not _goes_round(model, bore):
-                why = "open"
-            elif detector._cored(model, set(bore), radius):
-                why = "cored"
-        if why is not None:
-            note["declined"].append({"location": model.ref(bore[0]), "record": record["id"], "reason": why})
-            declined |= claimed
-            continue
-        for face in claimed:
-            owner[face] = len(taken)
-        taken.append({"record": record, "bore": bore, "radius": radius, "claimed": claimed, "steps": steps,
-                      "cones": cones, "met": []})
-    firsts: dict[int, int] = {}
-    for n, hole in enumerate(found):
-        meets = sorted({owner[face] for face in hole["_faces"] if face in owner})
-        for k in meets:
-            taken[k]["met"].append(n)
-        if meets:
-            firsts[n] = meets[0]
-    placed: dict[int, list[dict[str, Any]]] = {}
-    alone: list[dict[str, Any]] = []
-    for k, one in enumerate(taken):
-        theirs = [found[n] for n in one["met"]]
-        group = set(one["claimed"])
-        for n in one["met"]:
-            if firsts[n] == k:
-                group |= {face for face in found[n]["_faces"] if face not in owner}
-        if len(theirs) == 1 and group == theirs[0]["_group"]:
-            group = theirs[0]["_group"]  # the very set the detector described: its faces in the same order
-        record = one["record"]
-        said = None
-        if record["bottom"] in _BOTTOMS:
-            said = {"bottom": record["bottom"], "into": rotation @ np.asarray(record["axis"], dtype=float)}
-        named = frozenset({*one["bore"], *(face for step in one["steps"] for face in step["faces"])})
-        hole = detector._described(model, group, one["radius"], said, named)
-        # a groove the detector set aside from a hole of these stays one, unless the record names its cylinder
-        carried = [groove for old in theirs for groove, face in zip(old.get("grooves") or (), old.get("_grooves") or ())
-                   if face not in owner]
-        if carried:
-            hole["grooves"] = [*carried, *(hole.get("grooves") or ())]
-        hole["recognised_by"] = "quiddity"
-        note["disagreements"].extend(_differences(hole, one, theirs, taken, said is not None))
-        if theirs:
-            placed.setdefault(one["met"][0], []).append(hole)
+            if meets[0] not in contested:
+                differs(where, "holes", named[meets[0]], 1)
+            contested.add(meets[0])
+        elif not any(round(float(model.surface(face).radius), 6) == hole["_radius"] for face in bore):
+            why = "other_bore"
+            differs(where, "diameter_mm", round(2 * round(float(model.surface(bore[0]).radius), 6), 9),
+                    hole["diameter_mm"])
         else:
-            alone.append(hole)
-    merged: list[dict[str, Any]] = []
-    for n, hole in enumerate(found):
-        if n in placed:
-            merged.extend(placed[n])
-        elif n not in firsts:
-            hole["recognised_by"] = "cad"
-            if not declined & set(hole["_faces"]):  # a record declined says so already
-                note["disagreements"].append({"location": hole["location"], "field": "hole", "quiddity": False,
-                                              "cad": True})
-            merged.append(hole)
-    return merged + alone
+            why, said = _closing(model, hole, record, rotation)
+            if why is not None:
+                differs(where, *said)
+        if why is not None:
+            note["declined"].append({"location": where, "record": record["id"], "reason": why})
+            continue
+        assert hole is not None
+        if said is not None:
+            closed = detector._describe(model, hole["_group"], hole["_radius"], said)
+            if "grooves" in hole:
+                closed["grooves"] = hole["grooves"]
+            differs(where, "through", False, True)
+            hole = read[meets[0]] = closed
+        taken.add(meets[0])
+        # what each names beside the bore, where they differ: the item lists the detector's, as it did
+        stepped = sorted(float(step["diameter_mm"]) for step in entry["steps"])
+        bored = sorted(float(step["diameter_mm"]) for step in hole["counterbores"])
+        if len(stepped) != len(bored) or any(abs(a - b) > NEAR_MM for a, b in zip(stepped, bored)):
+            differs(where, "counterbores", stepped, bored)
+        sunk = sum(len(cone["faces"]) for cone in entry["cones"])
+        if sunk != len(hole["countersinks"]):
+            differs(where, "countersinks", sunk, len(hole["countersinks"]))
+    for n, hole in enumerate(read):
+        hole["recognised_by"] = "quiddity" if n in taken else "cad"
+        if n not in named:
+            differs(hole["location"], "hole", False, True)
+    return read
+
+
+def _closing(model: Model, hole: dict[str, Any], record: dict[str, Any],
+             rotation: np.ndarray) -> tuple[str | None, Any]:
+    """What ``record`` says closes ``hole``, the detector's hole it is, against the kernel: ``(None, None)`` where
+    the two agree, or the record's word is no reading (``unknown``); ``(None, said)`` where the detector reads
+    through, the record closed, and the kernel bears the record out (``said``: the floor, for
+    ``_dfm_cnc_holes._describe``); ``("contradicted", (field, quiddity's, the detector's))`` where the rays
+    contradict the record (the module's **Which records are taken**)."""
+    word = record["bottom"]
+    if word == "through":
+        return (None, None) if hole["through"] else ("contradicted", ("through", True, False))
+    if word not in ("flat", "drill_point"):
+        return None, None
+    axis = unit(hole["_axis"])
+    sign = 1 if float((rotation @ np.asarray(record["axis"], dtype=float)) @ axis) > 0 else -1
+    if not hole["through"]:
+        # the hole's own floor, which the detector's ray met: at the end the record goes into, and of its kind
+        if hole["bottom"] != "closed" and float(np.asarray(hole["opening"], dtype=float) @ axis) * sign > 0:
+            return "contradicted", ("opening", brep.rounded(-axis * sign), hole["opening"])
+        return (None, None) if hole["bottom"] == word else ("contradicted", ("bottom", word, hole["bottom"]))
+    hit = model.first(hole["_aside"], axis * sign, skip=1e-6)
+    if hit is None or not hit.face:
+        return "contradicted", ("through", False, True)  # the ray into the hole leaves the part: that end is open
+    cylinders = [face for face in hole["_faces"] if model.surface(face).kind == "cylinder"]
+    end = max(model.extent(face, axis * sign)[1] for face in cylinders)
+    if float(np.asarray(hole["_aside"]) @ (axis * sign)) + hit.distance - end > FLOOR_DIAMETERS * 2 * hole["_radius"]:
+        return "contradicted", ("through", False, True)  # what it meets is no floor of this hole's: too far past it
+    kind = model.surface(hit.face).kind
+    if word == "drill_point" and kind != "cone":
+        return "contradicted", ("bottom", word, "through")
+    if word == "flat" and kind == "cone":
+        return "contradicted", ("bottom", word, "through")
+    return None, {"sign": sign, "floor": hit.face, "bottom": word if kind in ("plane", "cone") else "other"}
 
 
 def _goes_round(model: Model, bore: list[int]) -> bool:
@@ -221,40 +277,6 @@ def _goes_round(model: Model, bore: list[int]) -> bool:
         else:
             stretches.append([low, high, sweep])
     return any(sweep >= detector.FULL_ROUND for _low, _high, sweep in stretches)
-
-
-def _differences(hole: dict[str, Any], one: dict[str, Any], theirs: list[dict[str, Any]],
-                 taken: list[dict[str, Any]], read: bool) -> list[dict[str, Any]]:
-    """Where a taken record and the detector read one hole differently, each with both readings: ``hole`` (one
-    found it and the other did not), ``holes`` (how many each makes of these faces), and of one hole of each:
-    ``through``, ``bottom`` (where quiddity read one: ``read``), ``diameter_mm``, ``counterbores`` (their
-    diameters) and ``countersinks`` (their cones' count: a seat's and a mouth chamfer's alike)."""
-    where = hole["location"]
-
-    def differs(field: str, quiddity: Any, cad: Any) -> dict[str, Any]:
-        return {"location": where, "field": field, "quiddity": quiddity, "cad": cad}
-
-    if not theirs:
-        return [differs("hole", True, False)]
-    records = {k for k, other in enumerate(taken) if set(other["met"]) & set(one["met"])}
-    if len(theirs) != 1 or len(records) != 1:
-        return [differs("holes", len(records), len({n for k in records for n in taken[k]["met"]}))]
-    old = theirs[0]
-    found = []
-    if read and old["through"] != hole["through"]:
-        found.append(differs("through", hole["through"], old["through"]))
-    elif read and old["bottom"] != hole["bottom"]:
-        found.append(differs("bottom", hole["bottom"], old["bottom"]))
-    if old["diameter_mm"] != hole["diameter_mm"]:
-        found.append(differs("diameter_mm", hole["diameter_mm"], old["diameter_mm"]))
-    stepped = sorted(float(step["diameter_mm"]) for step in one["steps"])
-    bored = sorted(float(bore["diameter_mm"]) for bore in old["counterbores"])
-    if len(stepped) != len(bored) or any(abs(a - b) > NEAR_MM for a, b in zip(stepped, bored)):
-        found.append(differs("counterbores", stepped, bored))
-    sunk = sum(len(cone["faces"]) for cone in one["cones"])
-    if sunk != len(old["countersinks"]):
-        found.append(differs("countersinks", sunk, len(old["countersinks"])))
-    return found
 
 
 def summary(notes: Iterable[dict[str, Any] | None], measured: Iterable[dict[str, Any] | None],
@@ -275,4 +297,4 @@ def summary(notes: Iterable[dict[str, Any] | None], measured: Iterable[dict[str,
             "fallbacks": fallbacks,
             "declined": [entry for note in measured for entry in note["declined"]],
             "disagreements": [entry for note in measured for entry in note["disagreements"]],
-            "repeatable": not any(entry["reason"] in MOMENTARY for entry in fallbacks)}
+            "repeatable": all(entry["reason"] in REPEATABLE for entry in fallbacks)}

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 
-"""The CNC check's holes as quiddity recognises them (``cad.build123d._dfm_cnc_recognised``), on tiny parts built
-here, so each expected figure is the construction's: a hole quiddity reads carries the figures this library
-measures, in their documented meanings; a blind bore and a shallow recess whose floors are no face of the hole's
-own are blind, where the detector's ray took them for through; what quiddity does not claim is still the
-detector's -- a drafted wall, a sealed bore, a channel it calls a hole and is none; two stretches of one drilled
-hole are one hole, and no face is two holes'; a part quiddity is not available for keeps the detector's holes, the
-report as it was but for the note that says so; and one recogniser is asked once for a document's every part.
+"""The CNC check's holes with quiddity's reading of what closes them (``cad.build123d._dfm_cnc_recognised``), on
+tiny parts built here, so each expected figure is the construction's. A hole whose record is taken carries the
+detector's figures; a blind bore and a shallow recess whose floors are no face of the hole's own are blind, where
+the detector's ray read them through, and nothing else of them changes. A record the kernel contradicts changes
+nothing: a hole crossed by another stays two holes, a narrower bore is never a counterbore, and a record that
+says closed where a ray leaves the part, through where the ray meets the hole's own floor, a point where there is
+no cone, is declined -- each with the detector's report exactly as it was and the disagreement said. What
+quiddity does not claim is the detector's still; a part quiddity is not available for keeps the detector's
+holes, the report as it was but for the note that says so, repeatable only where the reason is the part's own;
+and one recogniser is asked once for a document's every part.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from cad._internal import manufacturing
 from cad._internal.dfm import kept
 from cad.build123d import _dfm_brep as brep
 from cad.build123d import _dfm_cnc, _dfm_cnc_recognised, cnc
+from cad.quiddity import _features, _process
 from cad.quiddity._features import unavailable
 from tests.python.support.dfm_cnc import A, _check, _part
 from tests.python.support.paths import repo_path
@@ -43,6 +47,19 @@ def _measure(shape: Any, recognise: bool = True) -> dict[str, Any]:
 
 def _holes(report: dict[str, Any]) -> dict[float, dict[str, Any]]:
     return {hole["diameter_mm"]: hole for hole in report["holes"]["items"]}
+
+
+def _as_it_was(report: dict[str, Any]) -> dict[str, Any]:
+    """A report as the detector alone gives it: no ``recognition``, every hole its own."""
+    report = copy.deepcopy(report)
+    report["holes"].pop("recognition", None)
+    for hole in report["holes"]["items"]:
+        hole["recognised_by"] = "cad"
+    return report
+
+
+def _block() -> Any:
+    return bd.Box(60, 40, 40)  # its top at z = 20
 
 
 def _plate() -> Any:
@@ -69,9 +86,27 @@ def _capped() -> Any:
     return _part(part, "capped")
 
 
+def _saying(change: Any) -> Any:
+    """quiddity's own answer with each hole's record changed by ``change(record)`` (which may answer several
+    records, or none, in its place): a record it could give, and the kernel does not bear out."""
+    real = quiddity.features_of
+
+    def features_of(parts: Any, **given: Any) -> Any:
+        found = real(parts, **given)
+        for result in found:
+            holes = []
+            for record in result["holes"]:
+                said = change(copy.deepcopy(record))
+                holes.extend(said if isinstance(said, list) else [said])
+            result["holes"] = holes
+        return found
+
+    return mock.patch.object(quiddity, "features_of", features_of)
+
+
 @unittest.skipUnless(QUIDDITY, NEEDS)
 class RecognisedHolesTest(unittest.TestCase):
-    def test_a_hole_quiddity_reads_carries_the_figures_this_library_measures(self) -> None:
+    def test_a_hole_whose_record_is_taken_carries_the_figures_the_detector_measures(self) -> None:
         # through the engine's checks process, as a check of a file runs
         report = _check(_plate(), material="aluminum").measurements
         measured, holes = report["holes"], _holes(report)
@@ -81,26 +116,22 @@ class RecognisedHolesTest(unittest.TestCase):
             "parts": {"quiddity": 1, "cad": 0}, "fallbacks": [], "declined": [], "disagreements": [],
             "repeatable": True})
         drilled, bored, sunk, broken = holes[6.8], holes[6.6], holes[4.5], holes[4.0]
-        # the drilled hole: its point's angle is its cone's, its opening the end quiddity's axis comes in from
         self.assertEqual((drilled["depth_mm"], drilled["through"], drilled["bottom"], drilled["opening"]),
                          (15.0, False, "drill_point", [0.0, 0.0, 1.0]))
         self.assertAlmostEqual(drilled["point_angle_deg"], 118.0, places=6)
         self.assertEqual((drilled["standard_drill"], drilled["tap_candidate"], drilled["drilled"], drilled["floor_tool"]),
                          ("6.8 mm", "M8x1.25", True, None))
         self.assertEqual((drilled["aligned"], drilled["reachable"], drilled["inclination_deg"]), (True, True, 0.0))
-        self.assertRegex(drilled["location"], r"^plate/face \d+$")
-        self.assertEqual(len(drilled["faces"]), 2, "its wall and its point")
-        # a depth is the drilled length below a counterbore or a seat: the bore's own, as quiddity's is
         self.assertEqual((bored["through"], bored["depth_mm"], bored["overall_depth_mm"]), (True, 34.0, 40.0))
         self.assertEqual(bored["counterbores"], [{"diameter_mm": 11.0, "depth_mm": 6.0,
                                                   "depth_to_diameter": round(6.0 / 11.0, 9)}])
         self.assertEqual((sunk["depth_mm"], [(s["diameter_mm"], s["angle_deg"]) for s in sunk["countersinks"]]),
                          (37.75, [(9.0, 90.0)]))
-        # a mouth's small chamfer, which quiddity keeps apart from a seat, is a countersink here: its cone's
-        # largest diameter and included angle
+        # a mouth's small chamfer, which quiddity keeps apart from a seat, is a countersink here, as it was
         self.assertEqual((broken["depth_mm"], [(s["diameter_mm"], s["angle_deg"]) for s in broken["countersinks"]]),
                          (39.5, [(5.0, 90.0)]))
-        self.assertEqual(len(broken["faces"]), 2, "its wall and its chamfer")
+        # every item is the detector's own, to the last field
+        self.assertEqual(_as_it_was(_measure(_plate())), _measure(_plate(), recognise=False))
 
     def test_a_blind_bore_and_a_shallow_recess_are_blind_where_the_detector_s_ray_read_through(self) -> None:
         shape = _capped()
@@ -118,14 +149,18 @@ class RecognisedHolesTest(unittest.TestCase):
                 self.assertEqual(changed, {"through", "bottom", "opening", "drilled", "floor_tool", "recognised_by"})
         self.assertEqual({key: holes[5.0][key] for key in holes[5.0] if key != "recognised_by"},
                          {key: alone[5.0][key] for key in alone[5.0] if key != "recognised_by"})
-        # each said, with both readings
+        # each said, with both readings, and no other family reads the part otherwise
         self.assertEqual(read["holes"]["recognition"]["disagreements"], [
             {"location": holes[diameter]["location"], "field": "through", "quiddity": False, "cad": True}
             for diameter in (16.0, 40.0)])
+        was = _measure(shape, recognise=False)
+        self.assertEqual({name: read[name] for name in read if name != "holes"},
+                         {name: was[name] for name in was if name != "holes"})
         # a ball nose closes its hole and is no flat floor: quiddity's word for it is flat, a plane's here
-        nosed = bd.Box(60, 40, 20) - (bd.Pos(0, 0, 11) * bd.Cylinder(4, 9, align=DOWN) + bd.Pos(0, 0, 2) * bd.Sphere(4))
+        nosed = _block() - (bd.Pos(0, 0, 21) * bd.Cylinder(4, 9, align=DOWN) + bd.Pos(0, 0, 12) * bd.Sphere(4))
         (hole,) = _measure(_part(nosed))["holes"]["items"]
-        self.assertEqual((hole["through"], hole["bottom"], hole["floor_tool"]), (False, "other", None))
+        self.assertEqual((hole["through"], hole["bottom"], hole["floor_tool"], hole["recognised_by"]),
+                         (False, "other", None, "quiddity"))
 
     def test_what_quiddity_does_not_claim_is_still_the_detector_s(self) -> None:
         block = bd.Box(60, 40, 20)
@@ -133,22 +168,22 @@ class RecognisedHolesTest(unittest.TestCase):
         drafted = block - (bd.Pos(0, 0, -10) * bd.Cylinder(4, 5, align=(A.CENTER, A.CENTER, A.MIN))
                            + bd.Pos(0, 0, -5) * bd.Cone(4, 4 + 15 * math.tan(math.radians(2)), 15,
                                                        align=(A.CENTER, A.CENTER, A.MIN)))
-        read = _measure(_part(drafted))
-        (hole,), (alone,) = read["holes"]["items"], _measure(_part(drafted), recognise=False)["holes"]["items"]
+        read, alone = _measure(_part(drafted)), _measure(_part(drafted), recognise=False)
+        (hole,) = read["holes"]["items"]
         self.assertEqual((hole["recognised_by"], hole["diameter_mm"], hole["depth_mm"], len(hole["faces"])),
                          ("quiddity", 8.0, 5.0, 2))
         self.assertEqual([round(sink["angle_deg"], 6) for sink in hole["countersinks"]], [4.0], "the drafted wall")
-        self.assertEqual({key: value for key, value in hole.items() if key != "recognised_by"},
-                         {key: value for key, value in alone.items() if key != "recognised_by"})
         self.assertEqual(read["holes"]["recognition"]["disagreements"],
                          [{"location": hole["location"], "field": "countersinks", "quiddity": 0, "cad": 1}])
+        self.assertEqual(_as_it_was(read), alone)
         # a bore sealed inside the block is an interior void to quiddity, which has no hole there
-        read = _measure(_part(block - bd.Cylinder(4, 10)))
+        read, alone = _measure(_part(block - bd.Cylinder(4, 10))), _measure(_part(block - bd.Cylinder(4, 10)), False)
         (hole,) = read["holes"]["items"]
         self.assertEqual((hole["recognised_by"], hole["bottom"], hole["depth_mm"]), ("cad", "closed", 10.0))
         self.assertEqual(read["holes"]["recognition"]["holes"], {"quiddity": 0, "cad": 1})
         self.assertEqual(read["holes"]["recognition"]["disagreements"],
                          [{"location": hole["location"], "field": "hole", "quiddity": False, "cad": True}])
+        self.assertEqual(_as_it_was(read), alone)
         # a 2.6 mm channel along the top, its axis 0.6 mm under it, is open along its side: a hole to quiddity,
         # none here (it sweeps 235 degrees), so its record is declined and no family reads it as one
         channel = block - bd.Pos(0, 0, 9.4) * bd.Rot(0, 90, 0) * bd.Cylinder(1.3, 80)
@@ -156,54 +191,110 @@ class RecognisedHolesTest(unittest.TestCase):
         self.assertEqual(read["holes"]["items"], [])
         (declined,) = read["holes"]["recognition"]["declined"]
         self.assertEqual((declined["reason"], declined["record"]), ("open", "holes/0"))
-        self.assertRegex(declined["location"], r"^part/face \d+$")
-        read["holes"].pop("recognition")
-        self.assertEqual(read, alone)
-
-    def test_two_stretches_of_one_drilled_hole_are_one_hole_and_no_face_is_two_holes(self) -> None:
-        # 6 mm drilled across a 60 mm block, through an 8 mm hole down its middle
-        crossed = bd.Box(60, 40, 20) - bd.Cylinder(4, 40) - bd.Rot(0, 90, 0) * bd.Cylinder(3, 80)
-        read, alone = _measure(_part(crossed)), _measure(_part(crossed), recognise=False)
-        self.assertEqual(sorted(hole["diameter_mm"] for hole in alone["holes"]["items"]), [6.0, 6.0, 8.0])
-        holes = _holes(read)
-        self.assertEqual((read["holes"]["count"], sorted(holes)), (2, [6.0, 8.0]))
-        self.assertEqual((holes[6.0]["depth_mm"], holes[6.0]["through"], len(holes[6.0]["faces"])), (60.0, True, 2))
-        faces = [face for hole in read["holes"]["items"] for face in hole["faces"]]
-        self.assertEqual(len(faces), len(set(faces)))
-        self.assertEqual(sorted(faces), sorted(face for hole in alone["holes"]["items"] for face in hole["faces"]))
         self.assertEqual(read["holes"]["recognition"]["disagreements"],
-                         [{"location": holes[6.0]["location"], "field": "holes", "quiddity": 1, "cad": 2}])
-        # the families that read a hole's faces read the same faces
-        for family in ("access", "walls", "gaps", "pockets", "sharp_edges", "setups"):
-            self.assertEqual(read[family], alone[family], family)
+                         [{"location": declined["location"], "field": "hole", "quiddity": True, "cad": False}])
+        self.assertEqual(_as_it_was(read), alone)
 
-    def test_two_records_on_one_of_the_detector_s_holes_are_two_holes_and_its_other_faces_the_first_s(self) -> None:
-        """The counterbored hole's record handed over as two, its bore and its counterbore each a hole: what
-        the detector makes one hole of is two, the step's plane, which neither record names, the first's."""
-        real = quiddity.features_of
+    def test_a_hole_another_hole_crosses_stays_two_holes_each_as_deep_as_a_drill_goes(self) -> None:
+        """6 mm along a 260 mm block, crossed in the middle by 10 mm: the detector reads the two stretches, 125.5
+        mm each (21 diameters, which a drill reaches); quiddity's one record is both, 260 mm (43, which none
+        does). A check that passed fails for no change to the part unless the record is declined."""
+        crossed = _part(bd.Box(260, 40, 20) - bd.Cylinder(5, 40) - bd.Rot(0, 90, 0) * bd.Cylinder(3, 300), "crossed")
+        read, alone = _measure(crossed), _measure(crossed, recognise=False)
+        self.assertEqual(sorted((hole["diameter_mm"], hole["depth_mm"]) for hole in alone["holes"]["items"])[:2],
+                         [(6.0, 125.5), (6.0, 125.5)])
+        self.assertEqual(_as_it_was(read), alone)
+        said = read["holes"]["recognition"]
+        first = alone["holes"]["items"][0]["location"]
+        (declined,) = said["declined"]
+        self.assertEqual((declined["reason"], said["holes"]), ("spans", {"quiddity": 1, "cad": 2}))
+        self.assertEqual([entry for entry in said["disagreements"] if entry["field"] == "holes"],
+                         [{"location": declined["location"], "field": "holes", "quiddity": 1, "cad": 2}])
+        self.assertIn(first, {hole["location"] for hole in read["holes"]["items"]})
+        result = cnc(crossed, material="aluminum")
+        self.assertEqual((result.status, [f.code for f in result.findings if f.code == "cnc.hole_depth_limit"]),
+                         ("ok", []))
 
-        def split(parts: Any, **_given: Any) -> Any:
-            (found,) = real(parts)
-            (whole,) = [hole for hole in found["holes"] if hole["counterbore"]]
-            step = whole["counterbore"]
-            bore = {**whole, "counterbore": None, "faces": [face for face in whole["faces"] if face not in step["faces"]]}
-            wide = {**whole, "id": "holes/9", "counterbore": None, "diameter_mm": step["diameter_mm"],
-                    "faces": list(step["faces"])}
-            found["holes"] = [bore if hole is whole else hole for hole in found["holes"]] + [wide]
-            return [found]
+    def test_a_narrower_bore_is_never_a_counterbore_and_a_hole_is_a_record_s_whole_or_not_at_all(self) -> None:
+        """A stepped blind bore, 10 mm for 15 mm then 6 mm for 10 mm: one hole here, 6 mm under a 10 mm
+        counterbore. A record that takes the 10 mm step for the bore, with or without another for the 6 mm, is
+        declined, and the hole is the detector's: its 6 mm bore's diameter, depth and drill are still judged."""
+        stepped = _part(_block() - bd.Pos(0, 0, 20) * bd.Cylinder(5, 15, align=DOWN)
+                        - bd.Pos(0, 0, 5) * bd.Cylinder(3, 10, align=DOWN))
+        alone = _measure(stepped, recognise=False)
+        (hole,) = alone["holes"]["items"]
+        self.assertEqual((hole["diameter_mm"], [bore["diameter_mm"] for bore in hole["counterbores"]]), (6.0, [10.0]))
 
-        with mock.patch.object(quiddity, "features_of", split):
-            read = _measure(_plate())
-        alone = _holes(_measure(_plate(), recognise=False))
-        holes = _holes(read)
-        self.assertEqual((read["holes"]["count"], sorted(holes)), (5, [4.0, 4.5, 6.6, 6.8, 11.0]))
-        self.assertEqual((len(holes[6.6]["faces"]), len(holes[11.0]["faces"])), (2, 1), "the step's plane is the bore's")
-        faces = [face for hole in read["holes"]["items"] for face in hole["faces"]]
-        self.assertEqual(len(faces), len(set(faces)))
-        self.assertEqual(set(holes[6.6]["faces"]) | set(holes[11.0]["faces"]), set(alone[6.6]["faces"]))
-        self.assertEqual([entry for entry in read["holes"]["recognition"]["disagreements"]], [
-            {"location": holes[6.6]["location"], "field": "holes", "quiddity": 2, "cad": 1},
-            {"location": holes[11.0]["location"], "field": "holes", "quiddity": 2, "cad": 1}])
+        def wide(record: dict[str, Any]) -> dict[str, Any]:
+            step = record["counterbore"]
+            return {**record, "counterbore": None, "diameter_mm": step["diameter_mm"], "faces": list(step["faces"])}
+
+        def both(record: dict[str, Any]) -> list[dict[str, Any]]:
+            step = record["counterbore"]
+            narrow = {**record, "id": "holes/9", "counterbore": None, "evidence_status": "unproved",
+                      "faces": [face for face in record["faces"] if face not in step["faces"]]}
+            return [wide(record), narrow]
+
+        for change, reasons, differs in ((wide, ["other_bore"], ("diameter_mm", 10.0, 6.0)),
+                                         (both, ["shared", "unproved"], ("holes", 2, 1))):
+            with self.subTest(change=change.__name__), _saying(change):
+                read = _measure(stepped)
+                self.assertEqual(_as_it_was(read), alone)
+                said = read["holes"]["recognition"]
+                self.assertEqual(([entry["reason"] for entry in said["declined"]], said["holes"]),
+                                 (reasons, {"quiddity": 0, "cad": 1}))
+                self.assertEqual(said["disagreements"], [{"location": hole["location"], "field": differs[0],
+                                                          "quiddity": differs[1], "cad": differs[2]}])
+
+    def test_what_a_record_says_closes_a_hole_is_taken_only_where_the_rays_do_not_contradict_it(self) -> None:
+        tip = 3.0 / math.tan(math.radians(59.0))
+        through = _part(_block() - bd.Cylinder(3, 60))
+        blind = _part(_block() - bd.Pos(0, 0, 20) * bd.Cylinder(4, 10, align=DOWN))
+        drilled = _part(_block() - (bd.Pos(0, 0, 21) * bd.Cylinder(3, 13, align=DOWN)
+                                    + bd.Pos(0, 0, 8) * bd.Cone(0.0, 3, tip, align=DOWN)))
+        # 4 mm, 10 deep, into a slot 20 high across the block: open, the slot's far wall 20 mm past its end
+        slotted = _part(_block() - bd.Pos(0, 0, 20) * bd.Cylinder(2, 10, align=DOWN) - bd.Box(60, 20, 20))
+        capped = _capped()
+
+        def says(**fields: Any) -> Any:
+            return lambda record: {**record, **fields} if record["diameter_mm"] != 5.0 else record
+
+        cases = [
+            # a ray into the hole leaves the part: that end is open, whatever the record says
+            ("through, said flat", through, says(bottom="flat"), ("through", False, True)),
+            ("through, said a point", through, says(bottom="drill_point"), ("through", False, True)),
+            # what the ray meets is no floor of this hole's: the far wall of what it opens into
+            ("open into a slot, said flat", slotted, says(bottom="flat"), ("through", False, True)),
+            # the ray meets the hole's own floor
+            ("blind, said through", blind, says(bottom="through"), ("through", True, False)),
+            ("blind, said closed from the other end", blind, says(axis=[0.0, 0.0, 1.0]),
+             ("opening", [0.0, 0.0, -1.0], [0.0, 0.0, 1.0])),
+            # the floor is of another kind than the record says
+            ("flat floor, said a point", blind, says(bottom="drill_point"), ("bottom", "drill_point", "flat")),
+            ("a drill's point, said flat", drilled, says(bottom="flat"), ("bottom", "flat", "drill_point")),
+            ("a floor that is not the hole's own, said a point", capped, says(bottom="drill_point"),
+             ("bottom", "drill_point", "through")),
+            ("the same, said closed from the end it opens at", capped, says(axis=[0.0, 0.0, 1.0]),
+             ("through", False, True)),
+        ]
+        for name, shape, change, (field, theirs, ours) in cases:
+            with self.subTest(name), _saying(change):
+                read, alone = _measure(shape), _measure(shape, recognise=False)
+                self.assertEqual(_as_it_was(read), alone, "the detector's reading stands, exactly")
+                said = read["holes"]["recognition"]
+                self.assertEqual({entry["reason"] for entry in said["declined"]}, {"contradicted"})
+                self.assertTrue(said["disagreements"])
+                for entry in said["disagreements"]:
+                    self.assertEqual((entry["field"], entry["quiddity"], entry["cad"]), (field, theirs, ours))
+                self.assertEqual({hole["recognised_by"] for hole in read["holes"]["items"]
+                                  if hole["diameter_mm"] != 5.0}, {"cad"})
+        # ``unknown`` is no reading: the record is taken, and the detector's reading stands
+        with _saying(says(bottom="unknown")):
+            read = _measure(capped)
+        self.assertEqual({hole["recognised_by"] for hole in read["holes"]["items"]}, {"quiddity"})
+        self.assertEqual((read["holes"]["recognition"]["declined"], read["holes"]["recognition"]["disagreements"]),
+                         ([], []))
+        self.assertEqual(_as_it_was(read), _measure(capped, recognise=False))
 
     def test_one_recogniser_is_asked_once_for_every_part_a_document_holds(self) -> None:
         drilled = bd.Box(40, 30, 12) - bd.Pos(12, 0, 0) * bd.Cylinder(2, 12)
@@ -217,6 +308,23 @@ class RecognisedHolesTest(unittest.TestCase):
         self.assertEqual((said["holes"], said["parts"]), ({"quiddity": 3, "cad": 0}, {"quiddity": 3, "cad": 0}))
         self.assertEqual(sorted(hole["location"].split("/")[0] for hole in read["holes"]["items"]), ["a", "b", "c"])
 
+    def test_a_part_of_more_faces_than_are_handed_over_is_the_detector_s_on_every_computer(self) -> None:
+        started: list[Any] = []
+        child = _process._Child
+
+        def counted(*given: Any) -> Any:
+            started.append(given)
+            return child(*given)
+
+        with mock.patch.object(_features, "FACES", 11), mock.patch.object(_process, "_Child", counted):
+            read = _measure(_capped())
+        self.assertEqual(started, [], "no recogniser's process is started for it")
+        self.assertEqual(_as_it_was(read), _measure(_capped(), recognise=False))
+        said = read["holes"]["recognition"]
+        self.assertEqual((said["fallbacks"], said["repeatable"], said["version"]),
+                         ([{"part": "capped", "reason": "too_many_faces",
+                            "detail": "the part holds 12 faces, over the 11 of a part handed to quiddity"}], True, None))
+
 
 class FallbackTest(unittest.TestCase):
     """A part quiddity is not available for: its holes are the detector's, the report as it was."""
@@ -229,39 +337,53 @@ class FallbackTest(unittest.TestCase):
         with mock.patch.object(quiddity, "features_of", features_of):
             return _measure(self.shape)
 
-    def test_the_holes_are_the_detector_s_and_the_report_says_why(self) -> None:
+    def test_the_holes_are_the_detector_s_and_the_report_says_why_and_whether_it_would_say_so_again(self) -> None:
         self.assertNotIn("recognition", self.alone["holes"])
         self.assertEqual({hole["recognised_by"] for hole in self.alone["holes"]["items"]}, {"cad"})
-        for reason, repeatable in (("no_wheel", True), ("unverified", True), ("refused", True),
-                                   ("not_installed", False), ("timed_out", False), ("stopped", False)):
+        own = ("no_wheel", "no_faces", "too_many_faces", "unwritten", "refused", "failed", "unknown_schema", "unverified")
+        self.assertEqual(set(_dfm_cnc_recognised.REPEATABLE), set(own))
+        self.assertLess(set(own), set(_features.REASONS))
+        for reason in _features.REASONS:
             with self.subTest(reason=reason):
                 read = self._with(lambda parts, **_given: [unavailable(reason, "why, in a line") for _part in parts])
                 self.assertEqual(read["holes"].pop("recognition"), {
                     "library": "quiddity", "version": None, "holes": {"quiddity": 0, "cad": 3},
                     "parts": {"quiddity": 0, "cad": 1},
                     "fallbacks": [{"part": "capped", "reason": reason, "detail": "why, in a line"}],
-                    "declined": [], "disagreements": [], "repeatable": repeatable})
+                    "declined": [], "disagreements": [], "repeatable": reason in own})
                 self.assertEqual(read, self.alone)
 
-    def test_a_recogniser_that_raises_or_another_release_s_answer_costs_no_hole(self) -> None:
+    def test_what_the_machinery_or_another_release_answers_costs_no_hole_and_is_not_said_repeatable(self) -> None:
         def raises(parts: Any, **_given: Any) -> Any:
-            raise RuntimeError("no recogniser here")
+            raise RuntimeError("can't start new thread")
 
         said = self._with(raises)["holes"]["recognition"]
         self.assertEqual((said["fallbacks"], said["repeatable"]),
-                         ([{"part": "capped", "reason": "failed",
-                            "detail": "quiddity could not be asked: RuntimeError: no recogniser here"}], True))
+                         ([{"part": "capped", "reason": "unanswered",
+                            "detail": "quiddity could not be asked: RuntimeError: can't start new thread"}], False))
         # records are read as one release's, the one the extra pins: the code that measures names it
         extras = tomllib.loads(repo_path("packages", "cad", "pyproject.toml").read_text(encoding="utf-8"))
         (requirement,) = extras["project"]["optional-dependencies"]["quiddity"]
         self.assertEqual(requirement.partition(";")[0].strip(), f"quiddity=={_dfm_cnc_recognised.QUIDDITY}")
-        other = {"available": True, "quiddity": "0.0.1", "holes": [], "records": []}
-        read = self._with(lambda parts, **_given: [copy.deepcopy(other) for _part in parts])
+        # whatever another release answers -- features, or why it has none -- is that environment's
+        answers = ({"available": True, "quiddity": "0.0.1", "holes": [], "records": []},
+                   unavailable("unverified", "its faces are not the part's", "0.0.1"),
+                   unavailable("failed", "a panic", "0.0.1"))
+        for answer in answers:
+            with self.subTest(answer=answer.get("reason")):
+                read = self._with(lambda parts, **_given: [copy.deepcopy(answer) for _part in parts])
+                said = read["holes"].pop("recognition")
+                self.assertEqual((said["version"], [entry["reason"] for entry in said["fallbacks"]], said["repeatable"]),
+                                 ("0.0.1", ["other_release"], False))
+                self.assertRegex(said["fallbacks"][0]["detail"], r"^quiddity 0\.0\.1 answered.*, and its records are "
+                                                                 r"read as quiddity 0\.5\.5's$")
+                self.assertEqual(read, self.alone)
+        # records that do not read against the part: every hole the detector's, and not said repeatable
+        broken = {"available": True, "quiddity": _dfm_cnc_recognised.QUIDDITY, "records": [], "holes": [{"id": "holes/0"}]}
+        read = self._with(lambda parts, **_given: [copy.deepcopy(broken) for _part in parts])
         said = read["holes"].pop("recognition")
-        self.assertEqual((said["version"], said["fallbacks"], said["repeatable"]),
-                         ("0.0.1", [{"part": "capped", "reason": "other_release",
-                                     "detail": "quiddity 0.0.1 answered, and its records are read as quiddity "
-                                               f"{_dfm_cnc_recognised.QUIDDITY}'s"}], False))
+        self.assertEqual(([entry["reason"] for entry in said["fallbacks"]], said["repeatable"], said["parts"]),
+                         (["misread"], False, {"quiddity": 0, "cad": 1}))
         self.assertEqual(read, self.alone)
 
     def test_a_check_passes_as_it_did(self) -> None:
