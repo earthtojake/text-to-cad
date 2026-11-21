@@ -131,7 +131,7 @@ Run the smallest check that covers the change, then the broader one before hand-
 | Shared JS or the viewer | `npm run build:packages`, then `scripts/test/test-js.sh --select core\|ui\|web\|mcp\|all` |
 | What the bundlers consume | `scripts/bundle/bundle.sh --check` |
 | The docs site, the API | `npm --prefix apps/docs run check`, `npm --prefix apps/api test` |
-| A skill's behaviour | `scripts/bench/skill_ab.py` ([Writing a skill](docs/contributing/writing-a-skill.md#test-a-change-ab)) |
+| A skill's behaviour | `scripts/bench/skill_ab.py` ([Writing a skill](docs/contributing/writing-a-skill.md#test-a-large-change-ab)) |
 | The JS, API, Python and policy suites in one run | `scripts/test/test.sh` (CI runs more: [Testing](docs/contributing/testing.md#ci)) |
 
 CI runs one job per concern, only where a change reaches it; `main` requires the single check `CI`.

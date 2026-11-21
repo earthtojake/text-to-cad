@@ -129,10 +129,13 @@ skills/<name>/
 - Name only the environment variables a person may set
   (`cad._internal.environment`, the public tier).
 
-## Test a change (A/B)
+## Test a large change (A/B)
 
-A change to what a skill tells agents is a change to what agents do, and reading the diff does not
-say what. Before a pull request that rewrites a `SKILL.md`, changes a method, or removes guidance:
+Most changes to a skill need no bench: a corrected fact, a passage that follows a tool change, a line
+added with its evidence or one taken out are reviewed by reading them and running what they say. The
+bench is for a change large enough that reading the diff does not say what agents will do: a
+`SKILL.md` rewritten, a method changed, a whole section of guidance removed. Before such a pull
+request:
 
 ```bash
 scripts/bench/skill_ab.py --base main                     # every task, both skill sets
@@ -243,7 +246,7 @@ part of a rewrite, a tidy-up or a fix that happens to reach them. Propose the ch
 - [ ] The Setup and Show the model blocks are the shared text where they apply.
 - [ ] The Setup block, the `name` and `description`, and every line on what the agent does not do on
       a person's behalf are as they were, or a person approved the change by name.
-- [ ] A change to what agents are told was run A/B, with the table in the pull request, and a
+- [ ] A rewrite or a change of method was run A/B, with the table in the pull request, and a
       rewrite was audited against the text it replaced.
 - [ ] A command the skill stops using still works for 30 days.
 - [ ] Its name is in `SKILLS` in `packages/cad/src/cad_server/plugin/source.py`, in the same release (a
