@@ -46,6 +46,7 @@ import { studioEnvironmentCacheFor } from "../look/studioEnvironmentCache.js";
 import { isKitScene } from "../scene.js";
 import LoadingIndicator from "../status/LoadingIndicator.js";
 import AnnotationOverlay from "../tools/annotate/AnnotationOverlay.jsx";
+import { backdropScheme } from "../tools/PreviewChrome.jsx";
 import { useSceneEffects } from "../tools/model-effects/useSceneEffects.js";
 import { TOUCH_HIT_PX, prefersCoarsePointer } from "../viewport/dom.js";
 import { annotationAt, annotationsInBox } from "../../../annotation/geometry.js";
@@ -1273,6 +1274,8 @@ const ShellViewport = forwardRef(function ShellViewport({
   const transitionBackdrop = viewerTransitionBackdrop({
     renderMode, renderConfiguration, background: normalizedThemeSettings.background, viewerTheme
   });
+  // The indicator in the ink of the backdrop it is on (Render's, where it has its own), else the viewport's: never the app's.
+  const transitionScheme = backdropScheme({ color: transitionBackdrop.backgroundColor }, appearance);
 
   return (
     <div
@@ -1283,7 +1286,8 @@ const ShellViewport = forwardRef(function ShellViewport({
     >
       <div className="h-full w-full" ref={mountRef} />
       {coveringModeTransition ? (
-        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center" style={transitionBackdrop} role="status" data-viewer-transition={renderMode ? "render" : "inspect"}>
+        <div className={`pointer-events-none absolute inset-0 z-20 flex items-center justify-center ${transitionScheme}`} style={transitionBackdrop} role="status"
+          data-viewer-transition={renderMode ? "render" : "inspect"} data-scheme={transitionScheme}>
           <LoadingIndicator
             progress={loadingPresentation?.busy ? loadingPresentation.progress : { label: "Preparing view" }}
             operationKey={`${resolvedPresentationKey}:${renderMode}`}

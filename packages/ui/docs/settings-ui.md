@@ -1596,9 +1596,15 @@ own before any view is up (`file-viewer/presentation`'s `ViewerLoadingOverlay`, 
 flashes from one background to the other before its picture — the corner's bare buttons
 and their halo, a 2D view's paper and strokes (a drawing's, a board's, a schematic's), and Preview's studio, which
 takes the viewport's light or dark but keeps its own backdrop colour: Preview is a photographic render whose backdrop
-and floor are its own settings (Background colour, Floor), so it does not take the canvas's gradient. Chrome on a
-surface of its own — the strip and the sub-toolbars, the panel, Quick Edit, the playbar, every menu — keeps the app's
-theme. A picture taken off screen (a card's) is the light viewport's whatever the setting, and the server's
+and floor are its own settings (Background colour, Floor), so it does not take the canvas's gradient. So does what
+belongs to the picture and floats over it: the update status (under the strip or at the top centre), the alert card,
+a view's own could-not-display message, and every cover on the picture — the display mode's (on Render's backdrop
+where it has one, its ink chosen for that colour, else the viewport's) and Preview's ("Preparing preview…", on what
+Preview is about to show: its Background colour where it is set, else the view's canvas, in that backdrop's ink as
+Preview's bar and playbar are, `backdropScheme`). The rule: **what belongs to the picture takes the picture's scheme;
+what the person works the view with keeps the app's** — chrome on a surface of its own, mirroring the navbar and the
+panel: the strip and the sub-toolbars, the panel and a phone's sheet, Quick Edit, the Display and Preview Settings
+cards, every menu (the view's context menu too) and every tooltip, which a portal draws in the app's scope. A picture taken off screen (a card's) is the light viewport's whatever the setting, and the server's
 snapshots are always light.
 
 ### The palette

@@ -118,7 +118,11 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   const scheme = viewport?.scheme === "dark" ? "dark" : viewport ? "light" : null;
   const toolsHidden = chromeHidden || compact;
   // The view catching up, said as every view says it, unless the card says why the chrome is gone.
-  const statusNode = !status || (chromeHidden && alert?.alert) ? null : <div className="pointer-events-none flex max-w-full items-center gap-2" data-viewport-status="">
+  // It says what the picture is doing, over the picture: in its scheme (Preview's backdrop's while Preview is up), never
+  // the app's, under the strip as at the top centre.
+  const statusScheme = previewing ? (preview?.scheme ?? scheme) : scheme;
+  const statusNode = !status || (chromeHidden && alert?.alert) ? null : <div className={cn("pointer-events-none flex max-w-full items-center gap-2", statusScheme)}
+    data-viewport-status="" data-scheme={statusScheme ?? undefined}>
     {status.preview ? <ViewPreviewLabel /> : null}
     <ViewUpdateStatus status={status.update ?? IDLE_STATUS} onRetry={status.onRetry ?? undefined} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
   </div>;
@@ -331,7 +335,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
         {chromeHidden || previewing || !contextMenu ? null : <ViewportContextMenu {...contextMenu} />}
         <div className={cn("contents", scheme)}><ViewerLoadingOverlay loading={loading} operationKey={file} /></div>
         {/* The alert card, last: over the tools, which a warning the view survives keeps on screen. */}
-        {previewing || !alert ? null : <ViewerAlertCard {...alert} file={alert.file ?? file} />}
+        {previewing || !alert ? null : <div className={cn("contents", scheme)} data-view-alert-scope=""><ViewerAlertCard {...alert} file={alert.file ?? file} /></div>}
       </div>
       {/* The strip's column and Quick Edit's bar: centred on the whole view, always, whatever the panels do, and over
           them where they meet (a layer of their own over the panels, an overlaid one too); hidden and inert in Preview,
