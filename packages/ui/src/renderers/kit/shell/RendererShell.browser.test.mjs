@@ -1059,25 +1059,48 @@ test('the panel always pushes, and starts collapsed where the model would keep u
   await waitMode('push');
   assert.ok(await besideStage());
   assert.equal(await drawnWidth(), 232, 'a narrower view never narrows the panel');
-  // Below it collapses on its own, unwritten; opened then, it pushes too, and Escape leaves it where it is.
+  // Below it collapses on its own, unwritten, and wide again it opens on its own: with no choice on the file, it
+  // follows the view across the line.
   await width(867);
   await waitMode('closed');
-  assert.ok(!/"open":false/.test(await kept()), 'a collapse the width made is not kept');
+  assert.ok(!/"open":/.test(await kept()), 'what the width does is not kept');
+  await width(1300);
+  await waitMode('push');
+  await width(700);
+  await waitMode('closed');
+  // Opened by the person in the narrow view: it pushes, and that choice holds (kept), narrower still or wide.
   await pane.locator('[data-navbar-panel="left"][aria-expanded="false"]').click();
   await waitMode('push');
   assert.ok(await besideStage(), 'opened in a narrow view, it pushes');
   assert.equal(await drawnWidth(), 232, 'opened in a narrow view, at its one width');
   assert.ok(await centredOnArea(), 'the strip stays on the view\'s centre, over the panel');
+  assert.ok(/"open":true/.test(await kept()), 'the choice is kept');
   await page.keyboard.press('Escape');
   assert.equal(await mode(), 'push');
-  assert.ok(!/"open":/.test(await kept()), 'nothing the width did was kept');
-  // Wide again: open, as the person left it.
+  // Its grip's bounds are fixed whatever the view: 200px and 480px, in a 700px view too; the width is kept.
+  const grip = pane.getByRole('separator', { name: 'Resize panel' });
+  assert.deepEqual([await grip.getAttribute('aria-valuemin'), await grip.getAttribute('aria-valuemax')], ['200', '480']);
+  await grip.press('Home');
+  await page.waitForFunction(() => Math.round(document.querySelector('[data-testid="one"] aside[data-flat-panel]').getBoundingClientRect().width) === 200);
+  await grip.press('End');
+  await page.waitForFunction(() => Math.round(document.querySelector('[data-testid="one"] aside[data-flat-panel]').getBoundingClientRect().width) === 480);
   await width(1300);
-  await waitMode('push');
-  // A person's close is kept: closed by its button, the panel stays closed when the view is wide.
+  assert.equal(await mode(), 'push');
+  // A person's close is kept, and holds as the view widens; reopened, at the width it had.
   await pane.locator('[data-navbar-panel="left"]').click();
   assert.equal(await mode(), 'closed');
   assert.ok(/"open":false/.test(await kept()));
+  await width(1400);
+  assert.equal(await mode(), 'closed', 'closed by the person, a wide view leaves it closed');
+  await pane.locator('[data-navbar-panel="left"]').click();
+  await waitMode('push');
+  assert.equal(await drawnWidth(), 480, 'reopened at the width it was dragged to');
+  await pane.getByRole('separator', { name: 'Resize panel' }).press('Home');
+  await grip.press('ArrowRight');
+  await grip.press('ArrowRight');
+  await page.waitForFunction(() => Math.round(document.querySelector('[data-testid="one"] aside[data-flat-panel]').getBoundingClientRect().width) === 232);
+  await pane.locator('[data-navbar-panel="left"]').click();
+  assert.equal(await mode(), 'closed');
   // A mouse resting on the toggle peeks it: over the view, the canvas the size it was and the camera where it was;
   // a click then pins it, and the canvas narrows by the panel's width, as it always has.
   const view = () => page.evaluate(() => {

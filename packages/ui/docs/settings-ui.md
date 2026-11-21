@@ -810,14 +810,18 @@ structure. Every rule here, and why:
   panel's padding, never its content — and the head's rule, a scrolled row and the sticky actions foot end inside the
   card, clipped to its rounded inside; 4px leaves a row's fill, 8px out from the content line, 3px of the card's inside
   at the left and 4px at the right. Pinned, the panel is as it always was: full height, touching the edges, its rule at
-  its right. **A narrow pane starts it collapsed**: it starts open only where the model's area keeps 640px beside
-  it (`sidebars.js`'s `MIN_MODEL_WIDTH`), so the view at least 640px and the panel's width (872px with the 232px
-  panel), and collapsed below. **That
-  collapse isn't remembered**, so widening the view brings back the person's choice; opened over it, it pushes. The
-  strip and Quick Edit stay centred on the window, over the panel (the hard rule above).
+  its right. **Until the person chooses, the view decides**: on a file whose panel they have not opened or closed in
+  this session, it is open where the model's area keeps 640px beside the default-width panel (`sidebars.js`'s
+  `MIN_MODEL_WIDTH`: the view at least 640px and 232px, 872px, whatever width the grip has set, so a drag never
+  collapses the panel under the grip), collapsed below, and it follows the window as it
+  is resized across that line; what the width does is never kept. **Once they open or close it on a file** (its
+  toggle, its key, a peek pinned), **their choice holds there at any width**: no window re-opens or re-collapses it. A
+  peek is no choice. Another file follows the view until it has a choice of its own. The strip and Quick Edit stay
+  centred on the window, over the panel (the hard rule above).
 - **What is kept is the person's choice, per file, for the session** (the file's entry in the tab's settings,
-  `filePanel.js`: `open`, `width`, `tab`); a record from when the view had a right panel (`right`,
-  `rightWidth`, `sections`), or from when \ alone hid everything (`hidden`), is read as nothing.
+  `filePanel.js`: `open`, `width`, `tab`): open or closed, the width they dragged it to (kept as it is closed,
+  reopened and peeked) and the tab; a record from when the view had a right panel (`right`, `rightWidth`, `sections`),
+  or from when \ alone hid everything (`hidden`), is read as nothing.
 - **Its tabs**: the structure's first (Model; a board's Parts, Nets and Layers; a schematic's Parts, Nets and
   Hierarchy; a drawing's Layers; a robot's Links), then **Params**, **Joints** and **Animation**, each only where
   the file has it. Their content is as it was in the right panel's sections: Parameters' two-row sliders with the
@@ -862,12 +866,15 @@ structure. Every rule here, and why:
   width in English beside the search's icon, the widest (Model, Params, Motion) with 7.5px to spare; a fourth, and a
   translation that runs longer (Japanese's model tabs), is ⋯'s. **The tabs that do not fit are ⋯'s items**
   (`FlatPanel.jsx`'s `fitTabs`, measured on a hidden ruler of every tab and the row's own width as a ResizeObserver
-  sees them, no fixed breakpoint), in order, each with its icon (and, searching, its count); **the open tab always
+  sees them, no fixed breakpoint), in order, each with its icon; **the open tab always
   shows**: where it would be in ⋯ it takes the last shown tab's place. Nothing in the row scrolls. The panel's width is
   its own: one fixed default (232px, `sidebars.js`'s `DEFAULT_PANEL_WIDTH`: the least width on the 8px grid where every
   three tabs fit, so the panel takes no more of the model than three need), or what the person's grip set it to, never
-  the view's or what the tabs need; the grip alone is bounded as it moves (200px, and the model kept 640px). A narrow
-  view collapses the panel; it never shrinks it.
+  the view's or what the tabs need, **between fixed bounds, the same at any window width**: 200px (`FlatPanel.jsx`'s
+  `FLAT_PANEL_MIN_WIDTH`) to 480px (`sidebars.js`'s `MAX_PANEL_WIDTH`, about twice the default), the grip working in
+  any desktop window within them and saying them (`aria-valuemin`, `aria-valuemax`); a width stored outside them reads
+  as the bound. A panel the person pins open in a narrow window may leave the model little room: their choice (the
+  view's own rule would have collapsed it). No window shrinks it. A phone's sheet has no grip.
 - **A tab's changed dot**: Params, Joints and Animation carry a dot (`kit/tools/ChangedDot.jsx`: 4px, `--brand-icon`)
   against their name's top-right, which moves neither the name nor the tab's width, while their state is off its
   default, exactly while the tab's Reset is on, from the state that turns Reset on (`FlatPanelChanged`, beside the
@@ -877,15 +884,26 @@ structure. Every rule here, and why:
 - **The search** covers the tree-like tabs alone — a STEP's or an `.xbf`'s Model, a robot's Links, a board's Parts,
   Nets and Layers, a schematic's Parts, Nets and Hierarchy, a drawing's Layers (`isStructureTab`: the `tree` section,
   or a tab handed in unless it says `search: false`) — never Params, Joints or Animation; its icon is there only where
-  the file has a searchable tab. Pressed (or **/**), the head row becomes the search box (`TreeFilterInput`, dense,
-  placeholder "Search", its accessible name what it searches — "Search the board", "Search the schematic", "Search the
-  drawing", "Search the model"), its X (**Close search**) where the icon was, and the tabs stand in a row under it; its
-  magnifier starts on the inset and its X's glyph ends on the right inset, as every icon in the panel does.
-  Like Figma's layer search it is **no box**: no border, fill or ring, only its icon and its text, 28px. **Escape or
-  the X closes it**, the query gone. A query filters **every searchable tab at once** (KiCad's Parts, Nets and Layers
-  alike), each searchable tab's name saying how many it finds (`useFlatPanelMatches`), the open tab showing its own;
-  opened from a tab it does not cover it opens the first it does, and a query that finds nothing in the open tab and
-  something in another opens the first such, until a tab is chosen by hand.
+  the file has a searchable tab. Pressed (or **/**), **the head's row becomes the search box** (`TreeFilterInput`,
+  dense, placeholder "Search", its accessible name what it searches — "Search the board", "Search the schematic",
+  "Search the drawing", "Search the model"), its X (**Close search**) where the icon was: one row, no tabs, no title,
+  no counts, no ⋯ — there is no point in tabs while searching. **Nothing under it moves**: the box takes the row as
+  it is (a single tab's title row, 28px with no rule; the tabs' row, 32px over its rule), at the same height, place and
+  padding, so the body's top and every row under it stay at their pixel, open or shut (`PanelInset.browser.test.mjs`
+  measures it, in the docked panel and the peek card alike); its magnifier starts on the inset and its X's glyph
+  ends on the right inset, as every icon in the panel does. Like Figma's layer search it is **no box**: no border,
+  fill or ring, only its icon and its text, 28px. **An empty box changes only the head**: the body stays the tab that
+  was open, scrolled, picked and folded as it was, whatever the tab (Joints and Params alike). **A query shows
+  results, and only results**: a file of one tree-like tab (a model's Model, a robot's Links, a GLB's, a 3MF's or an
+  STL's Model, a drawing's Layers) shows that tree's hits, whatever tab was open; a file of several (a board's Parts,
+  Nets and Layers; a schematic's Parts, Nets and Hierarchy) shows **one list across them**, a group per tab that finds
+  something, in the tabs' order, each under the panel's muted 28px heading (`TreeRowHeading`) of the tab's name and its
+  count ("Parts 5", `useFlatPanelMatches`); a tab that finds nothing has no group, and nothing found anywhere is one
+  line. Params, Joints and Animation are never searched nor shown while a query is. A hit is its tab's, as in it: a
+  press picks it, hover lights it, its row's actions work, no tab chosen for it; the arrows walk the hits through the
+  groups in order (the cursor drawn in one group at a time) and Enter picks under it. **Escape or the X closes it**,
+  the query gone, and the head and the body are what they were — the tab that was open, scrolled where it was: the
+  search never changes which tab is open.
 - **One tab is a title.** A panel with a single tab (a Model with nothing to Position or set, a drawing's Layers, a board
   read without its index) draws no pill: its name, a plain title at the tabs' size and the open tab's weight (500) in
   the tab's place, and no rule under the head, so the title flows straight into its list. **The title is a list row**:
@@ -1050,9 +1068,10 @@ structure. Every rule here, and why:
   file's name) and the sheets each places, in page order, each row the Model tree's — a branch's
   chevron or a sheet's glyph, its name, its page number as its detail, its file in its tooltip — every
   sheet open, the sheet shown lit; a press on a row shows that sheet, the way back up from one entered.
-- **Search is the panel's.** What is typed filters every searchable tab at once; the open tab shows its hits, the match
-  lit (`TreeFilterHighlight`) — the layers or sheets whose names match, the Parts' and the Nets' ranked hits (the
-  arrows and Enter walk and pick the open tab's, else the first list's) — and one line where it finds nothing there.
+- **Search is the panel's.** What is typed filters every searchable tab at once; the hits are the results (one tree's,
+  or one list grouped by tab: [The panel](#the-panel)), the match lit (`TreeFilterHighlight`) — the layers or sheets
+  whose names match, the Parts' and the Nets' ranked hits (the arrows walk them through the groups, Enter picks) — and
+  one line where it finds nothing.
   Escape or the box's X closes it, each tree folded and open as the person left it: a search opens or shuts no tree's
   own rows. Most tabs list their hits flat, with
   no chevron (the Model's, the Links', the Parts', the Nets', a board's layers, the Hierarchy); a
@@ -1062,9 +1081,8 @@ structure. Every rule here, and why:
   reveal on a hover of the view's edge, and a pick on the picture never opens it; a mouse resting on its toggle peeks it,
   over the view and pushing nothing, until the pointer has left both ([The panel](#the-panel)).
   ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search with the keyboard in the box, while the view has
-  the keyboard. Docked, open or collapsed is the person's, and so is its width (232px at first; from a grip on its
-  right edge, Left/Right by 16px, from 200px to what leaves the model 640px, and, before the view is measured, no
-  wider than it is). **All of the panel's state is
+  the keyboard. Docked, open or collapsed is the person's once they choose, and so is its width (232px at first; from
+  a grip on its right edge, Left/Right by 16px, from 200px to 480px at any window width). **All of the panel's state is
   the file's**, as its camera and its layers are: open or collapsed, the width and the tab are kept in
   the file's view (`panel`, `file-viewer/filePanel.js`), written by the panel's
   own state (`useFlatPanelState`) for every view that has a panel, 2D and 3D alike, and merged into the
@@ -1078,8 +1096,8 @@ structure. Every rule here, and why:
   the pane it was framed in (`kit/viewport/flatView.js`), so a file reopened with its panel open (the
   canvas the whole view until the panel docks) comes back exactly as it was left. Zoom to fit and 100%
   measure the room beside the panel. A file whose panel the person has not opened or closed has it open, and collapsed
-  (by the width, not kept) where open it would leave the model under 640px; once they have chosen, the choice is the file's at any width, and a
-  panel opened always pushes ([The panel](#the-panel)). **On a phone** (under 600px) the panel is a sheet from the
+  (by the width, not kept) where open it would leave the model under 640px, following the window; once they have
+  chosen, the choice is the file's at any width, and a panel opened always pushes ([The panel](#the-panel)). **On a phone** (under 600px) the panel is a sheet from the
   left, in every renderer ([A phone's sidebar](#a-phones-sidebar)): `FlatPanel`'s phone page (`mode: "page"`, the
   desktop's head, tabs, search and rows) inside shadcn's Sheet; ⌘\\ opens and shuts it
   too, and / does nothing there.

@@ -13,7 +13,7 @@ import HoverTip, { useFrameHoverTip } from "./HoverTip.jsx";
 import { usePanelToggles } from "../../../file-viewer/panelToggles.js";
 import { ViewerElementContext, ViewerHostContext } from "../../../host/context.js";
 import { Sheet, SheetContent, SheetTitle } from "@cad/ui/primitives/sheet";
-import { sidebarLayout, sidebarWant, toggleSidebar } from "./sidebars.js";
+import { sidebarLayout, toggleSidebar } from "./sidebars.js";
 import { usePanelPeek } from "./usePanelPeek.js";
 import { hasOpenPopup } from "../../../lib/popups.js";
 import { ViewCornerSideProvider, viewCornerSide } from "./ViewCorner.jsx";
@@ -131,19 +131,18 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   // What a press would pick, beside the pointer.
   const hoverTip = useFrameHoverTip({ hovered: inspect?.hovered || "", describe: inspect?.describe || null, tip: inspect?.tip || null, enabled: selecting && !toolsHidden && !previewing });
   const flat = useFlatPanelState({ frameRef: root, kind: panel?.kind ?? "", toolStack: layout, onToolStackChange: onLayoutChange, compact: Boolean(compact) });
-  // The choice kept (the file's entry in the tab's settings, `filePanel.js`): open or closed. The panel opened over the
-  // width's collapse is the view's for now, kept nowhere.
+  // The person's choice on this file (its entry in the tab's settings, `filePanel.js`): open, closed, or none yet (the
+  // view's width decides, `sidebars.js`).
   const kept = flat.record;
-  const [opened, setOpened] = useState(false);
   // The panel is there from the view's first frame, the file still loading: its kind says it has one (its tabs fill as
   // the file arrives), so neither it nor its toggle comes in late and pushes the model aside. A load that failed, or a
   // compact host, has none.
   const has = sided && !(failed ?? chromeHidden) && !compact;
-  const sidebarState = { frameWidth: flat.frameWidth, panelWidth: flat.width, want: sidebarWant(kept.open), has: has && !mobile, opened, mobile, phoneHas: has };
+  const sidebarState = { frameWidth: flat.frameWidth, choice: kept.open, has: has && !mobile, mobile, phoneHas: has };
   const { mode } = sidebarLayout(sidebarState);
   const stateRef = useRef(sidebarState);
   stateRef.current = sidebarState;
-  // A choice the person made is kept, for the file; a collapse the width made never is.
+  // A choice the person made is kept, for the file, and holds at any width; what the width does is never kept.
   const change = flat.change;
   // A peek (`usePanelPeek.js`): the collapsed panel over the view while a mouse rests on its toggle; never kept.
   const peek = usePanelPeek({ enabled: has && !mobile && !previewing && mode === "closed" });
@@ -154,9 +153,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     if (!current.has) return;
     // A click (or ⌘\) while it peeks pins it: the panel opens as a click on a collapsed one always has.
     closePeek(false);
-    const next = toggleSidebar(current);
-    if (next.kept) change({ open: next.want });
-    setOpened(next.opened);
+    change({ open: toggleSidebar(current).open });
   }, [change, closePeek]);
   // Escape puts a peek away, before anything else of the view's (the tool in hand, the selection: the view's ladder
   // leaves it to the peek, `lib/popups.js`), after a popup or the search box in it has spent its own.

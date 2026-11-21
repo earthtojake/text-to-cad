@@ -127,9 +127,14 @@ function measurePanel() {
     const range = document.createRange();
     range.setStart(node, start);
     range.setEnd(node, end);
-    const rects = [...range.getClientRects()].filter(rect => rect.width > 0);
+    // What a clipping box round it (a name that truncates) leaves of it: glyphs cut off are not drawn.
+    let clip = Infinity;
+    for (let box = node.parentElement; box && box !== panel; box = box.parentElement) {
+      if (getComputedStyle(box).overflowX !== 'visible') clip = Math.min(clip, box.getBoundingClientRect().right);
+    }
+    const rects = [...range.getClientRects()].filter(rect => rect.width > 0 && rect.left < clip - 0.5);
     if (!rects.length) continue;
-    const left = Math.min(...rects.map(rect => rect.left)), right = Math.max(...rects.map(rect => rect.right));
+    const left = Math.min(...rects.map(rect => rect.left)), right = Math.min(clip, Math.max(...rects.map(rect => rect.right)));
     push(node.parentElement, { left, right, top: rects[0].top }, 'text', text.trim());
   }
   const BOX = '[data-flat-panel-body] :is([role=combobox], [aria-haspopup=menu], [data-slot=checkbox])';
@@ -246,6 +251,31 @@ for (const file of Object.keys(FILES)) {
       return icon.left - document.querySelector('[data-testid="one"] [data-flat-panel]').getBoundingClientRect().left;
     });
     assert.ok(Math.abs(toggle - INSET) <= 0.5, `${file}: the navbar's toggle's icon at ${toggle}px`);
+    // Opening the search (its icon, or /) and closing it move nothing under the head: the body's top, the open tab's
+    // first row and the scroll stay at their pixel, in a single title's row (the drawing) and the tabs' (the model, its
+    // last tab open: not one the search covers).
+    if (file === 'hinge.step' || file === 'layered.dxf') {
+      const still = () => page.evaluate(() => {
+        const panel = document.querySelector('[data-testid="one"] [data-flat-panel]'), body = panel.querySelector('[data-flat-panel-body]');
+        const shown = body.querySelector(':scope > [data-flat-panel-section]:not([hidden])');
+        const first = shown?.querySelector('[data-tree-row], [data-slider-field], [data-panel-row], li, button') ?? shown;
+        const box = element => { const rect = element.getBoundingClientRect(); return [rect.left, rect.top, rect.width, rect.height]; };
+        return { body: body.getBoundingClientRect().top, first: first ? box(first) : null, scroll: panel.querySelector('[data-flat-panel-scroller]').scrollTop };
+      });
+      const before = await still();
+      await pane.locator('[data-flat-panel-search-open]').click();
+      await pane.locator('[data-flat-panel-search] input').waitFor();
+      assert.deepEqual(await still(), before, `${file}: the search's icon moves nothing`);
+      await page.keyboard.press('Escape');
+      await pane.locator('[data-flat-panel-search]').waitFor({ state: 'detached' });
+      assert.deepEqual(await still(), before, `${file}: closing it moves nothing`);
+      await pane.locator('[data-cad-surface]').focus();
+      await page.keyboard.press('/');
+      await pane.locator('[data-flat-panel-search] input').waitFor();
+      assert.deepEqual(await still(), before, `${file}: / moves nothing`);
+      await page.keyboard.press('Escape');
+      await pane.locator('[data-flat-panel-search]').waitFor({ state: 'detached' });
+    }
     // The collapsed panel peeking over the view (a mouse resting on its toggle) is the same panel, on the same lines.
     if (file === 'hinge.step') {
       // The surface's gaps to the view's frame (left, top, bottom): pinned it touches the edges; peeked it is a card

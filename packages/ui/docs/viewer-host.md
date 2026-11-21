@@ -142,8 +142,9 @@ picture) and, in Preview, Preview's own bar (`settings-ui.md#camera-animation-an
 DXF's are its own canvas's. Nothing a renderer does opens or closes the explorer (only the
 file's name opens that). The layout a person gives the tool stack's panels is one
 of the tab's settings (`settings.toolStack` of the tab record, `@cad/ui/tab-store`),
-beside the appearance and the home's layout; the panel — open or collapsed by the person (a collapse the
-view's width made is not kept, nor a peek), its width and its tab — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
+beside the appearance and the home's layout; the panel — open or collapsed by the person (a choice that then holds on
+that file at any window width; what the view's width does is not kept, nor a peek), its width (200 to 480px) and its
+tab — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
 into the renderer's record by `FileViewer`).
 The model area is drawn in **the viewport's theme**, not the host's `colorScheme`: the person's Background
 (`settings.viewportBackground` of the tab record: Light by default, or Dark), resolved by
@@ -623,7 +624,8 @@ not open that file" and the reason otherwise, each with a Go home button where t
 The viewport's edges and corners are the shell's, never the host's: the tool strip at the
 top centre of the window, ending in Preview (a 3D view's), the tool in hand's sub-toolbar under it, the one panel
 (the file's structure, then its Parameters, Joints and Animation, as tabs) docked at the left, pinned open always pushing
-the model aside (collapsed on its own where it would leave the model under 640px; a mouse resting on its toggle peeks
+the model aside (collapsed on its own where it would leave the model under 640px, until the person opens or closes it
+on that file; a mouse resting on its toggle peeks
 it over the model as a floating card, pushing nothing, and only the toggle pins it), Quick Edit's bar at the bottom centred on the window as the strip is
 (the panel never moves either; where they meet it they sit above it), the bottom row Quick Edit's alone, and at the
 top-right the camera's own control alone: the view cube (a 68px box at the corner's 12px inset), or a flat view's

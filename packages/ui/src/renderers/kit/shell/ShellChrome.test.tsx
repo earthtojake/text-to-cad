@@ -153,7 +153,7 @@ it("the strip is at the top centre with the stack under it; the view's panel is 
 });
 
 it("the panel's tabs are there whatever the tool, a tool's own section coming and going with it; a tab shows its section alone, its content kept; the tab, the width and a collapse are the person's, and never the tab's settings", () => {
-  // The view's frame as wide as the viewer, so the grip's bound is the model's 640px: 1280 - 640.
+  // The grip's bounds are fixed, whatever the view: 200 and 480px.
   const rect = Element.prototype.getBoundingClientRect;
   override(Element.prototype, 'getBoundingClientRect', { value(this: HTMLElement) {
     return this.hasAttribute('data-sidebar') ? DOMRect.fromRect({ x: 0, y: 0, ...VIEWER }) : rect.call(this);
@@ -173,7 +173,7 @@ it("the panel's tabs are there whatever the tool, a tool's own section coming an
   // Its width, from the grip on its right edge: 16px a key, Home and End to its bounds.
   const grip = screen.getByRole('separator', { name: 'Resize panel' });
   fireEvent.keyDown(grip, { key: 'End' });
-  expect([flatPanel().style.width, grip.getAttribute('aria-valuemax')]).toEqual(['640px', '640']);
+  expect([flatPanel().style.width, grip.getAttribute('aria-valuemin'), grip.getAttribute('aria-valuemax')]).toEqual(['480px', '200', '480']);
   fireEvent.keyDown(grip, { key: 'Home' });
   expect(flatPanel().style.width).toBe('200px');
   // Collapsed, it goes whole, nothing of it over the model (its toggle the navbar's); shown again, on the tab it showed.

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import FlatPanel, { FlatPanelChanged, fitTabs, useFlatPanel, useFlatPanelMatches } from './FlatPanel.jsx';
@@ -86,38 +86,90 @@ it('focuses its search once for each press of /, never again when it reopens or 
   expect(document.activeElement).toBe(search());
 });
 
-// The search's icon opens the search: the row is its box, the X where the icon was, the tabs under it. A query
-// filters every searchable tab at once, each tab's name counting what it finds; it never reaches a tab marked
-// `search: false` (Parameters, Joints, Animation), which reads no query. Escape or the X closes it.
-it('searches every searchable tab at once from the row\'s icon, counting on each tab, never a tab it does not cover; Escape or the X closes it', () => {
-  const onTab = vi.fn();
-  const tabs = [{ id: 'parts', label: 'Parts', content: <Hits items={['R1', 'R2', 'C1']} /> }, { id: 'nets', label: 'Nets', content: <Hits items={['GND', 'R_NET']} /> },
-    { id: 'notes', label: 'Notes', search: false, content: <Hits items={['R notes']} /> }];
-  render(<Panel tabs={tabs} first="parts" onTab={onTab} />);
+// A tab's hits as a tree draws them: its rows filtered by the panel's query (its count told), a press on one a pick,
+// and the arrows walking them while the panel hands it the keys (`keyed`), as `useTreeSearch` does: an arrow past its
+// end answers false, Home and End put the cursor on its first and last hit.
+function Walk({ items, onPick = () => {} }: { items: string[], onPick?: (item: string) => void }) {
+  const panel = useFlatPanel()!;
+  const query = panel.query.trim().toLowerCase();
+  const found = query ? items.filter(item => item.toLowerCase().includes(query)) : items;
+  useFlatPanelMatches(query ? found.length : null);
+  const [cursor, setCursor] = useState(0);
+  useEffect(() => setCursor(0), [query]);
+  const keys = useRef<(event: { key: string }) => boolean>(() => false);
+  keys.current = event => {
+    if (event.key === 'Home' || event.key === 'End') { setCursor(event.key === 'Home' ? 0 : found.length - 1); return true; }
+    const next = cursor + ({ ArrowDown: 1, ArrowUp: -1 } as Record<string, number>)[event.key];
+    if (Number.isNaN(next) || next < 0 || next >= found.length) return false;
+    setCursor(next);
+    return true;
+  };
+  useEffect(() => panel.registerKeys((event: { key: string }) => keys.current(event)), [panel.registerKeys]);
+  return <ul data-query={query}>{found.map((item, at) => <li key={item} data-cursor={panel.keyed !== false && query && at === cursor ? '' : undefined}>
+    <button type="button" onClick={() => onPick(item)}>{item}</button></li>)}</ul>;
+}
+const section = (id: string) => document.querySelector<HTMLElement>(`[data-flat-panel-section="${id}"]`)!;
+const shownSections = () => [...document.querySelectorAll<HTMLElement>('[data-flat-panel-section]')].filter(node => !node.hidden).map(node => node.getAttribute('data-flat-panel-section'));
+const cursorAt = () => [...document.querySelectorAll('[data-cursor]')].map(node => node.textContent);
+const headBox = () => ({ compact: row().hasAttribute('data-compact'), rule: row().classList.contains('border-border'), height: row().className.match(/\bh-[78]\b/)?.[0],
+  padding: [row().style.paddingTop, row().style.paddingBottom, row().style.paddingLeft, row().style.paddingRight] });
+
+// The search's icon (or /) makes the head's row the search box: the same row, its padding, height and rule as they
+// were, no tabs; an empty box changes nothing in the body. A query shows results alone: where several tabs are
+// searched, ONE list, a group per tab that finds something, in the tabs' order, under its name and count; the arrows
+// walk the groups in order; a press on a hit is its pick. Nothing found, one line. Closed, the tab that was open.
+it('turns the head\'s row into the search box, results grouped by tab across the tree-like tabs, the arrows walking them in order; closed, the tab that was open', () => {
+  const onTab = vi.fn(), onPick = vi.fn();
+  const tabs = [{ id: 'parts', label: 'Parts', content: <Walk items={['R1', 'R2', 'C1']} onPick={onPick} /> }, { id: 'nets', label: 'Nets', content: <Walk items={['GND', 'R_NET']} onPick={onPick} /> },
+    { id: 'layers', label: 'Layers', content: <Walk items={['B.Cu', 'F.Cu']} /> }, { id: 'notes', label: 'Notes', search: false, content: <Walk items={['R notes']} /> }];
+  render(<Panel tabs={tabs} first="notes" onTab={onTab} />);
+  const head = headBox();
   fireEvent.click(searchIcon()!);
-  expect(document.activeElement).toBe(box());
-  // The row is the box, its X in the icon's place, and the tabs stand under it.
-  expect([row().hasAttribute('data-searching'), searchIcon(), screen.getByRole('button', { name: 'Close search' }) !== null,
-    row().firstElementChild!.contains(box()), screen.getByRole('tablist') !== null]).toEqual([true, null, true, true, true]);
+  // One row: the box, the X in the icon's place; no tabs; the row's box as it was; the body as it was (Notes).
+  expect([document.activeElement === box(), screen.queryByRole('tablist'), screen.getByRole('button', { name: 'Close search' }) !== null, headBox(), shownSections()])
+    .toEqual([true, null, true, head, ['notes']]);
   fireEvent.change(box()!, { target: { value: 'r' } });
-  // Parts 2 and Nets 1 (each its own count), Notes none: its list reads no query.
-  expect(tabNames()).toEqual(['Parts2', 'Nets1', 'Notes']);
-  const sections = () => Object.fromEntries([...document.querySelectorAll<HTMLElement>('[data-flat-panel-section]')].map(section => [section.getAttribute('data-flat-panel-section'),
-    [section.hidden, section.querySelector('ul')!.getAttribute('data-query'), section.querySelectorAll('li').length]]));
-  expect(sections()).toEqual({ parts: [false, 'r', 2], nets: [true, 'r', 1], notes: [true, '', 1] });
-  // A query that finds nothing in the open tab, something in another: that tab.
-  fireEvent.change(box()!, { target: { value: 'gnd' } });
-  expect(onTab).toHaveBeenLastCalledWith('nets');
-  expect(tabNames()).toEqual(['Parts0', 'Nets1', 'Notes']);
-  // Escape closes it: the tabs' row again, no counts, the icon back.
+  // Parts 2 and Nets 1, each under its name and count; the Layers find none (no group); Notes is not searched.
+  expect([shownSections(), [...document.querySelectorAll('[data-flat-panel-group-heading]')].map(heading => heading.textContent)])
+    .toEqual([['parts', 'nets'], ['Parts2', 'Nets1']]);
+  expect([section('notes').querySelector('ul')!.getAttribute('data-query'), section('parts').getAttribute('role')]).toEqual(['', null]);
+  // The arrows: Parts' hits, then on past their end into the Nets', and back up into the Parts' last.
+  expect(cursorAt()).toEqual(['R1']);
+  fireEvent.keyDown(box()!, { key: 'ArrowDown' });
+  fireEvent.keyDown(box()!, { key: 'ArrowDown' });
+  expect(cursorAt()).toEqual(['R_NET']);
+  fireEvent.keyDown(box()!, { key: 'ArrowUp' });
+  expect(cursorAt()).toEqual(['R2']);
+  // A hit is its tab's: a press picks it, no tab chosen for it.
+  fireEvent.click(within(section('nets')).getByRole('button', { name: 'R_NET' }));
+  expect([onPick.mock.calls, onTab.mock.calls]).toEqual([[['R_NET']], []]);
+  // Nothing found anywhere: one line.
+  fireEvent.change(box()!, { target: { value: 'zzz' } });
+  expect([shownSections(), document.querySelectorAll('[data-flat-panel-empty]').length]).toEqual([[], 1]);
+  // Escape closes it: the tabs again, on Notes, as before; nothing chose a tab meanwhile.
   fireEvent.keyDown(box()!, { key: 'Escape' });
-  expect([box(), searchIcon() !== null, tabNames()]).toEqual([null, true, ['Parts', 'Nets', 'Notes']]);
-  // Opened from a tab it does not cover, it opens the first it does; its X closes it.
-  fireEvent.click(screen.getByRole('tab', { name: 'Notes' }));
+  expect([box(), screen.getByRole('tab', { selected: true }).querySelector('[data-flat-panel-tab-name]')!.textContent, shownSections(), headBox(), onTab.mock.calls]).toEqual([null, 'Notes', ['notes'], head, []]);
+});
+
+// One tree-like tab (a model's Model beside its Joints): a query shows that tree's hits, whatever tab was open, and
+// clearing it shows that tab again; a single tab's title row becomes the box as it is, 28px with no rule.
+it('searches the one tree from any tab and gives the open tab back as the query clears; a lone title\'s row is the box\'s, unchanged', () => {
+  const onTab = vi.fn();
+  render(<Panel tabs={[{ id: 'tree', label: 'Model', content: <Walk items={['base', 'arm']} /> }, { id: 'joints', label: 'Joints', search: false, content: <p>pose</p> }]}
+    first="joints" onTab={onTab} />);
   fireEvent.click(searchIcon()!);
-  expect(onTab).toHaveBeenLastCalledWith('parts');
+  expect(shownSections()).toEqual(['joints']);
+  fireEvent.change(box()!, { target: { value: 'ar' } });
+  expect([shownSections(), section('tree').querySelectorAll('li').length, document.querySelector('[data-flat-panel-group-heading]')]).toEqual([['tree'], 1, null]);
+  fireEvent.change(box()!, { target: { value: '' } });
+  expect(shownSections()).toEqual(['joints']);
   fireEvent.click(screen.getByRole('button', { name: 'Close search' }));
-  expect(box()).toBeNull();
+  expect([box(), screen.getByRole('tab', { selected: true }).querySelector('[data-flat-panel-tab-name]')!.textContent, onTab.mock.calls]).toEqual([null, 'Joints', []]);
+  cleanup();
+  render(<Panel tabs={[{ id: 'layers', label: 'Layers', content: <Walk items={['CUT', 'BEND']} /> }]} first="layers" />);
+  const title = headBox();
+  fireEvent.click(searchIcon()!);
+  expect([title.compact, title.rule, headBox(), row().querySelector('[data-flat-panel-heading]')]).toEqual([true, false, title, null]);
 });
 
 // Where no tab is searchable (Parameters, Joints and Animation alone), there is no search icon, and / opens nothing.
