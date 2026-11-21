@@ -205,8 +205,8 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   policy in the relevant `skills/<skill>/SKILL.md` or `references/` file.
 - A skill teaches a tool and how to check work done with it, and stays short: a line is
   added only for something an agent got wrong without it, with the evidence in the pull
-  request. A change to what a skill tells agents to do is tested A/B
-  (`scripts/bench/skill_ab.py`), and a rewrite is audited against the text it replaced
+  request. A rewrite of a skill, or a change of its method, is tested A/B
+  (`scripts/bench/skill_ab.py`) and audited against the text it replaced
   ([writing a skill](docs/contributing/writing-a-skill.md)). A skill's Setup block,
   its `name` and `description`, and any line on what the agent does not do on a person's
   behalf change only with a person's explicit approval.
