@@ -99,8 +99,8 @@ function FullSizeButton({ bridge }: { bridge: Bridge }) {
   const label = t('navbar.fullSize');
   const expand = () => void bridge.request('ui/request-display-mode', { mode: 'fullscreen' }).catch(() => {});
   return <TooltipHint content={label}>
-    <Button variant="ghost" size="icon-xs" className="size-6 text-muted-foreground hover:text-foreground" aria-label={label} onClick={expand}>
-      <Maximize2 className="size-3.5" aria-hidden="true" />
+    <Button variant="ghost" size="icon-xs" className="size-control shrink-0 rounded-md text-muted-foreground hover:text-foreground" aria-label={label} onClick={expand}>
+      <Maximize2 className="size-4" aria-hidden="true" />
     </Button>
   </TooltipHint>;
 }

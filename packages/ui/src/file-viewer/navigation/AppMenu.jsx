@@ -113,8 +113,8 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, colorSchem
           </TooltipHint> : null}
         </span>
         <span className="grid size-icon-button shrink-0 place-items-center" aria-hidden="true">
-          <span className="grid size-3.5 place-items-center rounded-[4px] border border-input text-primary-foreground group-data-[state=checked]/setting:border-primary group-data-[state=checked]/setting:bg-primary">
-            <Check className="hidden size-3 group-data-[state=checked]/setting:block" strokeWidth={3} />
+          <span className="grid size-(--cad-check) place-items-center rounded-[4px] border border-input text-primary-foreground group-data-[state=checked]/setting:border-primary group-data-[state=checked]/setting:bg-primary">
+            <Check className="hidden size-[calc(var(--cad-check)-2px)] group-data-[state=checked]/setting:block" strokeWidth={3} />
           </span>
         </span>
       </MenuPrimitive.CheckboxItem>),
