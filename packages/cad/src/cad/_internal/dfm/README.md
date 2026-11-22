@@ -91,14 +91,19 @@ from each part's result, which the process that measures keeps as each part is d
 `parts/`): a document one part of which was edited measures that part alone, and a check stopped at its limits
 measures, the next time, the parts it had not finished. Both processes measure a part on its own and in its own
 frame (CNC's machine frame, a sheet's own), so a part's result is the same in any document; a CNC part's is
-found by the families an earlier part failed too, since it skips them, and its walls and gaps keep their exact
-figures for the first 200 of its own, among which the document's first 200 always are. A part's result is found
-by its geometry and how it stands (its exact placement, never a result moved from another), its name and owner,
-the options its measurement reads and the code and libraries that measured it; quiddity's answer for a part is
-kept by the part's geometry and how it stands alone, so a part is asked once for each way it stands. Nothing is
-kept that the next measurement could make otherwise (the same `transient` rules as a report's), or that code
-edited since its process loaded it measured. Molding and printing keep no part's result: a mold's time and ray
-budgets are its document's, and a print's parts stand among each other on one plate and in one build volume.
+found by the families an earlier part failed too, since it skips them. A CNC report refines its first 200 walls
+and gaps as it always did, and each refinement is kept with its part's result, so none is made twice. A part's
+result is found by its geometry and how it stands (its exact placement, never a result moved from another), its
+name and owner, the options its measurement reads and the code and libraries that measured it; quiddity's answer
+for a part is kept by the part's geometry and how it stands alone, so a part is asked once for each way it stands.
+A part's result is kept on the rules a report is kept by -- whole, with a family not measured, or as a part that
+does not read -- but never where its measuring went on past a failure for want of memory it caught, where
+quiddity's answer for it is not one the part would give again (the moment's, or another release's), or where its
+measuring code was edited since its process loaded it. So a report put together from kept results is the one a
+fresh measurement makes with quiddity available, even while quiddity cannot be reached. A kept result a report
+cannot be put together from is removed and its part measured afresh. Molding and printing keep no part's result:
+a mold's time and ray budgets are its document's, and a print's parts stand among each other on one plate and in
+one build volume.
 
 A check outlives its caller, as a build does: a shell's time limit cutting its caller off leaves it running, its
 result kept, so the same check asked again finds it; asked while it still runs, it waits for that check and

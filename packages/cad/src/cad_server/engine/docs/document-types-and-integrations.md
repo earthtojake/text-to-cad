@@ -309,21 +309,28 @@ each part the CNC check asks it of (`features`), and reads them before it measur
 its geometry key and how it stands -- the exact matrix its document places it by, an occurrence's shift from the
 first, the token of the mesh it was read with, which solid of a part of several it is -- with, for a measurement,
 its name and its refs' owner, the options the measurement reads, and what measured it (the digest of that
-process's measuring code and the libraries); a CNC part also by whether quiddity read its holes and the families
-an earlier part failed, which it does not measure. So the same part standing the same way, named the same, is one
-entry in any document; placed otherwise, renamed or under another owner, another. A result is never moved from
-one placement to another (a moved point is rounded); a copy of a part inside a document is said again from its
-first, as it always was. A part's features are kept by its geometry and how it stands alone, and only an answer
-the part would give again (available, or for a reason of its own: `_dfm_cnc_recognised.REPEATABLE`). Nothing is
-kept that its process could measure otherwise the next time (a failure for want of memory; a part whose holes
-quiddity was not available for, for a reason of the moment), nor what a process whose code was edited since it
-loaded measured. Each file is `<cache>/parts/<kind>/<xx>/<geometry key>-<digest of the rest>.json`, written whole
-by that process, so a check stopped at its limits keeps the parts it finished and the next measures the rest; one
-that does not read as its name says is removed, never served. The engine lists the folder after each check that
-held a checks process and holds it to 16384 files and 512 MB, the least recently used (by its time on disk, set
-again by a read) first, a half-written file swept once it is an hour old; `cad cache clean` removes it. Molding
-and printing keep nothing per part: a mold's time and ray budgets are its document's, and a print's parts stand
-among each other on one plate.
+process's measuring code, the libraries and `kept.MEASURE_VERSION`); a CNC part also by whether quiddity is asked
+of it at all and the families an earlier part failed, which it does not measure. So the same part standing the same
+way, named the same, is one entry in any document; placed otherwise, renamed or under another owner, another. A
+result is never moved from one placement to another (a moved point is rounded); a copy of a part inside a document
+is said again from its first, as it always was. A CNC report refines its first 200 walls and gaps as it always did,
+each on its part's model, and keeps each refinement with that part's result, so no refinement is made twice and a
+check refines no more than before. A part's features are kept by its geometry and how it stands alone, and only an
+answer the part would give again (available from the one release whose records are taken, or unavailable for a
+reason of its own: `_dfm_cnc_recognised.REPEATABLE`); a CNC part's result is kept on the same terms. So a report
+put together from kept results is the one a fresh measurement makes with quiddity available, and stays so while
+quiddity cannot be reached or another release is installed: the kept reading is the better one, never a stale
+one. Nothing is kept that its process could measure otherwise the next time: a failure for want of memory, by any
+of its names, whether it failed a family or was caught and gone on past; a part whose holes quiddity was not
+available for, for a reason of the moment; or what code measured that was edited after its process loaded it, or
+on disk before it was imported (the code is asked again as each part is kept). Each file is
+`<cache>/parts/<kind>/<xx>/<geometry key>-<digest of the rest>.json`, written whole by that process, so a check
+stopped at its limits keeps the parts it finished and the next measures the rest; one that does not read as its
+name says, or that a report cannot be put together from, is removed and its part measured afresh, so no check fails
+for what was kept. The engine lists the folder after each check that held a checks process, never through a link,
+and holds it to 16384 files and 512 MB, the least recently used (by its time on disk, set again by a read) first, a
+half-written file swept once it is an hour old; `cad cache clean` removes it. Molding and printing keep nothing per
+part: a mold's time and ray budgets are its document's, and a print's parts stand among each other on one plate.
 
 **What is kept of an interference check** (`checks.py`), which keeps each pair's answer by the two parts'
 geometries itself: its result whole, by the document's version -- a model's generation, a file's bytes' digest
