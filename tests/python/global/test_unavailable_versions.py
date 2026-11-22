@@ -2,7 +2,7 @@
 
 PyPI never accepts a filename twice, so `scripts/release/unavailable-versions.txt` lists versions no
 release of text-to-cad can take. `check-version.sh` and `bump-version.sh` refuse them (Prepare Release
-runs the latter), and CONTRIBUTING.md names the same list for people.
+runs the latter), and docs/contributing/releases.md names the same list for people.
 """
 
 from __future__ import annotations
@@ -49,15 +49,15 @@ def _repo(root: Path, version: str) -> Path:
 
 
 class UnavailableVersionsTests(unittest.TestCase):
-    def test_the_list_is_the_burned_versions_and_contributing_names_the_same_ones(self) -> None:
+    def test_the_list_is_the_burned_versions_and_the_releases_guide_names_the_same_ones(self) -> None:
         listed = _listed()
         self.assertEqual(21, len(listed))
         self.assertEqual(len(listed), len(set(listed)))
-        contributing = repo_path("CONTRIBUTING.md").read_text(encoding="utf-8")
-        section = re.search(r"^### Versions a release cannot take\n(.*?)(?=^#{1,3} )", contributing, re.M | re.S)
-        self.assertIsNotNone(section, "CONTRIBUTING.md's Releases section names the versions a release cannot take")
+        releases = repo_path("docs/contributing/releases.md").read_text(encoding="utf-8")
+        section = re.search(r"^## Versions a release cannot take\n(.*?)(?=^#{1,2} )", releases, re.M | re.S)
+        self.assertIsNotNone(section, "docs/contributing/releases.md names the versions a release cannot take")
         documented = re.findall(r"`(\d+(?:\.\d+)+)`", section[1])
-        self.assertEqual(listed, documented, "CONTRIBUTING.md and unavailable-versions.txt list different versions")
+        self.assertEqual(listed, documented, "releases.md and unavailable-versions.txt list different versions")
 
     def test_bump_refuses_a_listed_version_and_accepts_0_10_0(self) -> None:
         with tempfile.TemporaryDirectory(prefix="unavailable-versions-") as root:

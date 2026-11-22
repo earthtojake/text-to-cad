@@ -24,15 +24,20 @@ class TheCopyIsTheCommand(unittest.TestCase):
                          "> apps/docs/src/lib/docs/cli-reference.generated.json")
 
     def test_every_command_cad_help_lists_is_in_it(self) -> None:
+        from cad.registry import INTEGRATIONS
         from cad_server.cli.document_types import OPERATIONS
         from cad_server.cli.integrations import OPERATIONS as INTEGRATION_OPERATIONS
 
         docs = reference.as_docs()
         listed = {command["command"] for group in (*docs["documentTypes"], *docs["integrations"])
                   for command in group["operations"]} | {command["command"] for command in docs["commands"]}
+        # A deprecated integration still answers, and `cad --help` no longer lists it: nor does the reference.
+        deprecated = {name for name, entry in INTEGRATIONS.items() if entry.deprecated}
         answered = {f"cad {name}" for name in set(cli._COMMANDS) - cli._UNLISTED} | {
-            f"cad {owner} {operation}" for owner, operation in (*OPERATIONS, *INTEGRATION_OPERATIONS)}
+            f"cad {owner} {operation}" for owner, operation in (*OPERATIONS, *INTEGRATION_OPERATIONS)
+            if owner not in deprecated}
         self.assertLessEqual(answered, listed)
+        self.assertFalse({command for command in listed if command.split()[1] in deprecated})
         # What else is there is a command's subcommand, after it: `cad server start` follows `cad server`.
         for command in sorted(listed - answered):
             self.assertIn(command.rsplit(" ", 1)[0], listed, command)

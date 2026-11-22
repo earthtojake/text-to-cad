@@ -100,8 +100,7 @@ def plate_drawing():               # a flat plate: its top face, laid on z=0
 
 @model
 def bracket_drawing():             # a bent part, unrolled, its bend lines on a layer of their own
-    cut, bends = unfold(bracket().shape, k_factor=0.4, bend_lines=True).children
-    return bd.Compound(children=[cut, bd.Compound(bends.edges(), label="BEND")], label="bracket_drawing")
+    return unfold(bracket().shape, k_factor=0.4, bend_lines=True)
 
 
 if __name__ == "__main__":
@@ -115,9 +114,8 @@ if __name__ == "__main__":
   and flattened the same way ([inputs](model-contract.md#inputs)).
 - **A bent part is `unfold(shape, k_factor=)`**, each bend unrolled by its bend allowance: faces
   laid flat one by one land on top of each other and are no blank. Without `bend_lines` it returns
-  the outline alone, one shape. With it, it returns the outline labelled `CUT` and a group of the
-  bends' centre lines labelled `BEND`: make the lines one shape, as above, or each is written as a
-  cut layer of its own and the export refuses it as an open cut. Take `k_factor` from the shop
+  the outline alone, one shape. With it, it returns the outline labelled `CUT` and the bends' centre
+  lines labelled `BEND`, each written as its own layer. Take `k_factor` from the shop
   ([sheet metal](manufacturing-sheet-metal.md#review-the-part)).
 - **Kerf is `bd.offset(profile, amount=...)`**, never hand-offset coordinates. Positive grows the
   profile (cut outside the line) and shrinks its holes, and the amount is how far each edge moves.

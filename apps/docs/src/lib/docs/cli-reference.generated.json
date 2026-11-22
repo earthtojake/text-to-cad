@@ -3405,106 +3405,6 @@
      ]
     }
    ]
-  },
-  {
-   "name": "orcaslicer",
-   "summary": "OrcaSlicer, the slicer, whose command line slices only with complete presets: `cad orcaslicer presets machine` lists the presets a person can select, from their own OrcaSlicer folders and the app's profiles, and `cad orcaslicer complete` writes a printer, a process and filaments complete, every parent merged in and the printer named as compatible, for OrcaSlicer's own command line to slice with",
-   "usage": "cad orcaslicer <operation> FILE [options]",
-   "operations": [
-    {
-     "command": "cad orcaslicer presets",
-     "summary": "list the presets of one kind a person can select (machine, process or filament), from their own OrcaSlicer folders and the app's profiles",
-     "usage": "cad orcaslicer presets [--match MATCH] [--profiles PROFILES] [--json] KIND",
-     "description": 126,
-     "arguments": [
-      {
-       "name": "KIND",
-       "help": 127,
-       "choices": [
-        "machine",
-        "process",
-        "filament"
-       ]
-      }
-     ],
-     "options": [
-      {
-       "flags": [
-        "--match"
-       ],
-       "metavar": "MATCH",
-       "help": 128
-      },
-      {
-       "flags": [
-        "--profiles"
-       ],
-       "metavar": "PROFILES",
-       "help": 129,
-       "repeatable": true
-      },
-      {
-       "flags": [
-        "--json"
-       ],
-       "help": 46
-      }
-     ]
-    },
-    {
-     "command": "cad orcaslicer complete",
-     "summary": "write a printer, a process and filaments complete for OrcaSlicer's command line: every parent merged in, the printer named as compatible",
-     "usage": "cad orcaslicer complete --printer PRINTER --process PROCESS [--filament FILAMENT] [--out OUT] [--profiles PROFILES] [--json]",
-     "description": 130,
-     "options": [
-      {
-       "flags": [
-        "--printer"
-       ],
-       "metavar": "PRINTER",
-       "help": 131,
-       "required": true
-      },
-      {
-       "flags": [
-        "--process"
-       ],
-       "metavar": "PROCESS",
-       "help": 132,
-       "required": true
-      },
-      {
-       "flags": [
-        "--filament"
-       ],
-       "metavar": "FILAMENT",
-       "help": 133,
-       "repeatable": true
-      },
-      {
-       "flags": [
-        "--out"
-       ],
-       "metavar": "OUT",
-       "help": 134
-      },
-      {
-       "flags": [
-        "--profiles"
-       ],
-       "metavar": "PROFILES",
-       "help": 129,
-       "repeatable": true
-      },
-      {
-       "flags": [
-        "--json"
-       ],
-       "help": 46
-      }
-     ]
-    }
-   ]
   }
  ],
  "commands": [
@@ -3512,7 +3412,7 @@
    "command": "cad cache",
    "summary": "cad's cache: dir, prune (what this release cannot use), clean (all of it)",
    "usage": "cad cache {dir,prune,clean} ...",
-   "description": 135,
+   "description": 126,
    "arguments": [
     {
      "name": "{dir,prune,clean} ...",
@@ -3528,29 +3428,29 @@
    "command": "cad cache dir",
    "summary": "print where cad's cache is",
    "usage": "cad cache dir",
-   "description": 136
+   "description": 127
   },
   {
    "command": "cad cache prune",
    "summary": "remove what this release of cad cannot use",
    "usage": "cad cache prune",
-   "description": 137
+   "description": 128
   },
   {
    "command": "cad cache clean",
    "summary": "remove all of cad's cache; cad makes it again as it needs it",
    "usage": "cad cache clean",
-   "description": 138
+   "description": 129
   },
   {
    "command": "cad delete",
    "summary": "delete documents: record, cached document, the engine's copy",
    "usage": "cad delete [--dry-run] [--yes] [--json] DOC [DOC ...]",
-   "description": 139,
+   "description": 130,
    "arguments": [
     {
      "name": "DOC",
-     "help": 140,
+     "help": 131,
      "repeatable": true
     }
    ],
@@ -3559,20 +3459,20 @@
      "flags": [
       "--dry-run"
      ],
-     "help": 141
+     "help": 132
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 142
+     "help": 133
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 143
+     "help": 134
     }
    ]
   },
@@ -3580,19 +3480,19 @@
    "command": "cad doctor",
    "summary": "report this cad, its folders, its kernel and the server; it changes nothing",
    "usage": "cad doctor [--check] [--json]",
-   "description": 144,
+   "description": 135,
    "options": [
     {
      "flags": [
       "--check"
      ],
-     "help": 145
+     "help": 136
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 146
+     "help": 137
     }
    ]
   },
@@ -3600,13 +3500,13 @@
    "command": "cad mcp",
    "summary": "serve the CAD app to the agent app that starts it, over MCP on stdin and stdout",
    "usage": "cad mcp",
-   "description": 147
+   "description": 138
   },
   {
    "command": "cad plugin",
    "summary": "the plugin in your agent apps: `install` puts it in or updates it; `update auto`: whether cad's updates update it too",
    "usage": "cad plugin {install} ...",
-   "description": 148,
+   "description": 139,
    "arguments": [
     {
      "name": "{install} ...",
@@ -3621,7 +3521,7 @@
    "command": "cad plugin install",
    "summary": "install the plugin in every agent app found on this computer, or update it there",
    "usage": "cad plugin install",
-   "description": 149
+   "description": 140
   },
   {
    "command": "cad plugin update",
@@ -3640,7 +3540,7 @@
    "command": "cad plugin update auto",
    "summary": "show or change whether cad's updates update the plugin too",
    "usage": "cad plugin update auto [{status,on,off}]",
-   "description": 150,
+   "description": 141,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3657,13 +3557,13 @@
    "command": "cad run",
    "summary": "run a script (or -m, -c) as uv run does, cad pinned at this device's release with the integrations its imports use",
    "usage": "cad run [uv run's options] SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE [ARGS...] | COMMAND [ARGS...]",
-   "description": 151
+   "description": 142
   },
   {
    "command": "cad server",
    "summary": "the cad server: start, stop, status",
    "usage": "cad server [--rotate-token] [--yes] {start,stop,status} ...",
-   "description": 152,
+   "description": 143,
    "arguments": [
     {
      "name": "{start,stop,status} ...",
@@ -3679,14 +3579,14 @@
      "flags": [
       "--rotate-token"
      ],
-     "help": 153
+     "help": 144
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 154
+     "help": 145
     }
    ]
   },
@@ -3694,20 +3594,20 @@
    "command": "cad server start",
    "summary": "start the cad server where it is not running",
    "usage": "cad server start [--port PORT] [--foreground]",
-   "description": 155,
+   "description": 146,
    "options": [
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 156
+     "help": 147
     },
     {
      "flags": [
       "--foreground"
      ],
-     "help": 157
+     "help": 148
     }
    ]
   },
@@ -3720,7 +3620,7 @@
      "flags": [
       "--json"
      ],
-     "help": 158
+     "help": 149
     }
    ]
   },
@@ -3733,7 +3633,7 @@
      "flags": [
       "--json"
      ],
-     "help": 159
+     "help": 150
     }
    ]
   },
@@ -3741,7 +3641,7 @@
    "command": "cad telemetry",
    "summary": "show or change the usage stats and crash reports CAD sends: status, on, off",
    "usage": "cad telemetry [{status,on,off}]",
-   "description": 160,
+   "description": 151,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3758,7 +3658,7 @@
    "command": "cad update",
    "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
    "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
-   "description": 161,
+   "description": 152,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -3772,7 +3672,7 @@
      "flags": [
       "--major"
      ],
-     "help": 162
+     "help": 153
     }
    ]
   },
@@ -3780,7 +3680,7 @@
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 163,
+   "description": 154,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3797,11 +3697,11 @@
    "command": "cad viewer",
    "summary": "open a viewer page on the running cad server",
    "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 164,
+   "description": 155,
    "arguments": [
     {
      "name": "FILE",
-     "help": 165,
+     "help": 156,
      "optional": true,
      "repeatable": true
     }
@@ -3812,39 +3712,39 @@
       "--host"
      ],
      "metavar": "HOST",
-     "help": 166
+     "help": 157
     },
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 167
+     "help": 158
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 168
+     "help": 159
     },
     {
      "flags": [
       "--no-open"
      ],
-     "help": 169
+     "help": 160
     },
     {
      "flags": [
       "--dist"
      ],
      "metavar": "DIST",
-     "help": 170
+     "help": 161
     },
     {
      "flags": [
       "--api-only"
      ],
-     "help": 171
+     "help": 162
     }
    ]
   }
@@ -3861,7 +3761,7 @@
   "a Quick Edit packet (the .snapshot.json the viewer writes), a job or a list of jobs, as JSON or a file of it: every picture its outputs name drawn, each job's view as it was -- its camera, display, hidden and isolated parts, pose -- with the packet's ink and dimensions, at its output settings (padding, tightFrame, transparent, background, renderScale, sizeProfile); the other flags override every job",
   "a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT (the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), edges=CLASS (the edges of one class alone: feature, tangent or seam; edges=feature draws no line where faces meet smoothly or a face closes on itself), or the display JSON object (mode, grid, camera, clip, exploded, edges, hidden, isolated: part refs the picture leaves out, or alone draws), or a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks, window: [x0, y0, x1, y1], the box of the board to frame, in its mm}; a KiCad schematic {sheet, border, title} (title: KiCad's title block, on unless false; border: the page's edge and frame). Every snapshot is drawn light",
   "draw the measuring grid",
-  "a preset (iso, front, back, left, right, top, bottom), azimuth:elevation, a camera JSON object (its position, target and orthographicHalfHeight in the viewer's scene coordinates, as a Quick Edit packet carries them: a document's or a GLB's mm, a robot's m, a 3MF's unit), or authored: the view --annotation's ink was drawn in, from its Quick Edit packet, exactly",
+  "a preset of the world's axes, Z up (iso, front: seen from -Y, back, left: from -X, right, top, bottom), azimuth:elevation, a camera JSON object (its position, target and orthographicHalfHeight in the viewer's scene coordinates, as a Quick Edit packet carries them: a document's or a GLB's mm, a robot's m, a 3MF's unit), or authored: the view --annotation's ink was drawn in, from its Quick Edit packet, exactly",
   "the viewer's Preview in place of a display mode: the model lit in a studio, in its materials, on a floor with its shadow, in perspective (a job's: \"preview\": true)",
   "a configuration's name (a robot's SRDF group state), a configuration sequence at a time of it (walk@0.6: where the viewer's playbar shows the mechanism then), or joint and coupling values as JSON ('{\"elbow\": 45}', '{\"curl\": 0.6}'; degrees, and a slide in the file's unit: a document's mm, a robot's m): the mechanism posed there; as built without it (a robot where the viewer opens it)",
   "the viewer's annotation file, or the Quick Edit packet (.snapshot.json) that carries it: its ink drawn over the model, on the parts it was drawn on",
@@ -3911,7 +3811,7 @@
   "Each joint's stops, found from the geometry: where its parts first meet another part.",
   "the document: a .step or .xbf, or a model's document id the engine holds (cad model ranges), or the handle its call returns.",
   "the sweep's step: degrees for a turning joint, millimetres for a sliding one; default 1.",
-  "how near two parts' surfaces come before they count as touching, in millimetres; default 0.3, the least (where they all but touch): a larger one stops each joint where its parts first come that near.",
+  "how near two parts' surfaces come before they count as touching, in millimetres; default 0.3, the least (where they all but touch): a larger one stops each joint where its parts first come that near; in a turn, a point nearer the axis than ten times the clearance counts as touching only within a tenth of its distance from the axis.",
   "sweep this joint alone (repeat it for several); default every joint a person moves. A name the document has no such joint by is refused, naming its joints.",
   "say on stderr each step as it starts (reading the document, sampling its surfaces, each joint) and each joint's stops as it ends (a joint or a sampling that takes long is said either way).",
   "the .xbf file",
@@ -3976,15 +3876,6 @@
   "the .kicad_sch to check (any sheet of its project: the check reads the whole hierarchy).",
   "Compile one MuJoCo model with MuJoCo and check it.",
   "the .xml or .mjcf file to check.",
-  "List the OrcaSlicer presets of one kind a person can select.",
-  "machine (a printer), process or filament.",
-  "only names containing this text, in any case.",
-  "another folder of OrcaSlicer presets to search first; once per folder.",
-  "Write a printer, a process and filaments complete, for OrcaSlicer's command line.",
-  "the printer (machine) preset's name, or a preset JSON file.",
-  "the process preset's name, or a preset JSON file.",
-  "a filament preset's name or file; once per material, in the printer's filament order.",
-  "the folder the complete presets are written into.",
   "cad's cache: what cad makes again when it needs it (environments, bytecode, meshes it derived). Never your documents or settings.",
   "Print where cad's cache is.",
   "Remove what this release of cad cannot use: environments made for other releases, and the release folders of 0.11.11 and earlier.",

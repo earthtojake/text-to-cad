@@ -270,9 +270,9 @@ Reading a finding:
 - **Check the pair before adopting the stop**, with a posed snapshot there. A stop made by a pair
   that does not limit the hardware (a vendor's servo cover the jaw clears) is not the joint's range,
   and neither is a stop wider than the actuator's own travel: write the datasheet's travel instead.
-  A stop is where surfaces come near, not where solids overlap: where one looks early (a lid that
-  still has room to fold back), `cad model interference "$ID" --pose '{"hinge": 170}'` at and past it
-  is the exact answer, with the joint's range widened for the test.
+  A stop is where surfaces come near, not where solids overlap, so it reads a little short of
+  contact (a lid that folds back flat at 180 reads 174): `cad model interference "$ID" --pose
+  '{"hinge": 178}'` at and past it is the exact answer, with the joint's range widened for the test.
 - **No stop.** A turn is swept a full turn each way and a slide the document's extent; a joint clear
   that far has none (`why`: `clear all the way round`). A cylindrical or spherical joint and a joint
   of a closed loop are not swept, and a warning says so. A document with no joint fails with
@@ -284,6 +284,11 @@ How it decides that two parts meet:
   stop is where the parts all but touch. A larger clearance only narrows a range. Every gap is
   measured to within 0.6 mm over the true one, never under it. Each part is tested on its own
   surface, not on the collision shape a simulator would use.
+- **Near a turn's axis.** A millimetre is a wide angle close to the axis, so in a turn a surface also
+  counts as near only where its gap is under a tenth of its distance from the axis: within 5.7
+  degrees of turning from touching. That decides within ten times the clearance of the axis (3 mm at
+  0.3 mm), which is where a lid, a door or a flap hinged on its edge lands: it stops about 6 degrees
+  short of flat, whatever the clearance.
 - **Touching or near as built.** Parts that touch as built (a horn on its servo), or stand under
   0.3 mm apart, meet only where their contact grows by about 15 mm^2 on a surface that stops the
   motion, or where one is pushed into the other; sliding along each other (a pin in its bore, a

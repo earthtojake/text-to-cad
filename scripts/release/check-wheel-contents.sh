@@ -119,8 +119,11 @@ REQUIRED=(
   "cad_server/_internal/proxy.py"
   # The script Open in starts a person's Blender with on a GLB or an STL (apps.BLENDER_SCRIPT).
   "cad_server/_internal/open_in_blender.py"
-  # Its README: the mechanisms the package's laws name.
+  # Its README and the pages it indexes: the mechanisms the package's laws name. Two pages stand for the folder,
+  # which the package data takes whole.
   "cad_server/engine/README.md"
+  "cad_server/engine/docs/architecture.md"
+  "cad_server/engine/docs/wire-format.md"
   "cad_server/_runtime/viewer/index.html"
   # Each page's third-party notice, written by its build: the wheel redistributes what they inline.
   "cad_server/_runtime/viewer/THIRD_PARTY_LICENSES.txt"
