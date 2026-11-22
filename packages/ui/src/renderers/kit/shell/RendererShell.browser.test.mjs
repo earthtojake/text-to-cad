@@ -85,7 +85,7 @@ const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvert
 // the navbar's left end edge to edge on the row's inset; a finger's tap leaves no fill or ring behind.
 test('a phone\'s scale: the primitives read the tokens (36px controls, 15/20 text), and a tap leaves no fill or ring', async (t) => {
   const origin = await serve(t);
-  const context = await browser.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true, isMobile: true });
+  const context = await browser.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true });
   t.after(() => context.close());
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
@@ -144,7 +144,7 @@ for (const phone of [true, false]) {
     const { PHONE_SCALE, DESKTOP_SCALE } = await import('../../../../dist/lib/scale.js');
     const scale = phone ? PHONE_SCALE : DESKTOP_SCALE;
     const origin = await serve(t);
-    const context = await browser.newContext(phone ? { viewport: { width: 390, height: 760 }, hasTouch: true, isMobile: true } : { viewport: { width: 1280, height: 800 } });
+    const context = await browser.newContext(phone ? { viewport: { width: 390, height: 760 }, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
     t.after(() => context.close());
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
@@ -217,7 +217,7 @@ for (const phone of [true, false]) {
 // popup and a second tap on the same trigger shuts it.
 test('a phone: every popup trigger opens on one tap and shuts on a second tap on it', async (t) => {
   const origin = await serve(t);
-  const context = await browser.newContext({ viewport: { width: 390, height: 760 }, hasTouch: true, isMobile: true });
+  const context = await browser.newContext({ viewport: { width: 390, height: 760 }, hasTouch: true });
   t.after(() => context.close());
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
@@ -282,7 +282,7 @@ test('a phone: every popup trigger opens on one tap and shuts on a second tap on
 // finger's lift does not take it away.
 test('a finger on a phone: the navbar\'s menus stay open, a held press opens the view\'s menu, a double tap fits, a tap shows Preview\'s bar', async (t) => {
   const origin = await serve(t);
-  const context = await browser.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true, isMobile: true });
+  const context = await browser.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true });
   t.after(() => context.close());
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
