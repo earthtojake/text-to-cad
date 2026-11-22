@@ -1,4 +1,4 @@
-"""A model's parameters, the daemon's half: the one operation that changes a script (``params``).
+"""A model's parameters, the daemon's half: the viewer's Save, the one request that changes a script.
 
 A build's report says where each parameter its model's script declares is spelled in the code
 (``cad.engine.parameters.rows``: the file, the line, the bytes of the default and the digest of the file
@@ -8,8 +8,8 @@ others, and they are gone. The served structure lists the document's parameters 
 (``serve.Server.structure``: writable only where a live worker recorded the bytes of the value the
 document holds).
 
-The daemon's ``set`` (``Setting.set``) is what ``cad model params``, ``cad.model.params`` and the page's Save
-(``POST /api/v1/documents/model/<id>/parameters``) reach, one code path: the values checked against the rows
+The daemon's ``set`` (``Setting.set``) is what the page's Save reaches (``POST
+/api/v1/documents/model/<id>/parameters``, the server's ``set_parameters``): the values checked against the rows
 (``parameters.changes``), the script's bytes against the digest and the spans its last run recorded
 (``parameters.standing``), and no build of the script under way, in any worker, nor another set of it
 (``busy``), the script then the set's alone until it is done: a build asked meanwhile waits for it

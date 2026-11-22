@@ -7,7 +7,6 @@
     "interference",
     "solve",
     "ranges",
-    "params",
     "drc",
     "erc",
     "validate"
@@ -87,12 +86,6 @@
           "summary": "each joint's stops found from the geometry: the joint turned or slid alone, a step at a time each way, until its parts meet another part; the stops and which parts meet, nothing written",
           "integration": "build123d",
           "engine": false
-        },
-        {
-          "name": "params",
-          "summary": "change the model's declared parameters in its script (NAME=VALUE ...): each number rewritten where its last run recorded it, the script's bytes checked first, then the model built again",
-          "integration": null,
-          "engine": true
         }
       ],
       "decorator": true,

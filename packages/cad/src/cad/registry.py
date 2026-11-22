@@ -12,8 +12,7 @@ type from some input; many integrations may produce one type, each stating which
 content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
 shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
 ``dfm`` a 3D type's manufacturing check, ``interference`` a B-rep type's check that no two parts share volume,
-``solve`` a B-rep type's stress study, ``ranges`` a mechanism's joint
-stops found from its geometry, ``params`` a model's declared parameters written into its script (the model's alone),
+``solve`` a B-rep type's stress study, ``ranges`` a mechanism's joint stops found from its geometry,
 ``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check, ``validate`` a robot
 description's conformance check.
 
@@ -44,8 +43,7 @@ __all__ = ["DOCUMENT_TYPES", "FILE_OPERATIONS", "INTEGRATIONS", "INTEGRATION_OPE
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
-OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "params", "drc", "erc",
-              "validate")
+OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "drc", "erc", "validate")
 #: What an integration does to its tool's own files, which are no document type (files we check or write and
 #: never show): a closed set too. ``check`` takes one file and answers findings, as a type's check does
 #: (``cad.results.CheckResult``); ``presets`` lists the presets of one kind the tool's own folders hold, by name,
@@ -305,13 +303,6 @@ _RANGES = Operation("ranges", "each joint's stops found from the geometry: the j
                               "time each way, until its parts meet another part; the stops and which parts meet, "
                               "nothing written", _KERNEL)
 
-# A model's parameters written into its script, at the positions its last run recorded, and the model built
-# again (``cad.engine.parameters``; the daemon's ``cad_server.engine.parameters``): the one operation that changes
-# code, so the model's alone -- a file's document holds its parameters' values, never where code keeps them.
-_PARAMS = Operation("params", "change the model's declared parameters in its script (NAME=VALUE ...): each number "
-                              "rewritten where its last run recorded it, the script's bytes checked first, then the "
-                              "model built again", engine=True)
-
 # What a STEP holds of a document, and what only the engine's own document holds beside it: the kernel reads
 # AP242's kinematics and has no writer for them, so a STEP, posed or not, is placements only.
 _STEP_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names")
@@ -322,7 +313,7 @@ _TYPES = (
         "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
                           "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
         (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES, _PARAMS), decorator=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True),
     DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",

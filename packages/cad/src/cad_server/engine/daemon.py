@@ -698,8 +698,10 @@ class Daemon:
         self.models = Models(self)
         from cad_server.engine.parameters import Setting
 
-        # A model's parameters set in its script and the script built again (``parameters``): ``set``; and a page's
-        # look at other values, built in the model's worker and held for that page alone: ``preview``.
+        # A model's parameters set in its script and the script built again (``parameters``): a page's Save,
+        # ``set``; and a page's look at other values, built in the model's worker and held for that page alone:
+        # ``preview``. Both reach the engine through the page's routes alone (``server.set_parameters``,
+        # ``server.preview_parameters``), never a request of this socket.
         self.setting = Setting(self)
         from cad_server.engine.parameters import Previewing
 
@@ -1466,19 +1468,6 @@ class Daemon:
                 if lost is not None:
                     model["rebuild"] = lost["rebuild"]
                 send({"model": model})
-            return
-        if op == "set":
-            # ``cad model params``, ``cad.model.params``: a model's parameters written into its script, and the
-            # script's last run built again (``parameters.Setting``), the page's Save's one path.
-            # Every refusal is answered, by its code where it has one; nothing it raises drops the connection.
-            try:
-                send({"done": self.setting.set(str(request.get("id")), request.get("values"))})
-            except ValueError as error:
-                send(refused(error))
-            except OSError as error:  # the script's folder refused the new bytes: the script is as it was
-                send({"failed": f"{error.strerror or error}: {getattr(error, 'filename', None) or ''}".rstrip(": ")})
-            except Exception as error:  # noqa: BLE001 - answered in its own words, never a dropped request
-                send({"failed": f"{type(error).__name__}: {error}"})
             return
         if op == "document":
             # What an id names while this engine holds it (``document``), asked without building.

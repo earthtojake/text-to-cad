@@ -18,7 +18,7 @@ Files are exports, written when asked.
 | Task | Start with | Reference |
 | --- | --- | --- |
 | Create or edit a part or assembly | A model script ([below](#write-a-model-and-run-it)) | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
-| Let the person tune a number (a wall, a fit, a count) | `model.param(...)` at the script's top level; `cad model params <id> wall=2.5` | [Parameters](references/model-contract.md#parameters-a-person-tunes) |
+| Let the person tune a number (a wall, a fit, a count) | `model.param(...)` at the script's top level; change a value by editing its number and running the script | [Parameters](references/model-contract.md#parameters-a-person-tunes) |
 | Organize a project | Its existing layout | [Project layout](references/project-layout.md) |
 | Export STEP, STL, 3MF, GLB or xbf | `cad model export <id> <file>` | [Exports](references/exports.md) |
 | A 2D profile, flat pattern or DXF | A model that returns 2D geometry on z=0, exported as `.dxf` | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |

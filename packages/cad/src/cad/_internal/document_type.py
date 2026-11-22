@@ -97,11 +97,6 @@ class DocumentType(types.ModuleType):
             value = solve_for(entry.id)
             self.__dict__[name] = value
             return value
-        if name == "params" and name in entry.operation_names:
-            # A model's parameters written into its script and the model built again (``cad.engine.api.params``).
-            value = _params(self)
-            self.__dict__[name] = value
-            return value
         if name == "ranges" and "ranges" in entry.operation_names:
             # The joint stops every type with a mechanism shares (``cad._internal.ranges``).
             from cad._internal.ranges import ranges_for
@@ -235,25 +230,6 @@ def _operation(owner: DocumentType, name: str) -> Any:
     described = inspect.cleandoc(verb.__doc__ or "")
     operation.__doc__ = f"cad.{owner.entry.id}.{name}: {owner.entry.operation(name).summary}.\n\n{described}"
     return operation
-
-
-def _params(owner: DocumentType) -> Any:
-    """``cad.model.params(handle_or_id, **values)``: the engine's ``params`` (``cad.engine.api.params``), its source
-    refused when it is another type's. Its source is positional alone, so every keyword is a parameter's name."""
-    from cad.engine import api
-
-    def params(source: Any, /, **values: Any) -> dict[str, Any]:
-        owner._own(source)
-        return api.params(source, **values)
-
-    params.__module__ = owner.__name__
-    params.__qualname__ = "params"
-    # Without its indentation, as every operation's (`_operation`): the same words on every Python the library runs on.
-    import inspect
-
-    params.__doc__ = (f"cad.{owner.entry.id}.params: {owner.entry.operation('params').summary}.\n\n"
-                      f"{inspect.cleandoc(api.params.__doc__ or '')}")
-    return params
 
 
 def bind(module_name: str) -> None:

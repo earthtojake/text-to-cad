@@ -51,8 +51,8 @@ HOLES = model.param("holes", 4, min=2, max=8)              # an int default: who
 BORE = model.param("bore", 3 + CLEARANCE)                  # CLEARANCE declared in spec.py
 ```
 
-`cad model inspect "$ID"` lists them. One is writable only where its default is a plain number in
-the model's own script; otherwise it is listed read-only:
+`cad model inspect "$ID"` lists them. The viewer saves one only where its default is a plain number in
+the model's own script; any other is listed read-only, and changes where it is declared:
 
 ```text
 parameters
@@ -62,18 +62,8 @@ parameters
   bore  3.2  float, in bracket.py, read-only: no plain number of its own in the code
 ```
 
-`cad model params` writes the new numbers into the script and builds it again; a save from the viewer
-does the same, so read a script again before you edit it:
-
-```bash
-cad model params "$ID" wall=2.5 holes=6
-```
-
-```text
-wall  2.0 -> 2.5  /work/src/bracket.py:6
-holes  4 -> 6  /work/src/bracket.py:7
-rebuilt 24613af9-e908-5fe0-aa44-16c485ee814b
-```
+To change a value, edit its number in the script and run it. A save from the viewer rewrites numbers
+in the script and builds it again, so read a script again before you edit it.
 
 An exported xbf lists each parameter at the value it was built with, read-only.
 

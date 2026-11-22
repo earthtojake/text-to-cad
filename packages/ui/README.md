@@ -22,8 +22,8 @@ of a document, never its file). Changing a design belongs to the agent and the c
 viewer tool (Select, Measure, Draw, Quick Edit, the filters and displays) exists to show the
 person the design and to give the agent feedback. The exception is a model's **Params** tab
 ([Parameters](docs/viewer-ux.md#parameters)): its Save asks the engine to set the named numbers
-the model's script declares, through the same path as `cad model params` (`client.setModelParameters`,
-`POST /api/v1/documents/model/<id>/parameters`). The engine, not the page, rewrites each number in
+the model's script declares (`client.setModelParameters`, `POST /api/v1/documents/model/<id>/parameters`),
+the one way the engine writes them. The engine, not the page, rewrites each number in
 the script where its last run recorded it, after checking the script is the one that ran, and builds
 the model again; the page then reads the rebuilt document as it reads any new version. Before a Save,
 the view draws the model at the drafts (`client.previewModelParameters`,

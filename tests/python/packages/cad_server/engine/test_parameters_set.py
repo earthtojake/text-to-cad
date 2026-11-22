@@ -1,6 +1,6 @@
 """A model's parameters set in its script, through the engine (``cad_server.engine.parameters``): the served
-structure lists what the worker that built the model recorded; ``params`` -- the library's, the command's and the
-page's route alike -- writes the numbers at their bytes alone and builds the script's last run again, refuses
+structure lists what the worker that built the model recorded; the CAD Viewer's Save (the page's route, the
+one way the engine writes them) writes the numbers at their bytes alone and builds the script's last run again, refuses
 by one word of a closed set with nothing written, and puts the bytes and the document back where the build at
 the new values fails. A declared xbf carries the record, read-only, and so does one exported from the model; a
 document no live worker built is read-only too."""
@@ -10,8 +10,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess
-import sys
 import tempfile
 import textwrap
 import unittest
@@ -20,11 +18,11 @@ import urllib.request
 from pathlib import Path
 
 from tests.python.support import engine_daemon
+from tests.python.support.parameters import save
 from tests.python.support.paths import add_sources
 
-SRC = add_sources()
+add_sources()
 
-import cad.model  # noqa: E402
 import cad.xbf  # noqa: E402
 from cad.engine import api, client  # noqa: E402
 from cad.engine.ids import model_id  # noqa: E402
@@ -79,20 +77,20 @@ class SetCase(unittest.TestCase):
     def refused(self, code: str, **values) -> ParameterRefused:
         data = self.script.read_bytes()
         with self.assertRaises(ParameterRefused) as caught:
-            cad.model.params(self.ident, **values)
+            save(self.ident, **values)
         self.assertEqual(caught.exception.code, code, str(caught.exception))
         self.assertEqual(self.script.read_bytes(), data, f"{code}: nothing written")
         return caught.exception
 
 
 class SetTest(SetCase):
-    def test_params_writes_the_numbers_alone_and_the_document_is_built_at_them(self) -> None:
+    def test_a_save_writes_the_numbers_alone_and_the_document_is_built_at_them(self) -> None:
         self.assertEqual({name: (row["value"], row["writable"], row["reason"], row["source"])
                           for name, row in self.served().items()},
                          {"pitch": (30.0, False, "shared", "spec.py"), "wall": (2.0, True, None, "bracket.py"),
                           "holes": (6, True, None, "bracket.py"), "twice": (4.0, False, "expression", "bracket.py")})
         before = self.script.read_bytes()
-        answer = cad.model.params(self.ident, wall=2.5, holes=8)
+        answer = save(self.ident, wall=2.5, holes=8)
         self.assertEqual(answer, {"id": self.ident, "rebuilt": [self.ident], "written": [
             {"name": "wall", "from": 2.0, "to": 2.5, "file": str(self.script), "line": 6},
             {"name": "holes", "from": 6, "to": 8, "file": str(self.script), "line": 7}]},
@@ -108,7 +106,7 @@ class SetTest(SetCase):
         self.assertEqual({(row["name"], row["value"], row["writable"], row["reason"], row["source"]) for row in listed},
                          {("pitch", 30.0, False, "file", None), ("wall", 2.5, False, "file", None),
                           ("holes", 8, False, "file", None), ("twice", 5.0, False, "file", None)})
-        self.assertEqual(cad.model.params(self.ident, wall=2.5), {"id": self.ident, "written": [], "rebuilt": []})
+        self.assertEqual(save(self.ident, wall=2.5), {"id": self.ident, "written": [], "rebuilt": []})
 
     def test_each_refusal_says_its_code_and_writes_nothing(self) -> None:
         self.refused("unknown_parameter", depth=3)
@@ -130,7 +128,7 @@ class SetTest(SetCase):
         served = self.served()
         self.assertEqual((served["wall"]["value"], served["wall"]["writable"]), (2.0, True),
                          "the last good document, its positions recorded again")
-        self.assertEqual(cad.model.params(self.ident, wall=3.0)["written"][0]["to"], 3.0)
+        self.assertEqual(save(self.ident, wall=3.0)["written"][0]["to"], 3.0)
 
     def test_the_page_route_needs_the_guard_and_takes_numbers_alone(self) -> None:
         serving = client.request({"op": "status"}, start=False)["serving"]
@@ -162,27 +160,6 @@ class SetTest(SetCase):
         status, said = post("model", {"values": {"wall": 3}})
         self.assertEqual((status, said["written"][0]["to"], said["rebuilt"]), (200, 3.0, [self.ident]))
         self.assertIn(b'"wall", 3.0,', self.script.read_bytes(), "an integer given a float parameter stays a float")
-
-    def test_the_command_sets_them_and_exits_by_the_refusal_s_class(self) -> None:
-        env = {**os.environ, "PYTHONPATH": str(SRC)}
-
-        def command(*args: str) -> subprocess.CompletedProcess:
-            return engine_daemon.run([sys.executable, "-m", "cad_server.cli", "model", "params", self.ident, *args],
-                                     env=env, cwd=self.folder)
-
-        done = command("wall=2.25", "--json")
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(json.loads(done.stdout)["written"][0]["to"], 2.25)
-        for args, status, code in ((["wall=9", "--json"], 2, "out_of_range"), (["pitch=1", "--json"], 1, "not_writable"),
-                                   (["wall=1" + "0" * 400, "--json"], 2, "not_a_number"), (["wall", "--json"], 2, None)):
-            with self.subTest(args=args):
-                done = command(*args)
-                self.assertEqual(done.returncode, status, done.stdout + done.stderr)
-                said = json.loads(done.stdout)
-                self.assertEqual((said["ok"], said.get("code")), (False, code))
-        done = command("holes=9")
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertRegex(done.stdout, rf"holes  6 -> 9  .*bracket\.py:7\nrebuilt {self.ident}\n")
 
 
 SIBLINGS = """\
@@ -233,13 +210,13 @@ class SiblingsTest(unittest.TestCase):
     def test_a_model_the_change_does_not_reach_holds_and_serves_the_new_record(self) -> None:
         self.assertEqual(self.wall(self.b), (2.0, True, None), "b served before the set")
         # ``bad`` failed in the run and fails the same way now: not the change's, so the set stands.
-        answer = cad.model.params(self.a, wall=3.0)
+        answer = save(self.a, wall=3.0)
         self.assertEqual(answer["rebuilt"], [self.a, self.b])
         self.assertEqual(self.wall(self.b), (3.0, True, None), "b's document is a new generation, its rows served")
         self.script.write_text(SIBLINGS.replace('"wall", 2.0', '"wall", 3.5'), encoding="utf-8")  # by hand, and run
         api.build_script(self.script, None, progress=False)
         self.assertEqual(self.wall(self.b), (3.5, True, None))
-        self.assertEqual(cad.model.params(self.b, wall=4.0)["written"][0]["to"], 4.0, "set through b")
+        self.assertEqual(save(self.b, wall=4.0)["written"][0]["to"], 4.0, "set through b")
 
     def test_an_xbf_exported_from_a_model_carries_its_parameters_read_only(self) -> None:
         out = Path(tempfile.mkdtemp(prefix="parameters-export-")).resolve()
@@ -251,7 +228,7 @@ class SiblingsTest(unittest.TestCase):
 
     def test_a_model_that_built_and_fails_at_the_new_values_fails_the_set(self) -> None:
         with self.assertRaises(ParameterRefused) as caught:
-            cad.model.params(self.a, wall=4.8)
+            save(self.a, wall=4.8)
         self.assertEqual(caught.exception.code, "build_failed")
         self.assertIn("ValueError: too thick", str(caught.exception))
         self.assertEqual(self.script.read_text(encoding="utf-8"), SIBLINGS)

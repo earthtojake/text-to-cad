@@ -89,8 +89,7 @@ These words mean one thing each, in the code, the commands and every document.
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
   (a 3D type's manufacturing check), `interference` (a B-rep type's check that no two parts share volume),
   `solve` (a B-rep type's stress study), `ranges` (a mechanism's joint stops,
-  found from its geometry), `params` (a model's declared parameters written into its script, the model's alone:
-  law 30), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  found from its geometry), `drc` (a board's design rule check), `erc` (a schematic's electrical
   rules check), `validate` (a robot description's conformance check). Each type implements those that make
   sense for it.
 
@@ -303,13 +302,13 @@ renumbers the list and every citation in the same change.
     of a model comes from a run an agent or a person starts, which pushes the model's code, key and
     document to it. The engine never reads a script to learn what a model is, never watches one, never
     infers a document from a path and never runs code on its own: a script edited and not run changes
-    nothing it holds or says. One case reads a script outside a run and starts a build, and only when
-    asked: `cad model params` (law 30), and a page's preview of values before it saves them. A file document is the disk by definition and is read again when its
-    bytes change.
+    nothing it holds or says. One case reads a script outside a run and starts a build, and only when a
+    page asks: its Save of a model's parameters (law 30), and its preview of values before it saves them.
+    A file document is the disk by definition and is read again when its bytes change.
     *Pressure-test*: build a model, then edit its script, its modules and the files its bodies read
     without running it: every page, command and tool answers as before the edit, and no process of the
-    engine has opened a file of the model's code since its run, but `params` and a preview, which read
-    the script and refuse since it changed (`script_changed`).
+    engine has opened a file of the model's code since its run, but a page's Save and preview, which
+    read the script and refuse since it changed (`script_changed`).
 22. **One table names every document type and integration.** *The package.* The registry
     (`cad.registry`) is the single source for every layer: each type's id, extensions, MIME type, view,
     content and operations, with the integration each needs; each integration's name, extra, process
@@ -336,7 +335,7 @@ renumbers the list and every citation in the same change.
 26. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot`
     are shared by every type that has them (`inspect` and `read` where a type has them); every other
     operation is named for what it does and means one thing: `dfm`, `interference`, `solve`, `ranges`,
-    `params`, `drc`, `erc`, `validate`. One result shape per operation: a check returns findings, each with
+    `drc`, `erc`, `validate`. One result shape per operation: a check returns findings, each with
     a severity, a code and a location (`cad.results.CheckResult`), and `export` says the files it wrote.
     A new shared operation must be code-free, frequently needed and meaningful across types. A file cad
     checks and never shows has no document type, and its check is its tool's integration's (`cad mujoco
@@ -367,24 +366,26 @@ renumbers the list and every citation in the same change.
     output, and the file is written again from the model whenever it runs. An edit is a native file's
     own: `with <type>.edit(path) as document:` opens the file in its tool, hands the block the tool's
     live document, and saves at the block's end only when the block changed it, never when it raises.
-    A type has a decorator or an edit, never both. `params` (law 30) is neither: it opens no tool and
-    makes no declared file; it rewrites numbers in a model's own script, and the engine builds the model
-    again from it, as a run does.
-30. **A model's parameters are its code's, and `cad model params` is the one command that changes a
+    A type has a decorator or an edit, never both. A page's Save of parameters (law 30) is neither: it
+    opens no tool and makes no declared file; it rewrites numbers in a model's own script, and the engine
+    builds the model again from it, as a run does.
+30. **A model's parameters are its code's, and the viewer's Save is the one way the engine changes a
     script.** *Models.* A script declares a parameter at a module's top level (`cad.model.param`: a
     lower-case name, a plain number default it returns unchanged, and the closed set `min`, `max`,
     `step`, `unit`); one declared inside a function is refused, since a body can be replayed without
     running. A build records the declarations in the document (law 4); the worker that loaded the
     script keeps where each default is spelled in memory alone, as provenance is (law 7). A value
-    changes only in the code: by hand, or by `cad model params` (`cad.model.params`, and the viewer's
-    Parameters Save, one path), which writes only a literal of the model's own script, only while the
-    file holds the bytes its last run read, and runs that run again in the warm worker; a build the new
+    changes only in the code: an agent or a person edits it and runs the script, or a person saves new
+    values in the viewer's Parameters tab. The Save is a page's request, as its preview is, and no
+    operation (law 20): no command or library function writes parameters, and an agent changes one by
+    editing the code. The Save writes only a literal of the model's own script, only while the file
+    holds the bytes its last run read, and runs that run again in the warm worker; a build the new
     values break puts the bytes back, never over another writer's change. A page's preview of other
     values is built in the same worker for that page alone and becomes nothing else: never a file, the
     document, its record or the cache, never what another page, an export or an agent reads (the
     engine's **Parameters**).
     *Pressure-test*: declare a parameter in a shared module, in a loop and as an expression: each is
-    listed read-only and `params` refuses it; edit the script by hand and `params` refuses
+    listed read-only and a Save refuses it; edit the script by hand and a Save refuses
     (`script_changed`) until the script runs again.
 
 
@@ -397,7 +398,7 @@ the engine built before names the command (`cad run` and the script that defines
 `cad <type> inspect` prints what the document holds -- its state, parts, bounds, volume (and a part
 inside out, a solid's faces pointing inward), materials,
 joints, couplings (name, kind, ratio, joints), states, sequences, animations, parameters (each its value, range and
-unit, where it is declared, and whether `cad model params` writes it) and declared files -- then its build closure (`--json`:
+unit, where it is declared, and whether the viewer's Save can write it) and declared files -- then its build closure (`--json`:
 both as data; `--query structure`, the same with nothing measured: no bounds, volume or masses;
 `--query closure`, and `cad.<type>.inspect()` with no reference, the closure alone);
 with a reference it returns geometry facts. No form meshes a part, and a part's volume and box
@@ -415,8 +416,8 @@ src/cad/
   registry.py            # the document types and the integrations: the one table every layer
                          #   reads, kernel-free (`python -m cad.registry --js` writes the JS)
   model/                 # the model, the type with no file: @model, its parameters (param, declared
-                         #   in the script; params, written back), and a model's operations, by
-                         #   its handle or document id (a ModelType)
+                         #   in the script), and a model's operations, by its handle or document
+                         #   id (a ModelType)
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
                          #   B-rep type's solve and ranges: model's, xbf's and step's)

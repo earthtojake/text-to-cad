@@ -201,7 +201,7 @@ class ViewerApp(CadApp):
 
     def set_parameters(self, ident, values):
         # The engine's own ``set`` (``Server.set_parameters``, the daemon's ``parameters.Setting``): the one path
-        # ``cad model params`` takes too.
+        # that writes a model's parameters into its script.
         if self.server.set_parameters is None:
             return super().set_parameters(ident, values)
         return self.server.set_parameters(ident, values)

@@ -1,6 +1,6 @@
 """A model's parameters, the library's half (``cad.engine.parameters``), the standard library alone: a
 declaration checked, a load's declarations recorded with where each default is spelled, the rows a model
-has (own, shared, expression), the page's view of them, and what ``params`` checks and writes."""
+has (own, shared, expression), the page's view of them, and what a Save checks and writes."""
 
 from __future__ import annotations
 

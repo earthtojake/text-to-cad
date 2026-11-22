@@ -18,11 +18,11 @@ import urllib.request
 from pathlib import Path
 
 from tests.python.support import engine_daemon
+from tests.python.support.parameters import save
 from tests.python.support.paths import add_sources
 
 add_sources()
 
-import cad.model  # noqa: E402
 from cad.engine import api, client  # noqa: E402
 from cad.engine.ids import model_id  # noqa: E402
 from cad.engine.parameters import ParameterRefused  # noqa: E402
@@ -132,7 +132,7 @@ class PreviewTest(PreviewCase):
         self.assertEqual(self.call("POST", f"{shown['id']}/exports", {"source": {"doc": shown["id"]}})[0], 404)
         self.assertEqual(self.call("POST", f"model/{shown['id']}/parameters", {"values": {"wall": 3}})[0], 404)
         # The last run is the worker's still: a set writes the literal where that run recorded it, from 2.0.
-        answer = cad.model.params(self.ident, wall=2.5)
+        answer = save(self.ident, wall=2.5)
         self.assertEqual([(row["from"], row["to"]) for row in answer["written"]], [(2.0, 2.5)])
         self.assertEqual(self.script.read_bytes(), before.replace(b'"wall", 2.0', b'"wall", 2.5'))
         self.assertEqual(self.call("GET", f"model/{shown['id']}/structure")[0], 404, "a new version lets it go")

@@ -14,11 +14,11 @@ import unittest
 from pathlib import Path
 
 from tests.python.support import engine_daemon
+from tests.python.support.parameters import save
 from tests.python.support.paths import add_sources
 
 add_sources()
 
-import cad.model  # noqa: E402
 from cad.engine import api, client  # noqa: E402
 from cad.engine.ids import model_id  # noqa: E402
 from cad.engine.parameters import ParameterRefused  # noqa: E402
@@ -113,19 +113,19 @@ class TurnTest(unittest.TestCase):
         gate.accept()  # the other worker is loading the script now
         before = self.script.read_bytes()
         with self.assertRaises(ParameterRefused) as caught:
-            cad.model.params(self.ident, wall=3.0)
+            save(self.ident, wall=3.0)
         self.assertEqual(caught.exception.code, "busy", str(caught.exception))
         self.assertEqual(self.script.read_bytes(), before, "nothing written while the build reads the script")
         gate.release()
         thread.join(120)
         self.assertTrue(said and all(row["ok"] for row in said[0]["done"]), said)
-        self.assertEqual(cad.model.params(self.ident, wall=3.0)["written"][0]["to"], 3.0, "and set once it is done")
+        self.assertEqual(save(self.ident, wall=3.0)["written"][0]["to"], 3.0, "and set once it is done")
 
     def test_a_build_asked_while_a_save_builds_the_script_waits_for_it(self) -> None:
         gate = _Gate(self.folder)
         self.addCleanup(gate.release)
         answers: dict = {}
-        saving = threading.Thread(target=lambda: answers.update(params=cad.model.params(self.ident, wall=3.0)))
+        saving = threading.Thread(target=lambda: answers.update(params=save(self.ident, wall=3.0)))
         saving.start()
         self.addCleanup(saving.join, 120)
         gate.accept()  # the save wrote the script, and its build is loading it

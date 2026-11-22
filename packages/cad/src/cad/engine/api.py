@@ -46,7 +46,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
 __all__ = ["Document", "Drawn", "EngineError", "Facts", "IN_CALLER", "IN_ENGINE", "NoDaemon", "Outdated", "Report",
-           "Served", "Stopped", "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers", "params",
+           "Served", "Stopped", "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers",
            "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
@@ -1306,7 +1306,7 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
                       for name, motion in (kinematics.get("motions") or {}).items()],
         "animations": structure.get("animations") or [],
         # What its script declares (``parameters.served``): each its value, kind, range and unit, and whether
-        # ``cad model params`` can write it (``writable``, else ``reason``) and where (``source``).
+        # the viewer's Save can write it (``writable``, else ``reason``) and where (``source``).
         "parameters": list(structure.get("parameters") or []),
         "files": list((model or {}).get("files") or []),
     }
@@ -1334,27 +1334,6 @@ def stop() -> bool:
     if not wait_gone():
         raise EngineError("the engine daemon did not exit")
     return True
-
-
-def params(source: Any, /, **values: Any) -> dict[str, Any]:
-    """A model's declared parameters (``cad.engine.parameters``) given new values in its script, and the
-    model built again: ``params(handle_or_id, wall=2.5, holes=8)``. The engine that holds the model's document
-    checks each name and value against what the worker that built it recorded, checks the script's bytes are
-    the ones that run read, writes each number where its default is spelled -- nothing else of the file
-    changes -- and builds the script's last run again in that worker; a build that fails puts the script's
-    bytes back and builds again, so the document is the last good one. Answers ``{"id", "written": [{name,
-    from, to, file, line}], "rebuilt": [ids]}``; a value equal to the one the code holds writes nothing.
-    ``parameters.ParameterRefused`` (a ``ValueError``, its ``code`` one of ``parameters.CODES``) when it is
-    refused, nothing written; or, ``build_failed``, when the build at the new values failed and the script
-    is as it was."""
-    from cad.engine.ids import is_id
-
-    ident = source.id if isinstance(source, Document) else os.fspath(source) if isinstance(source, (str, os.PathLike)) \
-        else None
-    if ident is None or not is_id(ident):
-        raise ValueError(f"params takes a model's handle or its document id (cad run SCRIPT.py prints it), not {source!r}")
-    # The daemon's op for it is ``set`` (``cad_server.engine.parameters.Setting``).
-    return _ask({"op": "set", "id": ident, "values": dict(values)})["done"]
 
 
 # --- what each verb did, told to its observers ------------------------------------------------
