@@ -200,8 +200,9 @@ function PositionBody({ kinematics, values, couplings = null, preset, onValues, 
       origin={Math.min(Math.max(Number(rest) || 0, control.min), control.max)}
       onValueChange={next => write(control, next ?? currentValue)} />;
   };
-  // Its mechanism's motion, where the shell hands it here (`JointsMotionContext`): the tab's top section, then a
-  // hairline and the joints under their heading, as the Display card's sections are; one Reset for both.
+  // Its mechanism's motion, where the shell hands it here (`JointsMotionContext`): the tab's top section, then one
+  // hairline and the joints, as the Display card's sections are (the tab is "Joints": no heading repeats it); one
+  // Reset for both.
   const held = routine && !routine.disabled ? routine : null;
   return <ToolPanel id="position" title={t("position.title")} label={t("position.controls")} fit="details">
     <div>
@@ -209,9 +210,7 @@ function PositionBody({ kinematics, values, couplings = null, preset, onValues, 
         <div className="flex flex-col gap-1 pb-3" data-joints-motion="">
           <AnimationControls runtime={routine.runtime} kind="motion" disabled={routine.disabled} />
         </div>
-        <div className="border-t border-border pt-3 pb-1" data-joints-rule="">
-          <h4 className="text-xs leading-(--cad-leading-xs) font-medium text-foreground" data-joints-heading="">{t("position.title")}</h4>
-        </div>
+        <div className="border-t border-border pt-3" data-joints-rule="" />
       </> : null}
       {posable ? <KinematicsPoseRow poses={poseNames.map(name => ({ value: name, label: name }))}
         activeValue={preset} onSelect={onPreset} onReset={onReset} /> : null}

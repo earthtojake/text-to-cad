@@ -905,8 +905,7 @@ structure. Every rule here, and why:
   Reset in the transport: one Reset a tab, always in the same place.
 - **Joints with motions** (a mechanism's: an engine document whose joints have motions) is ONE tab, **Joints**, drawn
   as the Display card's sections are: first the motion's rows (Sequence, the transport, Speed, Loop), then ONE hairline
-  and the joints' heading ("Joints", in the foreground at medium weight, `data-joints-heading`), then the Position row and
-  the joint sliders, then ONE **Reset** (its name "Reset joints") that puts back both — the motion to its start, the
+  (no heading: the tab is already "Joints"), then the Position row and the joint sliders, then ONE **Reset** (its name "Reset joints") that puts back both — the motion to its start, the
   joints to their default — on while either is off it (`KinematicsResetRow`'s `routine`). The shell hands the motion to
   the renderer's Joints tab (`RendererShell`'s `jointsHoldMotion`, `JointsMotionContext`) and draws no Motion tab. Why:
   a mechanism's motions drive the same joints the sliders set, so two tabs were one subject split in two.

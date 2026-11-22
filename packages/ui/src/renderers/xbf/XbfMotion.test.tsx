@@ -263,12 +263,12 @@ it('a mechanism with joints and motions has ONE "Joints" tab: the motion first, 
   const scene = { setPose: vi.fn() };
   render(<Merged scene={scene} />);
   const panel = screen.getByRole('tabpanel', { name: /^Joints\b/ });
-  // In order: the motion's controls, the hairline and its heading, the Position row, a joint's slider; one Reset, the tab's.
+  // In order: the motion's controls, the hairline (no heading: the tab is "Joints"), the Position row, a joint's slider; one Reset, the tab's.
   const order = [...panel.querySelectorAll('[data-joints-motion], [data-joints-rule], [data-pose-row], [role=slider][aria-label=hinge], [data-pose-reset], [data-animation-reset]')]
     .map(node => node.hasAttribute('data-joints-motion') ? 'motion' : node.hasAttribute('data-joints-rule') ? `rule:${node.textContent}`
       : node.hasAttribute('data-pose-row') ? 'position' : node.hasAttribute('data-pose-reset') ? 'reset' : node.hasAttribute('data-animation-reset') ? 'transport-reset' : 'joint');
   expect([document.querySelectorAll('[data-tool-panel]').length, order, panel.querySelector('[data-animation-transport] [data-animation-reset]')])
-    .toEqual([1, ['motion', 'rule:Joints', 'position', 'joint', 'reset'], null]);
+    .toEqual([1, ['motion', 'rule:', 'position', 'joint', 'reset'], null]);
   const reset = () => within(panel).getByRole('button', { name: 'Reset joints' }) as HTMLButtonElement;
   expect(reset().disabled).toBe(true);
   // The motion played and paused: Reset on; pressed, the motion back at its start and the joints as built.
