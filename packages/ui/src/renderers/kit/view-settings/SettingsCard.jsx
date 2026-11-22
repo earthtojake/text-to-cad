@@ -7,7 +7,6 @@ import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { Switch } from "@cad/ui/primitives/switch";
 import { cn } from "@cad/ui/utils";
 import { hasOpenPopup } from "../../../lib/popups.js";
-import { DEFAULT_PANEL_WIDTH } from "../shell/sidebars.js";
 import { PANEL_PEEK_ELEVATION_CLASS, PANEL_PEEK_GAP_PX, PANEL_PEEK_IN_RIGHT_CLASS, PANEL_PEEK_OUT_RIGHT_CLASS, PANEL_PEEK_RADIUS_PX, useSlidingCard }
   from "../../../file-viewer/panelPeek.js";
 import { FileSheetColorPicker } from "../inspector/FileSheet.js";
@@ -16,8 +15,8 @@ import { SliderField } from "../inspector/SliderField.jsx";
 
 /**
  * A settings card (`docs/design-system.md`, "The settings cards"): the view's **Display** card and Preview's **Settings**,
- * docked at the view's right edge, the sidebar's peek card's mirror. Its box is the peek card's at the default sidebar
- * width (`DEFAULT_PANEL_WIDTH`, less `PANEL_PEEK_GAP_PX` on each side), its surface the peek card's (its border, the
+ * docked at the view's right edge, the sidebar's peek card's mirror. Its box is `SETTINGS_CARD_WIDTH_PX` wide on a
+ * desktop (`--cad-card-min` on a phone), its surface the peek card's (its border, the
  * sidebar's colour, its shadow and radius), and it slides in from the right edge and back out as the peek does from the
  * left (`file-viewer/panelPeek.js`'s `PANEL_PEEK_IN_RIGHT_CLASS` and `PANEL_PEEK_OUT_RIGHT_CLASS`, the peek's durations and
  * easing). Its content stands as far inside its edge as the peek card's does: the panel's inset less the gap (12px), on
@@ -41,8 +40,12 @@ import { SliderField } from "../inspector/SliderField.jsx";
  * - `"custom"`: `label` and `node`, a control of its own (a palette), its label in the label column.
  */
 
-/** The card's width: the default sidebar's, less the peek's gap on each side, as the peek card is. */
-export const SETTINGS_CARD_WIDTH_PX = DEFAULT_PANEL_WIDTH - 2 * PANEL_PEEK_GAP_PX;
+/**
+ * The card's width on a desktop: wide enough that half its content (132px, inside its 12px inset) holds the longest
+ * option of any card (a 3D file's "Orthographic", 123px, with room for a wider font), so every dropdown is half its row
+ * as on a phone (`docs/design-system.md`, "Half the row"). A phone's is `--cad-card-min`.
+ */
+export const SETTINGS_CARD_WIDTH_PX = 288;
 /** The card's gap to the view's edges, the peek card's. */
 export const SETTINGS_CARD_GAP_PX = PANEL_PEEK_GAP_PX;
 /**

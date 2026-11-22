@@ -1663,9 +1663,9 @@ test('three tabs and the search fit the 232px panel with no ⋯; a fourth is ⋯
 });
 
 // Display's card (`DisplaySettings.jsx`, `kit/view-settings/SettingsCard.jsx`), as a page lays it out: the sidebar's peek
-// card mirrored at the view's right edge (the same box, gaps and content inset), over the whole 6rem cube; its dropdowns one width;
-// nothing in it cut short.
-test('Display\'s card is the peek card\'s mirror at the view\'s right edge, over the cube: the same gaps, width and inset, its dropdowns one width, nothing cut', async (t) => {
+// card mirrored at the view's right edge (the same top, gaps and content inset), 288px wide so half its content holds its
+// widest option, over the whole 6rem cube; its dropdowns one width; nothing in it cut short.
+test('Display\'s card is the peek card\'s mirror at the view\'s right edge, over the cube: the same gaps and inset, 288px wide, its dropdowns one width, nothing cut', async (t) => {
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
   await page.addInitScript(() => { window.Worker = undefined; });
@@ -1701,7 +1701,8 @@ test('Display\'s card is the peek card\'s mirror at the view\'s right edge, over
       widths: [...card.querySelectorAll('[data-settings-select]')].map(trigger => rect(trigger).width), cut,
       cube: cube.width, drawn: [drawn.left - box.left, drawn.top - box.top, box.right - drawn.right, box.bottom - drawn.bottom], overCube: points.every(([x, y]) => card.contains(document.elementFromPoint(x, y))) };
   });
-  assert.deepEqual([at.card[1], at.card[2], at.right], [at.peek[1], at.peek[2], at.peek[0]], `the peek card's box, mirrored: ${JSON.stringify(at)}`);
+  assert.deepEqual([at.card[1], at.right], [at.peek[1], at.peek[0]], `the peek card's top and gap, mirrored: ${JSON.stringify(at)}`);
+  assert.equal(at.card[2], 288, `the card's desktop width, wider than the peek card's ${at.peek[2]}: ${JSON.stringify(at)}`);
   assert.deepEqual([at.inset, at.peekInset], [12, 12], 'the content 12px in, as the peek card\'s is');
   assert.ok(at.widths.length === 3 && at.widths.every(width => Math.abs(width - at.widths[0]) < 0.5) && at.widths[0] >= (at.card[2] - 24) / 2 - 0.5,
     `the dropdowns one width, half the content at least: ${at.widths}`);

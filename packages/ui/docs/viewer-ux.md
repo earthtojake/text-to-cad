@@ -184,8 +184,8 @@ chrome that floats over the picture. The home is the navbar over the library.
   (pressed while the card is open), no chevron, tooltip "Display". Why: one place and one icon for how the picture is
   drawn, beside Preview, keeping the picture itself clear.
 - **The card** (`DisplaySettings.jsx`, on `SettingsCard.jsx`) is titled "Display". It docks 4px under the navbar and
-  4px from the view's right edge and slides in from the right as the peek does from the left. It is at least 224px
-  wide on a desktop, matching the peek's card, and 320px on a phone, and grows to fit a value rather than cut it off
+  4px from the view's right edge and slides in from the right as the peek does from the left. It is at least 288px
+  wide on a desktop, so every dropdown is half its row, and 320px on a phone, and grows to fit a value rather than cut it off
   ([The settings cards](design-system.md#the-settings-cards)).
 - **Rows**: no section headings, one hairline between the camera's rows and the picture's.
 

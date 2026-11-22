@@ -42,7 +42,7 @@ the phone's. Every primitive and shared class reads them; script that counts pix
 | `--cad-switch-w` × `--cad-switch-h` | 24 × 14 | 36 × 20 | a switch |
 | `--cad-thumb` (`size-thumb`), `--cad-check` | 12, 14 | 20, 20 | a slider's thumb; a checkbox |
 | `--cad-hit` (`.cad-hit`) | 0 | 36 | the least press area round a small mark, invisible and centred on it |
-| `--cad-card-min` | 224 | min(320px, 100vw − 8px) | a settings card's least width |
+| `--cad-card-min` | 288 | min(320px, 100vw − 8px) | a settings card's least width |
 
 The navbar, Preview's bar, the strip and a sub-toolbar are the control + 12 (40; 48 on a phone); the panel's head row
 is the control + 4 (32; 40). Only layout is a phone's own: the panel is a sheet, More holds what does not fit, Quick
@@ -301,7 +301,8 @@ popup, one keyboard and one touch rule, so a fix lands in every picker.
   (`grid-cols-[minmax(max-content,1fr)_minmax(50%,max-content)]`), growing past half only where its value needs it. A
   colour field, and a dropdown set to fit (the Home's ghost filter, a picker on a toolbar tile), are as wide as their
   content. Why: one as wide as its value reads ragged, and one wider than half for no reason crowds its label.
-- **In a settings card every dropdown is one width**: half the content (100px in a 224px card) or the card's widest
+- **In a settings card every dropdown is one width**: half the content (132px in a desktop's 288px card, 148px in a
+  phone's 320px one) or the card's widest
   option (`fixedWidth`, so the width never changes with the choice), 24px tall (36 on a phone), 6px in, 14px icons.
 
 ### Menus
@@ -404,9 +405,10 @@ so the two look and move alike.
 
 - **The box mirrors the peek card**: a 1px border, opaque `bg-sidebar`, `shadow-md` and 10px corners, 4px from the
   view's right edge, from what it docks under (the navbar, or Preview's bar) and, when taller than the view, the bottom.
-- **The width** is at least 224px on a desktop (the default panel's 232 less 4px each side) and
-  min(320px, 100vw − 8px) on a phone. The card grows to fit its widest label and value rather than cut either, never
-  past the view less 8px.
+- **The width** is at least 288px on a desktop and min(320px, 100vw − 8px) on a phone. Why: half the content then
+  holds the longest option of any card (a 3D file's "Orthographic", 123px on a desktop), so every dropdown is half its
+  row on either; at the panel's 224px it was not, and every dropdown in the card grew past half to match it. The card
+  grows to fit its widest label and value rather than cut either, never past the view less 8px.
 - **Inside**, a 12px inset all round and the panel's one type size (`data-panel-surface="card"`). The head is the
   title (medium) and its X on one line, the X's 12px glyph ending on the inset, with no icon beside the title. The
   body scrolls in a `ScrollArea` between the head and Reset. Its rows are a grid, the label column taking the rest and
@@ -519,7 +521,7 @@ transitions and drawn sizes, not class names, and a test of a layout that is gon
 | … "every popup trigger opens on one tap and shuts on a second tap on it" | the touch rule in the navbar, the strip, the Display card, the sheet and Preview's Settings |
 | … "the type scale and the strip's proportions, as drawn" | the 40px strip of 28px tiles, the 32px head with its rule under the strip, panel and menu text 12/16, the navbar 13/20, a tooltip 11/16 |
 | … "a toolbar button under the pointer is seen…", "Preview's bar takes the backdrop's ink…" | hover fills and ink read on their surface |
-| … "three tabs and the search fit the 232px panel…", "Display's card is the peek card's mirror…" | the tab budget; the card's box, gaps and 12px inset, its dropdowns one width, nothing cut |
+| … "three tabs and the search fit the 232px panel…", "Display's card is the peek card's mirror…" | the tab budget; the card's top, gaps and 12px inset, its 288px width, its dropdowns one width, nothing cut |
 | `scripts/test/check-ui-strings.mjs`, `i18n/i18n.test.mjs` | no English literal in the chrome; the locales mirror `en.js` |
 | `tests/python/global/test_document_links.py` | every relative link and `#anchor` in these docs lands on a heading |
 
