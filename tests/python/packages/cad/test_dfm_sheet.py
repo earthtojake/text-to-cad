@@ -589,6 +589,41 @@ class EqualWebsTest(unittest.TestCase):
                 self.assertEqual(webs(loops(self.E)), webs(loops(-self.E)))
         self.assertEqual([cutouts for *_, cutouts in webs(pairs(self.E))], [4])
 
+    def test_a_neck_between_stations_is_found_however_its_side_rounds(self) -> None:
+        # a V 0.9 from the middle of a side 10 long: between its 20 stations, on one of the 21 that rounding
+        # gave it as often. Equal places may be one; the width is the least that any ray found
+        for e in (0.0, self.E, -self.E, 1e-12, -1e-12):
+            with self.subTest(e):
+                side = 10.0 + e
+                outline = bd.Polyline((0, 0), (side, 0), (side, -12), (30, -12), (30, 20), (6, 20), (6, 6), (5, 0.9),
+                                      (4, 6), (4, 20), (-20, 20), (-20, -12), (0, -12), close=True)
+                plate = bd.extrude(bd.make_face(outline), amount=2.0)
+                plate.label = "plate"
+                (finding,) = [f for f in checked(plate).findings if f.code == "sheet.web_width"]
+                self.assertAlmostEqual(finding.value, 0.9, places=4)
+        slope = plane.Loop([(0, 0), (6, 0), (6, 4 - 5e-7), (0, 4)], [True] * 4, label="outer")
+        (web,) = [width for width in plane.widths([slope], [True]) if width.kind == "material"]
+        self.assertLess(web.width, 4 - 4e-7)  # the first of equal places, the least of their widths
+        # bars that round to one micron are one item: its width the least of theirs, not the first's
+        slots = [plane.Loop([(x, 0), (x + 4, 0), (x + 4, 9), (x, 9)], [True] * 4, label="hole")
+                 for x in (0, 5.1439, 20, 25.1435)]
+        (bar,) = sheet._outline_features(None, slots, 2.0, lambda point: ("", [0.0, 0.0, 0.0]))["webs"]
+        self.assertEqual((bar["width_mm"], bar["cutouts"]), (1.1435, 4))
+
+    def test_every_cutout_as_near_is_counted_whichever_comes_first(self) -> None:
+        # the corner one is 3 from two others, and one of those is 1 from a fourth: three cutouts share the 3
+        def window(x: float, y: float) -> plane.Loop:
+            return plane.Loop([(x, y), (x + 8, y), (x + 8, y + 8), (x, y + 8)], [True] * 4, label="hole")
+
+        for e in (0.0, self.E, -self.E):
+            four = [window(0, 0), window(11 + e, 0), window(0, 11), window(0, 20)]
+            for order in ((0, 1, 2, 3), (0, 2, 1, 3)):
+                with self.subTest(e=e, order=order):
+                    found = sheet._outline_features(None, [four[i] for i in order], 4.0,
+                                                    lambda point: ("", [0.0, 0.0, 0.0]))["webs"]
+                    self.assertEqual(sorted((round(w["width_mm"], 3), w["cutouts"]) for w in found),
+                                     [(1.0, 2), (3.0, 3)])
+
 
 class TypeSideTest(unittest.TestCase):
     def test_k_factor_defaults(self) -> None:

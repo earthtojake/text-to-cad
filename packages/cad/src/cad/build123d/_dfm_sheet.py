@@ -2652,20 +2652,21 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
             gaps.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz,
                          "between": "one contour" if a == b else "two contours"})
     cutouts = [loop for loop in loops if loop.label == "hole" and loop.circle is None]
-    bars: dict[int, tuple[dict[str, Any], set[int]]] = {}
-    for k, found in enumerate(plane.nearest(cutouts, plane.TIE_MM)):
-        if found is None:
-            continue
-        size = round(round(found[0], 6) * 1000)  # to the micron, half of one rounding one way whatever the noise
-        if size not in bars:
-            _, start, end = plane.distance(cutouts[k], cutouts[found[1]], plane.TIE_MM)
-            ref, xyz = web_at(start)
-            bars[size] = ({"width_mm": _r(found[0]), "location": ref, "xyz": xyz,
-                           "across": [_r(float(v)) for v in (*start, *end)]}, set())
-        bar, between = bars[size]
-        between.update((k, found[1]))
-        bar.update(cutouts=len(between), said=f"between {len(between)} cutouts")
-    webs.extend(bar for bar, _ in bars.values())
+    bars: dict[int, list[tuple[int, float, list[int]]]] = {}  # a width's: a cutout, the width, every one as near
+    for k, near in enumerate(plane.as_near(cutouts, plane.TIE_MM)):
+        if near:
+            width_mm = min(near)[0]
+            size = round(round(width_mm, 6) * 1000)  # to the micron, half of one rounding one way whatever the noise
+            bars.setdefault(size, []).append((k, width_mm, [j for _, j in near]))
+    for alike in bars.values():  # one item: the least of their widths, at the first as narrow
+        least_width = min(width_mm for _, width_mm, _ in alike)
+        k, _, others = next(bar for bar in alike if bar[1] <= least_width + plane.TIE_MM)
+        _, start, end = plane.distance(cutouts[k], cutouts[others[0]], plane.TIE_MM)
+        ref, xyz = web_at(start)
+        between = {cutout for first, _, across in alike for cutout in (first, *across)}
+        webs.append({"width_mm": _r(least_width), "location": ref, "xyz": xyz,
+                     "across": [_r(float(v)) for v in (*start, *end)],
+                     "cutouts": len(between), "said": f"between {len(between)} cutouts"})
     return {"notches": notches, "tabs": tabs, "webs": webs, "gaps": gaps}
 
 
