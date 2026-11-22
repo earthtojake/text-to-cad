@@ -65,11 +65,9 @@ export function inlineHeight(width: number, maxHeight?: number): number {
  */
 function Frame({ bridge, context, insets, inline = false, floatingComposer = false, overlay = null, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; floatingComposer?: boolean; overlay?: ReactNode; children: ReactNode }) {
   // Where the host's composer floats over the page instead of taking room from it: the room it
-  // covers, which lists scroll clear of. Keep the cube on the opposite side (its top-left) so a tab's
-  // composer or sidebar chat button never covers it.
+  // covers, which lists scroll clear of and Quick Edit stands above. The cube keeps its top-right.
   const floating = {
-    ...(floatingComposer ? { '--cad-host-bottom-inset': `${context.safeAreaInsets?.bottom || 0}px`,
-      '--cad-viewport-corner-left': '2px', '--cad-viewport-corner-right': 'auto' } : {}),
+    ...(floatingComposer ? { '--cad-host-bottom-inset': `${context.safeAreaInsets?.bottom || 0}px` } : {}),
   } as CSSProperties;
   const [width, setWidth] = useState(() => window.innerWidth);
   useEffect(() => {

@@ -109,18 +109,18 @@ it('a tab host gets the page it always had, down to its bottom: the home, with n
   const frame = container.firstElementChild as HTMLElement;
   expect([frame.style.paddingTop, frame.style.paddingBottom]).toEqual(['4px', '0px']);
   expect(frame.style.getPropertyValue('--cad-host-bottom-inset')).toBe('72px');
-  // The sidebar's chat button floats bottom-right: the corner stays at the left (its top-left, the bottom row Quick Edit's).
-  expect(frame.style.getPropertyValue('--cad-viewport-corner-left')).toBe('2px');
-  expect(frame.style.getPropertyValue('--cad-viewport-corner-right')).toBe('auto');
+  // The cube keeps the top-right, as in every host.
+  expect(frame.style.getPropertyValue('--cad-viewport-corner-left')).toBe('');
+  expect(frame.style.getPropertyValue('--cad-viewport-corner-right')).toBe('');
   expect(frame.style.getPropertyValue('--cad-viewport-corner-top')).toBe('');
 });
 
-it.each(['tab', 'file'] as const)('a %s view keeps the cube left of the floating composer', surface => {
+it.each(['tab', 'file'] as const)('a %s view keeps the cube at the top-right', surface => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   const { container } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, surface }} />);
   const frame = container.firstElementChild as HTMLElement;
-  expect(frame.style.getPropertyValue('--cad-viewport-corner-left')).toBe('2px');
-  expect(frame.style.getPropertyValue('--cad-viewport-corner-right')).toBe('auto');
+  expect(frame.style.getPropertyValue('--cad-viewport-corner-left')).toBe('');
+  expect(frame.style.getPropertyValue('--cad-viewport-corner-right')).toBe('');
   expect(frame.style.getPropertyValue('--cad-viewport-corner-top')).toBe('');
 });
 

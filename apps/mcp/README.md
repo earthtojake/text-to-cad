@@ -532,12 +532,9 @@ browser (503: no display, a remote shell), or the card reaches the engine direct
 card open the launch's page through `ui/open-link` where the host offers it, else as a plain
 link. A view whose launches carried no page (the engine gave none) has no Browser item; the home,
 which has no file, has no file menu. In a tab, Codex's composer floats over the page, and the
-home's list scrolls clear of it (`--cad-host-bottom-inset`). The view's corner (the cube, or a
-flat view's zoom) stands at the top in every host,
-the bottom row Quick Edit's; in this tab presentation, across sidebar, thread and file views, it
-sits at the top-left, mirrored, clear of the sidebar chat button's side. `App.tsx` supplies
-`--cad-viewport-corner-left: 2px` and `--cad-viewport-corner-right: auto`;
-inline hosts (including full-size cards) retain the default top-right placement.
+home's list scrolls clear of it and Quick Edit stands above it (`--cad-host-bottom-inset`). The
+view's corner (the cube, or a flat view's zoom) stands at the top-right in every host and presentation,
+the bottom row Quick Edit's.
 
 ## Engine transport
 

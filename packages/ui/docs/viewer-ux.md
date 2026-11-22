@@ -221,7 +221,7 @@ The bar where a person writes a note to their agent about what is on screen (`Qu
 - **One row at rest**: the note ("Describe a change…") with its buttons at the right of its last line. A row of
   attachments appears above it only while something is attached; the bar grows upward, its bottom and note in place.
   One solid surface, the strip's, at rest and in use: no dimmed rest state.
-- **Placement**: 16px off the bottom, centred on the whole view, at most 400px wide (else the view less 16px a side).
+- **Placement**: 16px off the bottom (above a host's floating composer, `--cad-host-bottom-inset`), centred on the whole view, at most 400px wide (else the view less 16px a side).
   Where a pinned panel would reach under it, it centres on the model's area; a peek moves nothing. On a phone it spans
   the view less 8px a side, above the safe area. The bottom of the view is Quick Edit's alone.
 - **The note** grows upward as it is written (never on focus) to four lines, then scrolls, its scrollbar at the bar's
