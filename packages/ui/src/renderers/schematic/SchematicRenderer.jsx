@@ -46,7 +46,7 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  * board is: the board's flat view (`kit/viewport/usePlotView.js`, `kit/shell/FlatViewFrame.jsx`), its
  * pan, zoom and fit, Select (a click the most specific thing under the pointer its filter ticks —
  * `SchematicSelectFilter.jsx` — a pin, a junction or a no-connect, a label, a wire, a symbol or a sheet
- * symbol; Shift adds; a plain drag the box between its ends, every viewer's, taking what it touches),
+ * symbol; Shift adds, a finger's tap too; a plain drag the box between its ends, every viewer's, taking what it touches),
  * Annotate and Measure (to
  * pins' and wires' ends, junctions and labels, in millimetres), Quick Edit's references (`#R1`, `#R1.2`,
  * `#net:/MID`, `#wire:<uuid>`, `#sheet:/Load/`) and its Export (KiCad's PDF, SVGs, netlist and BOM). The
@@ -292,6 +292,15 @@ function SchematicSurface({ view, data }) {
       ? annotationAt(point, annotationSurface.onScreen(annotationRef.current.items), pickPx(pointerType))[0]?.id || null : null);
     const measured = clear => measureSelectHandlers(measureRef.current, () => measureRuntimeRef.current, clear);
     const pointer = event => ({ clientX: event.clientX, clientY: event.clientY, pointerType: event.pointerType, shiftKey: event.shiftKey });
+    // What a press under Select lands on, front to back as every view picks: a measurement, then the ink, then the
+    // sheet's own. `adds`: the press adds it, or takes it out where it is picked: with Shift, or a finger's on something
+    // (a finger has no Shift; its tap on nothing is a plain one, and clears).
+    const pressed = (point, event) => {
+      const measurement = measured(() => {}).under(pointer(event));
+      const ink = measurement ? null : inkUnder(point, event.pointerType);
+      const hit = measurement || ink ? null : pickAt(point, event.pointerType);
+      return { measurement, ink, hit, adds: event.shiftKey || (event.pointerType === "touch" && Boolean(measurement || ink || hit)) };
+    };
     const tap = (point, event) => {
       if (!pageRef.current) return;
       const tool = toolRef.current;
@@ -305,23 +314,31 @@ function SchematicSurface({ view, data }) {
         return;
       }
       if (tool !== SCHEMATIC_TOOL.SELECT) return;
-      const shift = event.shiftKey;
+      const { ink, hit, adds } = pressed(point, event);
       const session = annotationRef.current;
-      if (measured(() => selectionRef.current.clear()).press(pointer(event))) {
-        if (!shift && session.selected.length) session.select([]);
+      if (measured(() => selectionRef.current.clear()).press({ ...pointer(event), shiftKey: adds })) {
+        if (!adds && session.selected.length) session.select([]);
         return;
       }
-      const ink = inkUnder(point, event.pointerType);
       if (ink) {
-        const picked = shift ? (session.selected.includes(ink) ? session.selected.filter(id => id !== ink) : [...session.selected, ink]) : [ink];
-        if (!shift) selectionRef.current.clear();
+        const picked = adds ? (session.selected.includes(ink) ? session.selected.filter(id => id !== ink) : [...session.selected, ink]) : [ink];
+        if (!adds) selectionRef.current.clear();
         session.select(withGroups(picked, session.items));
         return;
       }
-      if (!shift && session.selected.length) session.select([]);
-      const hit = pickAt(point, event.pointerType);
-      selectionRef.current.pick(hit ? { id: hit.selector } : null, { multiSelect: shift });
-      if (hit && !shift) measureRef.current.select([]);
+      if (!adds && session.selected.length) session.select([]);
+      selectionRef.current.pick(hit ? { id: hit.selector } : null, { multiSelect: adds });
+      if (hit && !adds) measureRef.current.select([]);
+    };
+    // What a tap under Select would take out of the selection, by name (null: nothing): what it lands on, where the
+    // press lets it go (the one thing picked pressed again, or a picked one with Shift or a finger). The flat canvas
+    // holds such a tap for the double-click window (`useFlatCanvasView`'s `takesAway`).
+    const takesAway = (point, event) => {
+      if (toolRef.current !== SCHEMATIC_TOOL.SELECT || !pageRef.current) return null;
+      const { measurement, ink, hit, adds } = pressed(point, event);
+      if (measurement) return adds && measureRef.current.selected.includes(measurement) ? `measurement:${measurement}` : null;
+      if (ink) return adds && annotationRef.current.selected.includes(ink) ? `ink:${ink}` : null;
+      return hit && selectionRef.current.takesAway({ id: hit.selector }, { multiSelect: adds }) ? `pick:${hit.selector}` : null;
     };
     // A double-click on a sheet symbol, under Select, enters its sheet; anywhere else it fits.
     const doubleTap = (point, event) => {
@@ -371,12 +388,12 @@ function SchematicSurface({ view, data }) {
       const at = atPoint(point, pointerType);
       return at ? pageRef.current?.sheetAt(at.page, at.reach) || null : null;
     };
-    return { tap, hover, box, doubleTap, pickAt, sheetUnder };
+    return { tap, takesAway, hover, box, doubleTap, pickAt, sheetUnder };
   }, [annotationSurface, requestPaint, showSheet]);
 
   const plotView = usePlotView({
     plot, restored, colorScheme, surround: surroundOf, noun: "schematic", onViewMoved: rememberView, drawView, overlay,
-    onTap: handlers.tap, onHover: handlers.hover, onDoubleTap: handlers.doubleTap
+    onTap: handlers.tap, takesAway: handlers.takesAway, onHover: handlers.hover, onDoubleTap: handlers.doubleTap
   });
   viewRef.current = plotView;
   useFlatBoxSelect(plotView, { enabled: toolMode === SCHEMATIC_TOOL.SELECT && Boolean(page), onBox: handlers.box });

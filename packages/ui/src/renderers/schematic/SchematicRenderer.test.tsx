@@ -275,6 +275,27 @@ it('a press picks what is under it and reveals its row; a net from the Nets ligh
   view.dispose();
 });
 
+// A finger has no Shift: its tap adds what it lands on and takes out what is picked (once a double tap's window has
+// passed, `docs/viewer-ux.md`, "Selection and gestures"); on bare paper it clears at once.
+it("a finger's tap adds what it lands on and takes out what is picked, once its window has passed; on bare paper it clears at once", async () => {
+  const view = await open();
+  const { pane } = view;
+  await onSheet(pane, '/');
+  const controller = await controllerOf(view);
+  await zoomIn(pane);
+  const finger = { pointerType: 'touch' };
+  const wire = '#wire:5c4e0000-0000-4000-8000-0000000000a1';
+  tap(pane, [101.6, 59.69], finger);
+  tap(pane, [124, 64.77], finger);
+  expect(selected(controller)).toEqual(['#R1', wire]);
+  tap(pane, [101.6, 59.69], finger);
+  expect(selected(controller)).toEqual(['#R1', wire]);
+  await waitFor(() => expect(selected(controller)).toEqual([wire]));
+  tap(pane, [20, 20], finger);
+  expect(selected(controller)).toEqual([]);
+  view.dispose();
+});
+
 it("a plain drag under Select draws the shared box, taking what it touches whichever way it is drawn; Shift at its release adds; a Shift drag pans", async () => {
   const view = await open();
   const { pane } = view;

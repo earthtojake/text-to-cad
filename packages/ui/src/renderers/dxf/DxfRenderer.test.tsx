@@ -277,6 +277,60 @@ it('Select picks an entity by handle: lit, a Quick Edit chip by type and layer (
   dispose();
 });
 
+// A finger has no Shift: its tap adds what it lands on and takes out what is picked, and on nothing it clears at once.
+// A tap that would take something out waits the double-click window, which a double-click drops: a double-click never
+// takes the selection away (`docs/viewer-ux.md`, "Selection and gestures").
+it("a finger's tap adds, and takes out what is picked once its window has passed; a double-click never takes the selection away", async () => {
+  const drawing = await openDrawing();
+  const { canvas, tap, dispose } = drawing;
+  const controller = await waitFor(() => { expect(drawing.controller).not.toBeNull(); return drawing.controller; });
+  const entities = () => controller.readState().selectedEntities;
+  const finger = { pointerType: 'touch' };
+  tap(34, 40, finger);
+  tap(50, 0, finger);
+  expect(entities()).toEqual(['33', '2F']);
+  tap(34, 40, finger);
+  expect(entities()).toEqual(['33', '2F']);
+  await waitFor(() => expect(entities()).toEqual(['2F']));
+  tap(80, 10, finger);
+  expect(entities()).toEqual([]);
+  // A mouse: a double-click on the circle picks it with its first click; its second, which would take it out, waits,
+  // and the double-click drops it, so the circle stays picked and nothing is left waiting (Shift adds).
+  tap(34, 40);
+  tap(34, 40);
+  expect(entities()).toEqual(['33']);
+  const { scale, offsetX, offsetY } = painted.at(-1)!;
+  fireEvent.dblClick(canvas, { clientX: 34 * scale + offsetX, clientY: offsetY - 40 * scale });
+  tap(50, 0, { shiftKey: true });
+  expect(entities()).toEqual(['33', '2F']);
+  dispose();
+});
+
+// Escape, a step a press, in every view's order: what is under way, then the tool in hand goes down with what is
+// picked kept, and only then what is picked.
+it('Escape cancels a measurement under way, then puts the tool in hand down with the pick kept, then lets go of the pick', async () => {
+  const drawing = await openDrawing();
+  const { canvas, tap, dispose } = drawing;
+  const controller = await waitFor(() => { expect(drawing.controller).not.toBeNull(); return drawing.controller; });
+  const entities = () => controller.readState().selectedEntities;
+  const inHand = () => ['Select', 'Measure'].filter(name => screen.getByRole('button', { name, exact: true }).getAttribute('aria-pressed') === 'true');
+  const escape = () => fireEvent.keyDown(canvas, { key: 'Escape' });
+  tap(34, 40);
+  fireEvent.click(screen.getByRole('button', { name: 'Measure', exact: true }));
+  // A measurement's first end, let go: the next two ends measure afresh, the right edge's 60 mm.
+  tap(0, 0);
+  escape();
+  expect([inHand(), entities()]).toEqual([['Measure'], ['33']]);
+  tap(100, 0);
+  tap(100, 60);
+  await screen.findByRole('button', { name: 'Measurement 1: 60.00 mm' });
+  escape();
+  expect([inHand(), entities()]).toEqual([['Select'], ['33']]);
+  escape();
+  expect(entities()).toEqual([]);
+  dispose();
+});
+
 it('a DXF has no snapshot in the navbar, whatever the destination: its note to the agent is Quick Edit\'s', async () => {
   const { pane, dispose } = await openDrawing('clipboard');
   await waitFor(() => expect(pane.querySelector('canvas')).not.toBeNull());

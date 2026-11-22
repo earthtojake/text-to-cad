@@ -453,6 +453,37 @@ it('a tap picks the most specific thing: a pad, then copper, then nothing; Shift
   dispose();
 });
 
+// A finger has no Shift: its tap adds what it lands on and takes out what is picked, and on bare board it clears at
+// once. A tap that would take something out waits the double-click window (a finger's, its double tap's), which a
+// double-click drops: a double-click never takes the selection away (`docs/viewer-ux.md`, "Selection and gestures").
+it("a finger's tap adds, and takes out what is picked once its window has passed; a double-click never takes the selection away", async () => {
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  const controller = await controllerOf(view);
+  const finger = { pointerType: 'touch' };
+  const track = '#track:7a1c0000-0000-4000-8000-000000000001';
+  tap(pane, [34.175, 15], finger);
+  tap(pane, [30, 15], finger);
+  expect(selected(controller)).toEqual(['#R1.1', track]);
+  tap(pane, [34.175, 15], finger);
+  expect(selected(controller)).toEqual(['#R1.1', track]);
+  await waitFor(() => expect(selected(controller)).toEqual([track]));
+  tap(pane, [36, 26], finger);
+  expect(selected(controller)).toEqual([]);
+  // A mouse keeps its rules, a click replacing. A double-click's second click on the pad its first picked would take
+  // it out: it waits, and the double-click drops it, so the pad stays picked and nothing is left waiting (Shift adds).
+  tap(pane, [30, 15]);
+  tap(pane, [34.175, 15]);
+  tap(pane, [34.175, 15]);
+  expect(selected(controller)).toEqual(['#R1.1']);
+  const [clientX, clientY] = pageToScreen(frames.at(-1)!, 34.175, 15);
+  fireEvent.dblClick(pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!, { clientX, clientY });
+  tap(pane, [35.825, 15], { shiftKey: true });
+  expect(selected(controller)).toEqual(['#R1.1', '#R1.2']);
+  dispose();
+});
+
 it("Select's filter is KiCad's boxes in one row's submenu: they tick what a click takes, All ticks them all, Locked items at the foot, and the submenu stays up", async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();

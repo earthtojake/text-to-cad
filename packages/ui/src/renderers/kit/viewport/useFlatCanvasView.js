@@ -13,6 +13,11 @@
  * Figma's does (`wheelGesture.js`). Every flat view (a 2D drawing, a
  * board) is this one hook under its own paint.
  *
+ * A tap reaches the tool at once, but for one that would take something out of the selection
+ * (`takesAway`), which waits the double-click window and which the double-click drops before it fits, as
+ * a 3D view's pick does (`kit/tools/select/usePointerPick.js`): a double-click never shows the selection
+ * going and coming back.
+ *
  * The renderer brings the picture: `content` (a new one frames itself, unless this file's view is
  * already the person's), the `bounds` the fit frames (`@cad/core`'s plane maths,
  * `lib/drawing2d/transform.js`: model space, y up) and `paint(ctx, frame)`, which draws one whole
@@ -51,6 +56,7 @@ import { flatViewRecord, readFlatView } from "./flatView.js";
 import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "./pixelRatio.js";
 import { createWheelGesture } from "./wheelGesture.js";
 import { doubleClickFits } from "./dom.js";
+import { DOUBLE_CLICK_WAIT_MS, DOUBLE_TAP_MS } from "./touchGestures.js";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 
 /** Wheel notches to zoom factor. A notch is ~100 px of delta on most mice. */
@@ -77,6 +83,12 @@ const wheelZoomFactor = (pixels, pinch) => Math.exp(-pixels * (pinch ? PINCH_WHE
  * @param {(ctx: CanvasRenderingContext2D, frame: { width: number, height: number, pixelRatio: number,
  *   transform: object|null, element: Element|null, colorScheme: "light"|"dark" }) => void} options.paint  One whole frame.
  * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
+ * @param {(point: { x: number, y: number }, event: PointerEvent) => string | null} [options.takesAway]  What a tap would take
+ *   out of the selection, by a key the renderer names it with (null: nothing). Such a tap waits the double-click window
+ *   (`DOUBLE_CLICK_WAIT_MS`, a finger's `DOUBLE_TAP_MS`) before `onTap` hears it, and a double-click drops it. A second
+ *   tap taking the same key is that double-click's second click, and waits in its place; a tap on anything else lets
+ *   the waiting one act first. A lone one acts once the window has passed, if it would still take the same thing: a
+ *   tool put down, or a view moved off what it was made on, drops it.
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
  *   A pointer resting over the canvas with nothing pressed (null: it left).
  * @param {(point: { x: number, y: number }, event: MouseEvent) => boolean | void} [options.onDoubleTap]  Asked first what a
@@ -92,8 +104,8 @@ const wheelZoomFactor = (pixels, pinch) => Math.exp(-pixels * (pinch ? PINCH_WHE
  *   strip do meanwhile, so it is uncovered exactly as it was left; a pane that really changed size is taken up after.
  */
 export function useFlatCanvasView({ content, bounds, restored = null, colorScheme = "light", onViewMoved, paint: paintFrame,
-  onTap = null, onHover = null, onDoubleTap = null, middlePan = false, orbitPan = false, fitBox = fitTransform, clearStrip = false,
-  suspended = false }) {
+  onTap = null, takesAway = null, onHover = null, onDoubleTap = null, middlePan = false, orbitPan = false, fitBox = fitTransform,
+  clearStrip = false, suspended = false }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -124,6 +136,8 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   paintFrameRef.current = paintFrame;
   const tapRef = useRef(onTap);
   tapRef.current = onTap;
+  const takesAwayRef = useRef(takesAway);
+  takesAwayRef.current = takesAway;
   const hoverRef = useRef(onHover);
   hoverRef.current = onHover;
   // The pan, as a 3D view's OrbitControls are to its Box select: `enabled` false while a press is
@@ -363,6 +377,27 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     // The press that may still be a tap: where it went down, until it travels or a second finger lands.
     // `pan`: a middle press, a pan from the start.
     let press = null;
+    // A tap that would take something out of the selection, waiting the double-click window: `{ point, event, key, timer }`.
+    let held = null;
+    const dropHeld = () => { if (held) window.clearTimeout(held.timer); held = null; };
+    // It is a point, not what was under it: it acts only if it still takes the same thing, so a tool put down or a view
+    // moved meanwhile never turns it into a tap on something else.
+    const commitHeld = () => {
+      const waiting = held;
+      dropHeld();
+      if (waiting && takesAwayRef.current?.(waiting.point, waiting.event) === waiting.key) tapRef.current?.(waiting.point, waiting.event);
+    };
+    const tap = (point, event) => {
+      const key = takesAwayRef.current?.(point, event) || null;
+      // A second tap on what is waiting is a double-click's second click: the first is dropped, and this one waits in
+      // its place for the double-click that drops it. A tap on anything else lets the waiting one act first.
+      if (held) { if (key && key === held.key) dropHeld(); else commitHeld(); }
+      if (key) {
+        held = { point, event, key, timer: window.setTimeout(commitHeld, event.pointerType === "touch" ? DOUBLE_TAP_MS : DOUBLE_CLICK_WAIT_MS) };
+        return;
+      }
+      tapRef.current?.(point, event);
+    };
     const onPointerDown = (event) => {
       // Primary press only: a secondary or middle press belongs to whatever the
       // host puts on them, not to panning — but a view whose tool takes its drags pans with the middle.
@@ -421,7 +456,7 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       if (pointers.size === 0) setDragging(false);
       const tapped = press && press.id === event.pointerId && !press.moved && !press.tapless && event.type === "pointerup";
       press = null;
-      if (tapped && at) tapRef.current?.(at, event);
+      if (tapped && at) tap(at, event);
     };
     const onPointerLeave = () => { if (!pointers.size) hoverRef.current?.(null, null); };
     // The right button is a pan: the browser's own menu stays off the picture, as OrbitControls keeps it off a 3D view.
@@ -438,8 +473,10 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       if (gesture.pan) moveTo(panTransform(transform, gesture.pan.x, gesture.pan.y));
       else zoomBy(wheelZoomFactor(gesture.zoom, gesture.pinch), local(event));
     };
+    // The double-click (a finger's double tap says it too, `touchGestures.js`): the tap waiting for it is dropped first.
     const onDoubleClick = (event) => {
       event.preventDefault();
+      dropHeld();
       if (doubleTapRef.current?.(local(event), event) === true) return;
       // A fit is Select's double-click, as in every view: under Draw or Measure it is theirs.
       if (doubleClickFits(canvas)) fit();
@@ -462,6 +499,8 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       canvas.removeEventListener("pointerleave", onPointerLeave);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("dblclick", onDoubleClick);
+      // A tap still waiting goes with the canvas it was made on.
+      dropHeld();
     };
   }, [fit, moveTo, zoomBy]);
 

@@ -191,8 +191,23 @@ function DxfSurface({ view, data }) {
     };
     const inkUnder = (point, pointerType) => (annotationRef.current.items.length
       ? annotationAt(point, annotationSurface.onScreen(annotationRef.current.items), pickPx(pointerType))[0]?.id || null : null);
+    // The entity under a pane point, as Select would take it ("" for none).
+    const entityUnder = (point, pointerType) => {
+      const at = atPoint(point, pointerType);
+      return at && drawingRef.current ? entityAt(drawingRef.current, at.model, at.reach, { hiddenLayers: hiddenRef.current }) : "";
+    };
     const measured = clear => measureSelectHandlers(measureRef.current, () => measureRuntimeRef.current, clear);
     const pointer = event => ({ clientX: event.clientX, clientY: event.clientY, pointerType: event.pointerType, shiftKey: event.shiftKey });
+    // What a press under Select lands on, front to back as every view picks: a measurement, then the ink, then the
+    // drawing's entities (`id`, its reference). `adds`: the press adds it, or takes it out where it is picked: with
+    // Shift, or a finger's on something (a finger has no Shift; its tap on nothing is a plain one, and clears).
+    const pressed = (point, event) => {
+      const measurement = measured(() => {}).under(pointer(event));
+      const ink = measurement ? null : inkUnder(point, event.pointerType);
+      const handle = measurement || ink ? "" : entityUnder(point, event.pointerType);
+      return { measurement, ink, id: handle ? drawingReferenceId(handle) : "",
+        adds: event.shiftKey || (event.pointerType === "touch" && Boolean(measurement || ink || handle)) };
+    };
     const tap = (point, event) => {
       if (!drawingRef.current) return;
       const tool = toolRef.current;
@@ -207,25 +222,31 @@ function DxfSurface({ view, data }) {
         return;
       }
       if (tool !== DXF_TOOL.SELECT) return;
-      const shift = event.shiftKey;
+      const { ink, id, adds } = pressed(point, event);
       const session = annotationRef.current;
-      // Front to back, as every view picks: a measurement, then the ink, then the drawing's entities.
-      if (measured(() => selectionRef.current.clear()).press(pointer(event))) {
-        if (!shift && session.selected.length) session.select([]);
+      if (measured(() => selectionRef.current.clear()).press({ ...pointer(event), shiftKey: adds })) {
+        if (!adds && session.selected.length) session.select([]);
         return;
       }
-      const ink = inkUnder(point, event.pointerType);
       if (ink) {
-        const picked = shift ? (session.selected.includes(ink) ? session.selected.filter(id => id !== ink) : [...session.selected, ink]) : [ink];
-        if (!shift) selectionRef.current.clear();
+        const picked = adds ? (session.selected.includes(ink) ? session.selected.filter(other => other !== ink) : [...session.selected, ink]) : [ink];
+        if (!adds) selectionRef.current.clear();
         session.select(withGroups(picked, session.items));
         return;
       }
-      if (!shift && session.selected.length) session.select([]);
-      const at = atPoint(point, event.pointerType);
-      const handle = at ? entityAt(drawingRef.current, at.model, at.reach, { hiddenLayers: hiddenRef.current }) : "";
-      selectionRef.current.pick(handle ? { id: drawingReferenceId(handle) } : null, { multiSelect: shift });
-      if (handle && !shift) measureRef.current.select([]);
+      if (!adds && session.selected.length) session.select([]);
+      selectionRef.current.pick(id ? { id } : null, { multiSelect: adds });
+      if (id && !adds) measureRef.current.select([]);
+    };
+    // What a tap under Select would take out of the selection, by name (null: nothing): what it lands on, where the
+    // press lets it go (the one thing picked pressed again, or a picked one with Shift or a finger). The flat canvas
+    // holds such a tap for the double-click window (`useFlatCanvasView`'s `takesAway`).
+    const takesAway = (point, event) => {
+      if (toolRef.current !== DXF_TOOL.SELECT || !drawingRef.current) return null;
+      const { measurement, ink, id, adds } = pressed(point, event);
+      if (measurement) return adds && measureRef.current.selected.includes(measurement) ? `measurement:${measurement}` : null;
+      if (ink) return adds && annotationRef.current.selected.includes(ink) ? `ink:${ink}` : null;
+      return id && selectionRef.current.takesAway({ id }, { multiSelect: adds }) ? `pick:${id}` : null;
     };
     const hover = (point, event) => {
       const tool = toolRef.current;
@@ -248,11 +269,6 @@ function DxfSurface({ view, data }) {
       selectionRef.current.hoverHit(handle ? { id: drawingReferenceId(handle) } : null);
       setPointing(current => (current === over ? current : over));
     };
-    // The entity under a pane point, as Select would take it ("" for none).
-    const entityUnder = (point, pointerType) => {
-      const at = atPoint(point, pointerType);
-      return at && drawingRef.current ? entityAt(drawingRef.current, at.model, at.reach, { hiddenLayers: hiddenRef.current }) : "";
-    };
     // Select's box: the entities not on a hidden layer that it touches, even in part, with the ink and the
     // measurements it takes (`takeFlatBox`; Shift at its release adds).
     const box = (drawnBox) => {
@@ -266,11 +282,12 @@ function DxfSurface({ view, data }) {
         measure: measured(() => {}), selection: selectionRef.current,
         picked: entitiesInBox(drawable, bounds, { hiddenLayers: hiddenRef.current }).map(drawingReferenceId) });
     };
-    return { tap, hover, entityUnder, box };
+    return { tap, takesAway, hover, entityUnder, box };
   }, [annotationSurface, requestPaint]);
 
   const drawingView = useDrawingView({
-    drawing, restored, colorScheme, onViewMoved: rememberView, hiddenLayers, overlay, onTap: handlers.tap, onHover: handlers.hover
+    drawing, restored, colorScheme, onViewMoved: rememberView, hiddenLayers, overlay, onTap: handlers.tap, takesAway: handlers.takesAway,
+    onHover: handlers.hover
   });
   viewRef.current = drawingView;
   useFlatBoxSelect(drawingView, { enabled: toolMode === DXF_TOOL.SELECT && Boolean(drawing), onBox: handlers.box });

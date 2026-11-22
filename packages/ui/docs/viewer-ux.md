@@ -462,11 +462,11 @@ not open, CAD not running, a replaced link, a server that does not answer.
 - From front to back, a press takes a measurement, then ink, then the model. The selection stays lit, and in Quick
   Edit's chip, under every tool. The hover tip names what a press would pick
   ([Tooltips and feedback](#tooltips-and-feedback)).
-- **A double-click never takes the selection away** in a 3D view. A click that would let something go (the selected
-  thing pressed again, or taken out with Shift or a finger) waits the double-click window: 220ms for a mouse
-  (`DOUBLE_CLICK_WAIT_MS`), 300ms for a finger. A double-click drops it; a click on something else lets it act first.
-  A press on empty space clears at once, since what a double-click there does needs no selection. A flat view's click
-  (a board, a schematic, a drawing) still acts at once.
+- **A double-click never takes the selection away**, on a flat view as on a 3D one. A click that would let something
+  go (the selected thing pressed again, or taken out with Shift or a finger) waits the double-click window: 220ms for a
+  mouse (`DOUBLE_CLICK_WAIT_MS`), 300ms for a finger. A double-click drops it; a click on something else lets it act
+  first. A press on empty space clears at once, since what a double-click there does needs no selection. The same in
+  every view, 2D and 3D, a board in 3D included.
 - **A double-click** under Select (under Draw or Measure it is the tool's):
   - On a STEP or .xbf: on a part of an assembly it isolates the part and shows its row, keeping the selection; on a
     face, an edge or ink it turns the view square to it, keeping what the first click picked; on empty space it leaves
@@ -481,10 +481,11 @@ not open, CAD not running, a replaced link, a server that does not answer.
 - **The view's menu** (a right click; a long press on touch) is one list in every view: Copy Reference; Select,
   Isolate, Exit all isolates (on a 3D view, Select tangent faces or edges where they apply); Hide others, Show all,
   Hide; the view's own items; and last, Zoom to fit and Zoom to selection.
-- **Touch.** One finger orbits a 3D view, two fingers pan and zoom, and a tap picks. On a 3D view a tap adds to the
-  selection (a finger has no Shift), a tap on a selected item takes it out (after the double-tap window), and a tap on
-  empty space clears at once. On a flat view a tap picks as a click does. A double tap is a double-click, and a long
-  press is a right click: the menu opens at the finger, and what the press started is cancelled
+- **Touch.** One finger orbits a 3D view, two fingers pan and zoom, and a tap picks. A tap adds to the selection (a
+  finger has no Shift), a tap on a selected item takes it out (after the double-tap window), and a tap on empty space
+  clears at once, in every view (a board in 3D too). A tap takes a measurement or ink the same way. A double tap is a
+  double-click, and a long press
+  is a right click: the menu opens at the finger, and what the press started is cancelled
   ([Touch](design-system.md#touch)).
 
 ### Select's menu
@@ -653,7 +654,7 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 - **Escape** undoes the innermost thing first: an open menu or dropdown, the Display card, the explorer, the panel's
   search or its peek; then Preview; then the view's own steps, one a press and in the same order in every view: picked
   ink, a box being drawn or a measurement under way, the tool in hand going back to Select (its effect kept), the
-  measurements picked, then the selection and isolation. Why: Escape leaves the tool first, as in design tools, and the
+  measurements picked, then the selection, then (in a view that isolates) the isolation. Why: Escape leaves the tool first, as in design tools, and the
   selection, which feeds Quick Edit's chips, survives it. The pinned panel never closes on Escape. Quick Edit's note has its own Enter and Escape ([Quick Edit](#quick-edit)).
 
 ## Tooltips and feedback

@@ -40,8 +40,11 @@ const COARSE_TAP_SLOP_PX = 12;
  *   takes it away where it is selected (a finger has no Shift); a finger's tap on nothing is a plain one (it clears).
  * @param {(left: object | null, right: object | null) => boolean} [options.sameHit]  When two hover hits are
  *   the same thing to the renderer (default: equal `id`), so `onHover` fires on change only.
- * @param {(hit: object | null, modifiers: { multiSelect: boolean }) => boolean} [options.takesAway]  Whether this tap
- *   would take something out of the selection: such a tap waits the double-click window (above).
+ * @param {(hit: object | null, modifiers: { multiSelect: boolean }, pointer: Pointer) => boolean | string | null} [options.takesAway]
+ *   Whether this tap would take something out of the selection: such a tap waits the double-click window (above). A
+ *   string names what it would take out, for a scene whose hits do not (a view that picks by the pointer alone): a
+ *   second tap naming the same is the double-click's second click. `Pointer` here, and `onPick`'s, also carries the
+ *   press's `pointerType`.
  */
 export function usePointerPick({ viewport, scene, enabled, onPick, onHover = null, sameHit = null, touchAdds = false, takesAway = null }) {
   const callbacks = useRef(null);
@@ -114,12 +117,19 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
       const found = Boolean(hit && ("press" in hit ? hit.press : true));
       const touchAdds = callbacks.current.touchAdds && started.pointerType === "touch" && found;
       const modifiers = { multiSelect: Boolean(event.shiftKey) || touchAdds };
-      const pointer = pointerAt(started.x, started.y);
+      const pointer = { ...pointerAt(started.x, started.y), pointerType: started.pointerType };
+      const takes = () => callbacks.current.takesAway?.(hit, modifiers, pointer) || null;
+      let key = takes();
       // A second tap on what is waiting is a double-click's second click: the first is dropped, and this one waits
-      // in its place for the double-click that drops it. A tap on anything else lets the waiting one act first.
-      if (held) { if (same(held.hit, hit)) dropHeld(); else commitHeld(); }
-      if (callbacks.current.takesAway?.(hit, modifiers)) {
-        held = { hit, modifiers, pointer, timer: window.setTimeout(commitHeld, started.pointerType === "touch" ? DOUBLE_TAP_MS : DOUBLE_CLICK_WAIT_MS) };
+      // in its place for the double-click that drops it. A tap on anything else lets the waiting one act first (and
+      // is asked again, the selection having changed).
+      if (held) {
+        const again = typeof held.key === "string" && typeof key === "string" ? held.key === key : same(held.hit, hit);
+        if (again) dropHeld();
+        else { commitHeld(); key = takes(); }
+      }
+      if (key) {
+        held = { hit, modifiers, pointer, key, timer: window.setTimeout(commitHeld, started.pointerType === "touch" ? DOUBLE_TAP_MS : DOUBLE_CLICK_WAIT_MS) };
         return;
       }
       callbacks.current.onPick(hit, modifiers, pointer);

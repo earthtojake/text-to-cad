@@ -364,7 +364,7 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit's bar at the bot
   opens its card, the Background alone (no rule, no Reset); Projection and Preview are a 3D view's. Select picks, front to back, a measurement, then ink, then
   the drawing's ENTITY under the pointer (`drawing2d/entities.js`'s `entityAt`: within
   6 px, a fingertip's 16; the lines over a hatch before the hatch; nothing on a hidden
-  layer); Shift adds. Its box (`useFlatBoxSelect`) takes the entities it touches
+  layer); Shift adds, as a finger's tap on something does. Its box (`useFlatBoxSelect`) takes the entities it touches
   (`entitiesInBox`, over each entity's drawn line-work, points,
   regions and words, on the layers shown), with the ink and the measurements (`boxTake.js`'s
   `takeFlatBox`). Its selection is the kit's (`useSceneSelection`,
@@ -442,7 +442,8 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit's bar at the bot
   has the press: `controls.enabled`, which `useFlatBoxSelect` turns off for it as Box select turns
   OrbitControls off; a press that lets go before is the tool's tap), the 3D views' pans too (the right or middle button's drag, a drag
   with Ctrl, Cmd or Shift), a mouse's wheel or a pinch to zoom about the pointer and a trackpad's
-  two-finger scroll to pan, double-click to fit again, and a right-click for the view's menu (an
+  two-finger scroll to pan, double-click to fit again (dropping first a tap that waits for it: one that would take
+  something out of the selection, `takesAway`, waits the double-click window), and a right-click for the view's menu (an
   entity's reference, Select, Hide its layer; Show all layers; the framing). The view lives in a REF and the
   canvas repaints through one `requestAnimationFrame` when something changed; a pan
   never re-renders the component tree. A resize paints at once, inside the pane's

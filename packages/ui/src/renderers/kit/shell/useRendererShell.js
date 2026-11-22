@@ -142,7 +142,7 @@ const EMPTY = Object.freeze({});
  * @param {{ active?: boolean, handle?: (options: { toolInHand: boolean }) => boolean }} [options.escape]  Escape, innermost first: `handle` returns
  *   true when it spent the key. `toolInHand`: a tool other than the file's default, or an effect, is in hand; the
  *   renderer then spends the key only on what is under way (a measurement being drawn) and leaves what is picked, and
- *   the shell puts the tool down: one Escape order in every view, a STEP's. After it there is nothing of the viewer's
+ *   the shell puts the tool down: one Escape order in every view. After it there is nothing of the viewer's
  *   own left to close.
  * @param {{ signatures?: Record<string, string>, read: () => Record<string, unknown> } | null} [options.rendererState]
  *   The renderer's own slices of the file's view (`fileView.js`): `read()` is called when the view is written,
@@ -595,7 +595,7 @@ export function useRendererShell({
         if (!(annotateToolActive && event.target instanceof Element && event.target.closest("[data-cad-annotation-overlay]"))) annotationRef.current.select([]);
         return;
       }
-      // One order in every view, a STEP's: what is under way (a measurement being drawn), then the tool in hand, then
+      // One order in every view: what is under way (a measurement being drawn), then the tool in hand, then
       // what is picked. The renderer is told whether a tool is in hand, and leaves what is picked for a later press.
       const toolInHand = Boolean(effectInHand || (toolModes && toolMode !== toolModes.defaultMode));
       if (escapeRef.current?.({ toolInHand })) return;

@@ -474,9 +474,11 @@ with one).
 - **The picture's gestures become mouse events in one place** (`kit/viewport/touchGestures.js`). A double tap is a
   double-click (each tap within 350ms and 10px, the second within 300ms and 24px). A press held 500ms within 10px is a
   right-click, opening the menu at the finger. A second finger or more movement is neither. One finger orbits, two
-  pan and zoom, and a tap picks; a pinch or a camera drag never picks. A press that would take something out of the
-  selection waits the double-click window (`DOUBLE_CLICK_WAIT_MS`, 220ms; a finger's `DOUBLE_TAP_MS`, 300ms). What
-  each gesture does: [Selection and gestures](viewer-ux.md#selection-and-gestures).
+  pan and zoom, and a tap picks, adding as Shift does; a pinch or a camera drag never picks. A press that would take
+  something out of the selection waits the double-click window (`DOUBLE_CLICK_WAIT_MS`, 220ms; a finger's
+  `DOUBLE_TAP_MS`, 300ms), and the double-click drops it: a 3D view's pick (`kit/tools/select/usePointerPick.js`) and a
+  flat view's canvas (`kit/viewport/useFlatCanvasView.js`) alike, each asking its view's `takesAway`. What each gesture
+  does: [Selection and gestures](viewer-ux.md#selection-and-gestures).
 - **A finger reaches further on the picture**: an edge within 20px (within 16px it wins over the face under it), ink,
   a measurement or the eraser within 16px (`TOUCH_HIT_PX`), a joint's knob within 22px.
 - **The pointer's kind never sets the layout**; only the viewer's width does. It may change how input is read (reach,

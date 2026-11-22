@@ -216,11 +216,12 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   }, selectedCamera);
   assert.notDeepEqual(await viewport.screenshot({ style: HIDDEN }), selectedFrame, 'Select orbit presents a new frame after drawing');
 
-  // An update of the model discards ink drawn over the revision before it, and the panel with it.
+  // An update of the model keeps the ink: its marks are in the scene's coordinates, so they stand where they were
+  // drawn, and nothing a person drew is thrown away; Quick Edit still carries it.
   if (update) {
     await update();
-    await until('the update discards the ink', seen => seen.green < NONE && seen.red < NONE);
-    await panel.waitFor({ state: 'detached' });
+    await until('the ink stays across the update', seen => seen.green > 100);
+    await panel.waitFor();
   }
   assert.deepEqual(errors, []);
 }

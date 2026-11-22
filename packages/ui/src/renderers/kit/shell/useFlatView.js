@@ -24,8 +24,9 @@ import { useWhenSettled } from "./useWhenSettled.js";
  *
  * `useFlatHandover` is what goes out of the view: Quick Edit's props (its references and chips, the
  * annotation, and the prompt's views and files: the views with ink, the one on screen and the
- * annotation file, as `host.promptFiles` writes them), the keys (Escape lets go, Delete deletes what
- * Select picked, ⌘Z walks the history, a tool's letter takes it up and F fits, ⌘\ shows or hides the
+ * annotation file, as `host.promptFiles` writes them), the keys (Escape lets go of picked ink and what is under
+ * way, then puts the tool in hand down, then lets go of what is picked; Delete deletes what Select picked, ⌘Z walks
+ * the history, a tool's letter takes it up and F fits, ⌘\ shows or hides the
  * view's panel and / opens it on its search (`panelControl`, which the frame fills in), the copy key copies
  * the annotated view while a drawing tool is up, else what `copySelection` copies), a host's capture
  * request, the live binding, and the alert card with its dismissal. While the view is in Preview (`previewing`, a view
@@ -178,11 +179,16 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     return copySelection ? copySelection() : false;
   };
 
-  // ---- keys: Escape lets go, Delete deletes what Select picked, ⌘Z walks the history ----
-  const letGo = () => {
+  // ---- keys: Escape, Delete deletes what Select picked, ⌘Z walks the history ----
+  // Escape, a step a press, in the same order in every view: picked ink, a measurement under way (a box being dragged
+  // is its gesture's own), the tool in hand going back to Select, the measurements picked, then the selection.
+  // The tool goes before the picks, so the selection, which feeds Quick Edit's chips, survives it. An empty Quick Edit
+  // passes its Escape on to this.
+  const escapeView = () => {
     const session = annotationRef.current, now = measureRef.current;
     if (session.selected.length) { session.select([]); return true; }
     if (now.drafting) { now.cancelDraft(); return true; }
+    if (!selecting) { selectTool(FLAT_TOOL.SELECT); return true; }
     if (now.selected.length) { now.select([]); return true; }
     if (selectionRef.current.active) { selectionRef.current.clear(); return true; }
     return false;
@@ -229,9 +235,7 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
       if (previewing) { leavePreview?.(); return; }
       // The drawing tools' layer spends its own Escape (its editor, the stroke in hand).
       if (annotating && event.target instanceof Element && event.target.closest("[data-cad-annotation-overlay]")) return;
-      if (letGo()) return;
-      // Nothing to let go of: the tool in hand goes down, back to Select.
-      if (!selecting) selectTool(FLAT_TOOL.SELECT);
+      escapeView();
     }
   });
 
@@ -265,7 +269,7 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
 
   const quickEdit = {
     resource: workspace.resource, references, chips, nameReference, annotation: quickEditAnnotation,
-    prompt: quickEditPrompt, onCopy: copyAction, onEscape: letGo, onClear: clearQuickEdit, disabled: !shown
+    prompt: quickEditPrompt, onCopy: copyAction, onEscape: escapeView, onClear: clearQuickEdit, disabled: !shown
   };
   return { quickEdit, cardAlert, alertDismissal, toolStack, changeToolStack, panelControl, zoomKeys, reportActionError: setActionError };
 }

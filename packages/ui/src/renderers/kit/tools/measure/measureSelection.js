@@ -71,10 +71,12 @@ export function measureSelectHandlers(measure, runtime, clearParts, { picks = tr
         if (!event.shiftKey && measure.selected.length) measure.select([]);
         return false;
       }
-      measure.select(event.shiftKey
+      // Shift, or a finger (which has no Shift), adds a measurement or takes it out, as a part's tap does.
+      const additive = event.shiftKey || event.pointerType === "touch";
+      measure.select(additive
         ? (measure.selected.includes(id) ? measure.selected.filter(other => other !== id) : [...measure.selected, id])
         : [id]);
-      if (!event.shiftKey) clearParts();
+      if (!additive) clearParts();
       return true;
     },
     box(box) {

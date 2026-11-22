@@ -364,10 +364,12 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     // The second press of a double-click keeps what the first found.
     const again = inkPress.current?.id === id && event.timeStamp - inkPress.current.at < DOUBLE_PRESS_MS;
     inkPress.current = { id, before: again ? inkPress.current.before : session.selected, at: event.timeStamp };
-    const picked = event.shiftKey
+    // Shift, or a finger (which has no Shift), adds the mark or takes it out, as a part's tap does.
+    const additive = event.shiftKey || event.pointerType === "touch";
+    const picked = additive
       ? (session.selected.includes(id) ? session.selected.filter(other => other !== id) : [...session.selected, id])
       : [id];
-    if (!event.shiftKey) onClearReferences?.();
+    if (!additive) onClearReferences?.();
     session.select(withGroups(picked, session.items));
   };
   const rootHandlers = {

@@ -71,7 +71,7 @@ const BoardPreview = props => <Suspense fallback={null}><BoardPreviewView {...pr
  * kit (`kit/shell/FlatViewFrame.jsx`, `useFlatView.js`): Select, as KiCad's — a click picks the most
  * specific thing under the pointer that its filter (KiCad's Selection Filter, `BoardSelectFilter.jsx`)
  * ticks, on a layer the Display draws (a pad, a via, a track, a text, a dimension, a graphic, a pour
- * or a rule area by its outline, then a part), Shift adds, and a click on nothing clears; a plain
+ * or a rule area by its outline, then a part), Shift adds (a finger's tap too), and a click on nothing clears; a plain
  * drag draws a box (every viewer's, `kit/tools/select/useBoxSelectGesture.js`'s `useFlatBoxSelect`):
  * it takes what it touches, as the filter does, or naming its area on the view's working layer when it takes
  * nothing (`tools.js`); the rest are the 3D
@@ -436,6 +436,15 @@ function BoardSurface({ view, data }) {
       ? annotationAt(point, annotationSurfaceRef.current.onScreen(annotationRef.current.items), pickPx(pointerType))[0]?.id || null : null);
     const measured = clear => measureSelectHandlers(measureRef.current, () => measureRuntimeRef.current, clear);
     const pointer = event => ({ clientX: event.clientX, clientY: event.clientY, pointerType: event.pointerType, shiftKey: event.shiftKey });
+    // What a press under Select lands on, front to back as every view picks: a measurement, then the ink, then the
+    // board's own. `adds`: the press adds it, or takes it out where it is picked: with Shift, or a finger's on something
+    // (a finger has no Shift; its tap on nothing is a plain one, and clears).
+    const pressed = (point, event) => {
+      const measurement = measured(() => {}).under(pointer(event));
+      const ink = measurement ? null : inkUnder(point, event.pointerType);
+      const hit = measurement || ink ? null : pickAt(point, event.pointerType);
+      return { measurement, ink, hit, adds: event.shiftKey || (event.pointerType === "touch" && Boolean(measurement || ink || hit)) };
+    };
     const tap = (point, event) => {
       if (!indexRef.current) return;
       const tool = toolRef.current;
@@ -450,24 +459,31 @@ function BoardSurface({ view, data }) {
         return;
       }
       if (tool !== BOARD_TOOL.SELECT) return;
-      const shift = event.shiftKey;
+      const { ink, hit, adds } = pressed(point, event);
       const session = annotationRef.current;
-      // Front to back, as every view picks: a measurement, then the ink, then the board's own.
-      if (measured(() => selectionRef.current.clear()).press(pointer(event))) {
-        if (!shift && session.selected.length) session.select([]);
+      if (measured(() => selectionRef.current.clear()).press({ ...pointer(event), shiftKey: adds })) {
+        if (!adds && session.selected.length) session.select([]);
         return;
       }
-      const ink = inkUnder(point, event.pointerType);
       if (ink) {
-        const picked = shift ? (session.selected.includes(ink) ? session.selected.filter(id => id !== ink) : [...session.selected, ink]) : [ink];
-        if (!shift) selectionRef.current.clear();
+        const picked = adds ? (session.selected.includes(ink) ? session.selected.filter(id => id !== ink) : [...session.selected, ink]) : [ink];
+        if (!adds) selectionRef.current.clear();
         session.select(withGroups(picked, session.items));
         return;
       }
-      if (!shift && session.selected.length) session.select([]);
-      const hit = pickAt(point, event.pointerType);
-      selectionRef.current.pick(hit ? { id: hit.selector } : null, { multiSelect: shift });
-      if (hit && !shift) measureRef.current.select([]);
+      if (!adds && session.selected.length) session.select([]);
+      selectionRef.current.pick(hit ? { id: hit.selector } : null, { multiSelect: adds });
+      if (hit && !adds) measureRef.current.select([]);
+    };
+    // What a tap under Select would take out of the selection, by name (null: nothing): what it lands on, where the
+    // press lets it go (the one thing picked pressed again, or a picked one with Shift or a finger). The flat canvas
+    // holds such a tap for the double-click window (`useFlatCanvasView`'s `takesAway`).
+    const takesAway = (point, event) => {
+      if (toolRef.current !== BOARD_TOOL.SELECT || !indexRef.current) return null;
+      const { measurement, ink, hit, adds } = pressed(point, event);
+      if (measurement) return adds && measureRef.current.selected.includes(measurement) ? `measurement:${measurement}` : null;
+      if (ink) return adds && annotationRef.current.selected.includes(ink) ? `ink:${ink}` : null;
+      return hit && selectionRef.current.takesAway({ id: hit.selector }, { multiSelect: adds }) ? `pick:${hit.selector}` : null;
     };
     const hover = (point, event) => {
       const tool = toolRef.current;
@@ -511,7 +527,7 @@ function BoardSurface({ view, data }) {
       const board = indexRef.current, kinds = boardPickKinds(filterRef.current);
       return board && kinds ? board.pick(located.page, { kinds, view: located.side, tolerance: 0.1, layers: sideLayersRef.current?.[located.side] }) : null;
     };
-    return { tap, hover, box, pickAt, pickLocated, pickPart };
+    return { tap, takesAway, hover, box, pickAt, pickLocated, pickPart };
   }, [requestPaint]);
 
   // The flat canvas lets go of its rasters while the board is up in 3D (it is covered); it keeps its view.
@@ -520,8 +536,8 @@ function BoardSurface({ view, data }) {
   const [shown3d, setShown3d] = useState(false);
   const [closing3d, setClosing3d] = useState(false);
   const boardView = useBoardView({
-    plot, restored, colorScheme, onViewMoved: rememberView, drawView, overlay, onTap: handlers.tap, onHover: handlers.hover,
-    paused: dimension === "3d" && shown3d,
+    plot, restored, colorScheme, onViewMoved: rememberView, drawView, overlay, onTap: handlers.tap, takesAway: handlers.takesAway,
+    onHover: handlers.hover, paused: dimension === "3d" && shown3d,
     // Under Preview the flat canvas is left exactly as it is: the page's chrome goes and comes back round it.
     suspended: previewing
   });
@@ -820,7 +836,7 @@ function BoardSurface({ view, data }) {
         <Board3dView handle={view3dRef} viewerRef={viewer3dRef} modelKey={`${file}#3d`} layout={plot.layout} outline={plot.board?.outline ?? null}
           thickness={thickness} parts={boardParts} models={models} client={workspace.client} showModels={showModels} bodyInk={bodyInk} pickPart={handlers.pickPart}
           display={display} colorScheme={colorScheme} opening={opening} projection={projection} pickAt={handlers.pickLocated}
-          onTap={handlers.tap} onHover={handlers.hover} picking={Boolean(index) && !annotating && !previewing} suspended={previewing} shown={(shown3d || !opening.flat) && !previewing}
+          onTap={handlers.tap} takesAway={handlers.takesAway} onHover={handlers.hover} picking={Boolean(index) && !annotating && !previewing} suspended={previewing} shown={(shown3d || !opening.flat) && !previewing}
           overlay={overlay} onCamera={onCamera3d} onShown={() => { if (dimensionRef.current === "3d") setShown3d(true); }} />
       </Suspense> : null}
       {/* Measure's layer, over the board and under the tools: the pointer stays the board's. */}
