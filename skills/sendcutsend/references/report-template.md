@@ -11,19 +11,19 @@ Use this structure when the user asks for a review, validation, preflight, or ma
 
 ## Sources Checked
 
-List official SendCutSend URLs used for the checks as Markdown links. Include only sources actually consulted. Include the access date and JSON `_meta.generated_at` values when available. The findings table must also link the specific rule source for each row, so this section is a bibliography, not a substitute for row-level citations.
+List the official SendCutSend URLs consulted as Markdown links, with the access date and each JSON's `_meta.generated_at`. This section is a bibliography, not a substitute for row-level citations.
 
 ## Geometry Facts
 
-Summarize facts from text-to-cad inspection when available and targeted `build123d`/`ezdxf` inspection code: file type, units, extents/bounding box, entity/body counts, layers, unsupported entities, obvious open/duplicate geometry, and parsing limitations.
+File type, units, extents/bounding box, entity/body counts, layers, unsupported entities, obvious open/duplicate geometry, and parsing limitations.
 
-For bent 2D files, include bend geometry facts from the exported file: bend-line count and layers, individual bend line lengths, nearest non-bend cut geometry for each bend line, local flange depths, bend-line span coverage, bend-adjacent cut geometry, insufficient contact/support observations, and any split/interrupted/common-axis bend observations. Use those facts for comparison against the current material/thickness service page.
+For bent 2D files, include bend geometry facts from the exported file: bend-line count and layers, individual bend line lengths, nearest non-bend cut geometry for each bend line, local flange depths, bend-line span coverage, bend-adjacent cut geometry, insufficient contact/support observations, and any split/interrupted/common-axis bend observations.
 
-For bent STEP/STP files, include measured sheet thickness when available and the extracted bend-radius set. Compare bend radii to the selected material/SKU only when that order context is known.
+For bent STEP/STP files, include measured sheet thickness when available and the extracted bend-radius set.
 
 ## Findings
 
-Use one row per issue. In `Rule source`, link the specific official page or JSON file that defines the requirement being checked, and include the field path when the source is JSON. Example: `[sendcutsend-specs.json](https://cdn.sendcutsend.com/specs/sendcutsend-specs.json) materials[sku=ALU-063].cutting_specs.min_hole_size`. Prefer exact SKU-specific sources over generic guide text. If no external rule applies, write `Direct file inspection`.
+Use one row per issue. In `Rule source`, link the specific official page or JSON file that defines the requirement being checked, and include the field path when the source is JSON. Example: `[sendcutsend-specs.json](https://cdn.sendcutsend.com/specs/sendcutsend-specs.json) materials[sku=ALU-063].cutting_specs.min_hole_size`.
 
 | Status | Check | Evidence | Rule source | Recommendation |
 | --- | --- | --- | --- | --- |
@@ -33,8 +33,6 @@ Use one row per issue. In `Rule source`, link the specific official page or JSON
 
 Use a limited verdict:
 
-- `Ready to upload for this assumed context`
-- `Needs edits before upload`
-- `Insufficient context to validate`
-
-Never use a ready verdict if any required current official requirement check is marked `❌ fail` or `❓ need more info`. Use `Ready to upload for this assumed context` only when every required cited check has sufficient order context, source evidence, measured file facts, and passes or is explicitly outside the selected service. Until an explicit SendCutSend UI classification model is deliberately added, treat measured upload risks and manufacturability issues as `❌ fail`.
+- `Ready to upload for this assumed context`: every required check passes or is explicitly outside the selected service
+- `Needs edits before upload`: a required check is `❌ fail`
+- `Insufficient context to validate`: none fails, and one is `❓ need more info`
