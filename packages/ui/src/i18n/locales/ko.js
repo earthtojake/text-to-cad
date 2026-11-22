@@ -390,10 +390,10 @@ export default {
 
 
   "preview.label": "미리 보기",
-  "preview.settings": "미리 보기 설정",
+  "preview.settings": "표시",
   "preview.exit": "미리 보기 종료",
-  "preview.settingsTitle": "설정",
-  "preview.close": "미리 보기 설정 닫기",
+  "preview.settingsTitle": "표시",
+  "preview.close": "표시 설정 닫기",
   "preview.orbit": "궤도 회전",
   "preview.speed": "속도",
   "preview.orbitSpeed": "궤도 회전 속도",

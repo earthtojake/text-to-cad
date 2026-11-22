@@ -774,7 +774,7 @@ test('Preview draws the robot as it opens, and leaving it finds the tools view a
   assert.equal(await pane.locator('[data-preview-playbar]').count(), 0, 'no playbar for a file with no routine');
   assert.equal(await pane.locator('[data-viewer-navbar]').count(), 0, 'no navbar in Preview');
   assert.deepEqual(await pane.locator('[data-preview-bar] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Preview settings', 'Exit preview']);
+    ['Display', 'Exit preview']);
 
   // Leaving finds the tools view's work as it was left.
   await exitPreview();

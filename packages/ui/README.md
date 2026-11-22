@@ -317,7 +317,7 @@ panel docked at its left (the strip and Quick Edit centred on the window over it
 cube alone at the top-right. Preview (preview
 mode) is the shell's own, the one place Render is drawn — whatever the file's display mode,
 which has no Render — and takes the whole page, the navbar and the strip with it, in every
-host; in the navbar's place its own bar, on no surface, names the file and holds Preview settings
+host; in the navbar's place its own bar, on no surface, names the file and holds Display
 (Orbit, off at every entry, and its speed, then Render's settings, sliding in from the right
 edge) and Exit preview, fading with the playbar while the pointer rests; for a file with
 routines, Preview's own playbar sits under the model. Routines play in the tools view from the panel's

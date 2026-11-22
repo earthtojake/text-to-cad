@@ -1488,7 +1488,7 @@ it("a board has Preview as a 3D file has: its button right of Display, the page 
   await waitFor(() => expect(pane.querySelector('[data-preview-view] [data-stand-in-viewport]')).not.toBeNull());
   expect([viewport3d.props.preview, viewport3d.props.renderMode, pane.querySelector('[data-board-3d]')]).toEqual([true, true, null]);
   // Its settings: Orbit, then Render's lighting, background and floor; no Part colours. An edit is the file's.
-  fireEvent.click(within(bar).getByRole('button', { name: 'Preview settings' }));
+  fireEvent.click(within(bar).getByRole('button', { name: 'Display' }));
   const settings = pane.querySelector<HTMLElement>('[data-preview-settings-panel]')!;
   expect([...settings.querySelectorAll('[data-settings-heading]')].map(heading => heading.textContent)).toEqual(['Orbit', 'Lighting', 'Background', 'Floor']);
   fireEvent.click(within(settings).getByRole('switch', { name: 'Floor' }));

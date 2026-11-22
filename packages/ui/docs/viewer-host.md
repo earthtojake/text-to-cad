@@ -209,7 +209,7 @@ person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 A renderer's controls for the view are the renderer's own: the viewer's for a 3D view, under a file's navbar
 portalled into its view slot (Display, then Preview), the cube alone at the top-right; without a navbar Display and
 Preview at its strip's end;
-and in Preview its bar's Preview settings and Exit preview, the navbar hidden. The host draws none of them. The host's `captureRequest`
+and in Preview its bar's Display and Exit preview, the navbar hidden. The host draws none of them. The host's `captureRequest`
 command is the same capture: to a composer destination it delivers the view and
 the selection through `promptContext.deliver`. Neither route detects the platform.
 

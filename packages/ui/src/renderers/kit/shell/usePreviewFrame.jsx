@@ -49,7 +49,7 @@ function ViewControl({ label, disabled = false, tooltipSide = "top", onClick, ch
  *   (`previewCover.js`) — unless the view is `moving` (Orbit, a routine playing), which has nothing to wait for — or
  *   at most a few seconds. Then it fades from the finished picture. Leaving needs none.
  * - **The host's navbar** steps aside while Preview is up (`fileView.onPreviewChange`).
- * - **Preview's bar and panel** (`PreviewChrome`'s props): the file's name, Preview settings (a toggle, in Display's cube,
+ * - **Preview's bar and panel** (`PreviewChrome`'s props): the file's name, Display (a toggle, in Display's cube,
  *   `DisplayIcon`, at its size: how the picture is looked at, in Preview as outside it; the panel Orbit and its speed,
  *   then `render`, Render's own settings) and Exit preview, in the backdrop's ink, gone while the pointer rests
  *   (`usePreviewIdle` over `hostElement`).

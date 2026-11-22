@@ -391,10 +391,10 @@ export default {
 
 
   "preview.label": "預覽",
-  "preview.settings": "預覽設定",
+  "preview.settings": "顯示",
   "preview.exit": "結束預覽",
-  "preview.settingsTitle": "設定",
-  "preview.close": "關閉預覽設定",
+  "preview.settingsTitle": "顯示",
+  "preview.close": "關閉顯示設定",
   "preview.orbit": "環繞",
   "preview.speed": "速度",
   "preview.orbitSpeed": "環繞速度",

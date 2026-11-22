@@ -410,10 +410,10 @@ export default {
 
   // Preview: its tile, its corner controls and its settings panel.
   "preview.label": "Preview",
-  "preview.settings": "Preview settings",
+  "preview.settings": "Display",
   "preview.exit": "Exit preview",
-  "preview.settingsTitle": "Settings",
-  "preview.close": "Close preview settings",
+  "preview.settingsTitle": "Display",
+  "preview.close": "Close display settings",
   "preview.orbit": "Orbit",
   "preview.speed": "Speed",
   "preview.orbitSpeed": "Orbit speed",

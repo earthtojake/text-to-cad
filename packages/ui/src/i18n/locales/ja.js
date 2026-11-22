@@ -390,10 +390,10 @@ export default {
 
 
   "preview.label": "プレビュー",
-  "preview.settings": "プレビューの設定",
+  "preview.settings": "表示",
   "preview.exit": "プレビューを終了",
-  "preview.settingsTitle": "設定",
-  "preview.close": "プレビューの設定を閉じる",
+  "preview.settingsTitle": "表示",
+  "preview.close": "表示の設定を閉じる",
   "preview.orbit": "周回",
   "preview.speed": "速度",
   "preview.orbitSpeed": "周回速度",

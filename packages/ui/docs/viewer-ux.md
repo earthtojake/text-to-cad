@@ -109,10 +109,10 @@ chrome that floats over the picture. The home is the navbar over the library.
 - **Pinned, it pushes.** The picture is drawn in the room it leaves, the model centred there; it never overlays the
   model, at any width. Showing or hiding it is a plain resize, so a fitted view refits.
 - **Collapsed, it leaves nothing** over the model: no rail, no hot edge. A pick never opens it.
-- **The peek.** A mouse or pen resting 500ms on the toggle (`PANEL_PEEK_DELAY_MS`) shows the collapsed panel as a card
+- **The peek.** A mouse or pen resting 250ms on the toggle (`PANEL_PEEK_DELAY_MS`) shows the collapsed panel as a card
   over the view, 4px in from the window's left, the navbar and the view's bottom, its contents where a pinned panel's
   stand. It slides in over 100ms and out over 80ms, pushes nothing, and works from the page's first frame. It goes
-  500ms after the pointer has left both toggle and card (not while a menu opened from it is up), on Escape, or on a
+  150ms after the pointer has left both toggle and card (`PANEL_PEEK_LEAVE_MS`; not while a menu opened from it is up), on Escape, or on a
   press on the model. Only a click on the toggle or ⌘\ pins it; nothing done inside it does, and a peek is never kept.
   There is no peek for a finger, a held button or keyboard focus. Why: a glance at the tree should not resize the
   picture or move the camera.
@@ -592,7 +592,7 @@ Draw is the one drawing tool: ink on the model, for a note to the agent ([its me
   which lifts once the picture has settled: after at least 700ms, and by 6s at the latest.
 - **It hides** the navbar, the strip and its row, the corner, Quick Edit, the update line, the Display card and the
   panel (kept as it was, out of sight). Leaving brings them back as they were. **Its bar** stands in the navbar's place
-  at its height, on no surface: the file's name at the left; Preview settings (Display's cube, where Display stood)
+  at its height, on no surface: the file's name at the left; Display (Display's cube and name, where the navbar's Display stood: the same settings for the Preview environment)
   and Exit preview (X) at the right; tooltips below.
 - **The bar comes and goes** with the playbar: up on entry, hidden after 2s without pointer movement over the view
   (`PREVIEW_IDLE_MS`) or at once when the pointer leaves, back on a move, a tap or keyboard focus. It stays while

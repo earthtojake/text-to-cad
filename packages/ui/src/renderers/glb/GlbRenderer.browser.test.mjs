@@ -398,8 +398,8 @@ test('an animated GLB opens at rest, its clips its Animation tab\'s, no playbar 
   assert.deepEqual(await page.evaluate(() => window.__cadStage().studioGround), floor);
 
   // Orbit, in Preview's settings, turns the camera; turned off again, it stops.
-  await pressPreviewable(page, pane, pane.getByRole('button', { name: 'Preview settings', exact: true }));
-  const orbit = pane.getByRole('region', { name: 'Preview settings' }).getByRole('switch', { name: 'Orbit', exact: true });
+  await pressPreviewable(page, pane, pane.getByRole('button', { name: 'Display', exact: true }));
+  const orbit = pane.getByRole('region', { name: 'Display' }).getByRole('switch', { name: 'Orbit', exact: true });
   assert.equal(await orbit.getAttribute('aria-checked'), 'false', 'Preview opens still');
   const held = await page.evaluate(() => window.__cadCamera().position);
   await orbit.click();
@@ -445,19 +445,19 @@ test("an animated GLB's Speed and Loop are the file's: chosen in the Animation t
     await page.getByRole('menuitemradio', { name: `${speed}×`, exact: true }).click();
     await tab.getByRole('switch', { name: 'Loop', exact: true }).click();
   };
-  const orbit = pane.getByRole('region', { name: 'Preview settings' }).getByRole('switch', { name: 'Orbit', exact: true });
+  const orbit = pane.getByRole('region', { name: 'Display' }).getByRole('switch', { name: 'Orbit', exact: true });
   assert.deepEqual(await settings(), ['Animation speed: 1×', 'true'], 'the clip\'s own');
   await choose(0.5);
   assert.deepEqual(await settings(), ['Animation speed: 0.5×', 'false']);
   await togglePreview(page, pane, true);
   settingsButton = playbar(pane).getByRole('button', { name: 'Playback settings' });
   assert.deepEqual(await settings(), ['Animation speed: 0.5×', 'false'], 'the file\'s, in Preview too');
-  await pressPreviewable(page, pane, pane.getByRole('button', { name: 'Preview settings', exact: true }));
+  await pressPreviewable(page, pane, pane.getByRole('button', { name: 'Display', exact: true }));
   await orbit.click();
   assert.equal(await orbit.getAttribute('aria-checked'), 'true');
   await togglePreview(page, pane, false);
   await togglePreview(page, pane, true);
-  await pressPreviewable(page, pane, pane.getByRole('button', { name: 'Preview settings', exact: true }));
+  await pressPreviewable(page, pane, pane.getByRole('button', { name: 'Display', exact: true }));
   assert.equal(await orbit.getAttribute('aria-checked'), 'false', 'still again');
   assert.deepEqual(await settings(), ['Animation speed: 0.5×', 'false'], 'the file\'s, kept');
   await togglePreview(page, pane, false);
