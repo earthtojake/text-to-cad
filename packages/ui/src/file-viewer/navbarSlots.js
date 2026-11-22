@@ -17,8 +17,8 @@ export const useNavbarSlots = () => useContext(NavbarSlotsContext);
 
 /**
  * A file's navbar's view slot: the element at the row's right end where the view on screen portals its view settings
- * (Display, Projection or a board's Side and 2D/3D, then Preview: `renderers/kit/shell/NavbarViewControls.jsx`), null
- * until the navbar has drawn it, and outside a file viewer's navbar, where a view keeps them over its picture.
+ * (Display, then Preview where the view has it: `renderers/kit/shell/NavbarViewControls.jsx`), null until the navbar
+ * has drawn it, and outside a file viewer's navbar, where a view ends its tool strip with them.
  */
 /** @type {import("react").Context<HTMLElement | null>} */
 export const NavbarViewSlotContext = createContext(/** @type {HTMLElement | null} */ (null));

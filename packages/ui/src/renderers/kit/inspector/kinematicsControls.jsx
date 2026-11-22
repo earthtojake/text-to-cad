@@ -17,13 +17,13 @@ export function positionValuesAreDefault(values, defaults) {
 }
 
 /**
- * Joints' Pose, the first row of its body, over the joints: a settings row (`FileSheetSettingRow`'s
- * shape, at the panel's 28px) — its label, **Position**, in the 4rem column on the 16px line, and the pose in
- * hand as a dropdown as wide as its value (6rem at least, the row's rest at most), at the row's right end on the
- * right 16px line, as a settings row's control is ("Custom" while the joints are set by hand):
+ * Joints' Pose, the first row of its body, over the joints (under the motion and its hairline, where the tab holds
+ * one): a panel settings row (`PanelSelectRow`, `panelRows.jsx`, the panel's 28px) — its label, **Position**, on the
+ * panel's 16px line, and the pose in hand as a dropdown half the row wide (wider only where its value needs it), ending
+ * on the right 16px line, as every settings row's control does ("Custom" while the joints are set by hand):
  * Default first where the section can reset, then the named poses. Reset, the way back to the default
- * pose, is the tab's actions row, last (`KinematicsResetRow`). Nothing where there is neither to
- * choose. Never disabled: a motion holding the model is let go of by a choice here (one motion at a time).
+ * pose, is the tab's ONE Reset, at its bottom right in its actions row (`KinematicsResetRow`). Nothing where there
+ * is neither to choose. Never disabled: a motion holding the model is let go of by a choice here (one motion at a time).
  */
 export function KinematicsPoseRow({ poses = [], activeValue, onSelect, onReset }) {
   const usage = useControlUsage();

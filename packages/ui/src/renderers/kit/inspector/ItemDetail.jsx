@@ -31,7 +31,7 @@ function Head({ item, data, copy }) {
  * what it holds or is connected to (the view's panel's lists are the hierarchy). Its name, the heading,
  * with the copy of its reference at the row's right end; then its few key facts as one grid: muted labels in
  * a fixed first column, values left-aligned in the second in tabular figures, every row 28px, 16px in and
- * 8px above and below, in the panel's one text size (13px).
+ * 8px above and below, in the panel's one text size (12px; a phone's 14px).
  *
  * @param {{ item: import("./inspect.js").DetailItem, copy?: string | (() => string) | null }} props
  */

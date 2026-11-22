@@ -1,9 +1,9 @@
 import { createToolModes } from "../kit/tools/toolModes.js";
 
 // A mesh file's tools. Select picks its parts — what Quick Edit names: a 3MF's objects (`model.3mf#o2.1`, its build's
-// second item, that item's first component), an STL's bodies (`model.stl#b2`, `stlBodies.js`) — then Pencil, Shapes
-// and Clip (a popover from its tile, never a tool in hand); a 3MF also has Measure (approximate, in the unit the file
-// declares), and an STL, in no unit, none. Neither has parts to move apart.
+// second item, that item's first component), an STL's bodies (`model.stl#b2`, `stlBodies.js`) — then Draw (over the
+// `pencil` and `shapes` modes) and Clip (a tool of the strip as Draw is, its row under the strip); a 3MF also has
+// Measure (approximate, in the unit the file declares), and an STL, in no unit, none. Neither has parts to move apart.
 export const MESH_TOOL = Object.freeze({ SELECT: "select", PENCIL: "pencil", SHAPES: "shapes", MEASURE: "measure" });
 
 export const THREE_MF_TOOL_MODES = createToolModes({

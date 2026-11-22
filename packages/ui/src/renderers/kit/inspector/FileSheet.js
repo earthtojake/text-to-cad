@@ -9,7 +9,7 @@ import { useI18n } from "@cad/ui/i18n";
 // padding), and a surface of its own (Preview's settings) pads them.
 export const FILE_SHEET_CONTROL_ROW_CLASSES = "space-y-1";
 export const FILE_SHEET_ROW_STACK_CLASSES = "space-y-3";
-// A sheet is on the type scale's 12/16 (`docs/settings-ui.md`, "The type scale"): its headings, labels,
+// A sheet is on the type scale's 12/16 (`docs/design-system.md`, "The type scale"): its headings, labels,
 // values and status alike, a heading told apart from its rows by colour (labels muted, values and headings
 // the foreground), never by size; a value badge, small metadata, 11/16.
 export const FILE_SHEET_SECTION_TITLE_CLASSES = "text-xs text-sidebar-foreground";
@@ -22,9 +22,6 @@ export const FILE_SHEET_VALUE_BADGE_INPUT_CLASSES = [
   "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30"
 ].join(" ");
 export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-control px-2 text-xs !text-foreground";
-
-/** A section heading: 24px, regular 12px, never a disclosure (`docs/settings-ui.md`). */
-
 
 /**
  * A setting's row: its label in a fixed column and its control filling the rest, 24px, so the

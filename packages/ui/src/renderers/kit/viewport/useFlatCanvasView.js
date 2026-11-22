@@ -441,7 +441,7 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     const onDoubleClick = (event) => {
       event.preventDefault();
       if (doubleTapRef.current?.(local(event), event) === true) return;
-      // A fit is Select's double-click, as in every view: under Pencil, Shapes or Measure it is theirs.
+      // A fit is Select's double-click, as in every view: under Draw or Measure it is theirs.
       if (doubleClickFits(canvas)) fit();
     };
 

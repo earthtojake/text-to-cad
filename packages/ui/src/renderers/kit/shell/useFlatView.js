@@ -18,7 +18,7 @@ import { useWhenSettled } from "./useWhenSettled.js";
  * What every FLAT view does around its picture (a 2D drawing, a board: `FlatViewFrame.jsx`), so a
  * person moving between them meets one viewer. Two halves, in the order a renderer needs them:
  *
- * `useFlatTools` is the tools: Select, Pencil, Shapes and Measure, the one in hand never saved (a
+ * `useFlatTools` is the tools: Select, Draw (its `pencil` and `shapes` modes) and Measure, the one in hand never saved (a
  * file opens in Select), the drawing tools' session and Measure's over the viewer's one history.
  * Measurements are the person's alone: Measure's row lists them, and they never go to Quick Edit.
  *

@@ -4,7 +4,7 @@ import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
 import { clampNumber, decimalsOf, formatNumber, readTyped, splitValueText } from "./numberText.js";
 
-// The field, Figma's number field (`docs/settings-ui.md`, "The slider control"): as wide as what it holds (the number and
+// The field, Figma's number field (`docs/design-system.md`, "The slider control"): as wide as what it holds (the number and
 // its unit, 22px tall), 32px at least (two or three digits) and 96px at most, its right edge on the slider's, so a longer
 // value grows it to the left; no fill at rest, so it sits in the panel as its text does; a 1px outline under the pointer,
 // the brand's edge while it is edited and the destructive's while what is typed is no number, 6px in from either so

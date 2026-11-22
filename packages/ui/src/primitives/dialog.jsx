@@ -6,7 +6,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 import { cn } from "@cad/ui/utils"
 
 // shadcn's Dialog as shipped, as `alert-dialog.jsx` is: on the viewer's type scale (`text-ui`) and with
-// no window breakpoints (settings-ui.md): one centred card, never wider than the window less 1rem a side.
+// no window breakpoints (`docs/design-system.md`, "Dialogs and sheets"): one centred card, never wider than the window less 1rem a side.
 // Its corner X is left out: the viewer's dialogs close by their own buttons, Escape or a press outside.
 
 /** @param {React.ComponentProps<typeof DialogPrimitive.Root>} props */

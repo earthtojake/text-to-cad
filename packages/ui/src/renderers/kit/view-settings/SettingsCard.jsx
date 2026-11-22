@@ -15,7 +15,7 @@ import { PANEL_ACTION_CLASS } from "../inspector/PanelActions.jsx";
 import { SliderField } from "../inspector/SliderField.jsx";
 
 /**
- * A settings card (`docs/settings-ui.md`, "The settings cards"): the view's **Display** card and Preview's **Settings**,
+ * A settings card (`docs/design-system.md`, "The settings cards"): the view's **Display** card and Preview's **Settings**,
  * docked at the view's right edge, the sidebar's peek card's mirror. Its box is the peek card's at the default sidebar
  * width (`DEFAULT_PANEL_WIDTH`, less `PANEL_PEEK_GAP_PX` on each side), its surface the peek card's (its border, the
  * sidebar's colour, its shadow and radius), and it slides in from the right edge and back out as the peek does from the
@@ -46,7 +46,7 @@ export const SETTINGS_CARD_WIDTH_PX = DEFAULT_PANEL_WIDTH - 2 * PANEL_PEEK_GAP_P
 /** The card's gap to the view's edges, the peek card's. */
 export const SETTINGS_CARD_GAP_PX = PANEL_PEEK_GAP_PX;
 /**
- * The card's layer (`docs/settings-ui.md`, "Layering"): the view's top layer's (`ViewFrame.jsx`'s strip and Quick Edit),
+ * The card's layer (`docs/design-system.md`, "Layering"): the view's top layer's (`ViewFrame.jsx`'s strip and Quick Edit),
  * drawn after it, so over the strip, the corner's cube or zoom and the picture; menus, tooltips and dialogs, portalled
  * to the page's end on the same layer, stand over it.
  */

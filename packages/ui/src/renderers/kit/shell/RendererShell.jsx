@@ -262,7 +262,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const compact = Boolean(view.appearance?.compact);
   const toolsHidden = chromeHidden || compact;
   // The view's panel (`FlatPanel.jsx`, placed by the frame): docked at the left, its tabs the renderer's
-  // sections, one state with every view's; none on a phone; Preview keeps it mounted out of sight.
+  // sections, one state with every view's; on a phone, a sheet under the navbar; Preview keeps it mounted out of sight.
   // A file with routines has its Animation tab, last (`AnimationSection.jsx`): the tools view's routine; Preview's is its playbar's.
   // A mechanism's motion whose Joints tab takes it (`jointsHoldMotion`) has none: its Joints tab is the ONE tab for both,
   // the motion first (`JointsMotionContext`).

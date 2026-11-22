@@ -38,8 +38,9 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   navbar's (`file-viewer/panelToggles.js`), its first control: a collapsed panel leaves nothing over the model but
  *   while a mouse rests on that toggle, when it peeks over the view, pushing nothing (`usePanelPeek.js`), until the
  *   pointer has left both, Escape, a press on the model, or a click on the toggle (or ⌘\) pins it. On a
- *   phone the same toggle opens it as a sheet from the left (shadcn's Sheet) under the navbar, over the model with no scrim and no slide, starting
- *   closed each time: a tap outside it, a swipe back to the left, Escape or its Back put it away. Preview keeps the
+ *   phone the same toggle opens it as a sheet from the left (shadcn's Sheet) under the navbar, over the model with no scrim,
+ *   sliding in and out as the peek does (100ms in, 80ms out: `panelPeek.js`'s `PANEL_SHEET_LEFT_CLASS`), starting
+ *   closed each time: a tap outside it, a swipe back to the left or Escape put it away. Preview keeps the
  *   docked panel mounted, out of sight, so a tree keeps its state.
  * - **The strip's column** at the top centre of the WHOLE view, always: no panel moves it, and where it meets one it
  *   stands over it (a layer of its own over the panels, `data-view-top-layer`); on a phone, the same. In it the strip (`tools`, and its view controls `views`),
@@ -64,7 +65,7 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * - **The navbar's view settings** (`navbar`: what a view portals into the file's navbar, `NavbarViewControls.jsx`),
  *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's alone), and **Display's
  *   card** (`card`: `{ open, content }`, `DisplaySettings.jsx`'s), docked under the navbar at the view's right edge,
- *   over the corner and the strip's layer (`docs/settings-ui.md`, "Layering").
+ *   over the corner and the strip's layer (`docs/design-system.md`, "Layering").
  * - **The corner** (`corner`, the view's top-right — the cube, or a flat view's zoom — or its
  *   top-left where the host anchors the cube there: the side read off the root with the measure, `viewCornerSide`, and said to everything in
  *   the corner, `ViewCornerSideProvider`), **the bottom centre** (`bottomCentre`, a

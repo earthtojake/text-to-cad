@@ -11,7 +11,7 @@ import { PanelSelectRow, PanelSwitchRow } from "../kit/inspector/panelRows.jsx";
 import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
 
 /**
- * How a board is drawn (`settings-ui.md`), by how often it is changed (the rule: on the screen what is
+ * How a board is drawn (`docs/viewer-ux.md`, "The Display card"), by how often it is changed (the rule: on the screen what is
  * changed often, in the panel or behind a menu what is changed now and then):
  *
  * - **Display's card** (`boardViewGroups`, `kit/shell/DisplaySettings.jsx`), opened by the navbar's Display

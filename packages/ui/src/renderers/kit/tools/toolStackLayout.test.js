@@ -29,7 +29,7 @@ test("the view's panel's old shared width reads as a panel's until the panel dro
     { flat: { width: 260 } });
 });
 
-test("every panel is a six-tool strip wide; a resizable one is only ever wider, up to half the viewer", () => {
+test("every panel is 164px wide (six of the strip's old 24px buttons); a resizable one is only ever wider, up to half the viewer", () => {
   assert.equal(TOOL_PANEL_WIDTH, 6 * 24 + 5 * 2 + 2 * 4 + 2 * 1);
   assert.equal(TOOL_PANEL_WIDTH, 164);
   assert.equal(clampToolPanelWidth(300, 1280), 300);

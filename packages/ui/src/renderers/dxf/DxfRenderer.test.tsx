@@ -297,7 +297,7 @@ it('host commands a flat drawing cannot answer are declined in words', async () 
   await expect(controller.select({ selectors: ['h2F'] })).rejects.toThrow(/picked by a person in the viewer under Select/);
   await act(async () => { await controller.clearSelection(); });
   await expect(controller.setCamera({ position: [0, 0, 1], target: [0, 0, 0], up: [0, 1, 0] })).rejects.toThrow(/no camera to pose/);
-  await expect(controller.setDisplaySettings({ mode: 'wireframe' })).rejects.toThrow(/no Display settings/);
+  await expect(controller.setDisplaySettings({ mode: 'wireframe' })).rejects.toThrow(/one Display setting is its Background/);
 
   // What it CAN do: report itself, fit again, and hand over a PNG. No zoom command, no zoom readout.
   const state = controller.readState();

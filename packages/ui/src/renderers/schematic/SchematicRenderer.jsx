@@ -53,9 +53,9 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  * payload comes from the BACKEND, a sheet at a time (`useSchematicDocument.js`); nothing here parses
  * KiCad's files.
  *
- * It follows the viewer's theme, live: KiCad's light paper and dark ink in light, a dark sheet and light
- * ink of the same hues in dark (`plot2d/theme.js`'s `schematicColors`: a switch redraws, it reads nothing
- * again), on the app's neutral grey round the sheet. No drawing sheet (KiCad's frame and title block) is
+ * It follows the viewport's Background (not the app's theme), live: KiCad's light paper and dark ink on Light, a dark
+ * sheet and light ink of the same hues on Dark (`plot2d/theme.js`'s `schematicColors`: a switch redraws, it reads nothing
+ * again), on the canvas's neutral grey of the same scheme round the sheet. No drawing sheet (KiCad's frame and title block) is
  * drawn, as a board draws none. Its panel (`kit/shell/FlatPanel.jsx`) is the Parts and the Nets
  * (`SchematicSection.jsx`, a board's list rules, the picked part's or net's pins under them) and, for a
  * schematic of more than one sheet, the Hierarchy (`SheetsSection.jsx`, KiCad's Hierarchy
@@ -63,7 +63,7 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  * symbol enters its sheet, and a right-click opens the view's menu (every view's, `kit/shell/viewMenu.js`:
  * the reference, Select, Isolate and a pin's net, Show sheet on a sheet symbol, Up one sheet over bare
  * paper, and the framing). Each sheet keeps its view with the file: going back to one, or reopening the file, finds it where it was left.
- * Ink and measurements are the sheet's they were made on: showing another sheet lets them go. A schematic has no view controls: it has no layers, and its colours are the theme's.
+ * Ink and measurements are the sheet's they were made on: showing another sheet lets them go. A schematic's one view setting is its Background (its Display card's one row): it has no layers, and its colours are the Background's.
  * A selected net is lit across the sheet shown, the rest stepped back, as KiCad's net highlight.
  */
 

@@ -25,9 +25,9 @@ import { createContext, useContext } from "react";
  * @property {string} [hovered]  What a press would pick now ("" for nothing): the hover tip's.
  * @property {(id: string) => string} [tip]  The hover tip's words for a pick, from what is in hand: its name
  *   and its short kind, measuring and listing nothing (the tip runs as the pointer moves; `describe` runs
- *   for the pane and a card). Without it, `hoverTipText(describe(id))`.
+ *   for a chip's card). Without it, `hoverTipText(describe(id))`.
  * @property {Record<string, import("react").ComponentType<any>>} [glyphs]  The view's own glyphs, by kind.
- * @property {string} [data]  The prefix of the pane's data attributes (`data-<data>-detail-row`).
+ * @property {string} [data]  The prefix of a card's data attributes (`ItemDetail.jsx`'s `data-<data>-detail-row`).
  * @property {(id: string, options?: { multiSelect?: boolean }) => void} select
  * @property {(id: string) => void} hover
  * @property {(ids: readonly string[]) => void} [frame]  Frames them (a double-click on a row).

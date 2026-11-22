@@ -4,11 +4,13 @@ import { VALUE_DROPDOWN_TRIGGER_CLASS, ValueDropdown } from "@cad/ui/primitives/
 import { cn } from "@cad/ui/utils";
 
 // The view's panel's two settings rows, ONE each, so every control of a kind looks alike wherever it stands (Joints'
-// Position, Animation's Clip, Speed and Loop; `docs/settings-ui.md`, "The panel"). Both are 28px on the
-// panel's one inset: the label (muted, `FieldLabel`) on its inset (`--panel-inset`, the
-// body's padding: a row pads nothing), the control ending on its right inset.
+// Position, Animation's Clip, Speed and Loop, a board's Others and Pours; `docs/viewer-ux.md`, "The panel"). Both are
+// 28px on the panel's one inset: the label (muted, `FieldLabel`) on its inset (`--panel-inset`, the
+// body's padding: a row pads nothing), the control ending on its right inset, a dropdown half the row wide (wider only
+// where its value needs it).
 
-/** A settings row's dropdown, Joints' Position's: bordered, as wide as its value (6rem at least), its value the foreground. */
+/** A settings row's dropdown trigger, the value dropdown's own: bordered, 6rem at least, its value the foreground (in a
+ * `PanelSelectRow`, half the row wide). */
 export const PANEL_DROPDOWN_CLASS = VALUE_DROPDOWN_TRIGGER_CLASS;
 
 /**

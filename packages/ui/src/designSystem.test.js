@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-// The viewer's chrome follows docs/settings-ui.md: type from the token scale (text-tiny,
+// The viewer's chrome follows `docs/design-system.md`, "Two scales": type from the token scale (text-tiny,
 // text-xs, text-ui, text-heading), and layout from the ONE viewer breakpoint (useViewerMobile)
 // or a container query — never the window's `sm:`/`md:` breakpoints. Document content
 // (markdown, code) keeps its own content styles and is not chrome.
@@ -51,7 +51,7 @@ test("every scroll region in the viewer's chrome is the ScrollArea primitive, ne
   for (const file of SCROLL_REGIONS) assert.match(readFileSync(join(root, file), "utf8"), /<ScrollArea\b/, `${file} scrolls in a ScrollArea`);
 });
 
-// The Home (`library/`) is the chrome's type scale (docs/settings-ui.md): the controls text-ui (13/20), the
+// The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"): the controls text-ui (13/20), the
 // heading, Recent, the one larger text (15/20 semibold), a name 12/16 (text-xs) and its facts, the count, a
 // format's badge and the table's header 11/16 (text-tiny); a tile's glyph 16px.
 test("the Home is the chrome's type scale: the heading 15/20, names 12/16, facts 11/16, and 16px glyphs", () => {
@@ -80,7 +80,7 @@ test("the Home is the chrome's type scale: the heading 15/20, names 12/16, facts
   assert.match(page, /className="cad-library h-full overflow-y-auto text-ui"/);
 });
 
-// THE type scale (docs/settings-ui.md, "The type scale"): three interface sizes and one heading, each on a fixed
+// THE type scale (`docs/design-system.md`, "The type scale"): three interface sizes and one heading, each on a fixed
 // line height -- tiny 11/16, xs 12/16, ui 13/20, heading 15/20 semibold -- and a phone's each step 2px up ("Two scales":
 // tiny 13/18, xs 14/20, ui 15/20, heading 17/22), the view's panel at xs (12/16; a phone's 14/20). No 10px step (text-micro is gone),
 // and no stylesheet sets a font size in pixels: every size is the scale's.
@@ -117,7 +117,7 @@ test("menus are the xs step on the row and tooltips the tiny step, from the prim
   assert.doesNotMatch(readFileSync(join(root, "renderers/kit/shell/ViewportContextMenu.jsx"), "utf8"), /DropdownMenuItem className="text-/);
 });
 
-// The logo stands on the page's gutter (docs/settings-ui.md): the navbar's 8px, the logo centred in its 28px tile (6px)
+// The logo stands on the page's gutter (`docs/viewer-ux.md`, "The navbar"): the navbar's 8px, the logo centred in its 28px tile (6px)
 // and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page. The Home itself is a centred
 // column of its own, 1128px at most on 24px gutters, 20px under the navbar, its tiles 232px at least.
 test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1128px column on its own gutters", () => {
@@ -135,7 +135,7 @@ test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1
   assert.match(navbar, /const NAV_ITEM_CLASS = "flex h-control /);
 });
 
-// The panel's rows have ONE owner of their horizontal geometry (docs/settings-ui.md): the row
+// The panel's rows have ONE owner of their horizontal geometry (`docs/design-system.md`, "Spacing and the panel inset"): the row
 // primitive pads a row by its `depth` and draws its guides, and the view's panel sets the lines. No
 // list pads a row, nor brings its own glyph column or chevron: only the primitive and the explorer
 // (which pads its own rows) read the old constants.
@@ -172,7 +172,7 @@ test("a panel row is padded by the row primitive alone: no list pads one, reads 
   assert.deepEqual(found, []);
 });
 
-// A number a slider sets is the ONE slider control (docs/settings-ui.md, "The slider control"): its
+// A number a slider sets is the ONE slider control (`docs/design-system.md`, "The slider control"): its
 // label, its number field and its slider. Only it and the playback scrubber (the tools view's playbar's and Preview's), a timeline, draw the
 // slider primitive; no site brings its own slider and number.
 const SLIDER_OWNERS = ["renderers/kit/inspector/SliderField.jsx", "renderers/kit/tools/playbar/AnimationTimeControl.js"];

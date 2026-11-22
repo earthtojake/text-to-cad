@@ -24,7 +24,7 @@ function LayerEye({ id, hidden, onToggle, label = null }) {
   const action = hidden ? t("tree.reveal") : t("tree.hide");
   return <TreeRowActions persistent={hidden}>
     <TooltipHint content={action}>
-      <Button type="button" variant="ghost" size="icon-xs" aria-label={label || t(hidden ? "layers.revealNamed" : "layers.hideNamed", { name: id })} aria-pressed={hidden} className="h-5 w-4 text-muted-foreground"
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={label || t(hidden ? "layers.revealNamed" : "layers.hideNamed", { name: id })} aria-pressed={hidden} className="cad-hit h-[calc(var(--cad-glyph)+4px)] w-glyph text-muted-foreground"
         data-layer-visibility={id} onClick={event => { event.stopPropagation(); onToggle(id, hidden); }}>
         {hidden ? <EyeOff className="size-3" aria-hidden="true" /> : <Eye className="size-3" aria-hidden="true" />}
       </Button>
@@ -47,7 +47,7 @@ function LayerEye({ id, hidden, onToggle, label = null }) {
  * so the view and a snapshot never disagree; a set the preset does not draw reads as Custom. Under the
  * layers, **Layer display** (the other layers, the pours, the opacities), as
  * KiCad's Appearance panel has them (`BoardDisplay.jsx`): how the board is drawn, changed now and then, so
- * the panel's; the preset (Display) and the side (Flip), changed often, end the strip. Last in Other,
+ * the panel's; the preset (Style) and the side (Side), changed often, are the Display card's. Last in Other,
  * **3D models**: the parts' models in the 3D view (how many parts stand on one, and an eye), a seldom-used
  * control kept here in both modes so the panel never differs between them; in 2D it changes nothing drawn.
  *

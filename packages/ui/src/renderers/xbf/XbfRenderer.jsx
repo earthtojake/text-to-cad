@@ -57,11 +57,12 @@ const MENU_CONTROLS = Object.freeze({
 });
 
 // An engine document in the viewer, exactly as a STEP is: the same tools in the same order
-// (Select with its filter, Pencil, Shapes, Measure, Explode, Clip), the same selection (Parts, Faces and
+// (Select with its filter, Draw, Measure, Explode, Clip), the same selection (Parts, Faces and
 // Edges as the filter ticks them, a collapsed assembly picked as a unit, a part's faces and edges
-// once it is open, a face's or an edge's tangent chain from the view's menu), the same view's panel (Model tree, Position), the
-// same menus, the same Quick Edit chips; and, for a document with motions, the playbar under the
-// model, the shell's routine transport playing them (`useXbfMotion.js`). What differs is
+// once it is open, a face's or an edge's tangent chain from the view's menu), the same view's panel (Model tree, Joints), the
+// same menus, the same Quick Edit chips; and, for a document with motions, the shell's routine transport playing
+// them (`useXbfMotion.js`) at the top of its Joints tab (its own Motion tab where it has no Joints; Preview's
+// playbar in Preview). What differs is
 // underneath: the document is read from the engine that serves it, and every face and edge is to
 // hand from the start, so nothing waits on topology. One tab a STEP never had: a model's Parameters
 // (`XbfParametersSection.jsx`), the named numbers its script declares, saved back into the script.
@@ -96,8 +97,8 @@ function pickElements(current, ids, multiSelect) {
 
 /**
  * The view's panel's tabs, in their order: the Model tree for any document with a part (a part file's
- * is its one row, an assembly's every part), Parameters for a document that records any, Position for
- * a mechanism. None: no panel.
+ * is its one row, an assembly's every part), Params (`parameters`) for a document that records any, Joints
+ * (`position`) for a mechanism. None: no panel.
  * @param {{ parts: number, posable: boolean, parameters: number }} document  `parts`: the tree's rows.
  * @returns {("model" | "parameters" | "position")[]}
  */
@@ -632,7 +633,7 @@ function XbfSurface({ view, data }) {
     setHover(elements.length ? { parts: EMPTY, element: elements[0] } : { parts: ids, element: null });
   }, []);
   const resource = shell.frame.resource;
-  // What a pick is, as the Selected pane, its chip's card and the hover tip read it (`xbfDescriber`).
+  // What a pick is, as its chip's card and the hover tip read it (`xbfDescriber`).
   const describe = useMemo(() => xbfDescriber({ scene, tree, facts, t }), [scene, tree, facts, t]);
   const { references, chips } = useXbfSelectionChips({ scene, tree, resource, selectedIds: selected, facts,
     onRemove: removeFromSelection, onHover: hoverChip, describe });
@@ -657,8 +658,8 @@ function XbfSurface({ view, data }) {
   }, [scene]);
   // The gesture's first click stands: what it selected stays selected, and a click that would have taken the
   // selection away waited and was dropped (`pickTakesAway`), so nothing is put back and nothing flickers. Under
-  // Select, Explode or Clip alike: under the two a pick would leave, the click waited, so the tool is still the
-  // one in hand.
+  // Select, Explode or Clip alike: Explode and Clip stand over Select, whose mode stays underneath them, so a pick
+  // under either is Select's and the tool stays in hand.
   const handleDoublePick = useCallback((clientX, clientY) => {
     const hit = pickAtClient(clientX, clientY);
     // Empty space: out of isolation, or, with nothing isolated, the model fitted (as F, and every view's double-click).
@@ -670,7 +671,9 @@ function XbfSurface({ view, data }) {
   // Under Measure, as a STEP's: the face or edge Measure takes there is looked at, empty space
   // leaves isolation (the presses of the gesture were Measure's own).
   const handleMeasureDoublePick = useCallback((id) => { if (id) { usage.used("look_at"); lookAt(id); } else exitIsolate(); }, [lookAt, exitIsolate, usage]);
-  // A pick under Explode or Clip takes Select up: it waits the double-click window first.
+  // Whether a pick waits the double-click window because the tool mode is not Select's. The picker runs only under
+  // Select (`picking`), and Explode and Clip keep Select's mode underneath them, so no pick waits for this now: only
+  // one that would take the selection away does (`pickTakesAway`).
   const deferPickRef = useRef(false);
   deferPickRef.current = toolMode !== XBF_TOOL.SELECT;
   // What Measure lights under the resting pointer: the face or edge it would take.
@@ -837,8 +840,9 @@ const COARSE_TAP_SLOP_PX = 12;
  * each press is made with (`pointerTypeRef`), heard before the pick's own listener hears it. A tap
  * activates as a STEP's did (`clickActivation.js`): at once, but for the second click of a
  * double-click, which the `dblclick` owns (`onDoublePick`, told whether the first click picked),
- * and a tap under a tool a pick would leave (`deferRef`: Explode, Clip), which waits the
- * double-click window. A finger double-clicks too: its double tap arrives as a `dblclick`
+ * and a tap that would take the selection away (`takesAway`), which waits the double-click window
+ * (`deferRef` would hold one under a tool mode other than Select's, but the picker runs only under
+ * Select). A finger double-clicks too: its double tap arrives as a `dblclick`
  * (`kit/viewport/touchGestures.js`), and as a finger's press carries no count from the browser, the
  * second tap of one is counted here by the same window.
  */

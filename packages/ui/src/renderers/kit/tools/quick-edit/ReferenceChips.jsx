@@ -24,8 +24,8 @@ import { useI18n } from "@cad/ui/i18n";
  *   (a document of one part, which the page already names), its `words` after the glyph ("◧face 1").
  * @property {string | (() => string)} [copy]  What a click on it copies: its reference, the file's path and its
  *   id; or a reference resolved at the click. Annotation and measurement chips omit this.
- * @property {import("../../inspector/inspect.js").DetailItem} [detail]  What it is, for its card: the view's description of
- *   it, the same the Selected pane draws (`ItemDetail.jsx`); its name, kind and facts.
+ * @property {import("../../inspector/inspect.js").DetailItem} [detail]  What it is, for its card (`ItemDetail.jsx`): the
+ *   view's description of it, its name, kind and facts.
  * @property {import("react").ReactNode} [icon]  Before its words: a measurement's ruler in its colour, the annotation's pen.
  * @property {string} [glyph]  Else, the glyph of what it names (`pickGlyph.jsx`: "solid" for a part, "face", "edge",
  *   "vertex", "ruler" for a measurement, "pencil" for the annotation); a compact name's own kind where it has none.

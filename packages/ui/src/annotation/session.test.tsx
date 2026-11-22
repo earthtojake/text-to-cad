@@ -111,13 +111,13 @@ it('Placement is what is drawn next: on the surface at first, kept like the colo
   expect(current().style.placement).toBe('plane');
 });
 
-it('Pencil and Shapes each keep what they draw with — the pen and the rectangle first — and share the ink, not the style', () => {
+it('the pencil and shapes families (Draw\'s two modes) each keep what they draw with — the pen and the rectangle first — and share the ink, not the style', () => {
   const session = renderHook(({ family }) => useAnnotationSession(family, CAD), { initialProps: { family: 'shapes' as 'pencil' | 'shapes' | null } });
   const current = () => session.result.current;
   // Shapes is up: its tool in hand is the rectangle.
   expect(current()).toMatchObject({ tool: 'rectangle', pencil: 'freedraw', shape: 'rectangle' });
   act(() => { current().selectColor('#39ff14'); current().selectStrokeWidth(4); current().selectPlacement('plane'); });
-  // Choosing in Pencil's menu (a pencil tool) leaves Shapes' choice alone, and Pencil takes it up.
+  // Choosing a pencil tool (on the drawing row) leaves Shapes' choice alone, and the pencil family takes it up.
   act(() => current().selectTool('highlighter'));
   expect(current()).toMatchObject({ tool: 'rectangle', pencil: 'highlighter', shape: 'rectangle' });
   session.rerender({ family: 'pencil' });

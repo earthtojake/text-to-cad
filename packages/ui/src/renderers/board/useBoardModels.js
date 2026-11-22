@@ -3,7 +3,7 @@
  * model name its footprints write, the STEP the engine serves by a document id or why there is none, as
  * the computer has it now. Asked again on every revision of the board and when the window takes the focus
  * back (a model file added or edited meanwhile: its stamp is in the table). A small JSON the server answers
- * from `stat` alone, so the Selected pane's 3D model fact and the Parts' No 3D model block read it in 2D
+ * from `stat` alone, so a part's 3D model fact (its chip's card) and the Parts' No 3D model block read it in 2D
  * too; the meshes themselves are the 3D view's (`Board3dView.jsx`). The same table answered again is the
  * same object, so nothing downstream rebuilds. Null until it is in, or where the host serves none.
  *

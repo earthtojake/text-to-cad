@@ -62,7 +62,7 @@ export function useRobotInspect({ selection, describe, tip = null, enabled = tru
  * What is selected in a robot, for Quick Edit: its references — each selected link by name, and a
  * selected mesh object by the link it belongs to, in the file on screen (`resource`) — and its
  * chips (`kit/tools/quick-edit/ReferenceChips.jsx`): a link or an object each, its card what the
- * description says of it (`describe`, the Selected pane's: a link's inertial, geometry and joints;
+ * description says of it (`describe`: a link's inertial, geometry and joints;
  * an object's link, triangles and size), lit in the view while the pointer rests on it, dropped from
  * the selection by its X. A click on a chip copies its link's reference (`/path/robot.urdf#upper_arm`).
  *

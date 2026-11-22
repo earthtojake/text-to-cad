@@ -75,8 +75,8 @@ const EMPTY = Object.freeze({});
  *    slices of view state — written soon after a change and once more on unmount, and
  *    read back before the first paint, the camera restored in place of the open-time fit;
  *  - Display settings: store, resolution against the renderer's FEATURES, the
- *    queued application to the viewport, and the content of Display's dropdown;
- *  - tools: the mode state machine and Annotate's session, or none at all for a renderer
+ *    queued application to the viewport, and what Display's card shows (`DisplaySettings.jsx`);
+ *  - tools: the mode state machine and Draw's annotation session, or none at all for a renderer
  *    whose viewport is the camera's alone;
  *  - the host contract: prompt snapshots, clipboard screenshots,
  *    preview, alerts, shortcuts (a file's controls are tool-stack panels the renderer
@@ -410,7 +410,7 @@ export function useRendererShell({
 
   // ---- tools ----------------------------------------------------------------
   const idle = viewerLoading || !scene;
-  // Pencil or Shapes is in hand: the drawing tools, which share one annotation.
+  // Draw is in hand, in its `pencil` or `shapes` mode: the drawing families, which share one annotation.
   const drawingFamily = toolMode === SHELL_TOOL.PENCIL || toolMode === SHELL_TOOL.SHAPES ? toolMode : null;
   const annotateToolActive = !previewing && drawingFamily !== null;
   // A model effect in hand (`model-effects/ModelTools.jsx`): a tool of the strip, pressed, its row under
@@ -422,7 +422,7 @@ export function useRendererShell({
   const selectDefaultTool = useCallback(() => { setEffectTool(null); setToolMode(toolModes ? toolModes.defaultMode : ""); }, [toolModes, setToolMode]);
   const selectEffectTool = useCallback(id => { setToolMode(toolModes ? toolModes.defaultMode : ""); setEffectTool(id); }, [toolModes, setToolMode]);
   const effectInHand = previewing ? null : effectTool;
-  // The annotation's undo history (`useViewerHistory.js`): Annotate's panel's Undo and Redo, and ⌘Z.
+  // The annotation's undo history (`useViewerHistory.js`): ⌘Z and ⇧⌘Z, the keyboard's (there are no buttons).
   const history = useViewerHistory();
   const historyRef = useRef(history);
   historyRef.current = history;
@@ -686,14 +686,14 @@ export function useRendererShell({
   const stripTool = ({ id, label, icon, ...rest }) => ({
     id, label, icon, active: !previewing && !effectInHand && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
   });
-  // Draw: the one strip tool that draws, over the two drawing modes (Pencil's freehand, Shapes'), its menu every
-  // drawing tool (`annotation/toolbar.jsx`'s `drawStripTool`); the row under the strip is the style of what is drawn
-  // next (`AnnotationToolbar`). Its button shows the tool it draws with, and a press takes it up.
+  // Draw: the one strip tool that draws, over the two drawing modes (`pencil`'s freehand, `shapes`'), a plain button
+  // with no menu (`annotation/toolbar.jsx`'s `drawStripTool`); the rows under the strip are its tools and the style of
+  // what is drawn next (`AnnotationToolbar`). Its button shows the tool it draws with, and a press takes it up.
   const drawing = [drawStripTool({ toolMode: previewing ? null : toolMode, annotation, takeFamily: family => selectTool(family), disabled: idle, t })];
   const tools = {
     /** A tool of the renderer's own: `{ id, label, icon }` plus anything the strip reads. */
     own: stripTool,
-    /** Draw: the strip's one drawing tool, over Pencil's and Shapes' modes, one annotation between them. */
+    /** Draw: the strip's one drawing tool, over the `pencil` and `shapes` modes, one annotation between them. */
     drawing,
   };
 

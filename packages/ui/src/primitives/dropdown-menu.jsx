@@ -122,7 +122,7 @@ function DropdownMenuItem({
   );
 }
 
-// Checkbox and radio items carry their check on the RIGHT (settings-ui.md): every row's text
+// Checkbox and radio items carry their check on the RIGHT (`docs/design-system.md`, "Menus"): every row's text
 // starts on one left edge, whether or not it is checked.
 function DropdownMenuCheckboxItem({
   className,
@@ -275,7 +275,7 @@ function DropdownMenuSubContent({
   );
 }
 
-// A submenu in place, for a menu with no room beside it for one (a phone's: settings-ui.md, Mobile): its
+// A submenu in place, for a menu with no room beside it for one (a phone's: `docs/design-system.md`, "Menus"): its
 // row, pressed (or Right), shows its items under it, in the menu itself and indented, its chevron
 // turning down while they show; pressed again (or Left) it hides them, and the menu's next opening starts
 // it hidden (its items go with the menu). The same three parts as a submenu's, and its items are a

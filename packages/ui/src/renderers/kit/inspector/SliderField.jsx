@@ -10,7 +10,7 @@ import { clampNumber, decimalsOf } from "./numberText.js";
 const SCRUB_SLOP_PX = 3;
 
 /**
- * THE control for a number a slider sets (`docs/settings-ui.md`, "The slider control"): every one
+ * THE control for a number a slider sets (`docs/design-system.md`, "The slider control"): every one
  * in the viewer is this, and nothing else draws the slider primitive but the playbar's scrubber.
  *
  * In a panel (the default) it is two lines, shadcn's: a 28px row of the label at the left and the

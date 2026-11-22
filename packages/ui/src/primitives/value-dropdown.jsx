@@ -3,7 +3,7 @@ import { cn } from "@cad/ui/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "./dropdown-menu.jsx";
 import { FLOATING_SURFACE_CLASS } from "../lib/floatingSurface.js";
 
-// THE value dropdown (settings-ui.md, "Dropdowns"): every place that picks one value of a list from its own trigger —
+// THE value dropdown (`docs/design-system.md`, "Dropdowns"): every place that picks one value of a list from its own trigger —
 // a panel's row, a settings card's row (Display's, Preview's Settings), a board's display — is this, on the one
 // `DropdownMenu` primitive: one popup, one touch rule (its trigger's: a mouse opens at the press, a finger toggles at its
 // click from the state at the press), one keyboard, one look. A menu of actions stays a plain `DropdownMenu`.

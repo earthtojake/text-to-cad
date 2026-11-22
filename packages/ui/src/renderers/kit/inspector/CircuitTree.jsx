@@ -137,9 +137,9 @@ export function treeAncestors(tree, id) {
 /**
  * A list of a flat view's panel (`kit/shell/FlatPanel.jsx`): a board's or a schematic's **Parts**, in
  * blocks, or its **Nets** (`board/BoardSection.jsx`, `schematic/SchematicSection.jsx`), as Altium's
- * PCB panel lists Components and Nets — a part's pins or pads are not rows here, they are what the
- * picked part shows under the lists (the Selected pane, `ItemDetail.jsx`). It is drawn as a tree is in a panel
- * (`settings-ui.md`): dense rows mounted as they scroll into view (`VirtualRows`). The panel's search
+ * PCB panel lists Components and Nets — a part's pins or pads are not rows here (the search finds one,
+ * below; a picked part's key facts are its Quick Edit chip's card, `ItemDetail.jsx`). It is drawn as a tree is in a panel
+ * (`docs/viewer-ux.md`, "Trees"): dense rows mounted as they scroll into view (`VirtualRows`). The panel's search
  * box searches it (`searchRoots`, the list with what it holds: a part's pads, so `#U3.9` finds one):
  * while something is typed, its ranked hits replace its rows (the arrow keys walk them while its tab is
  * open, Enter picks), and with none it draws nothing, so the panel leaves it out. The pointer on a row
@@ -154,7 +154,7 @@ export function treeAncestors(tree, id) {
  * block of several parts and the groups `closedGroups` names, shut until the person opens them. A
  * row's chevron opens or shuts it, and a block's name does too; a group's is a label. From the first row
  * the person opens or shuts, the shape is theirs. A pick made anywhere but in the list (on the picture,
- * in the Selected pane, a search hit's, a host's) brings its row into view, once a pick, as the model
+ * a search hit's, a host's) brings its row into view, once a pick, as the model
  * tree's does: its own row, else the row it is under (`ownerOf`: a pad's or a pin's part in the Parts,
  * the net of what is on one in the Nets), which is tinted while it holds the pick, as a selected row is
  * lit; a pick with no row moves nothing, and a press in the list

@@ -6,12 +6,14 @@ import { XIcon } from "lucide-react"
 
 import { cn } from "@cad/ui/utils"
 
-// shadcn's Sheet as shipped (Radix's Dialog drawn from an edge), with no window breakpoints (settings-ui.md): a side
+// shadcn's Sheet as shipped (Radix's Dialog drawn from an edge), with no window breakpoints (`docs/design-system.md`, "Dialogs and sheets"): a side
 // sheet is 3/4 of the window wide and never wider than 20rem. Additions: `onSwipeClose`, where a finger swiped
 // towards the sheet's own edge closes it (a phone's sidebar is put away the way it came), which Radix's Dialog has none of;
 // and, for a sheet that is part of the page rather than a step out of it (a phone's sidebar), `scrim={false}` (its overlay
 // kept but clear: a press beside the sheet still lands on it and closes the sheet, and reaches nothing under it),
-// `animated={false}` (it appears and goes at once, no slide or fade) and `overlayStyle` (where the overlay starts).
+// `animated={false}` (none of shadcn's slide and fade: it appears and goes at once, unless its classes bring a motion
+// of their own, as the phone's sidebar brings the peek's, `file-viewer/panelPeek.js`) and `overlayStyle` (where the
+// overlay starts).
 
 /** @param {React.ComponentProps<typeof SheetPrimitive.Root>} props */
 function Sheet({ ...props }) {

@@ -30,7 +30,7 @@ export function useBoardInspect({ index, describe, tip = null, hovered }) {
   return useMemo(() => (index ? { describe, tip, hovered, data: "board" } : null), [index, describe, tip, hovered]);
 }
 
-/** A board's picks described (`describeBoardPick`, a part's 3D model from the models table), in the view's language: what the pane and the cards read. */
+/** A board's picks described (`describeBoardPick`, a part's 3D model from the models table), in the view's language: what the chips' cards read. */
 export function useBoardDescribe(index, models = null) {
   const { t } = useI18n();
   return useCallback(id => (index ? describeBoardPick(index, id, t, models) : null), [index, t, models]);
@@ -47,7 +47,7 @@ export function useBoardTip(index) {
  * as a reference into the file on screen, by its board reference, and as a chip named as the board
  * names it (`R1`, `R1.2`, `net VBUS`, `VBUS · track`, `“blinky”`, an area), led by its kind's glyph —
  * the kinds Select's filter shows (a net's copper is its net's), a point an agent wrote the pick's vertex — its card
- * what the board says of it (`describe`, the Selected pane's).
+ * what the board says of it (`describe`).
  * A click on a chip copies its reference (`<file>#R1.2`); its X drops it; resting on it lights it.
  *
  * @param {{ scene: ReturnType<typeof import("./boardScene.js").createBoardScene> | null,

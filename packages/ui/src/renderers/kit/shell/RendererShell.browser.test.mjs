@@ -80,10 +80,11 @@ const settle = page => page.evaluate(() => new Promise(resolve => requestAnimati
 // temporary harness.
 const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 20 0 0\nvertex 0 20 0\nendloop\nendfacet\nendsolid triangle\n';
 
-// A phone's scale (`globals.css`, settings-ui.md's "A phone's scale"): the primitives read the tokens, so at the phone
-// breakpoint every control is 36px and every text 15/20, from the navbar to the strip, a menu and the panel's tabs;
+// A phone's scale (`globals.css`, `docs/design-system.md`, "Two scales"): the primitives read the tokens, so at the phone
+// breakpoint every control is 36px and every text 2px over the desktop's, from the navbar to the strip (15/20), a menu
+// and the panel's tabs (14/20);
 // the navbar's left end edge to edge on the row's inset; a finger's tap leaves no fill or ring behind.
-test('a phone\'s scale: the primitives read the tokens (36px controls, 15/20 text), and a tap leaves no fill or ring', async (t) => {
+test('a phone\'s scale: the primitives read the tokens (36px controls, each text 2px up), and a tap leaves no fill or ring', async (t) => {
   const origin = await serve(t);
   const context = await browser.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true });
   t.after(() => context.close());
@@ -134,7 +135,7 @@ test('a phone\'s scale: the primitives read the tokens (36px controls, 15/20 tex
   }
 });
 
-// THE two scales (settings-ui.md's "Two scales", `lib/scale.js`): on a phone and on a desktop, every interactive control
+// THE two scales (`docs/design-system.md`, "Two scales"; `lib/scale.js`): on a phone and on a desktop, every interactive control
 // on every surface a person reaches (the view, the Display card, the panel's tabs, Preview's Settings, Quick Edit, an
 // open menu) is one of its scale's sizes, and every text one of its scale's text sizes: nothing sized outside the
 // tokens. A walk of the page, in phone emulation and at a desktop's width.
@@ -214,7 +215,7 @@ for (const phone of [true, false]) {
   });
 }
 
-// Every popup trigger a finger reaches on a phone (settings-ui.md's "Dropdowns": ONE touch rule, the trigger's): on the
+// Every popup trigger a finger reaches on a phone (`docs/design-system.md`, "Dropdowns": ONE touch rule, the trigger's): on the
 // view (the navbar, the strip), in the Display card, in the sidebar sheet and in Preview's Settings, a tap opens its
 // popup and a second tap on the same trigger shuts it.
 test('a phone: every popup trigger opens on one tap and shuts on a second tap on it', async (t) => {
@@ -534,7 +535,7 @@ for (const [what, file, route, groups] of [['a 3D view', 'panel.harness', undefi
   });
 }
 
-// THE type scale (docs/settings-ui.md, "The type scale"), as a page computes it: a panel row and a menu item at
+// THE type scale (`docs/design-system.md`, "The type scale"), as a page computes it: a panel row and a menu item at
 // 12/16, a tooltip at 11/16, the navbar at 13/20. And the strip's proportions: a 40px bar of 28px tiles 5px in, its
 // corners 10px, theirs 4px; the panel's head a 32px row of the same tiles, its rule on the strip's bottom line; the
 // panels' toggles the navbar's 28px tiles.
@@ -1631,9 +1632,9 @@ test('three tabs and the search fit the 232px panel with no ⋯; a fourth is ⋯
   await page.locator('[data-flat-panel-more-menu]').waitFor({ state: 'detached' });
   await pane.getByRole('separator', { name: 'Resize panel' }).press('End');
   await page.waitForFunction(() => !document.querySelector('[data-testid="one"] [data-flat-panel-head] [data-flat-panel-more]'));
-  // On a phone the panel is a sheet of the same components: a tree row's gap, glyph slot, actions (their gap, size and
-  // inset) and a tab's size and type are the desktop's, only the row a finger's height (36px, its own); the four tabs
-  // fit the sheet's head, with no ⋯.
+  // On a phone the panel is a sheet of the same components: a tree row's gap, glyph slot and actions (their gap, size
+  // and inset) and a tab's padding are the desktop's, the row a finger's height (36px, its own) and a tab the phone's
+  // control (36px) at its text (14px); the four tabs fit the sheet's head, with no ⋯.
   const geometry = () => page.evaluate(() => {
     const surface = [...document.querySelectorAll('[data-testid="one"] [data-panel-surface], [data-panel-sheet] [data-panel-surface]')].find(node => !node.hidden && node.getBoundingClientRect().width > 0);
     const row = surface.querySelector('[data-tree-row]'), actions = row.querySelector('[data-row-actions]'), [isolate, hide] = actions.querySelectorAll('button');
@@ -1653,8 +1654,8 @@ test('three tabs and the search fit the 232px panel with no ⋯; a fourth is ⋯
   await page.locator('[data-panel-sheet] [data-tree-row]').first().waitFor();
   await settle(page);
   const phone = await geometry();
-  // The same components and the same rules, at a phone's scale (settings-ui.md's "A phone's scale"): a tab the control
-  // (36px) at 14px text (the desktop's 12px, two steps up as every text is), its padding the desktop's; a row's gaps, glyph and actions the desktop's.
+  // The same components and the same rules, at a phone's scale (`docs/design-system.md`, "Two scales"): a tab the control
+  // (36px) at 14px text (the desktop's 12px, 2px up as every text is), its padding the desktop's; a row's gaps, glyph and actions the desktop's.
   assert.deepEqual([phone.row, phone.tab], [desktop.row, [36, desktop.tab[1], '14px']], `the phone's rows and tabs are the desktop's at its scale: ${JSON.stringify({ desktop, phone })}`);
   assert.deepEqual([desktop.height, phone.height, desktop.row.between, desktop.tabs, desktop.more, phone.tabs, phone.more], [28, 36, 2, 4, false, 4, false]);
   assert.equal(await page.locator('[data-panel-sheet] [data-flat-panel-head] button:not([role=tab]):not([data-flat-panel-search-open])').count(), 0, 'the sheet\'s head is the tabs and the search alone: no Back');

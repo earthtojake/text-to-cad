@@ -4,7 +4,7 @@ import { cn } from "@cad/ui/utils";
 import { ViewerHostContext } from "../host/context.js";
 
 /**
- * Every loading surface's one indicator (`settings-ui.md`, "Loading"): what is happening now, as one step line — the
+ * Every loading surface's one indicator (`docs/viewer-ux.md`, "Loading and status screens"): what is happening now, as one step line — the
  * step in the chrome's text, muted, its count at the right in tabular figures — over the thin progress bar (its share
  * where it has one, a sliding segment where it has none), and under it whatever the caller adds (the connection-lost
  * line, a long step's detail), in the same type. No mark, no spinner, no headline: the navbar names the file and the

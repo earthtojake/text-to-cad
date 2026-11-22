@@ -12,7 +12,7 @@ import { useI18n } from "@cad/ui/i18n";
 // The tools a scene the kit draws offers, in two halves around the shell: what Quick Edit must know
 // before the shell is made (the tool in hand, Measure's session), and the strip, the row under it
 // and the layer over the view, made from the shell. Which of them a file has is its renderer's:
-// Select is the renderer's own, Pencil and Shapes the shell's, Measure where the file says its unit, and the
+// Select is the renderer's own, Draw (its `pencil` and `shapes` modes) the shell's, Measure where the file says its unit, and the
 // model effects where its view's features offer them (`model-effects/ModelTools.jsx`).
 
 /**
@@ -29,7 +29,7 @@ export function useSceneToolState({ toolModes, previewing, fileKey, revision, me
 }
 
 /**
- * The second half: the strip's tools after Select (Pencil, Shapes, Measure, the model effects), the tool in
+ * The second half: the strip's tools after Select (Draw, Measure, the model effects), the tool in
  * hand's row under the strip, Measure's layer over the view, and Select's press and hover on a
  * measurement.
  *

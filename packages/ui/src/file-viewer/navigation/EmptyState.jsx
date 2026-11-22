@@ -3,8 +3,8 @@ import { Button } from "@cad/ui/primitives/button";
 
 /**
  * The one status screen, used by every full-area state in both apps: a file that is not there, one that would not
- * open, CAD not running, a link that no longer works, the page's first answer not coming (`settings-ui.md`,
- * "Status screens").
+ * open, CAD not running, a link that no longer works, the page's first answer not coming (`docs/viewer-ux.md`,
+ * "Loading and status screens").
  *
  * Quiet, as the loading indicator it stands in the place of (`loading/LoadingStep.jsx`): no icon, no tinted tile,
  * nothing decorative. One 22rem column centred in the area, left-aligned on one line: the title in the chrome's text,

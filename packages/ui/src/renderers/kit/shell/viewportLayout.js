@@ -3,8 +3,9 @@ import { CHROME_INSET_PX, CORNER_INSET_PX } from "../../../lib/chromeInset.js";
 // The chrome's inset from the viewer's edges: the gap between the tool strip and the stack under
 // it, so the strip sits as far from the corner as the panels sit from the strip.
 export const VIEWPORT_INSET_PX = CHROME_INSET_PX;
-// One tool strip's height, shared by the toolbar and status row: 32px tiles in a 46px row, and its
-// border (`FloatingToolBar.js`).
+// The height of the row the update status stands in at the top centre where there is no strip (a load, a compact
+// host, Preview: `ViewFrame.jsx`), from the view's inset. Not the strip's: the strip is a 40px bar of 28px tiles
+// (`STRIP_BAR_PX`, below; `FloatingToolBar.js`).
 export const VIEWPORT_TOP_BAR_PX = 48;
 // The cube, in the TOP-right corner, so the bottom row is Quick Edit's alone. A host whose own control floats over that
 // corner lowers it clear by setting `--cad-viewport-corner-top`, the room that control takes from the top edge. Hosts can

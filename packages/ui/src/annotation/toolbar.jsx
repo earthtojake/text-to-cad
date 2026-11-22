@@ -13,14 +13,15 @@ import { useControlUsage } from '../usage/controls.js';
 import { useI18n } from '@cad/ui/i18n';
 
 /**
- * The drawing tools' sub-toolbar (`AnnotationToolbar`): one row under the strip's Draw tool. It starts with
- * the tools, one group, a button each, the one in hand pressed (`DRAWING_ROW_ENTRIES`: Pen, Highlighter, Line,
- * Arrow, Rectangle, Ellipse, Text, Fill, Eraser) — choosing one is how Draw changes what it draws with, its family
- * taken up (`takeFamily`) — and, in a second row under them on the same surface, the colour, stroke width and placement (on
- * the surface under each point, or on the plane of the surface the mark starts on) of what is drawn next, and
- * Clear, all the annotation session's (`session.js`). The style is the tool in hand's own — the pen's, the highlighter's, Shapes' —
- * and the eraser, which puts nothing down, has none: its three are greyed out. The same colour and stroke width dropdowns (`AnnotationStylePickers`) restyle
- * the ink Select has picked, on its selection's bar.
+ * The drawing tools' sub-toolbar (`AnnotationToolbar`): two rows under the strip's Draw tool, on one surface, no rule
+ * between them. The first is the tools that put ink down, a button each, the one in hand pressed (Pen, Highlighter,
+ * Line, Arrow, Rectangle, Ellipse, Text: `DRAWING_CREATE_ENTRIES`) — choosing one is how Draw changes what it draws
+ * with, its family taken up (`takeFamily`); the second, the two that change ink already down (Fill, Eraser:
+ * `DRAWING_EDIT_ENTRIES`), then what is drawn next, its colour, stroke width, line style and placement (on the surface
+ * under each point, or on the plane of the surface the mark starts on), and Clear, all the annotation session's
+ * (`session.js`). The style is the tool in hand's own — the pen's, the highlighter's, the shapes' — and the eraser,
+ * which puts nothing down, has none: its pickers are greyed out (Fill keeps its colour alone). The same colour, stroke
+ * width and line style dropdowns (`AnnotationStylePickers`) restyle the ink Select has picked, on its selection's bar.
  */
 
 /** @typedef {import('./tools.js').AnnotationTool} AnnotationTool */
@@ -282,9 +283,10 @@ function ColorMenu({ value, colors, onChange, disabled }) {
 }
 
 /**
- * The colour and weight dropdowns (`StyleMenu`) — the ink picked, on its selection's bar. Each is left out where it has nothing to set (`width`
- * null: no stroke picked); `placement` only where Annotate puts ink down. `children` follow them on
- * their row.
+ * The colour, stroke width, line style and placement dropdowns (`StyleMenu`): what is drawn next, on the drawing row
+ * (`AnnotationToolbar`), and the ink picked, on its selection's bar. Each is left out where it has nothing to set
+ * (`width` null: no stroke picked; `dash` null: none with a line style); `placement` only where Draw puts ink down.
+ * `children` follow them on their row.
  *
  * @param {{ color: string, width?: number | null, placement?: AnnotationPlacement | null,
  *   onColor(value: string): void, onWidth?(value: number): void,
@@ -312,15 +314,15 @@ const icon = Icon => <Icon className="size-3" strokeWidth={2} aria-hidden="true"
 const GROUP = 'flex items-center gap-1';
 
 /**
- * The drawing tools' sub-toolbar (`kit/tools/SubToolbar.jsx`), under the strip while Pencil or Shapes is the tool: one
- * row, the same for both, from the left — the tools of the one that is up as buttons, the one in hand pressed (Pencil's
- * Pen, Highlighter and Eraser; Shapes' Rectangle, Line, Arrow, Ellipse and Text; choosing one is all
- * the strip tool needs to draw with it); a rule; what is drawn next, its Color (`annotationColors`, for the viewer's `colorScheme`,
- * or any from the wheel), Stroke width and Placement, each a dropdown laid out as the strip's are (kept per drawing kind: the pen's, the
- * highlighter's, Shapes'; greyed out under the Eraser), then Clear annotations.
+ * The drawing tools' sub-toolbar (`kit/tools/SubToolbar.jsx`), under the strip while Draw is in hand: two rows on one
+ * surface, the same for both families, no rule between them. First the tools that put ink down, as buttons, the one in
+ * hand pressed (Pen, Highlighter, Line, Arrow, Rectangle, Ellipse and Text; choosing one is all Draw needs to draw
+ * with it); then Fill and Eraser, and what is drawn next, its Colour (`annotationColors`, for the viewer's `colorScheme`,
+ * or any from the wheel), Stroke width, Line style and Placement, each a dropdown laid out as the strip's are (kept per
+ * drawing kind: the pen's, the highlighter's, the shapes'; greyed out under the Eraser), then Clear annotations.
  * Undo and Redo are the keyboard's (⌘Z, ⇧⌘Z: `useViewerShortcuts.js`), not buttons. A flat view, where ink has nowhere to lie but
- * the drawing, has no placement to choose (`placements={false}`). On a phone, where the row is as wide as the
- * view, it wraps rather than scrolls.
+ * the drawing, has no placement to choose (`placements={false}`). On a phone, where the rows are as wide as the
+ * view, each wraps rather than scrolls.
  * @param {{ annotation: import('./session.js').AnnotationSession, colorScheme?: 'light' | 'dark', placements?: boolean }} props
  */
 export function AnnotationToolbar({ annotation, colorScheme = 'light', placements = true, takeFamily = null }) {

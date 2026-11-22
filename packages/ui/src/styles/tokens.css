@@ -2,15 +2,15 @@
 @custom-variant dark (&:where(.dark *):not(.light *));
 
 @theme inline {
-  /* THE type scale (`docs/settings-ui.md`, "The type scale"): three interface sizes and one heading, each
+  /* THE type scale (`docs/design-system.md`, "The type scale"): three interface sizes and one heading, each
    * with its fixed line height — tiny 11/16 (tooltips, shortcut hints, small metadata), xs 12/16 (the
-   * panel, Quick Edit, the sub-toolbars, every menu, dropdown, select and context menu), ui 13/20 (the
+   * panel, Quick Edit, the sub-toolbars, every menu, dropdown and context menu), ui 13/20 (the
    * app's chrome: the navbar, dialogs, the Home), heading 15/20 semibold (the one heading). A 13px default
    * at the normal 16px root: rems preserve the UI's scale without shrinking the spacing/radius system.
    * Stock shadcn controls use text-sm/text-base, so both resolve to the ui size. */
   /* Each size and line height is a variable (`--cad-text-*`, `--cad-leading-*`, `globals.css`) so a
-   * phone's view can take one step up the scale, menus and selects portalled out of the viewer included,
-   * and the view's panel can draw every step at its one size. */
+   * phone's view can take each step 2px up (tiny 13/18, xs 14/20, ui 15/20, heading 17/22), menus and
+   * dropdowns portalled out of the viewer included, and the view's panel can draw every step at its one size. */
   --text-ui: var(--cad-text-ui);
   --text-ui--line-height: var(--cad-leading-ui);
   --text-sm: var(--text-ui);
@@ -125,7 +125,7 @@
    * 12% into the background), the selection, the error's and the warning's ink. The brand is the focus
    * ring, a text selection, a selected row, the tool in hand's icon, a search's match and the logo: nothing else
    * (never a link in the chrome, which is muted, the foreground and underlined under the pointer),
-   * and never a button's fill (`docs/settings-ui.md`, "The palette"). */
+   * and never a button's fill (`docs/design-system.md`, "The palette"). */
   --brand: #249ddd;
   --brand-text: #2c7197;
   --brand-icon: #1683c7;

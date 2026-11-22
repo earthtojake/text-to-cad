@@ -40,7 +40,7 @@ export function useSchematicInspect({ index, describe, tip = null, hovered }) {
  * What is selected on a schematic, for Quick Edit (`useSceneSelection` over `schematicScene.js`): each
  * pick as a reference into the file on screen and as a chip named as the schematic names it (`R1`,
  * `R1.2`, `net /MID`, `/MID · wire`, `“MID”`, a sheet's name), led by its kind's glyph, its card what the
- * schematic says of it (`describe`, the Selected pane's). A click on a chip copies its reference; its X drops it;
+ * schematic says of it (`describe`). A click on a chip copies its reference; its X drops it;
  * resting on it lights it.
  */
 export function useSchematicReferences({ scene, selection, resource, describe = null }) {

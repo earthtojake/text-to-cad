@@ -19,7 +19,7 @@ import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
 //             matches the one the renderer declares for the file on screen — a rebuilt model
 //             has different parts, so ids from the old one are not ids at all — while the
 //             camera and the display are always kept.
-//   panel     the view's panel, open or closed, its width, its tab, its Selected pane's height
+//   panel     the view's panel, open or closed, its width and its tab
 //             (`filePanel.js`): written by the panel itself and merged into whatever a renderer
 //             writes by the file viewer, so no renderer reads or writes it here.
 //

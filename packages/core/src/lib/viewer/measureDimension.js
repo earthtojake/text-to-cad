@@ -50,7 +50,7 @@ export function measureSeriesColor(index) {
 export const MEASURE_DIMENSION_FADED_ALPHA = 0.7;
 export const MEASURE_DIMENSION_LABEL_BACKGROUND = "rgba(15, 23, 42, 0.92)";
 // A dimension's label and the snap chip: text drawn into the viewport keeps its own size, never under 10px
-// (`docs/settings-ui.md`, "The type scale"), on a 14px line in its chip.
+// (`docs/design-system.md`, "The type scale"), on a 14px line in its chip.
 export const MEASURE_DIMENSION_LABEL_FONT =
   "600 10px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
 const LABEL_LINE_PX = 14;

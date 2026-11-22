@@ -14,12 +14,13 @@ import { DOUBLE_CLICK_WAIT_MS } from "../kit/viewport/touchGestures.js";
  * changed before it isolates, leaves isolation or looks at a face or edge — the gesture ends as it did when
  * every click waited.
  *
- * Two taps still wait the double-click window (`tap(..., { wait: true, waitMs })`), because what
- * they do would have to be undone: a tap under a tool a pick would leave (Explode, Clip: a pick
- * there takes up Select), so a double-click under such a tool isolates and stays in the tool; and a
- * tap that would take a selection away (the thing selected pressed again, or empty space with
- * something selected), so a double-click never shows the selection going and coming back. A lone
- * such click acts once the window has passed. A finger's window is its double tap's.
+ * A tap still waits the double-click window (`tap(..., { wait: true, waitMs })`) where what it does
+ * would have to be undone: one that would take a selection away (the thing selected pressed again:
+ * `XbfRenderer.jsx`'s `pickTakesAway`), so a double-click never shows the selection going and coming
+ * back. A press on empty space clears at once: what a double-click there does (fit, leave isolation)
+ * needs no selection. Explode and Clip stand over Select, so a tap under them picks as Select's does
+ * and the tool stays in hand. A lone click that waits acts once the window has passed. A finger's
+ * window is its double tap's.
  *
  * `tap(clickCount, referenceId, options, { wait })`: a press released within the tap slop;
  * `miss(clickCount)`: a press that was not one (a drag, a cancel, a chord), which for a fresh

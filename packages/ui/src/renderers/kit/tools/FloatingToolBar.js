@@ -17,7 +17,7 @@ export { STRIP_BUTTON_CLASS, StripTouchProvider, TOP_STRIP_BUTTON_CLASS, TOUCH_S
 /**
  * One tool of the strip. The strip draws it; whoever hands it over decides what
  * it is, when it exists and what pressing it does. A tool with settings (Select's filter,
- * Animation's routines) has a small chevron right after its button that opens them (`menu`, a
+ * Measure's) has a small chevron right after its button that opens them (`menu`, a
  * `ToolSettingsMenu` with its "chevron" trigger), as a design tool's toolbar has it.
  *
  * @typedef {object} ViewportTool
@@ -33,12 +33,13 @@ export { STRIP_BUTTON_CLASS, StripTouchProvider, TOP_STRIP_BUTTON_CLASS, TOUCH_S
  * @property {import("react").ReactNode} [menu]  Its modes: the chevron after its button, and the menu it opens.
  * @property {boolean} [changed]  What it sets is off its default (an effect on the model, its tool not in hand): a dot in
  *   its tile's corner.
- * @property {string} [group]  The strip's group it is in (the tools that pick — Select, Pencil, Shapes, Measure — then
+ * @property {string} [group]  The strip's group it is in (the tools that pick or draw — Select, Draw, Measure — then
  *   the model's effects, "model"): their order, never a rule, since the strip draws none.
  */
 
 /**
- * One of the view's controls at the strip's end (Projection, Display, Preview): its tile as drawn on the
+ * One of the view's controls at the strip's end, where no navbar holds them (Display, Preview; a phone's zoom, in More):
+ * its tile as drawn on the
  * strip (`tile`), and what it is as a row of the touch strip's More menu, when there is no room for
  * it: `onSelect` for a press, or `popover` for a control whose tile opens a popover, which then
  * opens from More itself (`anchor`, the More button's ref).
@@ -52,9 +53,9 @@ export { STRIP_BUTTON_CLASS, StripTouchProvider, TOP_STRIP_BUTTON_CLASS, TOUCH_S
  * @property {import("react").ReactNode} tile
  * @property {() => void} [onSelect]
  * @property {(props: { anchor: import("react").RefObject<HTMLElement>, open: boolean, onOpenChange(open: boolean): void }) => import("react").ReactNode} [popover]
- * @property {(props: { openPopover(): void }) => import("react").ReactNode} [submenu]  In More, its choices (Display's modes, the
- *   zoom's), opened under its row in More itself, as a phone's menus open a submenu (`DropdownMenuInlineSub`: there is no room
- *   beside More for one); `openPopover` opens its `popover` from More (Display's settings page).
+ * @property {(props: { openPopover(): void }) => import("react").ReactNode} [submenu]  In More, its choices (the zoom's),
+ *   opened under its row in More itself, as a phone's menus open a submenu (`DropdownMenuInlineSub`: there is no room
+ *   beside More for one); `openPopover` opens its `popover` from More.
  */
 
 // A tool with a menu is ONE control (Select, Measure): its button, then its menu's small chevron
@@ -91,8 +92,8 @@ const MORE_ICON_CLASS = "flex size-4 shrink-0 items-center justify-center [&_svg
 
 /**
  * The interaction tools: a dumb strip positioned by the viewport shell. It renders the
- * tools it is handed, left to right, then the view's own controls (`views`: a 3D view's Preview, a board's
- * Flip, 2D/3D and Display), which are no tools: pressing one leaves the tool in hand as it is. No rule parts
+ * tools it is handed, left to right, then the view's own controls where no navbar holds them (`views`: Display, then
+ * Preview where the view has it), which are no tools: pressing one leaves the tool in hand as it is. No rule parts
  * them; the strip is one row of tiles at Figma's toolbar's proportions (a 40px bar, 28px tiles). It holds no state and knows no tool by name. On a phone (`touch`) it is one row of
  * touch-sized tiles, the tools, with the view's controls (and any tool that does not fit) in a More
  * menu (`TouchStrip`).

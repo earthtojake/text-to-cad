@@ -57,7 +57,7 @@ export function sceneCopyText(resource, ids) {
  * What is selected in a scene, for Quick Edit (`useSceneSelection`): each part as a reference into
  * the file on screen, by the id its scene picks it by — the file's own name for it, whose grammar
  * is its renderer's (`renderers.md`) — and as a chip named as the file names it, its card what the
- * view says of it (`describe`, the Selected pane's: `useSceneDescribe` unless the view has its own).
+ * view says of it (`describe`: `useSceneDescribe` unless the view has its own).
  * A click on a chip copies its reference; its X drops it; resting on it lights it. A pick the file's grammar
  * cannot name is still a chip, with nothing to copy, and no reference.
  *

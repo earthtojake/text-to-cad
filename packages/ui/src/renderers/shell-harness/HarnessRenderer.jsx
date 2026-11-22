@@ -33,7 +33,7 @@ import { ROW_NAME_UNDER_ACTIONS, TREE_ROW_NAME_CLASS, TreeRowActions, TreeRowGly
 // COMPILED package. When STEP moves onto the shell, delete this and drive those
 // cases through STEP.
 
-// Pencil and Shapes and nothing else: with no tool taken up, "" is the mode, exactly as the
+// Draw's two modes (`pencil`, `shapes`) and nothing else: with no tool taken up, "" is the mode, exactly as the
 // shell records for a renderer that hands over no tools at all.
 const HARNESS_TOOL_MODES = createToolModes({ defaultMode: "", modes: { [SHELL_TOOL.PENCIL]: {}, [SHELL_TOOL.SHAPES]: {} } });
 // A file with a tool stack (`panel*.harness`) opens in Select, as STEP and robots do: the tool

@@ -24,7 +24,7 @@ export const routineAway = runtime => runtime?.enabled === true && (runtime.play
 /**
  * The tools view's routines, a tab of the view's panel, **Animation** (`ToolPanel`, `kit/shell/FlatPanel.jsx`), the last,
  * for a file the tools view plays clips for (its renderer's routines; none: no tab).
- * It is roomier than a playbar could be, in the panel's settings-row patterns (`settings-ui.md`):
+ * It is roomier than a playbar could be, in the panel's settings-row patterns (`docs/viewer-ux.md`, "Animation"):
  *
  * - **Clip**: the routine, a labelled dropdown row as Speed is (`PanelSelectRow`, `kit/inspector/panelRows.jsx`), always
  *   (one routine too), listing every routine; a choice plays it from its start. The tab's and the row's words are the

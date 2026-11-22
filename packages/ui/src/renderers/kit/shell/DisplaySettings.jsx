@@ -10,7 +10,7 @@ import { useStripButtonClass } from "../tools/stripTouch.js";
 import { NAVBAR_VIEW_BUTTON_CLASS } from "./NavbarViewControls.jsx";
 
 /**
- * The view's **Display** (`docs/settings-ui.md`, "The Display card"): how the picture is looked at, one card for every
+ * The view's **Display** (`docs/viewer-ux.md`, "The Display card"): how the picture is looked at, one card for every
  * kind of file, opened by the navbar's Display button (the plain cube, left of Preview; with no
  * navbar the strip's last tile but Preview's, or a row of a phone's More). Its rows are the view's groups, in two
  * sections and ONE hairline between them: the camera's (a board's **Side** and **Mode**, then **Projection** where the

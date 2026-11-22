@@ -16,7 +16,7 @@ import { useI18n } from "@cad/ui/i18n";
 import { FlatPanelChanged } from "../kit/shell/FlatPanel.jsx";
 
 // An engine document's Parameters: the view's panel's tab for a model whose script declares named
-// numbers (`docs/settings-ui.md`, "Parameters"). Each is a control over the value the document was
+// numbers (`docs/viewer-ux.md`, "Parameters"). Each is a control over the value the document was
 // built with -- the slider control where it declares both ends of a range, a number field
 // otherwise -- and what a person sets is a draft, the tab's own, until Save sends every changed
 // value in one request (`client.setModelParameters`): the engine rewrites those numbers in the
@@ -43,7 +43,7 @@ const CHANGED = "script_changed";
 const BUSY_HOLD_MS = 2000;
 // A model building already (`busy`): its preview is asked again, waiting longer each time, never said.
 const busyWait = tries => Math.min(250 * 2 ** tries, 2000);
-// The cadence of the previews (`docs/settings-ui.md`, "Parameters"), from how long this model's take, request to
+// The cadence of the previews (`docs/viewer-ux.md`, "Parameters"), from how long this model's take, request to
 // answer. A model answered within FAST_PREVIEW_MS follows a slider as it moves: the newest values go as each
 // answer arrives. A slower one is sent nothing while the slider moves, only the value it comes to: the pointer
 // let go, a step of the keyboard or a value typed, or the slider at rest for SETTLED_MS, so no build is spent on

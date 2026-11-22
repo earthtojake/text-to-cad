@@ -48,7 +48,7 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, se
   const strip = [
     stripTool(FLAT_TOOL.SELECT, t("tool.select"), selectBadge === "all" ? SELECT_ICON
       : <ToolModeIcon tool="select" mode={selectBadge} className="size-3" aria-hidden="true" />, { shortcut: TOOL_SHORTCUTS.select, ...(selectMenu ? { menu: selectMenu } : {}) }),
-    // Draw: one button over Pencil's and Shapes' modes, its menu every drawing tool (`drawStripTool`).
+    // Draw: one plain button over the `pencil` and `shapes` modes, no menu (`drawStripTool`): its tools are the rows under the strip.
     drawStripTool({ toolMode, annotation, takeFamily: family => selectTool(family), disabled: !shown, t }),
     stripTool(FLAT_TOOL.MEASURE, t("tool.measure"), MEASURE_ICON, { shortcut: TOOL_SHORTCUTS.measure })
   ];
@@ -73,7 +73,7 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, se
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null }} props
  *   `surface`: the frame's own data attributes, which say what is drawn (`{ "data-drawing-surface": "" }`).
  *   `quickEdit`: null for a view whose picture has nothing a note could carry.
- *   `inspect`: what is picked and how the view describes it: the frame's Selected pane and hover tip (`ViewFrame.jsx`).
+ *   `inspect`: what is picked and how the view describes it: Quick Edit's chips' cards and the frame's hover tip (`ViewFrame.jsx`).
  *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's one control, at the top-right where a 3D view's cube
  *   stands, and the zoom's keys either way; while the picture is shown in 3D, the 3D view's (`viewportZoom`).
  *   `viewGroups`: the view's settings as Display's card draws them (`DisplaySettings.jsx`: a board's Side, Mode, in 3D

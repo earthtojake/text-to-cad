@@ -22,7 +22,7 @@ function LayerEye({ name, hidden, onToggle }) {
   const action = hidden ? t("tree.reveal") : t("tree.hide");
   return <TreeRowActions persistent={hidden}>
     <TooltipHint content={action}>
-      <Button type="button" variant="ghost" size="icon-xs" aria-label={t(hidden ? "layers.revealNamed" : "layers.hideNamed", { name })} aria-pressed={hidden} className="h-5 w-4 text-muted-foreground"
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={t(hidden ? "layers.revealNamed" : "layers.hideNamed", { name })} aria-pressed={hidden} className="cad-hit h-[calc(var(--cad-glyph)+4px)] w-glyph text-muted-foreground"
         data-layer-visibility={name} onClick={event => { event.stopPropagation(); usage.used("layer_visibility"); onToggle(name); }}>
         {hidden ? <EyeOff className="size-3" aria-hidden="true" /> : <Eye className="size-3" aria-hidden="true" />}
       </Button>

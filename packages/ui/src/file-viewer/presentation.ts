@@ -20,8 +20,9 @@ export interface ViewerLoadingOverlayProps {
   background?: string | null;
 }
 /**
- * The original CAD loading artwork, available before loading the renderer, drawn on the viewport's Background as the
- * person has it (the view's own cover and its picture are on it too), its words, mark and bar in that scheme's ink.
+ * The page's loading cover, available before loading the renderer: the one loading indicator (`loading/LoadingStep.jsx`:
+ * a step line over a thin bar, no mark), drawn on the viewport's Background as the person has it (the view's own cover
+ * and its picture are on it too), in that scheme's ink.
  */
 export function ViewerLoadingOverlay({ viewerLoading, progress, background = null }: ViewerLoadingOverlayProps) {
   const { scheme } = resolveViewportTheme(background ?? undefined);
@@ -29,5 +30,5 @@ export function ViewerLoadingOverlay({ viewerLoading, progress, background = nul
     createElement(Overlay, { loading: { opening: viewerLoading, headline: "Opening model", progress }, operationKey: "preparing-document" }));
 }
 
-/** The one loading indicator (`settings-ui.md`, "Loading"), for what a host draws itself in the app's theme: its home while it starts. */
+/** The one loading indicator (`docs/viewer-ux.md`, "Loading and status screens"), for what a host draws itself in the app's theme: its home while it starts. */
 export { default as LoadingStep } from '../loading/LoadingStep.jsx';

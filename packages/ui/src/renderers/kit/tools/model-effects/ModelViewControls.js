@@ -22,9 +22,9 @@ function formatNumber(value, digits = 2) {
 
 // These controls read the resolved scene's Clip and Explode groups. Public display
 // validation belongs to the settings store; resolved scene groups are not a saved display.
-// Persistent model effects are separate from Display and its presets. Clip and Explode are drawn
-// alike: the amount in the panel's heading, one row for a body — Explode's a slider, Clip's the
-// axis it cuts along (whose dropdown holds Clip's settings too) and then its slider.
+// Persistent model effects are separate from Display (the card the view's Display button, the plain cube, opens) and
+// its styles. Clip and Explode are tools of the strip, drawn alike in the row under it (`ModelTools.jsx`): what leads
+// it (Explode's name; Clip's axis, whose dropdown holds Clip's settings too), then its slider, the amount beside it.
 //
 // Clip's view holds where its plane stands (`at`, millimetres); the panel shows the share of the
 // model it cuts away, measured on `bounds` — the model at rest, the box the plane is placed in.
@@ -34,7 +34,7 @@ function clipState(viewSettings, bounds) {
   return { clip, range: max - min, amount: clipAmount(clip, bounds) * 100 };
 }
 
-/** How far Clip cuts, for its panel's heading. */
+/** How far Clip cuts, as its row reads it beside the slider. */
 export function clipSummary(viewSettings, bounds) {
   return `${formatNumber(clipState(viewSettings, bounds).amount, 0)}%`;
 }
@@ -84,7 +84,7 @@ function ClipAxisSelect({ viewSettings, onViewSettingsPatch, bounds }) {
     <DropdownMenuContent align="start" sideOffset={4} collisionPadding={8}
       className={cn(FLOATING_SURFACE_CLASS, "w-max min-w-0 data-[state=closed]:animate-none!")}>
       {/* As narrow as its settings: first the axes, a compact group of the Theme row's buttons in a row
-          as tall as an item; a rule; then the settings, Display's checkbox items, with no glyphs. */}
+          as tall as an item; a rule; then the settings, the menu's checkbox items (their check at the right), with no glyphs. */}
       <div className="flex min-h-control items-center px-1 py-0.5" data-clip-axis-row="">
         <MenuPrimitive.RadioGroup value={clip.axis} onValueChange={choose} aria-label={t("clip.axis")} className="flex items-center gap-0.5">
           {AXIS_OPTIONS.map(option => <MenuPrimitive.RadioItem key={option.value} value={option.value} onSelect={keepOpen}

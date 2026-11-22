@@ -15,10 +15,10 @@
 //
 // Importing this module has no environmental effects.
 
-// Every panel's width: a strip of six tools — each a 24px button (`size-6`,
-// `primitives/toolbar-button.jsx`), 2px apart (`gap-0.5`), inside 4px of padding (`p-1`) and a
-// 1px border (`FloatingToolBar.js`): 164px, whatever tools a file's own strip has. A fixed panel is
-// exactly this wide; a resizable one opens this wide and is only ever made wider.
+// Every panel's width, 164px: six 24px buttons 2px apart inside 4px of padding and a 1px border, the strip's measure
+// when the stack was made. It is a number of its own now: today's strip is 28px tiles 4px apart, 5px in (`stripTouch.js`),
+// and six of those would be 200px. A fixed panel is exactly this wide, whatever tools a file's own strip has; a
+// resizable one opens this wide and is only ever made wider.
 const STRIP_TOOLS = 6, BUTTON_PX = 24, GAP_PX = 2, PADDING_PX = 4, BORDER_PX = 1;
 export const TOOL_PANEL_WIDTH = STRIP_TOOLS * BUTTON_PX + (STRIP_TOOLS - 1) * GAP_PX + 2 * PADDING_PX + 2 * BORDER_PX;
 // The shortest a person can drag a panel's cap: its first row and a row of content under it.

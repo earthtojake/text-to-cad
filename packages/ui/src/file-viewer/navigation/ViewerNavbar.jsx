@@ -50,9 +50,10 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  * text and control in the panel beside it stands on.
  *
  * Right, only what a host or a file adds, in this order: the file's own actions (the viewer's
- * one: a dismissed alert's icon, which brings its card back); last, outermost, the host's own actions
- * (`actions`: the CAD app's Full size, inline).
- * The colour scheme is the app menu's. A view's own controls are never here: Display and Preview end its tool strip.
+ * one: a dismissed alert's icon, which brings its card back); the view's own controls, Display (the plain cube) then,
+ * where the view has it, Preview, which the view on screen portals into the row's view slot (`../navbarSlots.js`; with
+ * no navbar they end its tool strip); last, outermost, the host's own actions (`actions`: the CAD app's Full size, inline).
+ * The colour scheme is the app menu's.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
  */
@@ -60,9 +61,9 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
 /**
  * The left of the row: the logo, the file's name and its ⋯, one kind of control — transparent until
  * the pointer is on it or its menu is open, then the same accent — and none with a tooltip: each
- * says what it is. On a desktop they sit edge to edge, spaced by their own padding alone: the logo, Back, Forward
- * and the ⋯ in 28px buttons (the tool strip's), the name 4px in from its edges. On a phone, 36px tiles 4px apart (the
- * navbar's own tile and gap), the name's text 10px in. Their fill is `hover:` (only where the pointer hovers) or an open
+ * says what it is. They sit edge to edge, spaced by their own padding alone, on a desktop and a phone alike: the logo,
+ * Back, Forward and the ⋯ in the control's tiles (the tool strip's: 28px, a phone's 36px), the name's text a control's
+ * padding less 4px in from its edges (4px, a phone's 6px). Their fill is `hover:` (only where the pointer hovers) or an open
  * menu's, their ring `focus-visible:`, so a tap leaves neither.
  */
 const NAV_ITEM_CLASS = "flex h-control shrink-0 cursor-pointer items-center rounded-md outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground";
@@ -389,7 +390,7 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
       </div> : null}
       <div ref={trail} className={cn(NAVBAR_CONTROLS_CLASS, homing && "empty:hidden")}>
         {trailing}
-        {/* The view's settings, the view's own (Display, Projection or a board's Side and 2D/3D, then Preview), portalled
+        {/* The view's settings, the view's own (Display, then Preview where the view has it), portalled
             in by the view on screen (`../navbarSlots.js`); before the host's actions. */}
         {file && viewSlot ? <div ref={viewSlot} className="flex shrink-0 items-center gap-0.5 empty:hidden" data-navbar-view="" /> : null}
         {actions}

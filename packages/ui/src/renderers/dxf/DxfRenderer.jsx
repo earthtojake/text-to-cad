@@ -142,7 +142,7 @@ function DxfSurface({ view, data }) {
   const selection = useSceneSelection({ scene, requestRender: requestPaint });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
-  // What a pick is, as the Selected pane, its chip's card and the hover tip read it (`describeDrawingPick`).
+  // What a pick is, as its chip's card and the hover tip read it (`describeDrawingPick`).
   const describe = useCallback(id => (drawing ? describeDrawingPick(drawing, id, units.unit, t) : null), [drawing, units, t]);
   const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource, describe, group: "entity" });
   const overlay = useCallback((ctx, { transform, pixelRatio }) => {
@@ -380,7 +380,7 @@ function DxfSurface({ view, data }) {
       zoom);
   } : null;
 
-  // What is picked, as the frame reads it: the Selected pane under the Layers, the hover tip, the cards' rows.
+  // What is picked, as the frame reads it: Quick Edit's chips and their cards' rows, and the hover tip.
   const resource = workspace.resource;
   const copyText = useCallback(ids => sceneCopyText(resource, ids), [resource]);
   const tip = useCallback(id => (drawing ? drawingPickTip(drawing, id, units.unit, t) : ""), [drawing, units, t]);

@@ -10,14 +10,15 @@
 
 @import "./tokens.css";
 
-/* THE scale (`docs/settings-ui.md`, "A phone's scale"): every size the chrome draws at, as tokens, and ONE switch
+/* THE scale (`docs/design-system.md`, "Two scales"): every size the chrome draws at, as tokens, and ONE switch
  * for a phone below. Every primitive and shared class reads these (`tokens.css` names them for Tailwind:
  * `h-control`, `size-icon-button`, `min-h-row`, `px-pad`, `gap-step`, `rounded-control`, `size-glyph`); nothing
  * sizes itself for a phone on its own.
  *   text      the type scale: 11/16, 12/16 and 13/20, the heading 15/20; the view's panel's one size 12/16
- *   control   a control's height: a tile, a tab, a text button, a select, a field (28)
+ *   control   a control's height: a tile, a tab, a text button, a dropdown, a field (28)
  *   icon-button  a small icon button (a card's close, the playbar's, a row's action's hit area) (24)
  *   row       a row: a tree row in the panel, a menu's item (28); row-sm a list's row, the explorer's (24)
+ *   chip      a Quick Edit chip's height (20)
  *   hit       the least hit area a small mark takes (a chevron, a chip's x, a row's action: `.cad-hit`), none (0)
  *   glyph     a control's icon (16), and the small one (14)
  *   pad       a control's horizontal padding (8), gap between neighbours (4), a control's radius (4)
@@ -51,20 +52,20 @@
 }
 /* Text is drawn as Figma draws its interface: greyscale antialiasing on macOS, not the platform's
  * subpixel default, which draws light text on the dark theme a weight heavier. The whole page while a
- * viewer is on it (its root, `data-viewer-layout`, FileViewer's), so a menu, select or hint portalled
+ * viewer is on it (its root, `data-viewer-layout`, FileViewer's), so a menu, dropdown or hint portalled
  * out of it is drawn alike; family, sizes and weights are untouched. It is inherited. */
 :root:has([data-viewer-layout]), [data-viewer-layout] {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* The view's panels (`PanelSurface.jsx`, both of them — the left, `FlatPanel.jsx`, and the right, `InspectorPanel.jsx` —
- * docked or a phone's page) are one surface with ONE text size:
- * every step of the scale drawn in it is the panel's, so a heading, a label, a row, a field and a
+/* The view's one panel (`PanelSurface.jsx`, `FlatPanel.jsx`: docked, peeking or a phone's page) and the settings
+ * cards (`SettingsCard.jsx`: Display, Preview's Settings) are surfaces with ONE text size:
+ * every step of the scale drawn in one is the panel's, so a heading, a label, a row, a field and a
  * muted detail are told apart by colour and weight, never by size, whatever class a list inside it
- * names. A Quick Edit chip's card (`ItemDetail.jsx`'s `data-detail-card`, the Selected pane's
- * reading) is the same size, so a pick reads alike in both. A menu, select or hint portalled out of
- * either keeps the chrome's scale. */
+ * names. A Quick Edit chip's card (`ItemDetail.jsx`'s `data-detail-card`, the one place a pick is read in
+ * detail) is the same size, so a pick reads as the panel does. A menu, dropdown or hint portalled out of
+ * any of them keeps the chrome's scale. */
 /* The view's panel's ONE horizontal line, Figma's panel inset: every piece of its content (a tab's name, the title,
  * the search's text, a tree's first glyph, a label, a field, a dropdown, a switch, a slider's track, a heading, an
  * empty state) starts this far in from the panel's left edge and ends this far in from its right, on a desktop and
@@ -87,13 +88,14 @@
 
 /* A phone's scale: ONE switch, the viewer under 600px (`data-viewer-layout="mobile"`, `VIEWER_MOBILE_BREAKPOINT`),
  * read at arm's length and worked with a finger: every control, small icon button and row 36px (Apple's and
- * Material's touch targets), every text 15/20 (secondary text, where a desktop steps down to its tiny size, 14/20; the
- * heading 17/22), the glyphs 18 and 16, a control's padding 10px (an icon's inset in its tile), its radius 6px, a switch
- * 36x20 level with the controls, a slider's thumb 20px. The whole page follows, so a menu, a select or a hint portalled out
- * of the viewer is the same size as the chrome it opened from. Only the page's own viewer says so: a viewer drawn out
- * of sight for a picture (`OffscreenPicture.tsx`) pins its layout, and one inside `[data-offscreen-picture]` is never
- * read, so Home's type never jumps while its cards get pictures. A field keeps 15px: the page's viewport, not a 16px
- * font, stops a phone zooming in on it. */
+ * Material's touch targets), and a small mark's least hit area (`.cad-hit`) the same; every text a desktop's step 2px
+ * up: tiny 13/18, xs 14/20, ui 15/20, the heading 17/22, the view's panel's one size 14/20; the glyphs 18 and 16, a
+ * control's padding 10px (an icon's inset in its tile), its radius 6px, the gap between neighbours still 4px, a Quick
+ * Edit chip 28px, a switch 36x20 level with the controls, a slider's thumb and a checkbox 20px. The whole page follows,
+ * so a menu, a dropdown or a hint portalled out of the viewer is the same size as the chrome it opened from. Only the
+ * page's own viewer says so: a viewer drawn out of sight for a picture (`OffscreenPicture.tsx`) pins its layout, and
+ * one inside `[data-offscreen-picture]` is never read, so Home's type never jumps while its cards get pictures. A field
+ * keeps 15px: the page's viewport, not a 16px font, stops a phone zooming in on it. */
 :root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) {
   --cad-text-tiny: 13px;
   --cad-text-xs: 14px;
@@ -131,9 +133,9 @@
 /* A finger held on a view's picture is a long press (its menu, `touchGestures.js`): no iOS callout, no text selected. */
 [data-slot="cad-file-view"] canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 /* The view's panel on a phone (its page in the sidebar sheet, `FlatPanel.jsx`) is the desktop's panel, the same
- * components at the same sizes, gaps and type: its tabs, its search row and its tree rows (`primitives/tree-row.jsx`,
- * whose own touch height, 36px, is the one thing a phone changes in a row). A phone cannot hover, so a row's actions
- * (Isolate, the Hide/Reveal eye) are always shown there, and its name fades out under them. */
+ * components with the same gaps and insets at a phone's scale (above): its tabs, its search row and its tree rows
+ * (`primitives/tree-row.jsx`, a row a finger's 36px tall, its glyph slot and actions the desktop's). A phone cannot
+ * hover, so a row's actions (Isolate, the Hide/Reveal eye) are always shown there, and its name fades out under them. */
 [data-viewer-layout="mobile"] [data-panel-surface="page"] [data-row-actions], [data-viewer-layout="mobile"] [data-panel-surface="page"] [data-row-actions] button { opacity: 1 !important; }
 [data-viewer-layout="mobile"] [data-panel-surface="page"] [data-tree-row] [class*="group-hover/row:[mask-image"] {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--row-actions) - 0.5rem), transparent calc(100% - var(--row-actions)));
@@ -204,7 +206,7 @@
  * its size and age, 11/16 muted; the table's cells the same two. Every control of the row is 28px, its
  * icons 16px, and neutral: the chosen layout's icon alone is the brand's (`--brand-icon`), as the tool in
  * hand's is. Spacing on the 4/8/16 scale. A centred column, 1128px wide at most on 24px gutters of its own,
- * 32px under the navbar: a grid of framed cards, or a list of rows. */
+ * 20px under the navbar: a grid of framed cards, or a list of rows. */
 .cad-library { width: 100%; height: 100%; background: var(--background); }
 /* The model area's light gradient, every picture's ground in both themes (the pictures are the light
  * viewport's), with its faint edge. */

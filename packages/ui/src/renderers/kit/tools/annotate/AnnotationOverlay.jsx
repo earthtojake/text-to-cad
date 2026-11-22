@@ -73,7 +73,7 @@ function paintOutline(context, ink, { color, opacity = 0.45, pad = 4 }) {
 }
 
 /**
- * The drawing tools' surface over the viewport (Pencil and Shapes): every tool's gesture, its ink previewed as it is made (on a
+ * The drawing tools' surface over the viewport (Draw's, in its `pencil` or `shapes` mode): every tool's gesture, its ink previewed as it is made (on a
  * canvas of its own, in screen space) and put into the model as it ends (`annotation3d.js`): the pen, the highlighter, the
  * line, the arrow, the rectangle and the ellipse drawn; text written in place; the eraser dragged
  * over ink. Every mark lies on the surface it starts on (`annotation3d.js`'s `levelOf`: that

@@ -7,7 +7,7 @@ import { HOVER_TIP_DELAY_MS } from '../../../../dist/renderers/kit/shell/HoverTi
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as any;
 afterEach(cleanup);
 
-// The update status is the frame's, one rule in every view, 2D or 3D (`settings-ui.md`): under the strip,
+// The update status is the frame's, one rule in every view, 2D or 3D (`docs/viewer-ux.md`, "Loading and status screens"): under the strip,
 // at the top centre where there is no strip (a load, a compact host, Preview), and none while the card
 // says why the chrome is gone; its Retry wherever the update offers one.
 it('the update status stands under the strip, at the top centre without one, and gives way to the card of a view whose chrome is gone', () => {
@@ -34,7 +34,7 @@ it('the update status stands under the strip, at the top centre without one, and
   expect(idle.container.querySelector('[data-view-update-status]')).toBeNull();
 });
 
-// What a press would pick is the frame's in every view (`settings-ui.md`): the hover tip over the canvas, from
+// What a press would pick is the frame's in every view (`docs/viewer-ux.md`, "Tooltips and feedback"): the hover tip over the canvas, from
 // the view's description of a pick (`inspect`); the panel is the lists alone, nothing of the pick under them.
 it('the frame names what a press would pick in a tip beside the pointer, under Select and while no button is held, and draws no pane of the pick', () => {
   vi.useFakeTimers();
@@ -74,7 +74,7 @@ it("the hover tip takes the view's short words where it has them, and never runs
 });
 
 
-// What belongs to the picture is in the picture's scheme, whatever the app's theme (`settings-ui.md`, "The viewport's
+// What belongs to the picture is in the picture's scheme, whatever the app's theme (`docs/design-system.md`, "The viewport's
 // scheme"): the page's loading cover (`file-viewer/presentation`'s, before any view is up), the view's, Preview's (on
 // Preview's own backdrop, where its Background is set), the update status and the alert card. Each one's scheme is the
 // class over it, which sets its canvas and its ink.

@@ -8,7 +8,7 @@ import { useI18n } from "@cad/ui/i18n";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { useStripTouch } from "../stripTouch.js";
 
-// The rows of a picking tool's chevron menu (settings-ui.md, "Select's menu"), one anatomy for every
+// The rows of a picking tool's chevron menu (`docs/viewer-ux.md`, "Select's menu"), one anatomy for every
 // file: an optional "Selection tool" section (`SelectionToolSection`), then ONE row, "Filter"
 // (`FilterRow`), a stock submenu whose row names it and shows what is ticked, muted, at its right. No
 // renderer builds a row of its own.
