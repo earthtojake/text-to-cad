@@ -30,7 +30,8 @@ the axis, and its tangent lines where the cylinders meet the flanges.
 (r + K t)`` (the length of the neutral surface, ``K`` the K-factor), the bend itself unrolled into a strip
 ``BA`` wide. The flanges' faces are moved exactly (a rigid transform each), so their holes and arcs stay
 exact; a bend's strip is its cylinder's outline unrolled (exact for straight-ended bends, sampled where an
-end is curved), and the breaks of its ends with it. Two bends meeting tangent with no flat between meet at a joint, a flange of no faces the
+end is curved), and the breaks of its ends with it, those beside a cut that ends in the bend up to that
+cut's line. Two bends meeting tangent with no flat between meet at a joint, a flange of no faces the
 walk passes through (``_joints``): a joggle where they turn opposite ways, a compound bend where they turn the
 same way; a flange between two opposed bends is an offset's web (``web_of``). The pieces are fused into the flat pattern (``unfold``). Holes, their distances (to the edge,
 to each other, to each bend in four conventions), flanges' lengths, reliefs, notches, tabs and webs are all
@@ -630,6 +631,7 @@ class _Analysis:
         self.break_skins: dict[int, set[int]] = {}  # each one's skins (the side it breaks)
         self.bend_breaks: dict[int, int] = {}     # the breaks of a bend's ends: face -> the bend face it breaks
         self.bend_rounds: set[int] = set()        # those rounded whole, from one of its cylinders to the other
+        self.bend_cuts: dict[int, set[int]] = {}  # a cut that ends in a bend, along its axis -> the breaks by it
         self.formed: set[int] = set()             # cones, tori, freeform faces a thickness across: formed
         self.countersinks: dict[int, float] = {}
         self.wall_of: dict[int, int] = {}
@@ -835,6 +837,7 @@ class _Analysis:
                 self.edge_set.add(a)
         self._edge_breaks(paired, stands_for)
         self._bend_breaks(paired)
+        self._cuts_across(paired)
         self._full_rounds()
         self._whole_depths()
         self._formed(thickness, tol, paired)
@@ -1155,6 +1158,67 @@ class _Analysis:
                         continue
                     self.breaks[other] = float(depth.max() - depth.min())
                     self.bend_breaks[other] = c
+
+    def _cuts_across(self, paired: set[int]) -> None:
+        """A cut that ends in a bend, along its axis (a notch's end), its edges broken: a plane parallel to the axis
+        that crosses both cylinders and reaches them through their breaks is a cut edge, as it is where it is left
+        square. A chamfer or a round along it (behind its plane: a step's wall meets it in a corner, and stands in
+        front of it), and the facet where that meets the next cut's, are breaks of the bend (``bend_breaks``);
+        they and the breaks of the bend's ends beside them are laid up to the line the cut makes on the side
+        unfolded (``bend_cuts``, ``_stopped``)."""
+        t, tol = float(self.thickness), self.tolerance
+        taken = paired | self.edge_set | set(self.countersinks) | set(self.breaks)
+        beside: dict[int, tuple[int, float]] = {}  # a face within the sheet -> the cylinder beside it, and how deep
+        along: set[int] = set()                    # those that may break an edge along the axis
+        for c in sorted(self.bend_faces):
+            cylinder = self.surfaces[c - 1]
+            axis, origin = np.array(cylinder.axis), np.array(cylinder.origin)
+            into = 1.0 if cylinder.concave else -1.0
+            for b in sorted(self.neighbors[c] - taken):
+                surface = self.surfaces[b - 1]
+                rel = self._boundary([b], per_edge=3) - origin
+                depth = into * (np.linalg.norm(rel - np.outer(rel @ axis, axis), axis=1) - float(cylinder.radius))
+                if depth.min() < -tol or depth.max() > t + tol:
+                    continue
+                beside[b] = c, float(np.ptp(depth))
+                if (surface.kind == "plane" and abs(float(np.dot(surface.normal, axis))) < 1e-6) or (
+                        surface.kind == "cylinder" and surface.concave is False
+                        and float(surface.radius or math.inf) <= t + tol
+                        and abs(float(np.dot(surface.axis, axis))) > _PARALLEL
+                        and not self._coaxial(cylinder, surface, 1e-3)):
+                    along.add(b)
+        planes = [a for a in self.hits if a not in taken and self.surfaces[a - 1].kind == "plane"]
+        found: set[int] = set()  # the breaks of these cuts
+        # a chamfer reaches both cylinders through its cut as the cut does through it: the cut is the one that
+        # touches neither, or, broken on one side alone, the larger
+        for a in sorted(planes, key=lambda a: (bool(self.neighbors[a] & self.bend_faces), -self.areas[a - 1], a)):
+            if a in found:
+                continue
+            surface = self.surfaces[a - 1]
+            normal, at = np.array(surface.normal), np.array(surface.origin)
+            behind = {b for b in self.neighbors[a] & along
+                      if float(((self._boundary([b], per_edge=3) - at) @ normal).max()) <= tol}
+            reached = set()
+            for b in self.neighbors[a]:
+                c = b if b in self.bend_faces else beside[b][0] if b in behind else self.bend_breaks.get(b)
+                if c in self.bend_faces:
+                    cylinder = self.surfaces[c - 1]
+                    if abs(float(normal @ np.array(cylinder.axis))) < 1e-6 and \
+                            abs(float(normal @ (at - np.array(cylinder.origin)))) < float(cylinder.radius):
+                        reached.add(c)
+            if not any(d in self.partners.get(c, ()) for c in reached for d in reached):
+                continue
+            self.edge_set.add(a)
+            along.discard(a)
+            beside.pop(a, None)
+            broken = behind & along
+            # and the facet where one meets the break of the next cut
+            broken |= {b for f in broken for b in self.neighbors[f] & set(beside)
+                       if self.surfaces[b - 1].kind in (*_FREEFORM, "sphere") and self.neighbors[b] & self.edge_set}
+            found |= broken
+            for b in sorted(broken):
+                self.bend_breaks[b], self.breaks[b] = beside[b]
+            self.bend_cuts[a] = broken | {f for b in broken | {a} for f in self.neighbors[b] if f in self.bend_breaks}
 
     def _break_faces(self, a: int) -> list[int]:
         """Break ``a`` and the faces of its surface that are the same break (``_run``): of the same skins, or of
@@ -1910,8 +1974,10 @@ class _Analysis:
                     shape = shape.cut(hole).faces()[0]
                     self._hole(wire, face, loop, inner3, in_bend=True)
             pieces.append(shape)
+            # a cut that ends in it is behind its breaks, as a flange's cut edges are
+            cuts = {cut for cut, beside in self.bend_cuts.items() if beside & self.neighbors[a]}
             self.regions.append(_Region(plane.Loop(polygon, np.ones(len(polygon), bool)), self._from_flat_bend(bend),
-                                        sorted(self.neighbors[a] | {a})))
+                                        sorted(self.neighbors[a] | {a} | cuts)))
         return pieces
 
     def _bend_halves(self, ordinal: int, face: Any = None) -> list[Any]:
@@ -1935,14 +2001,66 @@ class _Analysis:
             return [face]
         return halves if len(halves) == 2 else [face]
 
+    def _cut_line(self, cut: int, bend: _Bend) -> tuple[float, float, float, float]:
+        """A cut that ends in ``bend``, in its strip: how far along the allowance the cut's plane crosses the
+        cylinder unfolded, the way out of the sheet there (1 or -1 along it), and from where to where along the
+        axis the cut runs: between the cut edges it meets."""
+        normal = np.array(self.surfaces[cut - 1].normal, dtype=float)
+        across = np.cross(normal, bend.axis)
+        middle = self._middle(cut) - bend.origin
+        offset = float(middle @ normal)
+        reach = math.sqrt(max(0.0, bend.radius_side ** 2 - offset * offset))
+        at = min((bend.origin + float(middle @ bend.axis) * bend.axis + offset * normal + sign * reach * across
+                  for sign in (1.0, -1.0)), key=lambda point: float(np.linalg.norm(point - bend.origin - middle)))
+        origin, x, _ = bend.frame
+        line, off = (self._unroll(bend)(np.array([at, at + 1e-3 * normal]))[:, :2] - origin) @ x
+        others = self.edge_set - {cut}
+        ends = [tuple(vertex) for edge in self.faces[cut - 1].edges()
+                if others & set(self.edge_faces.get(self.part.edge_ordinal(edge), ())) for vertex in edge.vertices()]
+        ws = bend.w(np.array(ends)) if ends else np.zeros(0)
+        if not len(ws) or float(np.ptp(ws)) <= self.tolerance:
+            ws = bend.w(self._boundary([cut]))
+        return float(line), math.copysign(1.0, off - line), float(ws.min()), float(ws.max())
+
+    def _stopped(self, ordinal: int, points: np.ndarray, bend: _Bend, cuts: list[int]) -> np.ndarray:
+        """A break beside a cut that ends in its bend, as it is laid: the rectangle it spans along the axis and
+        along the allowance, beside the cut up to the cut's line, past it up to the cut's end; a side nearer the
+        line or an end than the breaks are fused at is on it, as is one nearer an end than the break is deep (the
+        mitre where it meets the next). Unrolled about the axis as it is, a face of a cut that is not radial runs
+        past that line or stops short of it (as the side unfolded is the bend's inside or its outside), and the
+        curves where two breaks meet there are chords shorter than that tolerance."""
+        origin, x, y = bend.frame
+        near = 2.5 * plane.CHORD_MM
+        mitre = max(near, self.breaks.get(ordinal, 0.0))
+        laid = np.column_stack([(points - origin) @ x, (points - origin) @ y])
+        low, high = laid.min(axis=0), laid.max(axis=0)
+        for cut in cuts:
+            line, out, start, end = self._cut_line(cut, bend)
+            middle = (low[1] + high[1]) / 2.0
+            low[0] = line if abs(low[0] - line) < near else low[0]
+            high[0] = line if abs(high[0] - line) < near else high[0]
+            if middle <= start:
+                high[1] = min(high[1], start)
+            elif middle >= end:
+                low[1] = max(low[1], end)
+            else:
+                low[1] = start if low[1] < start + mitre else low[1]
+                high[1] = end if high[1] > end - mitre else high[1]
+                (high if out > 0.0 else low)[0] = line
+        if (high - low).min() <= self.tolerance:
+            return np.zeros((0, 2))  # all of it past the cut
+        corners = np.array([low, (high[0], low[1]), high, (low[0], high[1])])
+        return origin + corners[:, :1] * x + corners[:, 1:] * y
+
     def _unrolled(self, ordinal: int, bend: _Bend, face: Any = None) -> Any | None:
         """A bend's end's break (or ``face``, a part of it) unrolled with its bend (its outline about the axis,
-        as the strip's), or None."""
+        as the strip's; beside a cut that ends in the bend, up to it, ``_stopped``), or None."""
         import build123d as bd
 
         face = self.faces[ordinal - 1] if face is None else face
         outer, _, _ = _wire_loop(face.outer_wire().wrapped, face.wrapped, self._unroll(bend))
-        polygon = _simplify(outer.points)
+        cuts = [cut for cut, beside in self.bend_cuts.items() if ordinal in beside]
+        polygon = _simplify(self._stopped(ordinal, outer.points, bend, cuts) if cuts else outer.points)
         if len(polygon) < 3:
             return None
         return bd.make_face(bd.Polyline(*[(float(x), float(y), 0.0) for x, y in polygon], close=True))

@@ -954,7 +954,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   the other skin's break are short by that break, which is its own finding, not the skin's. A bend's end is broken by a cone or a torus
   about the bend's axis, beside one of its cylinders and a cut edge or a flange's break, within the sheet:
   an `edge_break` too, and the bend's length runs to the cut; a full round run on round the bend is a torus
-  about its axis t/2 round, from one of its cylinders to the other, read the same. A cut edge rounded whole
+  about its axis t/2 round, from one of its cylinders to the other, read the same. A cut that ends in a bend
+  along its axis (a notch's end: a plane parallel to the axis across both cylinders) is a cut edge where it
+  reaches both through its breaks, as it is left square, and a chamfer or a round along it (behind its plane: a
+  step's wall stands in front) is the bend's break, as is the facet where it meets the next. A cut edge rounded whole
   from one skin to the other (a full round, r = t/2: a convex cylinder along the skins, a torus or sphere
   about their normal, and the face that turns a corner of the outline between two) leaves no face of the cut
   square to the skins: it is an `edge_break` of both, no cut edge. A break may be several faces of one
@@ -1015,6 +1018,11 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   a line), and round a bend at the cylinder midway through the sheet, each half unrolled: an 80 x 40 plate
   with full-round ends unfolds 80 x 40, not 78 x 40, a 50 mm wide bracket with full-round sides is 50 mm
   wide across its bends too, not 48, and a hole with a full-round rim is its narrowest.
+  Beside a cut that ends in a bend, its breaks and the bend's ends' are laid as rectangles up to the line where
+  the cut's plane crosses the cylinder unfolded: such a cut is not radial, so unrolled about the axis a break
+  ran past that line or stopped short of it, and where two met their sampled curves were chords shorter than
+  the tolerance they are fused with (a notched Z bracket, rounded 0.5 mm, unfolded 3506.4 mm2 of 3642.2 or, as
+  it stood, kept a neck 0.0009 mm wide).
   A break in several faces is laid, unrolled and counted as the faces the kernel merges them into (grown a
   face at a time, so a round that was two faces whole stays two): laid face by face, a piece that projects
   narrower than the tolerance the breaks are fused with is lost there, and a hole's rim with it. A merged
