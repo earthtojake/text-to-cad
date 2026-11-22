@@ -120,7 +120,7 @@ function measurePanel() {
     return row ? row.querySelectorAll(':scope > [data-tree-guide]').length : 0;
   };
   const push = (element, rect, kind, text = '') => items.push({ left: rect.left - box.left, right: rect.right - box.left, kind, text: text.slice(0, 40),
-    depth: depthOf(element), line: Math.round(rect.top - box.top), where: element.closest('[data-flat-panel-head]') ? 'head' : 'body',
+    depth: depthOf(element), line: Math.round(rect.top - box.top), mid: (rect.top + rect.bottom) / 2 - box.top, where: element.closest('[data-flat-panel-head]') ? 'head' : 'body',
     path: [element.closest('[data-tree-row]') ? 'row' : '', element.closest('[data-flat-panel-tab]') ? 'tab' : ''].filter(Boolean).join(','),
     // Inside a button or a box: what its box holds, the box's edge the one on the line (a tab's name, Save's word, a
     // dropdown's choice).
@@ -142,7 +142,7 @@ function measurePanel() {
     const rects = [...range.getClientRects()].filter(rect => rect.width > 0 && rect.left < clip - 0.5);
     if (!rects.length) continue;
     const left = Math.min(...rects.map(rect => rect.left)), right = Math.min(clip, Math.max(...rects.map(rect => rect.right)));
-    push(node.parentElement, { left, right, top: rects[0].top }, 'text', text.trim());
+    push(node.parentElement, { left, right, top: rects[0].top, bottom: Math.max(...rects.map(rect => rect.bottom)) }, 'text', text.trim());
   }
   const BOX = '[data-flat-panel-body] :is([data-value-dropdown], [aria-haspopup=menu], [data-slot=checkbox])';
   // The search's field is no box (no border, fill or ring): its magnifier and its X are what stand on the insets.
@@ -208,8 +208,14 @@ function offInset({ clientWidth, items }) {
     if (item.left < level - 0.5 || item.right > right + 0.5) off.push(['outside the insets', item]);
     if (['switch', 'track', 'box'].includes(item.kind) && !near(item.right, right)) off.push(['not ending on the right inset', item]);
   }
-  const lines = Map.groupBy(items.filter(item => item.kind !== 'box'), item => `${item.where}@${item.line}`);
-  for (const line of lines.values()) {
+  // A line is what stands centred on one row: a field and its unit, a name and its count. By their middles, not their
+  // tops: a text's box and a field's box differ in height with the font, and their tops by a pixel or two.
+  const lines = [];
+  for (const item of items.filter(item => item.kind !== 'box').sort((a, b) => a.mid - b.mid)) {
+    const line = lines.find(group => group.where === item.where && Math.abs(group.mid - item.mid) <= 4);
+    if (line) line.items.push(item); else lines.push({ where: item.where, mid: item.mid, items: [item] });
+  }
+  for (const { items: line } of lines) {
     // A row's words (its name, its count) run on from its glyph: only its actions end on the right inset.
     const last = line.filter(item => !item.held && !(item.kind === 'text' && item.path.includes('row'))).reduce((a, b) => (b.right > a.right ? b : a), { right: -Infinity });
     if (last.left > clientWidth / 2 && !near(last.right, right)) off.push(['a line not ending on the right inset', last]);

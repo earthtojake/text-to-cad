@@ -195,6 +195,8 @@ for (const phone of [true, false]) {
     await walk('Quick Edit with an attachment');
     await press(pane.locator('[data-view-preview]'));
     await pane.locator('[data-preview-bar]').waitFor();
+    // Preview's cover holds over its bar until its first frame is drawn (slow on a software GPU): a press waits for it.
+    await pane.locator('[data-preview-cover]').waitFor({ state: 'detached' });
     const view = await pane.locator('[data-cad-canvas] canvas').first().boundingBox();
     if (phone) await page.touchscreen.tap(view.x + view.width / 2, view.y + view.height / 2); else await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
     await pane.locator('[data-preview-bar][data-state="visible"]').waitFor();
@@ -264,6 +266,8 @@ test('a phone: every popup trigger opens on one tap and shuts on a second tap on
   await pane.locator('[data-navbar-panel="left"]').tap();
   await page.locator('[data-panel-sheet]').waitFor({ state: 'detached' });
   await pane.locator('[data-view-preview]').tap();
+  // Preview's cover holds over its bar until its first frame is drawn (slow on a software GPU): a tap waits for it.
+  await pane.locator('[data-preview-cover]').waitFor({ state: 'detached' });
   // Its bar, brought up by a tap on the picture if it has gone, then its Settings.
   const view = await pane.locator('[data-cad-canvas] canvas').first().boundingBox();
   await page.touchscreen.tap(view.x + view.width / 2, view.y + view.height / 2);

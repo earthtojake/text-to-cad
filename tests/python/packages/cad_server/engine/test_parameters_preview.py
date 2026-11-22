@@ -165,8 +165,9 @@ class PreviewTest(PreviewCase):
         self.assertEqual((got, said["code"]), (409, "build_failed"))
         self.assertIn("ValueError: a wall of 4.8 leaves no room for the holes", said["detail"])
         self.assertEqual(self.size(self.ident), [2.0], "the document is as it was")
-        with self.script.open("a", encoding="utf-8") as script:
-            script.write("# edited, and not run\n")
+        # Bytes as they are: a text-mode append writes Windows' line ending, which the comparison below would not expect.
+        with self.script.open("ab") as script:
+            script.write(b"# edited, and not run\n")
         got, said = self.preview({"wall": 3.0})
         self.assertEqual((got, said["code"]), (409, "script_changed"))
         self.assertEqual(self.script.read_bytes(), before + b"# edited, and not run\n")
