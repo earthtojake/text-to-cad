@@ -1,50 +1,47 @@
 # Parts and footprints
 
-Check the part's datasheet against the footprint: pad numbering, pitch, body outline, exposed
-pad, polarity, courtyard and connector mating direction. Names and rendered graphics alone do
-not prove a match. Keep manufacturer, MPN, sourcing reference and DNP in footprint fields or a
-project BOM; do not infer purchase quantities from pad count.
+Read this to choose a part or its footprint, to give a part a 3D model, or to draw a footprint.
 
-A native board embeds its footprints. `fp-lib-table` is needed to resolve or update the original
-library, not to display an existing board. A project-local footprint library is a `.pretty`
-folder containing `.kicad_mod` files, referenced with `${KIPRJMOD}`. Stock libraries use the
-installed KiCad major's environment variable, such as `${KICAD9_FOOTPRINT_DIR}`, which DRC, ERC and an
-edit read in the KiCad you installed ([SKILL.md](../SKILL.md#setup)); with no KiCad installed, DRC warns
-`lib_footprint_issues` for each such footprint. Preserve project-local libraries when handing off a
-board. Read the library footprint before placing it.
+## Check the footprint against the datasheet
 
-Several physical pads may share one number (a shield or thermal pad). `part.pads_numbered("1")`
-returns every shape for that logical pin; `part.pad("1")` returns the first. Check connectivity
-and geometry across all those shapes. A hole without copper is not an electrical pad.
+Pad numbering, pitch, body outline, exposed pad, polarity, courtyard and connector mating direction: a name
+or a rendering does not prove a match, so read the library footprint before placing it and measure its pads
+(`kicad_pcb.read`) against the datasheet's drawing. Several pads may share one number (a shield, a thermal
+pad's islands): check connectivity and geometry across them all ([checks](checks.md#read-it)). A hole
+without copper is not an electrical pad.
 
-STEP export needs the footprint's actual 3D models. Verify model path, offset, scale and rotation.
-`--subst-models` can substitute a matching STEP/IGES model for VRML. Missing models must be
-reported; an enclosure check based on the bare board cannot establish component clearance.
-`cad kicad_pcb inspect board.kicad_pcb --json` lists each model missing (`models.missing`) before any
-export. KiCad's library has none for many parts a case is built round (keyboard switches, EC11
-encoders, 3.5 mm Eurorack jacks, 9 mm pots, several LEDs and USB-C receptacles): draw each from its
-datasheet with the cad skill, export it as STEP into the project (`board.3dshapes/`), and name it in the
-project's copy of the footprint as `${KIPRJMOD}/board.3dshapes/<name>.step`.
+Derate from the maker's data, not the nominal value: a class II ceramic (X5R, X7R) keeps only part of its
+capacitance under DC bias, less in a smaller package (the maker's curve at the working voltage:
+[Murata SimSurfing](https://ds.murata.com/simsurfing/index.html), [KEMET K-SIM](https://ksim3.kemet.com/)),
+so use C0G where the value must hold (RF matching, timing, filters, an audio path). An inductor's saturation
+current is held against the peak current, a resistor's rating against what it dissipates.
 
-## Derate
+## Libraries, part numbers and the BOM
 
-- A class II ceramic capacitor (X5R, X7R) loses capacitance under DC bias, more in a smaller package
-  and a lower voltage rating. Read the maker's curve at the working voltage
-  ([Murata SimSurfing](https://ds.murata.com/simsurfing/index.html),
-  [KEMET K-SIM](https://ksim3.kemet.com/)) and choose the part for the capacitance that remains.
-- C0G (NP0) for RF matching, timing and filters, with high-Q inductors in RF. No class II dielectric
-  in an audio path: it is piezoelectric, so it sings and picks up vibration, and its capacitance moves
-  with the signal.
-- A resistor's power rating with margin over what it dissipates; thin film where noise or precision
-  matters.
-- An inductor's saturation current above the peak current, not the average, and its DCR within the
-  loss and voltage-drop budget.
+A board embeds its footprints, so it opens without their libraries. A netlist import and DRC's library
+checks read them through the project's `fp-lib-table`, beside the `.kicad_pro`: a project library is a
+`.pretty` folder of `.kicad_mod` files, listed as
+`(lib (name "parts")(type "KiCad")(uri "${KIPRJMOD}/parts.pretty")(options "")(descr ""))`. A row naming a
+stock library (`${KICAD9_FOOTPRINT_DIR}/...`) is read in the KiCad the person installed
+([SKILL.md](../SKILL.md#setup)). Hand a board over with its project libraries.
 
-## The BOM is the schematic's
+Manufacturer and part number live in the schematic's fields (`MPN`, `LCSC`) and DNP on its symbols, and the
+BOM, with its quantities, is exported from them ([manufacturing](manufacturing.md#exports)), never
+inferred from the board's pads. Never edit an exported BOM: change the schematic's field and export it
+again, since a hand edit to the CSV disagrees with the board and is lost at the next export.
 
-Never edit an exported BOM. Change the schematic's field (`Value`, `MPN`, `LCSC`) and export it again
-(`cad kicad_sch export --to bom`): a hand edit to the CSV disagrees with the board and is lost at the
-next export.
+## 3D models
+
+A part stands on the STEP its footprint names ([where it is looked for](views.md#3d-and-part-models)).
+`cad kicad_pcb inspect board.kicad_pcb --json` lists the missing ones (`models.missing`, each with its
+reason) before any export. Report them: an enclosure checked against a board without its parts' bodies
+establishes no component clearance.
+
+KiCad's library has no model for many parts a case is built round (keyboard switches, EC11 encoders, 3.5 mm
+Eurorack jacks, 9 mm pots, several LEDs and USB-C receptacles): draw each from its datasheet with the cad
+skill, export it as STEP into the project (`board.3dshapes/`), and name it in the project's copy of the
+footprint as `${KIPRJMOD}/board.3dshapes/<name>.step`. Check its offset, scale and rotation in the board's
+3D view.
 
 ## A new footprint
 
@@ -56,4 +53,4 @@ next export.
    (2010), and to KiCad's footprint conventions, the [KLC's F rules](https://klc.kicad.org/footprint/)
    (pads, courtyard, silkscreen, fabrication layer).
 4. Place it on a board, snapshot it, and compare with the datasheet's drawing, measuring the pads from
-   `kicad_pcb.read`, never from the picture.
+   `kicad_pcb.read`.

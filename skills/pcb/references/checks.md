@@ -1,5 +1,10 @@
 # Read and check the saved board
 
+Read this to read a board in a script, to answer a reference the viewer handed you, or to read DRC's
+findings as data.
+
+## Read it
+
 ```python
 from cad import kicad_pcb
 
@@ -10,29 +15,45 @@ print(pin.at, pin.net)
 print(board.resolve("#J1.1"))
 ```
 
-Run it with `cad run inspect_board.py`, and KiCad's rule check with the command:
+Run it with `cad run inspect_board.py`. Each `kicad_pcb.read` reads the file as it is now, so read again after
+an edit. It answers a read-only view in the board's frame (millimetres, y down): `parts` (each with its
+`pads`), `tracks`, `vias`, `zones` (each layer's `fills`), `rule_areas`, `holes`, `outline`, `texts`,
+`dimensions`, `shapes` (the graphics), and `nets`, each with its pads, tracks, vias and zones and the
+`netclass` the `.kicad_pro` beside the board gives it. Printing one says what it holds
+(`Net('/GND', class 'Power': 4 pads, 8 tracks, 2 vias, 1 zones)`).
+
+- `part.pad("3")` is the first pad of that number. A shell's, a tab's or a thermal pad's several are
+  `part.pads_numbered("3")`: measure a pin over them all.
+- An arc or a circle of the outline or a graphic is points along it, every chord within 0.005 mm of it, so a
+  part fitted to the outline read back fits the board as drawn. A track's arc is coarser: a point each
+  10 degrees.
+- `from cad.kicad_pcb import inside`: whether a point lies in a polygon (a pour's fill, the outline), by the
+  even-odd rule, in the same millimetres.
+- `cad kicad_pcb inspect board.kicad_pcb` prints the board in one look (`--json`: `format`, `thickness`,
+  `size`, `layers`, `parts`, `nets`, `counts`, and `models`, each part's 3D model found or why not).
+
+What DRC does not establish (decoupling distances, width for current, a pair's geometry, the ground under a
+fast net) is measured from this view, each threshold from the circuit, the datasheets and the stackup:
+[layout](layout.md#a-property-check) has the script.
+
+## DRC as data
 
 ```bash
 cad kicad_pcb drc board.kicad_pcb --json
 ```
 
-Each `kicad_pcb.read` call reads the current file. Its dataclasses hold a read-only view of that
-revision: parts, pads, tracks, vias, zones, holes, nets, outline, texts, dimensions and graphics
-(`shapes`), in board millimetres with y down. An arc or a circle among the graphics and the outline
-is points along it, every chord within 0.005 mm of it, so a part fitted to the outline read back fits
-the board as drawn; a track's arc is coarser (10 degree chords). It does not launch KiCad, validate electrical design, or serve as a file serializer.
-Project netclass names are read from the sibling `.kicad_pro` when present. Refresh the index
-after an edit. `part.pads_numbered(number)` includes all shapes for a shared pin number.
-`from cad.kicad_pcb import inside` tests whether a point lies in a polygon (a pour's fill, the
-outline) by the even-odd rule, in the same millimetres. DRC is `cad kicad_pcb drc` (`--json`: each
-finding's `items`, as under `measurements.drc`, each with KiCad's `uuid`, `description` and `pos`, and what the
-board says it is: `kind` (track, via, pad, zone, footprint, shape, text, field), `layers`, `net`, `ref` (the
-reference `board.resolve` takes: `#track:<uuid>`, `#U3.7`, `#U3`) and `part`; each `measurements.drc` entry
-adds the `layer` its description ends with. KiCad reports a copper sliver with no item or position: the
-check finds it again in that layer's saved copper (`at_source: "board"`, the finding's location), and where
-it cannot, says why in `note`), and
-`cad.kicad_pcb.drc(path)` in a script run with `cad run` whose header names `cad[kicad]` (a
-`# /// script` block's `dependencies`); both run kicode's `kicad-cli`.
+`findings` are the lines it prints without `--json` (`severity`, `code`, `message`, `location`), and
+`measurements.drc` each one as KiCad reported it (`check`, `severity`, `type`, `description`, `at`, `layer`).
+Both carry the finding's `items`, each with KiCad's `uuid`, `description` and `pos`, and what the board says
+it is: `kind` (track, via, pad, zone, footprint, shape, text, field), `layers`, `net`, `part`, and `ref`, the
+reference `board.resolve` takes (`#track:<uuid>`, `#U3.7`, `#U3`). KiCad reports a copper sliver with no item
+and no position: the check finds it again in that layer's saved copper (`at_source: "board"`), and where it
+cannot, `note` says why. `kicad_pcb.drc(path)` answers the same in a script run with `cad run` (`.ok`,
+`.findings`, `.measurements["drc"]`, `.human_lines()`).
+
+DRC checks the copper as saved and refills nothing. A zone outline is not proof of connected copper: a
+missing or stale fill says nothing true of what the zone joins, so refill in an edit (`b.refill_zones()`)
+and save before trusting the result.
 
 ## References
 
@@ -42,7 +63,7 @@ The viewer hands you what the person picked as references, the file then `#` the
 | Reference | Names | `resolve` answers |
 | --- | --- | --- |
 | `#U1` | a part (footprint) by reference | `Part` |
-| `#U1.3` | its pad 3 (a shell's or a tab's several pads: `part.pads_numbered("3")`) | `Pad` |
+| `#U1.3` | its pad 3 | `Pad` |
 | `#net:GND` | a net, everything on it | `Net` |
 | `#net:GND@x12y8` | that net's copper at a point (a board saved without uuids names copper so) | `Copper` |
 | `#track:<uuid>` | a track or an arc | `Track`: net, layer, width, `length`, `points` |
@@ -56,28 +77,15 @@ The viewer hands you what the person picked as references, the file then `#` the
 | `#@x10y5..x20y15` | an area, the box between two corners | `Area`: `box`, `size`, and what lies wholly inside (`board.area(x0, y0, x1, y1)`) |
 | `#F.Cu@x10y5..x20y15` | an area on a layer | `Area` with `layer`: that layer's part of it, the parts on its side |
 
-Coordinates are millimetres in KiCad's frame, y down, as the file holds them. The viewer names an
-area when the person drags a box (it names no point; a point is yours to write): its layer is the
-one they were working on (the copper nearest them, or the layer they isolated), so put what they
-ask for there unless the note says otherwise. A `<uuid>` is the one the
-board file saved the item with (`(uuid "...")`), kept by every save and by KiCad's API, so it
-still names the item after you move it: find it in the file by that uuid (case-insensitive), or
-in a `kicad_pcb.edit` block with `board.get_items_by_id(KIID(value=uuid))` (`from
-kicode.proto.common.types import KIID`). Copies of one footprint can share their items' uuids; such
-an item is named under its footprint's uuid, `#text:<footprint uuid>/<uuid>`. A reference whose
-item is gone raises `ValueError`.
-Quote a path containing spaces before its reference, such as `"my board.kicad_pcb"#U1.3`.
-
-A Quick Edit's packet (`cad kicad_pcb snapshot --job PACKET`) lights the same references on the
-board it draws, as the person saw them; one that no longer resolves is listed in its warnings.
-
-Check facts DRC does not establish from the actual saved geometry: distance from each power
-pad to its assigned decoupling capacitor, connector access and mating clearance, narrowest
-power path against the current and copper specification, differential pair geometry, and
-return paths under signals. Thresholds come from the circuit/datasheets and stackup; do not
-apply an arbitrary universal distance or current rule. Report assumptions and inaccessible
-information. Measure repeated pad shapes together and account for vias and both copper sides.
-
-KiCad's `cad kicad_pcb drc` result is the connectivity and rule gate. A zone outline is not proof
-of connected copper: regenerate the fill in KiCad, save it, then run DRC. An unfilled or stale
-zone must not be called routed solely because its outline encloses a pin.
+- **An area** is what the viewer names when the person's box takes nothing (it names no point; a point is
+  yours to write). Its layer is the one they were working on (the copper nearest them, or the layer they
+  isolated), so put what they ask for there unless the note says otherwise.
+- **A `<uuid>`** is the one the board file saved the item with (`(uuid "...")`), kept by every save and by
+  KiCad's API, so it still names the item after you move it: find it in the file by that uuid
+  (case-insensitive), or in a `kicad_pcb.edit` block with `b.get_items_by_id(KIID(value=uuid))`
+  (`from kicode.proto.common.types import KIID`). Copies of one footprint can share their items' uuids;
+  such an item is named under its footprint's uuid, `#text:<footprint uuid>/<uuid>`. A reference whose
+  item is gone raises `ValueError`.
+- **A path containing spaces** is quoted before its reference: `"my board.kicad_pcb"#U1.3`.
+- **A Quick Edit's packet** (`cad kicad_pcb snapshot --job PACKET`) lights the same references on the
+  board it draws, as the person saw them; one that no longer resolves is listed in its warnings.
