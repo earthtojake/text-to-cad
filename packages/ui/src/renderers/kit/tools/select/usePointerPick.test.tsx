@@ -112,3 +112,42 @@ it('pinch, cancelled touches, and a drag returning to its start never become pic
   touch('pointerup');
   expect(onPick).toHaveBeenCalledTimes(1);
 });
+
+// A tap that would take the selection away waits the double-click window, and a double-click drops it: a double-click
+// on a selected part never shows it going and coming back. A lone one acts once the window has passed (a finger's
+// window is its double tap's), and a tap on something else lets the waiting one act first.
+it('holds a tap that takes the selection away for the double-click window, and a double-click drops it', () => {
+  vi.useFakeTimers();
+  try {
+    const takesAway = vi.fn((hit: { id?: string } | null) => hit?.id === 'left');
+    const { host, canvas, onPick, fire } = mount({ takesAway });
+    const tap = (clientX: number, pointerType = 'mouse') => {
+      fire(canvas, 'pointerdown', { clientX, clientY: 50, pointerType });
+      fire(canvas, 'pointerup', { clientX, clientY: 50, pointerType });
+    };
+    // A double-click on the selected part: both clicks wait, the double-click drops them, nothing is picked.
+    tap(50);
+    tap(50);
+    expect(onPick).not.toHaveBeenCalled();
+    host.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    vi.advanceTimersByTime(1000);
+    expect(onPick).not.toHaveBeenCalled();
+    // A lone click on it acts once the window has passed: 220ms for a mouse, a finger's 300ms.
+    tap(50);
+    vi.advanceTimersByTime(219);
+    expect(onPick).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onPick.mock.calls.map(([hit]) => hit?.id)).toEqual(['left']);
+    tap(50, 'touch');
+    vi.advanceTimersByTime(299);
+    expect(onPick).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(onPick).toHaveBeenCalledTimes(2);
+    // A tap on something else in the window: the waiting one acts first, then this one, at once.
+    tap(50);
+    tap(150);
+    expect(onPick.mock.calls.slice(2).map(([hit]) => hit?.id ?? null)).toEqual(['left', null]);
+  } finally {
+    vi.useRealTimers();
+  }
+});

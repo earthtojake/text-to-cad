@@ -1,3 +1,5 @@
+import { DOUBLE_CLICK_WAIT_MS } from "../kit/viewport/touchGestures.js";
+
 /**
  * Which tap of a click sequence activates what it picked, and when: an engine document's Select
  * (`XbfRenderer.jsx`'s `XbfPick`), by the rules a STEP's Select kept.
@@ -24,7 +26,8 @@
  * gesture (count 1) forgets any earlier click; `double()`: the dblclick; `cancel()`: drop a
  * held tap.
  */
-export const VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS = 220;
+// The kit's window, the one every selecting view's take-away click waits (`usePointerPick`).
+export const VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS = DOUBLE_CLICK_WAIT_MS;
 
 export function createClickActivation({
   commit,

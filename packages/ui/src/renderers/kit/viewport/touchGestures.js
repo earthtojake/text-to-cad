@@ -22,6 +22,12 @@ import { useEffect } from "react";
 export const TAP_SLOP_PX = 10;
 export const TAP_MAX_MS = 350;
 export const DOUBLE_TAP_MS = 300;
+/**
+ * How long a mouse's click that would take the selection away waits for the click that would make it a double-click
+ * (`usePointerPick`'s `takesAway`, an engine document's `clickActivation.js`): a double-click never shows the selection
+ * going and coming back. A finger's wait is its double tap's, `DOUBLE_TAP_MS`.
+ */
+export const DOUBLE_CLICK_WAIT_MS = 220;
 export const DOUBLE_TAP_SLOP_PX = 24;
 export const LONG_PRESS_MS = 500;
 /** The long press's event, on the canvas pressed: `{ detail: { clientX, clientY } }`, bubbling. */

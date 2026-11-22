@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { prefersCoarsePointer } from "../../viewport/dom.js";
+import { DOUBLE_CLICK_WAIT_MS, DOUBLE_TAP_MS } from "../../viewport/touchGestures.js";
 
 const HOVER_MIN_MOVE_PX = 2;
 const FINE_TAP_SLOP_PX = 4;
@@ -12,8 +13,11 @@ const COARSE_TAP_SLOP_PX = 12;
  * What a hit MEANS is its renderer's, which gets `{ id, point, ... }` exactly as
  * its scene returned it (or null for a press or a pointer over nothing).
  *
- * A tap acts at once: there is no wait to tell it from a double-click. A renderer
- * that gives a second click its own meaning counts clicks in `onPick`.
+ * A tap acts at once, but for one that would take the selection away (`takesAway`: the thing selected pressed
+ * again, or a finger's tap on it): that one waits the double-click window (`DOUBLE_CLICK_WAIT_MS`, a finger's
+ * `DOUBLE_TAP_MS`) and a double-click drops it, so a double-click never shows the selection going and coming back.
+ * A tap on something else in the window lets the waiting one act first; a lone one acts once the window has passed.
+ * A renderer that gives a second click its own meaning counts clicks in `onPick`.
  *
  * Nothing here is React state, and the camera keeps every gesture: listeners are
  * passive observers on the viewport's element, alive only while `enabled`.
@@ -36,10 +40,12 @@ const COARSE_TAP_SLOP_PX = 12;
  *   takes it away where it is selected (a finger has no Shift); a finger's tap on nothing is a plain one (it clears).
  * @param {(left: object | null, right: object | null) => boolean} [options.sameHit]  When two hover hits are
  *   the same thing to the renderer (default: equal `id`), so `onHover` fires on change only.
+ * @param {(hit: object | null, modifiers: { multiSelect: boolean }) => boolean} [options.takesAway]  Whether this tap
+ *   would take something out of the selection: such a tap waits the double-click window (above).
  */
-export function usePointerPick({ viewport, scene, enabled, onPick, onHover = null, sameHit = null, touchAdds = false }) {
+export function usePointerPick({ viewport, scene, enabled, onPick, onHover = null, sameHit = null, touchAdds = false, takesAway = null }) {
   const callbacks = useRef(null);
-  callbacks.current = { onPick, onHover, sameHit, touchAdds };
+  callbacks.current = { onPick, onHover, sameHit, touchAdds, takesAway };
   const { runtimeRef, hostRef, viewerReadyTick } = viewport;
 
   useEffect(() => {
@@ -56,6 +62,14 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
     let hoverFrame = 0;
     let hoverAt = null;
     let pendingHover = null;
+    // A tap that would take the selection away, waiting the double-click window: `{ hit, modifiers, pointer, timer }`.
+    let held = null;
+    const dropHeld = () => { if (held) window.clearTimeout(held.timer); held = null; };
+    const commitHeld = () => {
+      const waiting = held;
+      dropHeld();
+      if (waiting) callbacks.current.onPick(waiting.hit, waiting.modifiers, waiting.pointer);
+    };
 
     // The scene's own canvas only: a control drawn over it keeps its presses.
     const onCanvas = event => event.target === runtimeRef.current?.renderer?.domElement;
@@ -99,8 +113,19 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
       // Whether the tap found something: a hit, or (a scene that answers with a press and a rest) its press.
       const found = Boolean(hit && ("press" in hit ? hit.press : true));
       const touchAdds = callbacks.current.touchAdds && started.pointerType === "touch" && found;
-      callbacks.current.onPick(hit, { multiSelect: Boolean(event.shiftKey) || touchAdds }, pointerAt(started.x, started.y));
+      const modifiers = { multiSelect: Boolean(event.shiftKey) || touchAdds };
+      const pointer = pointerAt(started.x, started.y);
+      // A second tap on what is waiting is a double-click's second click: the first is dropped, and this one waits
+      // in its place for the double-click that drops it. A tap on anything else lets the waiting one act first.
+      if (held) { if (same(held.hit, hit)) dropHeld(); else commitHeld(); }
+      if (callbacks.current.takesAway?.(hit, modifiers)) {
+        held = { hit, modifiers, pointer, timer: window.setTimeout(commitHeld, started.pointerType === "touch" ? DOUBLE_TAP_MS : DOUBLE_CLICK_WAIT_MS) };
+        return;
+      }
+      callbacks.current.onPick(hit, modifiers, pointer);
     };
+    // The double-click (a finger's double tap says it too, `touchGestures.js`): the tap waiting for it is dropped.
+    const handleDoubleClick = () => dropHeld();
     const handlePointerMove = (event) => {
       if (press?.pointerId === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > (coarse(press.pointerType) ? COARSE_TAP_SLOP_PX : FINE_TAP_SLOP_PX)) press = null;
       // A camera gesture is under way, or the pointer cannot rest: no hover.
@@ -125,12 +150,16 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
     host.addEventListener("pointercancel", handlePointerCancel);
     host.addEventListener("pointermove", handlePointerMove);
     host.addEventListener("pointerleave", handlePointerLeave);
+    host.addEventListener("dblclick", handleDoubleClick);
     return () => {
       host.removeEventListener("pointerdown", handlePointerDown);
       host.removeEventListener("pointerup", handlePointerUp);
       host.removeEventListener("pointercancel", handlePointerCancel);
       host.removeEventListener("pointermove", handlePointerMove);
       host.removeEventListener("pointerleave", handlePointerLeave);
+      host.removeEventListener("dblclick", handleDoubleClick);
+      // A tap still waiting belongs to the tool it was made under.
+      dropHeld();
       window.cancelAnimationFrame(hoverFrame);
       host.style.cursor = "";
       // Leaving the tool leaves nothing hovered.

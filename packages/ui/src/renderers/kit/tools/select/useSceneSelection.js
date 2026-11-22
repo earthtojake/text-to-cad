@@ -28,6 +28,8 @@ function nextSelection(current, id, multiSelect) {
  */
 export function useSceneSelection({ scene, requestRender }) {
   const [chosen, setChosen] = useState(EMPTY);
+  const chosenRef = useRef(chosen);
+  chosenRef.current = chosen;
   const [pointed, setPointed] = useState("");
   const hovered = useRef("");
   const selected = useMemo(() => (scene?.hasPart ? chosen.filter(id => scene.hasPart(id)) : EMPTY), [scene, chosen]);
@@ -56,5 +58,15 @@ export function useSceneSelection({ scene, requestRender }) {
   // A viewport pick: the part under the pointer, and nothing clears.
   const pick = useCallback((hit, { multiSelect = false } = {}) => (hit ? select(hit.id, { multiSelect }) : clear()), [select, clear]);
   const hoverHit = useCallback((hit) => { hover(hit?.id || ""); setPointed(String(hit?.id || "")); }, [hover]);
-  return { selected, active: selected.length > 0, select, clear, take, pick, hover, hoverHit, pointed };
+  // Whether a pick would take a part out of the selection (`nextSelection`): the one selected part pressed again, or a
+  // selected part pressed with Shift or a finger. `PointerPick` makes such a pick wait the double-click window, so a
+  // double-click on a selected part never shows it going and coming back. A press on nothing clears at once: what a
+  // double-click there does (fit) needs no selection.
+  const takesAway = useCallback((hit, { multiSelect = false } = {}) => {
+    const id = String(hit?.id || "");
+    if (!id) return false;
+    const current = chosenRef.current;
+    return multiSelect ? current.includes(id) : current.length === 1 && current[0] === id;
+  }, []);
+  return { selected, active: selected.length > 0, select, clear, take, pick, takesAway, hover, hoverHit, pointed };
 }
