@@ -692,11 +692,13 @@ class Daemon:
         from cad_server.engine.checks import Checks, Pool, pool_size
         from cad_server.engine.checks_runner import Limits, Runner
         from cad_server.engine.measurements import Measurements
+        from cad_server.engine.parts import Parts
 
         # The manufacturing checks (``checks_runner``): what is kept of them, in memory and in the cache folder
         # -- a manufacturing process's measurements by what was measured (``measurements``), the interference
-        # check's results by its document's version (``checks``) -- and the checks processes that measure them,
-        # a check's limits said where a setting is no number.
+        # check's results by its document's version (``checks``), and the parts' measurements the checks processes
+        # keep, held to their bounds here (``parts``) -- and the checks processes that measure them, a check's
+        # limits said where a setting is no number.
         size, said = pool_size()
         limits = Limits.of_environment(self.supervisor.memory)
         for line in (said, *limits.notes):
@@ -707,7 +709,7 @@ class Daemon:
             lease=lambda slot: self.supervisor.lease("checks", slot, {}),
             release=self.supervisor.release, version=self._check_version, read=self._check_document,
             durable=self._durable, stopping=lambda: self.draining or self.stopping.is_set(), limits=limits,
-            measurements=Measurements(self._checks_folder), built=self._check_built)
+            measurements=Measurements(self._checks_folder), built=self._check_built, parts=Parts(self._checks_folder))
         # Told of each document the registry deletes, under its lock (``Registry.delete``): its kept checks go,
         # and what the kept measurements say its versions hold (the measurements are no document's, and stay).
         registry.FORGOTTEN.extend((self.checks.store.deleted, self.checks.measurements.deleted))

@@ -35,11 +35,12 @@ EDITED = "+edited"
 #: The source files every process's B-rep measurement runs, by their place in the cad package: the check's own
 #: steps (``_dfm_check``: the parts' integrity, the units' doubt), the parts read for it and their measures
 #: (``_dfm_brep``, ``_geometry`` and the kernel's validity check it asks), and the type side the measurement reads
-#: (the options it is handed, ``kept``; the materials, the declared processes and the rules' helpers).
+#: (the options it is handed, ``kept``; the materials, the declared processes and the rules' helpers), and what
+#: keeps a part's result (``parts``: what a kept part is found by is in its key, so an edit of it is a new code).
 DFM_COMMON: tuple[str, ...] = (
     "build123d/_dfm_check.py", "build123d/_dfm_brep.py", "build123d/_geometry.py", "engine/kernel/checks.py",
     "_internal/dfm/__init__.py", "_internal/dfm/_common.py", "_internal/dfm/kept.py", "_internal/dfm/materials.py",
-    "_internal/dfm/processes.py", "_internal/dfm/rules.py")
+    "_internal/dfm/parts.py", "_internal/dfm/processes.py", "_internal/dfm/rules.py")
 #: Each process's own: its measurement (``cad.build123d._dfm_<process>``), the plain geometry it measures with,
 #: and its type side's module, whose helpers it calls (a tool list read, a K-factor, a wall's minimum). A process's
 #: digest is of ``DFM_COMMON`` and these (``measure``'s ``dfm``).
@@ -62,9 +63,9 @@ DFM: dict[str, tuple[str, ...]] = {
 #: and how it is watched (the engine's places and its door, by which the environment that holds quiddity is found,
 #: and the worker's reading of a process's memory from outside: where quiddity answers and whether it is let to,
 #: never what), and what a document's STEP is written with that one shape's bytes are not (its tree and its
-#: styles).
+#: styles). And this module: the digest a part's kept result is found by, which says what measured, never how.
 BOUNDARY: tuple[str, ...] = ("cad.engine.document", "cad.engine.refs", "cad.results", "cad._internal.refused",
-                             "cad._internal.manufacturing",
+                             "cad._internal.manufacturing", "cad.engine._measuring",
                              "cad.engine.places", "cad.engine.client", "cad.engine.worker",
                              "cad.engine.export.tree", "cad.engine.step_style")
 

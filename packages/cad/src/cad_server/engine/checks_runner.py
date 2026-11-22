@@ -68,6 +68,7 @@ from cad.engine.worker import CHECK_SECONDS, check_limits, resident_of
 
 from cad_server.engine.checks import Checks, Pool, Withdrawn, digest
 from cad_server.engine.measurements import Measurements, build_token, file_token, is_key, is_record, model_token
+from cad_server.engine.parts import Parts
 from cad_server.engine.supervisor import Gone
 
 __all__ = ["FAILURES", "SECONDS", "STOPPED", "SUPERSEDED", "Asked", "Limits", "Runner", "State", "file_key",
@@ -218,8 +219,9 @@ class Runner:
     the version of it that outlives the engine with its id, or None; ``built(ident, version)``, what names
     that version among the kept measurements, which outlives the engine too -- its revision with what the
     engine knows the build made, so a model built otherwise at a revision it had is another version -- or None
-    (by default ``durable``'s version); ``stopping()``, whether the engine stops; ``limits``; and ``resident``,
-    a process's memory read from outside it."""
+    (by default ``durable``'s version); ``stopping()``, whether the engine stops; ``limits``; ``resident``,
+    a process's memory read from outside it; and ``parts``, the parts' kept measurements a checks process writes,
+    held to their bounds after each check that held one (``parts.Parts``; None: none)."""
 
     def __init__(self, store: Checks, pool: Pool, *, lease: Callable[[str], Any], release: Callable[[Any], None],
                  version: Callable[[str], str | None], read: Callable[[str], tuple[dict[str, Any], bytes]],
@@ -227,8 +229,8 @@ class Runner:
                  stopping: Callable[[], bool] = lambda: False, limits: Limits | None = None,
                  resident: Callable[[int | None], float | None] = resident_of,
                  measurements: Measurements | None = None,
-                 built: Callable[[str, str | None], str | None] | None = None) -> None:
-        self.store, self.pool = store, pool
+                 built: Callable[[str, str | None], str | None] | None = None, parts: Parts | None = None) -> None:
+        self.store, self.pool, self.parts = store, pool, parts
         self.measurements = measurements if measurements is not None else Measurements()
         self._built = built
         self._lease, self._release, self._version, self._read, self._durable = lease, release, version, read, durable
@@ -689,6 +691,8 @@ class Runner:
             with self.lock:
                 asked.slot = None
             self.pool.give(slot)
+            if self.parts is not None and process is not None:
+                self.parts.soon()  # what its process kept of its parts, held to their bounds
 
     # --- stopping -----------------------------------------------------------------------------------
 

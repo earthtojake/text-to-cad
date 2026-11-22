@@ -104,7 +104,7 @@ class CacheTest(unittest.TestCase):
 
         env, other = self.environment("mine0000", version()), self.environment("theirs00", OTHER)
         (base.folder() / "mine0000.lock").write_text("", encoding="utf-8")
-        for name in ("pycache", "hulls", "homes", "checks"):
+        for name in ("pycache", "hulls", "homes", "checks", "parts"):
             (self.cache / name / "x").mkdir(parents=True)
         old = self.release(OTHER)
         kept = self.data()
@@ -118,7 +118,7 @@ class CacheTest(unittest.TestCase):
         code, out, err = _run("clean")
         self.assertEqual((code, err), (0, ""))
         for path in (env, other, self.cache / "pycache", self.cache / "hulls", self.cache / "homes",
-                     self.cache / "checks", old):
+                     self.cache / "checks", self.cache / "parts", old):
             self.assertIn(f"removed {path} (", out)
             self.assertFalse(path.exists(), path)
         self.assertFalse(base.folder().exists(), "the environments' folder, its locks with it")

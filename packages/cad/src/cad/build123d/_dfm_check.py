@@ -302,18 +302,10 @@ def _transient(process: str, report: dict[str, Any]) -> bool:
     something the next run may not meet -- a helper not ready yet, an answer that timed out; one that says
     true, or nothing, is repeatable). Every other report, with a family not measured or none, is what its code
     makes of those parts each time."""
+    from cad._internal.dfm.parts import unrepeatable
+
     said = getattr(importlib.import_module(f"cad.build123d._dfm_{process}"), "transient", None)
-    if (callable(said) and said()) or _CUT_SHORT["integrity"]:
-        return True
-
-    def says_so(value: Any) -> bool:
-        if isinstance(value, dict):
-            error = value.get("error")
-            return ((isinstance(error, str) and out_of_memory(error)) or value.get("repeatable") is False
-                    or any(says_so(item) for item in value.values()))
-        return isinstance(value, list) and any(says_so(item) for item in value)
-
-    return says_so(report)
+    return bool((callable(said) and said()) or _CUT_SHORT["integrity"] or unrepeatable(report))
 
 
 def described(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]:
