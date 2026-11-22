@@ -139,8 +139,11 @@ const EMPTY = Object.freeze({});
  *   references already in the prompt grammar; a renderer with a reference vocabulary of its own supplies the
  *   builder that speaks it, and then `promptReferences` may return that vocabulary instead — and such a
  *   renderer reports its live `selection` itself, in the prompt grammar, through `live.state`.
- * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first: `handle` returns
- *   true when it spent the key. After it there is nothing of the viewer's own left to close.
+ * @param {{ active?: boolean, handle?: (options: { toolInHand: boolean }) => boolean }} [options.escape]  Escape, innermost first: `handle` returns
+ *   true when it spent the key. `toolInHand`: a tool other than the file's default, or an effect, is in hand; the
+ *   renderer then spends the key only on what is under way (a measurement being drawn) and leaves what is picked, and
+ *   the shell puts the tool down: one Escape order in every view, a STEP's. After it there is nothing of the viewer's
+ *   own left to close.
  * @param {{ signatures?: Record<string, string>, read: () => Record<string, unknown> } | null} [options.rendererState]
  *   The renderer's own slices of the file's view (`fileView.js`): `read()` is called when the view is written,
  *   never at render — state a renderer keeps outside React (a pose written per frame) is saved as it is at that
@@ -532,7 +535,17 @@ export function useRendererShell({
   // ---- shortcuts ------------------------------------------------------------
   const escapeRef = useRef(escape.handle);
   escapeRef.current = escape.handle;
-  const escapeView = useCallback(() => escapeRef.current?.() || false, []);
+  // The view's Escape as the keyboard's ladder ends it (`onEscape`): the renderer's, told whether a tool is in hand, then
+  // the tool going down. An empty Quick Edit passes its Escape on to this.
+  const escapeTailRef = useRef(null);
+  escapeTailRef.current = { toolInHand: Boolean(effectInHand || (toolModes && toolMode !== toolModes.defaultMode)), selectDefaultTool };
+  const escapeView = useCallback(() => {
+    const { toolInHand, selectDefaultTool: putDown } = escapeTailRef.current;
+    if (escapeRef.current?.({ toolInHand })) return true;
+    if (!toolInHand) return false;
+    putDown();
+    return true;
+  }, []);
   // What Select has picked of the annotation: Delete deletes it with whatever the renderer's own
   // selection can lose (`deleteSelection`: a measurement), and Escape lets go of it first.
   // The strip's tools as the frame last drew them (`RendererShell.jsx`): what a tool's letter takes up.
@@ -582,9 +595,12 @@ export function useRendererShell({
         if (!(annotateToolActive && event.target instanceof Element && event.target.closest("[data-cad-annotation-overlay]"))) annotationRef.current.select([]);
         return;
       }
-      if (escapeRef.current?.()) return;
+      // One order in every view, a STEP's: what is under way (a measurement being drawn), then the tool in hand, then
+      // what is picked. The renderer is told whether a tool is in hand, and leaves what is picked for a later press.
+      const toolInHand = Boolean(effectInHand || (toolModes && toolMode !== toolModes.defaultMode));
+      if (escapeRef.current?.({ toolInHand })) return;
       // A renderer that left it: the tool in hand goes down, back to the file's default (Select).
-      if (effectInHand || (toolModes && toolMode !== toolModes.defaultMode)) selectDefaultTool();
+      if (toolInHand) selectDefaultTool();
     }
   });
 

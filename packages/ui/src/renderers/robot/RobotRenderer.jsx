@@ -134,9 +134,11 @@ function RobotSurface({ view, data }) {
   const escape = useMemo(() => ({
     active: selection.active || measure.drafting || measure.selected.length > 0,
     // Escape cancels a measurement in progress, then clears what is picked.
-    handle: () => {
+    handle: ({ toolInHand = false } = {}) => {
       const now = measureRef.current;
       if (now.drafting) { now.cancelDraft(); return true; }
+      // The tool in hand goes down first (the shell's), keeping what is picked, as a STEP's Escape does.
+      if (toolInHand) return false;
       if (now.selected.length) { now.select([]); return true; }
       if (!selectionRef.current.active) return false;
       selectionRef.current.clear();

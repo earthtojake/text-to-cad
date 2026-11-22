@@ -560,7 +560,8 @@ Draw is the one drawing tool: ink on the model, for a note to the agent ([its me
   colour again unfills it.
 - Draw has no Select or Pan of its own: a right or middle drag is the view's, and holding Space hands the pointer to
   the view. The cube stays live.
-- **Ink stays where it was drawn**, on the model's surface or a plane, from every angle. **Picked ink** (under Select)
+- **Ink stays where it was drawn**, on the model's surface or a plane, from every angle, and across a new version of
+  the file: its marks are in the scene's coordinates, so a rebuild never throws away what a person drew. **Picked ink** (under Select)
   gets a small bar just above it: Colour, Stroke width, Line style, Fill for a closed shape, a rule, Delete. Ink has
   no panel: it is Quick Edit's Annotation chip, whose X clears it. Under Draw, ⌘C copies the view with its ink.
 
@@ -650,10 +651,10 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   **Delete** or Backspace deletes picked ink and measurements.
 - **A board**, while it has the keyboard: ⌘H (Ctrl+H) cycles Others, 3 switches 2D and 3D, ⇧F flips the board.
 - **Escape** undoes the innermost thing first: an open menu or dropdown, the Display card, the explorer, the panel's
-  search or its peek; then Preview; then the view's own steps, one a press: a box being drawn, a measurement under
-  way, picked ink, the selection and isolation, and the tool in hand going back to Select with its effect kept. The
-  order of those last steps is each view's (a STEP puts Draw or Measure down before it clears the selection). The
-  pinned panel never closes on Escape. Quick Edit's note has its own Enter and Escape ([Quick Edit](#quick-edit)).
+  search or its peek; then Preview; then the view's own steps, one a press and in the same order in every view: picked
+  ink, a box being drawn or a measurement under way, the tool in hand going back to Select (its effect kept), the
+  measurements picked, then the selection and isolation. Why: Escape leaves the tool first, as in design tools, and the
+  selection, which feeds Quick Edit's chips, survives it. The pinned panel never closes on Escape. Quick Edit's note has its own Enter and Escape ([Quick Edit](#quick-edit)).
 
 ## Tooltips and feedback
 

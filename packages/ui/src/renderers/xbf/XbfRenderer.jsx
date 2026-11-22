@@ -353,17 +353,8 @@ function XbfSurface({ view, data }) {
   // A measurement taken, deleted or cleared is a step of the view's one history, with the ink's.
   measure.history.current = shell.frame.history;
   shellRef.current = shell;
-  // Ink drawn over the version before does not describe this one: a new version of the file takes
-  // it, and its history with it, so Undo cannot put it back over the new model, as a STEP's did.
-  // Annotate stays the tool in hand.
-  const inkVersion = useRef({ file: document.modelKey, revision: loaded.revision });
-  useEffect(() => {
-    const before = inkVersion.current;
-    inkVersion.current = { file: document.modelKey, revision: loaded.revision };
-    if (before.file === document.modelKey && before.revision && loaded.revision && before.revision !== loaded.revision) {
-      shellRef.current?.frame.annotation.discard();
-    }
-  }, [document.modelKey, loaded.revision]);
+  // Ink stays across a new version of the model, as in every view: its marks are in the scene's own coordinates, so they
+  // stand where they were drawn whatever the rebuild moved, and the person's unsent marks are never thrown away.
   useDeclinedSelectReference(document);
   const ensureSelect = useCallback(() => { if (shellRef.current?.toolMode !== XBF_TOOL.SELECT) shellRef.current?.selectTool(XBF_TOOL.SELECT); }, []);
 
