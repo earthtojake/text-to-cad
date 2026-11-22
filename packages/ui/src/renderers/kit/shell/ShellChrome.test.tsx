@@ -379,7 +379,12 @@ it("on a phone the panel is a sheet from the left behind the navbar's toggle, cl
   expect([...row.querySelectorAll('[role=group][aria-label="Drawing tools"] button')].map(button => button.getAttribute('aria-label')))
     .toEqual(['Pen', 'Highlighter', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text']);
   expect([...row.querySelectorAll('[role=group][aria-label="Editing tools"] button')].map(button => button.getAttribute('aria-label')))
-    .toEqual(['Fill', 'Eraser']);
+    .toEqual(['Eraser']);
+  // Undo and Redo are on the phone's row too, left of Clear, the same tiles as the Eraser's.
+  const second = [...row.querySelectorAll('[data-annotation-row="style"] button')];
+  expect(second.map(button => button.getAttribute('aria-label')).slice(-3)).toEqual(['Undo', 'Redo', 'Clear annotations']);
+  const eraser = second.find(button => button.getAttribute('aria-label') === 'Eraser')!;
+  for (const name of ['Undo', 'Redo']) expect(second.find(button => button.getAttribute('aria-label') === name)!.className).toBe(eraser.className);
   expect(screen.queryByRole('button', { name: 'Drawing tools' })).toBeNull();
 });
 

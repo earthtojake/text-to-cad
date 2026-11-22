@@ -1511,7 +1511,7 @@ player advances the time by what the frame took (`advanceAnimationElapsed` in co
 
 Drawing is the viewer's own ink ([annotations](annotation.md)), with no drawing SDK
 behind it, and one strip tool, **Draw**, over two modes: freehand (`pencil`: the Pen, the Highlighter, the Eraser) and the
-shapes (`shapes`: the Rectangle, Line, Arrow, Ellipse, Text, and Fill). An engine document (an .xbf or a STEP), a GLB, a mesh, a robot, a DXF and a KiCad board offer them. (The tools themselves are the
+shapes (`shapes`: the Rectangle, Line, Arrow, Ellipse and Text). An engine document (an .xbf or a STEP), a GLB, a mesh, a robot, a DXF and a KiCad board offer them. (The tools themselves are the
 SHELL's — `kit/tools/annotate`, `shell.tools.drawing` — and a renderer puts them on its strip;
 `renderers/shell-harness` also mounts them, for tests.)
 
@@ -1522,26 +1522,22 @@ draws with is chosen in its row (`AnnotationToolbar`'s tools, both families', `t
 its own name (`pencil_pen`, `shapes_rectangle`, …). `useAnnotationSession(family, …)` is told which is in hand and keeps both
 choices (`pencil`, `shape`). Both share
 the session's ink and history, but not the style: it is kept per drawing kind, three slots (`session.styles`) — the Pen,
-the Highlighter and Shapes (all five shapes share one) — each with its own colour, stroke width, line style and placement, and
+the Highlighter and Shapes (all five shapes share one) — each with its own colour, stroke width and placement, and
 `session.style` is the slot of the tool in hand. While Draw is up one sub-toolbar, "Annotation
 controls", hangs under the strip (`annotation/toolbar.jsx`'s `AnnotationToolbar`, drawn by `RendererShell.jsx`), two
 rows on one surface with no rule (a phone's wrap where they have no room, its buttons 36px tiles):
 
 - The **tools** (`DRAWING_ROW_ENTRIES`), a button each, the one in hand pressed: the first row the seven that put ink
-  down, Pen, Highlighter, Line, Arrow, Rectangle, Ellipse and Text; the second row starts with the two that change ink
-  already down, Fill and Eraser — choosing one is how Draw changes what it draws with, its family taken
-  up. Fill (a shapes-family tool, key G, tooltip "Fill closed shapes", telemetry `shapes_fill`) fills the closed outline
-  under a press with the colour in hand through the same data as the selection bar's Fill toggle (`annotation3d.js`'s
-  `fillAreasOf`, `session.fill`), unfills one filled in that colour, recolours one filled in another
-  (`session.fillColor`), and passes over open marks. A closed outline is a rectangle or an ellipse, or a pen or
-  highlighter stroke whose ends meet within 20 px on the screen as it is shown now (`geometry.js`'s `fillTargetAt`,
-  its fill bounded by the line it was drawn along, the gap joined); a press on the outline's line counts as inside, and
-  where outlines overlap the last drawn wins. With Fill in hand the outline under the pointer is haloed in
-  `--brand-icon` on the overlay's preview, and nothing else is.
-- After them on the second row, **Colour**, **Stroke width** (its button three lines thin to thick; each weight in its menu a straight line at that weight), **Line style** (solid, dashed or dotted; greyed for the Highlighter and Text) and **Placement**, dropdowns, then
-  **Clear annotations**. They show and set the tool in hand's own slot; under the **Eraser**, which
-  puts nothing down, the four are disabled (greyed out, still on the row so it does not jump), under **Fill** all
-  but Colour, and Clear stays as it was.
+  down, Pen, Highlighter, Line, Arrow, Rectangle, Ellipse and Text; the second row starts with the Eraser, which takes
+  ink already down — choosing one is how Draw changes what it draws with, its family taken up.
+- After it on the second row, **Colour**, **Stroke width** (its button three lines thin to thick; each weight in its
+  menu a straight line at that weight) and **Placement**, dropdowns, then **Undo**, **Redo** and **Clear annotations**.
+  The dropdowns show and set the tool in hand's own slot; under the **Eraser**, which puts nothing down, the three are
+  disabled (greyed out, still on the row so it does not jump), and Undo, Redo and Clear stay as they were. Every stroke
+  is solid: there is no line style. Undo and Redo (lucide's `Undo2`, `Redo2`) call `session.undo` and `session.redo`,
+  are off where the history has no step that way (`canUndo`, `canRedo`), and show their keys in their tooltips
+  (`toolShortcuts.js`'s `undoShortcuts`, by the host's `environment.platform`). The second row is seven controls, as
+  the first is seven tools: Eraser, Colour, Stroke width, Placement, Undo, Redo and Clear.
 
 The tools: the Pen, smoothed as it is drawn, its width following pressure (a stylus's own, or simulated from speed with a
 mouse); the Highlighter, the same line at five times the stroke width, 0.35 opaque, round-ended, with no pressure
@@ -1556,7 +1552,7 @@ any part or reference under it, haloed in the selection's blue; Shift adds or ta
 away, a press on anything else lets go of it, Escape lets go and Delete deletes it.
 Before the press, the pointer resting on a mark lights it as a part is lit, a fainter
 halo, and the part under it is not lit (`RendererShell.jsx`'s `hoverSelectable`).
-The colour, Stroke width, Line style and Placement set what the tool in hand draws
+The colour, Stroke width and Placement set what the tool in hand draws
 next, never ink already down. Placement is **On surface** (the default) or **On plane**.
 Draw opens on the pen, and its shapes on the rectangle, each in neon red, 2px, On surface; the Highlighter opens in
 neon yellow (`#ffe600`, on the palette in both schemes), 2px, On surface.
@@ -1564,10 +1560,8 @@ neon yellow (`#ffe600`, on the palette in both schemes), 2px, On surface.
 The ink Select has picked has a bar of its own (`kit/tools/annotate/AnnotationSelectionBar.jsx`):
 the tool strip's surface, a size smaller, just above the ink (below it where there is
 no room above) and following it as the camera and its parts move. Its Color, Stroke
-width and Line style (strokes picked) dropdowns restyle the pick, one
-step each; **Fill** (a closed shape picked) fills its interior in its colour, the fill
-joining the shape's group so it is picked, restyled and deleted with it, and again
-takes it away; **Delete** deletes everything Select has picked, a measurement too.
+width (strokes picked) dropdowns restyle the pick, one
+step each; **Delete** deletes everything Select has picked, a measurement too.
 
 An annotation is not an overlay picture. Each mark is projected into the model in
 3D as it is put down (`kit/tools/annotate/annotation3d.js`), so it stays where it was drawn
@@ -1608,9 +1602,9 @@ With them put down the ink stays in the model, and its chip in Quick Edit. The n
 drawing tool adds to it. Annotations are session-only and never written to tab or file state.
 
 **Undo and Redo** are the annotations' (`kit/shell/useViewerHistory.js`, the shell's):
-each piece of ink put down, erased, restyled or filled, and a clear, is a step.
-They are the keyboard's, with no buttons: ⌘Z and ⇧⌘Z (Ctrl+Z and Ctrl+Y) walk them from anywhere
-in the viewer but a text field. A Quick Edit note
+each piece of ink put down, erased or restyled, and a clear, is a step.
+⌘Z and ⇧⌘Z (Ctrl+Z and Ctrl+Y) walk them from anywhere in the viewer but a text field, and so do the
+Undo and Redo buttons on Draw's row. A Quick Edit note
 carries the annotations as files: the annotation file, the views they were drawn in as a
 snapshot job, and a picture of each ([annotations](annotation.md#lifetime-and-capture)).
 

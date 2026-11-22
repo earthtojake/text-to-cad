@@ -9,10 +9,10 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
 ## Pieces
 
 - `annotation/session.js` — `useAnnotationSession`: the annotation's ink, what the tools
-  put down next (the tool of the family in hand, `pencil` — the pen, the highlighter or the eraser — and `shape` — the rectangle first, the line, arrow, ellipse, text or fill — each kept while the other is up; `style`, the colour, stroke width, line style and
+  put down next (the tool of the family in hand, `pencil` — the pen, the highlighter or the eraser — and `shape` — the rectangle first, the line, arrow, ellipse or text — each kept while the other is up; `style`, the colour, stroke width and
   placement — `surface`, the default, or `plane` — of the tool in hand, kept per drawing kind in `styles`: `pen`, `highlighter` (yellow
-  `#ffe600`; the others neon red) and `shapes`, which all five shapes share; the eraser has none) and the selection. Each add, erase, restyle of the selection
-  (`restyle`) or fill of a closed shape (`fill`, joining its group) is one step
+  `#ffe600`; the others neon red) and `shapes`, which all five shapes share; the eraser has none) and the selection. Each add, erase or restyle of the selection
+  (`restyle`) is one step
   in the file view's history (`renderers/kit/shell/useViewerHistory.js`, 200
   steps, shared with the renderer's own tools; without one the session keeps its
   own). Choosing what is drawn next never touches ink already down.
@@ -28,25 +28,23 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
   `jointValues`), the parts hidden and isolated, and the picture's size. Never
   how it looks.
 - `annotation/tools.js` — the two families Draw draws with and their tools: freehand, `pencil` (`freedraw`,
-  `highlighter`, `eraser`), and the shapes, `shapes` (`line`, `arrow`, `rectangle`, `ellipse`, `text`, and `fill`, which
-  fills a closed shape); `toolFamily(tool)`, `styleSlot(tool)` (the style slot a tool draws with; none for the eraser).
+  `highlighter`, `eraser`), and the shapes, `shapes` (`line`, `arrow`, `rectangle`, `ellipse`, `text`);
+  `toolFamily(tool)`, `styleSlot(tool)` (the style slot a tool draws with; none for the eraser).
 - `annotation/toolbar.jsx` — `drawStripTool`, the strip's one Draw tool (its icon what it draws with now), and
   `AnnotationToolbar`, its sub-toolbar: two rows on one surface, no rule (a phone's wrap where they have no room) —
   both families' tools, a button each, the one in hand pressed: first Pen, Highlighter, Line, Arrow, Rectangle, Ellipse
-  and Text; then Fill and Eraser, and Color, Stroke width, Line style (solid, dashed, dotted) and Placement (On
-  surface, On plane), dropdowns of the tool in hand's own style (disabled under the Eraser; under Fill all but Color), Stroke width's button three lines thin to thick, each weight in its menu a straight line drawn at it (four, 1–6px, unnamed; Color's, its and Line style's menus have no heading), then Clear;
-  Undo and Redo are ⌘Z and ⇧⌘Z, with no buttons. A flat view (a DXF) passes `placements={false}`: its ink has nowhere to lie but the drawing.
+  and Text; then Eraser, and Color, Stroke width and Placement (On surface, On plane), dropdowns of the tool in
+  hand's own style (disabled under the Eraser), Stroke width's button three lines thin to thick, each weight in its
+  menu a straight line drawn at it (four, 1–6px, unnamed; Color's and its menus have no heading), then Undo, Redo and
+  Clear — seven on each row. Every stroke is solid. Undo and Redo call the session's `undo` and `redo`, are off where
+  the history has no step that way (`canUndo`, `canRedo`), and show their keys in their tooltips (`undoShortcuts`: ⌘Z
+  and ⇧⌘Z on a Mac, Ctrl+Z and Ctrl+Y elsewhere, as the keyboard binds them). A flat view (a DXF) passes `placements={false}`: its ink has nowhere to lie but the drawing.
   `annotationColors` offers
   neon swatches and a neutral that reads against the theme: white in dark mode,
   near-black in light mode. A native color picker adds a custom color.
   `AnnotationStylePickers` also restyles the selection's ink.
 - `renderers/kit/tools/annotate/AnnotationSelectionBar.jsx` — the bar over the ink Select
-  picked: its colour and weight, Fill for a closed shape — a rectangle, an ellipse, or a pen or highlighter loop
-  whose ends are under `FILL_LOOP_GAP_PX` apart on the screen now (`fillableOutline`, as the Fill tool takes it) — (seeded
-  inside its outline as it falls on the screen, `annotation/geometry.js`'s
-  `interiorPoint` and `fillMarkAt`, and projected where the shape lies: On plane on the
-  shape's own plane if its points are coplanar (a fitted plane), else On surface) and
-  Delete.
+  picked: its colour and weight, and Delete.
 - `annotation/geometry.js` — each tool's mark in screen space:
   - The highlighter (`highlighterMark`) is the pen's smoothed line at one broad width — five times the stroke width
     (`HIGHLIGHTER_WIDTH_FACTOR`) — 35% opaque (`HIGHLIGHTER_OPACITY`), round-ended, with no `widths`: an ordinary
@@ -57,8 +55,6 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
     pressure (a stylus's own, or simulated from speed with a mouse), using
     `perfect-freehand`.
   - Rectangles get rounded corners.
-  - A fill finds the area inside a shape with
-    `@cad/core/lib/annotation/fillRegion.js`.
 - `renderers/kit/tools/annotate/AnnotationOverlay.jsx` — the surface over the viewport
   while Draw is up. It turns every gesture into marks, previews a mark on its
   own canvas as it is made, and puts it into the model when the gesture ends.
@@ -84,7 +80,7 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
   - Every point stays on the ray through where it was drawn, so from that view the ink is
     exactly what was drawn. **Ink lies on the surface it is drawn on.** Every mark has a
     **level**: the plane of the surface it starts on (a stroke's first point, a text mark's anchor
-    corner, a fill's first outline point), found by `levelOf(runtime, start, size)`. A flat face's
+    corner), found by `levelOf(runtime, start, size)`. A flat face's
     level is its own plane; a curved face's, its tangent plane at the start point (the geometry's
     smooth normal there). The normal is the surface's, **not the view direction**: from any
     angle, a mark started on a plate's top has the plate's top plane as its level. No sheet, no
@@ -99,7 +95,7 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
     of a few pixels (`subdivideStroke`) in both, so a two-point line reads the surface all along
     it; the pen's widths are split with it. In On surface a point takes the nearest depth within
     its own reach — half the stroke's width and a pixel, never a neighbour's, so a slanted face
-    does not lift the ink off it; a fill point by point. Every point is then two screen pixels toward
+    does not lift the ink off it. Every point is then two screen pixels toward
     the eye, text eight. Text is a card facing the view, at the level's depth under its anchor
     corner, in both modes. Ink already down never moves with the setting.
   - **The level, when the start is over nothing** (in order):
@@ -123,9 +119,8 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
   - **Grazing guard:** a level whose plane is nearly edge-on to the view (|normal · view
     direction| below 0.08) is replaced by the plane facing the view through the same point, else rays
     would stretch the mark along the plane.
-  - `projectAnnotations(runtime, marks, size, { placement, level, touchesAt, cpuBudget })` projects marks,
-    finding each one's level inside; `level` ({ point, normal }) gives all of them one instead (a fill
-    of a flat shape lies on the shape's plane).
+  - `projectAnnotations(runtime, marks, size, { placement, touchesAt, cpuBudget })` projects marks,
+    finding each one's level inside.
   - What the model hides of the ink is drawn faint through it (core's `ANNOTATION_HIDDEN_OPACITY`,
     on the viewer and in snapshots), so a profile drawn through a part's middle is seen.
   - Every mark is in model coordinates: it stays where it was drawn whatever

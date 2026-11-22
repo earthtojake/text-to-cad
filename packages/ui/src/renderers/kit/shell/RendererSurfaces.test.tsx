@@ -315,11 +315,11 @@ it("Draw is one plain tool on the strip; one row under the strip is its: the dra
   expect([row.closest('[data-cad-tool-stack]'), row.closest('[data-tool-panel]')]).toEqual([null, null]);
   const panel = () => within(screen.getByRole('toolbar', { name: 'Annotation controls' }));
   expect(panel().getAllByRole('button').map(button => button.getAttribute('aria-label')))
-    .toEqual(['Pen', 'Highlighter', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text', 'Fill', 'Eraser', 'Colour', 'Stroke width', 'Line style', 'Placement', 'Clear annotations']);
+    .toEqual(['Pen', 'Highlighter', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text', 'Eraser', 'Colour', 'Stroke width', 'Placement', 'Undo', 'Redo', 'Clear annotations']);
   expect(panel().getByRole('button', { name: 'Pen' }).getAttribute('aria-pressed')).toBe('true');
   const clear = () => panel().getByRole('button', { name: 'Clear annotations' }).hasAttribute('disabled');
   expect(clear()).toBe(true);
-  // Ink enables Clear. Undo and Redo are the keyboard's, ⌘Z and ⇧⌘Z (below), with no buttons.
+  // Ink enables Clear. Undo and Redo are the row's buttons and ⌘Z and ⇧⌘Z (below).
   act(() => viewport.props.annotation.add([ink('a')]));
   expect(clear()).toBe(false);
 });
@@ -336,13 +336,13 @@ it("choosing the Highlighter in Draw's row makes Draw show it, and a press on Dr
   expect([viewport.props.annotation.tool, strip.getByRole('button', { name: 'Draw' }).getAttribute('aria-pressed')]).toEqual(['highlighter', 'true']);
   expect(icon()).toContain('lucide-highlighter');
   // The highlighter's own settings, set while it is up: yellow to start.
-  expect(viewport.props.annotation.style).toEqual({ color: '#ffe600', strokeWidth: 2, placement: 'surface', dash: 'solid' });
+  expect(viewport.props.annotation.style).toEqual({ color: '#ffe600', strokeWidth: 2, placement: 'surface' });
   act(() => { viewport.props.annotation.selectColor('#39ff14'); viewport.props.annotation.selectStrokeWidth(4); viewport.props.annotation.selectPlacement('plane'); });
   // A shape chosen: the Rectangle, Shapes' own style; Draw shows it.
   await choose('Rectangle');
   expect(viewport.props.annotation.tool).toBe('rectangle');
   expect(icon()).toContain('lucide-square');
-  expect(viewport.props.annotation.style).toEqual({ color: '#ff2d55', strokeWidth: 2, placement: 'surface', dash: 'solid' });
+  expect(viewport.props.annotation.style).toEqual({ color: '#ff2d55', strokeWidth: 2, placement: 'surface' });
   // Put down, then taken up again: what it last drew with, the Rectangle.
   fireEvent.click(strip.getByRole('button', { name: 'Select' }));
   fireEvent.click(strip.getByRole('button', { name: 'Draw' }));

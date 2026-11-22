@@ -69,7 +69,7 @@ export default function SubToolbar({ label, className, children, ...props }) {
   </Wrapped.Provider>;
 }
 
-// The tools' sub-toolbars are one width on a desktop, 240px: the drawing tools' (its rows of seven 28px buttons) and
+// The tools' sub-toolbars are one width on a desktop, 240px: the drawing tools' (its first row's seven 28px buttons) and
 // the model effects' (a slider and its buttons), so the column under the strip does not change width
 // from one tool to the next.
 export const SUB_TOOLBAR_WIDTH_CLASS = "w-[240px]";

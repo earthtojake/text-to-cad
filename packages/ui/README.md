@@ -286,8 +286,8 @@ docks under the navbar at the view's right edge, the sidebar's peek card mirrore
 board's. The corner at the top-right keeps only the camera's own control: a 3D view's cube, or a flat view's one "100%"
 zoom dropdown. Without a navbar Display and Preview end the strip. A phone's picture has no corner control. The bottom row is Quick Edit's alone. The tool in hand's
 controls hang under the strip, its sub-toolbar (`kit/tools/SubToolbar.jsx`):
-Draw's two rows (the tools that put ink down; then Fill, the Eraser, Colour, Stroke width, Line style, Placement and
-Clear, Undo and Redo being keys alone); Measure's chips. Explode's and
+Draw's two rows of seven (the tools that put ink down; then the Eraser, Colour, Stroke width, Placement, Undo, Redo
+and Clear); Measure's chips. Explode's and
 Clip's slider rows open in a popover from their tiles, taking up no tool.
 The view's one panel, docked at the left, whatever the tool
 (`kit/shell/FlatPanel.jsx`): one head row, as Figma's Layers panel's — a tab per part of the file's structure (a STEP's or

@@ -8,7 +8,6 @@
  * over a model; a text mark's four corners are on the sheet, so its words grow and shrink with it.
  */
 import { REFERENCE_SELECTED_COLOR } from "../viewer/referenceGeometry.js";
-import { dashPattern } from "../../common/annotation.js";
 import { modelToScreen } from "./transform.js";
 
 const TEXT_LINE_HEIGHT = 1.25;
@@ -64,43 +63,23 @@ function paintText(ctx, mark, corners, keyline = null) {
 }
 
 function paintStroke(ctx, mark, points, lineScale, extra = 0) {
-  strokeInkPath(ctx, points, { width: mark.width * lineScale, widths: mark.widths, closed: mark.closed, dash: mark.dash, extra });
-}
-
-/**
- * A stroke's line on a 2D canvas, round-ended and round-joined, in its line style: `points` on screen, `width` its
- * screen width (`widths`: the pen's share of it at each point, drawn segment by segment), `extra` added to it (a
- * keyline's), `dash` its line style, its pattern (`dashPattern`) running on unbroken from segment to segment.
- * The viewer's live preview of a mark being drawn paints with it too (`AnnotationOverlay.jsx`).
- * @param {CanvasRenderingContext2D} ctx
- * @param {readonly { x: number, y: number }[]} points
- * @param {{ width: number, widths?: ArrayLike<number> | null, closed?: boolean, dash?: string | null, extra?: number }} options
- */
-export function strokeInkPath(ctx, points, { width, widths = null, closed = false, dash = null, extra = 0 }) {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  const pattern = dashPattern(dash, width);
-  ctx.setLineDash?.(pattern ?? []);
-  if (widths?.length === points.length) {
-    let travelled = 0;
+  const path = mark.closed ? [...points, points[0]] : points;
+  if (mark.widths?.length === points.length) {
     for (let index = 1; index < points.length; index += 1) {
-      ctx.lineWidth = width * (widths[index - 1] + widths[index]) / 2 + extra;
-      ctx.lineDashOffset = travelled;
+      ctx.lineWidth = mark.width * lineScale * (mark.widths[index - 1] + mark.widths[index]) / 2 + extra;
       ctx.beginPath();
       ctx.moveTo(points[index - 1].x, points[index - 1].y);
       ctx.lineTo(points[index].x, points[index].y);
       ctx.stroke();
-      travelled += Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
     }
-  } else {
-    const path = closed ? [...points, points[0]] : points;
-    ctx.lineWidth = width + extra;
-    ctx.lineDashOffset = 0;
-    ctx.beginPath();
-    path.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
-    ctx.stroke();
+    return;
   }
-  ctx.setLineDash?.([]);
+  ctx.lineWidth = mark.width * lineScale + extra;
+  ctx.beginPath();
+  path.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
+  ctx.stroke();
 }
 
 /** A ring of screen points, stroked. */

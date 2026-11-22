@@ -170,7 +170,7 @@ export const CONTROLS = new Set([
   'measure_taken', 'measure_delete', 'measure_clear',
   // Pencil's and Shapes' tools, and what is done to their ink.
   'pencil_pen', 'pencil_highlighter', 'pencil_eraser',
-  'shapes_rectangle', 'shapes_line', 'shapes_arrow', 'shapes_ellipse', 'shapes_text', 'shapes_fill', 'annotate_line_style',
+  'shapes_rectangle', 'shapes_line', 'shapes_arrow', 'shapes_ellipse', 'shapes_text',
   'annotate_mark', 'annotate_color', 'annotate_stroke_width', 'annotate_on_surface', 'annotate_on_plane',
   'annotate_restyle', 'annotate_fill', 'annotate_delete', 'annotate_clear', 'annotate_copy', 'undo', 'redo',
   // Explode's and Clip's controls.

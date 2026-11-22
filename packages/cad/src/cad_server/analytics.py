@@ -491,7 +491,7 @@ CONTROLS = frozenset({
     "measure_filter_all", "measure_filter_vertices", "measure_filter_edges", "measure_filter_faces",
     "measure_taken", "measure_delete", "measure_clear",
     "pencil_pen", "pencil_highlighter", "pencil_eraser",
-    "shapes_rectangle", "shapes_line", "shapes_arrow", "shapes_ellipse", "shapes_text", "shapes_fill", "annotate_line_style",
+    "shapes_rectangle", "shapes_line", "shapes_arrow", "shapes_ellipse", "shapes_text",
     "annotate_mark", "annotate_color", "annotate_stroke_width", "annotate_on_surface", "annotate_on_plane",
     "annotate_restyle", "annotate_fill", "annotate_delete", "annotate_clear", "annotate_copy", "undo", "redo",
     "explode_amount", "explode_reset", "clip_amount", "clip_axis_x", "clip_axis_y", "clip_axis_z", "clip_part_colors",

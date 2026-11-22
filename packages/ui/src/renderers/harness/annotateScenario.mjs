@@ -92,10 +92,10 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   await surface.waitFor();
   assert.equal(await draw.getAttribute('aria-pressed'), 'true', 'Draw is the tool');
   assert.equal(await draw.locator('svg').evaluate(icon => icon.getAttribute('class').includes('lucide-pencil')), true, 'Draw opens on the pen');
-  // In order: the seven tools that put ink down, then Fill, the Eraser, Colour, Stroke width, Line style, Placement and Clear.
+  // In order: the seven tools that put ink down, then the Eraser, Colour, Stroke width, Placement, Undo, Redo and Clear.
   const row = await controls.getByRole('button').evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.getBoundingClientRect().top]));
   assert.deepEqual(row.map(([name]) => name), ['Pen', 'Highlighter', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text',
-    'Fill', 'Eraser', 'Colour', 'Stroke width', 'Line style', 'Placement', 'Clear annotations']);
+    'Eraser', 'Colour', 'Stroke width', 'Placement', 'Undo', 'Redo', 'Clear annotations']);
   assert.equal(await controls.getByRole('button', { name: 'Pen', exact: true }).getAttribute('aria-pressed'), 'true', 'the pen is in hand');
   // Two rows of seven on one surface: the tools that put ink down on the first line, the rest on the second, under them.
   const tops = row.map(([, top]) => top);
@@ -141,8 +141,8 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   const turned = Math.hypot(...(await eyeToTarget()).map((value, index) => value - facing[index]));
   assert.ok(turned < 1e-4 * Math.hypot(...facing), `a right drag pans, never turns the view: ${turned}`);
 
-  // ⌘Z takes the stroke away, ⇧⌘Z brings it back where the view now has it: Undo and Redo
-  // are the keyboard's, not buttons.
+  // ⌘Z takes the stroke away, ⇧⌘Z brings it back where the view now has it: the keys do what the row's
+  // Undo and Redo do.
   await page.keyboard.press('ControlOrMeta+KeyZ');
   await until('Undo removes the stroke', seen => seen.red < NONE);
   await page.keyboard.press('ControlOrMeta+Shift+KeyZ');
@@ -193,18 +193,15 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   await page.keyboard.press('Delete');
   await until('Delete deletes the stroke and keeps the rectangle', seen => seen.green > 100 && seen.green < drawn.green - 50);
 
-  // The rectangle picked, its bar: Fill fills it in its colour, Delete deletes it, fill and all.
+  // The rectangle picked, its bar: Delete deletes it.
   await page.mouse.click(...at(0, -120));
   const bar = pane.getByRole('toolbar', { name: 'Selected annotation' });
   await bar.waitFor();
-  await bar.getByRole('button', { name: 'Fill', exact: true }).click();
-  assert.equal(await bar.getByRole('button', { name: 'Fill', exact: true }).getAttribute('aria-pressed'), 'true', 'Fill is lit once filled');
-  await until('the rectangle is still drawn, filled', seen => seen.green > 100);
   await bar.getByRole('button', { name: 'Delete', exact: true }).click();
-  await until('Delete on the bar deletes the rectangle and its fill', seen => seen.green < NONE);
+  await until('Delete on the bar deletes the rectangle', seen => seen.green < NONE);
   await bar.waitFor({ state: 'detached' });
   await page.keyboard.press('ControlOrMeta+KeyZ');
-  await until('Undo brings them back', seen => seen.green > 100);
+  await until('Undo brings it back', seen => seen.green > 100);
 
   // Back in Select, an ordinary left drag still presents new 3D frames with ink.
   const selectedCamera = await position();

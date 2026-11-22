@@ -126,7 +126,6 @@ PACKETS = "*.snapshot.json"
 # The viewer's annotation file (``@cad/core`` ``common/annotation.js``) and Measure's marks.
 ANNOTATION_KEYS = frozenset({"units", "parts", "marks"})
 MARK_KINDS = ("stroke", "area", "text")
-from cad.engine.render.dashes import DASHES  # noqa: E402  (a stroke's line styles)
 MARK_MAX = 8192  # a still's annotation holds at most this many marks
 TEXT_MAX_CHARS, TEXT_MAX_LINES = 10000, 256  # a text mark's words
 FONT_PX_MAX, STROKE_WIDTH_MAX = 512.0, 256.0  # a mark sizes a raster from these; bound them
@@ -556,8 +555,6 @@ def parse_annotation(value: Any) -> dict[str, Any] | None:
         if text is not None and (not isinstance(text, str) or len(text) > TEXT_MAX_CHARS
                                  or text.count("\n") + 1 > TEXT_MAX_LINES):
             raise SnapshotRefused(f"{at}.text is at most {TEXT_MAX_CHARS} characters on {TEXT_MAX_LINES} lines")
-        if mark.get("dash") is not None and (mark["kind"] != "stroke" or mark["dash"] not in DASHES):
-            raise SnapshotRefused(f"{at}.dash is a stroke's line style: one of {', '.join(DASHES)}")
         for key, high in (("fontPx", FONT_PX_MAX), ("width", STROKE_WIDTH_MAX)):
             value = mark.get(key)
             if value is not None and not (isinstance(value, (int, float)) and not isinstance(value, bool)

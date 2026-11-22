@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PaintBucket, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { ANNOTATION_STROKE_WIDTHS, AnnotationStylePickers, annotationColors } from "../../../../annotation/toolbar.jsx";
-import { fillableOutline, isHighlighterStroke, strokeSettingOf } from "../../../../annotation/geometry.js";
-import { annotationsOnScreen, annotationWorldPoints, closedShape, fillAreasOf } from "./annotation3d.js";
+import { strokeSettingOf } from "../../../../annotation/geometry.js";
+import { annotationWorldPoints } from "./annotation3d.js";
 import { useI18n } from "@cad/ui/i18n";
 
 // How far the bar keeps from the ink it is about, and from the viewport's edges, in px.
@@ -23,10 +23,8 @@ const strokeSetting = item => {
  * The ink Select has picked, its bar: a small floating toolbar just above it (below it where there
  * is no room above), following it as the camera moves — the tool strip's surface, a
  * size smaller. Colour, and for strokes their weight
- * (`AnnotationStylePickers`' dropdowns, each choice one step); Fill for a closed
- * shape, or a pen or highlighter loop whose ends meet on the screen now, as the Fill tool takes it (its interior, as it falls on the screen now, lying where the shape does — on its plane, or on the surface under it — one step; again
- * to take it away); and Delete, which deletes everything Select has picked (`onDelete`), a
- * measurement too.
+ * (`AnnotationStylePickers`' dropdowns, each choice one step); and Delete, which deletes everything Select has
+ * picked (`onDelete`), a measurement too.
  *
  * @param {{ annotation: import("../../../../annotation/session.js").AnnotationSession, runtimeRef: { current: object | null },
  *   viewerReadyTick?: number, onDelete(): void, disabled?: boolean }} props
@@ -75,32 +73,6 @@ export default function AnnotationSelectionBar({ annotation, colorScheme = "ligh
   if (!box || !items.length) return null;
 
   const strokes = items.filter(item => item.kind === "stroke");
-  // The strokes a line style restyles: not the highlighter's band.
-  const dashed = strokes.filter(item => !isHighlighterStroke(item));
-  const filledGroups = new Set(annotation.items.filter(item => item.kind === "area" && item.group).map(item => item.group));
-  // What Fill takes, as the Fill tool does (`fillableOutline`): a shape drawn closed, a pen or highlighter loop whose
-  // ends are under `FILL_LOOP_GAP_PX` apart on the screen now (re-read as the camera moves the bar), and a stroke
-  // already filled, so it can be unfilled at any zoom. Each with its outline on the screen, a loop's gap joined.
-  const runtime = runtimeRef.current, canvas = runtime?.renderer?.domElement;
-  const view = canvas ? { width: canvas.clientWidth, height: canvas.clientHeight } : null;
-  const onScreen = new Map(runtime && view ? annotationsOnScreen(runtime, strokes, view).map(ink => [ink.id, ink]) : []);
-  const closed = strokes.filter(item => closedShape(item) || (item.group && filledGroups.has(item.group)) || fillableOutline(onScreen.get(item.id)));
-  const filled = closed.length > 0 && closed.every(item => item.group && filledGroups.has(item.group));
-  const toggleFill = () => {
-    if (filled) {
-      const groups = new Set(closed.map(item => item.group));
-      annotation.remove(annotation.items.filter(item => item.kind === "area" && groups.has(item.group)).map(item => item.id));
-      return;
-    }
-    if (!runtime || !view) return;
-    for (const shape of closed) {
-      if (shape.group && filledGroups.has(shape.group)) continue;
-      const ink = onScreen.get(shape.id);
-      const outline = ink && (ink.closed ? ink : { ...ink, closed: true });
-      const areas = outline ? fillAreasOf(runtime, shape, outline, null, shape.color, view) : [];
-      if (areas.length) annotation.fill(shape.id, areas);
-    }
-  };
 
   const centre = (box.left + box.right) / 2;
   const left = Math.max(EDGE, Math.min(box.width - EDGE - size.width, centre - size.width / 2));
@@ -111,12 +83,7 @@ export default function AnnotationSelectionBar({ annotation, colorScheme = "ligh
     style={{ left, top }} data-annotation-selection-bar="" onPointerDown={event => event.stopPropagation()}>
     <AnnotationStylePickers label={t("annotate.selectedStyle")} className="flex items-center gap-0.5" disabled={disabled} color={items[0].color} colors={annotationColors(colorScheme)}
       width={strokes.length ? strokeSetting(strokes[0]) : null}
-      // The line style of the strokes picked that have one (none: the highlighter's alone, or no stroke picked).
-      dash={dashed.length ? dashed[0].dash ?? 'solid' : null}
-      onColor={color => annotation.restyle({ color })} onWidth={width => annotation.restyle({ width })} onDash={dash => annotation.restyle({ dash })}>
-      {closed.length ? <ToolbarButton tooltip={false} label={t("annotate.fill")} disabled={disabled} active={filled} aria-pressed={filled} onClick={toggleFill}>
-        <PaintBucket className="size-3" strokeWidth={2} aria-hidden="true" />
-      </ToolbarButton> : null}
+      onColor={color => annotation.restyle({ color })} onWidth={width => annotation.restyle({ width })}>
       <span role="separator" aria-orientation="vertical" className="mx-0.5 h-4 w-px bg-border" />
       <ToolbarButton tooltip={false} label={t("annotate.delete")} disabled={disabled} onClick={onDelete}>
         <Trash2 className="size-3" strokeWidth={2} aria-hidden="true" />

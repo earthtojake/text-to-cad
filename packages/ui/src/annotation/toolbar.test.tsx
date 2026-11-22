@@ -5,6 +5,8 @@ import { useAnnotationSession } from './session.js';
 import { ANNOTATION_COLORS, AnnotationToolbar, annotationColors, drawStripTool } from './toolbar.jsx';
 import FloatingToolBar from '../../dist/renderers/kit/tools/FloatingToolBar.js';
 import { useI18n } from '@cad/ui/i18n';
+import { ViewerHostContext } from '../host/context.js';
+import { testHost } from '../host/testing/host.js';
 
 afterEach(cleanup);
 
@@ -29,7 +31,7 @@ const open = async (name: string) => {
 const choose = async (name: string) => fireEvent.click(within(screen.getByRole('toolbar', { name: 'Annotation controls' })).getByRole('button', { name }));
 const label = (element: Element) => element.getAttribute('role') === 'separator' ? '|' : element.getAttribute('aria-label');
 
-it("the drawing controls are one surface of two rows of seven: the tools that put ink down, then Fill, the Eraser, Colour, Stroke width, Line style, Placement and Clear, no rule", () => {
+it("the drawing controls are one surface of two rows of seven: the tools that put ink down, then the Eraser, Colour, Stroke width, Placement, Undo, Redo and Clear, no rule", () => {
   render(<Panel />);
   const row = screen.getByRole('toolbar', { name: 'Annotation controls' });
   const rows = [...row.children];
@@ -38,9 +40,9 @@ it("the drawing controls are one surface of two rows of seven: the tools that pu
   expect(row.className.split(/\s+/)).toEqual(expect.arrayContaining(['flex-col', 'items-start']));
   const names = (element: Element) => [...element.querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
   expect(names(rows[0])).toEqual(['Pen', 'Highlighter', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text']);
-  expect(names(rows[1])).toEqual(['Fill', 'Eraser', 'Colour', 'Stroke width', 'Line style', 'Placement', 'Clear annotations']);
-  // Undo and Redo are the keyboard's alone.
-  expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+  expect(names(rows[1])).toEqual(['Eraser', 'Colour', 'Stroke width', 'Placement', 'Undo', 'Redo', 'Clear annotations']);
+  // No line style: every stroke is solid.
+  expect(screen.queryByRole('button', { name: 'Line style' })).toBeNull();
 });
 
 it("Draw is one plain strip tool, its button the tool it draws with; the row's tools, each with its key, the one in hand pressed, choose it and take up its family", async () => {
@@ -56,7 +58,7 @@ it("Draw is one plain strip tool, its button the tool it draws with; the row's t
     ['Rectangle', 'false', 'R'], ['Ellipse', 'false', 'O'], ['Text', 'false', 'T']]);
   expect(within(screen.getByRole('group', { name: 'Editing tools' })).getAllByRole('button')
     .map(item => [item.getAttribute('aria-label'), item.getAttribute('aria-pressed'), item.getAttribute('aria-keyshortcuts')]))
-    .toEqual([['Fill', 'false', 'G'], ['Eraser', 'false', 'E']]);
+    .toEqual([['Eraser', 'false', 'E']]);
   await choose('Highlighter');
   expect([session.tool, session.pencil, session.shape]).toEqual(['highlighter', 'highlighter', 'rectangle']);
   expect(button().getAttribute('aria-keyshortcuts')).toBe('Shift+P');
@@ -82,47 +84,42 @@ it("each drawing kind keeps its own style on the row: the pen's red, the highlig
   expect(session.styles.highlighter.color).toBe('#00e5ff');
 });
 
-it('the Eraser greys out Color, Stroke width, Line style and Placement, still on the row; Clear annotations stays as it was', async () => {
+it('the Eraser greys out Color, Stroke width and Placement, still on the row; Clear annotations stays as it was', async () => {
   render(<Panel />);
-  const disabled = () => ['Colour', 'Stroke width', 'Line style', 'Placement', 'Clear annotations'].map(name => screen.getByRole('button', { name }).hasAttribute('disabled'));
-  expect(disabled()).toEqual([false, false, false, false, true]);
+  const disabled = () => ['Colour', 'Stroke width', 'Placement', 'Clear annotations'].map(name => screen.getByRole('button', { name }).hasAttribute('disabled'));
+  expect(disabled()).toEqual([false, false, false, true]);
   await choose('Eraser');
-  expect(disabled()).toEqual([true, true, true, true, true]);
+  expect(disabled()).toEqual([true, true, true, true]);
   act(() => session.add([{ id: 'a', kind: 'stroke', points: new Float32Array(6), color: '#ff2d55', width: 2 } as any]));
-  expect(disabled()).toEqual([true, true, true, true, false]);
+  expect(disabled()).toEqual([true, true, true, false]);
   await choose('Pen');
-  expect(disabled()).toEqual([false, false, false, false, false]);
+  expect(disabled()).toEqual([false, false, false, false]);
 });
 
-it('Line style is a menu of Solid, Dashed and Dotted, each a line drawn in it as Stroke width\'s are, unnamed, kept per drawing kind; greyed for the Highlighter, Text and Fill', async () => {
+const stroke = (id: string) => ({ id, kind: 'stroke', points: new Float32Array(6), color: '#ff2d55', width: 2 } as any);
+const off = (name: string) => screen.getByRole('button', { name }).hasAttribute('disabled');
+
+it('Undo and Redo, left of Clear, walk the history: off with none, an undo takes the stroke away and a redo puts it back', () => {
   render(<Panel />);
-  expect(session.style.dash).toBe('solid');
-  const menu = await open('Line style');
-  expect(within(menu).getAllByRole('menuitemradio').map(item => [item.getAttribute('aria-label'), item.getAttribute('aria-checked'),
-    item.querySelector('[data-line-style]')!.getAttribute('data-line-style')]))
-    .toEqual([['Solid', 'true', 'solid'], ['Dashed', 'false', 'dashed'], ['Dotted', 'false', 'dotted']]);
-  // Stroke width's menu exactly: no heading and no names, the lines alone, each keeping its name for assistive technology.
-  const strokeMenuClass = menu.className;
-  expect([menu.querySelector('[data-slot="dropdown-menu-label"]'), within(menu).getAllByRole('menuitemradio').map(item => item.textContent)]).toEqual([null, ['', '', '']]);
-  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
-  expect((await open('Stroke width')).className).toBe(strokeMenuClass);
-  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
-  fireEvent.click(within(await open('Line style')).getByRole('menuitemradio', { name: 'Dashed' }));
-  expect([session.style.dash, session.styles.pen.dash, session.styles.shapes.dash]).toEqual(['dashed', 'dashed', 'solid']);
-  // Its button keeps its own glyph, whatever is chosen: solid, dashed and dotted, never Stroke width's.
-  const glyph = (name: string) => screen.getByRole('button', { name }).querySelector('svg')!;
-  expect(glyph('Line style').getAttribute('data-glyph')).toBe('line-style');
-  expect([...glyph('Line style').querySelectorAll('path')].map(path => path.getAttribute('stroke-dasharray'))).toEqual([null, '3 2.5', '0.01 2.75']);
-  expect(glyph('Line style').outerHTML).not.toBe(glyph('Stroke width').outerHTML);
-  // Shapes keep their own: solid until picked.
-  await choose('Rectangle');
-  expect(session.style.dash).toBe('solid');
-  for (const tool of ['Highlighter', 'Text', 'Fill']) {
-    await choose(tool);
-    expect(screen.getByRole('button', { name: 'Line style' }).hasAttribute('disabled'), tool).toBe(true);
-  }
-  await choose('Pen');
-  expect(screen.getByRole('button', { name: 'Line style' }).hasAttribute('disabled')).toBe(false);
+  expect([off('Undo'), off('Redo')]).toEqual([true, true]);
+  act(() => session.add([stroke('a')]));
+  expect([off('Undo'), off('Redo')]).toEqual([false, true]);
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  expect([session.items.length, off('Undo'), off('Redo')]).toEqual([0, true, false]);
+  fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+  expect([session.items.map(item => item.id), off('Undo'), off('Redo')]).toEqual([['a'], false, true]);
+  // Still there under the Eraser, which greys the style alone.
+  fireEvent.click(within(screen.getByRole('toolbar', { name: 'Annotation controls' })).getByRole('button', { name: 'Eraser' }));
+  expect([off('Undo'), off('Redo')]).toEqual([false, true]);
+});
+
+it("Undo's and Redo's keys are the viewer's, in their tooltips as the host's platform spells them", () => {
+  render(<Panel />);
+  const keys = () => ['Undo', 'Redo'].map(name => screen.getByRole('button', { name }).getAttribute('aria-keyshortcuts'));
+  expect(keys()).toEqual(['Ctrl+Z', 'Ctrl+Y']);
+  cleanup();
+  render(<ViewerHostContext.Provider value={testHost({ environment: { platform: 'darwin' } } as any)}><Panel /></ViewerHostContext.Provider>);
+  expect(keys()).toEqual(['⌘Z', 'Shift+⌘Z']);
 });
 
 it('a flat view (placements off) has no Placement', () => {
@@ -188,12 +185,4 @@ it("a phone's drawing tools wrap within their row where the view has no room; th
   render(<Panel />);
   expect(screen.getByRole('group', { name: 'Drawing tools' }).className.split(/\s+/)).toContain('flex-wrap');
   expect(document.querySelector('[data-annotation-row="style"]')!.className.split(/\s+/)).toContain('flex-wrap');
-});
-
-it('Fill takes the colour in hand alone: Stroke width and Placement are off under it, Colour stays', async () => {
-  render(<Panel />);
-  await choose('Fill');
-  expect([session.tool, session.lastFamily]).toEqual(['fill', 'shapes']);
-  expect(screen.getByRole('button', { name: 'Draw' }).getAttribute('aria-keyshortcuts')).toBe('G');
-  expect(['Colour', 'Stroke width', 'Placement'].map(name => screen.getByRole('button', { name }).hasAttribute('disabled'))).toEqual([false, true, true]);
 });

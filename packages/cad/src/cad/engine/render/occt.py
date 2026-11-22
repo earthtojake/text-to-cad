@@ -675,25 +675,6 @@ class Scene:
         self.canvas.context.SetZLayer(shown, Graphic3d_ZLayerId_Top)
         self.overlays.append(shown)
 
-    def _stroke(self, world: np.ndarray, mark: dict[str, Any], scale: float) -> None:
-        """A stroke mark, in its line style (``dashes.py``): solid, its polyline; dashed or dotted, each run of
-        ink of its pattern, measured in screen pixels where it lies (``_pixel_size``), as the viewer dashes it."""
-        from cad.engine.render.dashes import dash_pattern, dash_runs
-
-        width, widths, closed = mark.get("width", 2) * scale, mark.get("widths"), bool(mark.get("closed"))
-        pattern = dash_pattern(mark.get("dash"), mark.get("width", 2)) if getattr(self, "camera", None) is not None else None
-        if pattern is None:
-            self._polyline(world, mark["color"], width, closed, widths)
-            return
-        points = np.asarray(world, float)
-        shares = None if widths is None or len(widths) != len(points) else np.asarray(widths, float)
-        if closed:
-            points = np.vstack([points, points[:1]])
-            shares = None if shares is None else np.append(shares, shares[:1])
-        lengths = [float(np.linalg.norm(b - a)) / max(self._pixel_size((a + b) / 2), 1e-12) for a, b in zip(points[:-1], points[1:])]
-        for run, run_shares in dash_runs(points, lengths, pattern, shares):
-            self._polyline(run, mark["color"], width, False, None if run_shares is None else list(run_shares))
-
     def _polyline(self, points: np.ndarray, color: str, width: float, closed: bool = False,
                   widths: Any = None) -> None:
         if width > 1.5 and getattr(self, "camera", None) is not None:
@@ -797,7 +778,7 @@ class Scene:
             world = points @ matrix[:3, :3].T + matrix[:3, 3]
             placed_marks.append(world)
             if mark["kind"] == "stroke":
-                self._stroke(world, mark, scale)
+                self._polyline(world, mark["color"], mark.get("width", 2) * scale, bool(mark.get("closed")), mark.get("widths"))
             elif mark["kind"] == "area":
                 self._polyline(world[:mark.get("outline", len(world))], mark["color"], 1.5 * scale, True)
             elif len(world) == 4:

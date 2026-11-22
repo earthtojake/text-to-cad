@@ -39,7 +39,7 @@ test("an annotation that is not one is refused by what is wrong, an unknown fiel
     [{ marks: [stroke({ width: 0 })] }, "marks[0].width must be a positive number"],
     [{ marks: [stroke({ touches: [{ part: "o1.2", ref: 3 }] })] }, "marks[0].touches must list { part, ref? } entries"],
     [{ parts: {}, marks: [] }, 'unknown field "parts"'],
-    [{ marks: [stroke({ pattern: "solid" })] }, 'marks[0]: unknown field "pattern"'],
+    [{ marks: [stroke({ dash: "solid" })] }, 'marks[0]: unknown field "dash"'],
     [{ marks: [stroke({ part: "o1.2" })] }, 'marks[0]: unknown field "part"'],
     [{ marks: [stroke({ placement: "surface" })] }, 'marks[0]: unknown field "placement"'],
     [{ marks: [{ ...stroke(), kind: "area", triangles: [0, 1, 5] }] }, "marks[0].triangles must index its points"],
@@ -65,23 +65,4 @@ test("a translucent stroke (the highlighter's) draws once-only, on stencil refer
   assert.equal(new Set(refs).size, 4);
   assert.ok(refs.every(ref => ref > 0 && ref < 256));
   assert.equal(opaque.material.stencilWrite, false);
-});
-
-// A stroke's line style: `dash`, dashed or dotted (solid is a mark without one, as every mark written before there
-// were line styles), drawn on three's screen-space line dashed along its length, its pattern in screen pixels.
-test("a stroke's line style is read and refused as a field, and a dashed stroke's line is dashed in screen pixels at any zoom", () => {
-  const stroke = { id: "a", kind: "stroke", points: [0, 0, 0, 10, 0, 0], color: "#ff2d55", width: 2 };
-  assert.equal(normalizeAnnotation({ marks: [stroke] }).marks[0].dash, undefined);
-  assert.equal(normalizeAnnotation({ marks: [{ ...stroke, dash: "solid" }] }).marks[0].dash, undefined);
-  assert.equal(normalizeAnnotation({ marks: [{ ...stroke, dash: "dotted" }] }).marks[0].dash, "dotted");
-  assert.throws(() => normalizeAnnotation({ marks: [{ ...stroke, dash: "wavy" }] }), /dash must be one of solid, dashed, dotted/);
-  const context = { THREE, Line2, LineGeometry, LineMaterial };
-  const line = annotationMarkObject(context, { ...stroke, dash: "dashed" }, { lineScale: 1 });
-  assert.deepEqual([line.material.dashed, line.material.dashSize, line.material.gapSize], [true, 8, 6]);
-  assert.ok(line.geometry.getAttribute("instanceDistanceStart"), "its distances along its length");
-  // Each frame its distances are scaled by a pixel's size where it lies: 10 units across 100px of an orthographic view.
-  const camera = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 100);
-  line.onBeforeRender({ getSize: size => size.set(100, 100) }, null, camera);
-  assert.ok(Math.abs(line.material.dashScale - 10) < 1e-9, `a unit is 10px: ${line.material.dashScale}`);
-  assert.equal(annotationMarkObject(context, stroke, { lineScale: 1 }).material.dashed, false);
 });

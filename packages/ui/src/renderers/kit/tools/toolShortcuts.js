@@ -15,7 +15,7 @@ export const TOOL_SHORTCUTS = Object.freeze({ select: "V", measure: "M", fit: "F
 /** Each drawing tool's key: Pencil's and Shapes' variants. */
 export const DRAWING_SHORTCUTS = Object.freeze({
   freedraw: "P", highlighter: "⇧P", eraser: "E",
-  rectangle: "R", line: "L", arrow: "⇧L", ellipse: "O", text: "T", fill: "G",
+  rectangle: "R", line: "L", arrow: "⇧L", ellipse: "O", text: "T",
 });
 
 /** The key a keydown is, as the shortcuts spell it ("P", "⇧P"), or null for anything else. */
@@ -65,6 +65,12 @@ export const ZOOM_FACTOR = 1.5;
 export const zoomShortcuts = platform => (platform === "darwin"
   ? { in: "⌘+", out: "⌘-", actual: "⇧0", fit: TOOL_SHORTCUTS.fit, selection: "⇧2" }
   : { in: "Ctrl+=", out: "Ctrl+-", actual: "⇧0", fit: TOOL_SHORTCUTS.fit, selection: "⇧2" });
+
+/**
+ * Undo's and Redo's keys, as the viewer binds them (`kit/shell/useViewerShortcuts.js`) and a tooltip shows them: ⌘Z
+ * and ⇧⌘Z on a Mac (the host's `environment.platform`), Ctrl+Z and Ctrl+Y elsewhere.
+ */
+export const undoShortcuts = platform => (platform === "darwin" ? { undo: "⌘Z", redo: "⇧⌘Z" } : { undo: "Ctrl+Z", redo: "Ctrl+Y" });
 
 /** What a keydown asks of the zoom: "in", "out", "fit", "selection", "actual", or null. */
 export function zoomKeyOfEvent(event) {

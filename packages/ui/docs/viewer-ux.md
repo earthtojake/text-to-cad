@@ -538,7 +538,8 @@ a schematic. On a STEP or .xbf, Measure carries one too.
 - **One motion at a time.** Explode, the pose and a routine (and on a GLB or a robot, Clip) replace each other:
   setting one puts the others back at rest. None disables another's controls.
 - **Undo** (⌘Z, ⇧⌘Z) walks the view's one history: ink and measurements. The camera, the selection, Display,
-  Explode, Clip, hiding and the pose are not steps; each has its own way back. There are no Undo or Redo buttons.
+  Explode, Clip, hiding and the pose are not steps; each has its own way back. Draw's row has Undo and Redo buttons
+  too; no other tool has them.
 
 ### Draw
 
@@ -546,24 +547,23 @@ Draw is the one drawing tool: ink on the model, for a note to the agent ([its me
 
 - **One plain button** with no chevron. It shows what it draws with (the last one used), and its tooltip names that
   and its key ("Rectangle R"). A press takes up the last tool chosen.
-- **Its row** ("Annotation controls") is two rows, left-aligned, with no rule. First the drawing tools: Pen,
-  Highlighter, Line, Arrow, Rectangle, Ellipse, Text. Then Fill and Eraser, Colour, Stroke width, Line style,
-  Placement (3D only), and Clear (a bin, off with no ink). It is the same at every width and wraps on a phone. Why:
-  the order a person reaches for them, as in design tools.
+- **Its row** ("Annotation controls") is two rows, left-aligned, with no rule. The first is the seven drawing tools:
+  Pen, Highlighter, Line, Arrow, Rectangle, Ellipse, Text. The second is seven controls: Eraser, Colour, Stroke width,
+  Placement (3D only), Undo, Redo, and Clear (a bin, off with no ink). Undo and Redo are off where the history has no
+  step that way, and their tooltips give their keys (⌘Z, ⇧⌘Z; Ctrl+Z, Ctrl+Y). It is the same at every width and wraps
+  on a phone. Why: the order a person reaches for them, as in design tools.
 - **Style** is kept per kind (the Pen, the Highlighter, the shapes); every stroke starts at 2px. The Pen and the
   shapes start red (#ff2d55), the Highlighter yellow (#ffe600), which draws five times wider at 35% opacity.
 - **Colour** is a grid of seven bright colours and one neutral that reads on the picture (white on a dark Background,
-  near-black on a light one), then the system's colour wheel. Stroke width (1, 2, 4, 6px) and Line style (Solid,
-  Dashed, Dotted) show the lines themselves. Placement is On surface (the default) or On plane; a flat view has none.
-- Controls that do not apply grey out and stay where they are: the Eraser greys the four style controls, Fill greys
-  all but Colour, and the Highlighter and Text grey Line style. Why: the row never jumps.
-- **Fill** (G) fills a closed shape, or a pen loop whose ends meet within 20px, with the colour in hand; the same
-  colour again unfills it.
+  near-black on a light one), then the system's colour wheel. Stroke width (1, 2, 4, 6px) shows the lines themselves.
+  Every stroke is solid. Placement is On surface (the default) or On plane; a flat view has none.
+- Controls that do not apply grey out and stay where they are: the Eraser greys the three style controls. Why: the
+  row never jumps.
 - Draw has no Select or Pan of its own: a right or middle drag is the view's, and holding Space hands the pointer to
   the view. The cube stays live.
 - **Ink stays where it was drawn**, on the model's surface or a plane, from every angle, and across a new version of
   the file: its marks are in the scene's coordinates, so a rebuild never throws away what a person drew. **Picked ink** (under Select)
-  gets a small bar just above it: Colour, Stroke width, Line style, Fill for a closed shape, a rule, Delete. Ink has
+  gets a small bar just above it: Colour, Stroke width, a rule, Delete. Ink has
   no panel: it is Quick Edit's Annotation chip, whose X clears it. Under Draw, ⌘C copies the view with its ink.
 
 ## Camera, animation and Preview
@@ -639,7 +639,7 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 
 - **Single keys** need no ⌘, Ctrl or Alt, do not repeat, and never fire in a text field or in Preview: V Select,
   M Measure, F Zoom to fit, and Draw's tools, each taking Draw up with that tool: P Pen, ⇧P Highlighter, E Eraser,
-  L Line, ⇧L Arrow, R Rectangle, O Ellipse, T Text, G Fill.
+  L Line, ⇧L Arrow, R Rectangle, O Ellipse, T Text.
 - **Zoom**: + (or =) in and − out, by half again (also with ⌘ or Ctrl, which then zoom the view, not the page); ⇧1
   fit, ⇧2 the selection, ⇧0 100%. These repeat.
 - **The arrow keys** orbit the viewer that has the focus or the pointer; never in Preview, a text field or a tree row,

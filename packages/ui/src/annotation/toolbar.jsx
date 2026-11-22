@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Circle, Eraser, Highlighter, MoveUpRight, PaintBucket, Pencil, Slash, Square, Trash2, Type } from 'lucide-react';
+import { useContext, useEffect, useRef } from 'react';
+import { Circle, Eraser, Highlighter, MoveUpRight, Pencil, Redo2, Slash, Square, Trash2, Type, Undo2 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger
 } from '@cad/ui/primitives/dropdown-menu';
@@ -7,7 +7,8 @@ import { ToolbarButton } from '@cad/ui/primitives/toolbar-button';
 import { cn } from '@cad/ui/utils';
 import { FLOATING_SURFACE_CLASS } from '../lib/floatingSurface.js';
 import SubToolbar, { SUB_TOOLBAR_WIDTH_CLASS } from '../renderers/kit/tools/SubToolbar.jsx';
-import { DRAWING_SHORTCUTS } from '../renderers/kit/tools/toolShortcuts.js';
+import { DRAWING_SHORTCUTS, undoShortcuts } from '../renderers/kit/tools/toolShortcuts.js';
+import { ViewerHostContext } from '../host/context.js';
 import { toolFamily } from './tools.js';
 import { useControlUsage } from '../usage/controls.js';
 import { useI18n } from '@cad/ui/i18n';
@@ -16,12 +17,12 @@ import { useI18n } from '@cad/ui/i18n';
  * The drawing tools' sub-toolbar (`AnnotationToolbar`): two rows under the strip's Draw tool, on one surface, no rule
  * between them. The first is the tools that put ink down, a button each, the one in hand pressed (Pen, Highlighter,
  * Line, Arrow, Rectangle, Ellipse, Text: `DRAWING_CREATE_ENTRIES`) — choosing one is how Draw changes what it draws
- * with, its family taken up (`takeFamily`); the second, the two that change ink already down (Fill, Eraser:
- * `DRAWING_EDIT_ENTRIES`), then what is drawn next, its colour, stroke width, line style and placement (on the surface
- * under each point, or on the plane of the surface the mark starts on), and Clear, all the annotation session's
+ * with, its family taken up (`takeFamily`); the second, the Eraser, which takes ink already down
+ * (`DRAWING_EDIT_ENTRIES`), then what is drawn next, its colour, stroke width and placement (on the surface under each
+ * point, or on the plane of the surface the mark starts on), then Undo, Redo and Clear, all the annotation session's
  * (`session.js`). The style is the tool in hand's own — the pen's, the highlighter's, the shapes' — and the eraser,
- * which puts nothing down, has none: its pickers are greyed out (Fill keeps its colour alone). The same colour, stroke
- * width and line style dropdowns (`AnnotationStylePickers`) restyle the ink Select has picked, on its selection's bar.
+ * which puts nothing down, has none: its pickers are greyed out. Every stroke is solid. The same colour and stroke
+ * width dropdowns (`AnnotationStylePickers`) restyle the ink Select has picked, on its selection's bar.
  */
 
 /** @typedef {import('./tools.js').AnnotationTool} AnnotationTool */
@@ -42,24 +43,22 @@ export const SHAPE_TOOL_ENTRIES = [
   { id: 'arrow', key: 'annotate.tool.arrow', label: 'Arrow', Icon: MoveUpRight },
   { id: 'ellipse', key: 'annotate.tool.ellipse', label: 'Ellipse', Icon: Circle },
   { id: 'text', key: 'annotate.tool.text', label: 'Text', Icon: Type },
-  // Not an outline: a press inside a closed shape fills it with the colour in hand (`AnnotationOverlay.jsx`).
-  { id: 'fill', key: 'annotate.tool.fill', label: 'Fill', Icon: PaintBucket },
 ];
 /**
  * The drawing row's tools, one list in the order a person reaches for them, as design tools order theirs: the
- * freehand pen and highlighter, the shapes (line, arrow, rectangle, ellipse), text, then the tools that change ink
- * already down, Fill and the Eraser.
+ * freehand pen and highlighter, the shapes (line, arrow, rectangle, ellipse), text, then the tool that takes ink
+ * already down, the Eraser.
  * @type {readonly AnnotationToolEntry[]}
  */
-export const DRAWING_ROW_ENTRIES = ['freedraw', 'highlighter', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'fill', 'eraser']
+export const DRAWING_ROW_ENTRIES = ['freedraw', 'highlighter', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'eraser']
   .map(id => [...PENCIL_TOOL_ENTRIES, ...SHAPE_TOOL_ENTRIES].find(entry => entry.id === id));
 /** The drawing row's first row: the seven tools that put ink down. */
 export const DRAWING_CREATE_ENTRIES = DRAWING_ROW_ENTRIES.slice(0, 7);
-/** Its second row's first two: the tools that change ink already down, Fill and the Eraser. */
+/** Its second row's first: the tool that takes ink already down, the Eraser. */
 export const DRAWING_EDIT_ENTRIES = DRAWING_ROW_ENTRIES.slice(7);
 /**
  * The two families that draw, the tool modes the strip's one Draw tool takes up (`drawStripTool`): freehand
- * (`pencil`: the pen, the highlighter, the eraser) and the shapes (`shapes`: the shapes, text and fill), each keeping
+ * (`pencil`: the pen, the highlighter, the eraser) and the shapes (`shapes`: the shapes and text), each keeping
  * what it draws with and its style apart. The drawing row lists their tools as one (`DRAWING_ROW_ENTRIES`).
  * @type {readonly { id: import('./tools.js').AnnotationFamily, entries: readonly AnnotationToolEntry[] }[]}
  */
@@ -87,15 +86,13 @@ export function drawStripTool({ toolMode, annotation, takeFamily, disabled = fal
   const variant = drawingToolVariant(family, annotation);
   const Icon = annotationToolIcon(variant);
   return {
-    id: DRAW_TOOL, label: t('annotate.tool.draw'), tooltip: drawingToolTip(variant, t), shortcut: DRAWING_SHORTCUTS[variant], active, disabled,
+    id: DRAW_TOOL, label: t('annotate.tool.draw'), tooltip: drawingToolLabel(variant, t), shortcut: DRAWING_SHORTCUTS[variant], active, disabled,
     icon: <Icon className="size-3" strokeWidth={2} aria-hidden="true" />, ...(group ? { group } : {}),
     onSelect: () => takeFamily(family), takeFamily, drawFamilies: DRAWING_TOOLS.map(entry => entry.id)
   };
 }
 /** A drawing tool's name in `t`'s language: Draw's (`draw`) or what one draws with (`freedraw`, `line`, …). */
 export const drawingToolLabel = (id, t) => t(`annotate.tool.${id}`);
-/** A drawing tool's tooltip: its name, but Fill's says what it fills ("Fill closed shapes"). */
-export const drawingToolTip = (id, t) => (id === 'fill' ? t('annotate.tool.fillTip') : drawingToolLabel(id, t));
 /** The icon of a drawing tool (the pen's for one it does not know): a strip tool shows the variant it draws with. */
 export const annotationToolIcon = id => ([...PENCIL_TOOL_ENTRIES, ...SHAPE_TOOL_ENTRIES].find(tool => tool.id === id) || PENCIL_TOOL_ENTRIES[0]).Icon;
 /** The tool a drawing strip tool draws with now: `annotation.pencil` for Pencil, `annotation.shape` for Shapes. */
@@ -137,17 +134,6 @@ export const ANNOTATION_STROKE_WIDTHS = [
   { value: 4, label: 'Bold', key: 'annotate.stroke.bold' },
   { value: 6, label: 'Heavy', key: 'annotate.stroke.heavy' },
 ];
-/** @typedef {import('./geometry.js').AnnotationDash} AnnotationDash */
-// A stroke's line style (`dash`): solid, dashed or dotted, its glyph a line drawn in it.
-/** @type {readonly { value: AnnotationDash, label: string, key: string }[]} */
-export const ANNOTATION_LINE_STYLES = [
-  { value: 'solid', label: 'Solid', key: 'annotate.lineStyle.solid' },
-  { value: 'dashed', label: 'Dashed', key: 'annotate.lineStyle.dashed' },
-  { value: 'dotted', label: 'Dotted', key: 'annotate.lineStyle.dotted' },
-];
-const DASH_ARRAY = { solid: undefined, dashed: '3.5 2.5', dotted: '0.01 3' };
-const lineStyleGlyph = dash => <svg {...GLYPH} aria-hidden="true" className="h-4 w-[18px]" viewBox="0 0 18 16" strokeWidth={1.75}
-  strokeDasharray={DASH_ARRAY[dash] ?? undefined} data-line-style={dash}><path d="M2.5 8h13" /></svg>;
 // How ink lies, as its glyph: a sphere, in three dimensions, for ink drawn on the surface under it; a
 // flat sheet seen in perspective for ink drawn on a plane.
 const GLYPH = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -180,14 +166,11 @@ const placementGlyph = placement => {
 const strokeGlyph = width => <svg {...GLYPH} aria-hidden="true" className="h-4 w-[18px]" viewBox="0 0 18 16" strokeWidth={width} data-stroke-weight={width}>
   <path d="M3 8h12" />
 </svg>;
-// The two buttons' own glyphs, fixed whatever is chosen (as Figma's and Excalidraw's are), so the two read apart at a glance:
-// Stroke width three lines thin to thick, Line style three lines solid, dashed and dotted. Their menus show each choice's line.
+// Stroke width's own glyph, fixed whatever is chosen (as Figma's and Excalidraw's are): three lines thin to thick. Its menu
+// shows each choice's line.
 const ROWS_GLYPH = { viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', className: 'size-4', 'aria-hidden': 'true' };
 const strokeWidthIcon = <svg {...ROWS_GLYPH} data-glyph="stroke-width">
   <path d="M2.5 3h11" strokeWidth={1} /><path d="M2.5 7.5h11" strokeWidth={2} /><path d="M2.5 12.5h11" strokeWidth={3.5} />
-</svg>;
-const lineStyleIcon = <svg {...ROWS_GLYPH} strokeWidth={1.75} data-glyph="line-style">
-  <path d="M2.5 3.5h11" /><path d="M2.5 8h11" strokeDasharray="3 2.5" /><path d="M2.5 12.5h11" strokeDasharray="0.01 2.75" />
 </svg>;
 const swatch = color => ({ backgroundColor: color, boxShadow: 'inset 0 0 0 1px color-mix(in oklab, currentColor 35%, transparent)' });
 const ROW = 'flex min-w-0 flex-wrap items-center gap-0.5';
@@ -199,14 +182,13 @@ const menuHeading = text => <DropdownMenuLabel className="font-normal text-muted
  * One of a mark's styles as a dropdown, laid out as the strip's menus are: its button shows the
  * value (no chevron; `icon`, a fixed glyph in its place), and opens a menu headed with its name, a row per choice, its glyph and its
  * name, the check on the right of the current one. One chosen closes it. `bare`: no heading and no
- * names, the glyphs alone (Stroke width: a line per weight; Line style: a line per style), each choice keeping its name for
- * assistive technology.
+ * names, the glyphs alone (Stroke width: a line per weight), each choice keeping its name for assistive technology.
  */
 function StyleMenu({ label, options, value, glyph, icon, onChange, disabled, bare = false }) {
   const { t } = useI18n();
   return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild>
-      {/* Its name on a hover (Stroke width, Line style: two buttons of lines, told apart by it). */}
+      {/* Its name on a hover (Stroke width: a button of lines, named by it). */}
       <ToolbarButton label={label} disabled={disabled}>{icon ?? glyph(value)}</ToolbarButton>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="start" sideOffset={4} collisionPadding={8} aria-label={label}
@@ -283,9 +265,9 @@ function ColorMenu({ value, colors, onChange, disabled }) {
 }
 
 /**
- * The colour, stroke width, line style and placement dropdowns (`StyleMenu`): what is drawn next, on the drawing row
+ * The colour, stroke width and placement dropdowns (`StyleMenu`): what is drawn next, on the drawing row
  * (`AnnotationToolbar`), and the ink picked, on its selection's bar. Each is left out where it has nothing to set
- * (`width` null: no stroke picked; `dash` null: none with a line style); `placement` only where Draw puts ink down.
+ * (`width` null: no stroke picked); `placement` only where Draw puts ink down.
  * `children` follow them on their row.
  *
  * @param {{ color: string, width?: number | null, placement?: AnnotationPlacement | null,
@@ -294,18 +276,15 @@ function ColorMenu({ value, colors, onChange, disabled }) {
  *   disabled?: boolean, label: string, className?: string,
  *   children?: import('react').ReactNode }} props
  */
-export function AnnotationStylePickers({ color, width = null, dash = null, placement = null, onColor, onWidth, onDash, onPlacement,
-  colors = ANNOTATION_COLORS, disabled = false, colorOnly = false, dashOff = false, label, className = ROW, children = null }) {
+export function AnnotationStylePickers({ color, width = null, placement = null, onColor, onWidth, onPlacement,
+  colors = ANNOTATION_COLORS, disabled = false, label, className = ROW, children = null }) {
   const { t } = useI18n();
   return <div role="group" aria-label={label} className={className}>
     <ColorMenu value={color.toLowerCase()} colors={colors} onChange={onColor} disabled={disabled} />
     {width == null ? null : <StyleMenu bare label={t('annotate.strokeWidth')} options={ANNOTATION_STROKE_WIDTHS} value={width} glyph={strokeGlyph} icon={strokeWidthIcon}
-      onChange={value => onWidth?.(value)} disabled={disabled || colorOnly} />}
-    {/* The line style: a stroke's (the pen's, a shape's outline, an arrow's shaft), greyed where the tool draws none (`dashOff`). */}
-    {dash == null ? null : <StyleMenu bare label={t('annotate.lineStyle')} options={ANNOTATION_LINE_STYLES} value={dash} glyph={lineStyleGlyph} icon={lineStyleIcon}
-      onChange={value => onDash?.(value)} disabled={disabled || colorOnly || dashOff} />}
+      onChange={value => onWidth?.(value)} disabled={disabled} />}
     {placement == null ? null : <StyleMenu label={t('annotate.placement')} options={ANNOTATION_PLACEMENTS} value={placement} glyph={placementGlyph}
-      onChange={value => onPlacement?.(value)} disabled={disabled || colorOnly} />}
+      onChange={value => onPlacement?.(value)} disabled={disabled} />}
     {children}
   </div>;
 }
@@ -317,12 +296,13 @@ const GROUP = 'flex items-center gap-1';
  * The drawing tools' sub-toolbar (`kit/tools/SubToolbar.jsx`), under the strip while Draw is in hand: two rows on one
  * surface, the same for both families, no rule between them. First the tools that put ink down, as buttons, the one in
  * hand pressed (Pen, Highlighter, Line, Arrow, Rectangle, Ellipse and Text; choosing one is all Draw needs to draw
- * with it); then Fill and Eraser, and what is drawn next, its Colour (`annotationColors`, for the viewer's `colorScheme`,
- * or any from the wheel), Stroke width, Line style and Placement, each a dropdown laid out as the strip's are (kept per
- * drawing kind: the pen's, the highlighter's, the shapes'; greyed out under the Eraser), then Clear annotations.
- * Undo and Redo are the keyboard's (⌘Z, ⇧⌘Z: `useViewerShortcuts.js`), not buttons. A flat view, where ink has nowhere to lie but
- * the drawing, has no placement to choose (`placements={false}`). On a phone, where the rows are as wide as the
- * view, each wraps rather than scrolls.
+ * with it); then the Eraser, and what is drawn next, its Colour (`annotationColors`, for the viewer's `colorScheme`,
+ * or any from the wheel), Stroke width and Placement, each a dropdown laid out as the strip's are (kept per drawing
+ * kind: the pen's, the highlighter's, the shapes'; greyed out under the Eraser), then Undo, Redo and Clear annotations.
+ * Undo and Redo walk the view's one history (the session's `undo`, `redo`), as ⌘Z and ⇧⌘Z do (`useViewerShortcuts.js`),
+ * each off where the history has no step that way, its tooltip its key (`undoShortcuts`, for the host's platform).
+ * A flat view, where ink has nowhere to lie but the drawing, has no placement to choose (`placements={false}`). On a
+ * phone, where the rows are as wide as the view, each wraps rather than scrolls.
  * @param {{ annotation: import('./session.js').AnnotationSession, colorScheme?: 'light' | 'dark', placements?: boolean }} props
  */
 export function AnnotationToolbar({ annotation, colorScheme = 'light', placements = true, takeFamily = null }) {
@@ -332,29 +312,28 @@ export function AnnotationToolbar({ annotation, colorScheme = 'light', placement
   const { style } = annotation;
   // The eraser draws nothing: Color, Stroke width and Placement stay on the row, greyed out, so it does not jump.
   const erasing = annotation.tool === 'eraser';
-  // Fill puts down the colour in hand, nothing of a stroke's weight or a placement of its own (a fill lies where its shape does).
-  const filling = annotation.tool === 'fill';
-  // A line style is a stroke's: the highlighter's broad band and text have none (greyed, so the row does not jump).
-  const undashed = annotation.tool === 'highlighter' || annotation.tool === 'text';
+  const keys = undoShortcuts(useContext(ViewerHostContext)?.environment?.platform);
   const choose = id => { annotation.selectTool(id); takeFamily?.(toolFamily(id)); };
   // Each tool its name and its key in a tooltip ("Rectangle R"): the row's way to learn the letters.
-  const toolButton = ({ id, Icon }) => <ToolbarButton key={id} shortcut={DRAWING_SHORTCUTS[id]} label={drawingToolLabel(id, t)} tooltip={drawingToolTip(id, t)} disabled={disabled}
+  const toolButton = ({ id, Icon }) => <ToolbarButton key={id} shortcut={DRAWING_SHORTCUTS[id]} label={drawingToolLabel(id, t)} tooltip={drawingToolLabel(id, t)} disabled={disabled}
     active={!disabled && annotation.tool === id} aria-pressed={!disabled && annotation.tool === id} onClick={() => choose(id)}>
     {icon(Icon)}
   </ToolbarButton>;
   // Two rows of seven on one surface, left-aligned on the row's padding, the gap between them the row's own 4px, no rule:
-  // the tools that put ink down (`DRAWING_CREATE_ENTRIES`), then the two that change ink already down (Fill, the Eraser)
-  // beside what is drawn next — its Colour, Stroke width, Line style and Placement — and Clear.
+  // the tools that put ink down (`DRAWING_CREATE_ENTRIES`), then the Eraser, which takes ink already down, beside what
+  // is drawn next — its Colour, Stroke width and Placement — then Undo, Redo and Clear.
   return <SubToolbar label={t('annotate.controls')} data-annotation-controls="" className={cn('text-to-cad-annotation-toolbar flex-col flex-nowrap items-start', SUB_TOOLBAR_WIDTH_CLASS, 'data-[touch]:w-auto')}>
     <div role="group" aria-label={t('annotate.drawTools')} className={cn(GROUP, 'flex-wrap')} data-annotation-row="create">
       {DRAWING_CREATE_ENTRIES.map(toolButton)}
     </div>
     <div className={cn(GROUP, 'flex-wrap')} data-annotation-row="style">
       <div role="group" aria-label={t('annotate.editTools')} className={GROUP}>{DRAWING_EDIT_ENTRIES.map(toolButton)}</div>
-      <AnnotationStylePickers label={t('annotate.style')} className={GROUP} disabled={disabled || erasing} colorOnly={filling} dashOff={undashed}
-        colors={annotationColors(colorScheme)} color={style.color} width={style.strokeWidth} dash={style.dash ?? 'solid'}
+      <AnnotationStylePickers label={t('annotate.style')} className={GROUP} disabled={disabled || erasing}
+        colors={annotationColors(colorScheme)} color={style.color} width={style.strokeWidth}
         placement={placements ? style.placement : null}
-        onColor={annotation.selectColor} onWidth={annotation.selectStrokeWidth} onDash={annotation.selectDash} onPlacement={annotation.selectPlacement}>
+        onColor={annotation.selectColor} onWidth={annotation.selectStrokeWidth} onPlacement={annotation.selectPlacement}>
+        <ToolbarButton label={t('annotate.undo')} shortcut={keys.undo} disabled={disabled || !annotation.canUndo} onClick={annotation.undo}>{icon(Undo2)}</ToolbarButton>
+        <ToolbarButton label={t('annotate.redo')} shortcut={keys.redo} disabled={disabled || !annotation.canRedo} onClick={annotation.redo}>{icon(Redo2)}</ToolbarButton>
         <ToolbarButton tooltip={false} label={t('annotate.clear')} disabled={disabled || !annotation.hasContent} onClick={() => { controls.used('annotate_clear'); annotation.clear(); }}>{icon(Trash2)}</ToolbarButton>
       </AnnotationStylePickers>
     </div>

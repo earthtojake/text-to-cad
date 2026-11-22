@@ -285,6 +285,8 @@ quiet button reads as a button and nothing more, and the one filled button is th
   between tiles, 10px corners, 16px icons; a phone's uses the same classes at 36px. **A sub-toolbar** is a row at the
   strip's proportions, 240px wide on a desktop (`SUB_TOOLBAR_WIDTH_CLASS`; a slider row is 20rem on a phone). Why:
   the column under the strip keeps its width from one tool to the next.
+- **Draw's sub-toolbar** is two rows of seven `ToolbarButton` tiles: the seven drawing tools (Pen, Highlighter, Line,
+  Arrow, Rectangle, Ellipse, Text), then the Eraser, Colour, Stroke width, Placement (the globe), Undo, Redo and Clear.
 
 ### Dropdowns
 
