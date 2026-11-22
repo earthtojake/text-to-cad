@@ -1063,7 +1063,7 @@ Every item of a part's families carries its part's `thickness_mm`: what its rule
 | `hole_to_bend` | `distance_tangent_mm`, `distance_centerline_mm` (+ BA/2), `distance_inside_mm`, `distance_outside_mm`, `distance_outside_minus_radius_mm`, `bend` | the nearest bend, but one the cutout ends (a window across both its tangent lines); a round hole's distances are exact |
 | `notches` | `width_mm` (mouth), `length_mm` (depth), `length_to_width` | pockets of the outline off its hull |
 | `tabs` | `width_mm`, `length_mm`, `length_to_width` | facing straight sides, a tip, an inside corner at both sides of the base (proud of the body on three sides: an L plate's leg is no tab) |
-| `webs` | `width_mm`, `said`, `cutouts` | the narrowest material within an outline (a neck, a bridge), and the bar between a cutout that is no round hole and the cutout nearest it: the bars of one width are one item, `cutouts` how many they lie between (a grille is one feature) |
+| `webs` | `width_mm`, `said`, `cutouts` | the narrowest material within an outline (a neck, a bridge), and the bar between a cutout that is no round hole and the cutout nearest it: the bars of one width are one item, `cutouts` how many they lie between (a grille is one feature); of places as narrow (within 1e-6 mm), `location` is the first along the outline, at a corner the lower-numbered face's |
 | `gaps` | `width_mm`, `between` | the narrowest void (notches, gaps between outlines; across a hole only where it necks in under the hole's own `size_mm`) |
 
 DXF adds `cut_file` (`insunits`, `unit` and `unit_from`: `$INSUNITS` or `--units`, `mm_per_unit`,

@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any, Callable
 
 import numpy as np
@@ -2238,8 +2239,9 @@ class _Analysis:
 
     # -- back onto the part -------------------------------------------------------------------------------
 
-    def locate(self, point: Any) -> tuple[str, list[float]]:
-        """The ref of the part's face nearest a point of the flat pattern, and the point on the part."""
+    def locate(self, point: Any, within: float = 0.0) -> tuple[str, list[float]]:
+        """The ref of the part's face nearest a point of the flat pattern, and the point on the part: at a corner,
+        as near (``within``) two regions or two faces, the first's."""
         import build123d as bd
 
         p = np.asarray(point, dtype=float).reshape(1, 2)
@@ -2247,7 +2249,7 @@ class _Analysis:
         for candidate in self.regions:
             inside = plane.inside(p, [candidate.loop])[0]
             d = 0.0 if inside else plane.segments_distance(p, p, candidate.loop.a, candidate.loop.b)[0]
-            if d < best:
+            if d < best - within:
                 best, region = d, candidate
         if region is None:
             return self.part.ref("face", 1), [float(p[0, 0]), float(p[0, 1]), 0.0]
@@ -2263,16 +2265,18 @@ class _Analysis:
         bound = np.linalg.norm(np.maximum(0.0, np.maximum(lo[faces - 1] - at, at - hi[faces - 1])), axis=1)
         # a point of the outline lies on a cut edge's face: the nearest of those within a thickness, else
         # the nearest face of all; faces whose boxes are farther than the best found are not measured
-        best: dict[bool, tuple[float, int]] = {}
+        measured: list[tuple[bool, float, int]] = []
+        least = math.inf
         for k in np.argsort(bound):
             a = int(faces[k])
-            if best and bound[k] > min(value[0] for value in best.values()) and bound[k] > reach:
+            if bound[k] > least + within and bound[k] > reach:
                 break
             d = self.faces[a - 1].distance_to(vector)
-            edge = a in self.edge_set and d <= reach
-            if edge not in best or d < best[edge][0]:
-                best[edge] = (d, a)
-        nearest = (best.get(True) or best[False])[1]
+            least = min(least, d)
+            measured.append((a in self.edge_set and d <= reach, d, a))
+        kept = [(d, a) for edge, d, a in measured if edge] or [(d, a) for _, d, a in measured]
+        closest, first = min(kept, key=lambda found: found[0])
+        nearest = min((a for d, a in kept if d < closest + within), default=first)
         return self.ref(nearest), _xyz(at)
 
 
@@ -2617,6 +2621,7 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
     they lie between (``cutouts``) -- one feature, where ``hole_spacing`` would say each pair of slots."""
     least = max(1e-3, 0.01 * (thickness or 0.1))
     notches, tabs, webs, gaps = [], [], [], []
+    web_at = partial(analysis.locate, within=plane.TIE_MM) if analysis is not None else locate
     outer = [loop for loop in loops if loop.label == "outer"]
     for loop in outer:
         for pocket in plane.pockets(loop, least=least):
@@ -2634,7 +2639,7 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
         if width.kind == "material":
             if a != b or loops[a].label != "outer":
                 continue  # between two contours: hole_to_edge and hole_spacing measure it
-            ref, xyz = locate(width.start)
+            ref, xyz = web_at(width.start)
             webs.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz, "said": "a neck of the outline",
                          "across": [_r(v) for v in (*width.start, *width.end)]})
         else:
@@ -2648,15 +2653,16 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
                          "between": "one contour" if a == b else "two contours"})
     cutouts = [loop for loop in loops if loop.label == "hole" and loop.circle is None]
     bars: dict[int, tuple[dict[str, Any], set[int]]] = {}
-    for k, found in enumerate(plane.nearest(cutouts)):
+    for k, found in enumerate(plane.nearest(cutouts, plane.TIE_MM)):
         if found is None:
             continue
-        if round(found[0] * 1000) not in bars:
-            _, start, end = plane.distance(cutouts[k], cutouts[found[1]])
-            ref, xyz = locate(start)
-            bars[round(found[0] * 1000)] = ({"width_mm": _r(found[0]), "location": ref, "xyz": xyz,
-                                             "across": [_r(float(v)) for v in (*start, *end)]}, set())
-        bar, between = bars[round(found[0] * 1000)]
+        size = round(round(found[0], 6) * 1000)  # to the micron, half of one rounding one way whatever the noise
+        if size not in bars:
+            _, start, end = plane.distance(cutouts[k], cutouts[found[1]], plane.TIE_MM)
+            ref, xyz = web_at(start)
+            bars[size] = ({"width_mm": _r(found[0]), "location": ref, "xyz": xyz,
+                           "across": [_r(float(v)) for v in (*start, *end)]}, set())
+        bar, between = bars[size]
         between.update((k, found[1]))
         bar.update(cutouts=len(between), said=f"between {len(between)} cutouts")
     webs.extend(bar for bar, _ in bars.values())

@@ -19,6 +19,7 @@ import unittest
 from pathlib import Path
 
 import build123d as bd
+import numpy as np
 
 from cad._internal import manufacturing
 from cad._internal import sheet_plane as plane
@@ -489,6 +490,104 @@ class OutlineTest(unittest.TestCase):
         long, short, _ = plane.min_rectangle(points)
         self.assertAlmostEqual(long, top + 37.0, places=9)
         self.assertAlmostEqual(short, 50.0, places=9)
+
+
+class EqualWebsTest(unittest.TestCase):
+    # Equal lengths come out some 1e-14 mm apart, another way in each process that builds the part. Here
+    # each is off by a known amount, far under plane.TIE_MM, one way and then the other: one answer.
+    E = 1e-9
+
+    def webs(self, part: bd.Shape) -> list[tuple]:
+        part.label = "part"
+        return [(item["location"], tuple(round(v, 3) + 0.0 for v in (*item["xyz"], *item["across"])))
+                for item in items(measured(part), "webs")]
+
+    def test_of_necks_as_narrow_the_first_is_named(self) -> None:
+        def plate(e: float) -> bd.Part:
+            part = bd.Box(90, 50, 2)
+            for x, off in ((-20, e), (20, -e)):  # two necks 20 wide, one a hair narrower
+                for y in (-25, 25):
+                    part -= bd.Pos(x, y + (off if y < 0 else -off), 0) * bd.Box(10, 30, 4)
+            return part
+
+        def bracket(e: float) -> bd.Part:
+            part = bent([("line", 50), ("bend", 90, 2.0), ("line", 30)], 2.0, 50)
+            for y, off in ((0, e), (50, -e)):  # notched ends: a neck beside each, one a hair narrower
+                part -= bd.Pos(12 + off, y, 1) * bd.Box(8, 12, 8)
+            return part
+
+        for name, build in (("plate", plate), ("bracket", bracket)):
+            with self.subTest(name):
+                self.assertEqual(self.webs(build(self.E)), self.webs(build(-self.E)))
+
+    def test_of_bars_as_wide_the_first_is_named(self) -> None:
+        def grid(e: float) -> bd.Part:
+            part = bd.Box(90, 80, 2)
+            for x in (-10, 10):
+                for y in (-10, 10):  # each window has two neighbours as near
+                    off = e if x * y > 0 else -e
+                    part -= bd.Pos(x + off, y - off, 0) * bd.Box(12, 12, 4)
+            return part
+
+        self.assertEqual(self.webs(grid(self.E)), self.webs(grid(-self.E)))
+
+    def flat_of(self, plate: bd.Shape) -> sheet._Analysis:
+        plate.label = "plate"
+        analysis = sheet._Analysis(brep.parts_of(plate).parts[0], OPTIONS)
+        analysis.probe()
+        analysis.classify()
+        analysis.find_bends()
+        analysis.unfold()
+        return analysis
+
+    def test_a_corner_is_one_faces(self) -> None:
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+
+        analysis = self.flat_of(bd.Box(60, 40, 2) - bd.Box(12, 12, 4))
+        (window,) = [loop for loop in analysis.flat_loops if loop.label == "hole"]
+        for number, corner in enumerate(window.points):  # a bar's end: as near either of two walls
+            with self.subTest(number):
+                refs = {analysis.locate(corner + self.E * (other - corner) / 12.0, plane.TIE_MM)[0]
+                        for other in (window.points[number - 1], window.points[(number + 1) % 4])}
+                self.assertEqual(len(refs), 1, refs)
+        # where a skin in two faces has its seam, each with a cut edge of its own
+        left, right = (bd.Pos(x, 0, 0) * bd.Box(30, 40, 2) for x in (-15, 15))
+        fused = BRepAlgoAPI_Fuse(left.solids()[0].wrapped, right.solids()[0].wrapped)  # (joined, no face merged)
+        halves = self.flat_of(bd.Compound(fused.Shape()).solids()[0])
+        first, second = (region.loop.points for region in halves.regions[:2])
+        seam = next(p for p in first if (np.linalg.norm(second - p, axis=1) < 1e-6).any())
+        along = (second.mean(axis=0) - first.mean(axis=0)) / 30.0
+        self.assertEqual(halves.locate(seam + self.E * along, plane.TIE_MM)[0],
+                         halves.locate(seam - self.E * along, plane.TIE_MM)[0])
+
+    def test_rounding_moves_no_station_and_splits_no_width(self) -> None:
+        def outline(*points: tuple[float, float], label: str) -> plane.Loop:
+            return plane.Loop(points, [True] * len(points), label=label)
+
+        def webs(loops: list[plane.Loop]) -> list[tuple]:
+            found = sheet._outline_features(None, loops, 2.0, lambda point: ("", [float(v) for v in point]))["webs"]
+            return [(item["width_mm"], [round(v, 3) + 0.0 for v in item["across"]], item.get("cutouts"))
+                    for item in found]
+
+        def strip(e: float) -> list[plane.Loop]:  # its sides a whole number of stations long, but for rounding
+            return [outline((0, 0), (6 + e, 0), (6 + e, 4), (0, 4), label="outer")]
+
+        def pairs(e: float) -> list[plane.Loop]:  # two bars 2.0125 wide: half a micron past a whole one
+            return [outline((x, 0), (x + 4, 0), (x + 4, 9), (x, 9), label="hole")
+                    for x in (0, 6.0125 + e, 20, 26.0125 - e)]
+
+        def strips(e: float) -> list[plane.Loop]:  # two outlines with necks as narrow
+            return [outline((x, 0), (x + 9, 0), (x + 9, width), (x, width), label="outer")
+                    for x, width in ((0, 4 + e), (20, 4 - e))]
+
+        def leaning(e: float) -> list[plane.Loop]:  # a bar as narrow at either end, but for rounding
+            return [outline((0, 0), (4, 0), (4, 9), (0, 9), label="hole"),
+                    outline((6 + e, 0), (10, 0), (10, 9), (6 - e, 9), label="hole")]
+
+        for name, loops in (("station", strip), ("width", pairs), ("order", strips), ("bar's end", leaning)):
+            with self.subTest(name):
+                self.assertEqual(webs(loops(self.E)), webs(loops(-self.E)))
+        self.assertEqual([cutouts for *_, cutouts in webs(pairs(self.E))], [4])
 
 
 class TypeSideTest(unittest.TestCase):
