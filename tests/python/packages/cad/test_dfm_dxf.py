@@ -17,6 +17,7 @@ from pathlib import Path
 import ezdxf
 
 from cad import dxf
+from cad.build123d import _dfm_dxf
 
 # what every clean cut file says: whose the rules are, and what a flat drawing holds none of (its bends, reliefs,
 # hems and thickness: the bent part's check judges them)
@@ -257,6 +258,72 @@ class CutFileTest(unittest.TestCase):
         self.assertAlmostEqual(near["distance_centerline_mm"], 1.5, places=6)
         # CUT and ETCH_CUT both hold cut geometry: a fact (a shop's own file rules read it), no general rule
         self.assertEqual(result.measurements["cut_file"]["cut_layer_count"], 2)
+
+    def test_rounding_picks_no_holes_neighbour_and_no_corners_entity(self) -> None:
+        def named(foot: float, floor: float, e: float) -> tuple[list[str], list[tuple]]:
+            def build(msp, _):
+                corners = [(0, foot), (30, foot), (30, floor), (40, floor), (40, foot), (120, foot), (120, 100), (0, 100)]
+                for start, end in zip(corners, corners[1:] + corners[:1]):
+                    msp.add_line(start, end)
+                for x in (70, 90):
+                    for y in (50, 70):  # each hole has two neighbours as near
+                        off = e if (x == 70) == (y == 50) else -e
+                        msp.add_circle((x + off, y - off), 4)
+            measures = self.check(self.write("ties", build), thickness=2.0).measurements
+            return ([item["location"] for item in measures["notches"]["items"]],
+                    [(item["location"], item["other"]) for item in measures["hole_spacing"]["items"]])
+
+        whole = named(2.0, 15.0, 1e-9)
+        self.assertEqual(len(whole[1]), 4)
+        self.assertEqual(named(2.0, 15.0, -1e-9), whole)
+        # a wall whose end, projected onto it, rounds 2e-15 off itself: the corner is still the wall's
+        self.assertEqual(named(2.3, 15.1, 1e-9), whole)
+
+    def test_a_tie_loses_no_spacing_and_widens_none(self) -> None:
+        def row(msp, _):
+            msp.add_lwpolyline([(-30, -30), (80, -30), (80, 30), (-30, 30)], close=True)
+            apart = [3.99995 + 3e-7, 3.99995 - 3e-7, 3.99995 + 3e-7]
+            x = [0.0, 6 + apart[0], 12 + apart[0] + apart[1], 18 + sum(apart)]
+            for k in (0, 3, 1, 2):  # the two ends first: the least is between two that others found first
+                msp.add_circle((x[k], 0), 3)
+
+        def mixed(msp, _):
+            msp.add_lwpolyline([(-30, -30), (30, -30), (30, 30), (-30, 30)], close=True)
+            msp.add_ellipse((0, 9), major_axis=(0, 3), ratio=0.8)  # as near the square as the round below it
+            msp.add_circle((0, -9), 3)
+            msp.add_circle((0, -17), 3)
+            msp.add_lwpolyline([(-3, -3), (3, -3), (3, 3), (-3, 3)], close=True)
+
+        def star(msp, _):
+            msp.add_lwpolyline([(-30, -30), (30, -30), (30, 30), (-30, 30)], close=True)
+            for x, y in ((0, 0), (9, 0), (0, 9), (-9, 0), (0, -9)):  # four holes as near one, drawn first
+                msp.add_circle((x, y), 3)
+
+        def square(msp, _):
+            msp.add_lwpolyline([(-30, -30), (30, -30), (30, 30), (-30, 30)], close=True)
+            for x, y in ((0, 0), (9, 0), (0, 9), (9, 9)):  # four pairs: a finding for each hole
+                msp.add_circle((x, y), 3)
+
+        for name, build, spacing, failing in (("row", row, [3.9999, 4.0, 4.0], 1), ("mixed", mixed, [2.0, 3.0], 2),
+                                              ("star", star, [3.0] * 4, 4), ("square", square, [3.0] * 4, 4)):
+            with self.subTest(name):
+                result = self.check(self.write(name, build), thickness=2.0)
+                self.assertEqual([item["distance_mm"] for item in result.measurements["hole_spacing"]["items"]], spacing)
+                self.assertEqual(sum(1 for f in result.findings if f.code == "sheet.hole_spacing"), failing)
+
+    def test_the_pairs_under_a_limit_are_at_as_many_holes_as_they_can_be(self) -> None:
+        # two under a limit and three at it, which would take every hole first, as found
+        pairs = [(3.9999, 0, 1), (4.0, 1, 2), (4.0, 2, 3), (4.0, 3, 0), (3.9999, 0, 2)]
+        self.assertEqual(len({at for d, at, _ in _dfm_dxf._apart(pairs) if d < 4.0}), 2)
+
+    def test_the_cap_holds_as_many_holes_as_it_can(self) -> None:
+        def build(msp, _):
+            _plate(msp, 150.0, 150.0)
+            for k in range(289):  # 544 pairs as near, among 289 holes drawn out of their order: 300 listed
+                at = 101 * k % 289
+                msp.add_circle((10 + 8 * (at % 17), 10 + 8 * (at // 17)), 3)
+        spacing = self.check(self.write("capped", build), thickness=2.0).measurements["hole_spacing"]
+        self.assertEqual((spacing["count"], len({item["location"] for item in spacing["items"]})), (544, 289))
 
     def test_an_unfolded_part_written_by_build123d_is_a_clean_cut_file(self) -> None:
         import build123d as bd

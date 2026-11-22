@@ -2582,15 +2582,21 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
                 "inside_radius_mm": _r(bend.inside_radius), "bend_angle_deg": _r(bend.angle),
                 "location": item["location"], "xyz": item["xyz"]})
     pairs: dict[tuple[int, int], dict] = {}
-    for i, nearest in enumerate(plane.nearest([hole.loop for hole in analysis.holes])):
-        if nearest is not None:
-            key = (min(i, nearest[1]), max(i, nearest[1]))
-            if holes[key[0]]["kind"] != "round" and holes[key[1]]["kind"] != "round":
-                continue  # the bar between two cutouts is a web (``_outline_features``), not two holes' spacing
-            pairs.setdefault(key, {"distance_mm": _r(nearest[0]), "location": holes[key[0]]["location"],
-                                   "other": holes[key[1]]["location"], "xyz": holes[key[0]]["xyz"]})
-    spacing = sorted(pairs.values(), key=lambda item: item["distance_mm"])
-    return holes, spacing, to_bend
+    for d, i, j in plane.nearest_pairs([hole.loop for hole in analysis.holes], plane.TIE_MM):
+        key = (min(i, j), max(i, j))
+        if holes[key[0]]["kind"] != "round" and holes[key[1]]["kind"] != "round":
+            continue  # the bar between two cutouts is a web (``_outline_features``), not two holes' spacing
+        pairs[key] = {"distance_mm": _r(d), "location": holes[key[0]]["location"],
+                      "other": holes[key[1]]["location"], "xyz": holes[key[0]]["xyz"]}
+    return holes, _one_a_place_first(list(pairs.values())), to_bend
+
+
+def _one_a_place_first(items: list[dict]) -> list[dict]:
+    """``hole_spacing``'s items nearest first, and of those as near one at each place before a second at any: a
+    finding is a place's, and the list is cut at ``ITEM_CAP`` where holes as near have several pairs each."""
+    items = sorted(items, key=lambda item: item["distance_mm"])
+    first = {item["location"]: item for item in reversed(items)}
+    return sorted(items, key=lambda item: (item["distance_mm"], first[item["location"]] is not item))
 
 
 def _span_within(points: np.ndarray, lo: float, hi: float) -> tuple[float, float] | None:
@@ -2621,11 +2627,11 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
     they lie between (``cutouts``) -- one feature, where ``hole_spacing`` would say each pair of slots."""
     least = max(1e-3, 0.01 * (thickness or 0.1))
     notches, tabs, webs, gaps = [], [], [], []
-    web_at = partial(analysis.locate, within=plane.TIE_MM) if analysis is not None else locate
+    first_at = partial(analysis.locate, within=plane.TIE_MM) if analysis is not None else locate
     outer = [loop for loop in loops if loop.label == "outer"]
     for loop in outer:
         for pocket in plane.pockets(loop, least=least):
-            ref, xyz = locate(pocket.deepest)
+            ref, xyz = first_at(pocket.deepest)
             notches.append({"width_mm": _r(pocket.width), "length_mm": _r(pocket.depth),
                             "length_to_width": _r(pocket.depth / pocket.width), "area_mm2": _r(pocket.area, 3),
                             "location": ref, "xyz": xyz})
@@ -2639,7 +2645,7 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
         if width.kind == "material":
             if a != b or loops[a].label != "outer":
                 continue  # between two contours: hole_to_edge and hole_spacing measure it
-            ref, xyz = web_at(width.start)
+            ref, xyz = first_at(width.start)
             webs.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz, "said": "a neck of the outline",
                          "across": [_r(v) for v in (*width.start, *width.end)]})
         else:
@@ -2662,7 +2668,7 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
         least_width = min(width_mm for _, width_mm, _ in alike)
         k, _, others = next(bar for bar in alike if bar[1] <= least_width + plane.TIE_MM)
         _, start, end = plane.distance(cutouts[k], cutouts[others[0]], plane.TIE_MM)
-        ref, xyz = web_at(start)
+        ref, xyz = first_at(start)
         between = {cutout for first, _, across in alike for cutout in (first, *across)}
         webs.append({"width_mm": _r(least_width), "location": ref, "xyz": xyz,
                      "across": [_r(float(v)) for v in (*start, *end)],
