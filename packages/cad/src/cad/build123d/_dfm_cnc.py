@@ -213,10 +213,12 @@ SHANK_TRIES = 12
 class _Solid(brep.Part):
     """One solid of a part that holds several: a part of its own to machine (its own stock, frame, setups and
     access: another solid of the part is no obstacle to its tools), its refs the whole part's (``face_refs``,
-    ``edge_refs``: its ordinals to the part's)."""
+    ``edge_refs``: its ordinals to the part's), and which of how many it is (``solid``): with the part's key, matrix
+    and shift, how it stands."""
 
     face_refs: tuple[int, ...] = ()
     edge_refs: tuple[int, ...] = ()
+    solid: tuple[int, int] | tuple[()] = ()
 
     def ref(self, kind: str, ordinal: int) -> str:
         table = self.face_refs if kind == "face" else self.edge_refs if kind == "edge" else ()
@@ -232,7 +234,8 @@ def _solids(part: brep.Part) -> list[brep.Part]:
     found: list[brep.Part] = []
     for number, solid in enumerate(solids, start=1):
         own = _Solid(name=f"{part.name} (solid {number} of {len(solids)})", owner=part.owner, shape=solid,
-                     occurrences=part.occurrences, paths=part.paths, material=part.material)
+                     occurrences=part.occurrences, paths=part.paths, material=part.material, key=part.key,
+                     matrix=part.matrix, mesh=part.mesh, shift=part.shift, solid=(number, len(solids)))
         own.face_refs = tuple(part.face_ordinal(face) for face in own.faces())
         own.edge_refs = tuple(part.edge_ordinal(edge) for edge in own.edges())
         found.append(own)
@@ -240,10 +243,12 @@ def _solids(part: brep.Part) -> list[brep.Part]:
 
 
 def measure(document: brep.Document, options: dict[str, Any], candidates: bool, *,
-            recognise: bool = True) -> dict[str, Any]:
+            recognise: bool = True, kept: Any = None) -> dict[str, Any]:
     """The cnc report of ``document``: facts alone, every family's ``items`` at a ref. ``recognise`` False asks no
     recogniser: every hole is the detector's own (``recognised_by`` ``cad``) and the ``holes`` family says no
-    ``recognition`` -- the check as it measures where quiddity is not available, to compare the two by."""
+    ``recognition`` -- the check as it measures where quiddity is not available, to compare the two by.
+    ``kept``: the parts' kept results (``cad._internal.dfm.parts.Kept``; None: none), where a part's features
+    are found and kept (``_dfm_cnc_recognised.asked``)."""
     if not document.parts:
         raise Unmeasured("document_empty", "the document has no part to measure")
     # every occurrence is a part to make, counted and located once each (``brep.every_occurrence``): the
@@ -278,7 +283,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool, 
     # quiddity's features of every part that is measured itself, asked once for them all (one recogniser's
     # process a check); per model, what read its holes (a copy's is its first's), and the parts' own
     plan = _measured_themselves(parts, copies) if recognise else []
-    features = dict(zip(plan, recognised.asked(parts[index] for index in plan)))
+    features = dict(zip(plan, recognised.asked((parts[index] for index in plan), kept)))
     notes: list[dict[str, Any] | None] = []
     noted: list[dict[str, Any] | None] = []
     for index, part in enumerate(parts):
@@ -348,7 +353,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool, 
         totals = _shares(scalars)
         lost[len(models) - 1] = {}
         if recognise and index not in features:  # measured after all (the first of its geometry did not read)
-            features[index] = recognised.asked([part])[0]
+            features[index] = recognised.asked([part], kept)[0]
         notes.append(_measure_part(model, len(models) - 1, axes, turning, tools, stock, families, scalars, failed,
                                    lost[len(models) - 1], features.get(index), rotation))
         noted.append(notes[-1])

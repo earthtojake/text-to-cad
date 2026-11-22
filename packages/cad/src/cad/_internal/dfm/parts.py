@@ -55,7 +55,7 @@ FOLDER = "parts"
 SHEET, CNC, FEATURES = "dfm-sheet", "dfm-cnc", "features"
 KINDS = (SHEET, CNC, FEATURES)
 #: The processes whose parts are kept, by the kind each is kept as.
-PROCESSES = {"sheet": SHEET, "cnc": CNC}
+PROCESSES = {"cnc": CNC}
 #: The format of an entry's file: another is a file that does not read.
 FORMAT = 1
 

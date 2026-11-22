@@ -90,5 +90,88 @@ class KeptTest(unittest.TestCase):
             self.assertIsNone(Kept.of("cnc"), "code edited since its process loaded it is no other process's")
 
 
+
+def _document(folder: Path, parts: list) -> object:
+    """``parts`` (build123d shapes, each labelled) as one STEP's document, read as a check reads it."""
+    import build123d as bd
+
+    from cad.build123d import _dfm_brep as brep
+
+    path = folder / f"kit{len(list(folder.glob('*.step')))}.step"
+    bd.export_step(bd.Compound(children=parts, label="kit"), str(path))
+    return brep.read("step", path)
+
+
+def _labelled(shape: object, label: str) -> object:
+    shape.label = label
+    return shape
+
+
+class FeaturesKeptTest(unittest.TestCase):
+    """The recogniser's answer for a part is kept by the part's geometry and how it stands, when the part would
+    answer so again: asked once for each, and asked again where the answer was the moment's."""
+
+    def setUp(self) -> None:
+        from cad._internal.dfm.parts import Kept
+
+        self.root = Path(tempfile.mkdtemp(prefix="dfm-parts-"))
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.kept = Kept(self.root / "parts", "c0de")
+        self.asked: list[list[str]] = []
+        self.reason: str | None = None
+
+    def features_of(self, parts: list, **_given: object) -> list:
+        from cad.build123d import _dfm_cnc_recognised as recognised
+        from cad.quiddity._features import unavailable
+
+        self.asked.append([part.owner for part in parts])
+        if self.reason is not None:
+            return [unavailable(self.reason, "why, in a line") for _part in parts]
+        return [{"available": True, "quiddity": recognised.QUIDDITY, "records": [], "holes": [],
+                 "faces": len(part.faces())} for part in parts]
+
+    def ask(self, document: object) -> list:
+        from cad import quiddity
+        from cad.build123d import _dfm_brep as brep
+        from cad.build123d import _dfm_cnc_recognised as recognised
+
+        with mock.patch.object(quiddity, "features_of", self.features_of):
+            return recognised.asked(brep.every_occurrence(document).parts, self.kept)  # as the CNC check asks
+
+    def test_a_part_is_asked_once_for_each_way_it_stands(self) -> None:
+        import build123d as bd
+
+        block = bd.Box(20, 10, 5) - bd.Cylinder(2, 5)
+        first = self.ask(_document(self.root, [_labelled(bd.Pos(0, 0, 0) * block, "a"),
+                                               _labelled(bd.Pos(40, 0, 0) * bd.Box(8, 8, 8), "b")]))
+        self.assertEqual(self.asked, [["a", "b"]])
+        self.assertEqual([found["faces"] for found in first], [7, 6])
+        again = self.ask(_document(self.root, [_labelled(bd.Pos(0, 0, 0) * block, "renamed"),
+                                               _labelled(bd.Pos(40, 0, 0) * bd.Box(8, 8, 8), "b"),
+                                               _labelled(bd.Pos(0, 30, 0) * block, "moved")]))
+        self.assertEqual(self.asked[1:], [["kit/moved"]], "features are the geometry's where it stands, whatever "
+                                                          "its name: only the one placed otherwise is asked")
+        self.assertEqual([again[0], again[2]], first, "the kept answers")
+        self.assertEqual(self.kept.counts["features"], {"reused": 2, "measured": 3, "kept": 3})
+
+    def test_an_answer_of_the_moment_is_asked_again_and_one_of_the_part_s_own_is_not(self) -> None:
+        import build123d as bd
+
+        document = _document(self.root, [_labelled(bd.Box(20, 10, 5), "a")])
+        for reason, kept in (("timed_out", False), ("not_installed", False), ("over_memory", False),
+                             ("too_many_faces", True)):
+            with self.subTest(reason=reason):
+                self.asked.clear()
+                self.reason = reason
+                said = self.ask(document)
+                self.assertEqual((said[0]["reason"], self.asked), (reason, [["a"]]))
+                self.reason = None
+                self.ask(document)
+                self.assertEqual(len(self.asked), 1 if kept else 2)
+                if not kept:
+                    self.assertEqual(self.ask(document)[0]["available"], True, "the second answer, kept")
+                    shutil.rmtree(self.root / "parts")
+
+
 if __name__ == "__main__":
     unittest.main()

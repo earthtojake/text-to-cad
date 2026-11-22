@@ -194,9 +194,10 @@ def _scale(document: _dfm_brep.Document, document_type: str, report: dict[str, A
 
 
 def _measured(document: _dfm_brep.Document, document_type: str, process: str, options: dict[str, Any],
-              candidates: bool) -> dict[str, Any]:
+              candidates: bool, parts: Any = None) -> dict[str, Any]:
     """The report of ``document`` for ``process``, measured with the options its measurement reads alone
-    (``kept.Measuring``): a read of any other fails it (``RuntimeError``), even one a family caught."""
+    (``kept.Measuring``): a read of any other fails it (``RuntimeError``), even one a family caught. ``parts``:
+    the parts' kept results its process's module reads and keeps (``cad._internal.dfm.parts.Kept``), or None."""
     from cad._internal.dfm import Unmeasured, kept
 
     if not document.parts:
@@ -205,7 +206,7 @@ def _measured(document: _dfm_brep.Document, document_type: str, process: str, op
     doubt = _integrity(document, process)
     module = importlib.import_module(f"cad.build123d._dfm_{process}")
     measuring = kept.Measuring(process, options)
-    report = module.measure(document, measuring, candidates)
+    report = module.measure(document, measuring, candidates, **({"kept": parts} if parts is not None else {}))
     if measuring.undeclared:
         raise RuntimeError(f"the {process} measurement read {', '.join(sorted(measuring.undeclared))}, which "
                            f"cad._internal.dfm.{process}.MEASURES does not declare: declare it, or leave it to the "
@@ -262,13 +263,16 @@ def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]
     "resolved", "report"}, "content_key"}``, the report with the key of the content record of the very parts
     it was measured of (``_dfm_brep.content``), so whoever keeps the report keeps it under what was measured,
     whatever it took the document to hold -- and ``"transient": True`` beside them for a report not to be kept
-    at all (``_transient``); or ``{"unmeasured": {"code", "message"}}``. ``read``: what a reading failure is
+    at all (``_transient``); or ``{"unmeasured": {"code", "message"}}``. Each part's result is read from, and
+    kept in, the parts' store of this process's cache folder (``cad._internal.dfm.parts.Kept.of``), for the
+    processes that keep them. ``read``: what a reading failure is
     said as, ``failed to read ...``.
 
     A check given no process is not asked of it: whoever asks reads the process the parts declare from the
     document's record (``described``, ``kept.asked``) and names it here. Its measurements equal ``measure``'s
     and ``measure_declared``'s of the same document read from a file."""
     from cad._internal.dfm import Unmeasured
+    from cad._internal.dfm.parts import Kept
 
     document_type, process = check["type"], check.get("process")
     if process is None:
@@ -284,7 +288,7 @@ def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]
             raise Unmeasured("document_unreadable", f"failed to read {read or 'the document'}: {error}") from None
         key = _dfm_brep.content(document)["key"]
         resolved = dict(check["resolved"])
-        report = _measured(document, document_type, process, resolved, candidates)
+        report = _measured(document, document_type, process, resolved, candidates, Kept.of(process))
     except Unmeasured as failure:
         return {"unmeasured": {"code": failure.code, "message": failure.message}}
     return {"measured": {"process": process, "resolved": resolved, "report": report}, "content_key": key,

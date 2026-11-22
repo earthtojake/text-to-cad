@@ -79,6 +79,7 @@ class Part:
     key: str = ""                    # its prototype's geometry key (``Prototype.key``); "" for a live shape's part
     matrix: tuple[float, ...] = ()   # the column-major 4x4 its first occurrence is placed by; () for a live shape's
     mesh: str = ""                   # the token of the triangulation it was read with (``_meshed``); "" for none
+    shift: tuple[float, ...] = ()    # an occurrence's shift from the part's first (``every_occurrence``); () for it
     _faces: list[Any] | None = field(default=None, repr=False)
     _edges: list[Any] | None = field(default=None, repr=False)
     _face_map: Any = field(default=None, repr=False)
@@ -383,7 +384,7 @@ def every_occurrence(document: Document) -> Document:
     (which is its ref's owner): for a process whose measures depend on where the parts stand among each other
     and on the plate -- a print's clearances, its support, its bed, its build volume -- which the occurrences
     turned alike do not share. The first occurrence is the part itself; each other its shape moved, sharing
-    its geometry."""
+    its geometry, its key and its matrix, and saying how far it is moved (``shift``): with them, how it stands."""
     import dataclasses
 
     import build123d as bd
@@ -403,7 +404,8 @@ def every_occurrence(document: Document) -> Document:
             trsf.SetTranslation(gp_Vec(*(float(value) for value in shift)))
             moved = bd.Shape.cast(part.shape.wrapped.Moved(TopLoc_Location(trsf)))
             parts.append(Part(name=part.name, owner=path, shape=moved, paths=(path,),
-                              face_names=dict(part.face_names), material=part.material))
+                              face_names=dict(part.face_names), material=part.material, key=part.key,
+                              matrix=part.matrix, mesh=part.mesh, shift=tuple(float(value) for value in shift)))
     return Document(name=document.name, parts=parts, source=document.source, empty=list(document.empty))
 
 
@@ -417,6 +419,7 @@ NOT_CONTENT: dict[str, str] = {
     "_faces": "made of the shape when first asked", "_edges": "made of the shape when first asked",
     "_face_map": "made of the shape when first asked", "_edge_map": "made of the shape when first asked",
     "_edge_context": "made of the shape when first asked",
+    "shift": "an occurrence's own, made of the part's placements (``every_occurrence``), which the record holds",
     "source": "the path it was read from: no measurement reads it",
 }
 

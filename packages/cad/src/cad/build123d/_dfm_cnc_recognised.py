@@ -89,25 +89,55 @@ NEAR_MM = 1e-3
 FLOOR_DIAMETERS = 1.0
 
 
-def asked(parts: Iterable[brep.Part]) -> list[dict[str, Any]]:
+def asked(parts: Iterable[brep.Part], kept: Any = None) -> list[dict[str, Any]]:
     """quiddity's features of each of ``parts`` (``cad.quiddity.features_of``: one recogniser's process for them
     all), in order: a result that says ``available``, or why the part has none (its ``reason``; ``other_release``
     for anything another release than ``QUIDDITY`` answered). Nothing raises: a call that does is every part's
-    ``unanswered``."""
+    ``unanswered``. ``kept``: the parts' kept results (``cad._internal.dfm.parts.Kept``; None: none), where a
+    part's features are found by how it stands (``_kept``), and a part's answer is kept where it is repeatable --
+    available, or for a reason of the part's own (``REPEATABLE``) -- so a part is asked once for each way it
+    stands; any other answer is asked again the next time."""
+    from cad._internal.dfm.parts import FEATURES
+
     parts = list(parts)
-    if not parts:
-        return []
+    found: list[dict[str, Any] | None] = [None] * len(parts)
+    keys = [_kept(part) if kept is not None else None for part in parts]
+    for index, key in enumerate(keys):
+        if key is not None:
+            found[index] = kept.get(FEATURES, *key)
+    asking = [index for index, result in enumerate(found) if result is None]
+    if not asking:
+        return found  # type: ignore[return-value]
     try:
         import cad.quiddity
 
-        found = cad.quiddity.features_of(parts)
-        if len(found) != len(parts):
-            raise ValueError(f"{len(found)} answers for {len(parts)} parts")
+        answers = cad.quiddity.features_of([parts[index] for index in asking])
+        if len(answers) != len(asking):
+            raise ValueError(f"{len(answers)} answers for {len(asking)} parts")
     except Exception as error:  # noqa: BLE001 -- a recogniser that cannot be asked costs no check its holes
         said = {"available": False, "quiddity": None, "reason": "unanswered",
                 "detail": " ".join(f"quiddity could not be asked: {type(error).__name__}: {error}".split())}
-        return [dict(said) for _ in parts]
-    return [_of_release(result) for result in found]
+        answers = [dict(said) for _ in asking]
+    for index, answer in zip(asking, answers):
+        result = _of_release(answer)
+        if keys[index] is not None and (result.get("available") or result.get("reason") in REPEATABLE):
+            kept.keep(FEATURES, *keys[index], result)
+            result = kept.settled(result)
+        found[index] = result
+    return found  # type: ignore[return-value]
+
+
+def _kept(part: brep.Part) -> tuple[str, dict[str, Any]] | None:
+    """What a part's features are kept by (``cad._internal.dfm.parts``): its geometry and how it stands -- and the
+    recogniser's result's own version, the schema it reads and the release whose records are taken; None for a
+    part no document gave."""
+    from cad._internal.dfm.parts import standing
+    from cad.quiddity._features import FACES, SCHEMA, VERSION
+
+    stands = standing(part)
+    if stands is None:
+        return None
+    return part.key, {"standing": stands, "version": VERSION, "schema": SCHEMA, "quiddity": QUIDDITY, "faces": FACES}
 
 
 def _of_release(result: dict[str, Any]) -> dict[str, Any]:
