@@ -108,6 +108,40 @@ def rounded(steps: list[tuple], t: float, width: float, sides: int) -> bd.Part:
     return bd.Pos(t / 2, t / 2, 0) * bent(inner, t, width - t) + tube(path, t)
 
 
+def layered(part: bd.Shape, *tools: bd.Shape) -> bd.Solid:
+    """``part`` cut along each of ``tools`` (by the kernel's splitter) and joined again as the kernel
+    joins it: the same solid, no face merged."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse, BRepAlgoAPI_Splitter
+    from OCP.collections import List_TopoDS_Shape
+
+    parts, cutters = List_TopoDS_Shape(), List_TopoDS_Shape()
+    parts.Append(part.solids()[0].wrapped)
+    for tool in tools:
+        cutters.Append(tool.wrapped)
+    op = BRepAlgoAPI_Splitter()
+    op.SetArguments(parts)
+    op.SetTools(cutters)
+    op.Build()
+    joined, *rest = bd.Compound(op.Shape()).solids()
+    while rest:  # the next piece that touches what is joined so far
+        for piece in rest:
+            fuse = BRepAlgoAPI_Fuse(joined.wrapped, piece.wrapped)
+            fuse.Build()
+            solids = bd.Compound(fuse.Shape()).solids()
+            if len(solids) == 1:
+                joined = solids[0]
+                rest.remove(piece)
+                break
+        else:
+            raise AssertionError("the pieces do not join")
+    return joined
+
+
+def level(z: float) -> bd.Face:
+    """A face across Z at ``z``, wider than any part here."""
+    return bd.Face.make_rect(400, 400, bd.Plane.XY.offset(z))
+
+
 def _wall(t: float, r: float, length: float, height: float) -> bd.Part:
     """A bend and a wall rising from a plate's edge at x = 0 (plate below z = t), ``length`` along y."""
     centre = t + r
@@ -1253,37 +1287,6 @@ class ModellingMistakeTest(unittest.TestCase):
         # hole's rim with it (the hole filled, sheet.flat_incomplete). Round a bend's end the piece beside the
         # cut does not touch the bend's cylinder, so it was no break (sheet.uniform_thickness), and neither was
         # a corner of an outline rounded whole, nor a full round run on round a bend
-        from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse, BRepAlgoAPI_Splitter
-        from OCP.collections import List_TopoDS_Shape
-
-        def layered(part: bd.Shape, *tools: bd.Shape) -> bd.Solid:
-            """``part`` cut along each of ``tools`` (by the kernel's splitter) and joined again as the kernel
-            joins it: the same solid, no face merged."""
-            parts, cutters = List_TopoDS_Shape(), List_TopoDS_Shape()
-            parts.Append(part.solids()[0].wrapped)
-            for tool in tools:
-                cutters.Append(tool.wrapped)
-            op = BRepAlgoAPI_Splitter()
-            op.SetArguments(parts)
-            op.SetTools(cutters)
-            op.Build()
-            joined, *rest = bd.Compound(op.Shape()).solids()
-            while rest:  # the next piece that touches what is joined so far
-                for piece in rest:
-                    fuse = BRepAlgoAPI_Fuse(joined.wrapped, piece.wrapped)
-                    fuse.Build()
-                    solids = bd.Compound(fuse.Shape()).solids()
-                    if len(solids) == 1:
-                        joined = solids[0]
-                        rest.remove(piece)
-                        break
-                else:
-                    raise AssertionError("the pieces do not join")
-            return joined
-
-        def level(z: float) -> bd.Face:
-            return bd.Face.make_rect(400, 400, bd.Plane.XY.offset(z))
-
         def within(steps: list[tuple], t: float, depth: float, width: float) -> bd.Shell:
             """The surface ``depth`` into ``bent(steps, t, width)`` from the face its path runs on, run on past
             the part's ends and sides."""
@@ -1362,6 +1365,64 @@ class ModellingMistakeTest(unittest.TestCase):
         for depth in (1.04, 1.6):
             with self.subTest(bracket="sides rounded whole", cut_at=depth):
                 agrees(layered(whole, within(steps, 2.0, depth, 50.0)), whole, k_factor=0.4)
+
+    def test_a_break_in_many_pieces_is_one_break(self) -> None:
+        # a break was followed three faces in from its skin, so the fourth piece of one cut three times over was
+        # off the thickness (sheet.uniform_thickness), and sheet.edge_break counted the pieces (26 for 13)
+        def broken(result):
+            return next(f for f in result.findings if f.code == "sheet.edge_break")
+
+        def reads_as(split: bd.Shape, whole: bd.Shape) -> None:
+            result, wanted = checked(split), checked(whole)
+            self.assertEqual(verdicts(result), verdicts(wanted))
+            found, expected = broken(result), broken(wanted)
+            self.assertEqual(found.message.split()[0], expected.message.split()[0])  # as many faces
+            self.assertAlmostEqual(found.value, expected.value, places=3)
+            family, whole_family = (r.measurements["not_sheet"] for r in (result, wanted))
+            self.assertEqual(family["count"], whole_family["count"])
+            self.assertAlmostEqual(sum(item["area_mm2"] for item in family["items"]),
+                                   sum(item["area_mm2"] for item in whole_family["items"]), delta=0.05)
+            part, whole_part = (r.measurements["parts"]["items"][0] for r in (result, wanted))
+            self.assertAlmostEqual(part["flat_area_mm2"], whole_part["flat_area_mm2"], delta=0.05)
+            self.assertEqual([hole["size_mm"] for hole in result.measurements["holes"]["items"]],
+                             [hole["size_mm"] for hole in wanted.measurements["holes"]["items"]])
+
+        outline = (bd.RectangleRounded(80, 40, 5) - bd.Circle(6)).face()
+        plate = bd.extrude(outline, amount=2)
+        top = plate.edges().group_by(bd.Axis.Z)[-1]
+        for how in (bd.fillet, bd.chamfer):
+            whole = how(top, 0.6)
+            for cuts in ((1.7,), (1.5, 1.7, 1.9), (1.5, 1.6, 1.7, 1.8, 1.9)):
+                with self.subTest(broken=how.__name__, pieces=len(cuts) + 1):
+                    split = layered(whole, *(level(z) for z in cuts))
+                    reads_as(split, whole)
+                    # counted once, and every piece of it named
+                    self.assertEqual(len(broken(checked(split)).refs),
+                                     (len(cuts) + 1) * len(broken(checked(whole)).refs))
+
+        # rounded whole: the far half of a hole's round lies past its torus's period, where the kernel does not
+        # merge its pieces; the thin one was lost in the flat and the hole filled
+        whole = bd.extrude(bd.Pos(0, 0, -1) * outline, amount=2)
+        for wire in outline.wires():
+            whole = whole + tube(wire, 2.0)
+        with self.subTest(broken="rounded whole"):
+            reads_as(layered(whole, *(level(z) for z in (-0.504, -0.148, 0.208, 0.564))), whole)
+
+    def test_a_notch_beside_a_break_in_pieces_is_at_its_cut_edge(self) -> None:
+        # the cut edges behind a break were looked for two faces in from the skin: with each side's chamfer in
+        # three, a notch, a web and a gap were said to be at the chamfer
+        outline = (bd.Rectangle(80, 40) - bd.Pos(0, 17) * bd.Rectangle(3, 6) - bd.Pos(-20, -8) * bd.Circle(5)
+                   - bd.Pos(-8.5, -8) * bd.Circle(5)).face()
+        plate = bd.extrude(outline, amount=2)
+        levels = plate.edges().group_by(bd.Axis.Z)
+        split = layered(bd.chamfer([*levels[0], *levels[-1]], 0.6), *(level(z) for z in (0.1, 0.5, 1.5, 1.9)))
+        faces, report = split.faces(), checked(split).measurements
+        for family in ("notches", "webs", "gaps"):
+            self.assertTrue(report[family]["items"], family)
+            for item in report[family]["items"]:
+                with self.subTest(family=family, at=item["location"]):
+                    face = faces[int(item["location"].rsplit(" ", 1)[-1]) - 1]
+                    self.assertAlmostEqual(abs(face.normal_at().Z), 0.0, places=6)
 
     def test_a_round_whose_edges_meet_a_hair_apart_is_laid_whole(self) -> None:
         # a plate notched along half an ellipse, its rims rounded: the kernel may end the mitre where the round
