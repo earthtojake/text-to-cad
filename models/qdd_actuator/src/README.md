@@ -6,6 +6,14 @@
 
 Build from this folder: `python qdd_actuator.py`.
 
+Geometry: involute gears (20 deg, module 1.0, 0.12 mm backlash), the ring's teeth the
+spaces of a gear-shaped cut, meshed without interference through the drive cycle; fins
+ramped into the barrel at both ends; arc-segment rotor magnets; chamfered machined rims
+(housing, retainer, cover, carrier, flange) and countersunk output bolt holes.
+
+Parameter: `bolt_count` (3-12, default 6), the output flange's M5 bolt circle, in the
+viewer's Params tab, where Save writes the value back to the script.
+
 The makers (`make_stator`, `make_rotor`, `make_cross_roller_bearing`,
 `make_torque_sensor`, `make_driver_pcb`, `make_encoder_pcb`, `make_retainer_screws`)
 are plain functions in one body, like the repeated helpers (`make_ball_bearing(z)`,
