@@ -1606,6 +1606,15 @@ class Daemon:
                 # The script's turn (``parameters.Setting.building``): a set of it under way first, then this
                 # build before a set of it and before a page's preview of it (``parameters.Previewing``).
                 first.enter_context(self.setting.building(key, send))
+
+                def answered(payload: dict[str, Any], held: Any) -> None:
+                    # The worker and the script's turn are let go BEFORE the answer, so a caller that saves the
+                    # parameters the moment its build returns finds the script free (never ``busy``).
+                    if held is not None:
+                        self.release(held)
+                    first.close()
+                    send(payload)
+
                 for attempt in (1, 2):
                     worker = None
                     fresh = None
@@ -1665,7 +1674,8 @@ class Daemon:
                         answer["program"] = request.get("program")
                         self._built(worker, answer)
                         told.update(answer=answer, fresh=fresh, seconds=time.monotonic() - began)
-                        send(answer)
+                        held, worker = worker, None
+                        answered(answer, held)
                         return
                     except Gone as error:
                         # A build is never run twice, nor waited for twice on a worker that never said
@@ -1680,7 +1690,8 @@ class Daemon:
                             told.update(answer=failed, fresh=fresh, seconds=time.monotonic() - began,
                                         died=(error.code if error.code is not None else True)
                                         if error.during and not stopped else None)
-                            send(failed)
+                            held, worker = worker, None
+                            answered(failed, held)
                             return
                     except RuntimeError as error:
                         if not _no_kernel(error):
@@ -1688,7 +1699,8 @@ class Daemon:
                         # No kernel environment to start the worker in: its line, and its type.
                         told.update(answer={"failed": str(error), **failed_type(error)}, unavailable=error,
                                     seconds=time.monotonic() - began)
-                        send(told["answer"])
+                        held, worker = worker, None
+                        answered(told["answer"], held)
                         return
                     finally:
                         if worker is not None:
