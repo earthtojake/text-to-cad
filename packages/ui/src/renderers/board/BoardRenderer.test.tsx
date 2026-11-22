@@ -1187,7 +1187,7 @@ it("2D/3D is one view: the strip, its view controls, the panel and the corner st
   // Display's card in 3D: the camera's Projection after Side and Mode, the one on screen chosen; the presets as in 2D.
   expect(viewButtons(pane)).toEqual(['Display', 'Preview']);
   expect(cardSections(pane)).toEqual([[['side', 'Top'], ['dimension', '3D'], ['projection', 'Orthographic']], [['display', 'Board'], ['background', 'Light']]]);
-  expect((await displayChoices(user, pane)).map(([name, checked]) => [name, checked])).toEqual([['Perspective', 'false'], ['Orthographic', 'true'], ['Light', 'true'], ['Dark', 'false']]);
+  expect((await displayChoices(user, pane)).map(([name, checked]) => [name, checked])).toEqual([['Orthographic', 'true'], ['Perspective', 'false'], ['Light', 'true'], ['Dark', 'false']]);
   pickView(pane, 'data-display-projection', 'perspective');
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.projection).toBe('perspective'));
   await pickPreset(user, pane, 'Copper');

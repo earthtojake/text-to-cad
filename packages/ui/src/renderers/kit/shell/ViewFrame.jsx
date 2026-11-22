@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
+import { PANEL_SHEET_LEFT_CLASS } from "../../../file-viewer/panelPeek.js";
 import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { ViewPreviewLabel, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
@@ -208,14 +209,15 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
   // A phone's: the same panel, its tabs, search and every tab's content, the same components at the same sizes (a tree
   // row's own touch height aside), in a sheet from the left over the model (`FlatPanel`'s "page" mode), in the viewer's element.
-  // Under the navbar, there and gone at once, with no scrim (`usePhoneSheetPlace`).
+  // Under the navbar, with no scrim (`usePhoneSheetPlace`), sliding in and out from the left as the Display card does
+  // from the right: the peek's one slide (`panelPeek.js`), so a phone's two popovers move alike.
   const closeSheet = useCallback(() => setSheetOpen(false), []);
   const sheetPlace = usePhoneSheetPlace(viewerElement, has && mobile && sheetOpen && !previewing);
   const sheetNode = has && mobile ? <Sheet open={sheetOpen && !previewing} onOpenChange={setSheetOpen}>
     <SheetContent side="left" showCloseButton={false} onSwipeClose={closeSheet} container={viewerElement?.current ?? undefined}
       scrim={false} animated={false} style={sheetPlace.style} overlayStyle={sheetPlace.style} onCloseAutoFocus={sheetPlace.onCloseAutoFocus}
       onPointerDownOutside={sheetPlace.onPointerDownOutside}
-      aria-describedby={undefined} className="h-auto w-[85%] max-w-[20rem] gap-0 overflow-hidden border-border p-0" data-panel-sheet="">
+      aria-describedby={undefined} className={cn("h-auto w-[85%] max-w-[20rem] gap-0 overflow-hidden border-border p-0", PANEL_SHEET_LEFT_CLASS)} data-panel-sheet="">
       <SheetTitle className="sr-only">{panel.label}</SheetTitle>
       <FlatPanel mode="page" open onClose={closeSheet} loading={panelLoading} label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null}
         sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}

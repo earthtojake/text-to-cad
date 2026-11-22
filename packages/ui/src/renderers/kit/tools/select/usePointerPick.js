@@ -32,12 +32,14 @@ const COARSE_TAP_SLOP_PX = 12;
  * @param {(hit: object | null, pointer: Pointer | null) => void} [options.onHover]  The pick under a resting fine pointer changed.
  *   `Pointer`: where the pointer is, in CSS pixels from the viewport's top-left (`x`, `y`), and the
  *   viewport's size (`width`, `height`): what a tool that snaps to the screen (Measure) measures by.
+ * @param {boolean} [options.touchAdds]  A selecting picker's: a finger's tap on something adds it to the selection, or
+ *   takes it away where it is selected (a finger has no Shift); a finger's tap on nothing is a plain one (it clears).
  * @param {(left: object | null, right: object | null) => boolean} [options.sameHit]  When two hover hits are
  *   the same thing to the renderer (default: equal `id`), so `onHover` fires on change only.
  */
-export function usePointerPick({ viewport, scene, enabled, onPick, onHover = null, sameHit = null }) {
+export function usePointerPick({ viewport, scene, enabled, onPick, onHover = null, sameHit = null, touchAdds = false }) {
   const callbacks = useRef(null);
-  callbacks.current = { onPick, onHover, sameHit };
+  callbacks.current = { onPick, onHover, sameHit, touchAdds };
   const { runtimeRef, hostRef, viewerReadyTick } = viewport;
 
   useEffect(() => {
@@ -93,7 +95,11 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
       if (!started || event.button !== 0 || event.pointerId !== started.pointerId) return;
       const slop = coarse(started.pointerType) ? COARSE_TAP_SLOP_PX : FINE_TAP_SLOP_PX;
       if (Math.hypot(event.clientX - started.x, event.clientY - started.y) > slop) return;
-      callbacks.current.onPick(pickAt(started.x, started.y), { multiSelect: Boolean(event.shiftKey) }, pointerAt(started.x, started.y));
+      const hit = pickAt(started.x, started.y);
+      // Whether the tap found something: a hit, or (a scene that answers with a press and a rest) its press.
+      const found = Boolean(hit && ("press" in hit ? hit.press : true));
+      const touchAdds = callbacks.current.touchAdds && started.pointerType === "touch" && found;
+      callbacks.current.onPick(hit, { multiSelect: Boolean(event.shiftKey) || touchAdds }, pointerAt(started.x, started.y));
     };
     const handlePointerMove = (event) => {
       if (press?.pointerId === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > (coarse(press.pointerType) ? COARSE_TAP_SLOP_PX : FINE_TAP_SLOP_PX)) press = null;

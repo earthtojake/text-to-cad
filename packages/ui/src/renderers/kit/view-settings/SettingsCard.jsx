@@ -160,14 +160,17 @@ export function SettingsCard({ title, closeLabel, onClose, sections, resetLabel 
       event.preventDefault();
       onClose();
     }}>
-    <div className="flex shrink-0 items-start" style={{ paddingTop: PAD(5), paddingLeft: PAD(1), paddingRight: 40 }} data-settings-card-head="">
+    {/* The title and its X on ONE line, at either scale: the X's button is centred on the title's line (its height
+        hanging equally above and below it) and its 12px glyph ends on the inset line at the right. */}
+    <div className="flex shrink-0 items-center gap-2" style={{ paddingTop: PAD(5), paddingLeft: PAD(1), paddingRight: PAD(1) }}
+      data-settings-card-head="">
       <h3 className="min-w-0 flex-1 truncate text-xs leading-(--cad-leading-xs) font-medium text-foreground" data-settings-title="">{title}</h3>
+      <button type="button" aria-label={closeLabel} onClick={onClose} data-settings-close=""
+        className="flex size-icon-button shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
+        style={{ marginBlock: "calc((var(--cad-leading-xs) - var(--cad-icon-button)) / 2)", marginRight: "calc((12px - var(--cad-icon-button)) / 2)" }}>
+        <X className="size-3" aria-hidden="true" />
+      </button>
     </div>
-    <button type="button" aria-label={closeLabel} onClick={onClose} data-settings-close=""
-      className="absolute flex size-icon-button items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
-      style={{ top: PAD(9), right: PAD(7) }}>
-      <X className="size-3" aria-hidden="true" />
-    </button>
     <ScrollArea className="min-h-0 flex-1" viewportProps={{ "data-settings-card-scroller": "" }}>
       <div className={GRID_CLASS} style={{ paddingLeft: PAD(1), paddingRight: PAD(1), paddingTop: 12, paddingBottom: onReset ? 4 : PAD(1) }}
         data-settings-card-body="">

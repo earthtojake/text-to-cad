@@ -157,6 +157,8 @@ for (const phone of [true, false]) {
     const press = locator => phone ? locator.tap() : locator.click();
     const found = { heights: new Map(), texts: new Map() };
     const walk = async where => {
+      // Sizes read at rest: a control's own transition (a button's `transition-all`) may still be easing into the scale.
+      await page.evaluate(() => Promise.all(document.getAnimations().filter(animation => animation instanceof CSSTransition).map(animation => animation.finished.catch(() => {}))));
       const read = await page.evaluate(selector => [...document.querySelectorAll(selector)].filter(element => {
         const box = element.getBoundingClientRect(), style = getComputedStyle(element);
         return box.width > 1 && box.height > 1 && style.visibility !== 'hidden' && !element.closest('[hidden], [inert], [aria-hidden=true]');
@@ -485,40 +487,44 @@ for (const [what, file, route, groups] of [['a 3D view', 'panel.harness', undefi
     await pane.locator('[data-navbar-panel="left"]').click();
     const sheet = page.locator('[data-panel-sheet]');
     await sheet.waitFor();
+    // It slides in (the peek's slide, `PANEL_SHEET_LEFT_CLASS`): read where it rests once its slide has played.
+    const slide = await page.evaluate(() => getComputedStyle(document.querySelector('[data-panel-sheet]')).animationDuration);
+    await page.evaluate(() => Promise.all(document.querySelector('[data-panel-sheet]').getAnimations().map(animation => animation.finished.catch(() => {}))));
     const placed = await page.evaluate(() => {
       const box = document.querySelector('[data-panel-sheet]').getBoundingClientRect();
       const overlay = document.querySelector('[data-slot="sheet-overlay"]');
       const style = getComputedStyle(document.querySelector('[data-panel-sheet]'));
       return { left: Math.round(box.left), top: Math.round(box.top), navbar: Math.round(document.querySelector('[data-testid="one"] [data-viewer-navbar]').getBoundingClientRect().bottom),
-        scrim: overlay ? getComputedStyle(overlay).backgroundColor : null, animation: style.animationName, focused: document.activeElement?.closest('[data-panel-sheet]') !== null };
+        scrim: overlay ? getComputedStyle(overlay).backgroundColor : null, focused: document.activeElement?.closest('[data-panel-sheet]') !== null };
     });
-    assert.deepEqual(placed, { left: 0, top: placed.navbar, navbar: placed.navbar, scrim: 'rgba(0, 0, 0, 0)', animation: 'none', focused: true },
-      `in at once at the left edge, its top the navbar's bottom, nothing dimmed, focus in it: ${JSON.stringify(placed)}`);
+    assert.deepEqual({ ...placed, slide }, { left: 0, top: placed.navbar, navbar: placed.navbar, scrim: 'rgba(0, 0, 0, 0)', focused: true, slide: '0.1s' },
+      `slid in to the left edge in 100ms, its top the navbar's bottom, nothing dimmed, focus in it: ${JSON.stringify(placed)}`);
     assert.equal(await sheet.locator('[data-flat-panel]').getAttribute('data-flat-panel'), 'page');
     await page.mouse.click(380, 300);
-    assert.equal(await sheet.count(), 0, 'gone at once');
+    await sheet.waitFor({ state: 'detached' });
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-navbar-panel')), 'left', 'focus back on the toggle');
     // The navbar's toggle, in sight above it, shuts it too.
     await pane.locator('[data-navbar-panel="left"]').click();
     await sheet.waitFor();
     await pane.locator('[data-navbar-panel="left"]').click();
-    await settle(page);
-    assert.equal(await sheet.count(), 0, 'the toggle shuts it');
+    await sheet.waitFor({ state: 'detached' });
     // Display opens its card, the desktop's (no bottom sheet), its rows the file's. Pressed over the open sheet, it shuts
-    // the sheet and opens its card, the one press; a tap outside leaves the card open, as a person working in the view
-    // leaves it; its X puts it away.
+    // the sheet and opens its card, the one press.
     await pane.locator('[data-navbar-panel="left"]').click();
     await sheet.waitFor();
     await pane.locator('[data-display-settings]').click();
     const card = page.locator('[data-display-settings-card]');
     await card.waitFor();
-    assert.equal(await sheet.count(), 0, 'Display, pressed over the sheet, shut it');
+    await sheet.waitFor({ state: 'detached' });
     assert.deepEqual(await card.locator('[data-settings-row]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-settings-row'))), groups);
     assert.equal(await page.locator('[data-slot=drawer-content]').count(), 0, 'no bottom sheet');
     await settle(page);
-    await page.mouse.click(200, 500);
-    assert.equal(await card.count(), 1, 'a tap on the view leaves the card open');
+    // On a phone the card is a popover: its X puts it away, and so does a tap on the view, as the sheet's does.
     await card.getByRole('button', { name: 'Close display settings', exact: true }).click();
+    await card.waitFor({ state: 'detached' });
+    await pane.locator('[data-display-settings]').click();
+    await card.waitFor();
+    await page.mouse.click(200, 500);
     await card.waitFor({ state: 'detached' });
     assert.deepEqual(errors, []);
   });

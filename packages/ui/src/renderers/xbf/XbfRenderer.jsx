@@ -919,7 +919,7 @@ function XbfPick({ viewport, scene, enabled, onPick, takesAway, onHover, onDoubl
     };
   }, [enabled, hostRef, runtimeRef, viewerReadyTick, pointerTypeRef, activation]);
   usePointerPick({
-    viewport, scene, enabled, onHover,
+    viewport, scene, enabled, onHover, touchAdds: true,
     onPick: (found, modifiers) => activation.tap(countRef.current, found, modifiers, {
       wait: Boolean(deferRef.current) || Boolean(callbacks.current.takesAway?.(found, modifiers)),
       // A finger's double-click window is its double tap's.

@@ -166,7 +166,7 @@ function GlbSurface({ view, data }) {
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}
     viewportOverlay={viewport => { viewportRef.current = viewport; return <>
       {sceneTools.overlay(viewport)}
-      <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} />
+      <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} touchAdds />
     </>; }} />;
 }
 

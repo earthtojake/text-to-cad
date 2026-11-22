@@ -109,9 +109,9 @@ const CLOSE_DELAY_MS = 150;
 // A chip is the design system's Badge (`primitives/badge.jsx`, its secondary look: the filled tile, its radius, text and
 // 8px sides), given an edge so it stands off the bar's surface. Its two parts are buttons: the label (the badge's
 // padding is the label's, so the whole tile left of the x is the press) and the x, at the badge's 12px glyph.
-const CHIP_CLASS = cn(badgeVariants({ variant: "secondary" }), "h-chip min-w-0 max-w-full justify-start gap-0 border-border p-0 font-medium");
+const CHIP_CLASS = cn(badgeVariants({ variant: "secondary" }), "h-chip min-w-0 max-w-full justify-start gap-0 border-border p-0 pr-1 font-medium");
 const CHIP_LABEL_CLASS = "-my-px flex h-chip min-w-0 items-center truncate rounded-md py-0 pr-1 pl-2 leading-(--cad-leading-xs) outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
-const CHIP_REMOVE_CLASS = "cad-hit mr-1 flex size-glyph-sm shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
+const CHIP_REMOVE_CLASS = "cad-hit flex size-glyph-sm shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 const POPOVER_CLASS = cn(FLOATING_SURFACE_CLASS, "p-0 text-xs data-[state=closed]:animate-none!");
 const LIST_STYLE = { maxHeight: "calc(var(--radix-popover-content-available-height, 32rem) - 0.5rem)" };
 
@@ -266,7 +266,7 @@ function GroupChip({ chip }) {
       onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => event.preventDefault()}
       onPointerEnter={hover.stay} onPointerLeave={hover.leave} data-quick-edit-group-list={chip.group}>
       <ScrollArea className="min-w-0" viewportProps={{ style: LIST_STYLE }}>
-        <ul className="flex flex-col p-1">{chip.members.map(member => <GroupMember key={member.key} chip={member} />)}</ul>
+        <ul className="flex flex-col p-1.5">{chip.members.map(member => <GroupMember key={member.key} chip={member} />)}</ul>
       </ScrollArea>
     </PopoverContent>
   </Popover>;
@@ -284,7 +284,7 @@ function GroupMember({ chip }) {
   return <li className="flex min-w-0 flex-col rounded-sm hover:bg-accent/50" data-quick-edit-group-member={chip.key}
     onPointerEnter={event => { if (event.pointerType === "mouse") chip.onHover?.(true); }}
     onPointerLeave={event => { if (event.pointerType === "mouse") chip.onHover?.(false); }}>
-    <div className="flex h-icon-button min-w-0 items-center gap-1 pl-1.5">
+    <div className="flex h-icon-button min-w-0 items-center gap-1 px-1.5">
       <button type="button" aria-label={chip.label} className={cn("flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
         copyable ? "cursor-pointer" : "cursor-default")} onClick={() => { if (copyable) void copyChip(flash, chip); }} data-quick-edit-group-show="">
         {copied ? <span className="inline-flex items-center gap-1"><Check className="size-2.5" aria-hidden="true" />{t("chip.copied")}</span>
@@ -338,7 +338,7 @@ export function referenceFacts(facts) {
  */
 function ReferenceFacts({ facts }) {
   const shown = referenceFacts(facts);
-  return shown.length ? <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 pr-2 pb-1 pl-5 text-tiny leading-(--cad-leading-xs) text-muted-foreground" data-quick-edit-ref-facts="">
+  return shown.length ? <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 pr-1.5 pb-1.5 pl-6 text-tiny leading-(--cad-leading-xs) text-muted-foreground" data-quick-edit-ref-facts="">
     {shown.map(fact => <div key={String(fact.label)} className="contents">
       <dt className="whitespace-nowrap">{String(fact.label)}</dt>
       <dd className="min-w-0 tabular-nums [overflow-wrap:anywhere]">{plainText(fact.value) ? String(fact.value) : fact.value}</dd>
@@ -387,7 +387,7 @@ function MoreChips({ chips }) {
     <PopoverContent {...place} collisionPadding={8} className={cn(POPOVER_CLASS, "w-max min-w-28 max-w-44")}
       onOpenAutoFocus={event => event.preventDefault()} aria-label={t("chip.moreReferences")}>
       <ScrollArea className="min-w-0" viewportProps={{ style: LIST_STYLE }}>
-        <ul className="flex flex-col p-1">
+        <ul className="flex flex-col p-1.5">
           {chips.map(chip => <MoreChip key={chip.key} chip={chip} />)}
         </ul>
       </ScrollArea>

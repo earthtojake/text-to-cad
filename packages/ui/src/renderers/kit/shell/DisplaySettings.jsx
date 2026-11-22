@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { useI18n, english } from "@cad/ui/i18n";
@@ -38,13 +38,13 @@ export function displayGroup(mode, t = english, reset = undefined) {
     onChange: value => { if (value !== mode.value) mode.onChange(value); } };
 }
 
-/** The camera's projection: Perspective, then Orthographic, each with its icon. */
+/** The camera's projection: Orthographic (the default) first, then Perspective, each with its icon. */
 export function projectionGroup(projection, t = english, reset = undefined) {
   if (!projection) return null;
   const value = projection.value === "perspective" ? "perspective" : "orthographic";
   return { id: "projection", label: t("projection.label"), value, data: "data-display-projection", reset,
-    options: [{ value: "perspective", label: t("projection.perspective"), Icon: PerspectiveProjectionIcon },
-      { value: "orthographic", label: t("projection.orthographic"), Icon: OrthographicProjectionIcon }],
+    options: [{ value: "orthographic", label: t("projection.orthographic"), Icon: OrthographicProjectionIcon },
+      { value: "perspective", label: t("projection.perspective"), Icon: PerspectiveProjectionIcon }],
     onChange: next => { if (next !== value) projection.onChange(next); } };
 }
 
@@ -126,6 +126,23 @@ export function useDisplaySettings({ groups, onReset = null, disabled = false, c
   const Icon = DisplayIcon;
   const label = t("display.label");
   const shown = open && !closed;
+  // On a phone the card is a popover: a press anywhere else (the model, the navbar) puts it away, as the phone's sheet
+  // goes. Its button keeps its own toggle, and what the card opened (a dropdown's list, portalled out of it) is the card's.
+  // On a desktop it stays while the person works the view, and closes by its X, its button or Escape.
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  useEffect(() => {
+    if (!mobile || !shown || typeof document === "undefined") return undefined;
+    const away = event => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (cardRef.current?.contains(target) || buttonRef.current?.contains(target)) return;
+      if (target.closest("[data-radix-popper-content-wrapper], [role=menu], [role=listbox], [role=dialog]")) return;
+      closeRef.current();
+    };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [mobile, shown]);
   // Escape on the button, as in the card, puts the card away.
   const onKeyDown = event => { if (event.key === "Escape" && shown && !event.defaultPrevented) { event.preventDefault(); close(); } };
   const buttonProps = { ref: buttonRef, label, disabled, onClick: toggle, onKeyDown, "aria-pressed": shown, "aria-expanded": shown,

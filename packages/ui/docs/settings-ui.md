@@ -1449,7 +1449,9 @@ button ([Preview](#camera-animation-and-preview)). Each is the sidebar's peek ca
 - **Reset.** The panel's standard Reset (Params' and Joints'), at the bottom right, off while nothing differs.
 - **Behaviour.** The card stays open while the person works in the view: its button (a toggle, pressed and
   `aria-expanded` while it is open), its X and Escape in it (the keyboard back on the button) close it, and so do
-  another file and Preview; a press outside does not. It is never kept. It can be open beside the peek card.
+  another file and Preview; on a desktop a press outside does not. On a phone the card is a popover, as the phone's
+  sheet is: a press anywhere outside it and its button (the model, the navbar) puts it away; what it opened (a
+  dropdown's list) is its own. It is never kept. It can be open beside the peek card.
 
 ### Layering
 
@@ -1492,7 +1494,8 @@ sheet.
 On a phone the navbar's panel toggle (its first control) opens the view's panel as a standard mobile sidebar: shadcn's
 **Sheet** from the left, 85% of the screen wide and 20rem at most, **under the navbar** (its top the navbar's bottom
 edge, so the toggle, the name, Display and Preview stay in sight and usable), over the strip, the model and Quick Edit,
-with **no scrim** and **no animation**: it is there, and gone, at once (the Sheet's `scrim={false}` and
+with **no scrim**, **sliding in and out from the left as the Display card does from the right** (the peek's one slide,
+`panelPeek.js`'s `PANEL_SHEET_LEFT_CLASS`: 100ms in, 80ms out; none under reduced motion; the Sheet's own slide off,
 `animated={false}`, `usePhoneSheetPlace.js`), starting closed each time (kept nowhere). In it **the desktop's panel, the same components at the same sizes, gaps and type**:
 its head (the tabs, ⋯, the search's icon; no Back), its search, its tree rows (`primitives/tree-row.jsx`: the same 4px
 gap, 12px glyph slot, 16x20 actions 2px apart, 6px from the right; its row and text [the two scales](#two-scales)'s) and every tab's content (`FlatPanel`'s `mode: "page"`). Only what a phone cannot do differs: a
@@ -1858,7 +1861,9 @@ the UI font at the panel's 12px, numbers in tabular figures — no monospace. A 
 by absolute path; resting on it lights its picks; its X drops them.
 
 Viewport picks reach individual faces and edges, every one to hand from the start.
-Shift-click adds to a selection in the viewport; Shift, Ctrl or Cmd does in a
+A finger, which has no Shift, adds with every tap on a 3D view: a tap on a part, a face, an edge or a node adds it, a tap on one
+selected takes it away (after the double-tap window, so a double tap on it never shows it going), a tap on empty
+space clears at once (`usePointerPick`'s `touchAdds`), as touch CAD apps do. Shift-click adds to a selection in the viewport; Shift, Ctrl or Cmd does in a
 tree (robots select several links this way). Double-click, or a row's Isolate,
 isolates a component or subassembly, and the tree brings its row into view (its owners opened);
 double-click on empty space leaves isolation, as do the isolated row's X, the menu's Exit all
