@@ -61,6 +61,7 @@ from typing import Any
 
 import numpy as np
 
+from cad._internal.dfm._common import memory_passed
 from cad.build123d import _dfm_brep as brep
 from cad.build123d import _dfm_cnc_holes as detector
 from cad.build123d._dfm_cnc_model import Model, unit
@@ -95,8 +96,10 @@ def asked(parts: Iterable[brep.Part], kept: Any = None) -> list[dict[str, Any]]:
     for anything another release than ``QUIDDITY`` answered). Nothing raises: a call that does is every part's
     ``unanswered``. ``kept``: the parts' kept results (``cad._internal.dfm.parts.Kept``; None: none), where a
     part's features are found by how it stands (``_kept``), and a part's answer is kept where it is repeatable --
-    available, or for a reason of the part's own (``REPEATABLE``) -- so a part is asked once for each way it
-    stands; any other answer is asked again the next time."""
+    available, or for a reason of the part's own (``REPEATABLE``), and no failure for want of memory was gone on
+    past while the parts were asked (``_common.passed_over``) -- so a part is asked once for each way it stands;
+    any other answer is asked again the next time. A kept answer is served whether or not the recogniser can be
+    reached now: it is what the part answers with it there (``cad._internal.dfm.parts``' **The recogniser**)."""
     from cad._internal.dfm.parts import FEATURES
 
     parts = list(parts)
@@ -105,9 +108,13 @@ def asked(parts: Iterable[brep.Part], kept: Any = None) -> list[dict[str, Any]]:
     for index, key in enumerate(keys):
         if key is not None:
             found[index] = kept.get(FEATURES, *key)
+            if found[index] is not None and not _readable(found[index]):
+                kept.forget(FEATURES, *key)  # removed, never served: the part is asked afresh
+                found[index] = None
     asking = [index for index, result in enumerate(found) if result is None]
     if not asking:
         return found  # type: ignore[return-value]
+    start = memory_passed()
     try:
         import cad.quiddity
 
@@ -118,13 +125,30 @@ def asked(parts: Iterable[brep.Part], kept: Any = None) -> list[dict[str, Any]]:
         said = {"available": False, "quiddity": None, "reason": "unanswered",
                 "detail": " ".join(f"quiddity could not be asked: {type(error).__name__}: {error}".split())}
         answers = [dict(said) for _ in asking]
+    whole = memory_passed() == start  # no failure for want of memory gone on past meanwhile, by any part
     for index, answer in zip(asking, answers):
         result = _of_release(answer)
-        if keys[index] is not None and (result.get("available") or result.get("reason") in REPEATABLE):
+        if keys[index] is not None and whole and (result.get("available") or result.get("reason") in REPEATABLE):
             kept.keep(FEATURES, *keys[index], result)
             result = kept.settled(result)
         found[index] = result
     return found  # type: ignore[return-value]
+
+
+def _readable(result: Any) -> bool:
+    """Whether a kept answer is one ``holes`` reads: a result available with its records, holes and accounting
+    as lists, each hole with what the reading takes of it; or unavailable for a reason. One that is not is removed
+    and the part asked afresh."""
+    if not isinstance(result, dict) or not isinstance(result.get("available"), bool):
+        return False
+    if not result["available"]:
+        return isinstance(result.get("reason"), str)
+    needs = ("id", "evidence_status", "diameter_mm", "bottom", "axis", "faces", "counterbore", "spotface",
+             "outer_counterbores", "countersink", "mouth_chamfers")
+    return (all(isinstance(result.get(key), list) for key in ("records", "holes", "accounting"))
+            and all(isinstance(record, dict) and isinstance(record.get("parameters"), dict)
+                    for record in result["records"])
+            and all(isinstance(hole, dict) and all(key in hole for key in needs) for hole in result["holes"]))
 
 
 def _kept(part: brep.Part) -> tuple[str, dict[str, Any]] | None:

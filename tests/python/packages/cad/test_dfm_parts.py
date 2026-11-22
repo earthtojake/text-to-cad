@@ -74,6 +74,28 @@ class KeptTest(unittest.TestCase):
         blocked.write_text("", encoding="utf-8")
         Kept(blocked / "parts", "c0de").keep(CNC, GEOMETRY, {}, [1])  # a folder that takes no write
 
+    def test_a_part_is_found_by_the_version_of_a_report_s_shape_too(self) -> None:
+        from cad._internal.dfm import kept as measures
+        from cad._internal.dfm.parts import CNC
+
+        kept = self.kept()
+        kept.keep(CNC, GEOMETRY, {"part": "p"}, [1])
+        with mock.patch.object(measures, "MEASURE_VERSION", measures.MEASURE_VERSION + 1):
+            self.assertIsNone(kept.get(CNC, GEOMETRY, {"part": "p"}), "a report's shape changed by hand")
+        self.assertEqual(kept.get(CNC, GEOMETRY, {"part": "p"}), [1])
+
+    def test_nothing_is_kept_by_code_edited_on_disk_since_its_process_read_its_digest(self) -> None:
+        from cad._internal.dfm.parts import CNC, Kept
+        from cad.engine import _measuring
+
+        kept = Kept(self.root / "parts", "cnc-code", process="cnc")
+        with mock.patch.object(_measuring, "current", return_value="cnc-code-edited"):
+            kept.keep(CNC, GEOMETRY, {}, [1])
+        self.assertIsNone(kept.get(CNC, GEOMETRY, {}))
+        with mock.patch.object(_measuring, "current", return_value="cnc-code"):
+            kept.keep(CNC, GEOMETRY, {}, [1])
+        self.assertEqual(kept.get(CNC, GEOMETRY, {}), [1])
+
     def test_a_process_keeps_its_parts_where_its_code_is_its_own_and_for_sheet_and_cnc_alone(self) -> None:
         from cad._internal.dfm.parts import FOLDER, Kept
         from cad.engine import _measuring
@@ -127,7 +149,7 @@ class FeaturesKeptTest(unittest.TestCase):
         self.asked.append([part.owner for part in parts])
         if self.reason is not None:
             return [unavailable(self.reason, "why, in a line") for _part in parts]
-        return [{"available": True, "quiddity": recognised.QUIDDITY, "records": [], "holes": [],
+        return [{"available": True, "quiddity": recognised.QUIDDITY, "records": [], "holes": [], "accounting": [],
                  "faces": len(part.faces())} for part in parts]
 
     def ask(self, document: object) -> list:
@@ -267,6 +289,20 @@ class SheetKeptTest(_Checked):
             self.measure(document, self.kept)
         self.assertEqual(self.measured(document), 2, "the two not finished")
 
+    def test_a_kept_result_no_report_can_be_made_of_is_removed_and_its_part_measured_afresh(self) -> None:
+        document = _document(self.root, self.kit(40, 50))
+        fresh = self.measure(document)
+        self.measure(document, self.kept)
+        entries = sorted((self.root / "parts" / "dfm-sheet").rglob("*.json"))
+        for broken in (lambda result: result.update(holes="none"), lambda result: result.update(parts=[]),
+                       lambda result: result.update(_failed=[["a", 1]]), lambda result: result.update(other=1)):
+            with self.subTest(broken=broken):
+                entry = json.loads(entries[0].read_text(encoding="utf-8"))
+                broken(entry["result"])
+                entries[0].write_text(json.dumps(entry), encoding="utf-8")
+                self.assertEqual(self.measure(document, self.kept), fresh)
+                self.assertEqual(self.measure(document, self.kept), fresh, "measured afresh and kept again")
+
     def test_a_part_result_that_could_come_out_otherwise_is_never_kept(self) -> None:
         from cad.build123d import _dfm_sheet
 
@@ -307,15 +343,88 @@ class CncKeptTest(_Checked):
         import build123d as bd
 
         parts = [_labelled(bd.Pos(0, 50 * n, 0) * _block(width, 2), f"b{n}") for n, width in enumerate(widths)]
-        if turned:  # a copy of the first, turned: measured once, said again where it stands
+        if turned:  # copies of the first, turned a right angle and 37 degrees: measured once, said where each stands
             parts.append(_labelled(bd.Pos(0, -60, 0) * bd.Rot(0, 0, 90) * _block(widths[0], 2), "turned"))
+            parts.append(_labelled(bd.Pos(100, -60, 0) * bd.Rot(0, 0, 37) * _block(widths[0], 2), "leaning"))
+            # and its mirror image, which is no copy: a part of its own
+            parts.append(_labelled(bd.Pos(200, -60, 0) * bd.mirror(_block(widths[0], 2), bd.Plane.YZ), "mirrored"))
         return parts
 
     def test_a_document_one_part_of_which_changed_measures_that_part_alone(self) -> None:
-        self.assertEqual(self.measured(_document(self.root, self.kit(40, 50, 60, turned=True))), 3,
-                         "the turned copy is its first's, measured once")
+        self.assertEqual(self.measured(_document(self.root, self.kit(40, 50, 60, turned=True))), 4,
+                         "the turned copies are their first's, measured once; the mirror image is its own")
         self.assertEqual(self.measured(_document(self.root, self.kit(40, 50, 61, turned=True))), 1, "the one edited")
         self.assertEqual(self.measured(_document(self.root, self.kit(40, 50, 61, turned=True))), 0)
+
+    def test_a_part_is_found_in_a_document_of_other_neighbours(self) -> None:
+        import build123d as bd
+
+        parts = self.kit(40, 50)
+        self.assertEqual(self.measured(_document(self.root, parts)), 2)
+        other = [parts[0], _labelled(bd.Pos(0, 50, 0) * _block(70, 3), "b1")]
+        self.assertEqual(self.measured(_document(self.root, other)), 1, "b0 found beside another b1")
+
+    def test_a_report_from_kept_results_is_the_one_made_with_the_recogniser_there(self) -> None:
+        """A part's answer is kept only where it would be given again, so a report served from what was kept
+        while quiddity answered is that report still while it cannot be reached."""
+        from cad import quiddity
+        from cad.build123d import _dfm_cnc_recognised as recognised
+
+        def available(parts: list, **_given: object) -> list:
+            return [{"available": True, "quiddity": recognised.QUIDDITY, "records": [], "holes": [],
+                     "accounting": []} for _part in parts]
+
+        document = _document(self.root, self.kit(40, 50))
+        with mock.patch.object(quiddity, "features_of", available):
+            there = self.measure(document, self.kept)
+            self.assertEqual(there, self.measure(document))
+        self.reason = "not_installed"
+        self.assertEqual(self.measure(document, self.kept), there, "served as quiddity read it")
+        self.assertFalse(json.loads(self.measure(document))["holes"]["recognition"]["repeatable"],
+                         "while a fresh measurement now falls back")
+
+    def test_what_a_failure_for_want_of_memory_touched_is_kept_nowhere(self) -> None:
+        """Out of memory where the measurement goes on -- quiddity's part written, an exact wall refined -- is
+        no reading of the part's own: answered as measured, and kept neither per part nor whole."""
+        from cad.build123d import _dfm_check, _dfm_cnc
+        from cad.engine.export import step
+
+        from cad import quiddity
+        from cad.quiddity import _features
+
+        document = _document(self.root, self.kit(40, 50))
+        # the integration's own reading of each part, its STEP written by a kernel out of memory: quiddity is never
+        # reached, so no recogniser runs
+        with mock.patch.object(step, "shape_bytes", side_effect=MemoryError()), \
+                mock.patch.object(quiddity, "features_of", lambda parts, **_given: _features.features_of(parts, 30.0)):
+            said = json.loads(self.measure(document, self.kept))
+        recognition = said["holes"]["recognition"]
+        self.assertEqual({entry["reason"] for entry in recognition["fallbacks"]}, {"out_of_memory"})
+        self.assertFalse(recognition["repeatable"])
+        self.assertFalse((self.root / "parts").exists(), "no part's features nor result kept")
+        with mock.patch.object(_dfm_cnc, "_refine", side_effect=MemoryError()):
+            failing = self.measure(document, self.kept)
+            self.assertEqual(failing, self.measure(document), "the sampled figures, as with no store")
+            self.assertTrue(_dfm_check._transient("cnc", json.loads(failing)), "and the report kept by no one")
+        with mock.patch.object(_dfm_cnc, "_refine", side_effect=_dfm_cnc._refine) as refine:
+            self.assertEqual(self.measure(document, self.kept), self.measure(document))
+        self.assertGreater(refine.call_count, 0, "the refinements not kept, so made again")
+
+    def test_a_kept_result_no_report_can_be_made_of_is_removed_and_its_part_measured_afresh(self) -> None:
+        document = _document(self.root, self.kit(40, 50))
+        fresh = self.measure(document)
+        self.measure(document, self.kept)
+        entries = sorted((self.root / "parts" / "dfm-cnc").rglob("*.json"))
+        for broken in (lambda result: result.pop("frame"),
+                       lambda result: result["families"].update(walls=[{"thickness_mm": "thin"}]),
+                       lambda result: result["families"].update(holes=[{"recognised_by": "nobody"}]),
+                       lambda result: result.update(missed=[["a", 1]])):
+            with self.subTest(broken=broken):
+                entry = json.loads(entries[0].read_text(encoding="utf-8"))
+                broken(entry["result"])
+                entries[0].write_text(json.dumps(entry), encoding="utf-8")
+                self.assertEqual(self.measure(document, self.kept), fresh)
+                self.assertEqual(self.measure(document, self.kept), fresh, "measured afresh and kept again")
 
     def test_a_check_stopped_after_some_parts_measures_the_rest_alone_the_next_time(self) -> None:
         from cad.build123d import _dfm_cnc
@@ -347,7 +456,8 @@ class CncKeptTest(_Checked):
         self.reason = "timed_out"  # quiddity out of time on the part: the moment's
         said = json.loads(self.measure(document, self.kept))
         self.assertFalse(said["holes"]["recognition"]["repeatable"])
-        self.assertEqual(self.kept.counts["dfm-cnc"]["kept"], 1, "b1, measured after b0's walls failed, alone")
+        self.assertEqual(len(list((self.root / "parts" / "dfm-cnc").rglob("*.json"))), 1,
+                         "b1, measured after b0's walls failed, alone")
         self.reason = "no_wheel"
         self.assertEqual(self.measured(document), 2)
 

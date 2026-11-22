@@ -50,6 +50,7 @@ from typing import Any, Iterable
 import numpy as np
 
 from cad._internal.dfm import Unmeasured
+from cad._internal.dfm._common import passed_over
 
 __all__ = ["Document", "Edge", "NOT_CONTENT", "Part", "Rays", "Sample", "Surface", "content", "edges", "inside",
            "of_source", "parts_of", "read", "samples", "surface"]
@@ -566,7 +567,8 @@ def copies(parts: list[Part]) -> dict[int, Copy]:
     for index, part in enumerate(parts):
         try:
             groups.setdefault(_signature(part), []).append(index)
-        except Exception:  # noqa: BLE001 - a part the kernel cannot read so is measured on its own
+        except Exception as caught:  # noqa: BLE001 - a part the kernel cannot read so is measured on its own
+            passed_over(caught)
             continue
     found: dict[int, Copy] = {}
     for members in groups.values():
@@ -578,7 +580,8 @@ def copies(parts: list[Part]) -> dict[int, Copy]:
                 probes = _probes(parts[index])
                 shape = parts[index].shape
                 measures = (float(shape.volume), float(shape.area))
-            except Exception:  # noqa: BLE001
+            except Exception as caught:  # noqa: BLE001
+                passed_over(caught)
                 continue
             for first, theirs, sizes in firsts:
                 # its volume and area its first's too: a copy is the same geometry, not one that shares its probes
@@ -752,7 +755,8 @@ def _canonical(face: Any) -> tuple[str, Any] | None:
             geometry = made()
             if getattr(recognizer, test)(tolerance, geometry) and 0.0 <= recognizer.GetGap() <= tolerance:
                 return kind, geometry
-        except Exception:  # noqa: BLE001 - a face the recognizer declines is free-form
+        except Exception as caught:  # noqa: BLE001 - a face the recognizer declines is free-form
+            passed_over(caught)
             continue
     torus = _torus(face, tolerance)
     return ("torus", torus) if torus is not None else None
@@ -899,7 +903,8 @@ def edges(part: Part) -> list[Edge]:
         try:
             t, point, tangent = _edge_point(edge)
             na, nb = _normal_on(a, edge, t), _normal_on(b, edge, t)
-        except Exception:  # noqa: BLE001 - a degenerate edge has no angle to give
+        except Exception as caught:  # noqa: BLE001 - a degenerate edge has no angle to give
+            passed_over(caught)
             continue
         key = part.face_ordinal(a)
         if key not in walked:
@@ -948,7 +953,8 @@ def edge_angles(part: Part, edge: Edge, fractions: np.ndarray) -> tuple[np.ndarr
         try:
             at = GCPnts_AbscissaPoint(curve, float(fraction) * length, first)
             params.append(at.Parameter() if at.IsDone() else first + float(fraction) * (last - first))
-        except Exception:  # noqa: BLE001 - a curve the kernel cannot measure along is read by its parameter
+        except Exception as caught:  # noqa: BLE001 - a curve the kernel cannot measure along is read by its parameter
+            passed_over(caught)
             params.append(first + float(fraction) * (last - first))
     points = np.zeros((len(params), 3))
     for k, t in enumerate(params):
@@ -1114,7 +1120,8 @@ class Screen:
                 curve = BRepAdaptor_Curve(edge)
                 walked = GCPnts_TangentialDeflection(curve, 0.1, edge_deflection)
                 line = np.array([_xyz(walked.Value(i)) for i in range(1, walked.NbPoints() + 1)])
-            except Exception:  # noqa: BLE001 - an edge the kernel cannot walk: its boundary is unknown
+            except Exception as caught:  # noqa: BLE001 - an edge the kernel cannot walk: its boundary is unknown
+                passed_over(caught)
                 line = np.zeros((0, 3))
             if len(line) < 2:
                 unknown = True
@@ -1148,7 +1155,8 @@ class Screen:
             finer, coarser = min(resolutions), max(resolutions)
             ok = finer > 0.0 and math.isfinite(finer) and math.isfinite(coarser)
             uv = max(1e-7, coarser * tolerance) / finer if ok else math.inf
-        except Exception:  # noqa: BLE001 - a surface the kernel cannot resolve: its boundary unknown
+        except Exception as caught:  # noqa: BLE001 - a surface the kernel cannot resolve: its boundary unknown
+            passed_over(caught)
             uv = math.inf
         if not math.isfinite(uv):
             unknown = True
@@ -1769,7 +1777,8 @@ def face_size(face: Any) -> float:
         size = 2.0 * max(box.XHSize(), box.YHSize(), box.ZHSize())
         if math.isfinite(size) and size > 0.0:
             return float(size)
-    except Exception:  # noqa: BLE001 - a face the oriented box fails on takes the world box
+    except Exception as caught:  # noqa: BLE001 - a face the oriented box fails on takes the world box
+        passed_over(caught)
         pass
     world = face.bounding_box(optimal=False)
     return float(max(world.size.X, world.size.Y, world.size.Z))

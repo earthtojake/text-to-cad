@@ -16,6 +16,7 @@ from typing import Any, Iterable
 
 import numpy as np
 
+from cad._internal.dfm._common import passed_over
 from cad.build123d import _dfm_brep as brep
 
 __all__ = ["DRAFT_MAX_DEG", "Hit", "Model", "RUNS_UP", "Stations", "WORLD", "about", "directions_for",
@@ -166,7 +167,8 @@ def machine_frame(faces: list[Any], surfaces: list[brep.Surface]) -> tuple[np.nd
             continue
         try:
             area = float(face.area)
-        except Exception:  # noqa: BLE001 - a face with no area weighs nothing
+        except Exception as caught:  # noqa: BLE001 - a face with no area weighs nothing
+            passed_over(caught)
             continue
         if area > 0.0:
             vectors.append(unit(v))
@@ -532,7 +534,8 @@ class Model:
                 for k in range(per_edge):
                     p = curve.Value(first + (last - first) * k / (per_edge - 1))
                     points.append((p.X(), p.Y(), p.Z()))
-            except Exception:  # noqa: BLE001
+            except Exception as caught:  # noqa: BLE001
+                passed_over(caught)
                 continue
         return np.array(points).reshape(-1, 3)
 
@@ -598,7 +601,8 @@ class Model:
                 for u, v in uvs[::step][:NORMAL_NODES + 1]:
                     try:
                         normal = brep.point_normal(face, float(u), float(v))[1]
-                    except Exception:  # noqa: BLE001 - a singular point (a cone's apex) has no normal
+                    except Exception as caught:  # noqa: BLE001 - a singular point (a cone's apex) has no normal
+                        passed_over(caught)
                         continue
                     if abs(float(np.linalg.norm(normal)) - 1.0) < 1e-6:
                         rows.append(normal)
@@ -799,7 +803,8 @@ class Model:
         distance, index, u, v, edge = found
         try:
             _, normal = brep.point_normal(self.faces[index], u, v)
-        except Exception:  # noqa: BLE001
+        except Exception as caught:  # noqa: BLE001
+            passed_over(caught)
             normal = np.zeros(3)
         return Hit(distance, index + 1, normal, edge)
 
@@ -912,7 +917,8 @@ class Model:
                 distance, face, u, v, edge = hit
                 try:
                     _, normal = brep.point_normal(self.faces[face], u, v)
-                except Exception:  # noqa: BLE001
+                except Exception as caught:  # noqa: BLE001
+                    passed_over(caught)
                     normal = np.zeros(3)
                 found.append(Hit(distance, face + 1, normal, edge))
         return found
@@ -1008,7 +1014,8 @@ def stations_at(model: Model, edge: brep.Edge, fractions: np.ndarray) -> Station
         try:
             at = GCPnts_AbscissaPoint(curve, along, first)
             t = at.Parameter() if at.IsDone() else first + along / length * (last - first)
-        except Exception:  # noqa: BLE001 - a curve the kernel cannot measure along is read by its parameter
+        except Exception as caught:  # noqa: BLE001 - a curve the kernel cannot measure along is read by its parameter
+            passed_over(caught)
             t = first + along / length * (last - first)
         point, tangent = gp_Pnt(), gp_Vec()
         curve.D1(t, point, tangent)

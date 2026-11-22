@@ -49,6 +49,7 @@ import numpy as np
 from cad._internal import sheet_plane as plane
 from cad._internal.dfm import Unmeasured
 from cad._internal.dfm import sheet as rules_side
+from cad._internal.dfm._common import memory_passed, passed_over
 from cad.build123d import _dfm_brep as brep
 
 __all__ = ["FAMILIES", "Unfolded", "measure", "unfold"]
@@ -310,7 +311,8 @@ def _adjacency(part: brep.Part) -> list[_Join]:
                 props[ordinal].Normal(uv.X(), uv.Y(), p, n)
                 size = n.Magnitude()
                 normals.append((ordinal, np.array(brep._xyz(n)) / size if size > 1e-300 else np.zeros(3)))
-        except Exception:  # noqa: BLE001 - a degenerate edge joins nothing to measure
+        except Exception as caught:  # noqa: BLE001 - a degenerate edge joins nothing to measure
+            passed_over(caught)
             continue
         (a, na), (b, nb) = normals
         between = math.degrees(math.acos(max(-1.0, min(1.0, float(na @ nb)))))
@@ -1760,7 +1762,8 @@ class _Analysis:
             try:
                 fused = bd.Compound(children=[_unslivered(face) for face in
                                               fused.fuse(*broken, tol=2.5 * plane.CHORD_MM).clean().faces()])
-            except Exception:  # noqa: BLE001 - the skins' outline stands where the breaks do not fuse
+            except Exception as caught:  # noqa: BLE001 - the skins' outline stands where the breaks do not fuse
+                passed_over(caught)
                 pass
         faces = fused.faces()
         self.flat = faces[0] if len(faces) == 1 else bd.Compound(children=list(faces))
@@ -1931,7 +1934,8 @@ class _Analysis:
                                             bd.Plane(tuple(origin - reach * axis), z_dir=tuple(axis)))
             wall = middle.faces().filter_by(bd.GeomType.CYLINDER)[0]
             halves = [half for half in face.split(wall, keep=bd.Keep.ALL) if isinstance(half, bd.Face)]
-        except Exception:  # noqa: BLE001 - a round that does not split is unrolled whole
+        except Exception as caught:  # noqa: BLE001 - a round that does not split is unrolled whole
+            passed_over(caught)
             return [face]
         return halves if len(halves) == 2 else [face]
 
@@ -1968,7 +1972,8 @@ class _Analysis:
                     unify = ShapeUpgrade_UnifySameDomain(compound, True, True, True)
                     unify.Build()
                     faces = bd.Compound(unify.Shape()).faces()
-                except Exception:  # noqa: BLE001 - faces that do not merge are laid as they are
+                except Exception as caught:  # noqa: BLE001 - faces that do not merge are laid as they are
+                    passed_over(caught)
                     return None
                 return faces[0] if len(faces) == 1 else None
 
@@ -2014,7 +2019,8 @@ class _Analysis:
         try:
             halves = [half for half in face.split(bd.Plane(tuple(middle), z_dir=tuple(normal)),
                                                   keep=bd.Keep.ALL) if isinstance(half, bd.Face)]
-        except Exception:  # noqa: BLE001 - a round that does not split is laid in whole
+        except Exception as caught:  # noqa: BLE001 - a round that does not split is laid in whole
+            passed_over(caught)
             return [face]
         return halves if len(halves) == 2 else [face]
 
@@ -2107,7 +2113,8 @@ class _Analysis:
                     explorer.Next()
                 try:
                     return exact(pieces)
-                except Exception:  # noqa: BLE001 - edges that do not close exactly: the sampled outline
+                except Exception as caught:  # noqa: BLE001 - edges that do not close exactly: the sampled outline
+                    passed_over(caught)
                     outer, _, _ = _wire_loop(face.outer_wire().wrapped, face.wrapped, mapping)
                     return polygon_face(outer.points)
             # a whole turn about an axis (a cone, a torus round a hole or a disc): its closed edges, the largest
@@ -2133,13 +2140,15 @@ class _Analysis:
                     return None  # no outline of its own: the skin's stands there
                 try:
                     rings.append(exact(run))
-                except Exception:  # noqa: BLE001 - edges that do not close exactly: their sampled outline
+                except Exception as caught:  # noqa: BLE001 - edges that do not close exactly: their sampled outline
+                    passed_over(caught)
                     rings.append(polygon_face(mapping(np.vstack([points for points, _ in run]))))
             rings = sorted((ring for ring in rings if ring is not None), key=lambda ring: -ring.area)
             if not rings:
                 return None
             return rings[0].cut(*rings[1:]).faces()[0] if len(rings) > 1 else rings[0]
-        except Exception:  # noqa: BLE001 - a break that does not project leaves the skin's outline there
+        except Exception as caught:  # noqa: BLE001 - a break that does not project leaves the skin's outline there
+            passed_over(caught)
             return None
 
     def _flange_regions(self, ordinal: int, flange: _Flange) -> None:
@@ -2864,9 +2873,27 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool, 
             ) -> dict[str, Any]:
     """The sheet report of ``document``: facts alone, every family's ``items`` at a ref. ``kept``: the parts' kept
     results (``cad._internal.dfm.parts.Kept``; None: none), where each part's result is found, else measured and
-    kept (``_kept_part``): a part's result is its own, the report put together from them alike either way."""
+    kept (``_kept_part``): a part's result is its own, the report put together from them alike either way. A kept
+    result the report cannot be put together from is removed and its part measured afresh: no check fails for what
+    was kept."""
     if not document.parts:
         raise Unmeasured("document_empty", "the document holds no part to measure")
+    used: list[tuple[str, dict[str, Any]]] = []
+    try:
+        return _assembled(document, options, kept, used)
+    except Exception:
+        if not used:
+            raise
+        from cad._internal.dfm.parts import SHEET
+
+        for key in used:  # a kept result that read and still could not be put together: none of them stands
+            kept.forget(SHEET, *key)
+        return _assembled(document, options, kept, [])
+
+
+def _assembled(document: brep.Document, options: dict[str, Any], kept: Any,
+               used: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
+    """``measure``'s report, the keys of the kept results it took into ``used``."""
     results: list[dict[str, Any]] = []
     # A part that is another's geometry moved (``brep.copies``) is measured once, its first's items said again at
     # its own refs and places: a sheet is read in its own frame, wherever it stands.
@@ -2888,7 +2915,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool, 
             if said:
                 results[-1]["_findings"] = [said]
             continue
-        results.append(_kept_part(part, options, kept))
+        results.append(_kept_part(part, options, kept, used))
     for result in results:
         # every item carries its own part's thickness: what its rules scale by (``sheet._scales``)
         parts = result.get("parts")
@@ -2942,27 +2969,39 @@ class _Failed(Exception):
         self.said = said
 
 
-def _kept_part(part: brep.Part, options: dict[str, Any], kept: Any) -> dict[str, Any]:
+def _kept_part(part: brep.Part, options: dict[str, Any], kept: Any,
+               used: list[tuple[str, dict[str, Any]]] | None = None) -> dict[str, Any]:
     """``_part``'s result of ``part`` -- every family a part whose measuring raised -- found where ``kept`` holds it
     (``cad._internal.dfm.parts``: by the part's geometry and how it stands, its name and owner, which its refs and
-    its items say, and the options the measurement reads), else measured and kept; as it reads back from disk where
-    it is kept, so a part measured now and one found put the report together alike."""
+    its items say, and the options the measurement reads), else measured and kept -- unless it went on past a failure
+    for want of memory (``_common.passed_over``) -- as it reads back from disk where it is kept, so a part measured
+    now and one found put the report together alike. One found that is no part's result is removed (``used``: the
+    keys of those taken)."""
     from cad._internal.dfm.parts import SHEET, standing
 
     stands = standing(part) if kept is not None else None
     rest = {"standing": stands, "name": part.name, "owner": part.owner, "options": dict(options)}
     if stands is not None:
         found = kept.get(SHEET, part.key, rest)
-        if isinstance(found, dict):
-            return _restored(found)
+        if found is not None:
+            try:
+                restored = _restored(found)
+                if used is not None:
+                    used.append((part.key, rest))
+                return restored
+            except (AttributeError, KeyError, TypeError, ValueError):
+                kept.forget(SHEET, part.key, rest)  # removed, never served: the part is measured afresh
+    start = memory_passed()
     try:
         result = _part(part, options)
     except Exception as error:  # noqa: BLE001 - a part that cannot be measured fails its families alone
+        passed_over(error)
         result = {family: error for family in FAMILIES}
     if stands is None:
         return result
     plain = _stored(result)
-    kept.keep(SHEET, part.key, rest, plain)
+    if memory_passed() == start:  # nothing gone on past for want of memory: what it measured is its own
+        kept.keep(SHEET, part.key, rest, plain)
     return _restored(kept.settled(plain))
 
 
@@ -2983,17 +3022,32 @@ def _stored(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _restored(plain: dict[str, Any]) -> dict[str, Any]:
-    """``_stored``'s plain data as ``_part``'s result again, a stopped family a ``_Failed``."""
+    """``_stored``'s plain data as ``_part``'s result again, a stopped family a ``_Failed``; ``ValueError`` (or
+    ``KeyError``, ``TypeError``) for data no ``_part`` made, which a report cannot be put together from."""
+    if not isinstance(plain, dict) or not plain:
+        raise ValueError("no part's result")
     result: dict[str, Any] = {}
     for name, value in plain.items():
-        if isinstance(value, dict) and name in FAMILIES:
-            result[name] = _Failed(str(value["error"]))
+        if name in FAMILIES:
+            if isinstance(value, dict):
+                result[name] = _Failed(str(value["error"]))
+            elif isinstance(value, list) and all(isinstance(item, dict) for item in value):
+                result[name] = value
+            else:
+                raise ValueError(f"{name} is neither items nor a failure")
         elif name == "_lost":
-            result[name] = {family: set(faces) for family, faces in value.items()}
+            result[name] = {str(family): {int(face) for face in faces} for family, faces in value.items()}
         elif name == "_failed":
             result[name] = {int(ordinal): int(count) for ordinal, count in value}
-        else:
+        elif name == "_findings":
+            if not all(isinstance(found, dict) for found in value):
+                raise ValueError("a finding that is no table")
             result[name] = value
+        else:
+            raise ValueError(f"{name!r} is no field of a part's result")
+    parts = result.get("parts")
+    if isinstance(parts, list) and not (len(parts) == 1 and isinstance(parts[0].get("thickness_mm"), (int, float, type(None)))):
+        raise ValueError("a part's result says no one part")
     return result
 
 

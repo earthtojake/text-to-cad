@@ -45,6 +45,7 @@ REASONS = (
     "no_faces",        # the part holds no face
     "too_many_faces",  # the part holds more faces than are handed to quiddity (``FACES``)
     "unwritten",       # the kernel could not write the part's STEP
+    "out_of_memory",   # the kernel ran out of memory writing the part's STEP or checking quiddity's answer on it
     "refused",         # quiddity refused the STEP, in its words
     "failed",          # quiddity raised (a panic in its Rust among them)
     "stopped",         # quiddity's process ended while it had the part
@@ -114,7 +115,8 @@ def features_of(parts: Iterable[Any], timeout_s: float) -> list[dict[str, Any]]:
                     continue
                 step = shape_bytes(part.shape) if faces else b""
             except Exception as error:  # noqa: BLE001 -- a shape the kernel does not write is this part's answer
-                results.append(unavailable("unwritten", f"the kernel could not write the part's STEP: {error}"))
+                results.append(_short(error) or unavailable("unwritten", f"the kernel could not write the part's "
+                                                                         f"STEP: {error}"))
                 continue
             if not faces:
                 results.append(unavailable("no_faces", "the part holds no face"))
@@ -136,9 +138,21 @@ def features_of(parts: Iterable[Any], timeout_s: float) -> list[dict[str, Any]]:
                 reason = "unknown_schema" if isinstance(error, _UnknownSchema) else "unverified"
                 results.append(unavailable(reason, str(error), version))
             except Exception as error:  # noqa: BLE001 -- an answer or a face that does not read verifies nothing
-                results.append(unavailable("unverified", f"quiddity's answer could not be checked against the "
-                                                         f"part: {type(error).__name__}: {error}", version))
+                results.append(_short(error, version) or unavailable(
+                    "unverified", f"quiddity's answer could not be checked against the part: {type(error).__name__}: "
+                                  f"{error}", version))
     return results
+
+
+def _short(error: BaseException, quiddity: str | None = None) -> dict[str, Any] | None:
+    """The result of a part the kernel ran out of memory on (``out_of_memory``: by any of its names), which is no
+    reading of the part's own and may not happen the next time; None for any other failure."""
+    from cad._internal.dfm._common import out_of_memory
+
+    if not out_of_memory(error):
+        return None
+    return unavailable("out_of_memory", f"the kernel ran out of memory with the part: {type(error).__name__}: "
+                                        f"{error}", quiddity)
 
 
 def _shape(given: Any) -> Any:

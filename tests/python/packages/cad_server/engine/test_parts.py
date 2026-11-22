@@ -56,6 +56,28 @@ class PartsBoundsTest(unittest.TestCase):
         self.assertFalse(left.exists(), "one a stopped process left")
         self.assertTrue(kept.exists())
 
+    @unittest.skipUnless(hasattr(os, "symlink") and os.name != "nt", "links made by any user")
+    def test_a_link_in_the_folder_is_never_followed(self) -> None:
+        from cad_server.engine.parts import Parts
+
+        outside = self.root / "outside"
+        (outside / "aa").mkdir(parents=True)
+        mine = outside / "aa" / "aa11.json"
+        mine.write_bytes(b"x" * 10)
+        os.utime(mine, (0, 0))
+        (self.root / "parts" / "dfm-cnc").mkdir(parents=True)
+        os.symlink(outside, self.root / "parts" / "features")  # a kind's folder that is a link
+        os.symlink(outside / "aa", self.root / "parts" / "dfm-cnc" / "aa")  # and a folder of entries
+        os.symlink(mine, self.root / "parts" / "dfm-cnc" / "bb.json")
+        kept = self.entry("dfm-sheet", "cc33", 10, time.time())
+        self.assertEqual(Parts(lambda: self.root, entries=0).bound(), (0, 0))
+        self.assertTrue(mine.exists(), "nothing a link leads to is removed")
+        self.assertFalse(kept.exists())
+        shutil.rmtree(self.root / "parts")
+        os.symlink(outside, self.root / "parts")
+        self.assertEqual(Parts(lambda: self.root, entries=0).bound(), (0, 0))
+        self.assertTrue(mine.exists())
+
     def test_the_engine_s_registry_names_the_folder_and_none_keeps_nothing(self) -> None:
         from cad_server.engine.parts import Parts
         from cad_server.engine.registry import Folder, Registry

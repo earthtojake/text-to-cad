@@ -53,6 +53,7 @@ from typing import Any
 import numpy as np
 
 from cad._internal.dfm import cnc as rules_side
+from cad._internal.dfm._common import passed_over
 from cad.build123d import _dfm_brep as brep
 from cad.build123d._dfm_cnc_model import SAME, WORLD, Model, edge_normals, unit
 
@@ -426,7 +427,8 @@ def _axis_length(model: Model, ordinal: int, a: np.ndarray) -> float | None:
             curve = BRepAdaptor_Curve(edge.wrapped)
             first, last = curve.FirstParameter(), curve.LastParameter()
             t = [float(np.array(curve.Value(first + (last - first) * k / 16).Coord()) @ a) for k in range(17)]
-        except Exception:  # noqa: BLE001
+        except Exception as caught:  # noqa: BLE001
+            passed_over(caught)
             return None
         if max(t) - min(t) > 0.5 * whole:
             continue  # a seam or a side along the axis, no end

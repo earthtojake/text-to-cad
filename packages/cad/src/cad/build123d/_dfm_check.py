@@ -21,7 +21,7 @@ from typing import Any
 
 import numpy as np
 
-from cad._internal.dfm._common import out_of_memory
+from cad._internal.dfm._common import memory_passed, out_of_memory
 from cad.build123d import _dfm_brep
 
 __all__ = ["checked", "described", "dfm", "held", "measure", "measure_declared"]
@@ -55,8 +55,9 @@ def _closed_solids(part: _dfm_brep.Part) -> tuple[list[Any], list[Any], int]:
 
 #: Whether the integrity of the document last measured here (``_measured``) was cut short: the kernel's validity
 #: check raised on a part, so its ``not_sound`` was not looked for and the report does not say so; or a pair of
-#: solids could not be compared for want of memory. Such a report is not one to keep (``_transient``).
-_CUT_SHORT = {"integrity": False}
+#: solids could not be compared for want of memory. Such a report is not one to keep (``_transient``). And how
+#: many failures for want of memory this process had gone on past as it began (``_common.memory_passed``).
+_CUT_SHORT: dict[str, Any] = {"integrity": False, "memory": 0}
 
 #: Solids of one part share volume where their common is over this share of the smaller's volume.
 _OVERLAP = 1e-6
@@ -202,7 +203,7 @@ def _measured(document: _dfm_brep.Document, document_type: str, process: str, op
 
     if not document.parts:
         raise Unmeasured("document_empty", "the document holds no part with a face to measure")
-    _CUT_SHORT["integrity"] = False
+    _CUT_SHORT["integrity"], _CUT_SHORT["memory"] = False, memory_passed()
     doubt = _integrity(document, process)
     module = importlib.import_module(f"cad.build123d._dfm_{process}")
     measuring = kept.Measuring(process, options)
@@ -301,15 +302,21 @@ def _transient(process: str, report: dict[str, Any]) -> bool:
     last made (``transient()``: molding's release search out of its seconds, a hull printing's fit took another
     way for want of memory); its integrity was cut short (``_CUT_SHORT``: the kernel's validity check raised,
     so the report is silent on what it would have said); a family failed for want of memory, by any of its
-    names (its ``error``: ``_common.out_of_memory``); or a table of the report says of itself that it is not
+    names (its ``error``: ``_common.out_of_memory``), or a failure for want of memory was caught and gone on past
+    while it was measured (``_common.passed_over``); the process's measuring code on disk is no longer the code
+    this process said it measures with (``_measuring.current``: edited after the process started and before it
+    first imported that code); or a table of the report says of itself that it is not
     repeatable (``"repeatable": False``, wherever it lies and whatever made it: what it holds came of
     something the next run may not meet -- a helper not ready yet, an answer that timed out; one that says
     true, or nothing, is repeatable). Every other report, with a family not measured or none, is what its code
     makes of those parts each time."""
     from cad._internal.dfm.parts import unrepeatable
 
+    from cad.engine._measuring import current, measuring
+
     said = getattr(importlib.import_module(f"cad.build123d._dfm_{process}"), "transient", None)
-    return bool((callable(said) and said()) or _CUT_SHORT["integrity"] or unrepeatable(report))
+    return bool((callable(said) and said()) or _CUT_SHORT["integrity"] or memory_passed() != _CUT_SHORT["memory"]
+                or current(process) != (measuring().get("dfm") or {}).get(process) or unrepeatable(report))
 
 
 def described(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]:

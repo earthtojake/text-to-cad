@@ -16,7 +16,7 @@ import sys
 import threading
 from typing import Any
 
-__all__ = ["BOUNDARY", "DFM", "DFM_COMMON", "MEASURING", "measure", "measuring"]
+__all__ = ["BOUNDARY", "DFM", "DFM_COMMON", "MEASURING", "current", "measure", "measuring"]
 
 
 # The libraries a manufacturing check measures with, by the distribution that carries each (the first of
@@ -63,9 +63,10 @@ DFM: dict[str, tuple[str, ...]] = {
 #: and how it is watched (the engine's places and its door, by which the environment that holds quiddity is found,
 #: and the worker's reading of a process's memory from outside: where quiddity answers and whether it is let to,
 #: never what), and what a document's STEP is written with that one shape's bytes are not (its tree and its
-#: styles). And this module: the digest a part's kept result is found by, which says what measured, never how.
+#: styles). And this module, the digest a part's kept result is found by, which says what measured, never how, and
+#: the rename a kept part's file lands with.
 BOUNDARY: tuple[str, ...] = ("cad.engine.document", "cad.engine.refs", "cad.results", "cad._internal.refused",
-                             "cad._internal.manufacturing", "cad.engine._measuring",
+                             "cad._internal.manufacturing", "cad.engine._measuring", "cad._internal.atomic_replace",
                              "cad.engine.places", "cad.engine.client", "cad.engine.worker",
                              "cad.engine.export.tree", "cad.engine.step_style")
 
@@ -87,6 +88,16 @@ def measure(root: Any = None) -> dict[str, Any]:
     all: it measures nothing itself, and any process of its code measures for it (``measures_for``). Nothing is
     imported. ``root``: the package folder whose code is hashed, the cad package's by default."""
     return _measure(root)[0]
+
+
+def current(process: str, root: Any = None) -> str:
+    """The digest of ``process``'s measuring files as they are on disk now (``measure``'s ``dfm`` for it, read
+    again only where a file's size or time changed): whoever keeps what a process measured asks it as it keeps it,
+    since a process imports a process's measuring modules only as it first measures one, and code edited between
+    its start (``measuring``) and then is not the code it was found by."""
+    from pathlib import Path
+
+    return _measuring_code(Path(__file__).resolve().parent.parent if root is None else Path(root), process)[0]
 
 
 def _measure(root: Any = None) -> tuple[dict[str, Any], int, dict[str, int]]:

@@ -10,8 +10,8 @@ from typing import Any
 from cad._internal.refused import ArgumentRefused
 from cad.results import CheckFinding
 
-__all__ = ["ANGLE_EPS", "KNIFE_DEG", "UNITS_LARGE_MM", "UNITS_SMALL_MM", "first_error", "mm", "not_applicable",
-           "occurrence_count", "occurrences", "out_of_memory", "partial_findings", "require", "require_bool",
+__all__ = ["ANGLE_EPS", "KNIFE_DEG", "UNITS_LARGE_MM", "UNITS_SMALL_MM", "first_error", "memory_passed", "mm",
+           "not_applicable", "occurrence_count", "occurrences", "out_of_memory", "partial_findings", "passed_over", "require", "require_bool",
            "require_finite", "require_int", "require_text", "scale_findings", "units_doubt", "where"]
 
 #: Every process's: a convex edge whose material angle is under this many degrees is a **knife edge**, not a
@@ -119,12 +119,37 @@ _OUT_OF_MEMORY = re.compile(r"memoryerror|out\s*of\s*memory|bad_alloc|(cannot al
 
 def out_of_memory(failure: Any) -> bool:
     """Whether ``failure`` -- an exception, or the words one was said in (a family's ``error``: its type and its
-    words) -- is a failure for want of memory, by any of its names (``_OUT_OF_MEMORY``). What failed so may not
-    fail the next time: nothing measured through it is the part's alone."""
-    if isinstance(failure, MemoryError):
-        return True
-    said = f"{type(failure).__name__}: {failure}" if isinstance(failure, BaseException) else str(failure)
-    return _OUT_OF_MEMORY.search(said) is not None
+    words) -- is a failure for want of memory, by any of its names (``_OUT_OF_MEMORY``): an exception's own, or
+    those of the one it was raised from or while handling (a kernel's ``MemoryError`` said again as a
+    ``GeometryError``). What failed so may not fail the next time: nothing measured through it is the part's
+    alone."""
+    if not isinstance(failure, BaseException):
+        return _OUT_OF_MEMORY.search(str(failure)) is not None
+    seen: set[int] = set()
+    while failure is not None and id(failure) not in seen:
+        seen.add(id(failure))
+        if isinstance(failure, MemoryError) or _OUT_OF_MEMORY.search(f"{type(failure).__name__}: {failure}"):
+            return True
+        failure = failure.__cause__ or failure.__context__
+    return False
+
+
+#: The failures for want of memory a measurement caught and went on past, in this process, so far
+#: (``passed_over``): a figure it then took another way, or left out, may come out otherwise the next time.
+_PASSED = [0]
+
+
+def passed_over(error: BaseException) -> None:
+    """``error``, caught where a measurement goes on without what raised it, counted where it was a failure for
+    want of memory (``out_of_memory``): what was measured meanwhile is kept nowhere (``memory_passed``)."""
+    if out_of_memory(error):
+        _PASSED[0] += 1
+
+
+def memory_passed() -> int:
+    """How many failures for want of memory this process's measurements caught and went on past so far
+    (``passed_over``): a measurement that saw the count rise is not one to keep."""
+    return _PASSED[0]
 
 
 def first_error(value: Any) -> str | None:

@@ -133,7 +133,7 @@ import numpy as np
 from cad._internal.dfm import Unmeasured
 from cad._internal.dfm import cnc as rules_side
 from cad._internal.dfm.parts import CNC
-from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG
+from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG, memory_passed, passed_over
 from cad.build123d import _dfm_brep as brep
 from cad.build123d import _dfm_cnc_recognised as recognised
 from cad.build123d._dfm_cnc_holes import mouths as find_mouths
@@ -250,9 +250,28 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool, 
     ``recognition`` -- the check as it measures where quiddity is not available, to compare the two by.
     ``kept``: the parts' kept results (``cad._internal.dfm.parts.Kept``; None: none), where each part's result
     (``_part_result``) and its features (``_dfm_cnc_recognised.asked``) are found, else measured and kept: the
-    report is put together from its parts' results alike either way, by what reads no kernel."""
+    report is put together from its parts' results alike either way, by what reads no kernel, and each listed wall
+    and gap refined once, on its part's model, the refinement kept with the part's result. A kept result the report
+    cannot be put together from is removed and its part measured afresh: no check fails for what was kept."""
     if not document.parts:
         raise Unmeasured("document_empty", "the document has no part to measure")
+    used: list[tuple[str, dict[str, Any]]] = []
+    try:
+        return _assembled(document, options, recognise, kept, used)
+    except Unmeasured:
+        raise
+    except Exception:
+        if not used:
+            raise
+        for key in used:  # a kept result that read and still could not be put together: none of them stands
+            kept.forget(CNC, *key)
+        return _assembled(document, options, recognise, kept, [])
+
+
+def _assembled(document: brep.Document, options: dict[str, Any], recognise: bool, kept: Any,
+               used: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
+    """``measure``'s report, the keys of the kept results it took into ``used``."""
+    store = kept  # (the families' own loops below name a kept item ``kept``)
     # every occurrence is a part to make, counted and located once each (``brep.every_occurrence``): the
     # totals count them all, however the instances are turned; and each solid is a part to machine: a part
     # holding several is judged solid by solid, and said
@@ -294,6 +313,9 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool, 
     features = dict(zip(plan, recognised.asked((parts[index] for index in plan), kept)))
     notes: list[dict[str, Any] | None] = []
     noted: list[dict[str, Any] | None] = []
+    # each part's result taken (by its identity, a copy's its first's): the part measured, its model once there is
+    # one (measured here, or made to refine one of its items), the key it is kept under (None: not kept), itself
+    live: dict[int, tuple[brep.Part, Model | None, Any, dict[str, Any]]] = {}
     for index, part in enumerate(parts):
         copy = copies.get(index)
         if len(part.faces()) > FACE_BUDGET:
@@ -339,18 +361,27 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool, 
             # not looked for, or looked for as other families failed before it than have
             key = _kept(part, options, recognise, failed) if kept is not None else None
             result = kept.get(CNC, *key, count=False) if key is not None else None
+        if result is not None and not _readable(result):
+            kept.forget(CNC, *key)  # removed, never served: the part is measured afresh
+            result = None
         if key is not None:
             kept.counted(CNC, result is not None)
-        if result is None:
+        model = None
+        if result is not None:
+            used.append(key)
+        else:
             if recognise and index not in features:  # measured after all (not looked for, or not found)
                 features[index] = recognised.asked([part], kept)[0]
-            result = _part_result(part, axes, turning, tools, stock, failed, features.get(index))
+            result, model = _part_result(part, axes, turning, tools, stock, failed, features.get(index))
             if key is not None and _keeps(result):
                 kept.keep(CNC, *key, _stored(result))
                 result = kept.settled(_stored(result))
+            else:
+                key = None  # not kept, so nothing refined of it is either
         if result.get("error") is not None:
             failed.setdefault("model", result["error"])  # a part that does not read is the report's to say
             continue
+        live[id(result)] = (part, model, key, result)
         results.append(result)
         frames.append(np.asarray(result["frame"], dtype=float))
         framing.append(result["framing"])
@@ -371,6 +402,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool, 
         shares[len(results) - 1] = _minus(_shares(scalars), totals)
         lost[len(results) - 1] = {name: set(faces) for name, faces in result["lost"].items()}
         missed[len(results) - 1] = {int(ordinal): int(count) for ordinal, count in result["missed"]}
+    changed: set[int] = set()  # the parts' results a refinement was added to
     report: dict[str, Any] = {"machine": {"axes": axes, "turning": turning,
                                           "tools_mm": list(tools) if tools else None,
                                           "stock_mm": list(stock) if stock else None, "frames": framing}}
@@ -384,9 +416,9 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool, 
         items.sort(key=_ORDER.get(name, lambda item: 0))
         if name in ("walls", "gaps"):
             # the listed items only: an exact distance per item, not per face, keeps the budget on big parts --
-            # each part's own first CAP refined as it was measured (``_refined``), so the document's are among them
+            # each refined once on its part's model, the refinement kept with its part's result
             for item in items[:CAP]:
-                refined = item["_refined"]
+                refined = _refined(live, results[item["_model"]], item, name, changed)
                 item.update(refined["set"])
                 if refined["new"]:
                     lost[item["_model"]].setdefault(name, set()).update(int(ordinal) for ordinal, _ in refined["new"])
@@ -439,6 +471,9 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool, 
                 where = ", ".join(f"{float(v):g}" for v in item["xyz"])
                 item["unreached"] = f"; {item['unreached_mm']:g} mm of it, around {where}, reached by no tool"
         report[name] = family
+    for taken in changed:  # each part's refinements kept with it: none is made again
+        _, _, key, result = live[taken]
+        store.keep(CNC, *key, _stored(result))
     if "model" in failed:
         report["model"] = {"error": failed["model"]}
     report["partial_sections"] = sorted(name for name in failed)
@@ -512,29 +547,41 @@ def _found(parts: list[brep.Part], themselves: list[int], options: dict[str, Any
 
 def _part_result(part: brep.Part, axes: int, turning: bool, tools: tuple[float, ...] | None,
                  stock: tuple[float, float, float] | None, failed: dict[str, str],
-                 features: dict[str, Any] | None) -> dict[str, Any]:
+                 features: dict[str, Any] | None) -> tuple[dict[str, Any], Model | None]:
     """What one part adds to its document's report, measured in its own machine frame (``machine_frame``) after
-    the families ``failed`` before it, which it skips: the exact frame (``frame``) and what the report says of it
-    (``framing``); its families' items, each walls and gaps item of its first ``CAP`` with what refining it changes
-    (``_refined``); its scalars, the families it failed (``failed``, new ones alone), the faces each family's rays
-    the kernel failed on (``lost``) and every such face's count (``missed``); and what read its holes (``note``).
-    Plain data, but for the items' own private fields (``_stored`` keeps those the report reads). ``{"error"}``
-    for a part that does not read."""
+    the families ``failed`` before it, which it skips -- the exact frame (``frame``) and what the report says of it
+    (``framing``); its families' items, each wall and gap numbered (``_n``) for the refinements of it the report
+    asks (``refined``, none yet: ``_refinement``); its scalars, the families it failed (``failed``, new ones
+    alone), the faces each family's rays the kernel failed on (``lost``) and every such face's count (``missed``);
+    and what read its holes (``note``) -- with its model, shed, for those refinements. ``{"error"}`` for a part
+    that does not read, and no model. Plain data but for the items' own private fields (``_stored`` keeps those
+    the report reads); ``"repeatable": False`` where a failure for want of memory was gone on past meanwhile
+    (``_common.passed_over``), so nothing of it is kept."""
+    start = memory_passed()
+    result, model = _measured_part(part, axes, turning, tools, stock, failed, features)
+    if memory_passed() != start:
+        result["repeatable"] = False
+    return result, model
+
+
+def _measured_part(part: brep.Part, axes: int, turning: bool, tools: tuple[float, ...] | None,
+                   stock: tuple[float, float, float] | None, failed: dict[str, str],
+                   features: dict[str, Any] | None) -> tuple[dict[str, Any], Model | None]:
     try:
         surfaces = [brep.surface(face) for face in part.faces()]
         # the part is machined in its own frame (``machine_frame``): measured turned into it, every place and
         # direction it reports turned back
         rotation, share = machine_frame(part.faces(), surfaces)
     except Exception as error:  # noqa: BLE001 - a part that does not read is the report's to say
-        return {"error": f"{part.name}: {error}"}
+        passed_over(error)
+        return {"error": f"{part.name}: {error}"}, None
     own = {"part": part.name, "location": part.ref("face", 1), "axes": [brep.rounded(row, 6) for row in rotation],
            "turned": not np.array_equal(rotation, np.eye(3)), "aligned_area_fraction": round(share, 4)}
     try:
-        model = Model(part, surfaces)
-        if not np.array_equal(rotation, np.eye(3)):
-            model = Model(framed(part, rotation), [turned(surface, rotation) for surface in surfaces])
+        model = _model(part, surfaces, rotation)
     except Exception as error:  # noqa: BLE001 - a part that does not read is the report's to say
-        return {"error": f"{part.name}: {error}"}
+        passed_over(error)
+        return {"error": f"{part.name}: {error}"}, None
     families: dict[str, list[dict[str, Any]]] = {}
     scalars: dict[str, dict[str, Any]] = {}
     lost: dict[str, set[int]] = {}
@@ -543,54 +590,138 @@ def _part_result(part: brep.Part, axes: int, turning: bool, tools: tuple[float, 
     missed = brep.failed_ordinals(model.part, [model.screen], [model.screen.faces])
     model.shed()
     for name in ("walls", "gaps"):
-        _refined(model, families.get(name, []), name)
-    model.shed()
+        for n, item in enumerate(families.get(name, ())):
+            item["_n"] = n
     return {"frame": np.asarray(rotation, dtype=float).tolist(), "framing": own, "families": families,
             "scalars": scalars, "failed": {name: said for name, said in before.items() if name not in failed},
             "lost": {name: sorted(faces) for name, faces in lost.items()},
-            "missed": [[ordinal, count] for ordinal, count in missed.items()], "note": note}
+            "missed": [[ordinal, count] for ordinal, count in missed.items()], "note": note,
+            "refined": {"walls": {}, "gaps": {}}}, model
 
 
-def _refined(model: Model, items: list[dict[str, Any]], name: str) -> None:
-    """Each of a part's first ``CAP`` walls (or gaps), worst first, refined as the report refines the document's
-    first ``CAP`` (``_refine``) -- the document's are among its parts' own, a sort being stable --: what refining
-    changes of the item, and the faces whose rays the kernel failed on doing so with their counts, in its
-    ``_refined``; the item itself as measured."""
-    order = sorted(range(len(items)), key=lambda n: _ORDER[name](items[n]))
-    for n in order[:CAP]:
-        item, trial = items[n], dict(items[n])
-        was = brep.failures([model.screen])
-        try:
-            _refine(model, trial, outward=name == "gaps")
-        except Exception:  # noqa: BLE001 - a pair the kernel cannot measure keeps its sampled figure
-            pass
-        new = brep.failed_ordinals(model.part, [model.screen], [model.screen.faces], was)
-        item["_refined"] = {"set": {key: value for key, value in trial.items()
-                                    if key not in item or (item[key] is not value and item[key] != value)},
-                            "new": [[ordinal, count] for ordinal, count in new.items()]}
+def _model(part: brep.Part, surfaces: list[Any], rotation: np.ndarray) -> Model:
+    """The part's model in its machine frame: turned into it where ``rotation`` is no identity."""
+    model = Model(part, surfaces)
+    if not np.array_equal(rotation, np.eye(3)):
+        model = Model(framed(part, rotation), [turned(surface, rotation) for surface in surfaces])
+    return model
+
+
+def _refinement(model: Model, item: dict[str, Any], name: str) -> dict[str, Any]:
+    """What refining a listed wall (or gap) changes of it (``_refine``: its exact figure; ``set``), and the faces
+    whose rays the kernel failed on doing so, with their counts (``new``); the item itself as it was."""
+    trial = dict(item)
+    was = brep.failures([model.screen])
+    try:
+        _refine(model, trial, outward=name == "gaps")
+    except Exception as error:  # noqa: BLE001 - a pair the kernel cannot measure keeps its sampled figure
+        passed_over(error)
+    new = brep.failed_ordinals(model.part, [model.screen], [model.screen.faces], was)
+    return {"set": {key: value for key, value in trial.items()
+                    if key not in item or (item[key] is not value and item[key] != value)},
+            "new": [[ordinal, count] for ordinal, count in new.items()]}
+
+
+def _refined(live: dict[int, tuple[brep.Part, Model | None, Any, dict[str, Any]]], result: dict[str, Any],
+             item: dict[str, Any], name: str, changed: set[int]) -> dict[str, Any]:
+    """The refinement of a listed wall or gap (``_refinement``): its part's result's, else made now on its part's
+    model -- the one it was measured on, else one made of the part as it is (``_model``) -- and added to that
+    result (``changed``: written again where it is kept), unless a failure for want of memory was gone on past
+    meanwhile (``_common.passed_over``)."""
+    done = result["refined"][name].get(str(item["_n"]))
+    if done is not None:
+        return done
+    part, model, key, _result = live[id(result)]
+    if model is None:
+        model = _model(part, [brep.surface(face) for face in part.faces()], np.asarray(result["frame"], dtype=float))
+        live[id(result)] = (part, model, key, result)
+    start = memory_passed()
+    done = _refinement(model, item, name)
+    if memory_passed() == start:
+        result["refined"][name][str(item["_n"])] = done
+        if key is not None:
+            changed.add(id(result))
+    return done
 
 
 #: The private fields of an item the report reads once its part is measured: a wall's or a gap's two faces, and
-#: what refining it changes.
-_READ = frozenset({"_face", "_opposite", "_refined"})
+#: its number among its part's (``_n``), which its refinements are kept by.
+_READ = frozenset({"_face", "_opposite", "_n"})
 
 
 def _stored(result: dict[str, Any]) -> dict[str, Any]:
     """A part's result (``_part_result``) as plain data, its items with the private fields the report reads alone
     (``_READ``)."""
+    if "families" not in result:
+        return result
     return {**result, "families": {name: [{key: value for key, value in item.items()
                                            if not key.startswith("_") or key in _READ} for item in items]
                                    for name, items in result["families"].items()}}
 
 
 def _keeps(result: dict[str, Any]) -> bool:
-    """Whether a part's result is one to keep: one that read, whose families failed for no want of memory, and
-    whose holes' reading fell back for no reason the next measurement may not meet (``recognised.REPEATABLE``)."""
-    from cad._internal.dfm._common import out_of_memory
-
+    """Whether a part's result is one to keep: one that went on past no failure for want of memory (else
+    ``repeatable`` False, ``_part_result``), and whose holes' reading fell back for no reason the next measurement
+    may not meet (``recognised.REPEATABLE``). A part that does not read is kept as such, as a sheet part whose
+    measuring raised is."""
     note = result.get("note")
-    return (result.get("error") is None and not any(out_of_memory(said) for said in result["failed"].values())
+    return (result.get("repeatable") is not False
             and (note is None or note.get("reason") is None or note["reason"] in recognised.REPEATABLE))
+
+
+def _readable(result: Any) -> bool:
+    """Whether a kept part's result is one the report can be put together from: its fields of the kinds
+    ``_part_result`` makes, each item's order readable, each wall and gap numbered. One that is not is removed and
+    the part measured afresh (``measure``)."""
+    try:
+        if not isinstance(result, dict):
+            return False
+        if "error" in result:
+            return isinstance(result["error"], str)
+        frame = np.asarray(result["frame"], dtype=float)
+        if frame.shape != (3, 3) or not np.all(np.isfinite(frame)) or not isinstance(result["framing"], dict):
+            return False
+        for name, items in result["families"].items():
+            for item in items:
+                if not isinstance(item, dict):
+                    return False
+                if name in _ORDER:
+                    _sortable(_ORDER[name](item))
+                if name in ("walls", "gaps") and not all(isinstance(item.get(key), int) for key in _READ):
+                    return False
+                if name == "holes" and item.get("recognised_by") not in (None, "cad", "quiddity"):
+                    return False
+        scalars = result["scalars"]
+        for way, count in ((scalars.get("sharp_edges") or {"by_tool": {}})["by_tool"]).items():
+            if not isinstance(way, str) or not isinstance(count, int):
+                return False
+        if "small_features" in scalars and not isinstance(scalars["small_features"]["fine_faces"], int):
+            return False
+        if not all(isinstance(said, str) for said in result["failed"].values()):
+            return False
+        if not all(isinstance(ordinal, int) for faces in result["lost"].values() for ordinal in faces):
+            return False
+        if not all(isinstance(ordinal, int) and isinstance(count, int) for ordinal, count in result["missed"]):
+            return False
+        note = result["note"]
+        if note is not None and not (isinstance(note["declined"], list) and isinstance(note["disagreements"], list)
+                                     and note["by"] in ("cad", "quiddity")):
+            return False
+        for name in ("walls", "gaps"):
+            for done in result["refined"][name].values():
+                if not isinstance(done["set"], dict) or not all(isinstance(int(ordinal), int) and isinstance(count, int)
+                                                                for ordinal, count in done["new"]):
+                    return False
+        return True
+    except (AttributeError, KeyError, TypeError, ValueError, IndexError):
+        return False
+
+
+def _sortable(value: Any) -> None:
+    """``TypeError`` for an item's order that is no number, or tuple of them: the report sorts by it."""
+    for found in value if isinstance(value, tuple) else (value,):
+        if not isinstance(found, (int, float)):
+            raise TypeError(f"{found!r} is no order")
 
 
 def _one_cause(model: Model, index: int, state: dict[str, Any], families: dict[str, list[dict[str, Any]]],
@@ -813,6 +944,7 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
         try:
             return step()
         except Exception as error:  # noqa: BLE001 - one family failing never loses the rest
+            passed_over(error)
             failed[name] = f"{model.part.name}: {type(error).__name__}: {error}"
             return None
         finally:
@@ -1834,7 +1966,8 @@ def _sharp_edges(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             continue  # a sliver of the model's own (micrometres long), no feature a tool makes
         try:
             n1, n2 = edge_normals(model, edge)
-        except Exception:  # noqa: BLE001
+        except Exception as caught:  # noqa: BLE001
+            passed_over(caught)
             continue
         tried.append((edge, n1, n2, _way(model, state, edge, n1, n2, sees, cavity, made_from, partial, notes)))
     # a recess's way in is the whole recess's: a disc cutter that gets in anywhere along it (an entry hole at

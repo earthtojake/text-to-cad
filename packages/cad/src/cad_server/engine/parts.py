@@ -1,7 +1,8 @@
 """The parts' kept measurements in the cache folder (``cad._internal.dfm.parts``), held to their bounds by the daemon.
 
 A part's result is written and read by the process that measures it, never by the daemon, which imports no kernel:
-the daemon only lists the folder, ``parts/<kind>/<xx>/<name>.json``, and holds it to ``ENTRIES`` files and
+the daemon only lists the folder, ``parts/<kind>/<xx>/<name>.json`` (never through a link: one there is passed
+over, and what it leads to is never removed), and holds it to ``ENTRIES`` files and
 ``BYTES`` of them together, the least recently used first, by their time on disk, which a read sets again
 (``bound``). It sweeps the half-written files a stopped process left there (``<name>.json.<pid>.<random>.tmp``)
 once they are ``STALE_SECONDS`` old: a process writes one in an instant, so an older one has no writer left, and a
@@ -80,10 +81,14 @@ class Parts:
             return 0, 0
         now = time.time() if now is None else now
         found: list[tuple[float, int, str]] = []
-        for kind in _entries(root):
-            for folder in _entries(kind):
-                for entry in _entries(folder):
+        if os.path.islink(root):
+            return 0, 0  # a link is never followed: what it leads to is no part of the cache's
+        for kind in _folders(root):
+            for folder in _folders(kind.path):
+                for entry in _entries(folder.path):
                     name = entry.name
+                    if entry.is_symlink():
+                        continue
                     try:
                         stat = entry.stat(follow_symlinks=False)
                     except OSError:
@@ -109,6 +114,11 @@ class Parts:
                         pass
         self.held = (count, size)
         return count, size
+
+
+def _folders(folder: str | Path) -> list[os.DirEntry]:
+    """The folders in ``folder`` that are folders themselves, never a link to one."""
+    return [entry for entry in _entries(folder) if entry.is_dir(follow_symlinks=False)]
 
 
 def _entries(folder: Any) -> list[os.DirEntry]:
