@@ -108,16 +108,17 @@ write code for that tool: OCP is a dependency of `build123d`, not an integration
       `tests/python/packages/cad_server/`, `test_cli_commands.py` and `test_public_surface.py`. A file
       that has a document type has its operations there, never here (law 26).
 - [ ] **Our code**, in `packages/cad/src/cad/<name>/` for the library's side (helpers that take the
-      tool's objects; producers in `_producers.py`, gathered in `cad.registry._producers`), and in the
-      server for a program the server runs. It imports only its own extra's dependencies and
-      re-exports nothing of the tool. `tests/python/packages/cad_server/test_core_imports.py` holds
-      the package to the registry: add the name to `cad._INTEGRATIONS`
-      (`packages/cad/src/cad/__init__.py`) and the modules the extra brings to the test's
-      `EXTRA_MODULES`; it also holds `distributions`, `python` and `platforms` to the extra's
-      requirements and markers. Code of an engine process whose environment lacks the extra runs in a
-      process of its own, in the environment the engine makes for it (`coacd`'s decomposer,
-      `cad.engine.hulls`; `quiddity`'s recogniser, `cad.quiddity._process`), so the base the kernel
-      processes run in stays `cad[build123d]`.
+      tool's objects, or, for a tool with no objects of its own, the code that asks it about another
+      integration's: law 24's signature rule; producers in `_producers.py`, gathered in
+      `cad.registry._producers`), and in the server for a program the server runs. It imports only its
+      own extra's dependencies and re-exports nothing of the tool.
+      `tests/python/packages/cad_server/test_core_imports.py` holds the package to the registry: add
+      the name to `cad._INTEGRATIONS` (`packages/cad/src/cad/__init__.py`) and the modules the extra
+      brings to the test's `EXTRA_MODULES`; it also holds `distributions`, `python` and `platforms` to
+      the extra's requirements and markers. Code of an engine process whose environment lacks the
+      extra runs in a process of its own, in the environment the engine makes for it (`coacd`'s
+      decomposer, `cad.engine.hulls`; `quiddity`'s recogniser, `cad.quiddity._process`), so the base
+      the kernel processes run in stays `cad[build123d]`.
 - [ ] **Producer registration.** Each producer is `(type, matcher, writer, integration)`, with what it
       accepts and which parts of the type's content it provides; it regenerates a file from what a
       model returns. A tool that changes a native file in place is no producer but the type's edit
