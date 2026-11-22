@@ -10,7 +10,7 @@ import { takeInkInBox } from "../tools/select/boxTake.js";
 import { AnnotationToolbar } from "../../../annotation/toolbar.jsx";
 import ToolStack from "../tools/ToolStack.jsx";
 import PreviewPlaybar from "../tools/playbar/PreviewPlaybar.jsx";
-import AnimationSection from "../tools/playbar/AnimationSection.jsx";
+import AnimationSection, { JointsMotionContext } from "../tools/playbar/AnimationSection.jsx";
 import NavbarViewControls, { useNavbarViewControls } from "./NavbarViewControls.jsx";
 import { useDisplaySettings, viewGroups3d } from "./DisplaySettings.jsx";
 import { DISPLAY_DEFAULTS } from "../view-settings/viewerDisplaySettings.js";
@@ -67,7 +67,8 @@ const DOUBLE_PRESS_MS = 600;
  *   `sidebar`: the file's structure, in order — each a `ToolPanel`, drawn as a tab of the panel
  *   (`FlatPanel.jsx`): a tree, links, metadata, first.
  *   `fileSections`: the file's own settings — each a `ToolPanel`, drawn as a tab of the panel after the structure's:
- *   Parameters, Joints (the shell's Animation after them).
+ *   Parameters, Joints (the shell's Animation after them). `jointsHoldMotion`: the file's Joints tab takes its
+ *   mechanism's motion (`JointsMotionContext`, `AnimationSection.jsx`): no Motion tab, the motion at the top of Joints.
  *   `inspect`: what is picked and how the renderer describes it (`inspector/inspect.js`): the hover tip under Select
  *   and the frame's name for its marks.
  *   Gone in preview, kept mounted, so a tree keeps its expansion and scroll.
@@ -137,7 +138,7 @@ const DOUBLE_PRESS_MS = 600;
 // The update status with nothing to say (`ViewUpdateStatus`'s).
 const NO_UPDATE = Object.freeze({ pending: false, error: null });
 
-export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, fileSections = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
+export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, fileSections = null, jointsHoldMotion = false, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
   frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, boxSelect = null, inkTouches = null,
   doubleClickFits = true, zoomToSelection = null, inspect = null, promptNotes = null }) {
@@ -164,13 +165,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     if (chosenSpeed != null && Number(runtime.speed) !== chosenSpeed) runtime.onSpeedChange(chosenSpeed);
     if (chosenLoop != null && (runtime.loopEnabled !== false) !== chosenLoop) runtime.onLoopToggle(chosenLoop);
   }, [previewing, hasAnimation, animation?.speed, animation?.loopEnabled, animation?.activeClipId, chosenSpeed, chosenLoop]);
-  // Preview opens at rest, its routine started only by Autoplay.
-  const autoplayRef = useRef(shell.autoplay);
-  autoplayRef.current = shell.autoplay;
-  useEffect(() => {
-    const runtime = animationRef.current;
-    if (previewing && autoplayRef.current && animationControlsHaveContent(runtime) && !runtime.playing) runtime.onPlayToggle();
-  }, [previewing, hasAnimation]);
+  // Preview opens at rest, as the tools view does: only the person plays a routine.
   // What those settings change is the file's, and applied to its routine at once.
   // The person's presses on them are counted (`usage/controls.js`); the shell's own, above, are not.
   const counted = animation => (animationControlsHaveContent(animation) ? {
@@ -269,11 +264,18 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   // The view's panel (`FlatPanel.jsx`, placed by the frame): docked at the left, its tabs the renderer's
   // sections, one state with every view's; none on a phone; Preview keeps it mounted out of sight.
   // A file with routines has its Animation tab, last (`AnimationSection.jsx`): the tools view's routine; Preview's is its playbar's.
-  const animationTab = toolsRuntime ? <AnimationSection key={`animation-${frame.modelKey}`} runtime={toolsRuntime}
-    kind={toolsRuntime.noun === "Motion" ? "motion" : "animation"} disabled={viewerLoading || !scene} autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay} /> : null;
+  // A mechanism's motion whose Joints tab takes it (`jointsHoldMotion`) has none: its Joints tab is the ONE tab for both,
+  // the motion first (`JointsMotionContext`).
+  const routineKind = toolsRuntime?.noun === "Motion" ? "motion" : "animation";
+  const motionInJoints = Boolean(jointsHoldMotion && toolsRuntime && routineKind === "motion" && animationControlsHaveContent(toolsRuntime));
+  const routineDisabled = viewerLoading || !scene;
+  const jointsMotion = useMemo(() => (motionInJoints ? { runtime: toolsRuntime, disabled: routineDisabled } : null), [motionInJoints, toolsRuntime, routineDisabled]);
+  const animationTab = toolsRuntime && !motionInJoints ? <AnimationSection key={`animation-${frame.modelKey}`} runtime={toolsRuntime}
+    kind={routineKind} disabled={routineDisabled} /> : null;
   // The panel's tabs: the file's structure (`sidebar`), then its own settings (`fileSections`: Parameters, Joints),
   // then Animation, each only where the file has it.
-  const panelTabs = sidebar || fileSections || animationTab ? <>{sidebar}{fileSections}{animationTab}</> : null;
+  const panelTabs = sidebar || fileSections || animationTab
+    ? <JointsMotionContext.Provider value={jointsMotion}>{sidebar}{fileSections}{animationTab}</JointsMotionContext.Provider> : null;
   const panel = panelTabs ? { kind: "model", label: t("flatPanel.modelPanel"), searchLabel: t("flatPanel.searchModel"), sections: panelTabs } : null;
   const copyAction = () => {
     if (previewing) return false;
@@ -398,7 +400,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
       // playbar, its own routine.
       bottomCentre={<>
         {previewing && hasAnimation ? <PreviewPlaybar key={frame.modelKey} runtime={playbackRuntime} disabled={viewerLoading || !scene}
-          autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay} idle={previewIdle} scheme={previewScheme} /> : null}
+          idle={previewIdle} scheme={previewScheme} /> : null}
       </>}
       loading={frame.presentationState?.file === frame.modelKey && frame.presentationState?.covering ? null : frame.loading}
       // The card: the file as the alert names it (the catalog's absolute path), which Report Issue keeps out of its issue.

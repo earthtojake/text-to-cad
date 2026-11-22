@@ -43,17 +43,17 @@ test("the camera, the display and Preview's settings are always kept; a slice co
 test("a view with no display or no camera writes null for them, playback at its defaults, and a drawing's camera is whatever the drawing says", () => {
   const drawing = writeFileView({ camera: { scale: 2, offsetX: 1, offsetY: 3 } });
   assert.deepEqual(drawing, { version: FILE_VIEW_VERSION, camera: { scale: 2, offsetX: 1, offsetY: 3 }, display: null, preview: null,
-    playback: { orbitSpeed: 1, autoplay: false }, renderer: {} });
+    playback: { orbitSpeed: 1 }, renderer: {} });
   assert.deepEqual(readFileView(drawing).camera, { scale: 2, offsetX: 1, offsetY: 3 });
   assert.equal(writeFileView({ camera: "x" }).camera, null);
 });
 
 test("preview's playback settings are the view's: written whole, read back bounded, and the defaults for a view without them", () => {
   const written = writeFileView({ playback: { orbit: false, orbitSpeed: 2, autoplay: true, speed: 2, loop: false, junk: 1 } });
-  assert.deepEqual(written.playback, { orbitSpeed: 2, autoplay: true, speed: 2, loop: false });
-  assert.deepEqual(readFileView(JSON.parse(JSON.stringify(written))).playback, { orbitSpeed: 2, autoplay: true, speed: 2, loop: false });
-  assert.deepEqual(readFileView({ version: FILE_VIEW_VERSION, playback: { orbitSpeed: 99, speed: "fast" } }).playback, { orbitSpeed: 5, autoplay: false });
-  assert.deepEqual(readFileView(undefined).playback, { orbitSpeed: 1, autoplay: false });
+  assert.deepEqual(written.playback, { orbitSpeed: 2, speed: 2, loop: false });
+  assert.deepEqual(readFileView(JSON.parse(JSON.stringify(written))).playback, { orbitSpeed: 2, speed: 2, loop: false });
+  assert.deepEqual(readFileView({ version: FILE_VIEW_VERSION, playback: { orbitSpeed: 99, speed: "fast" } }).playback, { orbitSpeed: 5 });
+  assert.deepEqual(readFileView(undefined).playback, { orbitSpeed: 1 });
 });
 
 test("a chosen floor finish is kept with Preview's settings, in the record either app writes, group by group", () => {

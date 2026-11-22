@@ -43,7 +43,7 @@ function RoutineMenu({ runtime, disabled }) {
 /**
  * Preview's playbar, for a file with routines: one transparent row under the model, centred, as it
  * was before Preview had a sidebar — the Routines list at its left end where there are several,
- * Play or Pause, the scrubber, and the Playback settings (Speed, Loop, Autoplay) at its right end,
+ * Play or Pause, the scrubber, and the Playback settings (Speed, Loop) at its right end,
  * their menus opening up. Its buttons sit 4px apart, the scrubber as far from the button either
  * side of it. It plays Preview's own routine (`runtime`), never the tools view's. It comes and goes
  * with Preview's bar (`idle`, `createPreviewIdle`), its playing untouched by either. Preview has no
@@ -51,11 +51,11 @@ function RoutineMenu({ runtime, disabled }) {
  *
  * The tools view has no playbar: its routines are the panel's Animation tab (`AnimationSection.jsx`).
  *
- * @param {{ runtime: object, autoplay: boolean, onAutoplayChange(value: boolean): void, disabled?: boolean,
+ * @param {{ runtime: object, disabled?: boolean,
  *   idle?: ReturnType<typeof import("../PreviewChrome.jsx").createPreviewIdle> | null, scheme?: "light" | "dark" | null }} props
  *   `scheme`: the backdrop's ink (`backdropScheme`), its token scope, as Preview's bar is.
  */
-export default function PreviewPlaybar({ runtime, autoplay, onAutoplayChange, disabled = false, idle = null, scheme = null }) {
+export default function PreviewPlaybar({ runtime, disabled = false, idle = null, scheme = null }) {
   const shown = usePreviewShown(idle);
   const { t } = useI18n();
   if (!animationControlsHaveContent(runtime)) return null;
@@ -72,6 +72,6 @@ export default function PreviewPlaybar({ runtime, autoplay, onAutoplayChange, di
     <div className="min-w-0 flex-1 px-1">
       <AnimationTimeControl runtime={runtime} disabled={disabled} />
     </div>
-    <PlaybackMenu animation={runtime} side="top" disabled={disabled} autoplay={autoplay} onAutoplayChange={onAutoplayChange} />
+    <PlaybackMenu animation={runtime} side="top" disabled={disabled} />
   </div>;
 }

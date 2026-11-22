@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
 import { DEFAULT_PANEL_WIDTH } from '../../../dist/renderers/kit/shell/sidebars.js';
-import AnimationSection from '../../../dist/renderers/kit/tools/playbar/AnimationSection.js';
+import AnimationSection, { JointsMotionContext } from '../../../dist/renderers/kit/tools/playbar/AnimationSection.js';
 import XbfPositionSection, { useXbfPose } from '../../../dist/renderers/xbf/XbfPositionSection.js';
 import { useXbfMotion } from '../../../dist/renderers/xbf/useXbfMotion.js';
 import { createAnimationClock } from '../../../dist/renderers/kit/tools/playbar/animationClock.js';
@@ -80,7 +80,7 @@ function Harness({ mechanism = kinematics, scene }: { mechanism?: any, scene: { 
       sections={<XbfPositionSection kinematics={mechanism} motion={motion?.enabled ? motion : null} values={pose.values} couplings={pose.couplings}
         preset={pose.preset} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />}
       tab="position" onTabChange={() => {}} width={DEFAULT_PANEL_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
-    <AnimationSection runtime={motion} kind="motion" autoplay={false} onAutoplayChange={() => {}} />
+    <AnimationSection runtime={motion} kind="motion" />
   </div>;
 }
 
@@ -88,9 +88,10 @@ const lastPose = (scene: { setPose: ReturnType<typeof vi.fn> }) => scene.setPose
 const hingeAt = (scene: { setPose: ReturnType<typeof vi.fn> }) => lastPose(scene)?.hinge?.[0] ?? null;
 const bar = () => document.querySelector<HTMLElement>('[data-animation-section]')!;
 // The Animation tab's controls, the same set at rest, playing and paused: nothing comes or goes.
-const controls = () => [...bar().querySelectorAll('[data-animation-play], [data-animation-reset], [role=slider], [data-animation-speed], [data-animation-loop], [data-animation-autoplay]')]
+const tab = () => bar().closest<HTMLElement>('[data-tool-panel]')!;
+const controls = () => [...tab().querySelectorAll('[data-animation-play], [data-animation-reset], [role=slider], [data-animation-speed], [data-animation-loop]')]
   .map(control => control.getAttribute('aria-label') || control.textContent).map(name => name === 'Pause motion' ? 'Play motion' : name!.split(':')[0]);
-const CONTROLS = ['Play motion', 'Reset', 'Animation time', 'Animation speed', 'Loop', 'Autoplay'];
+const CONTROLS = ['Play motion', 'Animation time', 'Animation speed', 'Loop', 'Reset'];
 const toStart = () => fireEvent.keyDown(within(bar()).getByRole('slider', { name: 'Animation time' }), { key: 'Home' });
 // The routines' dropdown (Clip), above the playbar: each routine by its name, the one in hand checked.
 async function clips(user: ReturnType<typeof userEvent.setup>) {
@@ -109,10 +110,10 @@ async function chooseClip(user: ReturnType<typeof userEvent.setup>, name: string
 it('a GLB shows Animation and Animation, a mechanism Motion and Sequence', () => {
   const words = () => [document.querySelector('[data-tool-panel-heading] h3')?.textContent, bar().querySelector('[data-panel-select-row]')!.firstElementChild!.textContent];
   const runtime = { clips: [{ id: 'a', label: 'Spin', duration: 1 }], activeClipId: 'a', clock: createAnimationClock(), enabled: true, playing: false, elapsedSec: 0, speed: 1, loopEnabled: true };
-  const { unmount } = render(<AnimationSection runtime={runtime} autoplay={false} onAutoplayChange={() => {}} />);
+  const { unmount } = render(<AnimationSection runtime={runtime} />);
   expect(words()).toEqual(['Animation', 'Animation']);
   unmount();
-  render(<AnimationSection runtime={{ ...runtime, noun: 'Motion' }} kind="motion" autoplay={false} onAutoplayChange={() => {}} />);
+  render(<AnimationSection runtime={{ ...runtime, noun: 'Motion' }} kind="motion" />);
   expect(words()).toEqual(['Motion', 'Sequence']);
 });
 
@@ -131,10 +132,10 @@ it("the Animation section lists the document's motions by name, its time and its
   expect([controls(), lastPose(scene)]).toEqual([CONTROLS, null]);
   expect(await clips(user)).toEqual([['wave', 'true'], ['swing', 'false']]);
   expect([within(bar()).getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuetext'), bar().querySelector('[data-animation-speed]')!.getAttribute('aria-label'),
-    within(bar()).getByRole('switch', { name: 'Loop' }).getAttribute('aria-checked'), within(bar()).getByRole('switch', { name: 'Autoplay' }).getAttribute('aria-checked')])
-    .toEqual(['0.00s of 2.00s', 'Animation speed: 1×', 'true', 'false']);
-  // Reset, the transport's, is idle at the start; Loop and Autoplay are a label and a switch, no icon; the motions' row is labelled "Sequence".
-  expect([within(bar()).getByRole('button', { name: 'Reset' }).hasAttribute('disabled'), bar().querySelectorAll('[data-panel-switch-row] svg').length,
+    within(bar()).getByRole('switch', { name: 'Loop' }).getAttribute('aria-checked')])
+    .toEqual(['0.00s of 2.00s', 'Animation speed: 1×', 'true']);
+  // Reset, the tab's, at its bottom right, is idle at the start; Loop is a label and a switch, no icon; the motions' row is labelled "Sequence".
+  expect([within(tab()).getByRole('button', { name: 'Reset' }).hasAttribute('disabled'), bar().querySelectorAll('[data-panel-switch-row] svg').length,
     bar().querySelector('[data-panel-select-row]')!.firstElementChild!.textContent])
     .toEqual([true, 0, 'Sequence']);
 
@@ -169,10 +170,10 @@ it("the Animation section lists the document's motions by name, its time and its
   expect(hingeAt(scene)).toBe(60);
   expect(within(bar()).getByRole('button', { name: 'Play motion' })).toBeTruthy();
   expect(frames).toEqual([]);
-  // Reset, the transport's, puts it back at its start and the model at rest, and then is idle.
-  await user.click(within(bar()).getByRole('button', { name: 'Reset' }));
+  // Reset, the tab's, puts it back at its start and the model at rest, and then is idle.
+  await user.click(within(tab()).getByRole('button', { name: 'Reset' }));
   expect([lastPose(scene), within(bar()).getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuetext'),
-    within(bar()).getByRole('button', { name: 'Reset' }).hasAttribute('disabled')]).toEqual([null, '0.00s of 2.00s', true]);
+    within(tab()).getByRole('button', { name: 'Reset' }).hasAttribute('disabled')]).toEqual([null, '0.00s of 2.00s', true]);
 
   // Another motion chosen in the dropdown plays from its start: `swing` opens at `open`, checked as the one in hand.
   await chooseClip(user, 'swing');
@@ -238,6 +239,51 @@ it("a paused motion's frame is Joints' to take over: every control stays live, a
   expect(lastPose(scene)).toBeNull();
   expect([field().value, field().disabled]).toEqual(['0.00', false]);
   expect(within(position()).getByRole('button', { name: 'Position: Default' })).toBeTruthy();
+});
+
+// A mechanism with both joints and motions has ONE tab, "Joints" (the shell hands its motion to the Joints tab,
+// `JointsMotionContext`): the motion's controls first, a hairline and the joints under their heading, and one Reset at
+// the bottom right that puts back both, on while either is off its start.
+function Merged({ scene }: { scene: { setPose: (values: any) => void } }) {
+  const pose = useXbfPose(kinematics);
+  const position = useRef(pose);
+  position.current = pose;
+  const motion = useXbfMotion(kinematics, (values: any) => scene.setPose(values || (position.current.applied ? position.current.values : null)));
+  useEffect(() => { if (!motion?.enabled) scene.setPose(pose.applied ? pose.values : null); }, [pose.values, pose.applied]);
+  return <JointsMotionContext.Provider value={{ runtime: motion, disabled: false }}>
+    <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
+      sections={<XbfPositionSection kinematics={kinematics} motion={motion?.enabled ? motion : null} values={pose.values} couplings={pose.couplings}
+        preset={pose.preset} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />}
+      tab="position" onTabChange={() => {}} width={DEFAULT_PANEL_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
+  </JointsMotionContext.Provider>;
+}
+
+it('a mechanism with joints and motions has ONE "Joints" tab: the motion first, the joints under a hairline, one Reset for both', async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0, skipHover: true });
+  const scene = { setPose: vi.fn() };
+  render(<Merged scene={scene} />);
+  const panel = screen.getByRole('tabpanel', { name: /^Joints\b/ });
+  // In order: the motion's controls, the hairline and its heading, the Position row, a joint's slider; one Reset, the tab's.
+  const order = [...panel.querySelectorAll('[data-joints-motion], [data-joints-rule], [data-pose-row], [role=slider][aria-label=hinge], [data-pose-reset], [data-animation-reset]')]
+    .map(node => node.hasAttribute('data-joints-motion') ? 'motion' : node.hasAttribute('data-joints-rule') ? `rule:${node.textContent}`
+      : node.hasAttribute('data-pose-row') ? 'position' : node.hasAttribute('data-pose-reset') ? 'reset' : node.hasAttribute('data-animation-reset') ? 'transport-reset' : 'joint');
+  expect([document.querySelectorAll('[data-tool-panel]').length, order, panel.querySelector('[data-animation-transport] [data-animation-reset]')])
+    .toEqual([1, ['motion', 'rule:Joints', 'position', 'joint', 'reset'], null]);
+  const reset = () => within(panel).getByRole('button', { name: 'Reset joints' }) as HTMLButtonElement;
+  expect(reset().disabled).toBe(true);
+  // The motion played and paused: Reset on; pressed, the motion back at its start and the joints as built.
+  await user.click(within(panel).getByRole('button', { name: 'Play motion' }));
+  frameAt(500);
+  await user.click(within(panel).getByRole('button', { name: 'Pause motion' }));
+  expect([reset().disabled, hingeAt(scene)]).toEqual([false, 7.5]);
+  await user.click(reset());
+  expect([reset().disabled, lastPose(scene), within(panel).getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuenow')]).toEqual([true, null, '0']);
+  // A joint set by its named position: Reset on again, and it puts the joints back.
+  await user.click(within(panel).getByRole('button', { name: 'Position: Default' }));
+  await user.click(screen.getByRole('menuitemradio', { name: 'open' }));
+  expect([reset().disabled, hingeAt(scene)]).toEqual([false, 90]);
+  await user.click(reset());
+  expect([reset().disabled, within(panel).getByRole('button', { name: 'Position: Default' }) !== null]).toEqual([true, true]);
 });
 
 // A parameter edit builds the model again (a preview, then a saved version): a mechanism with the same joints keeps the

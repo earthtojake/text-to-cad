@@ -142,7 +142,7 @@ export function usePreviewFrame({ previewing, setPreviewing, modelKey, fileView,
   }, [previewing]);
   useEffect(() => { setPreviewing(false); }, [modelKey, setPreviewing]);
   // Preview is a view of its own (`PreviewView.jsx`): it opens on the model as authored, in Render,
-  // still, its routine at rest and started only by Autoplay, and leaving it takes it away.
+  // still, its routine at rest until the person plays it, and leaving it takes it away.
   const enter = () => {
     setCoverRequested(true);
     // After the frame the cover is painted in (a hidden page paints none: a timer stands in).

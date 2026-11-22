@@ -13,7 +13,7 @@ import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
 //   display   the Display settings: the mode, the grid, and what every mode shares (the model tools, the lens).
 //   preview   Preview's own settings: Render's lighting, background, floor and part colours.
 //   playback  the playback settings (`tools/playbar/playbackPreferences.js`): Preview's orbit speed,
-//             Autoplay, and the speed and loop chosen for the routine.
+//             and the speed and loop chosen for the routine.
 //   renderer  the renderer's own slices of view state, each `{ signature, value }`: what the
 //             slice was written against. A slice comes back only while its signature still
 //             matches the one the renderer declares for the file on screen — a rebuilt model

@@ -443,7 +443,6 @@ export default {
   "colorPicker.opacityHeading": "불투명도",
   "preview.preparing": "미리 보기 준비 중…",
   "playback.loop": "반복",
-  "playback.autoplay": "자동 재생",
   "chip.copied": "복사됨",
   "explode.label": "분해",
   "quickEdit.describe": "변경 사항 설명…",

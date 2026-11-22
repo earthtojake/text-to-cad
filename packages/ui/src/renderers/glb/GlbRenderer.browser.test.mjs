@@ -336,12 +336,18 @@ test('an animated GLB opens at rest, its clips its Animation tab\'s, no playbar 
   const panel = await openAnimation(pane);
   assert.deepEqual([await pane.locator('aside[data-flat-panel]:not([hidden]) [data-flat-panel-tab="animation"] [data-flat-panel-tab-name]').textContent(),
     await panel.locator('[data-panel-select-row]').first().locator('label, [data-field-label]').first().textContent()], ['Animation', 'Animation'], 'a GLB\'s tab and clip row use glTF\'s word');
-  const controls = () => panel.locator('[data-animation-play], [role=slider], [data-animation-speed], [data-animation-loop], [data-animation-autoplay]')
+  const controls = () => panel.locator('[data-animation-play], [role=slider], [data-animation-speed], [data-animation-loop]')
     .evaluateAll(elements => elements.map(element => (element.getAttribute('aria-label') || element.textContent).replace('Pause', 'Play').split(':')[0]));
-  const CONTROLS = ['Play animation', 'Animation time', 'Animation speed', 'Loop', 'Autoplay'];
+  const CONTROLS = ['Play animation', 'Animation time', 'Animation speed', 'Loop'];
   assert.deepEqual(await controls(), CONTROLS, 'at rest');
-  // The transport's Reset, idle at rest; no Stop.
-  assert.deepEqual([await panel.getByRole('button', { name: 'Reset', exact: true }).isDisabled(), await panel.getByRole('button', { name: /Stop/ }).count()], [true, 0], 'Reset idle at rest, no Stop');
+  // No Reset in the transport and no Stop: Reset is the tab's, at its bottom right (the panel's actions row, as Params'
+  // and Joints'), idle at rest.
+  const tab = panel.locator('xpath=ancestor::*[@data-tool-panel][1]');
+  const reset = tab.locator('[data-panel-foot] [data-animation-reset]');
+  const [tabBox, resetBox] = [await tab.boundingBox(), await reset.boundingBox()];
+  assert.deepEqual([await panel.locator('[data-animation-transport] button').count(), await reset.isDisabled(), await tab.getByRole('button', { name: /Stop/ }).count(),
+    resetBox.y > (await panel.locator('[data-animation-loop]').boundingBox()).y, Math.abs(tabBox.x + tabBox.width - resetBox.x - resetBox.width) <= 24],
+  [1, true, 0, true, true], `the transport is Play alone; Reset idle at the tab's bottom right, no Stop: ${JSON.stringify({ tabBox, resetBox })}`);
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   const toolsRest = await stillCapture(page);
   const panelTime = () => page.evaluate(() => Number(document.querySelector(

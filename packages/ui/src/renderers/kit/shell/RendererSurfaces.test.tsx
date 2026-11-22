@@ -472,15 +472,14 @@ it('opening another file while Preview is up leaves it; crossing touches neither
   expect([calls, viewport.preview]).toEqual([[], null]);
 });
 
-it("under Autoplay Preview plays its own routine as it opens; the tools view's is not touched", async () => {
+it("Preview opens at rest, even for a file whose old view said Autoplay: nothing plays but the person", async () => {
   const calls: string[] = [];
   mountRoutine({ animation: routineRuntime('tools', calls), previewAnimation: routineRuntime('preview', calls) },
     { version: 2, playback: { orbitSpeed: 1, autoplay: true } });
   fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
   await screen.findByRole('button', { name: 'Exit preview' });
-  await waitFor(() => expect(calls).toEqual(['play preview']));
   fireEvent.click(screen.getByRole('button', { name: 'Exit preview' }));
-  expect(calls).toEqual(['play preview']);
+  expect(calls).toEqual([]);
 });
 
 it('a view that stops offering Preview while it is up leaves it as every exit does: its view goes, and nothing else', async () => {

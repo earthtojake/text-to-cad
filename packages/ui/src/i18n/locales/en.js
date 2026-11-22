@@ -465,7 +465,6 @@ export default {
   "colorPicker.opacityHeading": "Opacity",
   "preview.preparing": "Preparing preview…",
   "playback.loop": "Loop",
-  "playback.autoplay": "Autoplay",
   "chip.copied": "Copied",
   "explode.label": "Explode",
   "quickEdit.describe": "Describe a change…",

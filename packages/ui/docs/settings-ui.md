@@ -807,7 +807,8 @@ a drawing of one layer its one row. After the structure's
 tabs, **only where the file has them**, what it lets the person set, each a tab by its name (`ToolPanel`s, the
 renderer's `fileSections`, then the shell's Animation): **Params** ([Parameters](#parameters)), **Joints** (Reset in
 its actions row, last, as Parameters' Reset and Save are), **Animation** (`kit/tools/playbar/AnimationSection.jsx`,
-below). The strip is for using tools, the panel for reading the file and setting what it declares, the corner for how
+below, its Reset in the same place). **A mechanism with joints and motions has ONE tab, Joints**: its motion first, then
+its joints, one Reset for both (below); a file with motions and no joints keeps its **Motion** tab. The strip is for using tools, the panel for reading the file and setting what it declares, the corner for how
 it is looked at, and Quick Edit's chip list for what is selected.
 
 ### The panel
@@ -891,16 +892,24 @@ structure. Every rule here, and why:
   Hierarchy; a drawing's Layers; a robot's Links), then **Params**, **Joints** and **Animation**, each only where
   the file has it. Their content is as it was in the right panel's sections: Parameters' two-row sliders with the
   borderless value field, its foot and its locked state; Joints' Position dropdown; Animation's Clip dropdown, its play
-  button and scrubber, its Speed dropdown and its Loop and Autoplay switches. Tabs that do not fit the head
+  button and scrubber, its Speed dropdown, its Loop switch and its Reset. Tabs that do not fit the head
   are ⋯'s items (below), never truncated and never scrolled.
 - **Animation** is one control group, not a form, in the panel's 28px rows 4px apart, every control's right edge on
   the right 16px line: the routine's dropdown, a labelled row as Speed is (the tab and the label are the routines' own
   words: an animation's, "Animation" and "Animation"; a mechanism's motion, "Motion" and "Sequence", from the renderer's
-  `kind`; the tab's id stays `animation`; a choice plays it from its start), then the transport, a playbar's — Play/Pause and
-  **Reset** (the strip's 28px tiles; Reset puts the routine back at its start and the model at rest, idle while it is
-  there), then the scrubber the rest of the row, with no time readout (the time is the scrubber's value, read out to
-  assistive technology) — then **Speed** a dropdown ("1×"), **Loop** and **Autoplay** switch rows: the label left, its
-  switch right, no icon.
+  `kind`; the tab's id stays `animation`; a choice plays it from its start), then the transport, a playbar's — Play/Pause
+  (the strip's 28px tile), then the scrubber the rest of the row, with no time readout (the time is the scrubber's value,
+  read out to assistive technology) — then **Speed** a dropdown ("1×") and **Loop** a switch row: the label left, its
+  switch right, no icon. **Reset** is the tab's actions row, at its bottom right as Params' and Joints' are
+  (`PanelActions`): it puts the routine back at its start and the model at rest, idle while it is there. There is no
+  Reset in the transport: one Reset a tab, always in the same place.
+- **Joints with motions** (a mechanism's: an engine document whose joints have motions) is ONE tab, **Joints**, drawn
+  as the Display card's sections are: first the motion's rows (Sequence, the transport, Speed, Loop), then ONE hairline
+  and the joints' heading ("Joints", in the foreground at medium weight, `data-joints-heading`), then the Position row and
+  the joint sliders, then ONE **Reset** (its name "Reset joints") that puts back both — the motion to its start, the
+  joints to their default — on while either is off it (`KinematicsResetRow`'s `routine`). The shell hands the motion to
+  the renderer's Joints tab (`RendererShell`'s `jointsHoldMotion`, `JointsMotionContext`) and draws no Motion tab. Why:
+  a mechanism's motions drive the same joints the sliders set, so two tabs were one subject split in two.
 - **Parameters** keeps its controls as they were; its status ("Run the script again to edit.") stands right-aligned
   directly above Reset and Save, one or two lines, and is the disabled buttons' tooltip, so why they are off is read
   where they are. **Locked, only the controls look it**: labels and values keep their colours; the sliders and fields
@@ -943,8 +952,8 @@ structure. Every rule here, and why:
 - **A tab's changed dot**: Params, Joints and Animation carry a dot (`kit/tools/ChangedDot.jsx`: 4px, `--brand-icon`)
   against their name's top-right, which moves neither the name nor the tab's width, while their state is off its
   default, exactly while the tab's Reset is on, from the state that turns Reset on (`FlatPanelChanged`, beside the
-  button): Params a draft off the document, Joints the pose off the default, Animation the routine off its start.
-  Speed, Loop and Autoplay are preferences and never set it. The tab's name then says ", changed"; a hidden tab's
+  button): Params a draft off the document, Joints the pose off the default (or, holding motions, the motion off its
+  start too), Animation the routine off its start. Speed and Loop are preferences and never set it. The tab's name then says ", changed"; a hidden tab's
   dot is on its ⋯ item, and ⋯ itself carries one where any hidden tab does. A single tab's title carries it too.
 - **The search** covers the tree-like tabs alone — a STEP's or an `.xbf`'s Model, a robot's Links, a board's Parts,
   Nets and Layers, a schematic's Parts, Nets and Hierarchy, a drawing's Layers (`isStructureTab`: the `tree` section,
@@ -1823,7 +1832,9 @@ row, and a robot's is the same row. The dropdown holds
 **Default**, which puts the joints back, then the named poses, and Custom while the joints are
 set by hand. Its last row is its actions row (`KinematicsResetRow`, `data-pose-actions`), where Params has
 its Reset and Save, in the same place and style (`PanelActions`): **Reset** alone (its name "Reset
-joints"), the way back to the default pose, off while the joints are at their default.
+joints"), the way back to the default pose, off while the joints are at their default. Where the mechanism has motions,
+the tab holds them first, above a hairline and the joints' heading, and its one Reset puts back the motion too (see
+[The panel](#the-panel)).
 Each joint is the [slider control](#the-slider-control): its name and value (degrees read
 "90.0°", a robot's slides in millimetres, "12.5 mm", typed in millimetres too; the unit says
 whether it turns or slides, so no kind icon), then its slider (no tooltip: the range is the slider's `aria-valuemin` and `aria-valuemax`).
@@ -2255,8 +2266,8 @@ a live `setDisplaySettings` refuses it as it refuses any mode it does not know, 
 left in it reads as the defaults. Render settings edited in Preview are the file's Render settings;
 leaving returns the tools view to the file's mode.
 
-**Routines** play, in the tools view, from the panel's **Animation** tab (**Motion** for an engine document's motions;
-`kit/tools/playbar/AnimationSection.jsx`),
+**Routines** play, in the tools view, from the panel's **Animation** tab (**Motion** for an engine document's motions
+where it has no joints; where it has joints too, the top of its **Joints** tab, above; `kit/tools/playbar/AnimationSection.jsx`),
 last of its tabs, for a file with routines only (an engine document's motions, a STEP's where it has any, a GLB's
 animations; none: no tab), and nothing of them is on the tool strip or under the model: there is no playbar in the
 tools view. Its rows are the panel's own (`kit/inspector/panelRows.jsx`, 28px, on the panel's one 16px inset, `--panel-inset`), top to bottom:
@@ -2264,8 +2275,14 @@ tools view. Its rows are the panel's own (`kit/inspector/panelRows.jsx`, 28px, o
   menu (one too); a choice plays it from its start.
 - **The transport**: **Play** or **Pause** (the strip's 28px tile, its icon turning in place) at the row's left, the
   scrubber (`AnimationTimeControl`) the rest of it; no time text (the time is the scrubber's value text).
-- **Speed** a dropdown ("1×"), **Loop** (Repeat) and **Autoplay** (CirclePlay) switch rows: the file's (its view's
-  `playback`), Speed and Loop once chosen what its routines play with, Autoplay whether entering Preview starts it.
+- **Speed** a dropdown ("1×") and **Loop** (Repeat) a switch row: the file's (its view's `playback`), once chosen what
+  its routines play with.
+- **Reset**, the tab's actions row at its bottom right (as Params' and Joints'): the routine back at its start and the
+  model at rest.
+
+**There is no Autoplay.** A routine opens at rest, in the tools view and in Preview, and only the person plays it: the
+settings are kept per session, so a switch to start it on entry saved nothing worth a row. A file's view from before
+(`playback.autoplay`) is read and the field dropped.
 
 **The tab's controls are one set** at rest, playing and paused: nothing comes or goes as the routine plays.
 **There is no Stop: the scrubber's start is the rest pose.** Scrubbed to 0 while the routine is not playing (dragged
@@ -2279,14 +2296,14 @@ A record from before the tab that kept a playbar put away (`playback.collapsed`)
 In **Preview**, which has no strip, Preview's own playbar plays its routine
 (`kit/tools/playbar/PreviewPlaybar.jsx`): one transparent row under the model on no surface, fading with
 Preview's bar — the routines' list where there are two or more, then **Play** or **Pause**, the scrubber
-and **Playback settings** (a cog: Speed, Loop, Autoplay). In the tools view a routine is a motion as a pose is
+and **Playback settings** (a cog: Speed, Loop). In the tools view a routine is a motion as a pose is
 (see [one motion at a time](#tools-and-lifecycle)): paused, its frame stays on the model. A
 routine opens at rest. Each view's routine is its own: entering Preview sets the
-tools view's untouched and starts its own at rest, playing only under Autoplay (off by default);
+tools view's untouched and starts its own at rest, playing only when the person plays it;
 leaving throws Preview's away, and the tools view's is as it was left. A new revision of the
 model starts its routine at rest. Speed and Loop are the file's, one set,
 chosen in Playback settings and kept in its view once chosen — until then the routine's own
-apply. Orbit's speed (1×) and Autoplay are the file's too, remembered between leaving and
+apply. Orbit's speed (1×) is the file's too, remembered between leaving and
 re-entering Preview and across a reload of the tab; whether it orbits is not kept. Another
 file has its own, which a file the page left has back when it is shown again, and a file the
 page has not shown starts at the defaults. Nothing of the
@@ -2308,7 +2325,7 @@ over the tools view's while it is up and unmounted as it closes, sharing only th
 device. The tools view's viewport stays mounted throughout and is never told: it draws nothing
 while covered and is uncovered with its own last frame. What is not either state's is the file's settings, shared by
 both and kept: its Display settings (an edit in Preview's Render settings is the file's
-Render settings), Orbit's speed, Autoplay, Speed and Loop.
+Render settings), Orbit's speed, Speed and Loop.
 
 **Two views, two ways of drawing.** The tools view is drawn for working on the
 model: the scene quality its settings resolve to, and a lower pixel ratio while

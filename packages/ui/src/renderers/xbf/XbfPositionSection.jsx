@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useContext, useMemo, useState, useSyncExternalStore } from "react";
 import {
   xbfCoupledPairs, xbfCouplingControls, xbfCouplingValues, xbfCouplingWrite, xbfCouplings, xbfPoseControls,
   xbfPoseValues, xbfSamePose, xbfUnposable, xbfOtherWarnings
 } from "@cad/core/lib/xbf/xbfKinematics.js";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
+import { AnimationControls, JointsMotionContext, routineAway } from "../kit/tools/playbar/AnimationSection.jsx";
 import { FileSheetStatusText, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
 import { DEFAULT_POSE_VALUE, KinematicsPoseRow, KinematicsResetRow, NO_PRESET_VALUE } from "../kit/inspector/kinematicsControls.jsx";
@@ -168,6 +169,7 @@ export default function XbfPositionSection({ kinematics, motion = null, ...own }
 }
 
 function PositionBody({ kinematics, values, couplings = null, preset, onValues, onPreset, onReset }) {
+  const routine = useContext(JointsMotionContext);
   const usage = useControlUsage();
   const { t } = useI18n();
   const controls = xbfPositionRows(kinematics);
@@ -198,8 +200,19 @@ function PositionBody({ kinematics, values, couplings = null, preset, onValues, 
       origin={Math.min(Math.max(Number(rest) || 0, control.min), control.max)}
       onValueChange={next => write(control, next ?? currentValue)} />;
   };
+  // Its mechanism's motion, where the shell hands it here (`JointsMotionContext`): the tab's top section, then a
+  // hairline and the joints under their heading, as the Display card's sections are; one Reset for both.
+  const held = routine && !routine.disabled ? routine : null;
   return <ToolPanel id="position" title={t("position.title")} label={t("position.controls")} fit="details">
     <div>
+      {routine ? <>
+        <div className="flex flex-col gap-1 pb-3" data-joints-motion="">
+          <AnimationControls runtime={routine.runtime} kind="motion" disabled={routine.disabled} />
+        </div>
+        <div className="border-t border-border pt-3 pb-1" data-joints-rule="">
+          <h4 className="text-xs leading-(--cad-leading-xs) font-medium text-foreground" data-joints-heading="">{t("position.title")}</h4>
+        </div>
+      </> : null}
       {posable ? <KinematicsPoseRow poses={poseNames.map(name => ({ value: name, label: name }))}
         activeValue={preset} onSelect={onPreset} onReset={onReset} /> : null}
       {coupled.map(control => slider(control, Number(shown[control.coupling]) || 0, couple,
@@ -212,7 +225,8 @@ function PositionBody({ kinematics, values, couplings = null, preset, onValues, 
       {/* What the document's mechanism cannot pose, and why. */}
       {[...unposable].map(([label, why]) => <FileSheetStatusText key={label}>{t("position.cannotPose", { name: label, reason: why })}</FileSheetStatusText>)}
       {others.map(text => <FileSheetStatusText key={text}>{text}</FileSheetStatusText>)}
-      {posable ? <KinematicsResetRow activeValue={preset} onReset={onReset} /> : null}
+      {posable ? <KinematicsResetRow activeValue={preset} onReset={onReset}
+        routine={routine ? { away: Boolean(held) && routineAway(held.runtime), reset: () => held.runtime.onRelease?.() } : null} /> : null}
     </div>
   </ToolPanel>;
 }

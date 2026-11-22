@@ -444,7 +444,6 @@ export default {
   "colorPicker.opacityHeading": "不透明度",
   "preview.preparing": "正在準備預覽…",
   "playback.loop": "循環",
-  "playback.autoplay": "自動播放",
   "chip.copied": "已複製",
   "explode.label": "分解",
   "quickEdit.describe": "描述一處變更…",

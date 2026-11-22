@@ -4,7 +4,7 @@ import { VALUE_DROPDOWN_TRIGGER_CLASS, ValueDropdown } from "@cad/ui/primitives/
 import { cn } from "@cad/ui/utils";
 
 // The view's panel's two settings rows, ONE each, so every control of a kind looks alike wherever it stands (Joints'
-// Position, Animation's Clip, Speed, Loop and Autoplay; `docs/settings-ui.md`, "The panel"). Both are 28px on the
+// Position, Animation's Clip, Speed and Loop; `docs/settings-ui.md`, "The panel"). Both are 28px on the
 // panel's one inset: the label (muted, `FieldLabel`) on its inset (`--panel-inset`, the
 // body's padding: a row pads nothing), the control ending on its right inset.
 

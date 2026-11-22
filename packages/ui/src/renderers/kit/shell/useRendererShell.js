@@ -278,7 +278,7 @@ export function useRendererShell({
   const recordRef = useRef(null);
   const onStateChangeRef = useRef(onStateChange);
   onStateChangeRef.current = onStateChange;
-  // The file's playback settings — preview's Orbit speed, Autoplay, and the routine's Speed and Loop
+  // The file's playback settings — preview's Orbit speed and the routine's Speed and Loop
   // once chosen — kept between leaving and re-entering preview, and in its view.
   const [playback, setPlaybackState] = useState(() => restored.playback);
   const setPlayback = useCallback(patch => setPlaybackState(current => normalizePlayback({ ...current, ...patch })), []);
@@ -370,8 +370,6 @@ export function useRendererShell({
     toolStackRef.current = next;
     services.onPreferenceChange({ toolStack: next });
   }, [services.onPreferenceChange]);
-  const autoplay = playback.autoplay;
-  const setAutoplay = useCallback(value => { controls.used("animation_autoplay"); setPlayback({ autoplay: value === true }); }, [setPlayback, controls]);
   const hostRef = useRef(null);
   const [hostElement, setHostElement] = useState(null);
   useEffect(() => { setHostElement(hostRef.current); }, []);
@@ -702,8 +700,8 @@ export function useRendererShell({
   return {
     // Renderer-facing.
     toolMode, selectTool, selectDefaultTool, effectTool: effectInHand, selectEffectTool, tools, idle, previewable, previewing, setPreviewing,
-    // The file's playback settings: Orbit's speed, Autoplay, and the routine's chosen Speed and Loop.
-    autoplay, setAutoplay, playback, setPlayback,
+    // The file's playback settings: Orbit's speed, and the routine's chosen Speed and Loop.
+    playback, setPlayback,
     // Preview's Orbit, on or off: off each time preview opens.
     orbiting, setOrbiting,
     // Deliver a prompt context through the host, reporting a failure as the viewport's alert.

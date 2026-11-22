@@ -345,7 +345,7 @@ own bar in the navbar's place, over the view's top edge on no surface: the file'
 its left, Preview settings (Orbit, then Render's settings, a panel sliding in from the right
 edge) and Exit preview at its right, fading with the playbar while the pointer rests. Routines play
 from the panel's Animation tab in the tools view (no playbar under the model there)
-and from Preview's playbar in Preview (on entry only with Autoplay on); the host passes no Preview props.
+and from Preview's playbar in Preview (at rest on entry); the host passes no Preview props.
 The file on screen keeps its view in the tab — its camera, Display settings
 (explode and clip included) and pose — so a refresh restores it; leaving the file for
 another or for the home drops it, and opening it again frames it anew (see

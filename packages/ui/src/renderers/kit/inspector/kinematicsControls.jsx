@@ -41,19 +41,27 @@ export function KinematicsPoseRow({ poses = [], activeValue, onSelect, onReset }
 
 /**
  * Joints' actions row, last in the tab, where Params has its Reset and Save (`PanelActions`): Reset alone,
- * the way back to the default pose, off while the model is there.
+ * the way back to the default pose, off while the model is there. Where the tab holds its mechanism's motion too
+ * (`routine`: `{ away, reset }`), the ONE Reset puts back both — the motion to its start, the joints to their default —
+ * and is on while either is off it.
  */
-export function KinematicsResetRow({ activeValue, onReset }) {
+export function KinematicsResetRow({ activeValue, onReset, routine = null }) {
   const usage = useControlUsage();
   const { t } = useI18n();
   if (!onReset) return null;
+  const posed = activeValue !== DEFAULT_POSE_VALUE;
+  const changed = posed || Boolean(routine?.away);
+  const reset = () => {
+    if (routine?.away) routine.reset();
+    if (posed || !routine) { usage.used("position_reset"); onReset(); }
+  };
   return <PanelActions data-pose-actions="">
     {/* Its word Params' Reset's, its name the joints' ("Reset joints"). */}
     <Button type="button" variant="ghost" size="xs" className={PANEL_ACTION_CLASS} data-pose-reset="" aria-label={t("pose.reset")}
-      disabled={activeValue === DEFAULT_POSE_VALUE} onClick={() => { usage.used("position_reset"); onReset(); }}>
+      disabled={!changed} onClick={reset}>
       {t("parameters.reset")}
     </Button>
     {/* The tab's dot: on exactly while Reset is. */}
-    <FlatPanelChanged on={activeValue !== DEFAULT_POSE_VALUE} />
+    <FlatPanelChanged on={changed} />
   </PanelActions>;
 }

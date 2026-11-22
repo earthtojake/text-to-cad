@@ -63,7 +63,9 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'preview_floor_enabled', 'preview_floor_color', 'preview_floor_opacity', 'preview_floor_placement',
   'preview_floor_finish', 'preview_reset',
   // A model's routines (the playbar, in the tools view and Preview), and its Position.
-  'animation_play', 'animation_clip', 'animation_speed', 'animation_loop', 'animation_autoplay', 'animation_release',
+  'animation_play', 'animation_clip', 'animation_speed', 'animation_loop',
+  // Autoplay, gone: kept so the page, cadgen and the receiver stay one list (released clients still send it).
+  'animation_autoplay', 'animation_release',
   'position_joint', 'position_preset', 'position_reset', 'position_knob',
   // The floating sidebar's sections: no view sends them now, but older releases do, and the three
   // lists are one vocabulary. Then the trees.

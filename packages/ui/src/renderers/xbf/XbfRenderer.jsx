@@ -805,7 +805,7 @@ function XbfSurface({ view, data }) {
   const inspect = useMemo(() => (scene && !previewing ? { describe, tip, hovered: pointed, data: "model" } : null), [scene, previewing, describe, tip, pointed]);
 
   return <RendererShell shell={shell} tools={strip} subToolbar={effects.subToolbar ?? (measuring ? <MeasurementsBar measure={measure} /> : null)} sidebar={sidebar} previewView={previewView}
-    fileSections={fileSections}
+    fileSections={fileSections} jointsHoldMotion={Boolean(fileSections) && sections.includes("position")}
     inspect={inspect} promptNotes={parameters.notes}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameReference}
     onClearReferences={() => { setChosen(EMPTY); measure.select([]); }} copySelection={copySelection}

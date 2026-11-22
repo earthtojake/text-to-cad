@@ -45,7 +45,7 @@ export function useGlbAnimation(document, requestRender) {
     stateRef.current = next;
     setState(next);
   }, []);
-  // At rest for every document, before anything (an Autoplay) plays it.
+  // At rest for every document, before the person plays it.
   // Every clip opens looping: a clip is its motion once (a cadgen GLB's is), and the player repeats it.
   useLayoutEffect(() => {
     clock.resetAnimationClock();

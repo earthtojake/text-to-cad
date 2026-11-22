@@ -16,7 +16,7 @@ export function playbarWords(runtime, t) {
 }
 
 // The transport: in the tools view the panel's Animation tab (`AnimationSection.jsx`: the clips, Play/Pause, the
-// time, this scrubber, whose start is the rest pose, then Speed, Loop and Autoplay); in Preview its playbar
+// time, this scrubber, whose start is the rest pose, then Speed and Loop); in Preview its playbar
 // (`PreviewPlaybar.jsx`: the routine, Play/Pause, this scrubber and the Playback settings,
 // `PlaybackMenu.jsx`).
 //

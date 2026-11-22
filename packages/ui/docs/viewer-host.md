@@ -186,9 +186,9 @@ Nothing of Preview's state — its camera, pose, routine, whether it orbits — 
 Render settings are the file's view's (`preview`). Routines play from the panel's Animation tab in
 the tools view (`AnimationSection.jsx`; no playbar there) and
 from Preview's playbar in Preview (`PreviewPlaybar.jsx`). Preview opens still: Orbit is off every time it opens, and its settings panel turns it
-on. The file's view's `playback` — Orbit's speed, Autoplay, the chosen speed and loop —
-is kept between visits to Preview and across a reload, and a file's routine plays on entry
-only when its Autoplay is on. The rules are in
+on. The file's view's `playback` — Orbit's speed, the chosen speed and loop —
+is kept between visits to Preview and across a reload, and a file's routine opens at rest:
+only the person plays it. The rules are in
 [settings-ui.md](settings-ui.md#camera-animation-and-preview).
 
 A renderer can publish `FileNavigationAction[]` through
@@ -491,7 +491,7 @@ opens as it was left; a file the page has not shown starts at the defaults. In t
 creates again (its frame re-created) starts afresh, since nothing names a view across its
 frames. A view is `{ camera, display, preview, playback, renderer }` (`kit/shell/fileView.js`):
 the camera is restored in place of the open-time fit, the display settings with their
-Clip and Explode, Preview's Render settings, the playback settings (Orbit's speed, Autoplay, and the chosen speed and
+Clip and Explode, Preview's Render settings, the playback settings (Orbit's speed and the chosen speed and
 loop), and the renderer's own slices each behind the
 signature it was written against — a slice that no longer fits the file on screen is
 dropped, the camera, the display and the playback never. Not in it, and started afresh

@@ -46,20 +46,17 @@ const MenuTrigger = forwardRef(function MenuTrigger({ label, className, children
 const keepOpen = event => event.preventDefault();
 
 /**
- * The routine's playback settings, as menu items: its **Speed** (a submenu), **Loop**, and **Autoplay**
- * (whether entering Preview starts it). Ticking a checkbox leaves the menu open. All three are the
- * file's, kept in its view.
+ * The routine's playback settings, as menu items: its **Speed** (a submenu) and **Loop**. Ticking the
+ * checkbox leaves the menu open. Both are the file's, kept in its view.
  *
- * @param {{ animation: object, autoplay: boolean, onAutoplayChange(value: boolean): void }} props
+ * @param {{ animation: object }} props
  */
-export function PlaybackSettingsItems({ animation, autoplay, onAutoplayChange }) {
+export function PlaybackSettingsItems({ animation }) {
   const { t } = useI18n();
   return <>
     <SpeedSubmenu label={t("playback.speed")} name={t("playback.animationSpeed")} value={Number(animation.speed) || 1} values={PLAYBACK_SPEEDS} onChange={animation.onSpeedChange} />
     <DropdownMenuCheckboxItem checked={animation.loopEnabled !== false} onSelect={keepOpen}
       onCheckedChange={checked => animation.onLoopToggle(checked === true)}>{t("playback.loop")}</DropdownMenuCheckboxItem>
-    <DropdownMenuCheckboxItem checked={autoplay === true} onSelect={keepOpen}
-      onCheckedChange={checked => onAutoplayChange?.(checked === true)}>{t("playback.autoplay")}</DropdownMenuCheckboxItem>
   </>;
 }
 
@@ -89,16 +86,16 @@ export function RoutineItems({ animation, onChoose }) {
  * given and there are two or more (`RoutineItems`: the tools view's playbar, whose row has no list of
  * its own).
  *
- * @param {{ animation: object, autoplay: boolean, onAutoplayChange(value: boolean): void,
+ * @param {{ animation: object,
  *   side?: "top" | "bottom", disabled?: boolean, onRoutine?: ((id: string) => void) | null, triggerClassName?: string }} props
  *   `animation` is the routine runtime; `side` is where the menu opens.
  */
-export default function PlaybackMenu({ animation, autoplay, onAutoplayChange, side = "top", disabled = false, onRoutine = null, triggerClassName }) {
+export default function PlaybackMenu({ animation, side = "top", disabled = false, onRoutine = null, triggerClassName }) {
   const { t } = useI18n();
   const routines = Boolean(onRoutine) && (animation?.clips?.length || 0) > 1;
   return <ToolPopover allowInactive side={side} align="end" label={t("playback.settings")} className={routines ? "w-48" : "w-40"}
     trigger={<MenuTrigger label={t("playback.settings")} disabled={disabled} className={cn(MENU_TRIGGER_CLASS, triggerClassName)} data-playback-menu=""><Settings className="size-3.5" strokeWidth={1.5} aria-hidden="true" /></MenuTrigger>}>
     {routines ? <RoutineItems animation={animation} onChoose={onRoutine} /> : null}
-    <PlaybackSettingsItems animation={animation} autoplay={autoplay} onAutoplayChange={onAutoplayChange} />
+    <PlaybackSettingsItems animation={animation} />
   </ToolPopover>;
 }

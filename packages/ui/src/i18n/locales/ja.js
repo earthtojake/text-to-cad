@@ -443,7 +443,6 @@ export default {
   "colorPicker.opacityHeading": "不透明度",
   "preview.preparing": "プレビューを準備中…",
   "playback.loop": "ループ",
-  "playback.autoplay": "自動再生",
   "chip.copied": "コピー済み",
   "explode.label": "分解",
   "quickEdit.describe": "変更を説明…",

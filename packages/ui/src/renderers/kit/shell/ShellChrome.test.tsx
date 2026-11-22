@@ -909,7 +909,7 @@ it("Preview opens still: Orbit, in its settings, turns the camera, and a speed c
   expect([previewProps.current.orbit, previewProps.current.orbitSpeed]).toEqual([false, 2]);
   // The file's view holds the speed, and no Orbit on or off.
   view.unmount();
-  expect(states.at(-1).playback).toEqual({ orbitSpeed: 2, autoplay: false });
+  expect(states.at(-1).playback).toEqual({ orbitSpeed: 2 });
 });
 
 it("Orbit's speed comes back with the file's view", async () => {
