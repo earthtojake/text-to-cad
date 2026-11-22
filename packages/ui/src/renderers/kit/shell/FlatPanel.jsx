@@ -523,7 +523,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
       </div> : searchButton}
     </>}>
       <FlatPanelContext.Provider value={panel}>
-        <div ref={body} className="group/body flex flex-col px-(--panel-inset)" style={BODY_STYLE} data-flat-panel-body="">
+        <div ref={body} className={BODY_CLASS} style={BODY_STYLE} data-flat-panel-body="">
           {sections ? <ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider> : tabs.map(entry => {
             // Searching several tabs, each that finds something is a group of the one list, under its name and count.
             const group = grouped && groups.includes(entry.id);
@@ -544,8 +544,12 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   return aside;
 }
 
-/** The body's 8px over its first row and under its last (`panelToggles.js`'s step), as the page's stand-in has it. */
-const BODY_STYLE = Object.freeze({ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX });
+/** The body's 8px over its first row (`panelToggles.js`'s step), as the page's stand-in has it. */
+const BODY_STYLE = Object.freeze({ paddingTop: PANEL_SURFACE_PX });
+/** And 8px under its last, unless the open tab ends in its sticky actions row (`PanelActions`), whose own 8px is the
+ *  panel's bottom: kept under it too, the row would stand flush on the panel's edge while the tab scrolls and 8px over
+ *  it at the end. */
+const BODY_CLASS = "group/body flex flex-col px-(--panel-inset) pb-2 [&:has(>section:not([hidden])_[data-panel-foot])]:pb-0";
 /** A tab's pill's padding either side of its name (`px-1.5` in `TAB_CLASS`, and the one tab's title's): the same as above
  * and below its 16px line in the 28px pill, so the pill is as padded across as it is tall, and its box stands as far
  * from the panel's left edge as from its top (10px; 6px inside the peek card). */
