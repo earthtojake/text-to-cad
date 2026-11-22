@@ -2860,8 +2860,11 @@ _SORT = {"not_sheet": ("deviation_mm", True), "sharp_bends": (None, False), "ben
          "curls": ("inside_radius_mm", False), "parts": (None, False)}
 
 
-def measure(document: brep.Document, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
-    """The sheet report of ``document``: facts alone, every family's ``items`` at a ref."""
+def measure(document: brep.Document, options: dict[str, Any], candidates: bool, *, kept: Any = None
+            ) -> dict[str, Any]:
+    """The sheet report of ``document``: facts alone, every family's ``items`` at a ref. ``kept``: the parts' kept
+    results (``cad._internal.dfm.parts.Kept``; None: none), where each part's result is found, else measured and
+    kept (``_kept_part``): a part's result is its own, the report put together from them alike either way."""
     if not document.parts:
         raise Unmeasured("document_empty", "the document holds no part to measure")
     results: list[dict[str, Any]] = []
@@ -2885,10 +2888,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
             if said:
                 results[-1]["_findings"] = [said]
             continue
-        try:
-            results.append(_part(part, options))
-        except Exception as error:  # noqa: BLE001 - a part that cannot be measured fails its families alone
-            results.append({family: error for family in FAMILIES})
+        results.append(_kept_part(part, options, kept))
     for result in results:
         # every item carries its own part's thickness: what its rules scale by (``sheet._scales``)
         parts = result.get("parts")
@@ -2905,9 +2905,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         for part, result in zip(document.parts, results):
             value = result.get(family, [])
             if isinstance(value, Exception):
-                # what this check does not measure says itself; anything else, with what raised it
-                said = str(value) if isinstance(value, Unmeasured) else f"{type(value).__name__}: {value}"
-                failure = failure or ": ".join(filter(None, (part.owner or part.name, said)))
+                failure = failure or ": ".join(filter(None, (part.owner or part.name, _said(value))))
                 continue
             items.extend(value)
         if failure is not None:
@@ -2927,6 +2925,76 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     if found:
         report["findings"] = found
     return report
+
+
+def _said(failure: Exception) -> str:
+    """What stopped a family: what this check does not measure says itself; anything else, with what raised it."""
+    if isinstance(failure, _Failed):
+        return failure.said
+    return str(failure) if isinstance(failure, Unmeasured) else f"{type(failure).__name__}: {failure}"
+
+
+class _Failed(Exception):
+    """A family a part's kept result says was stopped, in the words ``_said`` gave it."""
+
+    def __init__(self, said: str) -> None:
+        super().__init__(said)
+        self.said = said
+
+
+def _kept_part(part: brep.Part, options: dict[str, Any], kept: Any) -> dict[str, Any]:
+    """``_part``'s result of ``part`` -- every family a part whose measuring raised -- found where ``kept`` holds it
+    (``cad._internal.dfm.parts``: by the part's geometry and how it stands, its name and owner, which its refs and
+    its items say, and the options the measurement reads), else measured and kept; as it reads back from disk where
+    it is kept, so a part measured now and one found put the report together alike."""
+    from cad._internal.dfm.parts import SHEET, standing
+
+    stands = standing(part) if kept is not None else None
+    rest = {"standing": stands, "name": part.name, "owner": part.owner, "options": dict(options)}
+    if stands is not None:
+        found = kept.get(SHEET, part.key, rest)
+        if isinstance(found, dict):
+            return _restored(found)
+    try:
+        result = _part(part, options)
+    except Exception as error:  # noqa: BLE001 - a part that cannot be measured fails its families alone
+        result = {family: error for family in FAMILIES}
+    if stands is None:
+        return result
+    plain = _stored(result)
+    kept.keep(SHEET, part.key, rest, plain)
+    return _restored(kept.settled(plain))
+
+
+def _stored(result: dict[str, Any]) -> dict[str, Any]:
+    """A part's result as plain data: a stopped family ``{"error": its words}`` (``_said``), the faces each family's
+    rays failed on as lists, and the rays failed per face as pairs (ordinal, count), in their order."""
+    plain: dict[str, Any] = {}
+    for name, value in result.items():
+        if isinstance(value, Exception):
+            plain[name] = {"error": _said(value)}
+        elif name == "_lost":
+            plain[name] = {family: sorted(faces) for family, faces in value.items()}
+        elif name == "_failed":
+            plain[name] = [[ordinal, count] for ordinal, count in value.items()]
+        else:
+            plain[name] = value
+    return plain
+
+
+def _restored(plain: dict[str, Any]) -> dict[str, Any]:
+    """``_stored``'s plain data as ``_part``'s result again, a stopped family a ``_Failed``."""
+    result: dict[str, Any] = {}
+    for name, value in plain.items():
+        if isinstance(value, dict) and name in FAMILIES:
+            result[name] = _Failed(str(value["error"]))
+        elif name == "_lost":
+            result[name] = {family: set(faces) for family, faces in value.items()}
+        elif name == "_failed":
+            result[name] = {int(ordinal): int(count) for ordinal, count in value}
+        else:
+            result[name] = value
+    return result
 
 
 # --- the public unfold -------------------------------------------------------------------------------------------

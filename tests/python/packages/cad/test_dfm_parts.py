@@ -173,5 +173,110 @@ class FeaturesKeptTest(unittest.TestCase):
                     shutil.rmtree(self.root / "parts")
 
 
+
+class _Checked(unittest.TestCase):
+    """A process's measurement of documents built here, with a store of the test's own and without one."""
+
+    process = ""
+
+    def setUp(self) -> None:
+        from cad._internal.dfm.parts import Kept
+
+        self.root = Path(tempfile.mkdtemp(prefix="dfm-parts-"))
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.kept = Kept(self.root / "parts", "c0de")
+
+    def measure(self, document: object, kept: object = None) -> str:
+        """The report as JSON text, as a check answers it: measured with ``kept`` (this test's store), or with no
+        store at all."""
+        from cad._internal import manufacturing
+        from cad._internal.dfm import kept as measures
+        from cad.build123d import _dfm_check
+
+        options = measures.Measuring(self.process, manufacturing.options("step", self.process, {}))
+        report = _dfm_check._measured(document, "step", self.process, options, False, kept)
+        return json.dumps(report, sort_keys=True)
+
+    def measured(self, document: object) -> int:
+        """How many of ``document``'s parts its check measured with this test's store (the rest found kept), its
+        report checked against the one measured with none."""
+        from cad._internal.dfm.parts import PROCESSES
+
+        counts = self.kept.counts[PROCESSES[self.process]]
+        before = counts["measured"]
+        self.assertEqual(self.measure(document, self.kept), self.measure(document), "the report of every part "
+                                                                                     "measured afresh")
+        return counts["measured"] - before
+
+
+def _plate(width: float, holes: int = 1) -> object:
+    import build123d as bd
+
+    plate = bd.Box(width, 30, 2)
+    for n in range(holes):
+        plate -= bd.Pos(-width / 2 + 8 + 10 * n, 0, 0) * bd.Cylinder(2.5, 2)
+    return plate
+
+
+class SheetKeptTest(_Checked):
+    process = "sheet"
+
+    def kit(self, *widths: float, **named: float) -> list:
+        import build123d as bd
+
+        parts = [_labelled(bd.Pos(0, 50 * n, 0) * _plate(width, 2), f"p{n}") for n, width in enumerate(widths)]
+        return parts + [_labelled(bd.Pos(200, 0, 0) * _plate(width), name) for name, width in named.items()]
+
+    def test_a_document_one_part_of_which_changed_measures_that_part_alone(self) -> None:
+        self.assertEqual(self.measured(_document(self.root, self.kit(40, 50, 60, 70))), 4)
+        self.assertEqual(self.measured(_document(self.root, self.kit(40, 50, 61, 70))), 1, "the one edited")
+        self.assertEqual(self.measured(_document(self.root, self.kit(40, 50, 61, 70))), 0)
+
+    def test_a_part_is_its_own_entry_by_how_it_stands_its_name_and_its_owner(self) -> None:
+        import build123d as bd
+
+        self.assertEqual(self.measured(_document(self.root, self.kit(40, a=50))), 2)
+        self.assertEqual(self.measured(_document(self.root, self.kit(45, a=50))), 1, "the same part in another "
+                                                                                     "document: the same entry")
+        self.assertEqual(self.measured(_document(self.root, self.kit(40, b=50))), 1, "renamed")
+        moved = [_labelled(bd.Pos(0, 0, 0) * _plate(40, 2), "p0"), _labelled(bd.Pos(210, 0, 0) * _plate(50), "a")]
+        self.assertEqual(self.measured(_document(self.root, moved)), 1, "placed otherwise")
+        owned = [_labelled(bd.Pos(0, 0, 0) * _plate(40, 2), "p0"),
+                 bd.Compound(children=[_labelled(bd.Pos(200, 0, 0) * _plate(50), "a")], label="left"),
+                 bd.Compound(children=[_labelled(bd.Pos(200, 100, 0) * _plate(55), "a")], label="right")]
+        document = _document(self.root, owned)
+        self.assertEqual([part.owner for part in document.parts], ["p0", "kit/left/a", "kit/right/a"])
+        self.assertEqual(self.measured(document), 2, "a, the same part standing the same way, under another owner")
+
+    def test_a_check_stopped_after_some_parts_measures_the_rest_alone_the_next_time(self) -> None:
+        from cad.build123d import _dfm_sheet
+
+        class Stopped(BaseException):
+            """A check stopped at its limits: its process killed, nothing after it runs."""
+
+        real, done = _dfm_sheet._part, []
+
+        def stopping(part: object, options: object) -> object:
+            if len(done) == 2:
+                raise Stopped()
+            done.append(part)
+            return real(part, options)
+
+        document = _document(self.root, self.kit(40, 50, 60, 70))
+        with mock.patch.object(_dfm_sheet, "_part", stopping), self.assertRaises(Stopped):
+            self.measure(document, self.kept)
+        self.assertEqual(self.measured(document), 2, "the two not finished")
+
+    def test_a_part_result_that_could_come_out_otherwise_is_never_kept(self) -> None:
+        from cad.build123d import _dfm_sheet
+
+        document = _document(self.root, self.kit(40, 50))
+        with mock.patch.object(_dfm_sheet, "_holes", side_effect=MemoryError()):
+            said = json.loads(self.measure(document, self.kept))
+        self.assertEqual(said["holes"], {"error": "p0: MemoryError: "})
+        self.assertEqual(self.kept.counts["dfm-sheet"]["kept"], 0)
+        self.assertEqual(self.measured(document), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
