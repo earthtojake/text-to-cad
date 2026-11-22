@@ -135,9 +135,20 @@ class Kept:
         digest = hashlib.blake2b(rest.encode("utf-8"), digest_size=10).hexdigest()
         return self.folder / kind / geometry[:2] / f"{geometry}-{digest}.json"
 
-    def get(self, kind: str, geometry: Any, rest: dict[str, Any]) -> Any:
+    def counted(self, kind: str, found: bool) -> None:
+        """One part of ``kind`` found kept (``reused``), or not (``measured``)."""
+        self.counts[kind]["reused" if found else "measured"] += 1
+
+    def get(self, kind: str, geometry: Any, rest: dict[str, Any], *, count: bool = True) -> Any:
         """The result kept of a part of geometry key ``geometry`` and ``rest`` (the module's **By what**), or None:
-        none kept, one that does not read (removed), or no folder."""
+        none kept, one that does not read (removed), or no folder. ``count`` False: not counted (``counted``), for
+        a caller that may look again."""
+        found = self._got(kind, geometry, rest)
+        if count:
+            self.counted(kind, found is not None)
+        return found
+
+    def _got(self, kind: str, geometry: Any, rest: dict[str, Any]) -> Any:
         if self.folder is None or not isinstance(geometry, str) or not _GEOMETRY.fullmatch(geometry):
             return None
         said = self._rest(kind, rest)
@@ -145,7 +156,6 @@ class Kept:
         try:
             data = path.read_bytes()
         except OSError:
-            self.counts[kind]["measured"] += 1
             return None
         try:
             found = json.loads(data.decode("utf-8"))
@@ -159,13 +169,11 @@ class Kept:
                 path.unlink()
             except OSError:
                 pass
-            self.counts[kind]["measured"] += 1
             return None
         try:
             os.utime(path)  # the most recently used, by its time on disk
         except OSError:
             pass
-        self.counts[kind]["reused"] += 1
         return found["result"]
 
     def keep(self, kind: str, geometry: Any, rest: dict[str, Any], result: Any) -> None:

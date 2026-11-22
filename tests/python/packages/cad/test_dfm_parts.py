@@ -278,5 +278,99 @@ class SheetKeptTest(_Checked):
         self.assertEqual(self.measured(document), 2)
 
 
+
+def _block(width: float, holes: int = 1) -> object:
+    """A machined block, its holes drilled from the top and a pocket milled beside them."""
+    import build123d as bd
+
+    block = bd.Box(width, 30, 12) - bd.Pos(width / 2 - 8, 0, 3) * bd.Box(10, 14, 6)
+    for n in range(holes):
+        block -= bd.Pos(-width / 2 + 6 + 8 * n, 0, 0) * bd.Cylinder(2, 12)
+    return block
+
+
+class CncKeptTest(_Checked):
+    process = "cnc"
+
+    def setUp(self) -> None:
+        from cad import quiddity
+        from cad.quiddity._features import unavailable
+
+        super().setUp()
+        self.reason = "no_wheel"  # a reason of the platform's own, which the next check meets again
+        patched = mock.patch.object(quiddity, "features_of", lambda parts, **_given: [
+            unavailable(self.reason, "why, in a line") for _part in parts])
+        patched.start()
+        self.addCleanup(patched.stop)
+
+    def kit(self, *widths: float, turned: bool = False) -> list:
+        import build123d as bd
+
+        parts = [_labelled(bd.Pos(0, 50 * n, 0) * _block(width, 2), f"b{n}") for n, width in enumerate(widths)]
+        if turned:  # a copy of the first, turned: measured once, said again where it stands
+            parts.append(_labelled(bd.Pos(0, -60, 0) * bd.Rot(0, 0, 90) * _block(widths[0], 2), "turned"))
+        return parts
+
+    def test_a_document_one_part_of_which_changed_measures_that_part_alone(self) -> None:
+        self.assertEqual(self.measured(_document(self.root, self.kit(40, 50, 60, turned=True))), 3,
+                         "the turned copy is its first's, measured once")
+        self.assertEqual(self.measured(_document(self.root, self.kit(40, 50, 61, turned=True))), 1, "the one edited")
+        self.assertEqual(self.measured(_document(self.root, self.kit(40, 50, 61, turned=True))), 0)
+
+    def test_a_check_stopped_after_some_parts_measures_the_rest_alone_the_next_time(self) -> None:
+        from cad.build123d import _dfm_cnc
+
+        class Stopped(BaseException):
+            """A check stopped at its limits: its process killed, nothing after it runs."""
+
+        real, done = _dfm_cnc._part_result, []
+
+        def stopping(*given: object) -> object:
+            if len(done) == 2:
+                raise Stopped()
+            done.append(given)
+            return real(*given)
+
+        document = _document(self.root, self.kit(40, 50, 60))
+        with mock.patch.object(_dfm_cnc, "_part_result", stopping), self.assertRaises(Stopped):
+            self.measure(document, self.kept)
+        self.assertEqual(self.measured(document), 1, "the one not finished")
+
+    def test_a_part_result_that_could_come_out_otherwise_is_never_kept(self) -> None:
+        from cad.build123d import _dfm_cnc
+
+        document = _document(self.root, self.kit(40, 50))
+        with mock.patch.object(_dfm_cnc, "_walls", side_effect=MemoryError()):
+            said = json.loads(self.measure(document, self.kept))
+        self.assertEqual(said["walls"], {"error": "b0: MemoryError: "})
+        shutil.rmtree(self.root / "parts" / "features")  # each part's features asked again
+        self.reason = "timed_out"  # quiddity out of time on the part: the moment's
+        said = json.loads(self.measure(document, self.kept))
+        self.assertFalse(said["holes"]["recognition"]["repeatable"])
+        self.assertEqual(self.kept.counts["dfm-cnc"]["kept"], 1, "b1, measured after b0's walls failed, alone")
+        self.reason = "no_wheel"
+        self.assertEqual(self.measured(document), 2)
+
+    def test_a_part_measured_after_a_family_failed_is_kept_as_measured_so(self) -> None:
+        """A family that failed on a part is not measured on the parts after it, which are measured, and kept,
+        so: a part is found by the families failed before it too."""
+        from cad.build123d import _dfm_cnc
+
+        real = _dfm_cnc._knife_edges
+
+        def first_fails(model: object, state: object) -> object:
+            if model.part.name == "b0":
+                raise ValueError("the kernel gave up")
+            return real(model, state)
+
+        parts = self.kit(40, 50)
+        with mock.patch.object(_dfm_cnc, "_knife_edges", first_fails):
+            self.assertEqual(self.measured(_document(self.root, parts)), 2)
+            report = json.loads(self.measure(_document(self.root, parts), self.kept))
+            self.assertEqual(report["knife_edges"], {"error": "b0: ValueError: the kernel gave up"})
+            self.assertEqual(self.measured(_document(self.root, parts)), 0, "each found, b1 as measured after b0")
+            self.assertEqual(self.measured(_document(self.root, parts[::-1])), 1,
+                             "b1 measured again where no family failed before it; b0 found")
+
 if __name__ == "__main__":
     unittest.main()
