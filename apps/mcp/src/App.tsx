@@ -201,7 +201,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // viewer sits at the bottom centre under it. A host that mounts views inline draws its composer
   // across the bottom of a full-size view, so that view keeps clear of it.
   const insets = presentation === 'inline' ? context.safeAreaInsets || {} : { ...context.safeAreaInsets, bottom: 0 };
-  const chat = useMemo(() => chatReach(bridge.hostCapabilities, presentation), [bridge, presentation]);
+  const chat = useMemo(() => chatReach(bridge.hostCapabilities, presentation, surface), [bridge, presentation, surface]);
   const floatingComposer = presentation === 'tabs';
   // Once a newer view of this chat is up: this one's last frame (or null), and nothing else.
   const [still, setStill] = useState<string | null | undefined>(undefined);

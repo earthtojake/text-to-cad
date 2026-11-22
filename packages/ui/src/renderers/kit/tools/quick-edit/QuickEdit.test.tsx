@@ -456,3 +456,22 @@ it('carries every reference as one chip: one its name, several their count, whos
   const text = String(await waitFor(() => copied));
   for (const name of ['a', 'output_flange']) expect(text).toContain(`/models/parts/bracket.step#${name}`);
 });
+
+it('follows a destination that takes the person\'s message in its own box: no bar, its context kept to what is picked and drawn, cleared with none', async () => {
+  const deliver = vi.fn(async () => ({ status: 'added' as const, partIds: [] }));
+  const clear = vi.fn(async () => {});
+  const following = { kind: 'composer', available: true, follows: true } as const;
+  const { update } = mount(testHost({ promptContext: { getSnapshot: () => following, subscribe: () => () => {}, deliver, clear } as any }));
+  expect(box()).toBeNull();
+  // A pick: once it settles, the context is the file and the reference, with no note.
+  update({ references: [face] });
+  press();
+  await waitFor(() => expect(deliver).toHaveBeenCalled());
+  const context = (deliver.mock.calls.at(-1) as unknown[])[0] as any;
+  expect(context.parts.map((part: any) => [part.id, part.kind])).toEqual([['text', 'text'], ['file', 'reference'], ['reference-0', 'reference']]);
+  expect(context.parts[0].text).toBe('');
+  expect(box()).toBeNull();
+  // Nothing picked or drawn any more: the context is emptied.
+  update({ references: [] });
+  await waitFor(() => expect(clear).toHaveBeenCalled());
+});

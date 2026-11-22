@@ -18,6 +18,8 @@ const EMPTY = Object.freeze([]);
 // A press of the person's in this view leads the selection it made; an agent's selection (the live
 // controller's `select`) follows none, and opens the box without taking their keyboard.
 const PICK_MS = 1500;
+// How long a pick or a stroke settles before a following destination's context is brought up to date.
+const FOLLOW_SETTLE_MS = 350;
 // The note grows upward with what is written, a line at a time, to four lines (a 20px line, its 6px either side), then
 // scrolls; it opens at one line, whatever focuses it. Four, not more: the bar is always over the model.
 export const QUICK_EDIT_NOTE_MAX_PX = 4 * 20 + 12;
@@ -62,6 +64,9 @@ export function quickEditReferenceIds(selection) {
  * clear the note and what it carried once the note has gone; Copy Prompt keeps it all (nothing has gone yet),
  * its button showing a tick for a moment. A failure keeps the note and says why.
  * The note starts at one line and grows upward as it is written, to four lines (`QUICK_EDIT_NOTE_MAX_PX`), then scrolls.
+ * A destination that `follows` the view (a chat whose own box takes the person's message) has no bar: once a pick or a
+ * stroke settles, its context is replaced with what the view carries then (the references, the views and their
+ * snapshot; no note), and cleared (`promptContext.clear`) when nothing is picked or drawn.
  *
  * @param {{ resource: import("@cad/core/prompt").ResourceRef,
  *   references?: readonly import("@cad/core/prompt").PromptReference[],
@@ -93,6 +98,12 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const host = useViewerHost();
   const controls = useControlUsage();
   const destination = usePromptDestination();
+  // A destination that follows the view (a chat whose own box takes the person's message): no bar; its context is
+  // kept to what is picked and drawn now, with no note, for the message the person writes there.
+  const follows = destination.kind === "composer" && destination.available && Boolean(destination.follows);
+  const followsRef = useRef(follows);
+  followsRef.current = follows;
+  const [strokes, setStrokes] = useState(0);
   const [text, setText] = useState("");
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
@@ -122,7 +133,10 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     const up = event => {
       pressed.current = false;
       const view = root.current?.closest("[data-slot=cad-file-view]");
-      if (event.button === 0 && view && event.target instanceof Node && view.contains(event.target)) lastPress.current = performance.now();
+      if (event.button === 0 && view && event.target instanceof Node && view.contains(event.target)) {
+        lastPress.current = performance.now();
+        if (followsRef.current) setStrokes(count => count + 1);  // a pick or a stroke: the context follows
+      }
     };
     window.addEventListener("pointerdown", down, true);
     window.addEventListener("pointerup", up, true);
@@ -192,6 +206,32 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   };
   // Everything happens inside the press: the views are read as they are, and the host binds its
   // destination (and the clipboard its write) before their files are made.
+  // Everything a message carries, read as the view is now: the views, their files, the folders it names them by.
+  const contextOf = (noteText, note) => {
+    const unavailable = prompt?.unavailable?.() || "";
+    const views = unavailable ? [] : prompt?.views() ?? [];
+    // The selection goes with the views: a board's packet lights what it names when it is drawn again.
+    const files = views.length ? prompt.files(views, selection) : null;
+    void files?.catch(() => {});
+    // The folders the message names its files by, asked at the press (a browser's workspace is its last launch's).
+    const folders = host.promptFiles?.folders?.() ?? null;
+    void folders?.catch(() => {});
+    return createQuickEditContext({ resource, references: selection, text: noteText, views, files, read: prompt?.read, viewUnavailable: unavailable, folders,
+      notes: note?.text ? [note.text] : [] });
+  };
+  const follow = useRef(null);
+  follow.current = () => {
+    try {
+      if (!attached) void host.promptContext.clear?.()?.catch?.(() => {});
+      else void host.promptContext.deliver(contextOf("", null)).catch(() => {});
+    } catch { /* the next pick or stroke tries again */ }
+  };
+  // Following: once a pick or a stroke settles, the destination's context is what the view carries now.
+  useEffect(() => {
+    if (!follows || hidden || disabled) return undefined;
+    const timer = setTimeout(() => follow.current(), FOLLOW_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [follows, hidden, disabled, referenceKey, annotated, strokes]);
   const run = action => {
     if (!actionReady(action)) return;
     setError("");
@@ -200,16 +240,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     let note = null;
     try {
       note = notes?.take?.() ?? null;
-      const unavailable = prompt?.unavailable?.() || "";
-      const views = unavailable ? [] : prompt?.views() ?? [];
-      // The selection goes with the views: a board's packet lights what it names when it is drawn again.
-      const files = views.length ? prompt.files(views, selection) : null;
-      void files?.catch(() => {});
-      // The folders the message names its files by, asked at the press (a browser's workspace is its last launch's).
-      const folders = host.promptFiles?.folders?.() ?? null;
-      void folders?.catch(() => {});
-      const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable, folders,
-        notes: note?.text ? [note.text] : [] });
+      const context = contextOf(text, note);
       if (action === "send") outcome = host.promptContext.send(context);
       else if (action === "queue") outcome = host.promptContext.deliver(context);
       else outcome = host.clipboard.writeText(copiedQuickEdit(context)).then(() => ({ status: "copied" }));
@@ -336,6 +367,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
       return value;
     } } : chip));
   }, [annotationChip, ownChips]);
+  if (follows) return null;
   const section = <section ref={box} aria-label={t("quickEdit.title")} data-quick-edit-box=""
       // The bar: the toolbar's shape, a chat's input — its attachments on a row over the note when it has any, the note
       // with its buttons at its right.

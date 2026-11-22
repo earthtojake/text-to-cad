@@ -23,6 +23,11 @@ export interface PromptContext { schemaVersion: 1; operationId: string; parts: r
 export interface PromptDestinationState {
   kind: 'composer' | 'clipboard' | 'unavailable';
   available: boolean;
+  /**
+   * A composer that follows the view: the host's own box takes the person's message, so the view
+   * shows no note of its own and keeps the composer's context to what is picked and drawn now.
+   */
+  follows?: boolean;
   reason?: string;
   capabilities?: {
     attachments: 'none' | 'png' | 'images-and-text';
@@ -47,6 +52,8 @@ export interface PromptContextPort {
   subscribe(listener: () => void): () => void;
   deliver(context: PromptContext): Promise<PromptDeliveryResult>;
   send?(context: PromptContext): Promise<PromptDeliveryResult>;
+  /** A following composer's context emptied: nothing is picked or drawn any more. */
+  clear?(): Promise<void>;
 }
 export interface PromptMessageOptions {
   /** Complete inline representation, used instead of the attachment path when present. */

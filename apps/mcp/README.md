@@ -319,8 +319,11 @@ the launch's `_meta` first (`host/capability.ts`).
   packets are written as `.snapshot.json` and named by saved path. Views share the annotation. No images or file bytes are attached,
   even where the host accepts images. A host that takes neither gets Copy Prompt alone
   (`unavailablePromptContext`): Queue and Send are left out, not disabled. In
-  Codex, Send from a thread's CAD tab posts into that thread; from the
-  sidebar page it goes to the page's own chat tab.
+  Codex, Send from a thread's CAD tab posts into that thread. The sidebar page (`surface:
+  sidebar`) has a chat box of its own, so it shows no Quick Edit bar: the view follows that
+  chat (`ChatReach.follows`), and once a pick or a stroke settles the composer's context is
+  replaced with what the view carries then (its references and snapshot, no note), and emptied
+  when nothing is picked or drawn; the person's own message goes with it.
 - **Host-neutral shared code.** Host specifics live here and in `cad_server/mcp`,
   never in `packages/core` or `packages/ui`, which choose by capability (the
   prompt destination's `kind`, a port's presence, `environment.compact`). A policy

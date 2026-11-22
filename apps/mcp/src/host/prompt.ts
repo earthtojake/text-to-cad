@@ -10,19 +10,25 @@ const METHOD_NOT_FOUND = -32601;
 /** One text block naming the handoff's JSON files by path. */
 type Block = { type: 'text'; text: string; _meta?: { 'openai/title': string } };
 
-/** What this host's chat takes from a view: context for the next message (Queue), and a message now (Send). */
-export interface ChatReach { queue: boolean; send: boolean }
+/**
+ * What this host's chat takes from a view: context for the next message (Queue), and a message now
+ * (Send); `follows`, where the page's own chat box takes the person's message (Codex's sidebar page),
+ * so the view keeps that context to what is picked and drawn and shows no note of its own.
+ */
+export interface ChatReach { queue: boolean; send: boolean; follows?: boolean }
 
 /**
  * What the chat this view belongs to takes from it, as the host declared when it greeted the
  * page. Queue needs `updateModelContext`, except from a tab host (Codex), which is not asked: its
  * frames forward the method whether or not they declare it. Send needs `message`.
  */
-export function chatReach(hostCapabilities: Bridge['hostCapabilities'], presentation: Presentation): ChatReach {
+export function chatReach(hostCapabilities: Bridge['hostCapabilities'], presentation: Presentation, surface?: string): ChatReach {
   const message = hostCapabilities.message;
+  const queue = presentation === 'tabs' || Boolean(hostCapabilities.updateModelContext);
   return {
-    queue: presentation === 'tabs' || Boolean(hostCapabilities.updateModelContext),
+    queue,
     send: Boolean(message),
+    ...(queue && presentation === 'tabs' && surface === 'sidebar' ? { follows: true } : {}),
   };
 }
 
@@ -36,13 +42,19 @@ const baseName = (path: string) => path.split(/[\\/]/).pop() || path;
  * host takes messages, posts the context as the person's message now. The text names each
  * JSON file by its saved path (`part.path`); its bytes never travel in the message.
  */
-export function createChatPromptContext(bridge: Pick<Bridge, 'request' | 'onHostContext' | 'hostContext'>, { reach, t = english }: {
+export function createChatPromptContext(bridge: Pick<Bridge, 'request' | 'onHostContext' | 'hostContext'>, { reach, follows = false, t = english }: {
   reach: ChatReach;
+  /**
+   * The view follows the chat (Codex's sidebar page, whose own box takes the person's message): no
+   * note of the view's own, and each delivery replaces the composer's context with what the view
+   * carries now instead of adding to it; `clear` empties it.
+   */
+  follows?: boolean;
   /** What the person reads when the chat takes nothing, or is still busy: in the view's language. */
   t?: (key: string, params?: Record<string, unknown>) => string;
 }): PromptContextPort & { dispose(): void } {
   const state: PromptDestinationState = Object.freeze(reach.queue ? {
-    kind: 'composer', available: true,
+    kind: 'composer', available: true, ...(follows ? { follows: true } : {}),
     capabilities: { attachments: 'none', maxParts: 128, maxAttachmentBytes: 0, mixedTextAndImage: 'unsupported' },
   } satisfies PromptDestinationState : { kind: 'unavailable', available: false, reason: t('cad.prompt.noContext') } satisfies PromptDestinationState);
   // The ledger's refusal while busy is said in the person's language as it is said, not when the port was made.
@@ -90,7 +102,7 @@ export function createChatPromptContext(bridge: Pick<Bridge, 'request' | 'onHost
         const blocks: Block[] = [{ type: 'text', text: await textOf(context), _meta: { 'openai/title': textTitle(context) } }];
         // Updates replace each other, so they go out one at a time, in order.
         const update = queueing.then(async () => {
-          const next = [...queued, ...blocks].slice(-MAX_ITEMS);
+          const next = follows ? blocks : [...queued, ...blocks].slice(-MAX_ITEMS);
           await bridge.request('ui/update-model-context', { content: next }, { timeoutMs: 15_000 });
           queued = next;
         });
@@ -109,6 +121,17 @@ export function createChatPromptContext(bridge: Pick<Bridge, 'request' | 'onHost
     },
     dispose: stop,
   };
+  if (follows && reach.queue) {
+    port.clear = () => {
+      const update = queueing.then(async () => {
+        if (!queued.length) return;
+        await bridge.request('ui/update-model-context', { content: [] }, { timeoutMs: 15_000 });
+        queued = [];
+      });
+      queueing = update.catch(() => {});
+      return update;
+    };
+  }
   if (!reach.send) return port;
 
   port.send = context => {

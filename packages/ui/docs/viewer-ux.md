@@ -215,7 +215,9 @@ chrome that floats over the picture. The home is the navbar over the library.
 
 The bar where a person writes a note to their agent about what is on screen (`QuickEdit.jsx`).
 
-- **Always there**, with no X and no setting, wherever a note can carry the view's picks or ink: STEP, .xbf, GLB, STL,
+- **Always there**, with no X and no setting, wherever a note can carry the view's picks or ink (but where the
+  host's own chat box takes the person's message, a destination that `follows`: there the view keeps that chat's
+  context to what is picked and drawn, and shows no bar): STEP, .xbf, GLB, STL,
   3MF, a robot, a drawing, and a board or schematic once indexed. It is hidden (its note kept) while the file loads and
   in Preview, and absent in a compact view. Why: a bar that came and went was not there when wanted.
 - **One row at rest**: the note ("Describe a change…") with its buttons at the right of its last line. A row of

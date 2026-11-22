@@ -590,10 +590,11 @@ it("the host's notice waits for the model, then takes the top-right; Quick Edit 
   expect(screen.queryByRole('dialog', { name: 'A notice' })).toBeNull();
   stage('idle');
   expect(corner()).toEqual(['notice']);
-  // Quick Edit's row: at the bottom, where the frame's measure stands it (from the stage's left, 400px at most).
+  // Quick Edit's row: at the bottom, where the frame's measure stands it (from the stage's left, 400px at most),
+  // above whatever a host's composer covers there (`--cad-host-bottom-inset`).
   const row = document.querySelector<HTMLElement>('[data-quick-edit-row]')!;
   expect([row.querySelector('[data-quick-edit]') !== null, row.closest('[data-viewport-top-right]'), row.style.bottom, row.style.left, row.style.width])
-    .toEqual([true, null, '16px', 'var(--cad-quick-edit-left, 8px)', 'var(--cad-quick-edit-width, calc(100% - 2 * 8px))']);
+    .toEqual([true, null, 'calc(16px + var(--cad-host-bottom-inset, 0px))', 'var(--cad-quick-edit-left, 8px)', 'var(--cad-quick-edit-width, calc(100% - 2 * 8px))']);
   cleanup();
   // Shown small, the view has no Quick Edit and no strip, and the notice still asks.
   frame({ notice, appearance: { colorScheme: 'light', compact: true } });

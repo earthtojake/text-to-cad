@@ -383,6 +383,10 @@ describe('a Quick Edit in the chat', () => {
     expect(chatReach({}, 'tabs')).toEqual({ queue: true, send: false });
     expect(chatReach({ message: { text: {} } }, 'inline')).toEqual({ queue: false, send: true });
     expect(chatReach({ updateModelContext: {}, message: { text: {}, image: {} } }, 'inline')).toEqual({ queue: true, send: true });
+    // Codex's sidebar page has its own chat box: the view follows it; a thread's tab keeps its note.
+    expect(chatReach({}, 'tabs', 'sidebar')).toEqual({ queue: true, send: false, follows: true });
+    expect(chatReach({}, 'tabs', 'tab')).toEqual({ queue: true, send: false });
+    expect(chatReach({ message: { text: {} } }, 'inline', 'sidebar')).toEqual({ queue: false, send: true });
   });
 
   it('queues into the composer as one titled message and its annotation, keeping what it queued until the host clears it', async () => {
@@ -405,6 +409,23 @@ describe('a Quick Edit in the chat', () => {
     context({ 'openai/modelContext': null });
     await port.deliver(edit());
     expect(updates[2].params.content).toHaveLength(1);
+  });
+
+  it('a following port replaces the composer\'s context with what the view carries now, and clears it', async () => {
+    const sent: any[] = [];
+    const port = createChatPromptContext({ hostContext: {}, onHostContext: () => () => {},
+      request: async (method: string, params: any) => { sent.push({ method, params }); return {}; },
+    } as any, { reach: { queue: true, send: false, follows: true }, follows: true });
+    expect(port.getSnapshot()).toMatchObject({ kind: 'composer', available: true, follows: true });
+    await port.deliver(edit());
+    await port.deliver(edit());
+    expect(sent.map(call => call.params.content.length)).toEqual([1, 1]);
+    await port.clear!();
+    expect(sent.at(-1)).toEqual({ method: 'ui/update-model-context', params: { content: [] } });
+    // Nothing queued since: a second clear asks the host nothing.
+    await port.clear!();
+    expect(sent).toHaveLength(3);
+    port.dispose();
   });
 
   it('says to copy the prompt where a tab host does not take context, instead of the bare JSON-RPC error', async () => {

@@ -104,8 +104,8 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   const sayRef = useRef(translator(locale));
   sayRef.current = translator(locale);
   const chatContext = useMemo(() => chat.queue || chat.send
-    ? createChatPromptContext(bridge, { reach: chat, t: (key, params) => sayRef.current(key, params) }) : null,
-    [chat.queue, chat.send, bridge]);
+    ? createChatPromptContext(bridge, { reach: chat, follows: Boolean(chat.follows), t: (key, params) => sayRef.current(key, params) }) : null,
+    [chat.queue, chat.send, chat.follows, bridge]);
   useEffect(() => () => chatContext?.dispose(), [chatContext]);
   const promptContext = chatContext ?? unavailablePromptContext;
   // The file menu: its path, Reveal in the desktop's file manager (the server is on this machine),
