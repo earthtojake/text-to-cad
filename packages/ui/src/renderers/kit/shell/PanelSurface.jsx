@@ -96,8 +96,10 @@ export function PanelSurface({ mode, label, open, hidden = false, width, grip, g
   headInsets = NO_HEAD_INSETS, scrollerRef, scrollerProps = {}, onKeyDown, peek = false, peekLeaving = false, peekEntered = false, onPeekExited, asideRef, children, ...props }) {
   const page = mode === "page";
   const peeking = mode === "push" && peek;
-  const headNode = head === null ? null : <div ref={headRef} className={cn("box-content flex shrink-0 items-center gap-1 border-b", headRule ? "border-border" : "border-transparent")}
-      style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX, height: PANEL_HEAD_ROW,
+  // With its rule (tabs), the head is its row and 8px either side, the rule under; with none (a lone tab's title, and
+  // the search that stands in its place), the row alone over the body: nothing to separate, no gap kept for a rule.
+  const headNode = head === null ? null : <div ref={headRef} className={cn("box-content flex shrink-0 items-center gap-1", headRule && "border-b border-border")}
+      style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: headRule ? PANEL_SURFACE_PX : 0, height: PANEL_HEAD_ROW,
         paddingLeft: `calc(var(--panel-inset) - ${inset(headInsets.start)})`, paddingRight: `calc(var(--panel-inset) - ${inset(headInsets.end)})` }} data-panel-head="" data-rule={headRule ? "" : undefined}
       {...headProps}>{head}</div>;
   const scroll = <ScrollArea className="min-h-0 flex-1" viewportRef={scrollerRef} viewportProps={{ "data-panel-scroller": "", ...scrollerProps }}>

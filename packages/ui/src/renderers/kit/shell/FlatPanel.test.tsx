@@ -48,9 +48,9 @@ it('draws its tabs as pills, the open one filled, foreground and medium, the oth
   expect(document.querySelector('aside[data-flat-panel]')!.getAttribute('style')).toMatch(/width: 232px/);
 });
 
-// One tab is a plain title in the tab's place: no pill, no fill, in the head's one block (the tabs' 32px row, 8px over and
-// under it, the rule), so nothing under it moves when tabs arrive; the search's icon at the row's right end, as with several.
-it('draws a single tab as a plain title in the tabs\' own block, the search an icon at the right, and several as pills over the same rule', () => {
+// One tab is a plain title in the tab's place: no pill, no fill, on the tabs' 32px row with 8px over it, and no rule and
+// no gap under it (nothing to separate); several tabs add the rule and 8px under. The search's icon at the row's right end.
+it('draws a single tab as a plain title on the tabs\' row with no rule under it, the search an icon at the right, and several as pills over a rule', () => {
   render(<Panel tabs={[{ id: 'model', label: 'Model', content: <p>tree</p> }]} first="model" />);
   const title = row().querySelector<HTMLElement>('[data-flat-panel-heading]')!;
   expect([screen.queryAllByRole('tab').length, screen.queryByRole('tablist'), title.textContent]).toEqual([0, null, 'Model']);
@@ -59,12 +59,12 @@ it('draws a single tab as a plain title in the tabs\' own block, the search an i
   const block = () => [row().classList.contains('border-border'), row().hasAttribute('data-compact'), row().style.height === 'calc(var(--cad-control) + 4px)',
     [row().style.paddingTop, row().style.paddingBottom, row().style.paddingLeft], document.querySelector('[data-flat-panel-body]')!.className];
   const one = block();
-  expect(one.slice(0, 4)).toEqual([true, false, true, ['8px', '8px', 'calc(var(--panel-inset) - 6px)']]);
+  expect(one.slice(0, 4)).toEqual([false, false, true, ['8px', '0px', 'calc(var(--panel-inset) - 6px)']]);
   expect([...row().children].map(child => child.getAttribute('aria-label') ?? child.tagName.toLowerCase())).toEqual(['h2', 'Search the board']);
   expect(document.querySelector('[data-flat-panel-section="model"]')!.getAttribute('aria-labelledby')).toBe(title.id);
   cleanup();
   render(<Panel tabs={[{ id: 'parts', label: 'Parts', content: <p>Parts</p> }, { id: 'nets', label: 'Nets', content: <p>Nets</p> }]} first="parts" />);
-  expect([screen.getAllByRole('tab').length, document.querySelector('[data-flat-panel-heading]'), block()]).toEqual([2, null, one]);
+  expect([screen.getAllByRole('tab').length, document.querySelector('[data-flat-panel-heading]'), block()]).toEqual([2, null, [true, false, true, ['8px', '8px', 'calc(var(--panel-inset) - 6px)'], one[4]]]);
 });
 
 // "/" puts the keyboard in the search once per press: the panel closed and opened again, or mounted
@@ -170,7 +170,7 @@ it('searches the one tree from any tab and gives the open tab back as the query 
   render(<Panel tabs={[{ id: 'layers', label: 'Layers', content: <Walk items={['CUT', 'BEND']} /> }]} first="layers" />);
   const title = headBox();
   fireEvent.click(searchIcon()!);
-  expect([title.compact, title.rule, title.height, headBox(), row().querySelector('[data-flat-panel-heading]')]).toEqual([false, true, 'calc(var(--cad-control) + 4px)', title, null]);
+  expect([title.compact, title.rule, title.height, headBox(), row().querySelector('[data-flat-panel-heading]')]).toEqual([false, false, 'calc(var(--cad-control) + 4px)', title, null]);
 });
 
 // Where no tab is searchable (Parameters, Joints and Animation alone), there is no search icon, and / opens nothing.

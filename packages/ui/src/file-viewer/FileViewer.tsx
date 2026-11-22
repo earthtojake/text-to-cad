@@ -211,8 +211,8 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     // the app's theme: a host that knows no viewport has none to follow.
     const loading = presentation?.loading ?? <div className="flex h-full items-center justify-center px-4"><LoadingStep label={t("file.opening")} /></div>;
     const standIn = <>
-      <div aria-hidden="true" className="box-content flex shrink-0 items-center border-b border-border px-(--panel-inset)"
-        style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX, height: PANEL_HEAD_ROW }} data-panel-head="">
+      <div aria-hidden="true" className="box-content flex shrink-0 items-center px-(--panel-inset)"
+        style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: 0, height: PANEL_HEAD_ROW }} data-panel-head="">
         <span className="block h-2 w-12 rounded-full bg-muted-foreground/20 motion-safe:animate-pulse" data-panel-loading-title="" />
       </div>
       <div className="flex flex-col px-(--panel-inset)" style={{ paddingTop: PANEL_SURFACE_PX }}><TreeRowsLoading label={t("spinner.loading")} /></div>

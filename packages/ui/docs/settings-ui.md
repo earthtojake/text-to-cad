@@ -790,7 +790,7 @@ is in; a load that fails has none. **While the file loads, a structure tab with 
 (`FlatPanel.jsx`'s `FlatPanelRowsLoading`, `primitives/tree-row.jsx`'s `TreeRowsLoading`, in the pinned panel, a peek
 and a phone's sheet alike): six of the rows' own 28px lines, the first where the tab's first row will stand (under
 the head's one block, 8px into the body; the page's own stand-in for the panel before any view is up,
-`FileViewer`'s `data-panel-loading`, draws the same block, a bar where a lone title's name will stand, and the same rows
+`FileViewer`'s `data-panel-loading`, draws a lone title's head (no rule), a bar where its name will stand, and the same rows
 on the same lines: `file-viewer/panelToggles.js`'s metrics), each a block the glyph's size on the inset and a bar where
 a name starts, of uneven widths, fading out downwards, in the muted ink, pulsing gently (still where less motion is
 asked for); its tabpanel `aria-busy`, and "Loading" said to assistive technology. No spinner and no words in the panel:
@@ -979,12 +979,13 @@ structure. Every rule here, and why:
   search never changes which tab is open.
 - **One tab is a title.** A panel with a single tab (a Model with nothing to Position or set, a drawing's Layers, a board
   read without its index, or a file whose other tabs have not arrived yet) draws no pill: its name, a plain title at the
-  tabs' size and the open tab's weight (500) in the tab's place. **The head is one geometry, whatever it holds**: the
-  title stands in the tabs' block — the same 32px row, 8px over it and 8px under it to the same rule — its name on the
-  panel's inset at the tab labels' line (the head's padding, the inset less 6px, and the title's own 6px, a pill's).
-  So the body's top is at one pixel for a lone title, for tabs and for the search box, and nothing under the head moves
-  when a file's tabs arrive after it has loaded (its title first, then Params, Joints, Motion; a board's Nets and
-  Layers) or when the search opens. The search's icon stands at the row's right end.
+  tabs' size and the open tab's weight (500) in the tab's place, **with no rule under it and no gap kept for one**:
+  with one tab there is nothing to separate, so the title's 32px row (8px over it) sits straight on the body. Its name
+  stands on the panel's inset at the tab labels' line (the head's padding, the inset less 6px, and the title's own 6px,
+  a pill's). **The search mirrors the head it replaces**: over a lone title it has no rule either, over tabs it has
+  the tabs' rule, so the body's top does not move when the search opens or closes. Tabs add the rule and 8px under
+  their row; a file whose tabs arrive after it has loaded (its title first, then Params, Joints, Motion; a board's Nets
+  and Layers) gains them then. The search's icon stands at the row's right end.
 - **Its tabs**, the head's row, pills as Figma's right panel draws them (Design / Prototype): 28px, 6px
   of padding either side and 4px between pills, so two names stand 16px apart (`FlatPanel.jsx`'s `TAB_PAD_PX`,
   `TAB_GAP_PX`); three fit the 232px panel, and at the grip's 200px the last go into ⋯. The 6px is the pill's padding

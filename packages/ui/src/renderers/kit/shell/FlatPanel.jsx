@@ -400,10 +400,10 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   // The search goes with the last tab it covers.
   useEffect(() => { if (searchOpen && firstSearchable === undefined) closeSearch(); }, [searchOpen, firstSearchable, closeSearch]);
 
-  // One tab is a plain title, the open tab's name in its place (no pill, no fill), on the tabs' row and in its block —
-  // the same 32px row, 8px above and below it, the same rule — so the head is ONE geometry whatever it holds (a lone
-  // title, the tabs, the search box), and nothing under it moves as a file's tabs arrive after its title or the search
-  // opens: the body's top stands at one pixel. Its name stands on the inset, on the tab labels' line.
+  // One tab is a plain title, the open tab's name in its place (no pill, no fill), on the tabs' row, with no rule under
+  // it and no gap kept for one: with one tab there is nothing to separate. The search that opens in its place keeps the
+  // same head (no rule either), so opening it moves nothing. Tabs have the rule. Its name stands on the inset, on the
+  // tab labels' line.
   const single = tabs.length === 1 ? tabs[0] : null;
 
   // The row's tabs as they fit it, measured (`fitTabs`): a hidden ruler draws every tab as the row would, and the row
@@ -506,7 +506,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   const nothing = searching && (grouped ? tabs.every(entry => !searchable.has(entry.id) || counts[entry.id] === 0) : counts[displayed] === 0);
   const aside = <PanelSurface mode={page ? "page" : "push"} label={label} open={open} hidden={hidden} peek={peek} peekLeaving={peekLeaving} peekEntered={peekEntered} onPeekExited={onPeekExited}
     asideRef={surfaceRef} {...surfaceProps}
-    width={drawnWidth} grip={page ? null : grip} gripLabel={t("flatPanel.resize")} onKeyDown={onPanelKeyDown} data-flat-panel={mode} headRule
+    width={drawnWidth} grip={page ? null : grip} gripLabel={t("flatPanel.resize")} onKeyDown={onPanelKeyDown} data-flat-panel={mode} headRule={!single}
     headRef={head} headInsets={HEAD_INSETS} headProps={{ "data-flat-panel-head": "", "data-searching": searchOpen ? "" : undefined }} scrollerRef={scroller}
     scrollerProps={{ "data-flat-panel-scroller": "" }}
     head={<>

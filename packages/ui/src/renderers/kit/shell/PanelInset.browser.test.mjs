@@ -422,7 +422,9 @@ test('the collapsed panel peeks from the page\'s first frame, and the view takes
 
 // A file's other tabs arrive after it has loaded (a model's Params, Joints and Motion come with its structure): the head
 // is one block for its lone title and for its tabs, so the body's top, where its first row stands, does not move.
-test('a file whose tabs arrive after its title: the head keeps its block and the body its top', async t => {
+// A lone title has no rule under it; the tabs that arrive later bring theirs and its 8px, so the body steps down by
+// exactly that (8px and the 1px rule) and its first row still stands 8px into it.
+test('a file whose tabs arrive after its title: the head gains the tabs\' rule and nothing else moves', async t => {
   const { page, pane } = await open(t, 'late.step');
   const place = () => page.evaluate(() => {
     const panel = document.querySelector('[data-testid="one"] [data-flat-panel]'), top = panel.getBoundingClientRect().top;
@@ -436,7 +438,7 @@ test('a file whose tabs arrive after its title: the head keeps its block and the
   await pane.locator('[data-flat-panel] [role=tab]').first().waitFor();
   await pane.locator('[data-flat-panel] [data-flat-panel-body] [data-tree-row]').first().waitFor();
   const loaded = await place();
-  assert.deepEqual([loaded.head, loaded.body], [loading.head, loading.body], `the head and the body's top: ${JSON.stringify({ loading, loaded })}`);
-  // The first row stands at the body's top and its 8px, where it (or a row standing in for it) stood while the file loaded.
-  assert.equal(loaded.row, loading.body + 8);
+  assert.deepEqual([loaded.head, loaded.body], [loading.head + 9, loading.body + 9], `the head and the body's top: ${JSON.stringify({ loading, loaded })}`);
+  // The first row stands at the body's top and its 8px.
+  assert.equal(loaded.row, loaded.body + 8);
 });
