@@ -932,7 +932,7 @@ it("the board is drawn in the viewport's theme, Light by default whatever the ap
   dispose();
 });
 
-it("a board's card picture is drawn in both themes, on nothing but the board, the dark one carried beside the light", async () => {
+it("a board's card picture is drawn once, in the light theme, on nothing but the board", async () => {
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
@@ -940,8 +940,8 @@ it("a board's card picture is drawn in both themes, on nothing but the board, th
   themes.length = 0;
   const picture = await controller.thumbnail({ width: 480, height: 360 });
   expect(picture).toBeInstanceOf(Blob);
-  expect(picture.dark).toBeInstanceOf(Blob);
-  expect([...themes].sort()).toEqual(['dark', 'light']);
+  expect('dark' in picture).toBe(false);
+  expect(themes).toEqual(['light']);
   dispose();
 });
 

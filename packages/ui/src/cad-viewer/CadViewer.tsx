@@ -66,9 +66,9 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   library?: ModelLibrarySource<Model>;
   /**
    * Keep the library's picture of a model: the file on screen once it has settled, and on the home a
-   * card's; `png.dark`, where the view drew one, is its dark theme's, kept beside it.
+   * card's.
    */
-  onThumbnail?(png: Blob & { dark?: Blob }, file: string): Promise<unknown>;
+  onThumbnail?(png: Blob, file: string): Promise<unknown>;
   /** The person's colour scheme, its rows in the app menu over every file and on the home. */
   colorScheme?: ColorSchemeSetting;
   /**

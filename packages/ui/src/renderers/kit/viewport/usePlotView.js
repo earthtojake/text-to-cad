@@ -97,29 +97,25 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
   /**
    * The plot on its own, for a library card: fitted whole to `width` × `height` with the view's
    * margin, drawn as a snapshot draws it but on nothing round it — a board's area, a sheet's paper,
-   * in the theme's colours, the rest clear, so the card's own backdrop is all there is behind it. It
-   * is drawn in both themes from the payload held: the light picture, carrying the dark one as
-   * `dark`, which the library keeps beside it and shows in the dark theme (no card turns a plot's
-   * colours round). The pane's view is left as it is.
+   * in the light theme's colours, the rest clear, so the card's own backdrop is all there is behind
+   * it. The home shows it in both themes, never turned. The pane's view is left as it is.
    */
   const thumbnail = useCallback(async ({ width, height }) => {
     const current = plotRef.current;
     if (!current) throw new Error(`This ${noun} has nothing to picture yet.`);
-    const picture = (theme) => new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(width));
       canvas.height = Math.max(1, Math.round(height));
       const context = canvas.getContext("2d");
       if (!context) { reject(new Error(`The browser cannot draw the ${noun}’s picture.`)); return; }
       clearSurface(context, { width: canvas.width, height: canvas.height });
-      drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height), backdrop: "board", theme });
+      drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height), backdrop: "board", theme: "light" });
       canvas.toBlob((blob) => {
         if (blob) resolve(blob);
         else reject(new Error(`The browser could not encode this ${noun} as a PNG.`));
       }, "image/png");
     });
-    const [light, dark] = await Promise.all([picture("light"), picture("dark")]);
-    return Object.assign(light, { dark });
   }, [noun]);
 
   return { containerRef: view.containerRef, canvasRef: view.canvasRef, controls: view.controls, dragging: view.dragging, fit: view.fit, frame: view.frame, setView: view.setView, zoom: view.zoom,

@@ -505,12 +505,12 @@ it('counts the pin, from its button or the menu, the grid/list switch, and Copy 
   expect(said).toEqual({ home_pin: 1, home_layout_list: 1, home_layout_grid: 1, home_copy_path: 1, home_copy_link: 1, home_reveal: 1, home_unpin: 1 });
 });
 
-// Every picture is the light viewport's, on the model area's light gradient in both themes: a board's dark
-// picture is not asked for, and no picture (a drawing's included) is turned for the dark theme.
+// Every picture is the light viewport's, on the model area's light gradient in both themes: none (a board's
+// or a drawing's included) is turned for the dark theme.
 it("shows every card's light picture in both themes, never turned, and badges it with its format", async () => {
   const thumbnail = vi.fn(async (item: LibraryModel) => `data:${item.name}:${item.thumbnail}`);
   const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
-  const source = library([model('video.kicad_pcb', { thumbnail: 'light.png', thumbnailDark: 'dark.png', pictured: Date.now() / 1000 } as Partial<LibraryModel>),
+  const source = library([model('video.kicad_pcb', { thumbnail: 'light.png', pictured: Date.now() / 1000 }),
     model('plate.dxf', { thumbnail: 'plate.png', pictured: Date.now() / 1000 }), model('arm', { path: id, kind: 'model' })], { thumbnail });
   const home = (colorScheme: 'light' | 'dark') => <ViewerHostContext.Provider value={{ environment: { colorScheme } } as any}><ModelLibrary library={source} /></ViewerHostContext.Provider>;
   const view = render(home('dark'));

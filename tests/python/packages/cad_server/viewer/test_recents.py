@@ -41,20 +41,16 @@ class RecentStoreTest(unittest.TestCase):
         self.assertEqual(set(Registry(self.tmp).list()[0]) - {"pinned", "preview"},
                          {"schema", "id", "kind", "root", "home", "opened", "created", "namespace", "name"}, "its path, and when it was opened, first and last")
 
-    def test_twenty_edits_keep_one_picture_per_theme_and_a_forgotten_entry_keeps_none(self) -> None:
-        # Each revision a view pictures replaces the entry's pictures in place: lots of edits are no bloat.
+    def test_twenty_edits_keep_one_picture_and_a_forgotten_entry_keeps_none(self) -> None:
+        # Each revision a view pictures replaces the entry's picture in place: lots of edits are no bloat.
         store = RecentStore(self.tmp)
         board = str(self.tmp / "a.kicad_pcb")
         store.opened(board)
-        store.thumbnail(board, b"\x89PNG light 0", b"\x89PNG dark 0")
-        after_one = sorted(path.name for path in store.thumbnails.iterdir())
-        for edit in range(1, 21):
-            store.thumbnail(board, b"\x89PNG light %d" % edit, b"\x89PNG dark %d" % edit)
+        for edit in range(21):
+            store.thumbnail(board, b"\x89PNG light %d" % edit)
         [entry] = store.list()
-        self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()),
-                         sorted([entry.thumbnail, entry.thumbnail_dark]))
-        self.assertEqual(len(after_one), 2)
-        self.assertEqual(store.read_thumbnail(entry.thumbnail_dark), b"\x89PNG dark 20")
+        self.assertEqual([path.name for path in store.thumbnails.iterdir()], [entry.thumbnail])
+        self.assertEqual(store.read_thumbnail(entry.thumbnail), b"\x89PNG light 20")
         # Two files with the same picture are two names: forgetting one leaves the other's.
         other = str(self.tmp / "b.kicad_pcb")
         store.opened(other)
@@ -92,21 +88,28 @@ class RecentStoreTest(unittest.TestCase):
         self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()),
                          sorted([shown["0.step"], shown["3.step"]]))
 
-    def test_a_picture_may_have_its_dark_theme_s_beside_it_and_one_without_keeps_its_one(self) -> None:
+    def test_an_earlier_release_s_dark_picture_is_not_listed_and_goes_once_old(self) -> None:
+        # An earlier release kept a board's dark theme's picture beside its light one. The light one is
+        # still the record's picture; the dark one no record names now, so it goes once old, as an orphan.
         store = RecentStore(self.tmp)
-        store.opened("/a.kicad_pcb")
-        store.thumbnail("/a.kicad_pcb", b"\x89PNG light", b"\x89PNG dark")
+        board = str(self.tmp / "a.kicad_pcb")
+        store.opened(board)
+        light = store.thumbnail(board, b"\x89PNG light")
+        dark = "d" * 32 + ".png"
+        (store.thumbnails / dark).write_bytes(b"\x89PNG dark")
+        store.registry.update(store._ident(board),
+                              lambda record: {**record, "preview": {**record["preview"], "thumbnailDark": dark}})
         [entry] = store.list()
-        self.assertEqual(store.read_thumbnail(entry.public()["thumbnailDark"]), b"\x89PNG dark")
+        self.assertNotIn("thumbnailDark", entry.public())
         self.assertEqual(store.read_thumbnail(entry.thumbnail), b"\x89PNG light")
-        # Both are shown, so neither is swept; a picture taken again without one has none.
         old = time.time() - 3600
         for path in store.thumbnails.iterdir():
             os.utime(path, (old, old))
-        store.thumbnail("/a.kicad_pcb", b"\x89PNG light")
-        [entry] = store.list()
-        self.assertIsNone(entry.public()["thumbnailDark"])
-        self.assertEqual([path.name for path in store.thumbnails.iterdir()], [entry.thumbnail])
+        other = str(self.tmp / "b.kicad_pcb")
+        store.opened(other)
+        theirs = store.thumbnail(other, b"\x89PNG other")
+        self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()), sorted([light, theirs]))
+        self.assertEqual({entry.path: entry.thumbnail for entry in store.list()}[board], light)
 
     def test_a_file_is_updated_and_sized_as_it_is_on_disk_and_a_gone_one_says_nothing(self) -> None:
         store = RecentStore(self.tmp / "state")

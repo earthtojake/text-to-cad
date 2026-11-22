@@ -69,18 +69,18 @@ ENGINE_FIELDS = ("port", "schema")
 # The user's page token, one for every engine of a version (each imports the one before's): a link outlives an upgrade.
 TOKEN = f"{ENGINES}/token"
 
-# Where a record's Recents pictures are (its ``preview``'s ``thumbnail`` and ``thumbnailDark``: file names).
+# Where a record's Recents picture is (its ``preview``'s ``thumbnail``: a file name).
 PICTURES = "recents/thumbnails"
 _PICTURE = re.compile(r"[0-9a-f]{32}\.png")
 
 
 def pictures(record: dict[str, Any] | None) -> set[str]:
-    """The pictures a record's ``preview`` names: its PNGs' names under ``PICTURES``."""
+    """The picture a record's ``preview`` names: its PNG's name under ``PICTURES``, alone, or nothing.
+    Anything else in it is not read: a picture only an earlier release's record names (the dark theme's
+    it kept beside a board's) is one no record names, which goes once old (``RecentStore``)."""
     preview = (record or {}).get("preview")
-    if not isinstance(preview, dict):
-        return set()
-    return {name for name in (preview.get("thumbnail"), preview.get("thumbnailDark"))
-            if isinstance(name, str) and _PICTURE.fullmatch(name)}
+    name = preview.get("thumbnail") if isinstance(preview, dict) else None
+    return {name} if isinstance(name, str) and _PICTURE.fullmatch(name) else set()
 
 
 # Told of every record written (one that changed), after it is on disk; never waited on for more.

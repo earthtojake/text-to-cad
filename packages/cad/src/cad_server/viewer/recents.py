@@ -9,12 +9,11 @@ a CAD file opened on a page is a record of its own (``kind: "file"``: its path, 
 opened, ``created``, and last, ``opened``, whether it is pinned), and every model a script built is one already (``kind: "model"``, which the
 engine writes when it registers the build), as is every shape a program handed over (``kind:
 "shape"``). The home's picture of each is UI state on its record (``preview``), the PNG under
-``recents/thumbnails`` named by the record and its content, and, for a document whose picture its view
-draws in the dark theme's own colours too (a KiCad board's), a second PNG beside it (``thumbnailDark``)
-the home shows in the dark theme; an entry without one shows its one picture in both.
+``recents/thumbnails`` named by the record and its content: the light viewport's, which the home
+shows in both themes.
 
-The pictures are bounded however often a document is edited: a record names at most two, a new
-picture replaces them at once (``RecentStore.thumbnail``: the old ones go as the new are named), only
+The pictures are bounded however often a document is edited: a record names one, a new picture
+replaces it at once (``RecentStore.thumbnail``: the old one goes as the new is named), only
 the ``LIMIT`` records the home lists first keep theirs, within ``THUMBNAIL_BYTES`` in all (the rest,
 least recently used first, lose theirs, which a page takes again when it shows them), a forgotten
 record's go with it (``Registry.delete``), and a PNG no record names goes once no writer can still be
@@ -83,8 +82,6 @@ class Recent:
     created: float | None = None
     pinned: bool = False
     thumbnail: str | None = None
-    # Its picture in the dark theme's own colours, where its view draws one (a board's); None: ``thumbnail`` in both.
-    thumbnail_dark: str | None = None
     # When the picture was taken, in seconds: a document updated since has an old one.
     pictured: float | None = None
     # A file's size on disk, in bytes (None once it is gone); a model's and a shape's: None, its
@@ -150,7 +147,6 @@ class Recent:
             # A file that is gone, or a model whose script is (``detached``): listed, and removable.
             "missing": not present,
             "thumbnail": self.thumbnail,
-            "thumbnailDark": self.thumbnail_dark,
             "pictured": self.pictured,
             "size": self.size,
         }
@@ -210,29 +206,25 @@ class RecentStore:
         """Forget a file's entry: its record. The file stays where it is."""
         self.registry.delete(self._ident(path))
 
-    def thumbnail(self, path: str, png: bytes, dark: bytes | None = None) -> str:
-        """Keep a PNG for an entry (a file's path, or a model's id), and its dark theme's where its view
-        draws one: the light one's name. A picture taken without a dark one has none. It replaces the
-        record's pictures in place: written and named under the record's lock, the ones it named before
-        then removed (``_sweep_thumbnails``). An entry with no record keeps nothing."""
+    def thumbnail(self, path: str, png: bytes) -> str:
+        """Keep a PNG for an entry (a file's path, or a model's id): its name. It replaces the record's
+        picture in place: written and named under the record's lock, the one it named before then
+        removed (``_sweep_thumbnails``). An entry with no record keeps nothing."""
         ident = self._ident(path)
-        named = {"thumbnail": _picture_name(ident, png)}
-        if dark is not None:
-            named["thumbnailDark"] = _picture_name(ident, dark, "dark")
+        name = _picture_name(ident, png)
         before: set[str] = set()
 
         def change(record):
             if record is None:
                 return None
             before.update(pictures(record))
-            for key, data in (("thumbnail", png), ("thumbnailDark", dark)):
-                if key in named and not (self.thumbnails / named[key]).exists():
-                    self.state.write(f"{THUMBNAILS}/{named[key]}", data)
-            return {**record, "preview": {**named, "pictured": time.time()}}
+            if not (self.thumbnails / name).exists():
+                self.state.write(f"{THUMBNAILS}/{name}", png)
+            return {**record, "preview": {"thumbnail": name, "pictured": time.time()}}
 
         self.registry.update(ident, change)
-        self._sweep_thumbnails(before - set(named.values()))
-        return named["thumbnail"]
+        self._sweep_thumbnails(before - {name})
+        return name
 
     def read_thumbnail(self, name: str) -> bytes | None:
         if not name or "/" in name or "\\" in name or not name.endswith(".png"):
@@ -259,8 +251,7 @@ class RecentStore:
         for record in self.registry.list():
             preview = record.get("preview") or {}
             common = {"pinned": bool(record.get("pinned")), "thumbnail": preview.get("thumbnail"),
-                      "thumbnail_dark": preview.get("thumbnailDark"), "pictured": preview.get("pictured"),
-                      "created": record.get("created")}
+                      "pictured": preview.get("pictured"), "created": record.get("created")}
             if record.get("kind") == "file" and record.get("opened"):
                 path = str(registering.home(self.registry, record))
                 updated, size = _on_disk(path)
@@ -318,10 +309,10 @@ class RecentStore:
             return 0
 
 
-def _picture_name(ident: str, png: bytes, theme: str = "") -> str:
-    """A picture's file name: of its record, its theme and its bytes, so no two records share one (a
-    record's pictures go with it) and a new picture is a new name (a page keeps a picture by it)."""
-    digest = hashlib.sha256(f"{ident}\0{theme}\0".encode("utf-8"))
+def _picture_name(ident: str, png: bytes) -> str:
+    """A picture's file name: of its record and its bytes, so no two records share one (a record's
+    picture goes with it) and a new picture is a new name (a page keeps a picture by it)."""
+    digest = hashlib.sha256(f"{ident}\0".encode("utf-8"))
     digest.update(png)
     return digest.hexdigest()[:32] + ".png"
 

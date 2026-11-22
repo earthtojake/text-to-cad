@@ -126,8 +126,8 @@ const LIST_MS = 2_000;
 // The chrome's one scroll region (`primitives/scroll-area.jsx`), as this page uses it.
 
 // A card's or a row's picture, read once it is on screen; and one on screen that wants a picture (`seen`).
-// Every picture is the light viewport's, on the model area's light gradient in both themes (a board's
-// dark one is not needed there). A card's carries its format's badge (`badge`).
+// Every picture is the light viewport's, on the model area's light gradient in both themes. A card's
+// carries its format's badge (`badge`).
 function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false, badge = null }: { item: Model; load(item: Model): Promise<string | null>; seen(item: Model): void; opening?: boolean; badge?: string | null }) {
   const { t } = useI18n();
   const element = useRef<HTMLSpanElement>(null);
