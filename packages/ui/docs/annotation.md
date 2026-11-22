@@ -1,14 +1,15 @@
 # Annotation
 
-The drawing tools — Pencil and Shapes — are the viewer's own ink, with no drawing SDK behind it. A view has one
+The drawing tool — Draw, one strip tool over two families, freehand (`pencil`) and the shapes (`shapes`) — is the
+viewer's own ink, with no drawing SDK behind it. A view has one
 annotation: its marks are projected into the model in 3D, so they stay where they
-were drawn from every angle, lying on the surface they were drawn on. The engine document, GLB, mesh, robot, DXF and board renderers offer them
+were drawn from every angle, lying on the surface they were drawn on. The engine document, GLB, mesh, robot, DXF and board renderers offer it
 ([Draw](cad-renderer.md#draw)).
 
 ## Pieces
 
 - `annotation/session.js` — `useAnnotationSession`: the annotation's ink, what the tools
-  put down next (the tool of the strip tool in hand, `pencil` — the pen, the highlighter or the eraser — and `shape` — the rectangle first, the line, arrow, ellipse or text — each kept while the other is up; `style`, the colour, stroke width and
+  put down next (the tool of the family in hand, `pencil` — the pen, the highlighter or the eraser — and `shape` — the rectangle first, the line, arrow, ellipse, text or fill — each kept while the other is up; `style`, the colour, stroke width, line style and
   placement — `surface`, the default, or `plane` — of the tool in hand, kept per drawing kind in `styles`: `pen`, `highlighter` (yellow
   `#ffe600`; the others neon red) and `shapes`, which all five shapes share; the eraser has none) and the selection. Each add, erase, restyle of the selection
   (`restyle`) or fill of a closed shape (`fill`, joining its group) is one step
@@ -26,12 +27,14 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
   screen (Explode, or the pose off its default as `kinematics` or
   `jointValues`), the parts hidden and isolated, and the picture's size. Never
   how it looks.
-- `annotation/tools.js` — the two strip tools that draw and their tools: Pencil (`freedraw`, `highlighter`,
-  `eraser`) and Shapes (`line`, `arrow`, `rectangle`, `ellipse`, `text`); `toolFamily(tool)`, `styleSlot(tool)` (the style slot a tool draws with; none for the eraser).
-- `annotation/toolbar.jsx` — `AnnotationToolbar`, the sub-toolbar both strip tools share: one row (at every width; a phone's
-  wraps where it has no room) — the tools of the strip tool that is up, a button each, the one in hand pressed (Pencil's Pen,
-  Highlighter, Eraser; Shapes' Rectangle, Line, Arrow, Ellipse, Text); a rule; Color, Stroke width and Placement (On
-  surface, On plane), dropdowns of the tool in hand's own style (disabled under the Eraser), Stroke width's button three lines thin to thick, each weight in its menu a straight line drawn at it (four, 1–6px, unnamed; Color's and its menus have no heading), then Clear;
+- `annotation/tools.js` — the two families Draw draws with and their tools: freehand, `pencil` (`freedraw`,
+  `highlighter`, `eraser`), and the shapes, `shapes` (`line`, `arrow`, `rectangle`, `ellipse`, `text`, and `fill`, which
+  fills a closed shape); `toolFamily(tool)`, `styleSlot(tool)` (the style slot a tool draws with; none for the eraser).
+- `annotation/toolbar.jsx` — `drawStripTool`, the strip's one Draw tool (its icon what it draws with now), and
+  `AnnotationToolbar`, its sub-toolbar: two rows on one surface, no rule (a phone's wrap where they have no room) —
+  both families' tools, a button each, the one in hand pressed: first Pen, Highlighter, Line, Arrow, Rectangle, Ellipse
+  and Text; then Fill and Eraser, and Color, Stroke width, Line style (solid, dashed, dotted) and Placement (On
+  surface, On plane), dropdowns of the tool in hand's own style (disabled under the Eraser; under Fill all but Color), Stroke width's button three lines thin to thick, each weight in its menu a straight line drawn at it (four, 1–6px, unnamed; Color's, its and Line style's menus have no heading), then Clear;
   Undo and Redo are ⌘Z and ⇧⌘Z, with no buttons. A flat view (a DXF) passes `placements={false}`: its ink has nowhere to lie but the drawing.
   `annotationColors` offers
   neon swatches and a neutral that reads against the theme: white in dark mode,
@@ -57,7 +60,7 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
   - A fill finds the area inside a shape with
     `@cad/core/lib/annotation/fillRegion.js`.
 - `renderers/kit/tools/annotate/AnnotationOverlay.jsx` — the surface over the viewport
-  while Pencil or Shapes is up. It turns every gesture into marks, previews a mark on its
+  while Draw is up. It turns every gesture into marks, previews a mark on its
   own canvas as it is made, and puts it into the model when the gesture ends.
   Text is written where the surface is pressed: Enter, or a press elsewhere,
   puts it down as a text mark; Shift+Enter makes a new line; Escape drops it. The
@@ -147,7 +150,7 @@ outlives the drawing tools being put down, because the ink stays in the model an
 one adds to it. It goes when the person clears it, or when the model it was
 drawn on changes.
 
-⌘C / Ctrl+C while Pencil or Shapes is up copies the view as it is on screen, ink
+⌘C / Ctrl+C while Draw is up copies the view as it is on screen, ink
 included, to the clipboard as a PNG.
 
 Quick Edit captures the current view and distinct views with remaining ink when

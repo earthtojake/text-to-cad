@@ -71,9 +71,13 @@ guide records what the types so far needed, and is no template for the next.
 
 The rules are the shared UI's documents. Read, in this order:
 
-- [`settings-ui.md`](../../packages/ui/docs/settings-ui.md), binding for every control: the toolbar
-  button, `FloatingToolBar`, `SubToolbar`, `ToolPopover`, `FlatPanel` (the view's panel), `ToolStack`,
-  `ToolPanel`, the floating surface, the tokens (`tokens.css`) and the 13px UI size.
+- [`design-system.md`](../../packages/ui/docs/design-system.md), binding for every control: the tokens
+  (`tokens.css`) and the two scales (a desktop's `text-ui` 13/20, the panel's `text-xs` 12/16; a phone's each step 2px
+  up), the components (the toolbar button, `ValueDropdown`, the panel's rows, `SettingsCard`, `PanelActions`), the
+  floating surface, and touch.
+- [`viewer-ux.md`](../../packages/ui/docs/viewer-ux.md), binding for the layout: what goes where and why
+  (`FloatingToolBar`, `SubToolbar`, `ToolPopover`, `FlatPanel` (the view's panel), `ToolStack`, `ToolPanel`, the
+  Display card), what each file shows, and the patterns.
 - [`cad-renderer.md`](../../packages/ui/docs/cad-renderer.md): the renderer kit -- shell, inspector,
   viewport, tools, camera, view settings.
 - [`renderers.md`](../../packages/ui/docs/renderers.md) and
@@ -92,7 +96,7 @@ The steps:
    A 3D mesh view (the `xbf`, `glb` and `mesh` renderers), a flat drawing (`dxf`), or a flat plot
    (`kicad_pcb`, on the kit's `FlatViewFrame` and `useFlatView`).
 2. **Support every standard tool that applies to the type**: Select (its picks are the type's refs,
-   shown as chips), Measure, Annotate, Display and the view settings, and its inspector sections (a
+   shown as chips), Draw, Measure, Display (the navbar's shared card, with the type's rows), and its panel's tabs (a
    tree, layers).
 3. **Keep parity with the server**: `cad <type> snapshot` draws the same view server-side, and the
    renderer listed in `cadRenderers` also draws the home's picture of a model, off screen
@@ -105,8 +109,9 @@ The steps:
    `packages/ui/src/renderers/registrations.test.ts`.
 
 The worked example is the KiCad board view (`packages/ui/src/renderers/board/`): a flat view like a
-drawing's, on `FlatViewFrame`, with Select, Annotate and Measure, its Parts, Nets and Layers tabs, a
-Display and Settings menus of its own, and its refs as chips.
+drawing's, on `FlatViewFrame`, with Select, Draw and Measure, its Parts, Nets and Layers tabs, the shared
+Display card with its own rows (Side, Mode, in 3D Projection, Style, Background) and Preview's shared Settings card, and
+its refs as chips.
 
 ## Walkthrough: a type and its integration together (KiCad)
 

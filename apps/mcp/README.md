@@ -57,8 +57,8 @@ to `host.presentation`, in one change.
   thread. Each connects to a separate engine session, so an unnamed view belongs to that thread.
 - **Inline (no app: the development switch alone).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
-  the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the logo, which
-  opens the app menu, first; Back and Forward; the file name that opens the name menu; the ⋯,
+  the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the panel's toggle first, then the
+  logo, which opens the app menu; Back and Forward; the file name that opens the name menu; the ⋯,
   the file menu: Copy path, Copy link (the engine's own page of the document,
   `<engine origin>/<id>?token=<link>`, the origin from the launch and the link asked through the
   tunnel; never the tunnel's address), then Open in › Browser and Finder (File Explorer, File manager), a
@@ -66,8 +66,9 @@ to `host.presentation`, in one change.
   script was moved or deleted; Browser needs none), then the apps the server finds on this computer
   for the document's files, through the tunnel as Reveal goes (the source's, each export's as "App
   (file name)", then Default app) — no Export, as this host has no downloads;
-  then, at the right, only Full size where the host can show a view full size; Back and Forward are dropped on a phone-width view), the tool strip ending
-  in Projection, Display and Preview, the view's panel, the view cube, and Quick Edit. In
+  then, at the right, a put-away alert's icon, the view's Display and Preview and, outermost, Full size where the
+  host can show a view full size; Back and Forward are dropped on a phone-width view), the tool strip (no view
+  controls on it), the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
   newer card retires the older ones. The page keeps this presentation, tested and shipped in the same
   bundle, for the day a host's cards are verified; `CAD_MCP_PRESENTATION=inline` reaches it (below).
@@ -260,7 +261,8 @@ the launch's `_meta` first (`host/capability.ts`).
   and a renderer's link to another file (a robot's mesh) is plain text. It is drawn
   under the same 40px navbar as every other view (`chrome: "page"`), so the panel's toggle is there: first the
   panel's toggle, then its logo and app menu, the file's name (no name menu) and its ⋯ (no Open in › Browser; File
-  info, the file's facts), then at the right Full size where the host offers it. Preview's bar hides the
+  info, the file's facts), then at the right the view's Display and Preview, then Full size where the host offers it.
+  Preview's bar hides the
   navbar as it does everywhere. Its launch carries no page (`browser`). The agent reads it
   (`cad_view` lists it) but shows nothing in it: `cad_show` refuses its view, and
   the page ignores a show that reaches it anyway.
@@ -393,7 +395,7 @@ the launch's `_meta` first (`host/capability.ts`).
 - **A card says why it cannot work, in words a person can act on.** Three states, never
   confused, and never a host's or a transport's own error string (`host/channel.ts`,
   `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`), and names the browser, never the viewer
-  ([Naming the page](../../packages/ui/docs/settings-ui.md#naming-the-page)):
+  ([Naming the page](../../packages/ui/docs/viewer-ux.md#naming-the-page)):
   - **No channel.** A host can draw the card and carry none of its calls back: the Claude
     app's **Code tab** (observed 2026-10-25) frames `cad_show`'s card as "Widget from
     text-to-cad:cad cad_show", with an expand control of its own, and answers every
@@ -509,7 +511,8 @@ explorer's folders and search over it (`createCadFileSource`), its chat, its fil
 an alert's Report Issue open a new issue), followed through `ui/open-link`,
 and its home: the library. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps
 its view — camera, Display settings, pose — through updates of it, and leaving it for
-another model or the home drops it, as in the web Viewer. A view the
+another model or the home sets that view aside, in memory, until the model is shown again in the same view, as in
+the web Viewer. A view the
 host creates again (its frame re-created) starts afresh: nothing names a view across its
 frames, so there is nothing to keep its record under. `App.tsx` frames it (full page, or
 an inline card whose height the host is told) under the navbar (`chrome: "page"`) in every

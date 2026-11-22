@@ -135,11 +135,13 @@ relative viewport below it. The generic FileViewer knows nothing about export jo
 
 ## A CAD renderer's controls
 
-The controls of a CAD renderer (an engine document's, GLB, mesh, robot) are its own, over the viewport: its
-tool strip, the tool in hand's sub-toolbar and its docked panel (a phone's sheet), its view's settings (under a
-file's navbar Display, whose card docks at the view's right edge, and Preview, the same on a phone; without one Display
-and Preview at the strip's end) and, in Preview, Preview's own bar (`settings-ui.md#camera-animation-and-preview`); a
-DXF's are its own canvas's. Nothing a renderer does opens or closes the explorer (only the
+The controls of every view (an engine document's, GLB, mesh, robot, and a DXF's, a board's and a schematic's alike)
+are its own, over the viewport, in the one frame (`kit/shell/ViewFrame.jsx`): its
+tool strip, the tool in hand's sub-toolbar and its docked panel (a phone's sheet), the corner's control, Quick Edit,
+its view's settings (under a file's navbar Display, whose card docks at the view's right edge — a DXF's and a
+schematic's the Background alone — and, for a 3D view or a board, Preview, the same on a phone; without one Display
+and Preview at the strip's end) and, in Preview, Preview's own bar
+([Camera, animation and Preview](viewer-ux.md#camera-animation-and-preview)). Nothing a renderer does opens or closes the explorer (only the
 file's name opens that). The layout a person gives the tool stack's panels is one
 of the tab's settings (`settings.toolStack` of the tab record, `@cad/ui/tab-store`),
 beside the appearance and the home's layout; the panel — open or collapsed by the person (a choice that then holds on
@@ -150,12 +152,12 @@ The model area is drawn in **the viewport's theme**, not the host's `colorScheme
 (`settings.viewportBackground` of the tab record: Light by default, or Dark), resolved by
 `kit/look/useViewportTheme.js` over `@cad/core/lib/viewportTheme.js`; a renderer draws its scene and its picture in
 its `scheme` and hands it to its frame, which scopes the canvas box and the corner to it
-(`settings-ui.md#the-viewports-theme-background`). A host's appearance still themes the chrome.
+([the viewport's scheme](design-system.md#the-viewports-scheme)). A host's appearance still themes the chrome.
 Every list a renderer puts in its panel (a tab of the `sidebar`) is built of the STEP/xbf Model tree's
 base components, in `@cad/ui/primitives/tree-row` and `@cad/ui/primitives/tree-filter` (the row, its one
 glyph slot, its name and detail, a heading, the search's lit match and count) and `VirtualRows`: a new
 renderer's list adds a prop or a slot to those, never a row of its own
-(`settings-ui.md#the-views-panel-and-the-tool-stack`).
+([the panel's trees](viewer-ux.md#trees)).
 
 ## Preview and renderer navigation actions
 
@@ -184,12 +186,12 @@ mode. Preview is a view of its own, mounted over the tools view's while it is op
 page's GPU device; the tools view's viewport stays mounted under it and nothing of it changes.
 Nothing of Preview's state — its camera, pose, routine, whether it orbits — is persisted; its
 Render settings are the file's view's (`preview`). Routines play from the panel's Animation tab in
-the tools view (`AnimationSection.jsx`; no playbar there) and
+the tools view (`AnimationSection.jsx`; a mechanism's motion from the top of its Joints tab; no playbar there) and
 from Preview's playbar in Preview (`PreviewPlaybar.jsx`). Preview opens still: Orbit is off every time it opens, and its settings panel turns it
 on. The file's view's `playback` — Orbit's speed, the chosen speed and loop —
 is kept between visits to Preview and across a reload, and a file's routine opens at rest:
 only the person plays it. The rules are in
-[settings-ui.md](settings-ui.md#camera-animation-and-preview).
+[viewer-ux.md](viewer-ux.md#camera-animation-and-preview).
 
 A renderer can publish `FileNavigationAction[]` through
 `RendererViewProps.onNavigationActionsChange`. The CAD renderers publish one, and only
@@ -331,7 +333,7 @@ Hosts must resolve/validate accepted attachments and consume failed encoders;
 they do not transfer Promise or Blob values across native IPC.
 
 Quick Edit is the shared, host-neutral note to the agent
-([the design system](settings-ui.md#quick-edit)), and its buttons are what the host can carry out.
+([Quick Edit](viewer-ux.md#quick-edit)), and its buttons are what the host can carry out.
 Copy, Queue and Send carry the words and references, with a snapshot packet captured
 at the press when the displayed revision matches the saved input. If the viewer
 retains a previous revision, Quick Edit keeps the note and
@@ -519,8 +521,10 @@ tests remain required for resource changes.
 Viewer shortcuts consume only events from their own viewer, or from the page
 background after a pointer press in it, so another viewer or the composer never
 receives Escape, copy or orbit keys on its behalf
-([settings-ui.md](settings-ui.md#keyboard)). Annotate's surface reads the host's
-keyboard `platform` (`environment.platform`) for its undo and redo keys.
+([viewer-ux.md](viewer-ux.md#keyboard)). Undo and Redo (the view's one history: Draw's ink, Measure's rulers)
+take ⌘ or Ctrl alike; the host's
+keyboard `platform` (`environment.platform`) names the keys the hints show (⌘C or Ctrl+C, the zoom's, the panel's
+`⌘\` or `Ctrl+\`).
 
 ## Host chrome slots
 
@@ -566,8 +570,9 @@ browsed (`files.list` and `files.search`) from the file's folder or a model's `f
 plain text where there is neither; the ⋯ offers Copy path and Reveal in Finder / Show in Explorer / Show in file
 manager, each where `fileActions` can do it, and is absent where it can do none (no
 right-click on the name). Right, only what a host or a file adds: the renderer's navigation
-actions first, then the host's actions (`navbarActions`: `CadViewer` hands it the host's
-`fullSize`, the CAD app's Full size), outermost. The navbar holds no settings and none of the view's controls.
+actions first, then the view's own Display and Preview, which the view portals into the navbar's view slot (below),
+then the host's actions (`navbarActions`: `CadViewer` hands it the host's
+`fullSize`, the CAD app's Full size), outermost.
 
 The app menu is FileViewer's, built from the host's `navigation.home`, `links` and
 `environment.platform` and the person's `FileViewerProps.appSettings` (which `CadViewer`
@@ -640,8 +645,9 @@ and "Could
 not open that file" and the reason otherwise, each with a Go home button where the host has a home.
 
 The viewport's edges and corners are the shell's, never the host's: the tool strip at the
-top centre of the window, ending in Preview (a 3D view's), the tool in hand's sub-toolbar under it, the one panel
-(the file's structure, then its Parameters, Joints and Animation, as tabs) docked at the left, pinned open always pushing
+top centre of the window (no view controls on it under a navbar, which holds Display and Preview: below), the tool
+in hand's sub-toolbar under it, the one panel
+(the file's structure, then its Params, Joints and Animation, as tabs) docked at the left, pinned open always pushing
 the model aside (collapsed on its own where it would leave the model under 640px, until the person opens or closes it
 on that file; a mouse resting on its toggle peeks
 it over the model as a floating card, pushing nothing, and only the toggle pins it), Quick Edit's bar always at the bottom, one row (its attachments a row above it while something is picked), centred on the window as the strip is
@@ -667,7 +673,7 @@ the ports, never an app name: Copy Prompt always, Queue for a composer
 destination, Send where the prompt port has `send`. Native clipboard effects
 remain in the host implementation.
 
-A STEP's selection copy (a chip's click, the copy shortcut) and Annotate's
+A STEP's selection copy (a chip's click, the copy shortcut) and Draw's
 copy shortcut (the view with its annotations) use `ClipboardPort` directly: the references as text, the view with its ink as a PNG through
 `writeImage`. Their copy shortcut follows the same path. A double-click copies
 nothing: on a face or edge it turns the view square to it, on a component or
@@ -687,8 +693,8 @@ A copied reference names its file by its absolute path (`<path>#<selector>`), a 
 document id (`<id>#<selector>`), and so does a copied Quick Edit: every view spells a file the same way, so a reference pasted
 into a chat or a tool says exactly which file it means.
 
-Nothing of the tools view sits at the bottom centre but a file's playbar, for a file with routines
-(a quiet pill, or hidden to a smaller one), and Preview's playbar in Preview. A host whose own control floats over
+Nothing of the tools view sits at the bottom centre: the bottom row is Quick Edit's, and Preview's playbar stands
+there in Preview alone, for a file with routines. A host whose own control floats over
 that edge (a chat's composer) sets `--cad-host-bottom-inset` on an ancestor to the height it
 covers: the model library scrolls its last rows clear of it. A host whose own control
 floats over the view's top-right corner sets `--cad-viewport-corner-top` to the room

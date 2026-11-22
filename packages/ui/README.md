@@ -10,17 +10,18 @@ FileViewer over a CAD client, with the six CAD renderers, the home (the model
 library) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.
 
-The viewer's tools, panel, settings, tooltips and keyboard follow one
-binding [design system](docs/settings-ui.md), the same in both apps. A change to
-that chrome changes the design system first. The CAD app's surrounding host controls
+The viewer's tools, panel, settings, tooltips and keyboard follow two binding documents, the same in
+both apps: the [design system](docs/design-system.md) (the tokens, the two scales, the components, touch)
+and [the viewer's layout and patterns](docs/viewer-ux.md) (what goes where and why, the patterns). A change to
+that chrome changes them first. The CAD app's surrounding host controls
 remain its own.
 
 **The viewer is read-only, with one exception.** It writes no document's content and no file of
 one (an export is a download of a new file; the home's Delete removes the engine's record and cache
 of a document, never its file). Changing a design belongs to the agent and the code, and every
-viewer tool (Select, Measure, Annotate, Quick Edit, the filters and displays) exists to show the
-person the design and to give the agent feedback. The exception is a model's **Parameters** section
-([design system](docs/settings-ui.md#parameters)): its Save asks the engine to set the named numbers
+viewer tool (Select, Measure, Draw, Quick Edit, the filters and displays) exists to show the
+person the design and to give the agent feedback. The exception is a model's **Params** tab
+([Parameters](docs/viewer-ux.md#parameters)): its Save asks the engine to set the named numbers
 the model's script declares, through the same path as `cad model set` (`client.setModelParameters`,
 `POST /api/v1/documents/model/<id>/parameters`). The engine, not the page, rewrites each number in
 the script where its last run recorded it, after checking the script is the one that ran, and builds
@@ -49,18 +50,21 @@ layout remain shared; operating-system details and app workflows belong to the
 host. Follow [the feature-extension workflow](docs/viewer-host.md#adding-a-shared-feature)
 when introducing a new integration.
 
-The design system's type is [one scale](docs/settings-ui.md#the-type-scale) of three sizes and a heading, each
-on a fixed line height ([src/styles/tokens.css](src/styles/tokens.css)): `text-tiny` 11/16 (tooltips, shortcut
+The design system's type is [two scales](docs/design-system.md#the-type-scale) of three sizes and a heading, each
+on a fixed line height ([src/styles/tokens.css](src/styles/tokens.css) and
+[src/styles/globals.css](src/styles/globals.css)). A desktop's, the reference: `text-tiny` 11/16 (tooltips, shortcut
 hints, small metadata), `text-xs` 12/16 (the view's panel, Quick Edit, the sub-toolbars, and every menu,
-dropdown, select and context menu), `text-ui` 13/20 (app chrome: the navbar, dialogs, the Home; the default, which
+dropdown and context menu), `text-ui` 13/20 (app chrome: the navbar, dialogs, the Home; the default, which
 `text-sm` and `text-base` resolve to for shared and host controls) and `text-heading` 15/20 semibold (the one
-heading); a phone's a step up. Hosts apply `text-ui` to their body; FileViewer also sets it at its own boundary.
-Document headings and code retain their content styles. The menu, select-popup, context-menu and tooltip
-primitives set their own size and 16px line, including checkbox/radio items and submenus, portals included;
+heading). A phone's (the viewer's mobile layout, under 600px) takes each step 2px up: 13/18, 14/20, 15/20 and
+17/22. Hosts apply `text-ui` to their body; FileViewer also sets it at its own boundary.
+Document headings and code retain their content styles. The menu (`DropdownMenu`, every value picker's list
+too: `ValueDropdown`), context-menu and tooltip
+primitives set their own size and line, including checkbox/radio items and submenus, portals included;
 consumers do not add per-menu font-size overrides. These defaults belong to the primitives, including the CAD
 app's host-level equivalents.
 Viewer hover hints use `TooltipHint` from the shared tooltip primitive, with
-11px text and a 400ms delay. Use short action names, omit redundant hints on
+`text-tiny` text (11px; a phone's 13) and a 400ms delay. Use short action names, omit redundant hints on
 obvious or already labeled controls, and show full tree/field names only when
 clipped. Native HTML `title` attributes are not used for interface tooltips.
 
@@ -69,7 +73,8 @@ normal 16px root or shrinking layout spacing.
 
 The model area takes the person's Background (Light by default, or Dark), never the app's theme: the
 scene, its overlays and a 2D view's paper are drawn in the viewport's theme (`@cad/core/lib/viewportTheme.js`, the
-scene's colours written once), the chrome in the app's ([the palette and the viewport's theme](docs/settings-ui.md#the-palette)).
+scene's colours written once), the chrome in the app's ([the palette](docs/design-system.md#the-palette),
+[the viewport's scheme](docs/design-system.md#the-viewports-scheme)).
 Every control's label is `FieldLabel` (muted), its value the foreground.
 
 File-tab chrome uses normal-weight type. The navbar's file name, the explorer's and
@@ -80,7 +85,7 @@ view's panel's lists — every one of them, the Model, the Links, the Parts, the
 the Layers — share the STEP/xbf Model tree's base components (`primitives/tree-row.jsx`'s row, slot,
 name, detail and heading, `primitives/tree-filter.jsx`'s search highlight and count, `VirtualRows`),
 never a view's own, in the panel's 12px text, one glyph slot a row
-([the view's panel](docs/settings-ui.md#the-views-panel-and-the-tool-stack)). Both inset
+([the panel's trees](docs/viewer-ux.md#trees)). Both inset
 row backgrounds 5px from their horizontal edges, including selected, hovered and
 filtered rows; nesting adds indentation inside that gutter.
 The name menu is a popover under the navbar's file name: Models and Files as stock Tabs over
@@ -91,7 +96,7 @@ the viewer's own: the tool strip at the view's top centre, the tool in hand's su
 under it, and the one panel docked at its left, the canvas the narrower for it while it pushes it aside (a mouse
 resting on its collapsed toggle peeks it over the view instead, a floating card pushing nothing, pinned only by the toggle).
 FileViewer is mobile below 600px of its own width; progress indicators use this same
-breakpoint. The panel never scrolls sideways: Position's labels truncate to preserve its
+breakpoint. The panel never scrolls sideways: Joints' labels truncate to preserve its
 sliders and inputs.
 
 React, ReactDOM, Three.js and Lucide are host-supplied peers. React 18 and 19
@@ -110,21 +115,21 @@ src/
   library/           a host's home: the models opened before, to open again, and their pictures
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
-    xbf/            an engine document (.xbf) and a STEP: model tree, Position
-    robot/          URDF and SRDF: Position and Links
+    xbf/            an engine document (.xbf) and a STEP: model tree, Params, Joints
+    robot/          URDF and SRDF: Links and Joints
     glb/, mesh/     GLB, and STL/3MF triangle meshes
     dxf/            2D drawings
     workspace/      a viewer file's catalog entry and document load
     harness/, shell-harness/  surfaces the browser suites drive
-  primitives/       shared controls: buttons, menus, selects, sheets, tooltips, tree rows
+  primitives/       shared controls: buttons, menus, the value dropdown, sheets, tooltips, tree rows
   lib/              browser helpers
-  loading/          shared loading animation
+  loading/          the one loading indicator: a step line over a thin bar
   styles/           canonical tokens and component CSS
   assets/           lightweight UI assets
 dist/               generated ESM, declarations, CSS, assets and worker modules
 ```
 
-The loading icon's and the marks' provenance is [src/assets/README.md](src/assets/README.md);
+The marks' provenance is [src/assets/README.md](src/assets/README.md);
 the DXF and robot renderers' fixtures are described beside them
 ([dxf](src/renderers/dxf/__fixtures__/README.md), [robot](src/renderers/robot/__fixtures__/README.md)).
 
@@ -275,18 +280,19 @@ centre holds the file's tools — a STEP's Select (its selection filter the chev
 Draw (one plain button; its row under the strip holds the freehand and shape tools), Measure, then Explode and Clip; a robot's Select, Draw, Measure and Clip; a GLB's
 Select (its nodes), Draw, Measure, Explode (several parts) and Clip; a 3MF's Select (its
 objects), Draw, Measure and Clip; an STL's Select (its bodies), Draw and Clip.
-No rule parts the strip, at Figma's toolbar's proportions (48px, 32px tiles). The view's settings are the navbar's,
+No rule parts the strip, at Figma's toolbar's proportions (a 40px bar of 28px tiles 5px in; a phone's tiles 36px). The view's settings are the navbar's,
 for every kind of file: **Display** (the plain cube, no chevron; a toggle whose card, `kit/shell/DisplaySettings.jsx`,
 docks under the navbar at the view's right edge, the sidebar's peek card mirrored), then a 3D view's Preview, and a
 board's. The corner at the top-right keeps only the camera's own control: a 3D view's cube, or a flat view's one "100%"
 zoom dropdown. Without a navbar Display and Preview end the strip. A phone's picture has no corner control. The bottom row is Quick Edit's alone. The tool in hand's
-controls are one row under the strip, its sub-toolbar (`kit/tools/SubToolbar.jsx`):
-the drawing tools' colour, stroke width, placement and history; Measure's chips. Explode's and
+controls hang under the strip, its sub-toolbar (`kit/tools/SubToolbar.jsx`):
+Draw's two rows (the tools that put ink down; then Fill, the Eraser, Colour, Stroke width, Line style, Placement and
+Clear, Undo and Redo being keys alone); Measure's chips. Explode's and
 Clip's slider rows open in a popover from their tiles, taking up no tool.
 The view's one panel, docked at the left, whatever the tool
 (`kit/shell/FlatPanel.jsx`): one head row, as Figma's Layers panel's — a tab per part of the file's structure (a STEP's or
 an .xbf's Model, a robot's Links; a board's Parts, Nets and Layers, a
-schematic's Parts, Nets and Hierarchy, a drawing's Layers), then, only where the file has them, its Parameters, Joints and
+schematic's Parts, Nets and Hierarchy, a drawing's Layers), then, only where the file has them, its Params, Joints and
 Animation (`ToolPanel`s; their rows `kit/inspector/panelRows.jsx`), then Search, an icon that turns the head's row into the one search box, in the tabs' (or the title's) place, nothing under
 it moving, its results one tree's hits or, where several tabs are searched (a board's, a schematic's), one list grouped
 by tab (one tab is a plain title, in the tabs' own block, so the head never changes height) — its lists at its full height, in one
@@ -303,9 +309,10 @@ Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is
 the description's link tree, with the Model's rows and search box; see
 [robot links](docs/cad-renderer.md#robot-links).
-The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
-the view's panel, mobile layout, section density, keyboard scope, tooltips
-and Preview. RendererShell owns the strip and its sub-toolbar at the top centre of the window, the
+The binding [viewer layout and patterns](docs/viewer-ux.md) defines tool lifecycle,
+the view's panel, mobile layout, keyboard scope, tooltips
+and Preview, and the binding [design system](docs/design-system.md) section density, the components and touch.
+RendererShell owns the strip and its sub-toolbar at the top centre of the window, the
 panel docked at its left (the strip and Quick Edit centred on the window over it), Quick Edit's bar at the bottom and the
 cube alone at the top-right. Preview (preview
 mode) is the shell's own, the one place Render is drawn — whatever the file's display mode,
@@ -313,13 +320,13 @@ which has no Render — and takes the whole page, the navbar and the strip with 
 host; in the navbar's place its own bar, on no surface, names the file and holds Preview settings
 (Orbit, off at every entry, and its speed, then Render's settings, sliding in from the right
 edge) and Exit preview, fading with the playbar while the pointer rests; for a file with
-routines, Preview's own playbar sits under the model. Routines play from the tools view's own
-playbar, a quiet pill under the model the person can put away to a smaller one (its cog the routines
-and the Playback settings, its scrubber's start the rest pose), and from Preview's own playbar in Preview. Preview and the tools view are two views,
+routines, Preview's own playbar sits under the model. Routines play in the tools view from the panel's
+Animation tab (a mechanism's motion from the top of its Joints tab; Speed and Loop its rows, its scrubber's start
+the rest pose), and from Preview's own playbar in Preview. Preview and the tools view are two views,
 each with its own viewport, scene, camera, pose and routine over the page's one GPU device:
 Preview starts from the model as authored and leaves the tools view's state untouched, and
 leaving it throws Preview's away and gives the tools view back exactly as it was
-([Preview](docs/settings-ui.md#camera-animation-and-preview); its mechanism,
+([Preview](docs/viewer-ux.md#camera-animation-and-preview); its mechanism,
 [Preview and the camera](docs/cad-renderer.md#preview-and-the-camera)). Keep app-specific
 effects in the [host contract](docs/viewer-host.md), not in renderer components.
 
@@ -337,8 +344,8 @@ Authored material color, finish and opacity are read-only in every style. There
 is no Materials editor or persisted material override. See [View styles](docs/render-mode.md) and
 [loading](docs/loading.md).
 
-The navbar leads with the logo (the C mark, over the home and over a document alike), which
-opens the app's menu: Back to home where the host
+The navbar leads, over a file with a panel, with the panel's toggle, then the logo (the C mark, over the
+home and over a document alike), which opens the app's menu: Back to home where the host
 has a home, the person's settings (Language, Telemetry, Theme), Send feedback
 (a new issue titled "Feedback: " where the host has a tracker), GitHub, Discord and, in
 gray, the version and who made it. Where the host keeps the view's own history (the CAD
@@ -349,7 +356,7 @@ Export, a submenu of the formats; a model's Copy path and file manager act on it
 pointer is on them or their menu is open, with no tooltip. At the right is only what a host
 or a file adds: a dismissed alert's icon, the host's actions (the
 CAD app's Full size), after the view's own, which it portals into the navbar's view slot (Display, then a 3D view's
-Preview). A host whose own frame is its navigation shows
+or a board's Preview). A host whose own frame is its navigation shows
 the view alone (`chrome: "bare"`, the CAD app's file handler), with no navbar at all. With no
 file a view shows the host's home, the model library, under the same navbar (its logo and menu,
 without Back to home, Back and Forward where the host keeps the view's history, and the host's
@@ -371,14 +378,14 @@ copies all of them through the host's clipboard.
 
 The native `.kicad_pcb` renderer lives in `src/renderers/board/`, using the same file service,
 selection, Measure, annotation and Quick Edit host capabilities as the other renderers. A board has Preview as a 3D
-file has (the same button right of View, bar, settings, less Part colours, and camera), showing the board as it is
+file has (the same button right of Display, bar, settings, less Part colours, and camera), showing the board as it is
 made, lit, in a view of its own (`board/BoardPreviewView.jsx` over the kit's `usePreviewFrame.jsx`); its 2D/3D Mode
-and its tools are untouched by it ([a board in 3D](docs/settings-ui.md#a-board-in-3d)).
+and its tools are untouched by it ([a board in 3D](docs/viewer-ux.md#a-board-in-3d)).
 It consumes the core plot payload; authoring and DRC belong to KiCad and the `cad` command.
 The `.kicad_sch` renderer, `src/renderers/schematic/`, is the same flat plot view from the kit
 (`kit/viewport/usePlotView.js`, `kit/inspector/CircuitTree.jsx`, `kit/tools/select/SelectFilterMenu.jsx`),
 read a sheet at a time (`GET .../kicad_sch/<id>/plot?sheet=<path>`, the hierarchy's index with the
 first): its Parts, Nets and Hierarchy in the view's panel, the Hierarchy and a sheet symbol's double-click
-to move between sheets (each keeping its view for the session), and the app's theme,
-switched live; ERC belongs to the
+to move between sheets (each keeping its view for the session), drawn in the viewport's Background (its Display
+card's one row), never the app's theme; ERC belongs to the
 `cad` command.
