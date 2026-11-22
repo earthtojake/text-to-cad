@@ -81,17 +81,17 @@ test("the Home is the chrome's type scale: the heading 15/20, names 12/16, facts
 });
 
 // THE type scale (docs/settings-ui.md, "The type scale"): three interface sizes and one heading, each on a fixed
-// line height -- tiny 11/16, xs 12/16, ui 13/20, heading 15/20 semibold -- a phone's 15/20 (its secondary text 14/20, the
-// heading 17/22, "Two scales"), and the view's panel every step at its 12/16 (a phone's 15/20). No 10px step (text-micro is gone),
+// line height -- tiny 11/16, xs 12/16, ui 13/20, heading 15/20 semibold -- and a phone's each step 2px up ("Two scales":
+// tiny 13/18, xs 14/20, ui 15/20, heading 17/22), the view's panel at xs (12/16; a phone's 14/20). No 10px step (text-micro is gone),
 // and no stylesheet sets a font size in pixels: every size is the scale's.
-test("the type scale is three sizes and a heading on fixed line heights, a phone's one size, with no 10px step", () => {
+test("the type scale is three sizes and a heading on fixed line heights, a phone's each 2px up, with no 10px step", () => {
   const css = readFileSync(join(root, "styles/globals.css"), "utf8"), tokens = readFileSync(join(root, "styles/tokens.css"), "utf8");
   const block = selector => css.slice(css.indexOf(`${selector} {`)).split("}")[0];
   const vars = text => Object.fromEntries([...text.matchAll(/--cad-(text|leading)-(\w+):\s*([^;]+);/g)].map(([, kind, name, value]) => [`${kind}-${name}`, value.trim()]));
   assert.deepEqual(vars(block(":root")), { "text-tiny": "0.6875rem", "text-xs": "0.75rem", "text-ui": "0.8125rem", "text-heading": "0.9375rem",
     "text-panel": "0.75rem", "leading-tiny": "1rem", "leading-xs": "1rem", "leading-ui": "1.25rem", "leading-heading": "1.25rem", "leading-panel": "1rem" });
-  assert.deepEqual(vars(block(':root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *))')), { "text-tiny": "14px", "text-xs": "15px", "text-ui": "15px", "text-heading": "17px",
-    "text-panel": "15px", "leading-tiny": "20px", "leading-xs": "20px", "leading-ui": "20px", "leading-heading": "22px", "leading-panel": "20px" });
+  assert.deepEqual(vars(block(':root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *))')), { "text-tiny": "13px", "text-xs": "14px", "text-ui": "15px", "text-heading": "17px",
+    "text-panel": "14px", "leading-tiny": "18px", "leading-xs": "20px", "leading-ui": "20px", "leading-heading": "22px", "leading-panel": "20px" });
   for (const name of ["tiny", "xs", "ui", "heading"]) assert.match(tokens, new RegExp(`--text-${name}--line-height: var\\(--cad-leading-${name}\\);`));
   assert.match(tokens, /--text-heading--font-weight: 600;/);
   assert.doesNotMatch(css + tokens, /micro/);
@@ -103,7 +103,7 @@ test("the type scale is three sizes and a heading on fixed line heights, a phone
   assert.deepEqual(found, []);
 });
 
-// Every menu, dropdown, select and context menu is the scale's xs step (12/16; a phone's 15/20), each item at least the
+// Every menu, dropdown, select and context menu is the scale's xs step (12/16; a phone's 14/20), each item at least the
 // row (28; a phone's 36), its shortcut hints 11px, and a tooltip the tiny step: the primitives set it, so no menu or item
 // brings a size of its own.
 test("menus are the xs step on the row and tooltips the tiny step, from the primitives alone", () => {

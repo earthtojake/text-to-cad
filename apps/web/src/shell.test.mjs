@@ -23,11 +23,13 @@ test("the page's bar before its script is the navbar's", () => {
   const bar = shell.match(/\[data-boot-navbar\] \{([^}]*)\}/u)?.[1] ?? '';
   assert.match(bar, /box-sizing: border-box; height: 40px; border-bottom: 1px solid var\(--border\); background: var\(--sidebar\);/u);
   const phone = shell.match(/@media \(max-width: ([\d.]+)px\) \{ \[data-boot-navbar\] \{ height: (\d+)px; \} \}/u);
-  // The navbar: 40px with its border inside (`h-10 … border-b` in a border-box), on the chrome's colour, and 48px in
-  // a phone's view, which is a viewer under `VIEWER_MOBILE_BREAKPOINT` wide (the page's whole width here).
-  assert.match(ui('lib/navbarRow.js'), /NAVBAR_ROW_CLASS = "flex h-10 shrink-0 items-center gap-2 border-b /u);
+  // The navbar: the control and 12px with its border inside (`border-b` in a border-box), on the chrome's colour: 40px
+  // (a 28px control) and 48px (a phone's 36px) in a phone's view, a viewer under `VIEWER_MOBILE_BREAKPOINT` wide (the
+  // page's whole width here).
+  assert.match(ui('lib/navbarRow.js'), /NAVBAR_ROW_CLASS = "flex h-\[calc\(var\(--cad-control\)\+12px\)\] shrink-0 items-center gap-2 border-b /u);
   assert.match(ui('file-viewer/navigation/ViewerNavbar.jsx'), /cn\(NAVBAR_ROW_CLASS, "relative border-border bg-sidebar /u);
-  assert.match(ui('styles/globals.css'), /\[data-viewer-layout="mobile"\] :is\(\[data-viewer-navbar\], \[data-preview-bar\]\) \{ height: 48px; \}/u);
+  const controls = [...ui('styles/globals.css').matchAll(/--cad-control: (\d+)px;/gu)].map(([, px]) => Number(px) + 12);
+  assert.deepEqual(controls, [40, 48]);
   const breakpoint = Number(ui('file-viewer/responsive.js').match(/VIEWER_MOBILE_BREAKPOINT = (\d+)/u)?.[1]);
   assert.deepEqual([Math.ceil(Number(phone?.[1])), phone?.[2]], [breakpoint, '48']);
 });

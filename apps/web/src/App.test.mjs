@@ -312,9 +312,9 @@ test('the notice says the page reconnects, and how to start the engine', async (
     await act(() => root.render(createElement(EngineStopped, { locale: 'en' })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
       'CAD is not running.It starts again when your agent next uses CAD or you open the CAD app; this page reconnects on its own.Reload');
-    // The one quiet status screen: words and a small quiet button, no icon.
+    // The one quiet status screen: words and a small quiet button (the control's height), no icon.
     const screen = dom.window.document.querySelector('[data-status-screen]');
-    assert.deepEqual([screen?.querySelector('svg'), screen?.querySelector('button')?.classList.contains('h-7')], [null, true]);
+    assert.deepEqual([screen?.querySelector('svg'), screen?.querySelector('button')?.classList.contains('h-control')], [null, true]);
     await act(() => root.render(createElement(EngineStopped, { locale: 'en', refused: true })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
       "This link no longer works.Ask your agent to open the model again and use the new link.");

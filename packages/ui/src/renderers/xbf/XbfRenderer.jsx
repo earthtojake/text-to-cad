@@ -650,7 +650,7 @@ function XbfSurface({ view, data }) {
 
   // ---- double-click: a face or edge looked at, a part isolated, empty space leaves isolation or fits ----
   // A face or an edge: the view turns square to it (CAD's Normal To, `kit/camera/lookAt.js`) and
-  // nothing is picked; navigation only.
+  // the gesture changes no selection itself (its first click's pick stands, below).
   const lookAt = useCallback((id) => {
     const subject = xbfLookSubject(scene, id);
     if (subject) shellRef.current?.frame.viewerRef.current?.lookAt?.(subject);
