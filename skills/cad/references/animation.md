@@ -10,40 +10,19 @@ joints, mechanism states, couplings and configuration sequences, read
 - [Motion or animation](#motion-or-animation)
 - [Authoring](#authoring)
 - [Naming parts](#naming-parts)
-- [What fails the run](#what-fails-the-run)
 - [Reviewing](#reviewing)
 
 ## Motion or animation
 
-Two layers, each true to its format:
-
-- **A configuration sequence** (`cad.build123d`'s `configuration_sequence`, a motion on
-  the page) is the mechanism's: joint values over time, kept in the document as STEP
-  AP242's configuration sequence. Every GLB of the model carries it as a clip, and the
-  page's Motion section plays it. A robot's gait, a door's opening, an engine's running
-  belong here.
+- **A configuration sequence** (a motion on the page) is the mechanism's: joint values
+  over time, kept in the document. A robot's gait, a door's opening, an engine's running
+  belong there ([kinematics](kinematics.md#configuration-sequences)). Prefer one where
+  the mechanism says the movement.
 - **An animation** (`cad.build123d`'s `animation`) is the GLB's: glTF channels
   (translation, rotation, scale) on the parts a GLB places, and the mechanism's forward
-  kinematics at given times. It is no part of the mechanism: the viewer's page and a
-  STEP show nothing of it, and an exported `.xbf` only records its compiled tracks for a
-  GLB. It is baked into every GLB exported from the model. An explode, a reveal, a
-  showcase or a hidden cover belongs here.
-
-The rules:
-
-- **Prefer a motion where the mechanism says it**, and waypoints in it.
-- **No helper joints to fake an explode.** A joint per part only to slide it out is an
-  animation's job, and the Position panel would show a slider for each.
-- **Animations are GLB-only.** `cad model export "$ID" model.glb`,
-  `model.export(part(), "model.glb")` and `cad xbf export model.xbf model.glb` from an xbf the
-  model exported all bake them, the same bytes. `xbf.read` imports a part's geometry
-  without them.
-- **`.hide` is a scale trick.** glTF has no visibility channel, so a hidden part is
-  scaled to 0. Use `.scale(parts, to=1, start=t, end=t, interpolation="STEP")` to bring
-  it back.
-- **The GLB stores lines.** Every channel but a `STEP` one is written as glTF `LINEAR`
-  keys within 0.1 mm and 0.1° of its curve, so `interpolation` says how a part moves, not
-  which sampler the file holds.
+  kinematics at given times. An explode, a reveal, a showcase or a hidden cover belongs
+  here. It is baked into every GLB exported from the model and is no part of the
+  mechanism: the model's page, a snapshot and a STEP show nothing of it.
 
 ## Authoring
 
@@ -51,13 +30,13 @@ The rules:
 # src/hinged_box.py
 import build123d as bd
 from cad import model
-from cad.build123d import configuration_sequence, mechanism_state
-from cad.build123d import animation
+from cad.build123d import animation, configuration_sequence, mechanism_state
 
 
 @model
 def hinged_box_showcase():
     ...                                                            # a body, a hinged lid, a latch, two feet
+    mechanism_state(box, "shut", hinge=0)
     mechanism_state(box, "open", hinge=100)
     configuration_sequence(box, "open_close", [(0, "shut"), (1.5, "open"), (3, "shut")])   # every GLB's clip
 
@@ -99,45 +78,38 @@ Helpers compile to channels:
   (or `True`, the middle of the parts), each part `distance` away from it.
 - **`.stagger(parts, by=, step=, start=, each=)`**: each part in turn moved `by`, `step`
   seconds apart.
-- **`.hide(parts, at=)`**: a `STEP` scale to 0.
+- **`.hide(parts, at=)`**: a `STEP` scale to 0, since glTF has no visibility channel.
+  `.scale(parts, to=1, start=t, end=t, interpolation="STEP")` brings the part back.
 - **`.pose(at={t: mechanism state or joint values}, interpolation=)`**: the mechanism
   driven inside the animation, its links placed by forward kinematics, the joint values
   eased between the keys. It stands at its first pose before its first time.
 
 `start` defaults to 0 and `end` to the duration. With `STEP`, a channel jumps at `end`.
+The GLB stores every channel but a `STEP` one as glTF `LINEAR` keys within 0.1 mm and
+0.1° of its curve, so `interpolation` says how a part moves, not which sampler the file
+holds.
 
 ## Naming parts
 
-Parts are named as a ref's owner names them, from the assembly the animation is on: a
-label (`latch`), a path (`feet/foot_1`, `hand/finger.2`), or a glob (`feet/*`,
-`wheel?`). A glob takes its outermost matches, each a part or an assembly of its own.
-A glob matches a label, a numbered segment, or a path written with either (`*/screw` is every
-`screw` one level down). A name an assembly shares with a part inside it (`stem` holding a part
-`stem`) is the assembly, and the part is `stem/stem`; a name that fits several siblings is
-refused with each one's path.
-Each name or match moves as one body: an assembly's parts together, about its centre.
+Parts are named as a ref's owner names them
+([references](inspection-and-validation.md#references)), from the assembly the animation
+is on: a label (`latch`), a path (`feet/foot_1`, `hand/finger.2`), or a glob (`feet/*`,
+`wheel?`). A glob matches a label, a numbered segment, or a path written with either
+(`*/screw` is every `screw` one level down), and takes its outermost matches, each a part
+or an assembly of its own. A name an assembly shares with a part inside it (`stem`
+holding a part `stem`) is the assembly, and the part is `stem/stem`. Each name or match
+moves as one body: an assembly's parts together, about its centre.
 
 Channels compose as a scene graph does. One part's translations add, after its
 rotations. A part inside an assembly moves with the assembly's channels too, the
 assembly's outermost. All of them act after `.pose`, so an explode moves a posed part.
-
-## What fails the run
-
-Each of these fails the run, by name:
-
-- a part no occurrence is (the error lists the nearest names) or a glob matching nothing;
-- a mechanism state or joint the mechanism lacks, in `.pose`;
-- two channels of one path on one part overlapping in time, or two `.pose` calls
-  overlapping;
-- a part whose translation, rotation or scale would be `STEP` by one channel and eased
-  by another;
-- a time outside `0` to `duration`;
-- an animation with a configuration sequence's name.
+Two channels of one path on one part may not overlap in time, nor two `.pose` calls; a
+part's path may not be `STEP` in one channel and eased in another; and an animation may
+not take a configuration sequence's name. Each fails the run by name.
 
 ## Reviewing
 
-Export the GLB and give the person its path; when they ask to see it, open it in the CAD
-Viewer ([Show the model](../SKILL.md#show-the-model)). Its playbar, under the model, lists the motions and the animations, and plays, pauses, scrubs
-and loops them, at a chosen speed. While one plays, it owns the parts' places; putting
-it down puts them back at rest. A snapshot shows the model as built: it never plays an
-animation.
+A run checks an animation's names, times and overlaps, and nothing draws it but a GLB's
+player: a snapshot shows the model as built. Export the GLB and give the person its
+path; when they ask to see it, open the file in the viewer
+([Show the model](../SKILL.md#show-the-model)), which plays its motions and animations.

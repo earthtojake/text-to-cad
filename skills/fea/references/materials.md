@@ -11,28 +11,23 @@ bd_materials gives each mechanical property as a range, and a study reads:
 - **E and ν**: the middle of their ranges (they set the displacement, not whether the part holds);
 - **density**: as given.
 
-The result's `material` says which: `"source": "document"` and the `ranges` each number came from.
-Report the yield used and that it is the low end of the range.
+A one-part result's `material` says which: `"source": "document"` and the `ranges` each number
+came from (an assembly's `parts` give each part's material and yield). Report the yield used and
+that it is the low end of the range.
 
 **A STEP carries a material's name and density, not its mechanics**, so a part solved from a STEP
 with no study material is refused, naming the part. Solve the model's `.xbf` instead, or give the
 numbers.
 
 **A study's own numbers win** over the model's: a supplier's datasheet, a heat-treated grade the
-model's material does not describe. Give them as an object, in `material` for every part or in
-`parts` for one:
-
-```json
-{"name": "Aluminum 6061-T6", "E_MPa": 68900, "nu": 0.33, "yield_MPa": 276, "density_t_per_mm3": 2.7e-9}
-```
-
-`E_MPa`, `nu` and `yield_MPa` are required, `name` and `density_t_per_mm3` optional (the result
-says `"source": "study"`). A name alone is refused: nothing reads an alloy's numbers off its name.
+model's material does not describe. Give them as the object [`material`](study-file.md#material)
+describes, in `material` for every part or in `parts` for one (the result then says
+`"source": "study"`). No table reads an alloy's numbers off its name, so a name alone is refused.
 A part with neither a model material nor study numbers is refused, naming it: set its material in
-the model (ask the user what it is made of), or ask for the numbers. Never pick a material to make
-a study run.
+the model (ask the person what it is made of), or ask for the numbers. Never pick a material to
+make a study run.
 
-The material is isotropic. For a directional one (printed layers, wood, a fibre block) give the
-modulus along the direction that carries the load, say that you did, and treat the answer as
-rough; a printed polymer's strength varies by a factor of two or more with layer adhesion, infill
-and orientation, so say so and keep a larger margin than for a machined metal.
+For a directional material (printed layers, wood, a fibre block) give the modulus along the
+direction that carries the load, say that you did, and report the answer as rough, with a larger
+margin than for a machined metal: a printed polymer's strength varies by a factor of two or more
+with layer adhesion, infill and orientation.

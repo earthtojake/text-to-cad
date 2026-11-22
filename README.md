@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/earthtojake/text-to-cad/raw/c58bda791fecdfd0d141e1e47ab42cf9fd8c53b5/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
+<img src="https://github.com/earthtojake/text-to-cad/raw/1dba9d3d0bf77b6e74673aa1743a1f0173a13892/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
 
 Design physical products with AI.
 
@@ -36,7 +36,7 @@ Devin CLI, Factory Droid, GitHub Copilot CLI, Kimi Code, Muse, Pi, Qwen Code, Am
 Cline, Goose, Hermes Agent, Kilo Code, Kiro CLI, OpenClaw, OpenCode, Roo Code,
 Trae and Windsurf.
 
-Installing by hand, app by app, updating and removing: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/c58bda791fecdfd0d141e1e47ab42cf9fd8c53b5/docs/install.md)
+Installing by hand, app by app, updating and removing: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/1dba9d3d0bf77b6e74673aa1743a1f0173a13892/docs/install.md)
 
 ## ✨ Features
 
@@ -55,7 +55,10 @@ The text-to-cad plugin gives your agent local workflows to generate 3D models as
 
 Projects built on top of text-to-cad, and projects that text-to-cad uses.
 
-- **Studio**: An open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand. [Website](https://texttocad.studio) · [GitHub](https://github.com/amywork777/studio)
+- **Studio**: A community app by @amywork777: an open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand. [Website](https://texttocad.studio) · [GitHub](https://github.com/amywork777/studio)
+- **build123d**: The Python CAD library text-to-cad's models are written in: parts and assemblies as code, with sketches, features and joints, built on OpenCASCADE. [Docs](https://build123d.readthedocs.io) · [GitHub](https://github.com/gumyr/build123d)
+- **OpenCASCADE**: The open-source geometry kernel under build123d: it builds the solids and reads and writes the STEP files. [Website](https://dev.opencascade.org) · [GitHub](https://github.com/Open-Cascade-SAS/OCCT)
+- **kicode**: KiCad's command line, kicad-cli, and its Python client, KiPy, in one Python package: the headless KiCad that text-to-cad's circuit boards run on, with nothing else of KiCad installed. Unofficial: not made or supported by the KiCad project. [PyPI](https://pypi.org/project/kicode/) · [GitHub](https://github.com/earthtojake/kicode)
 
 ## 🛠️ Contributing
 
@@ -64,12 +67,12 @@ text-to-cad is MIT-licensed and built in the open.
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
   A bug report with the model script and the output of `cad doctor` is the
   fastest to fix, and an agent app without a plugin gets one on request. A
-  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/c58bda791fecdfd0d141e1e47ab42cf9fd8c53b5/SECURITY.md) says.
+  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/1dba9d3d0bf77b6e74673aa1743a1f0173a13892/SECURITY.md) says.
 - **Questions, ideas and what you made**: the [Discord](https://discord.gg/5FGB9DwJYU).
   Say what the skills got wrong, too: that is what improves them.
 - **Code, skills and models**: a new skill (a fabrication service, a printer, a
   CAD workflow) goes in `skills/`, an example model in `models/`, and fixes
-  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/c58bda791fecdfd0d141e1e47ab42cf9fd8c53b5/CONTRIBUTING.md) has the local setup, how to
+  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/1dba9d3d0bf77b6e74673aa1743a1f0173a13892/CONTRIBUTING.md) has the local setup, how to
   test in the agent apps, and the guidance for agents working in the repository.
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
