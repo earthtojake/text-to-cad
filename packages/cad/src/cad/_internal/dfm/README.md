@@ -86,6 +86,20 @@ true, or nothing of it, is repeatable). 128 results and 64 MB at most are held i
 the engine's memory, and they are written under `checks/` in its cache folder, bounded, so a restarted engine
 finds them.
 
+**Each part's own** (`parts.py`). A report not kept whole is measured, and for CNC and sheet it is put together
+from each part's result, which the process that measures keeps as each part is done (in its cache folder,
+`parts/`): a document one part of which was edited measures that part alone, and a check stopped at its limits
+measures, the next time, the parts it had not finished. Both processes measure a part on its own and in its own
+frame (CNC's machine frame, a sheet's own), so a part's result is the same in any document; a CNC part's is
+found by the families an earlier part failed too, since it skips them, and its walls and gaps keep their exact
+figures for the first 200 of its own, among which the document's first 200 always are. A part's result is found
+by its geometry and how it stands (its exact placement, never a result moved from another), its name and owner,
+the options its measurement reads and the code and libraries that measured it; quiddity's answer for a part is
+kept by the part's geometry and how it stands alone, so a part is asked once for each way it stands. Nothing is
+kept that the next measurement could make otherwise (the same `transient` rules as a report's), or that code
+edited since its process loaded it measured. Molding and printing keep no part's result: a mold's time and ray
+budgets are its document's, and a print's parts stand among each other on one plate and in one build volume.
+
 A check outlives its caller, as a build does: a shell's time limit cutting its caller off leaves it running, its
 result kept, so the same check asked again finds it; asked while it still runs, it waits for that check and
 answers with its result, measuring nothing. A check waiting for a busy process says what it waits for. A check

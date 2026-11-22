@@ -300,6 +300,31 @@ told (`FORGOTTEN`) and drops what it holds of them in memory. They are read and 
 lock of the document, so a check of it that began before neither names an alias nor takes one from disk into
 memory. The results are no document's, and go by their bounds or with the cache (`cad cache clean`).
 
+**What is kept of each part** ([parts.py](../parts.py), and the library's `cad._internal.dfm.parts`, whose
+docstrings are the store): a measurement not kept whole is put together from its parts' own, so a document one part
+of which was edited measures that part alone. A CNC check and a sheet check measure each part on its own, in a
+frame of its own, and the report is made from the parts' results by code that reads no kernel; so the process
+that measures keeps each part's result as the part is done (`dfm-cnc`, `dfm-sheet`), and quiddity's answer for
+each part the CNC check asks it of (`features`), and reads them before it measures. A part's result is found by
+its geometry key and how it stands -- the exact matrix its document places it by, an occurrence's shift from the
+first, the token of the mesh it was read with, which solid of a part of several it is -- with, for a measurement,
+its name and its refs' owner, the options the measurement reads, and what measured it (the digest of that
+process's measuring code and the libraries); a CNC part also by whether quiddity read its holes and the families
+an earlier part failed, which it does not measure. So the same part standing the same way, named the same, is one
+entry in any document; placed otherwise, renamed or under another owner, another. A result is never moved from
+one placement to another (a moved point is rounded); a copy of a part inside a document is said again from its
+first, as it always was. A part's features are kept by its geometry and how it stands alone, and only an answer
+the part would give again (available, or for a reason of its own: `_dfm_cnc_recognised.REPEATABLE`). Nothing is
+kept that its process could measure otherwise the next time (a failure for want of memory; a part whose holes
+quiddity was not available for, for a reason of the moment), nor what a process whose code was edited since it
+loaded measured. Each file is `<cache>/parts/<kind>/<xx>/<geometry key>-<digest of the rest>.json`, written whole
+by that process, so a check stopped at its limits keeps the parts it finished and the next measures the rest; one
+that does not read as its name says is removed, never served. The engine lists the folder after each check that
+held a checks process and holds it to 16384 files and 512 MB, the least recently used (by its time on disk, set
+again by a read) first, a half-written file swept once it is an hour old; `cad cache clean` removes it. Molding
+and printing keep nothing per part: a mold's time and ray budgets are its document's, and a print's parts stand
+among each other on one plate.
+
 **What is kept of an interference check** (`checks.py`), which keeps each pair's answer by the two parts'
 geometries itself: its result whole, by the document's version -- a model's generation, a file's bytes' digest
 -- and the check (type, resolved options, the library's release and its code's digest), served to a caller the
@@ -323,8 +348,7 @@ bounds; limits: a check's, in seconds and MB; running: each check asked and not 
 or file, its `state`, `where` it measures (None, and `waiting`, while it has no process), since, seconds, whether
 a caller is attached and how many are: `callers`, a caller gone never counted).
 
-A part an edit left untouched is
-measured again with its document: a measurement is of a document's parts together, as its record says them. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
+A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
 the library's readers), by its caller, in a process of its own the caller holds to a check's limits
 (`cad._internal.manufacturing._watched`: the engine's, `worker.check_limits`). The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
 the type side judges the report against the process's rules (`cad._internal.dfm.rules.evaluate`: general
@@ -453,7 +477,8 @@ detector where it has not come, saying so, and asks for it again a minute later 
 the checks processes that ask. `cad[quiddity]` is one wheel, about
 9 MB, for macOS, Linux x86-64 and aarch64 (glibc 2.28 or newer) and Windows x86-64; anywhere else a part's features
 are unavailable (`no_wheel`). No command runs it; the CNC check reads it, for what closes a part's holes
-(`cad.build123d._dfm_cnc_recognised`).
+(`cad.build123d._dfm_cnc_recognised`), and asks it of a part once for each way the part stands where the answer is
+one the part would give again (**What is kept of each part**).
 
 **A GLB in Blender's scene.** `cad.blender.load` is the `blender` integration's one helper, for a script that
 renders with bpy (Blender as a Python module, its extra `cad[blender]`), run by `cad run` in the environment

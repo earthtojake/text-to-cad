@@ -176,8 +176,8 @@ renumbers the list and every citation in the same change.
    the user's own, the same whatever release runs: state (settings and the records of documents, never
    geometry or source), cache (each document's bytes as last built and a file document's views keyed
    by its bytes, which go with the document; what is derived from content rather than from one
-   document, a check's measurements among it, kept by what it was made of, held to bounds and
-   outliving any document; bytecode and the environments it installs; every one regenerable) and the
+   document, a check's measurements among it, of a whole document and of each part, kept by what it
+   was made of, held to bounds and outliving any document; bytecode and the environments it installs; every one regenerable) and the
    engine's folder (its door and lock). The code stays the only source of truth: a document is what
    its last run made, and nothing reruns (the server's **Folders**; `cad.engine.places`).
 3. **Three sides, by where the code runs.** *The package.* The library (`cad`: what a model imports

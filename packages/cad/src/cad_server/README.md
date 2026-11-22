@@ -289,7 +289,8 @@ documents' records, the page token and port, the telemetry spool and the feed's 
 folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: the documents' bytes
 (`documents/`), what is kept by what it was made of and not by document (`checks/`, the manufacturing checks'
 measurements, so the same parts checked the same way are measured once, whatever file or model they are in;
-`interference/`, `hulls/` and `mjcf/`), the environments, bytecode and the integrations' private homes, all made
+`parts/`, each part's own measurement for the CNC and sheet checks and quiddity's features of it, so a part an
+edit left as it was is not measured again; `interference/`, `hulls/` and `mjcf/`), the environments, bytecode and the integrations' private homes, all made
 again on demand, and all but the documents' bytes removed by `cad cache clean`. On Windows neither
 is in the local application data, which Windows virtualizes for every process an app package (the Claude
 desktop app) starts. A release reads what the release before wrote and migrates it on first touch, once
