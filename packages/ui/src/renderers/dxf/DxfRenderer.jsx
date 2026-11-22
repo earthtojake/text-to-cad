@@ -35,7 +35,7 @@ import { useI18n } from "@cad/ui/i18n";
 
 /**
  * A `.dxf` is drawn as a drawing: on a canvas, head on, in the pens it declares. No 3D, no fold
- * preview, no thickness or material, no Display settings and no Preview — a DXF is a finished 2D
+ * preview, no thickness or material, no Display setting but the Background and no Preview — a DXF is a finished 2D
  * document, and the questions those answered were about a sheet-metal part the viewer would be
  * inventing from it.
  *
@@ -87,8 +87,8 @@ function DxfSurface({ view, data }) {
 
   // ---- the view this file was left at ---------------------------------------
   // The file's view (`kit/shell/fileView.js`) with the drawing's view as its camera (`kit/viewport/flatView.js`:
-  // the transform and the pane it was framed in) and nothing else: a drawing has no Display settings and
-  // no slices of its own.
+  // the transform and the pane it was framed in) and nothing else: a drawing's one Display setting, the Background, is
+  // the tab's, and it has no slices of its own.
   const [restored] = useState(() => readFlatView(readFileView(view.state).camera));
   const storedRef = useRef(JSON.stringify(writeFileView({ camera: restored })));
   const saveTimer = useRef(0);
