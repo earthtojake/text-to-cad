@@ -1,8 +1,7 @@
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { FieldLabel } from "@cad/ui/primitives/field-label";
-import { Children, useEffect, useId, useRef, useState } from "react";
+import { Children, useEffect, useRef, useState } from "react";
 import { cn } from "@cad/ui/utils";
-import { Checkbox } from "@cad/ui/primitives/checkbox";
 import { ColorPicker } from "@cad/ui/primitives/color-picker";
 import { useI18n } from "@cad/ui/i18n";
 
@@ -25,29 +24,7 @@ export const FILE_SHEET_VALUE_BADGE_INPUT_CLASSES = [
 export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-control px-2 text-xs !text-foreground";
 
 /** A section heading: 24px, regular 12px, never a disclosure (`docs/settings-ui.md`). */
-export const FILE_SHEET_SECTION_HEADING_CLASSES = "flex h-icon-button min-w-0 items-center gap-2 text-xs font-normal leading-(--cad-leading-xs) text-foreground";
 
-/**
- * One settings section: a heading and its rows, a rule above it when another section precedes
- * it. A section a feature switches on and off (`enabled`, `onEnabledChange`) ends its heading in
- * that feature's checkbox, at the right, the title naming it; while it is off the section is its
- * heading alone.
- */
-export function FileSheetSettingsSection({ title, children, enabled, onEnabledChange, sectionId }) {
-  const titleId = useId();
-  const switchable = typeof onEnabledChange === "function";
-  const open = !switchable || enabled === true;
-  return <section aria-labelledby={titleId} data-settings-section={sectionId}
-    className="[&+section]:mt-1 [&+section]:border-t [&+section]:pt-1 border-border">
-    <h2 className="m-0">
-      {switchable ? <label className={cn(FILE_SHEET_SECTION_HEADING_CLASSES, "cursor-pointer justify-between")}>
-        <span id={titleId} className="truncate">{title}</span>
-        <Checkbox aria-labelledby={titleId} checked={open} onCheckedChange={checked => onEnabledChange(checked === true)} />
-      </label> : <span id={titleId} className={FILE_SHEET_SECTION_HEADING_CLASSES}>{title}</span>}
-    </h2>
-    {children == null || !open ? null : <div data-settings-section-body="" className="space-y-1 pb-1">{children}</div>}
-  </section>;
-}
 
 /**
  * A setting's row: its label in a fixed column and its control filling the rest, 24px, so the

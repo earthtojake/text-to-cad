@@ -5,7 +5,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { resolveViewSettings } from '@cad/core/common/viewSettings.js';
 import { createViewSettingsStore } from './viewSettingsStore.js';
 import { CrossSectionControls, ExplodeControls, clipSummary } from '../../../../dist/renderers/kit/tools/model-effects/ModelViewControls.js';
-import { FileSheetSettingsSection } from '../../../../dist/renderers/kit/inspector/FileSheet.js';
 
 Object.assign(globalThis, { React });
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));

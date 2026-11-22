@@ -299,12 +299,12 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   expect([viewValue(pane, 'side'), viewValue(pane, 'dimension'), viewValue(pane, 'display')]).toEqual(['top', '2d', 'board']);
   for (const button of cornerStack(pane)!.querySelectorAll('button')) expect(button.className.includes('size-control')).toBe(true);
   expect([cornerStack(pane)!.closest('[data-viewer-navbar]') !== null, pane.querySelector('[data-view-corner-stack]')]).toEqual([true, null]);
-  // Each dropdown shows its choice with its icon; its options each theirs, the one on screen chosen. In 2D there is no
+  // Each dropdown shows its choice with its icon (Mode its words alone); its options each theirs, the one on screen chosen. In 2D there is no
   // Projection; Reset is off while the board is as it opened for the first time.
   expect(cardSections(pane)).toEqual([[['side', 'Top'], ['dimension', '2D']], [['display', 'Board'], ['background', 'Light']]]);
   expect(within(displayCard()!).getByRole('button', { name: 'Reset' }).hasAttribute('disabled')).toBe(true);
   expect([viewRows(pane, 'data-board-side-option'), viewRows(pane, 'data-board-dimension-option')])
-    .toEqual([[['Top', 'true', true], ['Bottom', 'false', true]], [['2D', 'true', true], ['3D', 'false', true]]]);
+    .toEqual([[['Top', 'true', true], ['Bottom', 'false', true]], [['2D', 'true', false], ['3D', 'false', false]]]);
   expect(await presets(pane)).toEqual([['Board', 'true', true], ['Copper', 'false', true], ['Assembly', 'false', true], ['Placement', 'false', true]]);
   expect(await displayChoices(userEvent.setup({ skipHover: true, pointerEventsCheck: 0 }), pane)).toEqual([['Light', 'true', true], ['Dark', 'false', true]]);
   expect(tools.querySelector('[data-strip-rule], [data-view-controls]')).toBeNull();
@@ -923,7 +923,7 @@ it('a preset chooses the layers; the side (Flip) and the pours are kept through 
   expect(viewValue(pane, 'side')).toBe('top');
   flip(pane);
   expect(viewValue(pane, 'side')).toBe('bottom');
-  await user.click(within(await displayMenu(user, pane)).getByRole('checkbox', { name: 'Copper pours' }));
+  await user.click(within(await displayMenu(user, pane)).getByRole('switch', { name: 'Copper pours' }));
   // A switch is not a layer set: the preset is still the one on screen, the corner's Display ticks it.
   expect(await presetChoice(user, pane)).toBe('Board');
   expect((await presets(pane)).map(([name]) => name)).toEqual(['Board', 'Copper', 'Assembly', 'Placement']);

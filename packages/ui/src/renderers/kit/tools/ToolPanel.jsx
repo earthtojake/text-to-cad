@@ -29,8 +29,7 @@ const FIT = Object.freeze({
 const FLOOR = Object.freeze({ tree: 128, details: 96 });
 const KEY_NUDGE_PX = 16;
 /**
- * Every panel's heading text: the size and weight of Display's section headings
- * (`FILE_SHEET_SECTION_HEADING_CLASSES`, 11px), so every heading in the stack reads alike.
+ * Every panel's heading text: the type scale's xs step, regular, the foreground, so every heading in the stack reads alike.
  */
 export const TOOL_PANEL_HEADING_TEXT_CLASS = "text-xs font-normal leading-(--cad-leading-xs) text-foreground";
 

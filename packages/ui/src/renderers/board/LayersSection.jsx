@@ -117,8 +117,10 @@ export default function LayersSection({ sheet, display, onDisplayChange, colorSc
       </ul>)}
       {modelsRow && !groups.some(group => group.id === "other") ? <ul data-layer-group="other">{modelsRow}</ul> : null}
     </div>
-    {/* Its rule the panel's width, out over the body's padding; the settings under it on the panel's lines. */}
-    <div className="-mx-(--panel-inset) mt-2 border-t border-border px-(--panel-inset) pt-1" data-board-display-settings="layer-display">
+    {/* ONE hairline, as the Joints tab and the Display card draw theirs (the rows' line, 12px of air over and under it),
+        then the settings on the panel's lines. */}
+    <div className="mt-3 border-t border-border pt-3" data-board-layer-rule="" />
+    <div data-board-display-settings="layer-display">
       <BoardLayerDisplaySettings display={display} sheet={sheet} onChange={onDisplayChange} />
     </div>
   </div>;

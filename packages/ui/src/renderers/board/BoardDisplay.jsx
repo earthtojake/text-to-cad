@@ -2,16 +2,12 @@ import { useI18n, english } from "@cad/ui/i18n";
 import {
   BOARD_DISPLAY_DEFAULTS, BOARD_DISPLAY_OTHERS, boardDisplayDrawsCopper, boardDisplayIsCustom, readBoardDisplay, selectBoardMode
 } from "@cad/core/lib/plot2d/index.js";
-import { Checkbox } from "@cad/ui/primitives/checkbox";
-import { ValueDropdown } from "@cad/ui/primitives/value-dropdown";
-import { cn } from "@cad/ui/utils";
-import {
-  FileSheetSettingRow, FileSheetSettingsSection, parseFileSheetNumberInput
-} from "../kit/inspector/FileSheet.js";
+import { TreeRowHeading } from "@cad/ui/primitives/tree-row";
+import { parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
 import { CircuitBoard, Cpu, Route, SquareDashed } from "lucide-react";
 import { backgroundGroup, displayGroup, projectionGroup } from "../kit/shell/DisplaySettings.jsx";
-import { textGlyphIcon } from "../kit/shell/TextGlyph.jsx";
+import { PanelSelectRow, PanelSwitchRow } from "../kit/inspector/panelRows.jsx";
 import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
 
 /**
@@ -49,11 +45,6 @@ export const BOARD_MODE_OPTIONS = Object.freeze([
 // 2D and 3D as the right panel's Mode row draws them: a flat square and a box.
 const CUSTOM = "custom";
 const percent = value => `${Math.round(value * 100)}%`;
-// Every control fills the row's control column at the row's 24px height, a choice too: the room is the control's.
-// A row is as tall as its control where that is taller (a phone's 32px Select), never cut by it.
-const CONTROL_CLASS = "!h-icon-button w-full min-w-0";
-const ROW_CLASS = "h-auto min-h-icon-button";
-
 /** What the layers but the active one are, as Others names them. */
 export const BOARD_OTHERS_OPTIONS = Object.freeze(BOARD_DISPLAY_OTHERS.map(value => Object.freeze({ value, labelKey: `board.text.others_${value}` })));
 
@@ -61,13 +52,6 @@ export const BOARD_OTHERS_OPTIONS = Object.freeze(BOARD_DISPLAY_OTHERS.map(value
 export function boardDisplayChoice(display, sheet) {
   if (boardDisplayIsCustom(display, sheet)) return { value: CUSTOM, labelKey: "board.text.custom" };
   return BOARD_MODE_OPTIONS.find(option => option.value === display.mode) || BOARD_MODE_OPTIONS[0];
-}
-
-function Choice({ label, name, value, options, onChange, data }) {
-  return <FileSheetSettingRow label={label} className={ROW_CLASS}>
-    <ValueDropdown value={value} options={options.map(([id, title]) => ({ value: id, label: title }))} onChange={onChange} label={name}
-      className={cn(CONTROL_CLASS, "justify-self-stretch py-2 text-xs")} triggerProps={{ "aria-label": name, ...data }} optionProps={option => ({ "data-board-option": option.value })} />
-  </FileSheetSettingRow>;
 }
 
 /** An opacity: the slider control, its committed percentage, which a draft changes only on Enter or blur. */
@@ -102,29 +86,27 @@ export function boardPresetMode({ display, sheet, onChange, t = english }) {
  */
 export function BoardLayerDisplaySettings({ display, sheet, onChange }) {
   const { t } = useI18n();
-  return <FileSheetSettingsSection title={t("board.text.layer_display")} sectionId="board-layer-display">
-    <Choice label={t("board.text.others")} name={t("board.text.other_layers")} value={display.others}
-      options={BOARD_OTHERS_OPTIONS.map(({ value, labelKey }) => [value, t(labelKey)])}
-      onChange={value => { if (BOARD_DISPLAY_OTHERS.includes(value)) onChange({ ...display, others: value }); }} data={{ "data-board-others": display.others }} />
-    {boardDisplayDrawsCopper(display, sheet) ? <FileSheetSettingRow label={t("board.text.pours")} className={ROW_CLASS}>
-      <Checkbox className="ml-auto" aria-label={t("board.text.copper_pours")} checked={display.poured}
-        onCheckedChange={value => onChange({ ...display, poured: value === true })} data-board-pours="" />
-    </FileSheetSettingRow> : null}
+  // The panel's own parts at its rhythm, as the Joints and Params tabs draw theirs: a heading as the layer groups' over
+  // it (`TreeRowHeading`), the one dropdown's row, a switch's row, then the slider rows.
+  return <section aria-label={t("board.text.layer_display")} data-settings-section="board-layer-display">
+    <TreeRowHeading as="h4">{t("board.text.layer_display")}</TreeRowHeading>
+    <PanelSelectRow label={t("board.text.others")} triggerLabel={t("board.text.other_layers")} value={display.others}
+      options={BOARD_OTHERS_OPTIONS.map(({ value, labelKey }) => ({ value, label: t(labelKey) }))}
+      onChange={value => { if (BOARD_DISPLAY_OTHERS.includes(value)) onChange({ ...display, others: value }); }}
+      triggerProps={{ "data-board-others": display.others }} optionProps={option => ({ "data-board-option": option.value })} />
+    {boardDisplayDrawsCopper(display, sheet) ? <PanelSwitchRow label={t("board.text.pours")} checked={display.poured}
+      onChange={poured => onChange({ ...display, poured })} switchProps={{ "aria-label": t("board.text.copper_pours"), "data-board-pours": "" }} /> : null}
     <Opacity id="zones" label={t("board.text.zones")} name={t("board.text.zone_opacity")}
       value={display.zones ?? BOARD_DISPLAY_DEFAULTS.zones} onChange={zones => onChange({ ...display, zones })} />
     <Opacity id="tracks" label={t("board.text.tracks")} name={t("board.text.track_opacity")}
       value={display.tracks ?? BOARD_DISPLAY_DEFAULTS.tracks} onChange={tracks => onChange({ ...display, tracks })} />
-  </FileSheetSettingsSection>;
+  </section>;
 }
 
 /** The key that turns the board over, Flip's (EasyEDA's Shift+F: F is Zoom to fit, `kit/tools/toolShortcuts.js`). */
 export const BOARD_FLIP_SHORTCUT = "⇧F";
 /** The key that draws the board in 3D and flat again (KiCad's Alt+3 opens its 3D viewer). */
 export const BOARD_DIMENSION_SHORTCUT = "3";
-// 2D/3D's glyphs: the words, as KiCad, EasyEDA and the maps apps label their 3D switch (a square read as the
-// strip's Shapes tool). The same in every language.
-const FlatGlyph = textGlyphIcon("2D");
-const SolidGlyph = textGlyphIcon("3D");
 
 /**
  * The board's view settings as Display's card draws them (`kit/shell/DisplaySettings.jsx`), the camera's section
@@ -152,7 +134,8 @@ export function boardViewGroups({ display, sheet = null, onChange, dimension = "
   const solid = dimension === "3d";
   const modeGroup = onDimensionChange ? { id: "dimension", label: t("board.text.mode"), value: solid ? "3d" : "2d", data: "data-board-dimension-option",
     reset: defaults?.dimension,
-    options: [{ value: "2d", label: t("board.text.view_2d"), Icon: FlatGlyph }, { value: "3d", label: t("board.text.view_3d"), Icon: SolidGlyph }],
+    // Its options are the words alone ("2D", "3D"): an icon of the same words would say them twice.
+    options: [{ value: "2d", label: t("board.text.view_2d") }, { value: "3d", label: t("board.text.view_3d") }],
     onChange: next => { if (next === dimension) return; used?.("board_dimension"); onDimensionChange(next); } } : null;
   return [sideGroup, modeGroup, projectionGroup(projection, t, defaults?.projection),
     displayGroup(boardPresetMode({ display, sheet, onChange, t }), t, defaults?.style), backgroundGroup(background, t, used)].filter(Boolean);

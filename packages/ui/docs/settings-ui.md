@@ -1131,11 +1131,14 @@ structure. Every rule here, and why:
   and not a choice, while the Layers tab's eyes have left the preset's set) and **Background**. Reset puts the side, the
   mode, the preset and the projection back to a board's first opening (the top, 2D, Board, Orthographic). The rest of how a
   board is drawn is changed now and then, so it is the Layers tab's, as KiCad's Appearance panel has it,
-  in the settings form's rows: under the layers, **Layer display**: **Others** (KiCad's high-contrast
-  modes, a Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and
-  with a copper layer active every drill and via through it, stay at full strength; **Ctrl+H** (⌘H)
-  cycles them while the board has the keyboard), **Pours** (a checkbox, while copper is drawn), and
-  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the side, the mode and the presets are the Display card's too. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
+  in the panel's own parts at its rhythm, as the Joints and Params tabs draw theirs: under the layers, ONE hairline (the
+  Joints tab's and the Display card's, 12px of air over and under it), then **Layer display**, a heading as the layer
+  groups' are (`TreeRowHeading`): **Others** (KiCad's high-contrast modes, [the dropdown](#dropdowns)'s row,
+  `PanelSelectRow`: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and with a copper
+  layer active every drill and via through it, stay at full strength; **Ctrl+H** (⌘H) cycles them while the board has
+  the keyboard), **Pours** (a switch's row, `PanelSwitchRow`, while copper is drawn), and the **Zones**' (60%) and
+  **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). Display's **Mode** names 2D and 3D in
+  words alone (no icon of the same words). On a phone the side, the mode and the presets are the Display card's too. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
   snapshot --display` draws too. A schematic has none: its colours are the theme's.
 
 - **The Hierarchy** (`schematic/SheetsSection.jsx`), KiCad's Hierarchy Navigator: the root (by its
@@ -1199,8 +1202,7 @@ Its panels follow these rules:
   proportion to its height, down to 96px or its content; a `"fixed"` panel keeps its height.
   If what cannot give way still does not fit, the column itself scrolls — a panel is never cut.
 - **Headings.** A stack panel's heading row (a section of the view's panel has none: its tab names
-  it) reads as the settings form's section headings do (12px, regular, `TOOL_PANEL_HEADING_TEXT_CLASS`,
-  `FileSheet.js`'s `FILE_SHEET_SECTION_HEADING_CLASSES`), 28px tall, 8px in: a title, a summary where there is one,
+  it) reads at the type scale's xs step (12px, regular, `TOOL_PANEL_HEADING_TEXT_CLASS`), 28px tall, 8px in: a title, a summary where there is one,
   then at its right end its own actions, the chevron where it folds (up while open, down while
   folded) and an X where it has something to remove. Every small button in a heading is 20px,
   2px apart and 4px from the edge.
