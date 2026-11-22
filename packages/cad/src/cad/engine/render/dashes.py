@@ -5,9 +5,10 @@ from segment to segment. A dot is a run of no length, drawn by its round caps al
 from __future__ import annotations
 
 import math
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
-import numpy as np
+if TYPE_CHECKING:  # numpy is the stills' alone: the snapshot's checks read DASHES with nothing installed
+    import numpy as np
 
 DASHES = ("solid", "dashed", "dotted")
 
@@ -27,6 +28,8 @@ def dash_runs(points: np.ndarray, lengths_px: Sequence[float], pattern: tuple[fl
     """The runs of ink of a polyline (``points``, N x D; ``lengths_px`` each of its N-1 segments' length on screen)
     dashed by ``pattern``: each run its points (the line's own, cut where a dash starts and ends) and, with
     ``shares`` (the pen's width at each point), its shares at them."""
+    import numpy as np
+
     on, off = pattern
     period = on + off
     runs: list[tuple[list[np.ndarray], list[float]]] = []

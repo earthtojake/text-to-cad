@@ -248,7 +248,10 @@ def _set(owner: DocumentType) -> Any:
 
     set.__module__ = owner.__name__
     set.__qualname__ = "set"
-    set.__doc__ = f"cad.{owner.entry.id}.set: {owner.entry.operation('set').summary}.\n\n{api.set.__doc__ or ''}"
+    # Without its indentation, as every operation's (`_operation`): the same words on every Python the library runs on.
+    import inspect
+
+    set.__doc__ = f"cad.{owner.entry.id}.set: {owner.entry.operation('set').summary}.\n\n{inspect.cleandoc(api.set.__doc__ or '')}"
     return set
 
 
