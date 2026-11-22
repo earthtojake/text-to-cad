@@ -7,7 +7,7 @@
     "interference",
     "solve",
     "ranges",
-    "set",
+    "params",
     "drc",
     "erc",
     "validate"
@@ -89,7 +89,7 @@
           "engine": false
         },
         {
-          "name": "set",
+          "name": "params",
           "summary": "change the model's declared parameters in its script (NAME=VALUE ...): each number rewritten where its last run recorded it, the script's bytes checked first, then the model built again",
           "integration": null,
           "engine": true

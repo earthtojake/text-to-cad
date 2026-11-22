@@ -27,7 +27,7 @@ import cad_server.cli as cli  # noqa: E402
 from cad_server.cli.document_types import operations_of, type_main  # noqa: E402
 
 TYPES = {
-    "model": ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "set"),
+    "model": ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "params"),
     "xbf": ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges"),
     "step": ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges"),
     "stl": ("export", "snapshot", "dfm"),
@@ -109,7 +109,7 @@ class TheCommandTable(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertIn("document types, the files cad shows (cad <type> <operation> FILE):", said)
         self.assertRegex(said, r"\n  srdf +snapshot, validate +SRDF: \.srdf\n")
-        self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm, interference, solve, ranges, set +model: a document id, "
+        self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm, interference, solve, ranges, params +model: a document id, "
                                r"held in memory\n")
         code, said, _ = _run(["step", "--help"])
         self.assertEqual(0, code)

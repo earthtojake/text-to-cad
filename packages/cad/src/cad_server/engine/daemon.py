@@ -1468,8 +1468,8 @@ class Daemon:
                 send({"model": model})
             return
         if op == "set":
-            # ``cad model set``, ``cad.model.set``: a model's parameters written into its script, and the script's
-            # last run built again (``parameters.Setting``), the page's Save's one path.
+            # ``cad model params``, ``cad.model.params``: a model's parameters written into its script, and the
+            # script's last run built again (``parameters.Setting``), the page's Save's one path.
             # Every refusal is answered, by its code where it has one; nothing it raises drops the connection.
             try:
                 send({"done": self.setting.set(str(request.get("id")), request.get("values"))})

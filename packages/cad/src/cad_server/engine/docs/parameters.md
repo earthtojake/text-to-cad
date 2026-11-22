@@ -59,7 +59,7 @@ engine's cache) is built again when the record the script declares now differs f
 too (`models.revision`: the closure's key and the record, digested, for a document that records any): a model
 whose body reads no parameter of its script -- a sibling's `wall` -- has the same key after `wall` changes, but
 not the same document, so it is a new generation, its pages fetch it again, its cache file is saved again and
-its rows are served at it, however the record changed (a `set`, an edit and a run). A declared or exported xbf carries
+its rows are served at it, however the record changed (`cad model params`, or an edit and a run). A declared or exported xbf carries
 the same record (`Loaded.parameters`; an export writes the document's own, `export/tree.py`'s `tree_of`); opening
 that file shows them, read-only. It is an attribute of its
 own under a GUID of its own, which a reader that does not know it passes over, and a document without it reads
@@ -83,9 +83,9 @@ span: an expression, or a literal not that declaration's alone, above).
 where nothing live says it. `cad model inspect` and `cad xbf inspect` list the same rows (`api._summary`'s
 `parameters`).
 
-**Setting.** One operation, three entrances, one code path: `cad model set ID wall=2.5 holes=8 [--json]`
-(`cli/document_types.py`), `cad.model.set(handle_or_id, **values)` (`api.set`, the daemon's `set` op) and the
-page's `POST /api/v1/documents/model/<id>/parameters` with `{"values": {...}}` (`viewer/http_app.py`, behind
+**Setting.** One operation, three entrances, one code path: `cad model params ID wall=2.5 holes=8 [--json]`
+(`cli/document_types.py`), `cad.model.params(handle_or_id, **values)` (`api.params`, the daemon's `set` op) and
+the page's `POST /api/v1/documents/model/<id>/parameters` with `{"values": {...}}` (`viewer/http_app.py`, behind
 the guard header and the page token every changing route has; only a model's document has it, and it names a
 document and parameters alone, never a path or text). Each reaches `parameters.Setting.set` in the daemon,
 which does in order, and changes nothing on disk before the fifth:

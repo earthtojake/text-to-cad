@@ -29,7 +29,7 @@ of ids is saved.
 `cad serve ID`, `cad model snapshot ID view.png`, `cad model export ID part.step`, and `cad
 inspect ID 'face 1'` take the id; `cad <type> inspect 'ID#face 1'` uses the same reference syntax.
 Each reads the document the engine holds, as it is: editing the script changes nothing until
-Python runs it again, and no verb imports, runs or builds a script -- but `cad model set`, which a
+Python runs it again, and no verb imports, runs or builds a script -- but `cad model params`, which a
 person or an agent asks to change the script's declared parameters, and which then runs the script's
 last run again (**Parameters**). An id the engine no longer
 holds (unsaved, detached) is refused with its state and the command that builds it again

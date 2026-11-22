@@ -62,11 +62,11 @@ parameters
   bore  3.2  float, in bracket.py, read-only: no plain number of its own in the code
 ```
 
-`cad model set` writes the new numbers into the script and builds it again; a save from the viewer
+`cad model params` writes the new numbers into the script and builds it again; a save from the viewer
 does the same, so read a script again before you edit it:
 
 ```bash
-cad model set "$ID" wall=2.5 holes=6
+cad model params "$ID" wall=2.5 holes=6
 ```
 
 ```text

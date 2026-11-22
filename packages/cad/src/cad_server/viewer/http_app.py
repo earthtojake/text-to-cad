@@ -959,7 +959,7 @@ class CadApp:
     def _parameters(self, request, response, ident) -> None:
         """``POST /api/v1/documents/model/<id>/parameters`` with ``{"values": {name: number, ...}}``: the
         model's parameters written into its script and the model built again (``set_parameters``: the engine's
-        ``set``, which ``cad model set`` runs), answered ``200 {"id", "written", "rebuilt"}`` once it is built.
+        ``set``, which ``cad model params`` runs), answered ``200 {"id", "written", "rebuilt"}`` once it is built.
         A change refused is the routes' answer (``{"error", "hint"}``) with its ``code`` (``PARAMETER_STATUS``
         says each one's status) and, for ``not_writable``, the parameter's ``reason``; ``build_failed`` carries
         the build's whole words too (``detail``). The request names parameters and numbers alone: never a

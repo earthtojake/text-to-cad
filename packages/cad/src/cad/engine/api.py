@@ -7,7 +7,7 @@
     serve(source, port=0) -> Served
     inspect(source, ref=None) -> Facts (the build closure without a ref)
     check(source, check) -> dict (a manufacturing check, measured in the engine's checks processes)
-    set(source, **values) -> dict (a model's parameters written into its script, the model built again)
+    params(source, **values) -> dict (a model's parameters written into its script, the model built again)
     status() / stop()
 
 Every one goes through the daemon (``client``), so the warm worker of the script or of the
@@ -46,8 +46,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
 __all__ = ["Document", "Drawn", "EngineError", "Facts", "IN_CALLER", "IN_ENGINE", "NoDaemon", "Outdated", "Report",
-           "Served", "Stopped", "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers", "serve", "set",
-           "snapshot", "status", "stop", "inspect"]
+           "Served", "Stopped", "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers", "params",
+           "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
     """A request the engine refused or could not run: its words; ``raised``: the type the engine failed with
@@ -1306,7 +1306,7 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
                       for name, motion in (kinematics.get("motions") or {}).items()],
         "animations": structure.get("animations") or [],
         # What its script declares (``parameters.served``): each its value, kind, range and unit, and whether
-        # ``cad model set`` can write it (``writable``, else ``reason``) and where (``source``).
+        # ``cad model params`` can write it (``writable``, else ``reason``) and where (``source``).
         "parameters": list(structure.get("parameters") or []),
         "files": list((model or {}).get("files") or []),
     }
@@ -1336,9 +1336,9 @@ def stop() -> bool:
     return True
 
 
-def set(source: Any, /, **values: Any) -> dict[str, Any]:  # noqa: A001 - the operation's own name
+def params(source: Any, /, **values: Any) -> dict[str, Any]:
     """A model's declared parameters (``cad.engine.parameters``) given new values in its script, and the
-    model built again: ``set(handle_or_id, wall=2.5, holes=8)``. The engine that holds the model's document
+    model built again: ``params(handle_or_id, wall=2.5, holes=8)``. The engine that holds the model's document
     checks each name and value against what the worker that built it recorded, checks the script's bytes are
     the ones that run read, writes each number where its default is spelled -- nothing else of the file
     changes -- and builds the script's last run again in that worker; a build that fails puts the script's
@@ -1352,7 +1352,8 @@ def set(source: Any, /, **values: Any) -> dict[str, Any]:  # noqa: A001 - the op
     ident = source.id if isinstance(source, Document) else os.fspath(source) if isinstance(source, (str, os.PathLike)) \
         else None
     if ident is None or not is_id(ident):
-        raise ValueError(f"set takes a model's handle or its document id (cad run SCRIPT.py prints it), not {source!r}")
+        raise ValueError(f"params takes a model's handle or its document id (cad run SCRIPT.py prints it), not {source!r}")
+    # The daemon's op for it is ``set`` (``cad_server.engine.parameters.Setting``).
     return _ask({"op": "set", "id": ident, "values": dict(values)})["done"]
 
 

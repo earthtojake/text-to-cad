@@ -541,9 +541,9 @@
      ]
     },
     {
-     "command": "cad model set",
+     "command": "cad model params",
      "summary": "change the model's declared parameters in its script (NAME=VALUE ...): each number rewritten where its last run recorded it, the script's bytes checked first, then the model built again",
-     "usage": "cad model set [--json] ID NAME=VALUE [NAME=VALUE ...]",
+     "usage": "cad model params [--json] ID NAME=VALUE [NAME=VALUE ...]",
      "arguments": [
       {
        "name": "ID",

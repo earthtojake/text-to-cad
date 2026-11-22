@@ -97,9 +97,9 @@ class DocumentType(types.ModuleType):
             value = solve_for(entry.id)
             self.__dict__[name] = value
             return value
-        if name == "set" and name in entry.operation_names:
-            # A model's parameters written into its script and the model built again (``cad.engine.api.set``).
-            value = _set(self)
+        if name == "params" and name in entry.operation_names:
+            # A model's parameters written into its script and the model built again (``cad.engine.api.params``).
+            value = _params(self)
             self.__dict__[name] = value
             return value
         if name == "ranges" and "ranges" in entry.operation_names:
@@ -237,22 +237,23 @@ def _operation(owner: DocumentType, name: str) -> Any:
     return operation
 
 
-def _set(owner: DocumentType) -> Any:
-    """``cad.model.set(handle_or_id, **values)``: the engine's ``set`` (``cad.engine.api.set``), its source
+def _params(owner: DocumentType) -> Any:
+    """``cad.model.params(handle_or_id, **values)``: the engine's ``params`` (``cad.engine.api.params``), its source
     refused when it is another type's. Its source is positional alone, so every keyword is a parameter's name."""
     from cad.engine import api
 
-    def set(source: Any, /, **values: Any) -> dict[str, Any]:  # noqa: A001 - the operation's own name
+    def params(source: Any, /, **values: Any) -> dict[str, Any]:
         owner._own(source)
-        return api.set(source, **values)
+        return api.params(source, **values)
 
-    set.__module__ = owner.__name__
-    set.__qualname__ = "set"
+    params.__module__ = owner.__name__
+    params.__qualname__ = "params"
     # Without its indentation, as every operation's (`_operation`): the same words on every Python the library runs on.
     import inspect
 
-    set.__doc__ = f"cad.{owner.entry.id}.set: {owner.entry.operation('set').summary}.\n\n{inspect.cleandoc(api.set.__doc__ or '')}"
-    return set
+    params.__doc__ = (f"cad.{owner.entry.id}.params: {owner.entry.operation('params').summary}.\n\n"
+                      f"{inspect.cleandoc(api.params.__doc__ or '')}")
+    return params
 
 
 def bind(module_name: str) -> None:

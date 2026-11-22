@@ -24,7 +24,7 @@ the model's own; ``expression``, no plain number in the code). The engine holds 
 while the worker that recorded them lives (``cad_server.engine.models``), and serves them beside the
 document's record (``served``).
 
-Changing a value is changing the script (``cad model set``, the page's Save): the values asked for are
+Changing a value is changing the script (``cad model params``, the page's Save): the values asked for are
 checked against the declarations (``changes``), the file's bytes against what the run recorded
 (``standing``), each number is spelled (``spelled``) and put in place of the one there (``splice``), and
 the script is built again. A page may first look at values without writing them (a preview, the page's
@@ -130,7 +130,7 @@ def param(name: str, default: int | float, *, min: int | float | None = None, ma
     ``name`` is a lower-case identifier, one declaration per name in a run. A parameter is declared at a
     module's top level: a body can be replayed without running, and a declaration inside one would be
     lost. A build records each declaration in the model's document, where the CAD Viewer lists them;
-    the value changes only in the code, by hand or by ``cad model set``, which rewrites the default
+    the value changes only in the code, by hand or by ``cad model params``, which rewrites the default
     where it is a plain number. (The one load that returns another number is a page's preview, in the
     engine's worker: the value a person is trying, which no document and no file keeps.)"""
     if unknown:

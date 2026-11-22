@@ -113,19 +113,19 @@ class TurnTest(unittest.TestCase):
         gate.accept()  # the other worker is loading the script now
         before = self.script.read_bytes()
         with self.assertRaises(ParameterRefused) as caught:
-            cad.model.set(self.ident, wall=3.0)
+            cad.model.params(self.ident, wall=3.0)
         self.assertEqual(caught.exception.code, "busy", str(caught.exception))
         self.assertEqual(self.script.read_bytes(), before, "nothing written while the build reads the script")
         gate.release()
         thread.join(120)
         self.assertTrue(said and all(row["ok"] for row in said[0]["done"]), said)
-        self.assertEqual(cad.model.set(self.ident, wall=3.0)["written"][0]["to"], 3.0, "and set once it is done")
+        self.assertEqual(cad.model.params(self.ident, wall=3.0)["written"][0]["to"], 3.0, "and set once it is done")
 
     def test_a_build_asked_while_a_save_builds_the_script_waits_for_it(self) -> None:
         gate = _Gate(self.folder)
         self.addCleanup(gate.release)
         answers: dict = {}
-        saving = threading.Thread(target=lambda: answers.update(set=cad.model.set(self.ident, wall=3.0)))
+        saving = threading.Thread(target=lambda: answers.update(params=cad.model.params(self.ident, wall=3.0)))
         saving.start()
         self.addCleanup(saving.join, 120)
         gate.accept()  # the save wrote the script, and its build is loading it
@@ -146,7 +146,7 @@ class TurnTest(unittest.TestCase):
         gate.release()
         saving.join(120)
         build.join(120)
-        self.assertEqual(answers["set"]["written"][0]["to"], 3.0)
+        self.assertEqual(answers["params"]["written"][0]["to"], 3.0)
         self.assertTrue(said and all(row["ok"] for row in said[0]["done"]), said)
         self.assertEqual(self.wall(), 3.0, "the build read the bytes the save wrote")
 
