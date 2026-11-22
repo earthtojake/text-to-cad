@@ -6,7 +6,7 @@ import { hasOpenPopup } from "../lib/popups.js";
 // resizes the picture or moves its camera. It opens after the pointer has rested on the toggle `PANEL_PEEK_DELAY_MS`,
 // never while a button is held (a drag passing over it), and only for a pointer that hovers (a mouse or a pen: a
 // finger's press is a click, which opens the panel as it always has). It goes once the pointer has been outside both
-// the toggle and the panel for the same delay, so the pointer can travel from the button down into the panel; it
+// the toggle and the panel for `PANEL_PEEK_LEAVE_MS`, so the pointer can travel from the button down into the panel; it
 // stays while the pointer is in either, and while a popup opened from it is up (a tab's dropdown, ⋯: the pointer is in
 // that popup then), checked again after each delay. The keyboard in it does not hold it: what goes, goes, its focus
 // handed to the toggle. Only the toggle pins it (a click, or its key ⌘\: the frame's toggle); nothing done inside it
@@ -28,8 +28,10 @@ import { hasOpenPopup } from "../lib/popups.js";
 //
 // Importing this module has no environmental effects.
 
-/** How long the pointer rests on the toggle before the panel peeks, and how long it is away before the peek goes. */
-export const PANEL_PEEK_DELAY_MS = 500;
+/** How long the pointer rests on the toggle before the panel peeks: long enough that passing over it opens nothing. */
+export const PANEL_PEEK_DELAY_MS = 250;
+/** How long the pointer is away from the toggle and the panel before the peek goes: room to cross the gap between them. */
+export const PANEL_PEEK_LEAVE_MS = 150;
 /** The slide in: quick, eased out (it arrives fast and settles). */
 export const PANEL_PEEK_IN_MS = 100;
 /** The slide out: quicker, eased in (it gathers speed as it goes). */
@@ -161,10 +163,10 @@ export function usePanelPeek({ enabled }) {
     const fire = () => {
       timer.current = null;
       if (inside.current.toggle || inside.current.panel) return;
-      if (held()) { timer.current = setTimeout(fire, PANEL_PEEK_DELAY_MS); return; }
+      if (held()) { timer.current = setTimeout(fire, PANEL_PEEK_LEAVE_MS); return; }
       hide();
     };
-    timer.current = setTimeout(fire, PANEL_PEEK_DELAY_MS);
+    timer.current = setTimeout(fire, PANEL_PEEK_LEAVE_MS);
   };
   const handlers = useMemo(() => ({
     toggle: {
