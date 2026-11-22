@@ -3,13 +3,13 @@ import { Spline } from "lucide-react";
 import { cn } from "@cad/ui/utils";
 
 /**
- * The small dot (4px, as the dots of Position's own icon) in a tile's top-right corner while what the tile controls is off its default (an
- * effect on the model, a pose off the default, a routine's frame on the model). The tile is drawn
- * `relative` around it.
+ * The small dot (4px, as the dots of Position's own icon, in the brand's state colour, `--brand-icon`) at the top-right of
+ * a tile or a panel tab's name while what it controls is off its default (parameters changed, a pose off the default, a
+ * routine's frame on the model: `FlatPanel.jsx`'s tabs). What holds it is drawn `relative` around it.
  */
 export function ChangedDot({ className }) {
   return <span aria-hidden="true" data-tool-changed=""
-    className={cn("pointer-events-none absolute right-[3px] top-[3px] size-1 rounded-full bg-primary", className)} />;
+    className={cn("pointer-events-none absolute right-[3px] top-[3px] size-1 rounded-full bg-brand-icon", className)} />;
 }
 
 /**

@@ -46,7 +46,7 @@ it('a tool is hinted only after a deliberate hover, with the same delay from one
   expect(tip()).toBeNull();
 });
 
-it('the strip and the view\'s actions share one hint with no native title; a click that focuses a trigger pins nothing, a Tab onto it names it', () => {
+it('the strip and the view\'s actions share one hint with no native title; a click that focuses a trigger pins nothing, a Tab onto it names it, and focus moved by code after that Tab names nothing', () => {
   render(<>
     {strip()}
     <ToolbarButton label="Display">D</ToolbarButton>
@@ -82,6 +82,16 @@ it('the strip and the view\'s actions share one hint with no native title; a cli
   wait(10);
   expect(tip()!.textContent).toBe('Preview');
   focusVisible.mockRestore();
+  // That Tab is spent on the move it made: focus code hands over later (a peek going from under the keyboard) names
+  // nothing, focus-visible as it is.
+  const draw = screen.getByRole('button', { name: 'Draw' });
+  const visible = vi.spyOn(draw, 'matches').mockImplementation(function (this: Element, selector: string) {
+    return selector === ':focus-visible' ? true : Element.prototype.matches.call(this, selector);
+  });
+  act(() => draw.focus());
+  wait(500);
+  expect(tip()).toBeNull();
+  visible.mockRestore();
 });
 
 it('preview puts the editor tools and their hints away', () => {
@@ -96,4 +106,21 @@ it('preview puts the editor tools and their hints away', () => {
   enter(draw);
   wait(500);
   expect(tip()).toBeNull();
+});
+
+// In the dark a toolbar's fills are its own: the base Button's ghost hover (`dark:hover:bg-accent/50`, which outranks a
+// plain `hover:` and matched the surface) never reaches a toolbar button or a split tool's.
+it("a toolbar button's fills win over the base Button's ghost hover in the dark: a tile and a split tool's button", async () => {
+  const classes = (element: Element) => element.className.split(/\s+/);
+  const { container, unmount } = render(<>
+    <ToolbarButton label="Tile" tooltip={false} />
+    <FloatingToolBar tools={[{ id: 'select', label: 'Select', icon: null, onSelect() {}, menu: 'MENU' }]} />
+  </>);
+  const tile = classes(container.querySelector('[aria-label="Tile"]')!);
+  expect([tile.includes('dark:hover:bg-accent/50'), tile.includes('dark:hover:bg-foreground/10'), tile.includes('dark:data-[variant=secondary]:bg-foreground/16')]).toEqual([false, true, true]);
+  const split = container.querySelector('[data-tool-split]')!;
+  const inner = classes(split.querySelector('button')!);
+  expect([classes(split).includes('dark:hover:bg-foreground/10'), inner.includes('dark:hover:bg-transparent'), inner.includes('dark:hover:bg-foreground/10'), inner.includes('dark:hover:bg-accent/50')])
+    .toEqual([true, true, false, false]);
+  unmount();
 });

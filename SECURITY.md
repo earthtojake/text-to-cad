@@ -86,6 +86,55 @@ files on this computer. Do not bind
 a non-loopback `--host` unless you mean to offer exactly that to everyone who
 can reach the port.
 
+**The one route that writes code.** A model's Parameters Save in the viewer
+(`POST /api/v1/documents/model/<id>/parameters`) is the one page route that
+writes a file the server later runs as Python: the model's own script, which it
+then builds again. It is behind the same Host check, guard header and
+credentials as every route that changes something. Its body is
+`{"values": {name: number}}` (64 KiB at most) and its path names a document id:
+it never carries a path or text. The server writes only what a run of the script
+told it:
+
+- Only numbers: each a finite number of its parameter's kind (an integer
+  parameter takes an integral one), within the range the script declares for it,
+  and written in the server's own spelling (an integer's digits; a float rounded to
+  six decimals, in the shortest text that reads back as it). A value is never
+  written as the text it was sent as.
+- Only where a run recorded: the bytes of a `model.param` default that is a plain
+  numeric literal, at the position the script's last run recorded, in that model's
+  own script. A parameter declared in another module, or whose default is an
+  expression, is never written, nor is any other byte of the file.
+- Only after checking the bytes: the worker that recorded those positions must
+  still be live, the script's bytes on disk must be the ones that run read, and
+  each position must still spell the recorded value; otherwise nothing is written
+  (`script_changed`, `no_worker`). The file is replaced at once, its mode kept, only
+  while it still holds the bytes that were checked, and a build that fails at the new
+  values puts the old bytes back unless the file was changed meanwhile, which is
+  left as it is.
+
+So whoever holds a credential can change a model's declared numbers within their
+declared ranges and have the script's last run built again, which runs that
+script's own code as it ran before. They cannot pick the file, write any other
+file, or add or change code.
+
+**Its preview runs code and writes nothing.** Before a Save, the Parameters tab asks
+for the model at its drafts (`POST /api/v1/documents/model/<id>/preview`), behind the
+same Host check, guard header and credentials. Its body is `{"values": {name: number},
+"page": token}` (64 KiB at most; `page` 1 to 64 letters, digits, `-` and `_`): no path,
+no text the server runs. The values are checked exactly as a Save's are (the live
+worker, the parameter's kind and range, the script's bytes against its last run's),
+and the model's own script is then run in that worker with those numbers in place of
+its declared defaults, to build the one model on screen. It writes no file and changes
+no document, record or cache: what it built is held in memory under an unguessable id
+(`<id>~preview-<16 hex digits>`) told only to the page that asked, read at the
+document's read routes alone (no export, envelope, pose or version), and let go after
+two minutes unread. So whoever holds a credential can run a model's own code at other
+values in range, as a Save would, without writing; they cannot
+write anything, pick the code run, or read another page's preview without its id. The
+work is bounded as a run's is: one preview builds per document at a time, a newer
+request replaces the one waiting, and the server holds at most two per page and
+sixteen in all.
+
 **The CAD app in agent hosts.** The page's own tools (`cad_sync`,
 `cad_capture_reply` and `cad_http`, its requests of the viewer's routes) need a
 capability, one for each host connection. The server delivers it in tool-result metadata, which
@@ -204,6 +253,11 @@ computer inside its major before one ships.
 - A file from someone else that reads, writes or runs anything beyond what
   opening, viewing, exporting or snapshotting it should. This includes a file
   that makes the server do unbounded work or hold unbounded memory.
+- A Parameters Save that writes anything but a number at a
+  position a run recorded in a model's own script, or writes when the script's
+  bytes are not the ones that run read; a preview that writes anything, runs a
+  script whose bytes are not the ones its last run read, or shows another page
+  or a verb what it built.
 - An MCP tool that the model can use to act as the CAD app's page, or a frame
   that can act as its host.
 - A way to publish to PyPI or the install branches (`latest`, `claude-plugin`,

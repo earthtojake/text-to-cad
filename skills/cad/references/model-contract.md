@@ -1,12 +1,13 @@
 # Models
 
-Read this file when writing or editing a model script, composing models into
-assemblies, choosing what to mark `@memo`, reading files into a model, or working out
-why a run ran what it ran.
+Read this file when writing or editing a model script, declaring or setting its
+parameters, composing models into assemblies, choosing what to mark `@memo`, reading
+files into a model, or working out why a run ran what it ran.
 
 ## Contents
 
 - [A model is a function](#a-model-is-a-function)
+- [Parameters a person tunes](#parameters-a-person-tunes)
 - [Assemblies call their parts](#assemblies-call-their-parts)
 - [What a run runs](#what-a-run-runs)
 - [`@memo` marks stages](#memo-marks-stages)
@@ -38,6 +39,33 @@ why a run ran what it ran.
   and the model's page says the run failed.
 - How a script's imports resolve is in
   [imports and shared code](project-layout.md#imports-and-shared-code).
+
+## Parameters a person tunes
+
+A number a person will tune is declared at the top level of the model's own script, and the code
+goes on with the plain number `model.param` returns:
+
+```python
+WALL = model.param("wall", 2.0, min=1, max=5, unit="mm")   # unit "mm" or "deg"; step= too
+HOLES = model.param("holes", 4, min=2, max=8)              # an int default: whole numbers
+BORE = model.param("bore", 3 + CLEARANCE)                  # CLEARANCE declared in spec.py
+```
+
+`cad model inspect "$ID"` lists them. The viewer saves one only where its default is a plain number in
+the model's own script; any other is listed read-only, and changes where it is declared:
+
+```text
+parameters
+  clearance  0.2 mm  float, 0 to 1, in spec.py, read-only: declared in another file
+  wall  2.0 mm  float, 1 to 5, in bracket.py
+  holes  4  int, 2 to 8, in bracket.py
+  bore  3.2  float, in bracket.py, read-only: no plain number of its own in the code
+```
+
+To change a value, edit its number in the script and run it. A save from the viewer rewrites numbers
+in the script and builds it again, so read a script again before you edit it.
+
+An exported xbf lists each parameter at the value it was built with, read-only.
 
 ## Assemblies call their parts
 

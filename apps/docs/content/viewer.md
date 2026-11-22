@@ -19,17 +19,19 @@ With no file it opens the home in your browser. With a file it opens that file's
 
 ## What it shows
 
-Each kind of file gets its own tools. Every 3D view ends its tool strip with Projection, Display and Preview, and has a view cube at the bottom right.
+Each kind of file gets its own tools, on a strip at the top of the view. How you look at the file is the **Display** card, opened by the cube at the right end of the navbar, left of **Preview**: it slides in at the right of the view and stays open while you work (for a 3D view: projection, style, background and show grid; for a board: side, 2D or 3D, in 3D projection, style and background), with a Reset that puts the file's own settings back. The top right of the view keeps only the camera: a 3D view's view cube, or a flat view's zoom, one "100%" menu.
 
 - **Models, STEP and xbf**: select faces, edges and parts, measure, explode an assembly, clip it, and read its structure in the view's panel. Selection and measurement are exact because the server holds the B-rep (the solid's exact surfaces).
-- **Meshes (GLB, STL, 3MF)**: orbit and clip. A GLB or 3MF can also be measured, but only approximately, on triangles.
+- **Meshes (GLB, STL, 3MF)**: orbit and clip; an STL lists its bodies, Body 1 to Body N. A GLB or 3MF can also be measured, but only approximately, on triangles.
 - **Drawings (DXF)**: a flat 2D canvas with pan and zoom, and a Layers tab where the file has layers.
-- **Robots (URDF, SRDF)**: the links, and a Position tab to pose the joints.
-- **Boards (KiCad)**: a board in 2D or 3D, and a schematic you can enter sheet by sheet. You do not need KiCad installed to view one.
+- **Robots (URDF, SRDF)**: the links, and a Joints tab to pose the joints.
+- **Boards (KiCad)**: a board in 2D or 3D, with Preview (the board rendered in 3D, its parts on it), and a schematic you can enter sheet by sheet. You do not need KiCad installed to view one.
 
-Preview is a full-page mode that draws the model rendered and plays its animations from a bar under it.
+Every file has a panel on the left, with tabs: the file's structure first (a model's **Model**, a robot's **Links**, a board's **Parts**, **Nets** and **Layers**), then, where the file has them, **Params**, **Joints** and **Motion** (**Animation** in a GLB). The panel button at the left of the navbar shows or hides it, as does `⌘\` (`Ctrl+\` on Windows and Linux).
 
-On a STEP or a robot, pick something, draw or measure, and Quick Edit appears at the top right. Write a note, use Copy Prompt and paste it into your agent: the prompt names the file and what you picked.
+Preview is a full-page mode that draws the model rendered and plays its animations from a bar under it. Every 3D file has it, and so does a board.
+
+Quick Edit is the bar at the bottom of the view. Pick something or draw, and what goes with your note appears as chips above it. Write a note, use Copy Prompt and paste it into your agent: the prompt names the file and what you picked.
 
 ## Live updates
 
@@ -45,7 +47,7 @@ The name menu under the file's name has a **Models** tab and a **Files** explore
 
 ## Exporting from the viewer
 
-Export is in the file menu, the three dots beside the file's name. It lists the formats that page can write. A model, STEP or xbf offers STEP, STL, 3MF, GLB and xbf, and DXF where the view is flat. A GLB, STL or 3MF page converts to the other two mesh formats.
+Export is in the **⋯** menu beside the file's name. It lists the formats that page can write. A model, STEP or xbf offers STEP, STL, 3MF, GLB and xbf, and DXF where the view is flat. A GLB, STL or 3MF page converts to the other two mesh formats.
 
 The file arrives as an ordinary browser download, so where it goes is your browser's setting. The viewer writes the model as its code built it; a posed or partial file is a different model. [Exports](repo:skills/cad/references/exports.md) covers the command-line route.
 

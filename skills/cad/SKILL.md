@@ -18,6 +18,7 @@ Files are exports, written when asked.
 | Task | Start with | Reference |
 | --- | --- | --- |
 | Create or edit a part or assembly | A model script ([below](#write-a-model-and-run-it)) | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
+| Let the person tune a number (a wall, a fit, a count) | `model.param(...)` at the script's top level; change a value by editing its number and running the script | [Parameters](references/model-contract.md#parameters-a-person-tunes) |
 | Organize a project | Its existing layout | [Project layout](references/project-layout.md) |
 | Export STEP, STL, 3MF, GLB or xbf | `cad model export <id> <file>` | [Exports](references/exports.md) |
 | A 2D profile, flat pattern or DXF | A model that returns 2D geometry on z=0, exported as `.dxf` | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
@@ -96,8 +97,8 @@ Each call prints how its model built, what it holds, its document's `id:` and it
 id comes from the script's path and the function's name, so it is the same on every run: use it for
 every command, and give the person the page once ([Show the model](#show-the-model)).
 
-- **A model takes no parameters.** Dimensions are arguments of a plain helper, and each configuration
-  is a `@model` of its own. Calling one returns a handle: `.id`, `.url`, `.shape`, `.export(...)`.
+- **A model function takes no arguments.** Dimensions are arguments of a plain helper, and each
+  configuration is a `@model` of its own. Calling one returns a handle: `.id`, `.url`, `.shape`, `.export(...)`.
 - **Running the script is the rebuild**, and it writes no file. The server replays whatever an edit
   did not reach, so reruns are cheap; `@memo` marks a stage of seconds of kernel work, or a body several models share
   ([what a run runs](references/model-contract.md#what-a-run-runs)). Keep the calls under

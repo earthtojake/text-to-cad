@@ -46,8 +46,8 @@ to `host.presentation`, in one change.
 - **Tabs (the Codex app).** **CAD** in the
   sidebar (the home: the models opened before, and Open), a **CAD** tab beside
   each thread, and *Open with CAD* for a model file. The sidebar and every tab are the
-  whole viewer under its navbar, as a card is (below); *Open with CAD* alone shows its file
-  bare, with no navbar. A tab's name and icon in Codex's tab strip are the page's own `<title>` and icon
+  whole viewer under its navbar, as a card is (below); *Open with CAD* shows its file alone,
+  under the same navbar. A tab's name and icon in Codex's tab strip are the page's own `<title>` and icon
   (`shell.html`: **CAD**, and the blue mark as a 32px PNG data URL), which the Codex app (26.1111.21308,
   read from its bundle 2026-11-15) prefers to the tool's title and icon; it takes an icon only as a PNG, JPEG, WebP or GIF
   data URL of at most 8192 characters (or an `https:` URL), so never the tools' `currentColor` SVG. The agent opens a tab once
@@ -57,8 +57,8 @@ to `host.presentation`, in one change.
   thread. Each connects to a separate engine session, so an unnamed view belongs to that thread.
 - **Inline (no app: the development switch alone).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
-  the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the logo, which
-  opens the app menu, first; Back and Forward; the file name that opens the name menu; the ⋯,
+  the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the panel's toggle first, then the
+  logo, which opens the app menu; Back and Forward; the file name that opens the name menu; the ⋯,
   the file menu: Copy path, Copy link (the engine's own page of the document,
   `<engine origin>/<id>?token=<link>`, the origin from the launch and the link asked through the
   tunnel; never the tunnel's address), then Open in › Browser and Finder (File Explorer, File manager), a
@@ -66,8 +66,9 @@ to `host.presentation`, in one change.
   script was moved or deleted; Browser needs none), then the apps the server finds on this computer
   for the document's files, through the tunnel as Reveal goes (the source's, each export's as "App
   (file name)", then Default app) — no Export, as this host has no downloads;
-  then, at the right, only Full size where the host can show a view full size; Back and Forward are dropped on a phone-width view), the tool strip ending
-  in Projection, Display and Preview, the view's panel, the view cube, and Quick Edit. In
+  then, at the right, a put-away alert's icon, the view's Display and Preview and, outermost, Full size where the
+  host can show a view full size; Back and Forward are dropped on a phone-width view), the tool strip (no view
+  controls on it), the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
   newer card retires the older ones. The page keeps this presentation, tested and shipped in the same
   bundle, for the day a host's cards are verified; `CAD_MCP_PRESENTATION=inline` reaches it (below).
@@ -257,12 +258,12 @@ the launch's `_meta` first (`host/capability.ts`).
 - ***Open with CAD* is the file alone.** `cad_file` (`surface: file`) shows the
   file the host handed over, and nothing else, for as long as it is open: no home
   and no explorer (the host's own file tree is its navigation), no Back or Forward,
-  and a renderer's link to another file (a robot's mesh) is plain text. It is the one
-  view with no navbar (`chrome: "bare"`): no logo or app menu, no name or name menu, no ⋯
-  (so no Open in › Browser); what the navbar would carry that it still has is its corner at
-  the viewport's top-right (`CardCorner.tsx`, the viewer's `notice`, Quick Edit under it):
-  Full size where the host offers it. Preview's bar hides the
-  corner as it hides a navbar. Its launch carries no page (`browser`). The agent reads it
+  and a renderer's link to another file (a robot's mesh) is plain text. It is drawn
+  under the same 40px navbar as every other view (`chrome: "page"`), so the panel's toggle is there: first the
+  panel's toggle, then its logo and app menu, the file's name (no name menu) and its ⋯ (no Open in › Browser; File
+  info, the file's facts), then at the right the view's Display and Preview, then Full size where the host offers it.
+  Preview's bar hides the
+  navbar as it does everywhere. Its launch carries no page (`browser`). The agent reads it
   (`cad_view` lists it) but shows nothing in it: `cad_show` refuses its view, and
   the page ignores a show that reaches it anyway.
 - **An agent reads the sidebar too, and shows beside its thread.** Each MCP session
@@ -330,7 +331,10 @@ the launch's `_meta` first (`host/capability.ts`).
   over its own model library and analytics. Everything the page asks of the
   server travels this way, as the web page asks its own: the models -- a STEP's
   and an `.xbf`'s reads too, dispatched directly to the engine's document router
-  that serves them (`/api/v1/documents/<kind>/<id>/...`) -- the
+  that serves them (`/api/v1/documents/<kind>/<id>/...`), a model's Parameters
+  Save among them (`POST /api/v1/documents/model/<id>/parameters`, one call held
+  until the rebuild it starts has ended) and the preview of its drafts
+  (`POST /api/v1/documents/model/<id>/preview`, then the preview's reads) -- the
   library and its pictures, Reveal, the person's analytics
   answer and language. One route is the server's own, not the
   viewer's: `/api/v1/local/browser/open`, which opens the web viewer's page of what the view shows
@@ -391,7 +395,7 @@ the launch's `_meta` first (`host/capability.ts`).
 - **A card says why it cannot work, in words a person can act on.** Three states, never
   confused, and never a host's or a transport's own error string (`host/channel.ts`,
   `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`), and names the browser, never the viewer
-  ([Naming the page](../../packages/ui/docs/settings-ui.md#naming-the-page)):
+  ([Naming the page](../../packages/ui/docs/viewer-ux.md#naming-the-page)):
   - **No channel.** A host can draw the card and carry none of its calls back: the Claude
     app's **Code tab** (observed 2026-10-25) frames `cad_show`'s card as "Widget from
     text-to-cad:cad cad_show", with an expand control of its own, and answers every
@@ -507,15 +511,15 @@ explorer's folders and search over it (`createCadFileSource`), its chat, its fil
 an alert's Report Issue open a new issue), followed through `ui/open-link`,
 and its home: the library. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps
 its view — camera, Display settings, pose — through updates of it, and leaving it for
-another model or the home drops it, as in the web Viewer. A view the
+another model or the home sets that view aside, in memory, until the model is shown again in the same view, as in
+the web Viewer. A view the
 host creates again (its frame re-created) starts afresh: nothing names a view across its
 frames, so there is nothing to keep its record under. `App.tsx` frames it (full page, or
 an inline card whose height the host is told) under the navbar (`chrome: "page"`) in every
-presentation but the file handler's (`chrome: "bare"`, above). Inline, where the host offers
+presentation, the file handler's too (above). Inline, where the host offers
 `fullscreen` among its display modes, the card's **Full size** (lucide `Maximize2`, a small ghost
 icon button) asks it for `ui/request-display-mode` fullscreen; it is the first of the host's
-actions at the navbar's right, over a file and on the home (the corner's first in the file
-handler); it is all the navbar's right end holds. The file menu's
+actions at the navbar's right, over a file and on the home, in every view. The file menu's
 **Open in › Browser** (the host's `fileActions.perform.browser`, `ModelView.tsx`, which `App.tsx`'s
 `openBrowserPage` implements) opens the web viewer's page of the document on screen: the page each launch carries (`browser`: the document's, `/<id>`
 with the link, or the home's), and for a file the person opened that no launch named, the
@@ -528,11 +532,12 @@ browser (503: no display, a remote shell), or the card reaches the engine direct
 card open the launch's page through `ui/open-link` where the host offers it, else as a plain
 link. A view whose launches carried no page (the engine gave none) has no Browser item; the home,
 which has no file, has no file menu. In a tab, Codex's composer floats over the page, and the
-home's list scrolls clear of it (`--cad-host-bottom-inset`). The cube sits at bottom-left
-in this tab presentation, across sidebar, thread and file views, so the composer and
-sidebar chat button can occupy bottom-right. `App.tsx` supplies
+home's list scrolls clear of it (`--cad-host-bottom-inset`). The view's corner (the cube, or a
+flat view's zoom) stands at the top in every host,
+the bottom row Quick Edit's; in this tab presentation, across sidebar, thread and file views, it
+sits at the top-left, mirrored, clear of the sidebar chat button's side. `App.tsx` supplies
 `--cad-viewport-corner-left: 2px` and `--cad-viewport-corner-right: auto`;
-inline hosts (including full-size cards) retain the default bottom-right placement.
+inline hosts (including full-size cards) retain the default top-right placement.
 
 ## Engine transport
 

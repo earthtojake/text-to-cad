@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { changeRobotVisibility, robotVisibilityState } from "./visibility.js";
 
-// The eye's rules, as `settings-ui.md` states them for a Links row: a link hides its own visuals
+// The eye's rules, as `docs/viewer-ux.md`, "Trees", states them for a Links row: a link hides its own visuals
 // and never its child links; a partly hidden link is not hidden, so its eye hides the rest; and a
 // reload keeps only the ids the loaded part list still has.
 

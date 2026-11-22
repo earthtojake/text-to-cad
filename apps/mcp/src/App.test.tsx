@@ -109,10 +109,10 @@ it('a tab host gets the page it always had, down to its bottom: the home, with n
   const frame = container.firstElementChild as HTMLElement;
   expect([frame.style.paddingTop, frame.style.paddingBottom]).toEqual(['4px', '0px']);
   expect(frame.style.getPropertyValue('--cad-host-bottom-inset')).toBe('72px');
-  // The sidebar's chat button floats bottom-right: the cube uses bottom-left.
+  // The sidebar's chat button floats bottom-right: the corner stays at the left (its top-left, the bottom row Quick Edit's).
   expect(frame.style.getPropertyValue('--cad-viewport-corner-left')).toBe('2px');
   expect(frame.style.getPropertyValue('--cad-viewport-corner-right')).toBe('auto');
-  expect(frame.style.getPropertyValue('--cad-viewport-corner-bottom')).toBe('');
+  expect(frame.style.getPropertyValue('--cad-viewport-corner-top')).toBe('');
 });
 
 it.each(['tab', 'file'] as const)('a %s view keeps the cube left of the floating composer', surface => {
@@ -121,7 +121,7 @@ it.each(['tab', 'file'] as const)('a %s view keeps the cube left of the floating
   const frame = container.firstElementChild as HTMLElement;
   expect(frame.style.getPropertyValue('--cad-viewport-corner-left')).toBe('2px');
   expect(frame.style.getPropertyValue('--cad-viewport-corner-right')).toBe('auto');
-  expect(frame.style.getPropertyValue('--cad-viewport-corner-bottom')).toBe('');
+  expect(frame.style.getPropertyValue('--cad-viewport-corner-top')).toBe('');
 });
 
 it.each(['inline', 'fullscreen'] as const)('an inline host in %s mode keeps the default cube corner', displayMode => {
@@ -245,7 +245,7 @@ it('an inline host gets the whole viewer in a card of a height it is told, with 
   expect(viewer.mounts).toBe(1);
 });
 
-it('every view has the navbar but the file handler: the sidebar\'s home, a thread\'s tab, an agent\'s tab and an inline card are page chrome, with the host\'s controls in it; the file handler is bare, its corner the host\'s notice', () => {
+it('every view has the navbar, the file handler\'s too: the sidebar\'s home, a thread\'s tab, an agent\'s tab, an inline card and the file handler are page chrome, with the host\'s controls in it', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
   const page = 'http://127.0.0.1:3245/id-p?token=t';
   // The inline card: the navbar, with Full size at its right and Open in › Browser in the file menu, and no corner.
@@ -266,18 +266,18 @@ it('every view has the navbar but the file handler: the sidebar\'s home, a threa
     expect(browser()).toEqual(expect.any(Function));
     expect(screen.queryByRole('button', { name: 'Full size' })).toBeNull();
   }
-  // The file handler: the view alone, no navbar to hand anything, and no Open in browser even where a page is known.
+  // The file handler: under the same navbar (its name, its ⋯ and the panels' toggles), and no Open in browser even
+  // where a page is known.
   cleanup();
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'file', browser: page }} />);
-  expect([viewer.props!.chrome, viewer.props!.fullSize, browser()]).toEqual(['bare', undefined, undefined]);
+  expect([viewer.props!.chrome, viewer.props!.notice, browser()]).toEqual(['page', undefined, undefined]);
 });
 
-it('the file handler\'s corner is the viewport\'s top-right, the host\'s notice: Full size there where an inline host offers it', () => {
+it('the file handler\'s Full size is the navbar\'s, where an inline host offers it: no corner over the model', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"
     launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'file' }} />);
-  expect(viewer.props!.chrome).toBe('bare');
-  expect(container.querySelector('[data-card-corner] [aria-label="Full size"]')).not.toBeNull();
+  expect([viewer.props!.chrome, viewer.props!.fullSize, container.querySelector('[data-card-corner]')]).toEqual(['page', expect.anything(), null]);
 });
 
 it("Open in › Browser is the file menu's where a launch carried the page: the server opens it from this computer, and only where it cannot is the launch's page opened through the host", async () => {

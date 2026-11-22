@@ -82,6 +82,23 @@ test("the faces are drawn once a renderer takes them, through one scratch canvas
   assert.ok(made.every(canvas => canvas.width === 0), "disposing frees the canvases");
 });
 
+test("a lit stage is the board alone under the host's lights: both faces drawn at once as lit sRGB surfaces, the slab casting, no overlay and no surround", () => {
+  const context = new Proxy({}, { get: (_target, key) => (key === "canvas" ? undefined : key === "measureText" ? () => ({ width: 1 }) : () => {}) });
+  const createCanvas = () => ({ width: 0, height: 0, getContext: () => context });
+  const stage = createBoardStage(THREE, { layout: LAYOUT, outline: BOARD.outline, theme: "dark", createCanvas, lit: true });
+  assert.equal(stage.presentable(), false, "not fit to be seen before its faces are drawn");
+  stage.setRenderer({ capabilities: { maxTextureSize: 4096 }, initTexture() {} });
+  stage.setLook({ display: { mode: "board", side: "top", poured: true, others: "shown" }, theme: "dark" });
+  assert.deepEqual([stage.stats().drawnSides, stage.presentable()], [["top", "bottom"], true]);
+  const [slab, ...faces] = stage.object3D.children;
+  assert.deepEqual([slab.castShadow, faces.length], [true, 2], "the slab and its two faces, nothing else");
+  assert.ok(faces.every(face => face.material.isMeshStandardMaterial && face.material.map.colorSpace === THREE.SRGBColorSpace && !face.material.transparent));
+  // The working view's overlay has nowhere to go, and says so by drawing nothing.
+  stage.setOverlay(() => true);
+  assert.equal(stage.object3D.children.length, 3);
+  stage.dispose();
+});
+
 test("a fit frames the slab and what stands on it as it is now: a tall part once it is in, nothing while it is hidden", () => {
   const stage = createBoardStage(THREE, { layout: LAYOUT, outline: BOARD.outline, thickness: 1.6, theme: "dark" });
   assert.deepEqual(stage.shownBounds(), stage.bounds, "the bare board frames its slab");

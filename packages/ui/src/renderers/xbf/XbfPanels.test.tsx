@@ -2,16 +2,18 @@ import React, { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
+import FlatPanel, { FLAT_PANEL_DEFAULT_WIDTH } from '../../../dist/renderers/kit/shell/FlatPanel.js';
 import XbfPositionSection, { useXbfPose } from '../../../dist/renderers/xbf/XbfPositionSection.js';
 import XbfModelTree from '../../../dist/renderers/xbf/XbfModelTree.js';
+import ToolPanel from '../../../dist/renderers/kit/tools/ToolPanel.js';
+import { xbfPanelSections } from '../../../dist/renderers/xbf/XbfRenderer.js';
 import { MeasureIcon as XbfMeasureIcon, SelectIcon as XbfSelectIcon, SelectMenu as XbfSelectMenu, XBF_SELECT_DEFAULT, xbfSelectBadge, xbfSelectExtras,
   xbfSelectKinds } from '../../../dist/renderers/xbf/XbfSelectionModes.js';
 import { measureBadge } from '../../../dist/renderers/kit/tools/measure/MeasureFilterMenu.js';
 import { ControlUsageProvider } from '../../../dist/usage/controls.js';
 import { MEASURE_FILTER_DEFAULT } from '../../../dist/renderers/kit/tools/measure/measureFilter.js';
 import { presentXbfTree, xbfPickFrontier } from '../../../dist/renderers/xbf/xbfTree.js';
-import { useXbfSelectionChips, xbfDescriber, xbfMassText, xbfMeasurementRows, xbfTipper } from '../../../dist/renderers/xbf/xbfChips.js';
+import { useXbfSelectionChips, xbfAreaText, xbfDescriber, xbfMassText, xbfMeasurementRows, xbfTipper, xbfVolumeText } from '../../../dist/renderers/xbf/xbfChips.js';
 import { nextSelectionIds, selectGeometryMode, tangentChain, treeShape, withTangentChains, xbfGeometryPicks } from '../../../dist/renderers/xbf/xbfSelectionFilter.js';
 import { NO_EXPANSION, openRows, personsRows, shutOpenedBy, toggleRow } from '../../../dist/renderers/xbf/xbfExpansion.js';
 import { xbfModelMenu, xbfPartMenu, xbfTangentSources, xbfTopologyMenu } from '../../../dist/renderers/xbf/xbfMenus.js';
@@ -44,7 +46,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); while (restores.length) rest
 // A section as the shell draws it: a tab of the view's panel, open.
 function InPanel({ tab, children }: { tab: string, children: React.ReactNode }) {
   return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
-    sections={children} tab={tab} onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />;
+    sections={children} tab={tab} onTabChange={() => {}} width={FLAT_PANEL_DEFAULT_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />;
 }
 
 // One assembly: a hinge of a base and two arms of one part, and a pin beside it, as the engine serves it.
@@ -81,8 +83,8 @@ it("the tree is a STEP's: the document's wrapper is no row, repeated parts fold,
 // The controls a tree draws, in order: its rows' names and their actions.
 const controls = () => [...document.querySelectorAll('[aria-label="Modeling tree"] button, [aria-label="Modeling tree"] [data-disclosure-locked]')]
   .map(element => element.getAttribute('aria-label') || `locked:${(element as HTMLElement).dataset.disclosureLocked}`);
-// What heads the tree: the panel's search, which searches it.
-const heading = () => [...document.querySelectorAll('[data-flat-panel-head] input')].map(element => element.getAttribute('aria-label'));
+// What heads the tree: the panel's search, the Model tab's first row, which searches it.
+const heading = () => [...document.querySelectorAll('[data-flat-panel-head] [data-flat-panel-search-open]')].map(element => element.getAttribute('aria-label'));
 
 function Tree({ mode }: { mode: string }) {
   const [expanded, setExpanded] = useState<string[]>([]);
@@ -98,12 +100,56 @@ it("the Model tree's controls are a STEP's under every shape Select's filter giv
   fireEvent.click(screen.getByRole('button', { name: 'Expand arm (2)' }));
   states.push(controls());
   for (const mode of ['parts', 'faces']) { view.rerender(<Tree mode={mode} />); states.push(controls()); }
-  // The panel's search; the tree shut; the tree open; and under Select's Parts and Faces, its
+  // The panel's search's icon; the tree shut; the tree open; and under Select's Parts and Faces, its
   // open rows' disclosure locked open.
   const hinge = ['Select hinge', 'Isolate hinge', 'Hide hinge'], pin = ['Select pin', 'Isolate pin', 'Hide pin'];
   const open = (disclosure: (row: string) => string) => [disclosure('hinge'), ...hinge, 'Select base', 'Isolate base', 'Hide base',
     disclosure('arm (2)'), 'Select arm (2)', 'Select arm_1', 'Isolate arm_1', 'Hide arm_1', 'Select arm_2', 'Isolate arm_2', 'Hide arm_2', ...pin];
   expect(states).toEqual([['Search the model'], ['Expand hinge', ...hinge, ...pin], open(row => `Collapse ${row}`), open(() => 'locked:open'), open(() => 'locked:open')]);
+});
+
+// A part file: one prototype, one instance, the document's wrapper around it (as the engine serves a single part).
+const partStructure = {
+  name: 'bracket', version: '1-1', units: 'mm',
+  prototypes: [{ index: 0, key: 'k-bracket', name: 'bracket', color: null, faceNames: {}, edgeNames: {}, faceColors: {} }],
+  instances: [{ prototype: 0, path: 'bracket', matrix: [], color: null }],
+  tree: { name: 'bracket', prototype: 0, instance: 0 },
+};
+
+it("a part file's Model is the panel's first tab, open at first, holding its one row: select it, hide it and show it", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  const tree = presentXbfTree(partStructure);
+  expect(tree.roots.map((node: any) => [node.kind, node.label, node.selectionId, node.leafPartIds])).toEqual([['part', 'bracket', 'i0', ['i0']]]);
+  // As the host draws it: the tree's rows, then Params; no tab chosen yet.
+  const sections = xbfPanelSections({ parts: tree.roots.length, posable: false, parameters: 1 });
+  expect(sections).toEqual(['model', 'parameters']);
+  let chosen: string[] = [];
+  function Part() {
+    const [hidden, setHidden] = useState<string[]>([]);
+    const [selected, setSelected] = useState<string[]>([]);
+    chosen = selected;
+    // The host's own part controls for a part file (`isAssemblyView` false: a part has nothing to isolate it from).
+    const partControls = { isAssemblyView: false, expandedTreeNodeIds: [], hiddenPartIds: hidden, onFocusTreeNode: () => {},
+      onTogglePartVisibility: (id: string) => setHidden(now => now.includes(id) ? now.filter(item => item !== id) : [...now, id]),
+      onSelectTreeNode: (id: string | string[], { multiSelect = false } = {}) => setSelected(now => nextSelectionIds(now, [id].flat(), multiSelect)) };
+    return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model" tab={undefined} onTabChange={() => {}}
+      width={FLAT_PANEL_DEFAULT_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} sections={<>
+        <XbfModelTree tree={tree} active selectedIds={selected} partControls={partControls} />
+        <ToolPanel id="parameters" title="Params" label="Parameters" fit="details"><div /></ToolPanel>
+      </>} />;
+  }
+  render(<Part />);
+  const tabs = screen.getAllByRole('tab');
+  expect(tabs.map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Model', 'true'], ['Params', 'false']]);
+  // The one row: its name, then its eye (no Isolate).
+  const row = () => [...document.querySelectorAll('[aria-label="Modeling tree"] li[data-virtual-row] button')].map(button => button.getAttribute('aria-label'));
+  expect(row()).toEqual(['Select bracket', 'Hide bracket']);
+  await user.click(screen.getByRole('button', { name: 'Select bracket' }));
+  expect(chosen).toEqual(['i0']);
+  await user.click(screen.getByRole('button', { name: 'Hide bracket' }));
+  expect(row()).toEqual(['Select bracket', 'Reveal bracket']);
+  await user.click(screen.getByRole('button', { name: 'Reveal bracket' }));
+  expect(row()).toEqual(['Select bracket', 'Hide bracket']);
 });
 
 // The tree as its host drives it (`XbfRenderer.jsx`): what is open and what is selected are the host's,
@@ -483,21 +529,22 @@ const positionTab = () => document.querySelector<HTMLElement>('[data-flat-panel-
 function positionControls() {
   const panel = positionTab();
   return {
-    head: [document.querySelector('[data-flat-panel-tab="position"] [data-flat-panel-tab-name]')!.textContent,
-      `Reset position:${(panel.querySelector('[data-pose-reset]') as HTMLButtonElement).disabled}`],
+    head: [document.querySelector('#flat-panel-tab-position')!.textContent,
+      `Reset joints:${(panel.querySelector('[data-pose-reset]') as HTMLButtonElement).disabled}`],
     body: [...panel.querySelectorAll('[data-tool-panel-body] button, [data-tool-panel-body] input, [data-tool-panel-body] [role=slider]')]
       .map(element => `${element.getAttribute('role') || element.tagName.toLowerCase()}:${element.getAttribute('aria-label')}:${(element as HTMLInputElement).value ?? ''}`)
   };
 }
 
-it("Position is a STEP's -- its heading, its Pose row with Reset on it, a named slider and value per joint -- through a configuration and back", async () => {
+it("Position is a STEP's -- its heading, its Pose row, a named slider and value per joint, then Reset in its actions row -- through a configuration and back", async () => {
   const user = userEvent.setup({ pointerEventsCheck: 0 });
   render(<XbfPosition />);
   const states: unknown[] = [positionControls()];
   const panel = positionTab();
-  expect(within(panel).getByRole('button', { name: 'Reset position' }).closest('[data-pose-row]')).toBe(within(panel).getByRole('button', { name: /^Pose: / }).closest('[data-pose-row]'));
-  await user.click(within(panel).getByRole('button', { name: /^Pose: / }));
-  const menu = document.querySelector<HTMLElement>('[role=menu][aria-label="Pose"]')!;
+  expect([within(panel).getByRole('button', { name: 'Reset joints' }).closest('[data-pose-actions]') !== null,
+    within(panel).getByRole('button', { name: 'Reset joints' }).textContent]).toEqual([true, 'Reset']);
+  await user.click(within(panel).getByRole('button', { name: /^Position: / }));
+  const menu = document.querySelector<HTMLElement>('[role=menu][aria-label="Position"]')!;
   states.push(within(menu).getAllByRole('menuitemradio').map(item => `${item.textContent}:${item.getAttribute('aria-checked')}`));
   await user.click(within(menu).getByRole('menuitemradio', { name: 'open' }));
   states.push(positionControls());
@@ -505,13 +552,13 @@ it("Position is a STEP's -- its heading, its Pose row with Reset on it, a named 
   await user.clear(value);
   await user.type(value, '25{Enter}');
   states.push(positionControls());
-  await user.click(within(panel).getByRole('button', { name: 'Reset position' }));
+  await user.click(within(panel).getByRole('button', { name: 'Reset joints' }));
   states.push(positionControls());
-  // The tab (Reset, in the Pose row, is off at the opening pose), the Pose row, then the joint's value on its name's line, its slider under it.
-  const shown = (pose: string, value: string, atOpening: boolean) => ({ head: ['Position', `Reset position:${atOpening}`],
-    body: [`button:Pose: ${pose}:`, 'button:Reset position:', `input:hinge slider value:${value}`, 'slider:hinge:'] });
-  expect(states).toEqual([shown('Default', '0.00°', true), ['Default:true', 'open:false'], shown('open', '90.0°', false),
-    shown('Custom', '25.0°', false), shown('Default', '0.00°', true)]);
+  // The tab (Reset, last, is off at the opening pose), the Pose row, then the joint's value on its name's line, its slider under it, then Reset.
+  const shown = (pose: string, value: string, atOpening: boolean) => ({ head: ['Joints', `Reset joints:${atOpening}`],
+    body: [`button:Position: ${pose}:`, `input:hinge slider value:${value}`, 'slider:hinge:', 'button:Reset joints:'] });
+  expect(states).toEqual([shown('Default', '0.00', true), ['Default:true', 'open:false'], shown('open', '90.0', false),
+    shown('Custom', '25.0', false), shown('Default', '0.00', true)]);
 });
 
 it("Position's pose is what the file's view keeps of it, and a new mount of the same mechanism takes it back", () => {
@@ -591,8 +638,8 @@ async function setValue(user: ReturnType<typeof userEvent.setup>, panel: HTMLEle
 }
 
 async function choose(user: ReturnType<typeof userEvent.setup>, panel: HTMLElement, name: string) {
-  await user.click(within(panel).getByRole('button', { name: /^Pose: / }));
-  await user.click(within(document.querySelector<HTMLElement>('[role=menu][aria-label="Pose"]')!).getByRole('menuitemradio', { name }));
+  await user.click(within(panel).getByRole('button', { name: /^Position: / }));
+  await user.click(within(document.querySelector<HTMLElement>('[role=menu][aria-label="Position"]')!).getByRole('menuitemradio', { name }));
 }
 
 it("Position shows a slider per coupling under the Pose row and none for its joints: they move only through it", async () => {
@@ -613,7 +660,7 @@ it("Position shows a slider per coupling under the Pose row and none for its joi
   expect(onPose.mock.lastCall![0]).toEqual(pose(90, 100, 70));
   await setValue(user, panel, 'index_curl', '0.2');
   expect(onPose.mock.lastCall![0]).toEqual(pose(18, 20, 14));
-  await user.click(within(panel).getByRole('button', { name: 'Reset position' }));
+  await user.click(within(panel).getByRole('button', { name: 'Reset joints' }));
   expect(valueOf(panel, 'index_curl')).toBe('0.00');
   expect(onPose.mock.lastCall![0]).toEqual(pose(0, 0, 0));
 });
@@ -685,7 +732,7 @@ function StepQuickEdit({ ids }: { ids: string[] }) {
 it("a face picked on a STEP's page opens Quick Edit with its reference, named or not, as on an .xbf's", () => {
   const box = () => screen.queryByRole('region', { name: 'Quick Edit' });
   const { rerender } = render(<StepQuickEdit ids={[]} />);
-  expect(box()).toBeNull();
+  expect(box()!.querySelector('[data-quick-edit-context]')).toBeNull();
   // A named face, a face by its number, the part: each is a reference, which opens the box with its chip,
   // named by the part (the one part: a face's chip shows its kind and number, its name the part's).
   for (const [id, shown] of [['i0/face/7', 'face 7'], ['i0/face/3', 'face 3'], ['i0', BRACKET.slice(0, 15).trimEnd()]]) {
@@ -696,31 +743,36 @@ it("a face picked on a STEP's page opens Quick Edit with its reference, named or
   }
 });
 
-// A pick as the Selected pane and its chip's card read it, over a scene that measures what it is asked.
+// A pick as its chip's card reads it, over a scene that measures what it is asked.
 const describedAs = (measured: object) => xbfDescriber({ scene: { structure, describePart: (part: string) => ({ name: part }), describeElement: () => null,
   measureParts: () => measured } as any, tree: presentXbfTree(structure) });
 const fact = (item: any, label: string) => item.facts.find((row: any) => row.label === label)?.value;
 
-it("a part's description weighs it by its material and says where it sits; a subassembly's sums its parts and lists them", () => {
-  expect(xbfMassText({ volume: 1000, mass: 1000e-9 * 7870, unweighed: 0 })).toBe('0.00787 kg');
-  expect(xbfMassText({ volume: 1000, mass: 12.3456, unweighed: 0 })).toBe('12.35 kg');
+it("a part's description weighs it by its material, a subassembly's sums its parts, each the thing alone with a few facts read at a glance", () => {
+  // Three significant figures (a number of four figures or more whole), in the unit it reads best in: g under 10 g, kg above.
+  expect(xbfMassText({ volume: 1000, mass: 1000e-9 * 7870, unweighed: 0 })).toBe('7.87 g');
+  expect(xbfMassText({ volume: 1000, mass: 0.008138, unweighed: 0 })).toBe('8.14 g');
+  expect(xbfMassText({ volume: 1000, mass: 0.3782, unweighed: 0 })).toBe('0.378 kg');
+  expect(xbfMassText({ volume: 1000, mass: 12.3456, unweighed: 0 })).toBe('12.3 kg');
   expect(xbfMassText({ volume: 1000, mass: null, unweighed: 1 })).toBe('no material');
+  expect([xbfVolumeText(1037), xbfVolumeText(140073), xbfAreaText(216.42), xbfAreaText(21642)]).toEqual(['1,037 mm³', '140 cm³', '216 mm²', '216 cm²']);
   const base = describedAs({ size: [10, 20, 30], volume: 600, mass: null, unweighed: 1 })('i0');
-  expect([base.title, base.what, base.tip, base.ref, fact(base, 'Size'), fact(base, 'Mass'), base.related]).toEqual(['base', 'hinge', 'hinge', 'base', '10 × 20 × 30 mm', 'no material', null]);
+  // A part with no material has no Mass row: only what is known is said.
+  expect([base.title, base.tip, base.facts.map((row: any) => row.label), fact(base, 'Size'), 'related' in base, 'what' in base])
+    .toEqual(['base', 'hinge', ['Size', 'Volume'], '10 × 20 × 30 mm', false, false]);
   const hinge = describedAs({ size: [10, 20, 30], volume: 6000, mass: 1.234, unweighed: 1 })('n0.0');
-  expect([hinge.title, fact(hinge, 'Parts'), fact(hinge, 'Mass')]).toEqual(['hinge', '3', '1.234 kg · 1 without material']);
-  // Its children, a row each that picks it, a folded run of one part's copies said part by part.
-  expect([hinge.related.title, hinge.related.rows.map((row: any) => [row.pick, row.label])]).toEqual(['Parts', [['i0', 'base'], ['i1', 'arm_1'], ['i2', 'arm_2']]]);
+  expect([hinge.title, hinge.facts.map((row: any) => row.label), fact(hinge, 'Parts'), fact(hinge, 'Mass'), 'related' in hinge])
+    .toEqual(['hinge', ['Parts', 'Size', 'Volume', 'Mass'], '3', '1.23 kg · 1 without material', false]);
   // Its chip's card is the same description.
   function Chips() {
     const scene = { structure, describePart: (part: string) => ({ name: part }), describeElement: () => null, measureParts: () => null };
     const tree = presentXbfTree(structure);
     const { chips } = useXbfSelectionChips({ scene, tree, resource: null, selectedIds: ['n0.0'], facts: new Map(), onRemove: () => {}, onHover: () => {},
       describe: xbfDescriber({ scene: scene as any, tree }) });
-    return <p>{chips[0].detail.related.rows.length}</p>;
+    return <p>{chips[0].detail.facts.map((row: any) => row.label).join(',')}</p>;
   }
   render(<Chips />);
-  expect(screen.getByText('3')).toBeTruthy();
+  expect(screen.getByText('Parts')).toBeTruthy();
 });
 
 it("the hover tip's words for an engine document are its tree's names, measuring nothing", () => {

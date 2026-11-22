@@ -35,7 +35,7 @@ carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it).
 
 A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and its
 `faces|edges|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`,
-`POST mesh`, and a file's `source`; `dxf` -- `drawing`, `source`; `kicad_pcb` -- `plot` (the
+`POST mesh`, a model's `POST parameters` (**Parameters**) and a file's `source`; `dxf` -- `drawing`, `source`; `kicad_pcb` -- `plot` (the
 board's geometry per layer and its index, read from the file on each request: `viewer/plots.py`),
 `source`; `kicad_sch` -- `plot` (every sheet of the hierarchy a page, and the schematic's index;
 `?sheet=<path>` that sheet's page alone, `index=0` without the index; the hierarchy parsed once per
@@ -64,6 +64,9 @@ closing a loop, or null) and the build's `warnings`. A page poses the instances 
 placement at the values over its placement as built, applied to its instances.
 `POST .../pose` (`{"pose": NAME | {joint: value}}`) answers the id of the
 document served at that pose, where it is read (`api`), and its `kinematics.pose` the values it stands at.
+The structure's `parameters` is the list the document records, always there (`[]` for none), each
+parameter served with `writable`, `reason` and `source` (**Parameters**); a model's own `POST
+.../parameters` sets them.
 `GET /api/v1/look` is the look the regular display modes are drawn in (**The viewer and the
 snapshot**), the same for every document; `GET /api/v1/look/environment` is its environment, the
 Radiance image `render/studio.hdr`.

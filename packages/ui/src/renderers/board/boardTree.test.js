@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createBoardIndex } from "@cad/core/lib/board2d/boardIndex.js";
-import { boardDetail, boardRowOwners, boardTreeAncestors, boardTreeNodeIds, buildBoardTree, partKind } from "./boardTree.js";
+import { boardRowOwners, boardTreeAncestors, boardTreeNodeIds, buildBoardTree, partKind } from "./boardTree.js";
 import { boardReferenceId, describeBoardReference } from "./boardFacts.js";
 
 const square = (cx, cy, w, h) => [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]];
@@ -63,7 +63,7 @@ test("a board whose footprints record their schematic sheets is its parts in tho
   assert.deepEqual(tree.parts.nodesById.get("part:C10").searchAliases, ["1u", "C_0603"]);
 });
 
-test("a reference finds its row, a pad its part's and its net's, and what it picks in detail", () => {
+test("a reference finds its row, a pad its part's and its net's", () => {
   assert.deepEqual(boardTreeNodeIds("#U1"), ["part:U1"]);
   assert.deepEqual(boardTreeNodeIds("#U1.2"), []);
   assert.deepEqual(boardRowOwners(index, "#U1.2"), ["part:U1", "net:VIN"]);
@@ -80,16 +80,6 @@ test("a reference finds its row, a pad its part's and its net's, and what it pic
   assert.deepEqual(boardTreeNodeIds('#net:"x@x1y2"@x3y4'), ["net:x@x1y2"]);
   assert.deepEqual(boardTreeNodeIds("#U 3"), []);
   assert.deepEqual(boardTreeNodeIds("#@x1y2"), []);
-  // A part's detail: its pads, one a pin, each its number, name and net; a pad's, its part's.
-  const part = boardDetail(index, "#U1");
-  assert.deepEqual([part.label, part.detail, part.count, part.listLabel], ["U1", "AMS1117 · SOT-223", "2 pads", "Pads of U1"]);
-  assert.deepEqual(part.rows.map((row) => [row.pick, row.label, row.detail]), [["#U1.2", "2", "VO · VIN"], ["#U1.4", "4", "NC · unconnected-(U1-NC-Pad4)"]]);
-  assert.equal(boardDetail(index, "#U1.4").id, "part:U1");
-  // A net's: its pads, each its part and number, in natural order; its copper's, the net's.
-  const net = boardDetail(index, "#net:VIN");
-  assert.deepEqual([net.label, net.count, net.rows.map((row) => [row.pick, row.label])], ["VIN", "3 pads", [["#C2.1", "C2.1"], ["#C10.1", "C10.1"], ["#U1.2", "U1.2"]]]);
-  assert.equal(boardDetail(index, "#net:VIN@x10y25.8").id, "net:VIN");
-  assert.equal(boardDetail(index, "#@x1y2"), null);
 });
 
 test("a chip names a part, a pad, a net, copper and a point, its card in KiCad's millimetres", () => {

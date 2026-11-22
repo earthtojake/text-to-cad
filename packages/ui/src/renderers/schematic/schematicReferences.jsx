@@ -12,6 +12,9 @@ const EMPTY = Object.freeze([]);
 const KIND_ICONS = Object.freeze({ part: SymbolKindIcon, symbol: SymbolKindIcon, pin: PinKindIcon, net: NetKindIcon, sheet: SheetKindIcon,
   label: LabelKindIcon, wire: WireKindIcon, bus: WireKindIcon, junction: JunctionKindIcon, no_connect: NoConnectKindIcon, bus_entry: BusEntryKindIcon });
 const CHIP_ICON_CLASS = "size-2.5 shrink-0 text-muted-foreground";
+// What Quick Edit groups a schematic's picks as (`ReferenceChips.jsx`'s `CHIP_GROUPS`), by what the schematic says each is.
+const SCHEMATIC_GROUPS = new Map([["part", "component"], ["symbol", "component"], ["pin", "pin"], ["net", "net"], ["sheet", "sheet"], ["label", "label"],
+  ["wire", "wire"], ["bus", "wire"]]);
 
 /** A schematic's picks described (`describeSchematicPick`), in the view's language: what the pane, the cards and the tip read. */
 export function useSchematicDescribe(index) {
@@ -27,20 +30,17 @@ export function useSchematicTip(index) {
 
 /**
  * What is picked on the schematic, as its frame reads it (`kit/inspector/inspect.js`): each pick
- * described, what the pointer is on (`hovered`), and what a row of the pane does (`select`, `hover`,
- * `show` — the sheet it is on — `frame`, `onSelect`, `copyText`).
+ * described (a chip's card, the hover tip's name) and what the pointer is on (`hovered`).
  */
-export function useSchematicInspect({ index, describe, tip = null, selection, hovered, onSelect, show, frame, copyText }) {
-  const { selected, select, hover } = selection;
-  return useMemo(() => (index ? { selected, describe, tip, hovered, glyphs: KIND_ICONS, data: "schematic", select, hover, show, frame, onSelect, copyText } : null),
-    [index, selected, describe, tip, hovered, select, hover, show, frame, onSelect, copyText]);
+export function useSchematicInspect({ index, describe, tip = null, hovered }) {
+  return useMemo(() => (index ? { describe, tip, hovered, data: "schematic" } : null), [index, describe, tip, hovered]);
 }
 
 /**
  * What is selected on a schematic, for Quick Edit (`useSceneSelection` over `schematicScene.js`): each
  * pick as a reference into the file on screen and as a chip named as the schematic names it (`R1`,
  * `R1.2`, `net /MID`, `/MID · wire`, `“MID”`, a sheet's name), led by its kind's glyph, its card what the
- * schematic says of it (`describe`, the Selected pane's), its ID the reference. A click on a chip copies its reference; its X drops it;
+ * schematic says of it (`describe`). A click on a chip copies its reference; its X drops it;
  * resting on it lights it.
  */
 export function useSchematicReferences({ scene, selection, resource, describe = null }) {
@@ -54,7 +54,8 @@ export function useSchematicReferences({ scene, selection, resource, describe = 
       const described = scene.describePart(id);
       const value = reference(id);
       const Icon = KIND_ICONS[described?.glyph] || SymbolKindIcon;
-      return { key: `pick:${id}`, label: described?.name || schematicReferenceId(id), icon: <Icon className={CHIP_ICON_CLASS} />, id: schematicReferenceId(id),
+      return { key: `pick:${id}`, label: described?.name || schematicReferenceId(id), icon: <Icon className={CHIP_ICON_CLASS} />,
+        group: SCHEMATIC_GROUPS.get(described?.glyph) || "item",
         ...(value ? { copy: formatPromptReference(value) } : {}),
         detail: describe?.(id) || null,
         onRemove: () => select(id, { multiSelect: true }), onHover: on => hover(on ? id : "") };

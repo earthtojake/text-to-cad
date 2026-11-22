@@ -23,7 +23,7 @@ or any movement that is not the mechanism's is a GLB's `animation()`: read
 Give a model kinematics only where it is a mechanism: parts that move relative to each
 other in use (a hinge, a robot arm, a gearbox, a lead screw). A joint exists because the
 mechanism moves there: one added to slide a part out for an explode is an animation's
-job, and the viewer's Position would show a slider for it.
+job, and the person could pose it in the viewer like any other joint.
 
 An assembly's mechanism is written in its body, and its document keeps it:
 
@@ -130,13 +130,13 @@ if __name__ == "__main__":
 assembly; a joint it leaves out stays as built (a state that names none is the as-built
 pose under a name: a key, a `--zero`). A cylindrical joint takes `(angle, distance)`, a
 ball joint its three angles and a coupling its value (`bend=0.5`). Mechanism states are
-what the viewer's Position lists as presets, and what a `--pose` names.
+the poses the viewer offers the person by name, and what a `--pose` names.
 
 A file of the mechanism in another pose is a model of its own: `posed(hinge(), state)`
 returns a copy of the assembly with every part where the named state, or a mapping of
 joint label to value, puts it. The copy keeps its joints, couplings, states and
-sequences, with the asked values as its as-built state, so its page's Position and
-motions still work.
+sequences, with the asked values as its as-built state, so it still poses and plays its
+motions in the viewer.
 
 ```python
 # src/hinge_poses.py
@@ -186,9 +186,9 @@ screw_pair(assembly, "feed", lead_screw=2.0)                        # 2 mm a tur
 
 With each knuckle's `angular_range` from 0 to its full bend, `index_bend` ranges over
 `[0, 1]`, and `--pose '{"index_bend": 0.6}'` poses the knuckles at 54, 60 and 42 degrees.
-A coupling's name poses wherever a joint's does (states, sequences, `--pose`); the viewer
-shows the coupling's slider and none of its joints', and setting one of its joints alone
-is refused.
+A coupling's name poses wherever a joint's does (states, sequences, `--pose`); in the viewer
+the person poses the coupling, never one of its joints alone, and setting one of its joints
+alone is refused.
 
 **Two slides, one pinion.** A parallel gripper's fingers are two racks on one pinion. Where
 the CAD draws no pinion, the pinion is a `RevoluteJoint` on the part that carries it,
@@ -436,7 +436,7 @@ cad model snapshot "$ID" tmp/stride.png --pose walk@0.6
 
 `--pose` takes a mechanism state's name, joint and coupling values as JSON (a turn in
 degrees, a slide in millimetres; the rest as built), or a configuration sequence at a
-time of it (`walk@0.6`: the mechanism where the playbar would have it then). An unknown
+time of it (`walk@0.6`: the mechanism where playback would have it then). An unknown
 state, joint or coupling, a value out of range and a coupling's joint set alone are
 refused by name before anything renders.
 
@@ -455,9 +455,9 @@ cad model snapshot --job tmp/frames.json
 ```
 
 The frames stand under the mechanism's fixed link, as the sequence is written: a robot whose
-ground is its pelvis walks in the air. For a person, the model's page poses the document
-live under Position (a slider per coupling and per joint no coupling moves, the mechanism
-states as presets) and plays its configuration sequences on the playbar under the model.
+ground is its pelvis walks in the air. In the viewer the person can pose the document live,
+by each coupling and each joint no coupling moves or at a mechanism state, and play its
+configuration sequences.
 
 A pose or a motion shows movement; it does not measure it. A check of the model measures
 the parts as built, so a part that clears there can still pass through another

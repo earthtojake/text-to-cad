@@ -10,7 +10,7 @@
  * with a file (a capability set rather than a fork), where its files are read from,
  * where its links point, and its home.
  */
-export { EmptyState } from "./EmptyState.jsx";
+export { EmptyState, StatusAction } from "./EmptyState.jsx";
 export { ViewerNavbar } from "./ViewerNavbar.jsx";
 export { AppMenu } from "./AppMenu.jsx";
 export { DiscordMark, GitHubMark } from "./brandMarks.jsx";

@@ -8,7 +8,8 @@ a document of that kind, and the same id under another kind is a 404 that names 
 
 * ``model``, ``xbf``, ``step``: the engine's document -- ``structure``, ``parts/<key>`` (and each
   part's ``faces``/``edges``/``vertices/<ordinal>``, ``groups``, ``volume``), ``measure``,
-  ``kinematics``, ``POST pose``, ``POST mesh``; a file's also its ``source``.
+  ``kinematics``, ``POST pose``, ``POST mesh``; a model's also ``POST parameters`` (its parameters set in
+  its script, ``http_app.CadApp._parameters``); a file's also its ``source``.
 * ``dxf``: ``drawing`` (the 2D payload), ``source``.
 * ``kicad_pcb``: ``plot`` (the board's geometry per layer, and its index), ``drc`` (KiCad's design rule
   check of it), ``source``.

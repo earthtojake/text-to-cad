@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fuzzyMatch } from '../../../file-viewer/navigation/fuzzy.js';
 import { useControlUsage } from '../../../usage/controls.js';
+import { useFlatPanel, useFlatPanelMatches } from '../shell/FlatPanel.jsx';
 
 /** The scroller a tree sits in (its tool-stack panel's body): a search keeps its place in it. */
 const panelScroller = element => element?.closest('[data-tool-panel-body]') ?? element;
@@ -149,19 +150,37 @@ export function useTreeSearch(roots, external = null) {
   useLayoutEffect(() => { if (!external && !searching && listRef.current) panelScroller(listRef.current).scrollTop = resumeScroll.current; }, [searching]);
   // A query typed elsewhere starts its cursor on the first match, as one typed here does.
   useEffect(() => { if (external) setCursor(null); }, [external?.query]);
-  const cursorId = found.matches.some(match => match.entry.node.id === cursor) ? cursor : found.matches[0]?.entry.node.id ?? null;
+  // A query typed in the view's panel: how many it finds here, said on this tab's name there.
+  useFlatPanelMatches(external ? (searching ? found.total : null) : undefined);
+  // The cursor is drawn only where the search box's keys are: in the panel's results across several tabs, one list's
+  // at a time (`FlatPanel.jsx`'s `keyed`).
+  const keyed = useFlatPanel()?.keyed !== false;
+  const cursorId = !keyed ? null : found.matches.some(match => match.entry.node.id === cursor) ? cursor : found.matches[0]?.entry.node.id ?? null;
   useEffect(() => { if (cursorId) listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"]`)?.scrollIntoView?.({ block: 'nearest' }); }, [cursorId]);
+  // The search box's keys: the arrows walk the hits, Enter picks the one under the cursor. An arrow that would leave
+  // the list (past its last hit, before its first) moves nothing and answers false, so the panel can hand the keys to
+  // the next list; `Home` and `End` (the panel's, as it hands them over) put the cursor on the first or the last hit.
   const onKeyDown = event => {
-    if (event.key === 'Escape' && query) { event.preventDefault(); event.stopPropagation(); changeQuery(''); return; }
-    if (!found.matches.length) return;
+    if (event.key === 'Escape' && query) { event.preventDefault(); event.stopPropagation(); changeQuery(''); return true; }
+    if (!found.matches.length) return false;
     const at = found.matches.findIndex(match => match.entry.node.id === cursorId);
+    if (event.key === 'Home' || event.key === 'End') {
+      setCursor(found.matches[event.key === 'Home' ? 0 : found.matches.length - 1].entry.node.id);
+      return true;
+    }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
-      setCursor(found.matches[Math.min(Math.max(at + (event.key === 'ArrowDown' ? 1 : -1), 0), found.matches.length - 1)].entry.node.id);
-    } else if (event.key === 'Enter' && at >= 0) {
+      const next = at + (event.key === 'ArrowDown' ? 1 : -1);
+      if (next < 0 || next >= found.matches.length) return false;
+      setCursor(found.matches[next].entry.node.id);
+      return true;
+    }
+    if (event.key === 'Enter' && at >= 0) {
       event.preventDefault();
       listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"] button[aria-pressed]:not(:disabled)`)?.click();
+      return true;
     }
+    return false;
   };
   return { query, searching, deferredQuery, index, found, cursorId, listRef, changeQuery, onKeyDown };
 }

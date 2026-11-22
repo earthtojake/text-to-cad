@@ -41,12 +41,12 @@ export default function ModelPartActions({ node, controls, disabled }) {
   return <TreeRowActions persistent={persistent}>
     {/* Isolated, the row's Isolate is the way out: an X, there the whole time, which leaves isolation. */}
     {canIsolate && <TooltipHint content={focused ? t("tree.exitIsolate") : t("tree.isolate")}><Button variant="ghost" size="icon-xs" disabled={disabled || hidden} aria-label={isolateLabel}
-      className={cn('h-5 w-4', focused ? 'text-foreground' : cn('text-muted-foreground', REVEAL_ON_HOVER))} data-isolate-exit={focused ? '' : undefined}
+      className={cn('cad-hit h-[calc(var(--cad-glyph)+4px)] w-glyph', focused ? 'text-foreground' : cn('text-muted-foreground', REVEAL_ON_HOVER))} data-isolate-exit={focused ? '' : undefined}
       onClick={() => { if (!focused) usage.used('isolate'); return focused ? onUnfocusTreeNode?.(node.selectionId) : onFocusTreeNode(node.selectionId); }}>
       {focused ? <X className="size-3"/> : <Focus className="size-3"/>}
     </Button></TooltipHint>}
     <TooltipHint content={hidden ? t("tree.reveal") : t("tree.hide")}><Button variant="ghost" size="icon-xs" disabled={disabled || focused} aria-label={t(hidden ? "tree.revealNamed" : "tree.hideNamed", { name: node.label })}
-      className={cn('h-5 w-4 text-muted-foreground', !hidden && REVEAL_ON_HOVER)}
+      className={cn('cad-hit h-[calc(var(--cad-glyph)+4px)] w-glyph text-muted-foreground', !hidden && REVEAL_ON_HOVER)}
       onClick={() => { usage.used('tree_visibility'); onTogglePartVisibility?.(node.selectionId); }}>
       {hidden ? <EyeOff className="size-3"/> : <Eye className="size-3"/>}
     </Button></TooltipHint>

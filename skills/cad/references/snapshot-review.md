@@ -46,7 +46,7 @@ vocabulary is refused by name before anything renders.
 visible), `hidden-line` (linework with occluded edges suppressed) and `wireframe` (edges only).
 After a mode or alone, by commas (`hidden-line,exploded=0.6`, `solid,edges=feature`), it takes:
 
-- `exploded=AMOUNT`: the parts moved apart as the viewer's Explode moves them, 0 to 1;
+- `exploded=AMOUNT`: the parts moved apart as the viewer's explode moves them, 0 to 1;
 - `edges=CLASS`: the edges of one class alone, `feature` (where faces meet at an angle), `tangent`
   (where they meet smoothly) or `seam` (where a face closes on itself). `edges=feature` draws no
   line along a loft's or a cylinder's seam, nor where a fillet meets its faces, which otherwise
@@ -61,11 +61,11 @@ document of one part.
 
 `--grid` draws the measuring grid (red X and green Y axes) under the model.
 
-`--preview` draws the viewer's Preview in place of a display mode: the model lit in a studio (a
+`--preview` draws the viewer's preview in place of a display mode: the model lit in a studio (a
 key light, softboxes, shadows on itself), in its materials, on a floor with its shadow, in
 perspective. It is the picture for a person, and the one that shows form on a part of one colour: a
 gloss-black shell, a white fairing. Review geometry in the display modes, where edges are drawn.
-The first Preview of a document takes some seconds longer than a mode. It is drawn by the same
+The first preview of a document takes some seconds longer than a mode. It is drawn by the same
 renderer, not a path tracer: glass is a see-through tint, a polished metal reads lighter than the
 viewer's, and nothing is reflected in the floor. A drawing, a board and a schematic have none.
 
@@ -191,7 +191,7 @@ settled on from its report (`settledCamera`: `position`, `target`, `up` and, ort
 ## Mesh files, robots and drawings
 
 - **A mesh** (`.stl`, `.3mf`, `.glb`) takes every display mode, the grid, clip,
-  Explode (a file of several parts) and annotations; `--pose` is refused: a
+  an explode (a file of several parts) and annotations; `--pose` is refused: a
   mesh has no mechanism. A GLB is drawn at rest, its clips not played; its materials
   and base colour textures are drawn.
 - **A robot** (`.urdf`, `.srdf`) is its links' visuals in their colours, faces

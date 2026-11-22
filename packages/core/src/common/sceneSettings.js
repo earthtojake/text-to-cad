@@ -288,17 +288,34 @@ function applyPartColor(settings, partColor) {
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/iu;
 
-/** The theme's background, every stop of it the canvas: one plain colour behind the model. */
+const channels = hex => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16));
+const toHex = values => `#${values.map(value => Math.round(Math.min(255, Math.max(0, value))).toString(16).padStart(2, "0")).join("")}`;
+/** `from` moved `by` of the way to `to` (past it, or before `from`, outside 0..1). */
+const along = (from, to, by) => { const a = channels(from), b = channels(to); return toHex(a.map((value, index) => value + (b[index] - value) * by)); };
+
+/**
+ * The theme's background on the canvas: a `#rrggbb` is one plain colour behind the model, every stop
+ * of it the canvas; a `[top, bottom]` pair (the light viewport's, `lib/viewportTheme.js`) a gradient
+ * down the view. The scene's linear background (`lib/viewer/stageTheme.js`) runs its stops over twice
+ * the view's height, centred, so the view shows its middle half: the stops are set half the span past
+ * each end, and the view's top and bottom are the pair's own colours.
+ */
 function onCanvas(background, canvas) {
+  if (Array.isArray(canvas)) {
+    const [top, bottom] = canvas.map(color => color.toLowerCase());
+    return { ...background, type: "linear", solidColor: bottom, linearStart: along(top, bottom, -0.5), linearEnd: along(top, bottom, 1.5), linearAngle: 90,
+      radialInner: top, radialOuter: bottom };
+  }
   return { ...background, type: "solid", solidColor: canvas, linearStart: canvas, linearEnd: canvas, radialInner: canvas, radialOuter: canvas };
 }
 
 /**
  * Public grouped preset policy; historical display modes are draw details. `preview` asks for
  * Preview's photographic look (Render) over the same display, with Preview's own settings
- * (`previewSettings`). No file is in Render. `canvas`, a `#rrggbb`, is the app's canvas (the
- * `--canvas` token, `lib/appTheme.js`): given, the tools view draws on it in place of the theme's
- * own background, so a 3D view's content area is the 2D views'. Preview keeps its own background
+ * (`previewSettings`). No file is in Render. `canvas`, a `#rrggbb`, is the viewport's canvas
+ * (`lib/viewportTheme.js`), or a `[top, bottom]` pair its gradient: given, the tools view draws on it
+ * in place of the theme's own background, so a 3D view's content area is the 2D views'. `appearance`
+ * is the viewport's light or dark, which the scene's whole look follows, never the app's chrome. Preview keeps its own background
  * (`previewSettings.background`), and a caller that names no canvas (a snapshot) the theme's.
  */
 export function resolveViewSceneSettings({
@@ -325,6 +342,8 @@ export function resolveViewSceneSettings({
   neutralTheme.floor.enabled = false;
   if (typeof canvas === "string" && HEX_COLOR.test(canvas)) {
     neutralTheme.background = onCanvas(neutralTheme.background, canvas.toLowerCase());
+  } else if (Array.isArray(canvas) && canvas.length === 2 && canvas.every(color => typeof color === "string" && HEX_COLOR.test(color))) {
+    neutralTheme.background = onCanvas(neutralTheme.background, canvas);
   }
   const cameraSettings = resolveCamera(DEFAULT_NORMAL_CAMERA, camera, {
     projection: view.camera.projection, focalLength: view.camera.focalLength

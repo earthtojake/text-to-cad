@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { PNG } from 'pngjs';
 
-// The drawing tools (Pencil and Shapes) end to end in a real browser: the viewer's own ink, drawn over the real viewport
+// The drawing tool (Draw: freehand and shapes) end to end in a real browser: the viewer's own ink, drawn over the real viewport
 // and projected into the real model. Unit tests cover the session, the ink geometry and the
 // projection; this is the flow a person actually uses.
 //
@@ -14,7 +14,7 @@ import { PNG } from 'pngjs';
 
 // The chrome over the viewport (the strip and its panels, the cube and its axes, menus) and the
 // stroke preview: none of it is ink in the model.
-const HIDDEN = '[data-cad-tool-groups], [data-flat-panel-pill], [aria-label="View cube"], [data-slot=popover-content], '
+const HIDDEN = '[data-cad-tool-groups], [aria-label="View cube"], [data-slot=popover-content], '
   + '[data-cad-annotation-overlay] canvas { visibility: hidden !important; }';
 // Neon red (#ff2d55, the pen's default) and neon green (#39ff14). The fixture's parts are blue and
 // grey-blue, neither of them red or green.
@@ -25,7 +25,7 @@ const NONE = 10;
 /**
  * @param {{ page: import('playwright').Page, pane: import('playwright').Locator, errors: string[],
  *   update?: () => Promise<void> }} view
- *   A page the harness has opened on a file whose renderer offers Pencil and Shapes; `update`, where the frame's
+ *   A page the harness has opened on a file whose renderer offers Draw; `update`, where the frame's
  *   harness has one, saves the file again and settles once the new revision is on screen.
  */
 export async function runAnnotateScenario({ page, pane, errors, update }) {
@@ -34,14 +34,13 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   const panel = pane.locator('[data-quick-edit-ref="annotation"]');
   const strip = pane.getByRole('group', { name: 'Interaction tools' });
   const tool = name => strip.getByRole('button', { name, exact: true });
-  // The drawing controls: ONE row hung under the strip, for Pencil and Shapes alike — the tools of the one that is up,
-  // what is drawn next, its history.
+  // The drawing controls: ONE row hung under the strip, whichever drawing tool is in hand — what is drawn next.
   const controls = pane.getByRole('toolbar', { name: 'Annotation controls', exact: true });
   const annotateHistory = name => controls.getByRole('button', { name, exact: true });
-  // What a strip tool draws with: a button at the row's start, once the strip tool is up.
-  const chooseTool = async (family, name) => {
-    if (await tool(family).getAttribute('aria-pressed') !== 'true') await tool(family).click();
-    await controls.getByRole('group', { name: `${family} tools` }).getByRole('button', { name, exact: true }).click();
+  // What Draw draws with: a button of the row's tools, once Draw is up (its family taken up with it).
+  const chooseTool = async (_family, name) => {
+    if (await tool('Draw').getAttribute('aria-pressed') !== 'true') await tool('Draw').click();
+    await controls.getByRole('button', { name, exact: true }).click();
   };
   // A setting of what is drawn next, from its dropdown in the row.
   const choose = async (setting, name) => {
@@ -49,7 +48,7 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
     // Color's is a grid of swatches, each a plain item; the rest are radio lists.
     await page.getByRole(setting === 'Colour' ? 'menuitem' : 'menuitemradio', { name, exact: true }).click();
   };
-  // A shape: its button in the row, Shapes up.
+  // A shape: its button in the row.
   const shape = name => chooseTool('Shapes', name);
   const names = group => group.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
   const position = () => page.evaluate(() => window.cadHarness.a.controller.readState().camera.position);
@@ -80,27 +79,28 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
     await page.mouse.move(...from); await page.mouse.down(); await page.mouse.move(...to, { steps: 10 }); await page.mouse.up();
   };
 
-  const draw = tool('Pencil');
+  const draw = tool('Draw');
   await viewport.waitFor();
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   await until('no ink before drawing', seen => seen.red < NONE && seen.green < NONE);
 
-  // Pencil opens on the pen, Shapes on the rectangle; their controls are one row under the strip, no panel of the tool
-  // stack: the colours, then what is drawn next, then the history, all on one line.
-  const drawing = ['Pencil', 'Shapes'];
-  assert.deepEqual((await names(strip)).filter(name => /^(Pencil|Shapes)/.test(name)), drawing, 'the strip has Pencil and Shapes, plain buttons with no chevron');
+  // Draw opens on the pen; its controls are one row under the strip, no panel of the tool stack: both families'
+  // tools, then what is drawn next, all on one line.
+  assert.deepEqual((await names(strip)).filter(name => /^(Draw|Pencil|Shapes)/.test(name)), ['Draw'], 'the strip has Draw, one plain button');
   await draw.click();
   const surface = pane.locator('[data-cad-annotation-overlay]');
   await surface.waitFor();
-  assert.equal(await draw.getAttribute('aria-pressed'), 'true', 'Pencil is the tool');
-  assert.equal(await tool('Shapes').getAttribute('aria-pressed'), 'false');
-  assert.equal(await draw.locator('svg').evaluate(icon => icon.getAttribute('class').includes('lucide-pencil')), true, 'Pencil opens on the pen');
-  assert.equal(await tool('Shapes').locator('svg').evaluate(icon => icon.getAttribute('class').includes('lucide-square')), true, 'Shapes opens on the rectangle');
-  // One row, in order, all on one line: the tools of Pencil, then Color, Stroke width, Placement and Clear.
+  assert.equal(await draw.getAttribute('aria-pressed'), 'true', 'Draw is the tool');
+  assert.equal(await draw.locator('svg').evaluate(icon => icon.getAttribute('class').includes('lucide-pencil')), true, 'Draw opens on the pen');
+  // In order: the seven tools that put ink down, then the Eraser, Colour, Stroke width, Placement, Undo, Redo and Clear.
   const row = await controls.getByRole('button').evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.getBoundingClientRect().top]));
-  assert.deepEqual(row.map(([name]) => name), ['Pen', 'Highlighter', 'Eraser', 'Colour', 'Stroke width', 'Placement', 'Clear annotations']);
+  assert.deepEqual(row.map(([name]) => name), ['Pen', 'Highlighter', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text',
+    'Eraser', 'Colour', 'Stroke width', 'Placement', 'Undo', 'Redo', 'Clear annotations']);
   assert.equal(await controls.getByRole('button', { name: 'Pen', exact: true }).getAttribute('aria-pressed'), 'true', 'the pen is in hand');
-  assert.ok(row.every(([, top]) => top === row[0][1]), 'every control on one line');
+  // Two rows of seven on one surface: the tools that put ink down on the first line, the rest on the second, under them.
+  const tops = row.map(([, top]) => top);
+  assert.ok(tops.slice(0, 7).every(top => top === tops[0]) && tops.slice(7).every(top => top === tops[7]) && tops[7] > tops[0],
+    `seven on one line, seven on the next: ${JSON.stringify(tops)}`);
   assert.equal(await controls.evaluate(row => Boolean(row.closest('[data-cad-tool-stack], [data-tool-panel]'))), false, 'not a panel of the stack');
   const [stripBox, rowBox] = await Promise.all([strip.boundingBox(), controls.boundingBox()]);
   assert.ok(rowBox.y >= stripBox.y + stripBox.height, 'the row hangs under the strip');
@@ -117,25 +117,32 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   await copy.waitFor();
   assert.ok(await moved(before) < 1e-6, 'annotation never moves the camera');
 
-  // Orbited — a right drag over the annotation is the view's — the view keeps the ink where it was
-  // drawn on the model: still red, somewhere else.
+  // Panned — a right drag over the annotation is the view's, as under Select — the view keeps the ink where
+  // it was drawn on the model: still red, somewhere else.
+  const eyeToTarget = () => page.evaluate(() => {
+    const { position, target } = window.cadHarness.a.controller.readState().camera;
+    return position.map((value, index) => value - target[index]);
+  });
+  const facing = await eyeToTarget();
   await page.mouse.move(...at(150, 150));
   await page.mouse.down({ button: 'right' });
   await page.mouse.move(...at(250, 190), { steps: 8 });
   await page.mouse.up({ button: 'right' });
-  // The orbit eases out: the camera is at rest once two readings 100 ms apart agree.
+  // The pan eases out: the camera is at rest once two readings 100 ms apart agree.
   await page.waitForFunction(() => {
     const now = window.cadHarness.a.controller.readState().camera.position.join();
     const resting = window.__annotateCamera === now;
     window.__annotateCamera = now;
     return resting;
   }, null, { polling: 100 });
-  const orbited = await until('the ink orbits with the model',
+  const orbited = await until('the ink moves with the model',
     seen => seen.red > 50 && Math.hypot(seen.x - stroke.x, seen.y - stroke.y) > 20);
-  assert.ok(await moved(before) > 1e-3, 'a right drag orbited the camera');
+  assert.ok(await moved(before) > 1e-3, 'a right drag moved the camera');
+  const turned = Math.hypot(...(await eyeToTarget()).map((value, index) => value - facing[index]));
+  assert.ok(turned < 1e-4 * Math.hypot(...facing), `a right drag pans, never turns the view: ${turned}`);
 
-  // ⌘Z takes the stroke away, ⇧⌘Z brings it back where the view now has it: Undo and Redo
-  // are the keyboard's, not buttons.
+  // ⌘Z takes the stroke away, ⇧⌘Z brings it back where the view now has it: the keys do what the row's
+  // Undo and Redo do.
   await page.keyboard.press('ControlOrMeta+KeyZ');
   await until('Undo removes the stroke', seen => seen.red < NONE);
   await page.keyboard.press('ControlOrMeta+Shift+KeyZ');
@@ -153,11 +160,11 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   await until('Clear annotation removes all ink', seen => seen.red < NONE && seen.green < NONE);
   await copy.waitFor({ state: 'detached' });
 
-  // The Highlighter, a button of Pencil's row: the strip's Pencil shows it, and a drag puts a stroke down (Quick Edit's chip);
+  // The Highlighter, a button of the row: Draw shows it, and a drag puts a stroke down (Quick Edit's chip);
   // it opens in the highlighter's own yellow, not the pen's green.
   await chooseTool('Pencil', 'Highlighter');
   assert.equal(await controls.getByRole('button', { name: 'Colour', exact: true }).locator('span').evaluate(swatch => swatch.style.backgroundColor), 'rgb(255, 230, 0)', "the highlighter's colour is its own");
-  assert.equal(await draw.locator('svg').evaluate(icon => icon.getAttribute('class').includes('lucide-highlighter')), true, 'Pencil shows the highlighter');
+  assert.equal(await draw.locator('svg').evaluate(icon => icon.getAttribute('class').includes('lucide-highlighter')), true, 'Draw shows the highlighter');
   assert.equal(await draw.getAttribute('aria-pressed'), 'true');
   await drag(at(-80, 10), at(60, 40));
   await copy.waitFor();
@@ -186,18 +193,15 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   await page.keyboard.press('Delete');
   await until('Delete deletes the stroke and keeps the rectangle', seen => seen.green > 100 && seen.green < drawn.green - 50);
 
-  // The rectangle picked, its bar: Fill fills it in its colour, Delete deletes it, fill and all.
+  // The rectangle picked, its bar: Delete deletes it.
   await page.mouse.click(...at(0, -120));
   const bar = pane.getByRole('toolbar', { name: 'Selected annotation' });
   await bar.waitFor();
-  await bar.getByRole('button', { name: 'Fill', exact: true }).click();
-  assert.equal(await bar.getByRole('button', { name: 'Fill', exact: true }).getAttribute('aria-pressed'), 'true', 'Fill is lit once filled');
-  await until('the rectangle is still drawn, filled', seen => seen.green > 100);
   await bar.getByRole('button', { name: 'Delete', exact: true }).click();
-  await until('Delete on the bar deletes the rectangle and its fill', seen => seen.green < NONE);
+  await until('Delete on the bar deletes the rectangle', seen => seen.green < NONE);
   await bar.waitFor({ state: 'detached' });
   await page.keyboard.press('ControlOrMeta+KeyZ');
-  await until('Undo brings them back', seen => seen.green > 100);
+  await until('Undo brings it back', seen => seen.green > 100);
 
   // Back in Select, an ordinary left drag still presents new 3D frames with ink.
   const selectedCamera = await position();
@@ -209,11 +213,12 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   }, selectedCamera);
   assert.notDeepEqual(await viewport.screenshot({ style: HIDDEN }), selectedFrame, 'Select orbit presents a new frame after drawing');
 
-  // An update of the model discards ink drawn over the revision before it, and the panel with it.
+  // An update of the model keeps the ink: its marks are in the scene's coordinates, so they stand where they were
+  // drawn, and nothing a person drew is thrown away; Quick Edit still carries it.
   if (update) {
     await update();
-    await until('the update discards the ink', seen => seen.green < NONE && seen.red < NONE);
-    await panel.waitFor({ state: 'detached' });
+    await until('the ink stays across the update', seen => seen.green > 100);
+    await panel.waitFor();
   }
   assert.deepEqual(errors, []);
 }

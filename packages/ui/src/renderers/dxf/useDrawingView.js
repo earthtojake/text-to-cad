@@ -28,11 +28,13 @@ const NO_LAYERS = new Set();
  * @param {(ctx: CanvasRenderingContext2D, view: { transform: object, pixelRatio: number, width: number, height: number }) => void} [options.overlay]
  *   Painted over the drawing in each frame.
  * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
+ * @param {Parameters<typeof useFlatCanvasView>[0]["takesAway"]} [options.takesAway]  What a tap would take out of the
+ *   selection: such a tap waits the double-click window (`useFlatCanvasView`'s).
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
  *   A pointer resting over the canvas with nothing pressed (null: it left).
  */
 export function useDrawingView({ drawing, restored = null, colorScheme = "light", onViewMoved, hiddenLayers = NO_LAYERS,
-  overlay = null, onTap = null, onHover = null }) {
+  overlay = null, onTap = null, takesAway = null, onHover = null }) {
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
   const hiddenRef = useRef(hiddenLayers);
@@ -48,7 +50,7 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
     overlayRef.current?.(ctx, { transform, pixelRatio, width, height });
   }, []);
   const view = useFlatCanvasView({ content: drawing, bounds: drawing?.bounds ?? null, restored, colorScheme, onViewMoved, paint,
-    onTap, onHover, fitBox: fitBoardBounds, clearStrip: true, middlePan: true, orbitPan: true });
+    onTap, takesAway, onHover, fitBox: fitBoardBounds, clearStrip: true, middlePan: true, orbitPan: true });
   const { requestPaint, encode } = view;
 
   // A layer shown or hidden: the same view, without it.

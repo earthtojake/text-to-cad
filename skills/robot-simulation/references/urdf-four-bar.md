@@ -35,7 +35,7 @@ independent coordinate, and put this namespaced element on the input joint, whic
   continuous one has none), and the linkage must close over the driver's whole range: its `<limit>`,
   or one turn for a continuous driver.
 - **What moves it.** The viewer and `cad urdf snapshot` place the input joint from the driver's
-  value. It has no slider or handle, a snapshot's `--pose` refuses it by name, and an SRDF group
+  value. The person cannot pose it in the viewer, a snapshot's `--pose` refuses it by name, and an SRDF group
   state cannot set it, as with a mimic joint.
 - **What checks it.** `cad urdf validate` checks the element alone: at most one on a joint, every
   length positive, both zero angles numbers, the joint and its driver revolute or continuous on one

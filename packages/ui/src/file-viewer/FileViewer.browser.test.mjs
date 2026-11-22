@@ -88,3 +88,29 @@ test("the renderer is not re-rendered by the frame's own chrome: a navbar action
   await settle();
   assert.equal(await page.evaluate(() => window.harness.renders["root-a"]), before, "no renderer render for its own navbar action, or a width that does not cross the breakpoint");
 });
+
+// A library card's picture is drawn by a viewer of its own, out of sight at 480 × 360 (`OffscreenPicture.tsx`). That viewer
+// is under the phone breakpoint, and the page's type once followed it: Home's text grew a step while its cards got pictures.
+test("a viewer drawn out of sight for a picture never changes the page: its layout pinned, no data-viewer-layout, the page's type its own", async () => {
+  await reset();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await settle();
+  const type = () => page.evaluate(() => ({ xs: getComputedStyle(document.documentElement).getPropertyValue("--cad-text-xs").trim(),
+    name: getComputedStyle(document.querySelector('[data-testid="primary"] [data-file-name]')).fontSize,
+    layouts: [...document.querySelectorAll("[data-viewer-layout]")].map((node) => node.getAttribute("data-viewer-layout")) }));
+  const desktop = await type();
+  assert.deepEqual(desktop.layouts, ["desktop"]);
+  // As OffscreenPicture draws it: pinned, it neither measures nor carries the attribute the page's stylesheet reads.
+  await page.evaluate(() => window.harness.picture("pinned"));
+  await page.getByTestId("picture").locator("[data-viewer-pinned-layout]").waitFor({ state: "attached" });
+  await settle();
+  assert.deepEqual(await type(), desktop, "a pinned picture viewer leaves the page as it was");
+  assert.equal(await page.getByTestId("picture").locator("[data-viewer-pinned-layout]").getAttribute("data-viewer-pinned-layout"), "mobile");
+  // And a viewer in the picture's box that measured itself a phone's is still not the page's.
+  await page.evaluate(() => window.harness.picture("measured"));
+  await page.getByTestId("picture").locator('[data-viewer-layout="mobile"]').waitFor({ state: "attached" });
+  await settle();
+  const measured = await type();
+  assert.deepEqual([measured.xs, measured.name], [desktop.xs, desktop.name], "a phone-sized viewer out of sight never sets the page's type");
+  await page.evaluate(() => window.harness.picture("none"));
+});

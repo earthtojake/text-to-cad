@@ -199,6 +199,19 @@ class ViewerApp(CadApp):
             return super().delete_document(ident)
         return self.server.delete(ident)
 
+    def set_parameters(self, ident, values):
+        # The engine's own ``set`` (``Server.set_parameters``, the daemon's ``parameters.Setting``): the one path
+        # that writes a model's parameters into its script.
+        if self.server.set_parameters is None:
+            return super().set_parameters(ident, values)
+        return self.server.set_parameters(ident, values)
+
+    def preview_parameters(self, ident, values, page):
+        # The engine's own preview (``Server.preview_parameters``, the daemon's ``parameters.Previewing``).
+        if self.server.preview_parameters is None:
+            return super().preview_parameters(ident, values, page)
+        return self.server.preview_parameters(ident, values, page)
+
     def _holds_model(self, ident):
         # Held by this engine's server, and no file: a model's (or a shape's). Else the engine's
         # records, which know a model it holds on disk only.

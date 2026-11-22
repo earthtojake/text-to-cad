@@ -1,18 +1,19 @@
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useContext, useMemo, useState, useSyncExternalStore } from "react";
 import {
   xbfCoupledPairs, xbfCouplingControls, xbfCouplingValues, xbfCouplingWrite, xbfCouplings, xbfPoseControls,
   xbfPoseValues, xbfSamePose, xbfUnposable, xbfOtherWarnings
 } from "@cad/core/lib/xbf/xbfKinematics.js";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
+import { AnimationControls, JointsMotionContext, routineAway } from "../kit/tools/playbar/AnimationSection.jsx";
 import { FileSheetStatusText, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
-import { DEFAULT_POSE_VALUE, KinematicsPoseRow, NO_PRESET_VALUE } from "../kit/inspector/kinematicsControls.jsx";
+import { DEFAULT_POSE_VALUE, KinematicsPoseRow, KinematicsResetRow, NO_PRESET_VALUE } from "../kit/inspector/kinematicsControls.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import { useI18n } from "@cad/ui/i18n";
 
 // An engine document's Position: the view's panel's tab exactly as a STEP's is (the STEP
 // renderer's `PoseControlsSection.js` and `MotionControlsSection.js`, copied: one again at the
-// renderers' migration) -- headed "Position", the Pose row with its Reset (Default, the
+// renderers' migration) -- headed "Joints", the Pose row with its Reset (Default, the
 // document as built, then its configurations), then a slider per coupling (a constraint moving
 // several joints by ratio, 0 as built, over the range its joints' limits leave it), then a slider
 // per value of every other pair: an angle for a revolute pair, a distance for a prismatic one,
@@ -153,18 +154,22 @@ export function useXbfPose(kinematics) {
  *   it when not given). `preset`: the configuration chosen, `DEFAULT_POSE_VALUE` as built,
  *   `NO_PRESET_VALUE` set by hand. `onValues` takes every pair's values, and every coupling's when a
  *   coupling's slider moved. `motion`: the motion that owns the pose while it does (`useXbfMotion.js`):
- *   the section shows its frame, read-only, each coupling where the frame stands on it, and takes no
- *   edit (taking the motion up put Position's own pose at rest: one motion at a time).
+ *   the section shows its frame, each coupling where the frame stands on it, and stays as editable as
+ *   ever — nothing that moves the model disables another (one motion at a time): an edit here first lets
+ *   the motion go (`onRelease`, explicitly, so an edit that lands on the pose as built still frees it),
+ *   then sets the pose, a slider from the frame it showed (nothing jumps), a named position or Reset outright.
  */
 export default function XbfPositionSection({ kinematics, motion = null, ...own }) {
   const frame = useMotionFrame(kinematics, motion);
   if (!frame) return <PositionBody kinematics={kinematics} {...own} />;
   const atRest = xbfSamePose(frame, xbfPoseValues(kinematics));
+  const takeOver = act => (...args) => { motion.onRelease?.(); return act?.(...args); };
   return <PositionBody kinematics={kinematics} values={frame} couplings={xbfCouplingValues(kinematics, frame)}
-    preset={atRest ? DEFAULT_POSE_VALUE : NO_PRESET_VALUE} readOnly onValues={own.onValues} onPreset={own.onPreset} onReset={own.onReset} />;
+    preset={atRest ? DEFAULT_POSE_VALUE : NO_PRESET_VALUE} onValues={takeOver(own.onValues)} onPreset={takeOver(own.onPreset)} onReset={takeOver(own.onReset)} />;
 }
 
-function PositionBody({ kinematics, values, couplings = null, preset, onValues, onPreset, onReset, readOnly = false }) {
+function PositionBody({ kinematics, values, couplings = null, preset, onValues, onPreset, onReset }) {
+  const routine = useContext(JointsMotionContext);
   const usage = useControlUsage();
   const { t } = useI18n();
   const controls = xbfPositionRows(kinematics);
@@ -173,22 +178,21 @@ function PositionBody({ kinematics, values, couplings = null, preset, onValues, 
   const poseNames = Object.keys(kinematics?.configurations || {}).filter(name => String(name || "").trim());
   const unposable = xbfUnposable(kinematics);
   const others = xbfOtherWarnings(kinematics);
+  const posable = Boolean(poseNames.length || controls.length || coupled.length);
   // Each slider fills from where its joint is as built (a coupling's 0).
   const asBuilt = useMemo(() => (kinematics ? xbfPoseValues(kinematics) : null), [kinematics]);
   const change = (control, next) => {
-    if (readOnly) return;
     const written = writeXbfPosition(values, control, next);
     if (written) onValues(written);
   };
   const couple = (control, next) => {
-    if (readOnly) return;
     const written = xbfCouplingWrite(kinematics, values, shown, control.coupling, next);
     if (written) onValues(written.values, written.couplings);
   };
   // A joint a person moves, counted once a drag (`usage/controls.js`).
   const slider = (control, currentValue, writeValue, title, rest = 0) => {
     const write = (...args) => { usage.changed("position_joint"); return writeValue(...args); };
-    return <SliderField key={control.id} label={control.label} labelTitle={title} name={control.label} disabled={readOnly}
+    return <SliderField key={control.id} label={control.label} labelTitle={title} name={control.label}
       text={`${formatControlNumber(currentValue)}${unitSuffix(control.unit)}`}
       onTextCommit={text => write(control, parseFileSheetNumberInput(text, { fallback: currentValue, min: control.min, max: control.max }))}
       textLabel={t("position.sliderValue", { name: control.label })}
@@ -196,10 +200,20 @@ function PositionBody({ kinematics, values, couplings = null, preset, onValues, 
       origin={Math.min(Math.max(Number(rest) || 0, control.min), control.max)}
       onValueChange={next => write(control, next ?? currentValue)} />;
   };
+  // Its mechanism's motion, where the shell hands it here (`JointsMotionContext`): the tab's top section, then one
+  // hairline and the joints, as the Display card's sections are (the tab is "Joints": no heading repeats it); one
+  // Reset for both.
+  const held = routine && !routine.disabled ? routine : null;
   return <ToolPanel id="position" title={t("position.title")} label={t("position.controls")} fit="details">
-    <div className="space-y-1 pb-2 pt-0.5">
-      {poseNames.length || controls.length || coupled.length ? <KinematicsPoseRow poses={poseNames.map(name => ({ value: name, label: name }))}
-        activeValue={preset} onSelect={onPreset} onReset={onReset} disabled={readOnly} /> : null}
+    <div>
+      {routine ? <>
+        <div className="flex flex-col gap-1 pb-3" data-joints-motion="">
+          <AnimationControls runtime={routine.runtime} kind="motion" disabled={routine.disabled} />
+        </div>
+        <div className="border-t border-border pt-3" data-joints-rule="" />
+      </> : null}
+      {posable ? <KinematicsPoseRow poses={poseNames.map(name => ({ value: name, label: name }))}
+        activeValue={preset} onSelect={onPreset} onReset={onReset} /> : null}
       {coupled.map(control => slider(control, Number(shown[control.coupling]) || 0, couple,
         t("position.couples", { name: control.label, pairs: control.pairs.join(", ") })))}
       {controls.map((control) => {
@@ -210,6 +224,8 @@ function PositionBody({ kinematics, values, couplings = null, preset, onValues, 
       {/* What the document's mechanism cannot pose, and why. */}
       {[...unposable].map(([label, why]) => <FileSheetStatusText key={label}>{t("position.cannotPose", { name: label, reason: why })}</FileSheetStatusText>)}
       {others.map(text => <FileSheetStatusText key={text}>{text}</FileSheetStatusText>)}
+      {posable ? <KinematicsResetRow activeValue={preset} onReset={onReset}
+        routine={routine ? { away: Boolean(held) && routineAway(held.runtime), reset: () => held.runtime.onRelease?.() } : null} /> : null}
     </div>
   </ToolPanel>;
 }

@@ -32,6 +32,7 @@ this app. The Python wheel consumes only the production build.
 src/
   App.tsx               the CadViewer's browser host: URL, history, title, appearance, the file menu and the library
   main.tsx              host/client bootstrap and cleanup
+  StartingView.tsx      the page while it asks its server what it is: the app's own frame, inert
   host/                 browser clipboard, prompt delivery, the app menu's links, reload under a new server
   persistence/          the tab record in sessionStorage
   client/               appearance control and styling
@@ -62,14 +63,14 @@ and assets, so the app does not scan another package's source.
   names them (`f:`/`e:`/`v:` names), never by bytes, ordinals or positions, so a
   copied ref survives a rebuild.
 - **Independent motion**: a document's mechanism poses its parts in the page
-  (Position); the engine serves the document, never a frame of it.
+  (its Joints tab); the engine serves the document, never a frame of it.
 - **Loud failure**: a missing entry, an unresolvable ref, or a file the engine
   cannot read surfaces as an alert — never a silently wrong scene.
 - **The viewer is read-only**: it never changes a design. It writes no
   document's content and no file of one (an export downloads a new file; the
   home's Delete removes the engine's record and cache of a document, never its
   file). Changing a design belongs to the agent and the code; every viewer tool
-  (Select, Measure, Annotate, Quick Edit, the filters and displays) exists to
+  (Select, Measure, Draw, Quick Edit, the filters and displays) exists to
   show the person the design and to give the agent feedback.
 
 ## Launching
@@ -183,12 +184,22 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
   bytes: within it, reopening a document reads and meshes nothing again; past it the least
   recently used leave memory first and are read again when asked.
   Inactive WebGL scenes are released, and a file's view (its camera, Display
-  settings and pose) lasts only while it is the file on screen: a refresh brings it
-  back, and leaving the file drops it.
+  settings and pose) is kept for the file on screen, which a refresh brings
+  back; a file left is set aside for the page and given back when it is shown again.
 - **The page asks browsers not to translate it** (`translate="no"` and `class="notranslate"` on `<html>`, and
   `<meta name="google" content="notranslate">`, in `index.html`): the viewer speaks its own locales, and a
   browser's page translation rewrites text nodes React owns, so React's next commit throws `NotFoundError` and
   the page can go blank. The CAD app's two pages say the same. Only `classList` touches `<html>`'s class.
+- **The page's frame is there from its first paint, and nothing in it moves as the app takes over.** Before the
+  script runs, `index.html` draws the navbar's bar (40px, a phone's 48px under 600px; its colour and border read from
+  the stylesheet's tokens, `--sidebar` and `--border`, in the tab's theme its inline script set; `src/shell.test.mjs`
+  holds it to the navbar's own). While the page asks the server what it is (`main.tsx`), it draws the app's own frame
+  as the app's first frame does (`StartingView.tsx`): the real file viewer, inert and asking nothing, its file a
+  source whose every question never answers — the navbar with the panel's toggle, the logo, the name's empty place,
+  its menu and the ⋯; for a document's URL the panel's stand-in (the file's kept choice in this tab's record) and the
+  loading indicator under the navbar on the viewport's Background; for the home's, the home's navbar over the page's
+  background and the indicator. Its words are labels and the loading line the page has always shown in the browser's
+  language: the person's own comes with the server's description, so nothing else is said before it.
 - **Vite's transform cache can outlive HMR and hard reloads.** If a source
   edit does not show up, restart the dev server and delete
   `node_modules/.vite`.
@@ -205,8 +216,8 @@ inspected first. A held model's menu also has Copy path and Open in › Finder (
 File manager) on the script that builds it; where that script was moved or deleted, Open in is
 disabled, its hint "The source was moved or deleted." Open in also lists the apps the server finds
 on this computer for the document's files (`GET /api/v1/local/open-in`, as the menu opens): the
-source's, each export's as "App (file name)", then Default app; a choice is `POST /api/v1/local/open`. The navbar's right end holds only a dismissed alert's
-icon, when there is one. For a model it captures the displayed revision and writes the document as its code built it: every
+source's, each export's as "App (file name)", then Default app; a choice is `POST /api/v1/local/open`. The navbar's right end holds no export control: a dismissed
+alert's icon, when there is one, then the view's Display and, for a 3D view or a board, Preview. For a model it captures the displayed revision and writes the document as its code built it: every
 part, as authored. The menu chooses a format alone; a posed or partial file is a function
 in the model's code. A STEP, XBF or held model offers STEP, STL, 3MF, GLB and XBF (an XBF's
 XBF is its own bytes), and DXF where the view draws it flat on z=0; on a GLB, STL or 3MF page Export converts the file shown, at the
@@ -293,38 +304,35 @@ temporary fixtures and a private server/cache; it runs exactly what CI runs
 screenshots and bounded failure diagnostics; the runner cleans up its project and
 processes on exit.
 
-### Branded loading indicator
-
-`@cad/ui/loading-icon` exports the decorative `LoadingIcon` independently of
-the CAD renderer, so a host can show loading feedback without eagerly importing the
-CAD surface. `size` controls its pixel dimensions (default 96), `className` its
-placement, and `active={false}` uses the still pose. The host owns status text.
-It also stays still for OS/app reduced motion and hidden documents. See
-the UI package's asset documentation for asset provenance and regeneration.
-
 ## Current viewer behavior
 
-The shared [viewer design system](../../packages/ui/docs/settings-ui.md) is the
-authoritative contract for the [toolbar](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle),
-[view's panel and mobile layout](../../packages/ui/docs/settings-ui.md#the-views-panel-and-the-tool-stack),
+The shared [design system](../../packages/ui/docs/design-system.md) and
+[viewer layout and patterns](../../packages/ui/docs/viewer-ux.md) are the
+authoritative contract for the [toolbar](../../packages/ui/docs/viewer-ux.md#tools),
+[view's panel](../../packages/ui/docs/viewer-ux.md#the-panel) and
+[mobile layout](../../packages/ui/docs/viewer-ux.md#a-phone),
 settings controls, selection and
-[Preview](../../packages/ui/docs/settings-ui.md#camera-animation-and-preview).
+[Preview](../../packages/ui/docs/viewer-ux.md#camera-animation-and-preview).
 Keep those rules there rather than maintaining a separate web layout
 specification.
 
 The web host owns URL/history, the tab's persistence, appearance, version links
 and native service adapters. Shared renderers own all model interaction. STEP and
 robots open in Select, its selection filter the chevron after its button; the tool in hand's
-controls are one row under the strip. An assembly's Model (Links for a robot) and Position
+controls are a row under the strip (Draw's, two). An assembly's Model (Links for a robot) and Joints
 are tabs of the view's panel, docked at the left, whatever the tool. The
 file's name in the navbar opens its name menu: Models and Files (the explorer).
-Every file's tools are on a strip at the top centre (each format's are the
-[design system's table](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle)).
-Every 3D file's strip ends in Projection, Display (its settings, a popover that opens down) and
-Preview, a board's in Flip, 2D/3D and Display; the bottom-right corner holds the view cube, or a
-flat view's zoom pill, and Quick Edit is at the top-right. DXF is a
-2D canvas with pan, zoom, snapshot and Quick Edit, with no view controls on its strip; one with
-layers and blocks to read has the view's panel, its Layers tab.
+Every file's tools are on a strip at the top centre (each format's are
+[the viewer's tools](../../packages/ui/docs/viewer-ux.md#tools)).
+How the file is looked at is the navbar's **Display** (the plain cube, a card: a 3D view's Projection, then Style,
+Background and Show grid; a board's Side, Mode, in 3D Projection, then Style and Background; each with Reset at its
+bottom right; a drawing's or a schematic's the Background alone), then a 3D file's or a board's Preview; the top-right corner
+holds the camera's own control alone, the view cube or a flat view's "100%" zoom; the one panel, at the
+left, is the file's structure and, as tabs after it, its Params, Joints and Animation; what is selected is read
+in Quick Edit's chip list; and Quick Edit is a bar at the
+bottom, centred on the window as the strip is, the bottom row its alone. DXF is a
+2D canvas with pan, zoom, snapshot and Quick Edit, its strip Select, Draw and Measure (no view controls on it), its
+Display card the Background alone, and its Layers tab in the view's panel from the first frame.
 
 The name menu is a popover under the file's name, two tabs over the explorer's own rows:
 **Models**, the library's eight latest models (no file), by last activity, each its glyph, its
@@ -333,19 +341,23 @@ explorer: the file's folder (a model's, the folder the explorer was last in this
 person's home folder), one folder at a
 time, with "Filter files..." to find a file anywhere under it. It opens on Models over a model
 and on Files over a file. Below 600px of
-FileViewer width (a phone) the chrome is touch-sized and the panel's pill leads the tool strip. Preview is the shared shell's button after Display on the strip: it takes the whole page,
+FileViewer width (a phone) the chrome is touch-sized (the phone's scale) and the panel is a sheet under the navbar.
+Preview is the navbar's button right of Display (with no navbar, the strip's last tile): it takes the whole page,
 hiding the navbar, the tool strip and Quick Edit, opens still (Orbit, in its settings, is
 off at every entry), draws the model in Render — the one place it is drawn — and draws its
 own bar in the navbar's place, over the view's top edge on no surface: the file's name at
 its left, Preview settings (Orbit, then Render's settings, a panel sliding in from the right
 edge) and Exit preview at its right, fading with the playbar while the pointer rests. Routines play
-from the playbar under the model, in the tools view and in Preview (on entry only with Autoplay on); the host passes no Preview props.
+from the panel's Animation tab in the tools view (a mechanism's motion from the top of its Joints tab; no
+playbar under the model there)
+and from Preview's playbar in Preview (at rest on entry); the host passes no Preview props.
 The file on screen keeps its view in the tab — its camera, Display settings
 (explode and clip included) and pose — so a refresh restores it; leaving the file for
-another or for the home drops it, and opening it again frames it anew (see
+another or for the home sets its view aside for the page, which gives it back when the file is shown again, and a
+file the page has not shown opens framed anew (see
 [storage](docs/storage.md)). A rebuild of the file on screen keeps the camera once the person
 has moved it, and fits it again to a changed model while they have not
-([the camera rule](../../packages/ui/docs/settings-ui.md#camera-animation-and-preview)).
+([the camera rule](../../packages/ui/docs/viewer-ux.md#camera-animation-and-preview)).
 
 Authored material information lives in the selection's reference details; editing
 it requires changing the source model or annotations. The viewer has no Materials
@@ -355,8 +367,8 @@ Render and loading playbooks.
 A STEP or an `.xbf` loads its structure, then its parts, each at the mesh the engine
 made of it, and a new version fetches only the parts it changed (the shared
 [loading](../../packages/ui/docs/loading.md) playbook). The
-viewport carries opening/update status, centred at its top (a progress icon on
-mobile); initial loading may also use the viewport overlay, and an error is a card over the viewport whose Details keep the complete
+viewport carries the opening as its one loading indicator, centred in it, and an update's status centred under
+the strip (a progress icon on mobile); an error is a card over the viewport whose Details keep the complete
 compiler output, whose Retry reloads only that file and whose Report Issue opens a
 new issue titled "Issue: ", labelled `bug`, filled in from the card. A failed update the
 model survives can be dismissed, leaving the previous version to inspect.
@@ -396,17 +408,18 @@ No snapshot is written while drawing or typing, and no image is rendered.
 
 The bare URL is the home: the library every CAD view shares (`@cad/ui/library`),
 and nothing else, laid out after Figma's Recents in a centred column (1128px at most, on 24px
-gutters, 44px under the navbar). It starts with one control row of 24px
-controls: "Recent" at the left, a 17px heading on the row's line, and at the right the type filter, a dropdown
+gutters, 32px under the navbar). It starts with one control row of 28px
+controls: "Recent" and its count at the left, the 15/20 heading on the row's line, and at the right the type filter, a dropdown
 ("All ▾": All, Models, Files) where both kinds are listed, the search, the grid/list
 switch and, where the server's computer has a file chooser (`pick` in its info), **Open**,
 which opens the desktop's own chooser (`POST /api/v1/local/pick`, `cad_server._internal.picker`) and shows
-the file picked. The grid's tiles are transparent with a 1px border, at least 280px wide (three across
-the full column): a picture on the muted fill, then, in a compact caption, the kind's glyph (a model's cube, a
-file's plain file outline, whatever its kind) beside its name over its last activity with its verb ("Edited now",
+the file picked. The grid's tiles are framed cards, at least 232px wide (four across the full column): the
+picture (the light viewport's, on the model area's light gradient in both themes, its format's badge at its
+top-left), then, in a compact caption, the kind's glyph (a model's cube, a file's plain file outline, whatever
+its kind) beside its name over a file's size (the server's `size`) and its last activity with its verb ("Edited now",
 "Viewed 5m ago", "Edited 2h ago", "Viewed 3d ago", then the short date: Edited when it changed after it was last
-opened, Viewed when it was opened after it last changed). The list is a table: Name, Updated and Created over 40px
-rows, each a document's glyph and name and those two ages with no verb. Every model is a tile and a row of
+opened, Viewed when it was opened after it last changed). The list is a table: Name, Kind, Size, Updated and Created
+over 44px rows, each a document's small picture and name, its format, its size and those two ages with no verb. Every model is a tile and a row of
 its own, nothing folded, and none is tied to the script it was built from: a model shows its
 name, its glyph and its age. The pin and the ⋯ appear on hover (at a tile's picture's corner, at a row's end); a
 pinned one keeps its pin. The ⋯ menu holds Open, a file's Copy path and Reveal (a model has
@@ -488,10 +501,9 @@ renderer's selection action, rather than the file menu.
 
 ### Shared interface defaults
 
-The host body uses the shared `text-ui` token (13px at the normal root scale).
-Menus, tabs and tree rows follow the same default from
-[`@cad/ui`](../../packages/ui/README.md); settings sheets preserve their
-compact 11px labels and values. The shared renderer owns reference
+The host body uses the shared `text-ui` token (13/20 at the normal root scale: the navbar's and the dialogs').
+Menus, tabs, the panel's tree rows and settings sheets are a step under it, `text-xs` (12/16), set by
+[`@cad/ui`](../../packages/ui/README.md)'s primitives; a phone's scale takes each step 2px up. The shared renderer owns reference
 layout, projected-bounds camera fitting and labeled orientation axes, so the CAD app
 and the web stay consistent without host-specific copies of those controls.
 
@@ -504,17 +516,22 @@ which opens the name menu (Models and Files), with its ⋯ (Export, over a file 
 person's settings (Language — Automatic or a named language —, Telemetry, Theme), Send feedback (a new issue titled "Feedback: "),
 GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
 (X), as in the CAD app, over a file and on the home alike.
-Projection, Display and Preview (a board's Flip, 2D/3D and Display) are the view's, at the tool
-strip's end, never the navbar's;
+Its first control, before the logo, is the panel's toggle; at its right end the view portals its own Display (the
+plain cube) and a 3D file's or a board's Preview;
 in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
 links open in a new tab. The page never tells of a newer release: cad updates itself, and the agent the rest.
 The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
+A document's id is never its name, in the navbar or the title: the page asks for the document its URL names
+beside the server's description (`main.tsx`), into the client's catalog, so its first frame has its name where the
+server says it in time; the paint never waits for it, and until the catalog answers the name's place is empty and the
+title "text-to-cad". Moving between documents, the name is the home's card's, or the one a document had when it
+was shown before, until the catalog's; a file opened by its path and not found is named by its path's last segment.
 Appearance (System, Light, Dark) is the app menu's Theme row, the tab's choice (`colorScheme`,
-over a file and on the home); the page has no light/dark button of its own. The original animated mark remains the shared LoadingIcon
-for loading states. The C and CAD marks are the UI package's; the favicons are this
+over a file and on the home); the page has no light/dark button of its own. Loading states are the UI package's one
+indicator, a step line over a thin bar, with no mark. The C and CAD marks are the UI package's; the favicons are this
 app's, exported alongside the docs brand assets. See
 [the brand recipe](../../scripts/brand/README.md).
 

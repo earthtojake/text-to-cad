@@ -82,8 +82,8 @@ There is no `metals.steel()`: plain steel is `mild_steel()`. A grade is a name, 
   Hex strings avoid that ambiguity.
 
 A transmissive part is one fade, never two, in every file of it. What draws transmission (the
-viewer's Preview and shaded modes, a GLB in a path tracer) draws it opaque with its transmission;
-what draws none (the viewer's X-ray and Parts, a snapshot, a 3MF) draws it at a preview alpha the
+viewer's preview and shaded modes, a GLB in a path tracer) draws it opaque with its transmission;
+what draws none (the viewer's `xray` and `parts` modes, a snapshot, a 3MF) draws it at a preview alpha the
 material setter infers (`transmission=1` gives `0.3`, even with PBR `opacity=1`). The colour's
 alpha does not fade it further; to fade it everywhere, give the look a PBR `opacity` below 1.
 

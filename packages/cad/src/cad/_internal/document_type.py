@@ -112,12 +112,15 @@ class DocumentType(types.ModuleType):
             return lookup(self.__name__, name)
         except AttributeError:
             pass
-        has = [*(["read"] if entry.reader else []), *entry.operation_names]
+        has = [*(["read"] if entry.reader else []), *entry.operation_names, *self._declarations]
         raise AttributeError(f"cad.{entry.id} has no {name!r}; it has {', '.join(has)}")
+
+    #: What a script declares with the type beside its decorator, by name: none but the model's (``ModelType``).
+    _declarations: tuple[str, ...] = ()
 
     def __dir__(self) -> list[str]:
         entry = self.entry
-        names = {*super().__dir__(), *entry.operation_names, *(["read"] if entry.reader else [])}
+        names = {*super().__dir__(), *entry.operation_names, *(["read"] if entry.reader else []), *self._declarations}
         return sorted(name for name in names if not name.startswith("_") or name.startswith("__"))
 
     def __repr__(self) -> str:
@@ -167,7 +170,20 @@ def _what(source: Any) -> str:
 
 
 class ModelType(DocumentType):
-    """``cad.model``: the one type with no file, whose decorator is the engine's model itself."""
+    """``cad.model``: the one type with no file, whose decorator is the engine's model itself, and whose
+    script declares its parameters with it (``model.param``, ``cad.engine.parameters.param``: the standard
+    library alone, so ``import cad`` stays kernel-free)."""
+
+    _declarations = ("param",)
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "param":
+            # The function itself, never a wrapper: it reads the frame that calls it (a module's top level).
+            from cad.engine.parameters import param
+
+            self.__dict__[name] = param
+            return param
+        return super().__getattr__(name)
 
     def __call__(self, target: Any = None, /, *, name: str | None = None, animations: Any = None) -> Any:  # type: ignore[override]
         """``@model`` or ``@model(name=...)``: declare a model; ``model(shape, name=...)``: hand a shape over as

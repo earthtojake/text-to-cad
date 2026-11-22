@@ -1,64 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LoaderCircle, Play, SlidersHorizontal, X } from "lucide-react";
-import { Button } from "@cad/ui/primitives/button";
-import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
-import { TooltipHint } from "@cad/ui/primitives/tooltip";
-import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
-import { cn } from "@cad/ui/utils";
 import { useI18n } from "@cad/ui/i18n";
-import { usePreviewIdle } from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import { alertDismissible, useAlertDismissal } from "../status/ViewerAlertCard.jsx";
 import { modelUpdateStatus } from "../status/ViewUpdateStatus.jsx";
-import DisplayPopover, { DisplayMenuItems } from "./DisplayPopover.jsx";
-import ProjectionToggle, { otherProjection } from "./ProjectionToggle.jsx";
 import { viewportZoom, zoomViewControl } from "./ZoomControl.jsx";
-import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
-import PreviewSettings from "./PreviewSettings.jsx";
 import { withGroups } from "../../../annotation/geometry.js";
 import { BoxSelectGesture } from "../tools/select/useBoxSelectGesture.js";
 import { takeInkInBox } from "../tools/select/boxTake.js";
-import { useStripButtonClass } from "../tools/FloatingToolBar.js";
 import { AnnotationToolbar } from "../../../annotation/toolbar.jsx";
 import ToolStack from "../tools/ToolStack.jsx";
 import PreviewPlaybar from "../tools/playbar/PreviewPlaybar.jsx";
+import AnimationSection, { JointsMotionContext } from "../tools/playbar/AnimationSection.jsx";
+import NavbarViewControls, { useNavbarViewControls } from "./NavbarViewControls.jsx";
+import { useDisplaySettings, viewGroups3d } from "./DisplaySettings.jsx";
+import { DISPLAY_DEFAULTS } from "../view-settings/viewerDisplaySettings.js";
 import { animationControlsHaveContent } from "../tools/playbar/AnimationTimeControl.js";
 import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
 import ShellViewport from "./ShellViewport.jsx";
 import PreviewView from "./PreviewView.jsx";
-import { previewCoverStep } from "./previewCover.js";
+import { usePreviewFrame } from "./usePreviewFrame.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 import DoubleClickFit from "./DoubleClickFit.jsx";
 import AnnotationSelectionBar from "../tools/annotate/AnnotationSelectionBar.jsx";
 import ViewFrame from "./ViewFrame.jsx";
 import { useControlUsage } from "../../../usage/controls.js";
-
-// The sidebar sections Preview offers: posing the model and playing its routines.
-// Preview's cover: at least this long, then until publication and the picture are ready.
-// The picture is checked this often until it has converged.
-// The cover waits at least MIN; at MAX it stops waiting for more components, and lets the picture on
-// screen finish converging for at most FINISH more.
-const PREVIEW_COVER_MIN_MS = 700, PREVIEW_COVER_QUIET_MS = 400, PREVIEW_COVER_MAX_MS = 5000, PREVIEW_COVER_FINISH_MS = 1000,
-  PREVIEW_COVER_CONVERGE_MS = 50;
-
-/** One of Preview's bar's controls: the navbar's icon button, named on hover, below it. */
-function BarControl({ label, active = undefined, disabled = false, onClick, children, ...props }) {
-  return <TooltipHint content={label} side="bottom" disabled={active === true}>
-    <Button type="button" variant="ghost" size="icon-xs" aria-label={label} aria-pressed={active} disabled={disabled} onClick={onClick}
-      className={NAVBAR_CONTROL_CLASS} {...props}>{children}</Button>
-  </TooltipHint>;
-}
-// The projection on screen, as an icon (a More menu's row on a phone's strip).
-function ProjectionIcon({ value }) {
-  const Icon = value === "perspective" ? PerspectiveProjectionIcon : OrthographicProjectionIcon;
-  return <Icon />;
-}
-
-function ViewControl({ label, disabled = false, tooltipSide = "top", onClick, children }) {
-  return <ToolbarButton label={label} tooltipSide={tooltipSide} disabled={disabled} onClick={onClick} className={useStripButtonClass()}>
-    {children}
-  </ToolbarButton>;
-}
 
 // Two presses on the same ink this close together are one double-click.
 const DOUBLE_PRESS_MS = 600;
@@ -66,13 +31,15 @@ const DOUBLE_PRESS_MS = 600;
 /**
  * A 3D view's frame: every view's one frame (`ViewFrame.jsx`: the root, the docked panel, the strip
  * at the centre of the whole view, the top-right, the corner, the cards) with what a 3D view puts in
- * it — its viewport (`ShellViewport`) as the canvas, Preview's view over it and Preview's cover, the
- * strip's view controls (Projection, Display, then Preview), the tool stack, the playbar at the
- * bottom centre and Preview's own chrome; its corner is the viewport's cube alone. The same
+ * it — its viewport (`ShellViewport`) as the canvas, Preview's frame (`usePreviewFrame.jsx`: Preview's view over it,
+ * its cover, its bar and its button), for a file with routines its panel's Animation tab
+ * (`AnimationSection.jsx`; no playbar under the model), the
+ * tool stack, and Preview's own chrome (its playbar among it); its corner is the viewport's cube alone (the view's
+ * settings are Display's, in the navbar beside Preview). The same
  * structure, classes and data attributes for every renderer: hosts, stylesheets and tests key on
  * them. The toolbar is for using tools, the sidebar for reading the file: a tool's own controls are
  * panels in the tool stack, shown by the tool they belong to; what there is to read of the file (a
- * tree, joints, metadata) is the sidebar's sections, whatever the tool.
+ * tree, parameters, joints, routines) is the sidebar's tabs, whatever the tool.
  *
  * @param {{ shell: ReturnType<typeof import("./useRendererShell.js").useRendererShell>,
  *   tools: import("../tools/FloatingToolBar.js").ViewportTool[],
@@ -80,6 +47,7 @@ const DOUBLE_PRESS_MS = 600;
  *   references?: readonly import("@cad/core/prompt").PromptReference[],
  *   referenceChips?: readonly import("../tools/quick-edit/ReferenceChips.jsx").ReferenceChip[] | null,
  *   nameReference?: ((reference: import("@cad/core/prompt").PromptReference) => string | import("../inspector/pickGlyph.jsx").CompactName) | null,
+ *   promptNotes?: { take(): { text: string, done(): void, cancel?(): void } | null } | null,
  *   copySelection?: (() => unknown) | null,
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null,
  *   onContextMenuOpenChange?: ((open: boolean) => void) | null,
@@ -96,22 +64,27 @@ const DOUBLE_PRESS_MS = 600;
  *   shell's own tool's panel leads it: Annotate's.
  *   `subToolbar`: the renderer's tool in hand's own row under the strip (`kit/tools/SubToolbar.jsx`:
  *   the active tool); the shell's own tool's row (Annotate's) takes its place while it is up.
- *   `sidebar`: the file's sections, in order — each a `ToolPanel`, drawn as a tab of the view's panel
- *   (`FlatPanel.jsx`): a tree, joints, metadata. None (null): no panel.
- *   `inspect`: what is picked and how the renderer describes it (`inspector/inspect.js`): the frame's
- *   Selected pane under the panel's tabs, the hover tip under Select, and the rows of both.
+ *   `sidebar`: the file's structure, in order — each a `ToolPanel`, drawn as a tab of the panel
+ *   (`FlatPanel.jsx`): a tree, links, metadata, first.
+ *   `fileSections`: the file's own settings — each a `ToolPanel`, drawn as a tab of the panel after the structure's:
+ *   Parameters, Joints (the shell's Animation after them). `jointsHoldMotion`: the file's Joints tab takes its
+ *   mechanism's motion (`JointsMotionContext`, `AnimationSection.jsx`): no Motion tab, the motion at the top of Joints.
+ *   `inspect`: what is picked and how the renderer describes it (`inspector/inspect.js`): the hover tip under Select
+ *   and the frame's name for its marks.
  *   Gone in preview, kept mounted, so a tree keeps its expansion and scroll.
  *   `referenceChips`: the renderer's description of that selection, as Quick Edit shows it (its
  *   chips, `kit/tools/quick-edit/ReferenceChips.jsx`): a chip each for one or several picks of a kind
  *   on one part, its card, its hover and its removal. Without them Quick Edit counts the references.
  *   `nameReference`: what the renderer calls a reference into its file, for a reference pasted
  *   into Quick Edit's note ("cam"); "" for one it cannot name.
+ *   `promptNotes`: what the renderer has to tell the agent with the next Quick Edit, said once
+ *   (`{ take() }`, Quick Edit's `notes`).
  *   `references`: what is selected, in the prompt grammar — the references a Quick Edit attaches
  *   (`kit/tools/quick-edit/QuickEdit.jsx`), counted in its header; the file itself always goes. A
  *   renderer that hands none has no Quick Edit: only a view whose picks and annotations a note can
- *   carry offers one. The box sizes itself, for as long as it is open: a drag of its corner renders nothing
- *   here. `onClearReferences`: the renderer's clear of that selection, as a press on the
- *   background makes it; Quick Edit's X calls it, and clears Annotate's ink too.
+ *   carry offers one. `onClearReferences`: the renderer's clear of that selection, as a press on the
+ *   background makes it; a note that has gone (Queue, Send) calls it, and clears Annotate's ink too.
+ *   Quick Edit has no X: its chips' X drop what they carry.
  *   `copySelection`: the viewer's copy key (⌘C / Ctrl+C) while the renderer's own tool is up and
  *   something is selected (Annotate's copies the view with its ink); null when there is nothing to copy.
  *   `zoomToSelection`: `{ run(), available }`, the zoom menu's Zoom to selection (`ZoomControl.jsx`): what
@@ -162,10 +135,13 @@ const DOUBLE_PRESS_MS = 600;
  *   and Preview viewport's `runtimeLifecycle` and `onCameraSettled`. Preview is a view of its own
  *   (`PreviewView.jsx`) over the editor's, which nothing of it reaches.
  */
-export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
+// The update status with nothing to say (`ViewUpdateStatus`'s).
+const NO_UPDATE = Object.freeze({ pending: false, error: null });
+
+export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, fileSections = null, jointsHoldMotion = false, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
   frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, boxSelect = null, inkTouches = null,
-  doubleClickFits = true, zoomToSelection = null, inspect = null }) {
+  doubleClickFits = true, zoomToSelection = null, inspect = null, promptNotes = null }) {
   const { t } = useI18n();
   const frame = shell.frame;
   // What a tool's letter takes up (`useRendererShell`'s `onKey`): the strip as drawn now.
@@ -174,63 +150,6 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const { view, resolvedScene, viewerLoading, scene } = frame;
   // The one presentation state: every gate — the viewport's, the renderer's — reads it.
   const { previewing, setPreviewing } = shell;
-  // A phone's open section is a sheet up from the bottom, where Quick Edit's peek is: it steps aside.
-  // Preview's settings panel: closed as Preview opens, until its button brings it out.
-  const [previewPanelOpen, setPreviewPanelOpen] = useState(false);
-  // Preview is a view of its own, mounted over the editor's as it opens (`PreviewView.jsx`), and
-  // its first picture takes a moment on a large model — its scene built from the published mesh
-  // and remaining components arriving — so it is covered ("Preparing preview…") until
-  // its first frame is presented (`previewPresented`), the publication is complete,
-  // and its picture converged (every sample of its frame drawn: the view's `pictureProgress`) — unless
-  // it starts over, the view moving (a routine playing), when there is nothing to wait for — or at most
-  // a few seconds. Then the cover fades away from the finished picture. Leaving needs no cover: the
-  // Preview's view goes, and under it is the editor's, as it was.
-  const previewViewRef = frame.previewViewRef;
-  const [previewPresented, setPreviewPresented] = useState(false);
-  const previewPresentedRef = useRef(false);
-  previewPresentedRef.current = previewing && previewPresented;
-  // A press covers the view first, in its own frame, and preview is entered under it: preview's
-  // first render can take a moment on a large model, and the cover answers the press at once.
-  const [coverRequested, setCoverRequested] = useState(false);
-  // The cover is preview's from the render that enters it, so not one frame of preview shows
-  // before it: settled is reset there, and set once preview has come together. Each crossing is
-  // taken in the render that makes it, never in an effect after it (another commit): entering also
-  // answers the press's request and closes the settings panel.
-  const [previewSettled, setPreviewSettled] = useState(false);
-  const [coverFor, setCoverFor] = useState(previewing);
-  if (coverFor !== previewing) {
-    setCoverFor(previewing);
-    setPreviewSettled(false);
-    setPreviewPresented(false);
-    if (previewing) { setCoverRequested(false); setPreviewPanelOpen(false); }
-  }
-  const previewCovered = coverRequested || (previewing && !previewSettled);
-  // What moves Preview's picture on purpose: its Orbit, or its routine playing (`previewCover.js`).
-  const previewMovingRef = useRef(false);
-  previewMovingRef.current = shell.orbiting || previewView?.animation?.playing === true;
-  const previewLoadingRef = useRef(false);
-  previewLoadingRef.current = previewView?.complete === false;
-  useEffect(() => {
-    if (!previewing) return undefined;
-    let quiet = 0, done = false, capped = false;
-    const finish = () => { if (done) return; done = true; setPreviewSettled(true); };
-    // Published components still streaming (a model opened cold) is waited for this long, no longer; then the
-    // picture on screen converges, and the cover lifts on it, or at the last at FINISH more.
-    const cap = setTimeout(() => { capped = true; settle(0); }, PREVIEW_COVER_MAX_MS);
-    const last = setTimeout(finish, PREVIEW_COVER_MAX_MS + PREVIEW_COVER_FINISH_MS);
-    const settle = (delay = PREVIEW_COVER_QUIET_MS) => {
-      clearTimeout(quiet);
-      quiet = setTimeout(() => {
-        const step = previewCoverStep({ presented: previewPresentedRef.current, loading: previewLoadingRef.current && !capped, moving: previewMovingRef.current,
-          progress: previewViewRef.current?.pictureProgress?.() ?? null });
-        if (step === "wait") settle();
-        else if (step === "converge") settle(PREVIEW_COVER_CONVERGE_MS);
-        else finish();
-      }, delay);
-    };
-    settle(PREVIEW_COVER_MIN_MS);
-    return () => { done = true; clearTimeout(cap); clearTimeout(last); clearTimeout(quiet); };
-  }, [previewing]);
   // The routine the Animation section plays: the tools view's, or in Preview its own.
   const animation = previewing ? previewView?.animation ?? null : frame.animation;
   const hasAnimation = animationControlsHaveContent(animation);
@@ -246,23 +165,22 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     if (chosenSpeed != null && Number(runtime.speed) !== chosenSpeed) runtime.onSpeedChange(chosenSpeed);
     if (chosenLoop != null && (runtime.loopEnabled !== false) !== chosenLoop) runtime.onLoopToggle(chosenLoop);
   }, [previewing, hasAnimation, animation?.speed, animation?.loopEnabled, animation?.activeClipId, chosenSpeed, chosenLoop]);
-  // Preview opens at rest, its routine started only by Autoplay.
-  const autoplayRef = useRef(shell.autoplay);
-  autoplayRef.current = shell.autoplay;
-  useEffect(() => {
-    const runtime = animationRef.current;
-    if (previewing && autoplayRef.current && animationControlsHaveContent(runtime) && !runtime.playing) runtime.onPlayToggle();
-  }, [previewing, hasAnimation]);
+  // Preview opens at rest, as the tools view does: only the person plays a routine.
   // What those settings change is the file's, and applied to its routine at once.
   // The person's presses on them are counted (`usage/controls.js`); the shell's own, above, are not.
-  const playbackRuntime = hasAnimation ? {
+  const counted = animation => (animationControlsHaveContent(animation) ? {
     ...animation,
     onPlayToggle: (...args) => { controls.used("animation_play"); return animation.onPlayToggle?.(...args); },
     onClipSelect: (...args) => { controls.used("animation_clip"); return animation.onClipSelect?.(...args); },
     onRelease: (...args) => { controls.used("animation_release"); return animation.onRelease?.(...args); },
     onSpeedChange: value => { controls.used("animation_speed"); shell.setPlayback({ speed: value }); animation.onSpeedChange(value); },
-    onLoopToggle: value => { controls.used("animation_loop"); shell.setPlayback({ loop: value }); animation.onLoopToggle(value); }
-  } : null;
+    onLoopToggle: value => { controls.used("animation_loop"); shell.setPlayback({ loop: value }); animation.onLoopToggle(value); },
+    // The tools view's playbar's menu: a routine chosen there plays from its start (one use, the choice).
+    playClip: id => { controls.used("animation_clip"); animation.onClipSelect?.(id); animation.onPlayToggle?.(); }
+  } : null);
+  const playbackRuntime = counted(animation);
+  // The Animation tab's: the tools view's routine, kept mounted (out of sight) through Preview, so the tab stays the panel's.
+  const toolsRuntime = previewing ? counted(frame.animation) : playbackRuntime;
   // Preview opens still: its Orbit tile starts the camera turning, and a second press stops it.
   const orbitPlaying = shell.orbiting;
   // Under Select, what the pointer rests on is lit as a part is: the annotation's mark (and the marks
@@ -305,37 +223,26 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     // Over a mark or a measurement the part under it hears nothing of the pointer.
     if (over) event.stopPropagation();
   };
-  useEffect(() => { setPreviewing(false); }, [frame.modelKey, setPreviewing]);
-  // Preview is a view of its own (`PreviewView.jsx`): it opens on the model as authored, in Render,
-  // still, its routine at rest and started only by Autoplay, and leaving it takes it away.
-  const enterPreview = () => {
-    setCoverRequested(true);
-    // After the frame the cover is painted in (a hidden page paints none: a timer stands in).
-    let entered = false;
-    const enter = () => { if (!entered) { entered = true; setPreviewing(true); } };
-    requestAnimationFrame(() => setTimeout(enter, 0));
-    setTimeout(enter, 100);
-  };
-  const leavePreview = () => setPreviewing(false);
-  // Preview's bar names what it shows: the file's name, or its path's last part.
-  const previewName = view.file?.name || String(view.file?.path ?? "").split("/").pop() || "";
-  // While Preview is up the host's chrome steps aside (FileViewer's navbar): said as it opens, and as
-  // it closes or the view goes.
-  // Preview's bar and its playbar, shown and gone together while the pointer rests; its settings open hold them.
-  const previewIdle = usePreviewIdle(frame.hostElement, previewing, previewPanelOpen);
-  const onPreviewChange = view.onPreviewChange;
-  useEffect(() => {
-    if (!previewing || !onPreviewChange) return undefined;
-    onPreviewChange(true);
-    return () => onPreviewChange(false);
-  }, [previewing, onPreviewChange]);
-  // The drawing tools' sub-toolbar, one row under the strip while Pencil or Shapes is the tool: what it draws with, what the next mark
+  // The view's settings as Display's card draws them (`DisplaySettings.jsx`).
+  const viewGroups = viewGroups3d({ mode: frame.displayMode, projection: frame.projection, grid: frame.grid, background: frame.background,
+    defaults: DISPLAY_DEFAULTS, t, used: controls.used });
+  // Preview's frame (`usePreviewFrame.jsx`): its cover, entering and leaving it, the host's navbar stepping aside, its
+  // bar and settings panel, its view over the editor's (`PreviewView.jsx`) and its button. What moves its picture on
+  // purpose is its Orbit, or its routine playing.
+  const previewFrame = usePreviewFrame({ previewing, setPreviewing, modelKey: frame.modelKey, fileView: view, hostElement: frame.hostElement,
+    stageColor: frame.stageColor, viewportScheme: frame.viewport.scheme, View: PreviewView, view: previewView, desired: frame.previewDesiredScene,
+    sceneScaleMode: frame.sceneScaleMode, viewRef: frame.previewViewRef, moving: shell.orbiting || previewView?.animation?.playing === true,
+    orbit: orbitPlaying, onOrbitChange: shell.setOrbiting, orbitSpeed: frame.previewOrbitSpeed, onOrbitSpeedChange: frame.setPreviewOrbitSpeed,
+    render: frame.previewSettings, disabled: shell.idle, mobile });
+  const previewIdle = previewFrame.idle, previewScheme = previewFrame.scheme;
+  // The drawing tools' sub-toolbar, one row under the strip while Draw is the tool: what it draws with, what the next mark
   // looks like, and Undo, Redo and Clear (`annotation/toolbar.jsx`). The annotation itself has no
   // panel: it is Quick Edit's chip (its X clears it, a click copies it).
-  const colorScheme = view.appearance?.colorScheme === "dark" ? "dark" : "light";
+  // What is drawn on the model (ink's neutral colour) reads against the viewport, in its scheme, not the app's.
+  const colorScheme = frame.viewport.scheme;
   // Otherwise the renderer supplies its active tool's row.
   const toolRow = frame.annotateToolActive
-    ? <AnnotationToolbar annotation={frame.annotation} colorScheme={colorScheme} />
+    ? <AnnotationToolbar annotation={frame.annotation} colorScheme={colorScheme} takeFamily={family => shell.selectTool(family)} />
     : subToolbar;
 
   const hasContent = Boolean(scene) && !viewerLoading;
@@ -355,10 +262,21 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const compact = Boolean(view.appearance?.compact);
   const toolsHidden = chromeHidden || compact;
   // The view's panel (`FlatPanel.jsx`, placed by the frame): docked at the left, its tabs the renderer's
-  // sections, one state with every view's; none on a phone; Preview keeps it mounted out of sight.
-  const panel = sidebar ? { kind: "model", label: t("flatPanel.modelPanel"), searchLabel: t("flatPanel.searchModel"), sections: sidebar } : null;
-  // Display's tile is its mode's sphere; on a phone with no room for it, its More row shows the same.
-  const DisplayIcon = (frame.displayMode?.options?.find(option => option.value === frame.displayMode.value) || frame.displayMode?.options?.[0])?.Icon;
+  // sections, one state with every view's; on a phone, a sheet under the navbar; Preview keeps it mounted out of sight.
+  // A file with routines has its Animation tab, last (`AnimationSection.jsx`): the tools view's routine; Preview's is its playbar's.
+  // A mechanism's motion whose Joints tab takes it (`jointsHoldMotion`) has none: its Joints tab is the ONE tab for both,
+  // the motion first (`JointsMotionContext`).
+  const routineKind = toolsRuntime?.noun === "Motion" ? "motion" : "animation";
+  const motionInJoints = Boolean(jointsHoldMotion && toolsRuntime && routineKind === "motion" && animationControlsHaveContent(toolsRuntime));
+  const routineDisabled = viewerLoading || !scene;
+  const jointsMotion = useMemo(() => (motionInJoints ? { runtime: toolsRuntime, disabled: routineDisabled } : null), [motionInJoints, toolsRuntime, routineDisabled]);
+  const animationTab = toolsRuntime && !motionInJoints ? <AnimationSection key={`animation-${frame.modelKey}`} runtime={toolsRuntime}
+    kind={routineKind} disabled={routineDisabled} /> : null;
+  // The panel's tabs: the file's structure (`sidebar`), then its own settings (`fileSections`: Parameters, Joints),
+  // then Animation, each only where the file has it.
+  const panelTabs = sidebar || fileSections || animationTab
+    ? <JointsMotionContext.Provider value={jointsMotion}>{sidebar}{fileSections}{animationTab}</JointsMotionContext.Provider> : null;
+  const panel = panelTabs ? { kind: "model", label: t("flatPanel.modelPanel"), searchLabel: t("flatPanel.searchModel"), sections: panelTabs } : null;
   const copyAction = () => {
     if (previewing) return false;
     if (frame.annotateToolActive) { frame.copyAnnotation(); return true; }
@@ -366,7 +284,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     return false;
   };
   frame.copyActionRef.current = copyAction;
-  // Quick Edit's X: nothing picked and nothing drawn, as the person would clear each.
+  // A note gone (Queue, Send): nothing picked and nothing drawn, as the person would clear each.
   const clearQuickEdit = () => { onClearReferences?.(); if (frame.annotation.hasAnnotation) frame.annotation.forget(); };
   const forgetAnnotation = frame.annotation.forget;
   // Quick Edit's annotation: while Annotate is up or there is ink. The annotation goes with a note whenever
@@ -406,27 +324,26 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   // One place says the view is catching up: a newer revision of the file loading behind the model on
   // screen, or a Display change being prepared — the latter's failure first, since it is the one with
   // something to retry. Under the strip at the top centre, or in its place where there is no strip.
+  // While the file first loads there is no picture to catch up: the loading cover says what is happening,
+  // and the settings the model will open with, waiting for it, are no update (only their failure is said).
+  const viewUpdateStatus = viewerLoading && !frame.viewUpdate.status.error ? NO_UPDATE : frame.viewUpdate.status;
   const updateStatus = { preview: Boolean(frame.loading.preview), onRetry: frame.viewUpdate.retry,
-    update: frame.loading.updating && !frame.viewUpdate.status.error ? modelUpdateStatus(frame.loading.progress) : frame.viewUpdate.status };
+    update: frame.loading.updating && !frame.viewUpdate.status.error ? modelUpdateStatus(frame.loading.progress) : viewUpdateStatus };
   const quickEdit = references ? <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden} docked={mobile}
     resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt}
-    onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
-  // The view's own controls end the strip, after its rule: Projection (the state button), Display (its menu),
-  // then Preview. A phone has no room for them on its strip: they are rows of its More, with the zoom.
-  const views = shell.previewable && !previewing ? [
-    { id: "projection", label: t("projection.label"), icon: <ProjectionIcon value={frame.projection.value} />, disabled: shell.idle,
-      tile: <ProjectionToggle disabled={shell.idle} projection={frame.projection} />,
-      // In a phone's More, a row that switches it the same way.
-      onSelect: () => frame.projection.onChange(otherProjection(frame.projection.value)) },
-    { id: "display", label: t("display.label"), icon: DisplayIcon ? <DisplayIcon /> : null, disabled: shell.idle,
-      tile: <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid} />,
-      // In a phone's More, the same list opened under its row, in More itself (`FloatingToolBar.js`'s TouchStrip):
-      // the modes, then Grid.
-      submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} /> },
-    ...(mobile ? [zoomViewControl(zoom, { t, disabled: shell.idle })] : []),
-    { id: "preview", label: t("preview.label"), icon: <Play aria-hidden="true" />, disabled: shell.idle, onSelect: enterPreview,
-      tile: <ViewControl label={t("preview.label")} disabled={shell.idle} onClick={enterPreview}><Play aria-hidden="true" /></ViewControl> }
-  ] : [];
+    notes={promptNotes} onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
+  // The view's own controls: **Display** (`DisplaySettings.jsx`: its button, and its card docked at the view's right edge)
+  // and **Preview**, a play triangle, in that order: the file's navbar's right end, a phone's too; in a host's inline card
+  // (no navbar) the strip's end, and on a phone rows of its More with the zoom. The picture's corner is the cube alone.
+  const inNavbar = useNavbarViewControls();
+  const viewControls = shell.previewable && !previewing;
+  const display = useDisplaySettings({ groups: viewControls ? viewGroups : [], onReset: frame.resetDisplay, disabled: shell.idle,
+    closeKey: frame.modelKey, closed: previewing });
+  const viewSettings = viewControls && inNavbar ? <NavbarViewControls>
+    {display.navbarButton}
+    {previewFrame.navbarButton}
+  </NavbarViewControls> : null;
+  const views = viewControls && !inNavbar ? [display.stripView, ...(mobile ? [zoomViewControl(zoom, { t, disabled: shell.idle })] : []), previewFrame.stripView] : [];
   // Under Select a press on the canvas picks, front to back: the renderer's own overlays (a
   // measurement), then the annotation's mark (and the marks drawn with it), then a part. Shift adds or
   // takes away; a press that picks one kind lets go of the others, unless Shift keeps them.
@@ -447,10 +364,12 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     // The second press of a double-click keeps what the first found.
     const again = inkPress.current?.id === id && event.timeStamp - inkPress.current.at < DOUBLE_PRESS_MS;
     inkPress.current = { id, before: again ? inkPress.current.before : session.selected, at: event.timeStamp };
-    const picked = event.shiftKey
+    // Shift, or a finger (which has no Shift), adds the mark or takes it out, as a part's tap does.
+    const additive = event.shiftKey || event.pointerType === "touch";
+    const picked = additive
       ? (session.selected.includes(id) ? session.selected.filter(other => other !== id) : [...session.selected, id])
       : [id];
-    if (!event.shiftKey) onClearReferences?.();
+    if (!additive) onClearReferences?.();
     session.select(withGroups(picked, session.items));
   };
   const rootHandlers = {
@@ -471,53 +390,20 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     onPointerMoveCapture: hoverSelectable,
     onPointerLeave: () => { if (overSelectable.current || hoveredAnnotation) leaveSelectHover(); }
   };
-  // Preview: the tools put away and the host's navbar too (FileViewer hides it while
-  // `view.onPreviewChange` says Preview is up), the model in Render — the tools view never is — and
-  // still until Orbit is turned on. In the navbar's place, Preview's own bar over the view's top edge,
-  // on no surface, gone while the pointer rests (`PreviewChrome`): the file's name, and at its right its
-  // settings (a toggle, the panel docked under it at the view's right edge: Orbit, Render's own), closed
-  // as it opens, and the way out. The same in every host.
-  const preview = { active: previewing, name: previewName, idle: previewIdle, panelOpen: previewPanelOpen,
-    controls: <>
-      <BarControl label={t("preview.settings")} active={previewPanelOpen} disabled={shell.idle}
-        onClick={() => { if (!previewPanelOpen) controls.used("preview_settings"); setPreviewPanelOpen(open => !open); }} data-preview-settings=""><SlidersHorizontal className="size-3.5" aria-hidden="true" /></BarControl>
-      <BarControl label={t("preview.exit")} onClick={leavePreview}><X className="size-3.5" aria-hidden="true" /></BarControl>
-    </>,
-    panel: <PreviewSettings orbit={orbitPlaying} onOrbitChange={shell.setOrbiting}
-      speed={frame.previewOrbitSpeed || 1} onSpeedChange={frame.setPreviewOrbitSpeed}
-      onClose={() => setPreviewPanelOpen(false)} render={frame.previewSettings} /> };
   const body = (
     <ViewFrame rootRef={frame.hostRef} className={pointing ? "cursor-pointer" : ""} rootHandlers={rootHandlers} onCanvasPress={pressCanvas} selecting={frame.selecting}
       inspect={inspect}
-      stageColor={frame.stageColor} file={frame.modelKey} mobile={mobile} compact={compact} chromeHidden={chromeHidden} previewing={previewing}
-      preview={preview} tools={tools} views={views} toolRow={toolRow} status={updateStatus}
+      stageColor={frame.stageColor} viewport={frame.viewport} file={frame.modelKey} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} {...previewFrame.frame}
+      tools={tools} views={views} toolRow={toolRow} status={updateStatus}
       toolStack={<ToolStack hidden={previewing} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{toolPanels}</ToolStack>}
       panel={panel} panelControl={frame.panelControl} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}
-      notice={view.notice} quickEdit={quickEdit}
-      // Preview: a view of its own over the editor's, mounted while it is open.
-      underlay={previewing && previewView ? <div className="pointer-events-auto absolute inset-0 z-[1]" data-preview-view="">
-        <PreviewView view={previewView} desired={frame.previewDesiredScene} modelKey={frame.modelKey}
-          sceneScaleMode={frame.sceneScaleMode} viewRef={previewViewRef} onPresented={setPreviewPresented}
-          orbit={orbitPlaying} orbitSpeed={frame.previewOrbitSpeed ?? 1} />
-      </div> : null}
-      // A file with routines: its playbar under the model, in the tools view as in Preview (the same
-      // transparent row, with Reset first, and on a phone over Quick Edit's peek), Preview's its own routine.
+      notice={view.notice} quickEdit={quickEdit} navbar={viewSettings} card={display.card}
+      // A file with routines: in the tools view, its Animation tab (above), no playbar; in Preview, Preview's
+      // playbar, its own routine.
       bottomCentre={<>
-        {!previewing && !toolsHidden && hasAnimation ? <PreviewPlaybar key={`tools-${frame.modelKey}`} runtime={playbackRuntime} disabled={viewerLoading || !scene}
-          autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay} toolsView phone={mobile} /> : null}
         {previewing && hasAnimation ? <PreviewPlaybar key={frame.modelKey} runtime={playbackRuntime} disabled={viewerLoading || !scene}
-          autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay} idle={previewIdle} /> : null}
+          idle={previewIdle} scheme={previewScheme} /> : null}
       </>}
-      // Preview coming together underneath: the view as it was, held, until the picture is ready.
-      overlays={<div aria-hidden={!previewCovered} data-preview-cover={previewCovered ? "" : undefined}
-        className={cn("absolute inset-0 z-40 flex items-center justify-center",
-          // At once over the press, so nothing of preview shows first; it fades only as it lifts.
-          previewCovered ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0 transition-opacity duration-300 motion-reduce:transition-none")}
-        style={{ backgroundColor: frame.stageColor }}>
-        {previewCovered ? <span role="status" className="flex items-center gap-2 text-tiny text-muted-foreground">
-          <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />{t("preview.preparing")}
-        </span> : null}
-      </div>}
       loading={frame.presentationState?.file === frame.modelKey && frame.presentationState?.covering ? null : frame.loading}
       // The card: the file as the alert names it (the catalog's absolute path), which Report Issue keeps out of its issue.
       alert={{ alert: frame.viewerAlert, hasContent, dismissed: alertDismissal.dismissed, onDismiss: alertDismissal.dismiss,

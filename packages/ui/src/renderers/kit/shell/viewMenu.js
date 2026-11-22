@@ -82,7 +82,7 @@ export function exitIsolateEntry({ isolatedCount = 0, onExitIsolates = null, t =
 }
 
 /** A list's row menu from the same entries (a menu primitive's `Item` and `Separator`): a row and the picture offer one menu. */
-export function ViewMenuItems({ entries, Item, Separator, itemClassName = "text-xs" }) {
+export function ViewMenuItems({ entries, Item, Separator, itemClassName = "" }) {
   return entries.map(item => <Fragment key={item.id}>
     {item.separatorBefore ? <Separator /> : null}
     <Item className={itemClassName} disabled={item.disabled} onSelect={() => item.onSelect?.()}>{item.label}</Item>

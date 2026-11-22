@@ -8,7 +8,7 @@ export const VIRTUAL_ROWS_OVERSCAN = 12;
 
 function scrollerOf(element) {
   // In the view's panel a tab does not scroll: the panel does.
-  const panel = element.closest('[data-flat-panel-scroller]') || element.closest('[data-tool-panel-body]');
+  const panel = element.closest('[data-panel-scroller]') || element.closest('[data-tool-panel-body]');
   if (panel) return panel;
   for (let node = element.parentElement; node; node = node.parentElement) {
     if (/(auto|scroll|overlay)/.test(getComputedStyle(node).overflowY)) return node;

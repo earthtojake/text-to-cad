@@ -83,6 +83,7 @@ pages waiting on a served document the frame's build writes (``serve.Server.buil
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -230,9 +231,16 @@ def refused(error: Exception) -> dict[str, Any]:
     from cad.engine.serve import NotHeld
     from cad.engine.worker import refusal
 
+    from cad.engine.parameters import ParameterRefused
+
     found: dict[str, Any] = {"failed": str(error), **refusal(error)}
     if isinstance(error, NotHeld):
         found.update(state=error.state, rebuild=error.rebuild)
+    if isinstance(error, ParameterRefused):
+        # Why a change of parameters is refused (``code``), what to do, a parameter's own reason, and a failed
+        # build's whole words (``parameters.Setting``).
+        found.update({key: value for key in ("code", "hint", "reason", "detail")
+                      if isinstance(value := getattr(error, key, None), str)})
     return found
 
 
@@ -688,6 +696,16 @@ class Daemon:
         from cad_server.engine.models import Models
 
         self.models = Models(self)
+        from cad_server.engine.parameters import Setting
+
+        # A model's parameters set in its script and the script built again (``parameters``): a page's Save,
+        # ``set``; and a page's look at other values, built in the model's worker and held for that page alone:
+        # ``preview``. Both reach the engine through the page's routes alone (``server.set_parameters``,
+        # ``server.preview_parameters``), never a request of this socket.
+        self.setting = Setting(self)
+        from cad_server.engine.parameters import Previewing
+
+        self.previewing = Previewing(self)
         from cad_server.engine import registry
         from cad_server.engine.checks import Checks, Pool, pool_size
         from cad_server.engine.checks_runner import Limits, Runner
@@ -1074,6 +1092,10 @@ class Daemon:
                 self.server.revive = self.models.adopt
                 self.server.leaving = self.models.leaving
                 self.server.delete = self.models.delete
+                # A model's parameters as its live worker recorded them, and their ``set`` (``parameters``).
+                self.server.parameters = self.models.live
+                self.server.set_parameters = self.setting.set
+                self.server.preview_parameters = self.previewing.preview
                 application = getattr(self.server.http, "app", None)
                 if application is not None:
                     application.worked = self.stamp  # an agent's tool call is a command too (``mcp.http.Sessions``)
@@ -1566,9 +1588,22 @@ class Daemon:
                 return
             with self.busy_lock:
                 self.busy += 1
+            first = contextlib.ExitStack()
             try:
                 script = request["script"]
                 key, cwd, _python = self._routed(request)  # a build's Python is ``caller``'s
+                # The script's turn (``parameters.Setting.building``): a set of it under way first, then this
+                # build before a set of it and before a page's preview of it (``parameters.Previewing``).
+                first.enter_context(self.setting.building(key, send))
+
+                def answered(payload: dict[str, Any], held: Any) -> None:
+                    # The worker and the script's turn are let go BEFORE the answer, so a caller that saves the
+                    # parameters the moment its build returns finds the script free (never ``busy``).
+                    if held is not None:
+                        self.release(held)
+                    first.close()
+                    send(payload)
+
                 for attempt in (1, 2):
                     worker = None
                     fresh = None
@@ -1594,6 +1629,9 @@ class Daemon:
                         if cached is not None:
                             order["cache"] = cached  # what a fresh worker takes a model from, by its key
                         answer = worker.request(order, send)
+                        from cad_server.engine.parameters import ran
+
+                        ran(worker, request, answer)  # the run its parameters' ``set`` builds again, and how it ended
                         answer["worker"] = {"pid": worker.pid, "fresh": fresh}
                         # This server's release, which a script run in its own Python says once a run
                         # when it is another (``contract.notice``); and how that run was made, which the
@@ -1625,7 +1663,8 @@ class Daemon:
                         answer["program"] = request.get("program")
                         self._built(worker, answer)
                         told.update(answer=answer, fresh=fresh, seconds=time.monotonic() - began)
-                        send(answer)
+                        held, worker = worker, None
+                        answered(answer, held)
                         return
                     except Gone as error:
                         # A build is never run twice, nor waited for twice on a worker that never said
@@ -1640,7 +1679,8 @@ class Daemon:
                             told.update(answer=failed, fresh=fresh, seconds=time.monotonic() - began,
                                         died=(error.code if error.code is not None else True)
                                         if error.during and not stopped else None)
-                            send(failed)
+                            held, worker = worker, None
+                            answered(failed, held)
                             return
                     except RuntimeError as error:
                         if not _no_kernel(error):
@@ -1648,12 +1688,14 @@ class Daemon:
                         # No kernel environment to start the worker in: its line, and its type.
                         told.update(answer={"failed": str(error), **failed_type(error)}, unavailable=error,
                                     seconds=time.monotonic() - began)
-                        send(told["answer"])
+                        held, worker = worker, None
+                        answered(told["answer"], held)
                         return
                     finally:
                         if worker is not None:
                             self.release(worker)
             finally:
+                first.close()
                 with self.busy_lock:
                     self.busy -= 1
                     self.worked = time.monotonic()
@@ -1945,6 +1987,7 @@ class Daemon:
         self.supervisor.shed(self.pressure.under())
         self.supervisor.overrun()
         self.models.prune()
+        self.previewing.expire()  # a page's previews nobody has read for a while (``parameters.Previewing``)
         _send_counts()
         if self.draining or self.stopping.is_set():
             return

@@ -1,3 +1,4 @@
+import { SCENE_COLORS } from "@cad/core/lib/viewportTheme.js";
 import { createScreenSpaceLineStrip } from "@cad/core/common/renderEdges.js";
 import {
   ANNOTATION_RENDER_ORDER, annotationDocument, annotationMarkObject, annotationObjectShown as shown, clipAnnotationObject, disposeAnnotationObject
@@ -35,10 +36,6 @@ function pickTargets(runtime) {
 const partIdOf = hit => (Array.isArray(hit.object.userData?.partIds) && hit.instanceId != null
   ? hit.object.userData.partIds[hit.instanceId] : hit.object.userData?.partId) ?? null;
 
-// A fill's triangles, split until none has an edge longer than `limit` pixels — every one at once,
-// so neighbours never meet at a crack: points inside it for the eraser and Select to find it by.
-// The outline's points come first, in order; the rest are inside.
-const FILL_SEGMENT_PX = 12;
 // A stroke's line is split until no piece is longer than this many pixels, so each piece takes the depth
 // under it: a two-point line from the model out into the air lies on the model, then on its level, not at
 // the model's depth all along. The pen's widths are split with it.
@@ -56,25 +53,6 @@ function subdivideStroke(points, widths = null) {
   }
   return { points: out, widths: outWidths };
 }
-function subdivideArea(THREE, outline, limit = FILL_SEGMENT_PX) {
-  const points = outline.map(point => ({ x: point.x, y: point.y }));
-  let triangles = THREE.ShapeUtils.triangulateShape(outline.map(point => new THREE.Vector2(point.x, point.y)), []);
-  const middles = new Map();
-  const middle = (a, b) => {
-    const key = a < b ? `${a}|${b}` : `${b}|${a}`;
-    if (!middles.has(key)) { points.push({ x: (points[a].x + points[b].x) / 2, y: (points[a].y + points[b].y) / 2 }); middles.set(key, points.length - 1); }
-    return middles.get(key);
-  };
-  const long = ([a, b, c]) => Math.max(...[[a, b], [b, c], [c, a]].map(([u, v]) => Math.hypot(points[u].x - points[v].x, points[u].y - points[v].y))) > limit;
-  for (let pass = 0; pass < 6 && triangles.some(long); pass += 1) {
-    triangles = triangles.flatMap(([a, b, c]) => {
-      const ab = middle(a, b), bc = middle(b, c), ca = middle(c, a);
-      return [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]];
-    });
-  }
-  return { points, index: triangles.flat() };
-}
-
 // Ink stands off what it lies on, toward the eye, by this many screen pixels: clear of the face
 // without leaving it. A text mark on a surface by four times as much.
 const LIFT_PX = 2;
@@ -453,11 +431,11 @@ function levelDepth(view, level, point) {
  * The marks of an annotation projected into the model from the camera they were drawn under.
  *
  * Each point stays on the ray through where it was drawn, so from that view the ink is exactly what
- * was drawn. Each mark has a level (`levelOf`, at the mark's first point, a text mark's anchor corner,
- * or a fill's first outline point; or the `level` given), and `placement` says where a point lies on
- * its ray: `"surface"` (the default) on the visible surface under it — a stroke over the nearest of
- * what is within a few pixels of its line, so it is never cut by what it was drawn over, a fill's
- * point by point — and, over nothing, on the level; `"plane"` on the level, flat across a curved face.
+ * was drawn. Each mark has a level (`levelOf`, at the mark's first point or a text mark's anchor
+ * corner), and `placement` says where a point lies on its ray: `"surface"` (the default) on the visible
+ * surface under it — a stroke over the nearest of what is within a few pixels of its line, so it is
+ * never cut by what it was drawn over — and, over nothing, on the level; `"plane"` on the level, flat
+ * across a curved face.
  * A stroke's line is split into pieces of a few pixels first, in both. A text mark is a card facing
  * the view, at the level's depth under its anchor corner, in both. Every point is a little off what it
  * lies on, toward the eye (text, more).
@@ -467,36 +445,33 @@ function levelDepth(view, level, point) {
  * @param {object} runtime  The viewer runtime (`THREE`, `camera`, `modelGroup`, `renderer`, `scene`, `activeClipPlanes`).
  * @param {import("../../../../annotation/geometry.js").ScreenMark[]} marks
  * @param {{ width: number, height: number }} size  The viewport's CSS size, which the marks' pixels are of.
- * @param {{ placement?: "surface" | "plane", level?: { point: number[], normal: number[] } | null,
+ * @param {{ placement?: "surface" | "plane",
  *   touchesAt?: ((point: { x: number, y: number }) => { part: string, ref?: string }[]) | null, cpuBudget?: number }} [options]
- *   `level`: every mark lies on this plane instead of its own (a fill of a flat shape, on the shape's plane).
  * @returns {AnnotationItem[]}
  */
-export function projectAnnotations(runtime, marks, size, { placement = "surface", level = null, touchesAt = null, cpuBudget } = {}) {
+export function projectAnnotations(runtime, marks, size, { placement = "surface", touchesAt = null, cpuBudget } = {}) {
   const { THREE, camera } = runtime;
   const { width, height } = size;
   if (!THREE || !camera || !(width > 0) || !(height > 0) || !marks.length) return [];
   const view = viewOf(runtime, size);
   const targets = pickTargets(runtime);
   const look = windowLook(runtime, targets, size, view, cpuBudget);
-  const given = level ? guarded(view, { point: new THREE.Vector3(...level.point), normal: new THREE.Vector3(...level.normal).normalize() }) : null;
   const { lifted } = view;
   const partAt = point => { const hit = faceAt(runtime, targets, point, view)?.hit; return hit ? partIdOf(hit) : null; };
   const onSurface = placement !== "plane" && targets.length > 0;
   const shaped = marks.map(mark => {
-    const area = mark.kind === "area" ? subdivideArea(THREE, mark.outline) : null;
     const line = mark.kind === "stroke" ? subdivideStroke(mark.points, mark.widths) : null;
-    return { mark, area, line, points: area ? area.points : line ? line.points : markPoints(mark) };
+    return { mark, line, points: line ? line.points : markPoints(mark) };
   });
   // The parts' depth is read only for ink that lies on them, only under it.
-  const reach = Math.max(FILL_SEGMENT_PX, ...shaped.map(({ mark }) => (mark.kind === "stroke" ? mark.width * Math.max(1, ...(mark.widths || [1])) / 2 + COVER_PX : 0)));
+  const reach = Math.max(0, ...shaped.map(({ mark }) => (mark.kind === "stroke" ? mark.width * Math.max(1, ...(mark.widths || [1])) / 2 + COVER_PX : 0)));
   const surface = onSurface
     ? surfaceUnder(runtime, targets, shaped.flatMap(({ points }) => points), reach + 1, size, view) : null;
 
-  return shaped.map(({ mark, area, line, points }) => {
+  return shaped.map(({ mark, line, points }) => {
     const widths = line?.widths ?? mark.widths;
-    const start = mark.kind === "stroke" ? mark.points[0] : mark.kind === "area" ? mark.outline[0] : mark.corners[0];
-    const own = given ?? levelOf(runtime, start, size, { targets, view, depth: look });
+    const start = mark.kind === "stroke" ? mark.points[0] : mark.corners[0];
+    const own = levelOf(runtime, start, size, { targets, view, depth: look });
     const onLevel = point => levelDepth(view, own, point);
     let depths;
     if (mark.kind === "text") {
@@ -504,22 +479,19 @@ export function projectAnnotations(runtime, marks, size, { placement = "surface"
       const card = lifted(onLevel(start), LIFT_PX * 4);
       depths = points.map(() => card);
     } else if (!surface) depths = points.map(point => lifted(onLevel(point)));
-    else if (mark.kind === "stroke") {
+    else {
       const radius = index => mark.width * (widths?.[index] ?? 1) / 2 + COVER_PX;
       // Each point takes the nearest depth within its own reach, never a neighbour's: on a slanted face a
       // piece of line ahead is nearer, and would lift the point off it.
       const near = points.map((point, index) => surface.nearest(point, point, radius(index)));
       depths = near.map((depth, index) => (Number.isFinite(depth) ? lifted(depth) : lifted(onLevel(points[index]))));
-    } else {
-      depths = points.map(point => { const depth = surface.nearest(point, point, FILL_SEGMENT_PX / 2); return Number.isFinite(depth) ? lifted(depth) : lifted(onLevel(point)); });
     }
     const positions = new Float32Array(points.length * 3);
     points.forEach((point, index) => view.at(point, depths[index]).toArray(positions, index * 3));
     const item = { id: mark.id, kind: mark.kind, points: positions, color: mark.color, ...(mark.group ? { group: mark.group } : {}),
-      ...(mark.view ? { view: mark.view } : {}), touches: touchesOf(mark.kind === "area" ? mark.outline : points, touchesAt, partAt) };
+      ...(mark.view ? { view: mark.view } : {}), touches: touchesOf(points, touchesAt, partAt) };
     if (mark.kind === "stroke") Object.assign(item, { width: mark.width, opacity: mark.opacity, closed: mark.closed,
       ...(widths ? { widths } : {}) });
-    else if (mark.kind === "area") Object.assign(item, { opacity: mark.opacity, triangles: area.index, outline: mark.outline.length });
     else Object.assign(item, { text: mark.text, fontPx: mark.fontPx });
     return item;
   });
@@ -565,7 +537,7 @@ export function annotationWorldPoints(runtime, item) {
 
 /**
  * The ink as it falls on the screen now (`annotation/geometry.js`'s `ScreenAnnotation`): to hit-test with
- * the eraser and Select, and to bound a fill. Ink behind the eye is not there.
+ * the eraser and Select. Ink behind the eye is not there.
  */
 export function annotationsOnScreen(runtime, items, { width, height }) {
   const { THREE, camera } = runtime;
@@ -574,7 +546,7 @@ export function annotationsOnScreen(runtime, items, { width, height }) {
   const view = new THREE.Vector3(); camera.getWorldDirection(view);
   return items.flatMap(item => {
     const all = annotationWorldPoints(runtime, item);
-    // A fill's outline: its first points (the rest are inside it).
+    // An area's outline: its first points (the rest are inside it).
     const world = item.kind === "area" && item.outline ? all.slice(0, item.outline) : all;
     if (world.some(point => point.clone().sub(eye).dot(view) <= 0)) return [];
     const points = world.map(point => {
@@ -586,8 +558,8 @@ export function annotationsOnScreen(runtime, items, { width, height }) {
 }
 
 // What Select has picked is haloed: a wider line in the selection's blue behind the ink, along a
-// stroke, round a fill's outline or a text mark's box; what the pointer rests on, a fainter one.
-const SELECTION_COLOR = "#2979ff";
+// stroke, round an area's outline or a text mark's box; what the pointer rests on, a fainter one.
+const SELECTION_COLOR = SCENE_COLORS.selected;
 const HALO_PX = 6;
 const PICKED_OPACITY = 0.5;
 const HOVERED_OPACITY = 0.25;

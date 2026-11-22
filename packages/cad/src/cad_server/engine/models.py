@@ -8,7 +8,9 @@ materializes an unviewed model. A document outlives its worker: before a worker 
 shape a program handed over (``hand_over``), has no worker from the start: it is held as a drained
 document is, and no command builds it again. A document held nowhere is never built here: whoever
 asks for it is told the command that builds it again (``missing``), and the engine runs nothing.
-The book is process memory.
+The book is process memory. So are the rows a build's report gives of its model's parameters -- where
+each is spelled in the code -- which the book keeps beside the record while the worker that recorded them
+is live (``live``), and never writes or sends on (``parameters``).
 
 What outlives the process is the registry's (``registry``): each ``model`` and ``shape`` document
 is recorded there as it is registered (``record``, ``hand_over``), synchronously, so after a restart
@@ -21,8 +23,10 @@ no more (``identity.released``). A served
 document's generation (``version``, what a page shows and the viewer's export compares) is a token
 of its build's own, never a counter that starts again, so an id and a generation never name two
 documents across a restart; a run of the same closure in the worker holding the last build keeps it
-(nothing ran, nothing changed: no page fetches it again); its record's ``revision`` is its build closure's key (``revision``), the
-same for the same code, so a build that changed nothing rewrites no record.
+(nothing ran, nothing changed: no page fetches it again); its record's ``revision`` is its build closure's key (``revision``),
+with the parameters its document records where it records any, the same for the same code and the same
+record, so a build that changed nothing rewrites no record, and one whose script declares other values --
+which its closure need not reach: a sibling model's parameter -- is a new revision.
 
 What a restart opens at once is the cache's (``cache``): each ``model`` and ``shape`` document's
 bytes, saved in its registry folder once it has been idle (and at its drain, and at shutdown). A
@@ -36,6 +40,7 @@ call.
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
 import secrets
 import threading
@@ -93,11 +98,22 @@ def _given(given: list[str], header: dict[str, Any], script: Any) -> list[str]:
     return list(given) if same(theirs) == same(script) else sorted(set(given) | set(named))
 
 
-def revision(report: dict[str, Any]) -> str:
+def revision(report: dict[str, Any], parameters: Any = None) -> str:
     """A model document's recorded revision: its closure's key (the same code, the same revision, in
-    any process), else a token of this build's own (``durable``: false)."""
+    any process), else a token of this build's own (``durable``: false). A document that records parameters
+    (``parameters``: the report's rows, ``cad.engine.parameters.rows``) is that key with its record
+    (``parameters.record``), digested: a model whose key a parameter does not reach -- one its body never
+    reads -- holds the record all the same, so a record changed is a new revision, a new generation and a
+    cache file saved again. A document with none keeps its key alone, as before parameters were recorded."""
     key = (report.get("closure") or {}).get("key")
-    return str(key) if key else f"{_TOKEN}{secrets.token_hex(8)}"
+    if not key:
+        return f"{_TOKEN}{secrets.token_hex(8)}"
+    from cad.engine.parameters import record
+
+    recorded = record(parameters) if isinstance(parameters, list) else None
+    if recorded is None:
+        return str(key)
+    return hashlib.sha256(f"{key}\n{recorded}".encode()).hexdigest()
 
 
 # What starts a revision that is a build's own token (``revision``), never a closure's key (hexadecimal).
@@ -140,9 +156,13 @@ class Models:
                 root["previous"] = True  # the failed run's line says its previous good build is served
             for report in [root, *(root.get("child_models") or {}).values()]:
                 ident, source = report.get("id"), report.get("source")
+                # Where its parameters are spelled in the code, as the worker that built it recorded them
+                # (``cad.engine.parameters.rows``): kept here, in memory alone, while that worker lives (``live``),
+                # and never sent on.
+                rows = report.pop("parameters", None)
                 if not report.get("ok") or not ident or not source:
                     continue
-                recorded = revision(report)
+                recorded = revision(report, rows)
                 facts, before = self.facts(ident, report, recorded)
                 try:
                     if source.get("explicit_name") is not None:
@@ -166,10 +186,10 @@ class Models:
                 with self.lock:
                     old = self.records.get(ident)
                     # This build's generation. A document is what its last run made: a run of the same
-                    # code and inputs (its closure's key) in the worker that holds the last build made
-                    # that document again -- nothing ran, or it ran to the same bytes -- so its generation
-                    # stands, no page fetches it again and an export of it is still the one displayed.
-                    # Anything else is a new generation.
+                    # code and inputs (its closure's key) and the same parameters (``revision``) in the worker
+                    # that holds the last build made that document again -- nothing ran, or it ran to the same
+                    # bytes -- so its generation stands, no page fetches it again and an export of it is still
+                    # the one displayed. Anything else is a new generation.
                     same = (old is not None and old.get("worker") is worker and old.get("revision") == recorded
                             and durable(recorded))
                     version = old["version"] if same else secrets.token_hex(8)
@@ -178,7 +198,10 @@ class Models:
                                            "kind": "model", "python": python, "with": mine,
                                            "builtAt": time.time(), "version": version,
                                            "files": list(report.get("files") or {}), "revision": recorded,
-                                           "facts": facts}
+                                           "facts": facts, "parameters": rows if isinstance(rows, list) else None}
+                previewing = getattr(self.daemon, "previewing", None)
+                if not same and previewing is not None:
+                    previewing.drop(ident)  # a page's look at other values of the version before (``parameters``)
                 if facts is not None:
                     from cad.engine.delta import delta
 
@@ -426,6 +449,24 @@ class Models:
             return record
         return record if self.where(ident) else None
 
+    def live(self, ident: str, version: Any = None) -> dict[str, Any] | None:
+        """What the worker that built model document ``ident`` recorded of its parameters while it is live
+        in the supervisor (``{"script", "name", "rows", "worker"}``: ``cad.engine.parameters.rows``, where each
+        is spelled in the code), of its generation ``version`` where one is given; None for a document no
+        live worker built, one built before parameters were recorded, or one of another generation. A
+        worker retired or gone takes them with it (``prune``)."""
+        with self.lock:
+            record = self.records.get(ident)
+        if record is None or not isinstance(record.get("parameters"), list):
+            return None
+        worker = record["worker"]
+        if worker is None or not self.daemon.supervisor.holds(worker):
+            return None
+        if version is not None and record["version"] != version:
+            return None
+        return {"script": record["source"]["script"], "name": record["source"]["name"], "rows": record["parameters"],
+                "worker": worker}
+
     def _working(self, worker: Any) -> bool:
         """Whether ``worker`` holds its documents still: live in the supervisor, or out of it and
         alive -- being retired, and drained (``drain``) before it goes."""
@@ -607,6 +648,7 @@ class Models:
                 if self.daemon.builders.get(ident) is worker:
                     del self.daemon.builders[ident]
                 row["worker"] = None
+                row["parameters"] = None  # where its parameters are was the worker's to say (``live``)
 
     def listing(self) -> list[dict[str, Any]]:
         """The model documents, each with its ``state`` (``STATES``), and for one not held the command

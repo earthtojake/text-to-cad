@@ -226,8 +226,8 @@ keeps nothing, and only a clean result is kept: never a document that did not re
 measured. A document holds one version's results, so none outlives the document it describes. In memory the store
 holds 128 results and 64 MB at most, least recently used first; each is written beside the engine's cache too
 (`checks.Disk`: `<cache>/documents/<id>/checks/`, a file's under its document id, so deleting a document removes its
-results with it), under the version that outlives the engine -- a model's revision, its build closure's key, the
-key its cache file is kept by (a build with no key keeps nothing on disk), a file's digest -- so a restarted engine
+results with it), under the version that outlives the engine -- a model's revision, its build closure's key (with
+its parameters' record where it has one, **Parameters**), the revision its cache file is kept by (a build with no key keeps nothing on disk), a file's digest -- so a restarted engine
 answers the same check of the same document without measuring, and a model built again from the same code and
 inputs is the same document there. Each is written whole, a document keeps one version's, the store holds 1024
 results and 256 MB at most, least recently used (by its time on disk, set again by a read) first, and an entry that

@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePromptDestination, useViewerHost, ViewerElementContext } from "../../../host/context.js";
-import { hasOpenPopup } from "../../../lib/popups.js";
+import { hasOpenPopup, ownsEscape } from "../../../lib/popups.js";
 import { useAnnotationSession } from "../../../annotation/session.js";
 import { promptViews } from "../../../annotation/views.js";
 import { useAlertDismissal } from "../status/ViewerAlertCard.jsx";
@@ -18,17 +18,20 @@ import { useWhenSettled } from "./useWhenSettled.js";
  * What every FLAT view does around its picture (a 2D drawing, a board: `FlatViewFrame.jsx`), so a
  * person moving between them meets one viewer. Two halves, in the order a renderer needs them:
  *
- * `useFlatTools` is the tools: Select, Pencil, Shapes and Measure, the one in hand never saved (a
+ * `useFlatTools` is the tools: Select, Draw (its `pencil` and `shapes` modes) and Measure, the one in hand never saved (a
  * file opens in Select), the drawing tools' session and Measure's over the viewer's one history.
  * Measurements are the person's alone: Measure's row lists them, and they never go to Quick Edit.
  *
  * `useFlatHandover` is what goes out of the view: Quick Edit's props (its references and chips, the
  * annotation, and the prompt's views and files: the views with ink, the one on screen and the
- * annotation file, as `host.promptFiles` writes them), the keys (Escape lets go, Delete deletes what
- * Select picked, ⌘Z walks the history, a tool's letter takes it up and F fits, ⌘\ shows or hides the
+ * annotation file, as `host.promptFiles` writes them), the keys (Escape lets go of picked ink and what is under
+ * way, then puts the tool in hand down, then lets go of what is picked; Delete deletes what Select picked, ⌘Z walks
+ * the history, a tool's letter takes it up and F fits, ⌘\ shows or hides the
  * view's panel and / opens it on its search (`panelControl`, which the frame fills in), the copy key copies
  * the annotated view while a drawing tool is up, else what `copySelection` copies), a host's capture
- * request, the live binding, and the alert card with its dismissal.
+ * request, the live binding, and the alert card with its dismissal. While the view is in Preview (`previewing`, a view
+ * that offers it: `useFlatPreview.jsx`) the keys are Preview's, as in every view: Escape leaves it, once an open
+ * dropdown has closed, and the tools', the zoom's, Delete, undo and the copy key do nothing.
  */
 
 /** A flat view's tools: the ids the strip and the tool modes share. */
@@ -86,11 +89,13 @@ export function useFlatTools({ toolModes, file, revision, ready }) {
  *   snapshot packet carries of the prompt's references into `file` (its `references`, which `cad <type> snapshot --job`
  *   lights as the view did), where the view's packets carry them; null for none.
  * @param {((event: KeyboardEvent) => boolean) | null} [options.onViewKey]  A single key of the view's own (a
- *   view drawn flat or in 3D switching between them, or one seen from two sides turning over: its state
- *   buttons' keys, `StateButton.jsx`), tried before the tools' letters; true when it took it.
+ *   view drawn flat or in 3D switching between them, or one seen from two sides turning over: Display's Mode
+ *   and Side keys, 3 and ⇧F), tried before the tools' letters; true when it took it.
+ * @param {boolean} [options.previewing]  The view is in Preview: its tools are put away, and so are their keys.
+ * @param {(() => void) | null} [options.leavePreview]  Escape's, while it is.
  */
 export function useFlatHandover({ view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
-  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null, onViewKey = null }) {
+  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null, onViewKey = null, previewing = false, leavePreview = null }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
   const viewerElement = useContext(ViewerElementContext);
@@ -165,6 +170,7 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
   const clearQuickEdit = () => { selection.clear(); measure.select([]); if (annotation.hasAnnotation) annotation.forget(); };
   // A drawing tool's copy: the picture with its ink, to the clipboard; otherwise the view's own (its selection).
   const copyAction = () => {
+    if (previewing) return false;
     if (annotating) {
       if (!shown) return false;
       void host.clipboard.writeImage(capture()).catch(error => setActionError(error instanceof Error ? error.message : String(error)));
@@ -173,11 +179,16 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     return copySelection ? copySelection() : false;
   };
 
-  // ---- keys: Escape lets go, Delete deletes what Select picked, ⌘Z walks the history ----
-  const letGo = () => {
+  // ---- keys: Escape, Delete deletes what Select picked, ⌘Z walks the history ----
+  // Escape, a step a press, in the same order in every view: picked ink, a measurement under way (a box being dragged
+  // is its gesture's own), the tool in hand going back to Select, the measurements picked, then the selection.
+  // The tool goes before the picks, so the selection, which feeds Quick Edit's chips, survives it. An empty Quick Edit
+  // passes its Escape on to this.
+  const escapeView = () => {
     const session = annotationRef.current, now = measureRef.current;
     if (session.selected.length) { session.select([]); return true; }
     if (now.drafting) { now.cancelDraft(); return true; }
+    if (!selecting) { selectTool(FLAT_TOOL.SELECT); return true; }
     if (now.selected.length) { now.select([]); return true; }
     if (selectionRef.current.active) { selectionRef.current.clear(); return true; }
     return false;
@@ -186,39 +197,45 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
   chordRef.current = onChord;
   const viewKeyRef = useRef(onViewKey);
   viewKeyRef.current = onViewKey;
-  // The view's panel, as the frame drew it (`FlatViewFrame.jsx` fills it in): ⌘\ (Ctrl+\) shows or
-  // hides it, / opens it on its search.
+  // The view's panel, as the frame drew it (`ViewFrame.jsx` fills it in): ⌘\ (Ctrl+\) shows or hides it; / opens it
+  // on its search.
   const panelControl = useRef(null);
   // The view's zoom as the strip has it (the renderer writes it, Zoom to selection and all): what the zoom's keys reach.
   const zoomKeys = useRef(null);
   useViewerShortcuts({
     viewerElement,
     onChord: event => {
-      if (event.key === "\\" && !event.shiftKey && panelControl.current) { panelControl.current.toggle(); return true; }
+      if (previewing) return false;
+      if ((event.code === "Backslash" || event.key === "\\") && !event.shiftKey && panelControl.current) {
+        panelControl.current.toggle();
+        return true;
+      }
       return Boolean(shown && chordRef.current?.(event));
     },
     onCopy: () => copyAction(),
     onDelete: () => {
-      if (annotating) return false;
+      if (annotating || previewing) return false;
       const session = annotationRef.current;
       const ink = session.selected.length > 0;
       if (ink) session.remove(session.selected);
       return Boolean(measureRef.current.removeSelected()) || ink;
     },
-    onUndo: () => history.undo(),
-    onRedo: () => history.redo(),
-    // A tool's letter takes it up, F fits the picture (`toolShortcuts.js`), over the strip as drawn.
-    onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search() : shown && (viewKeyRef.current?.(event) === true
+    // ⌘Z and ⇧⌘Z walk the view's history; never in Preview.
+    onUndo: () => !previewing && history.undo(),
+    onRedo: () => !previewing && history.redo(),
+    // A tool's letter takes it up, F fits the picture (`toolShortcuts.js`), over the strip as drawn; never in Preview.
+    onKey: event => (previewing ? false : event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search()
+      : shown && (viewKeyRef.current?.(event) === true
       || pressToolKey(event, { tools: toolKeys.current, selectDrawing: tool => annotationRef.current.selectTool(tool), fit }))),
-    zoom: () => (shown ? zoomKeys.current : null),
-    escapeActive: Boolean(selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
+    zoom: () => (shown && !previewing ? zoomKeys.current : null),
+    escapeActive: Boolean(previewing || selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
     onEscape(event) {
-      if (hasOpenPopup(viewerElement?.current)) return;
+      // A popup opened in this viewer (a menu, a Select, a colour picker) owns Escape before Preview.
+      if (hasOpenPopup(viewerElement?.current) || ownsEscape(event.target)) return;
+      if (previewing) { leavePreview?.(); return; }
       // The drawing tools' layer spends its own Escape (its editor, the stroke in hand).
       if (annotating && event.target instanceof Element && event.target.closest("[data-cad-annotation-overlay]")) return;
-      if (letGo()) return;
-      // Nothing to let go of: the tool in hand goes down, back to Select.
-      if (!selecting) selectTool(FLAT_TOOL.SELECT);
+      escapeView();
     }
   });
 
@@ -252,7 +269,7 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
 
   const quickEdit = {
     resource: workspace.resource, references, chips, nameReference, annotation: quickEditAnnotation,
-    prompt: quickEditPrompt, onCopy: copyAction, onEscape: letGo, onClear: clearQuickEdit, disabled: !shown
+    prompt: quickEditPrompt, onCopy: copyAction, onEscape: escapeView, onClear: clearQuickEdit, disabled: !shown
   };
   return { quickEdit, cardAlert, alertDismissal, toolStack, changeToolStack, panelControl, zoomKeys, reportActionError: setActionError };
 }

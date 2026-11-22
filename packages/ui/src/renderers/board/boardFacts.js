@@ -1,6 +1,6 @@
 import { english } from "@cad/ui/i18n";
 const FACT_KEYS = {
-  "Value": "board.text.value", "Footprint": "board.text.footprint", "Side": "board.text.side", "Position": "position.title", "Rotation": "render.rotation",
+  "Value": "board.text.value", "Footprint": "board.text.footprint", "Side": "board.text.side", "Position": "pick.position", "Rotation": "render.rotation",
   "Net": "board.text.net", "Number": "board.text.number", "Pin": "board.text.pin", "Type": "robot.type", "Class": "board.text.class", "Pads": "board.text.pads",
   "Layer": "drawing.layer", "Layers": "board.text.layers", "Width": "board.text.width", "Length": "measure.length", "Diameter": "board.text.diameter",
   "Drill": "board.text.drill", "Size": "board.text.size", "Priority": "board.text.priority", "Filled": "board.text.filled_area", "Text": "board.text.text",
@@ -14,8 +14,8 @@ const HELD_KEYS = [["pads", "board.text.pads"], ["tracks", "board.text.tracks"],
   ["texts", "board.text.texts"], ["dimensions", "board.text.dimensions"], ["shapes", "board.text.graphics"]];
 /**
  * What the viewer says of one board reference: its name, as a chip names it (`R1`, `R1.2`,
- * `net VBUS`, `VBUS · track`, `“blinky”`, a point, an area) — never the raw selector, which its card
- * shows as its ID — the pick glyph its chip leads with (`glyph`, a pick glyph's kind, and `icon`, the
+ * `net VBUS`, `VBUS · track`, `“blinky”`, a point, an area) — never the raw selector, which its
+ * copy carries — the pick glyph its chip leads with (`glyph`, a pick glyph's kind, and `icon`, the
  * board's own glyph for it), and its card's rows, in KiCad's millimetres (y down, from KiCad's page
  * origin: what a script's `Vector2.from_xy_mm` takes). Pure data.
  *
@@ -86,9 +86,12 @@ export const boardReferenceId = (selector) => String(selector || "").replace(/^#
  * @param {{ toScript(point: number[]): number[], within?(box: number[], layer?: string | null): object }} index
  * @returns {{ name: string, glyph: string, icon?: string, facts: { label: string, value: string }[] } | null}
  */
+/** A fact's name, as the board says it in `t`'s language: its own name where the board has no word for it. */
+export const boardFactLabel = (label, t = english) => (FACT_KEYS[label] ? t(FACT_KEYS[label]) : label);
+
 export function describeBoardReference(resolved, index, t = english, models = null) {
   if (!resolved) return null;
-  const row = (label, value) => ({ label: FACT_KEYS[label] ? t(FACT_KEYS[label]) : label, value: String(value) });
+  const row = (label, value) => ({ label: boardFactLabel(label, t), value: String(value) });
   const netName = (name) => name || t("robot.none");
   if (resolved.kind === "part") {
     const part = resolved.part;

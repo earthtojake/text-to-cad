@@ -20,8 +20,8 @@ test('an engine document reopens with its tree as it was left, and its selection
   // The Model is the view's panel's first tab (its only one, with no tab row, where nothing has a Position), the panel
   // opened from its pill (the 800px view starts it collapsed).
   const openTree = async () => {
-    await pane.locator('[data-flat-panel-pill] button, [data-flat-panel][data-open]').first().waitFor();
-    if (await pane.locator('[data-flat-panel-pill] button').count()) await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
+    await pane.locator('[data-navbar-panel="left"]').first().waitFor();
+    if (await pane.locator('[data-navbar-panel="left"][aria-expanded="false"]').count()) await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
     const tab = pane.locator('[data-flat-panel]').getByRole('tab', { name: 'Model', exact: true });
     if (await tab.count()) await tab.click();
   };
@@ -65,4 +65,29 @@ test('an engine document reopens with its tree as it was left, and its selection
   // A bracket is a solid: the scene it draws is not flat, so its menu has no DXF.
   assert.deepEqual([shown.file, shown.name, shown.planar], ['/models/bracket.xbf', 'bracket.xbf', false]);
   assert.deepEqual(errors, []);
+});
+
+// While the file loads, a structure tab with no row shows the panel's placeholder rows, its tabpanel busy.
+const loadingRows = scope => scope.locator('aside[data-flat-panel] [role="tabpanel"][aria-busy="true"] [data-tree-row-placeholder]');
+
+// Every file has its panel from the first frame: a STEP's Model tab is there while its structure is on its way, its
+// rows once it is in — an assembly's, a part file's one — and the panel open then as it is once the file is in.
+test('an engine document (a STEP\'s renderer) has its Model tab from the first frame, open as it stays once the file is in: an assembly\'s rows, a part\'s one', async (t) => {
+  const harness = await serveXbfHarness(t);
+  // Wide enough that the panel starts open beside the model (it keeps 640px).
+  for (const [part, rows] of [[false, ['plate', 'peg (2)']], [true, ['plate']]]) {
+    const { page, pane, errors, release } = await harness.open({ part, hold: true, width: 1000 });
+    const panel = pane.locator('aside[data-flat-panel]');
+    await panel.locator('[data-flat-panel-heading]').filter({ hasText: 'Model' }).waitFor();
+    const toggle = pane.locator('[data-viewer-navbar] [data-navbar-panel]');
+    const first = await toggle.getAttribute('aria-expanded');
+    const names = () => panel.locator('[aria-label="Modeling tree"] [data-tree-row-name]').allInnerTexts();
+    assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await names(), await loadingRows(pane).count()], ['true', true, [], 6],
+      'open, the file still loading, its placeholder rows');
+    release();
+    await page.waitForFunction(() => { try { return window.cadHarness.a.controller?.readState().loading === false; } catch { return false; } });
+    assert.deepEqual([await names(), await loadingRows(pane).count()], [rows, 0]);
+    assert.equal(await toggle.getAttribute('aria-expanded'), first, 'the panel as it was at the first frame');
+    assert.deepEqual(errors, []);
+  }
 });

@@ -157,7 +157,8 @@ const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation'
 export const CONTROLS = new Set([
   // The tools on the strip, each one a mode that stays on (its seconds counted), and Preview; Explode
   // and Clip are popovers from their tiles, no mode, counted as used each time one opens (no seconds).
-  'select', 'pencil', 'shapes', 'measure', 'explode', 'clip', 'preview',
+  // Draw is Pencil and Shapes as one tool (`draw`); `pencil` and `shapes` are older releases'.
+  'select', 'pencil', 'shapes', 'measure', 'explode', 'clip', 'preview', 'draw',
   // Select's and Measure's filters (Group faces and Group edges, which older releases send).
   'select_filter_all', 'select_filter_parts', 'select_filter_faces', 'select_filter_edges', 'select_filter_position',
   'select_filter_links', 'select_group_faces', 'select_group_edges',
@@ -178,6 +179,7 @@ export const CONTROLS = new Set([
   // Display and Projection.
   'display_solid', 'display_shaded', 'display_parts', 'display_xray', 'display_hidden_line', 'display_wireframe',
   'display_grid', 'projection_orthographic', 'projection_perspective',
+  'viewport_background_light', 'viewport_background_dark', 'viewport_background_theme', 'view_home',
   // Preview's settings.
   'preview_settings', 'preview_orbit', 'preview_orbit_speed', 'preview_parts_color_mode', 'preview_parts_colors',
   'preview_parts_color', 'preview_lighting_quality', 'preview_lighting_exposure', 'preview_lighting_rotation',
@@ -198,7 +200,7 @@ export const CONTROLS = new Set([
   // The view itself: a double-click's Look at and isolate, the view cube, F's fit.
   'look_at', 'isolate', 'view_cube', 'view_cube_drag', 'fit',
   // Quick Edit's Copy, Queue and Send.
-  'quick_edit_copy', 'quick_edit_queue', 'quick_edit_send',
+  'quick_edit_copy', 'quick_edit_queue', 'quick_edit_send', 'quick_edit_shown', 'quick_edit_dismissed', 'board_side', 'board_dimension',
   // The navbar, its file menu and its name menu's Models and Files (the explorer), and the app menu.
   'navbar_back', 'navbar_forward', 'models', 'models_open', 'models_filter',
   'explorer', 'explorer_filter', 'file_copy_path', 'file_copy_link', 'file_reveal', 'file_open_app', 'home',

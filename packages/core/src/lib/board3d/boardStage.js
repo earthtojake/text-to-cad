@@ -14,6 +14,11 @@
  * `index.pick`, with its filter and its layers) is the view's (`pickAt`). Holes are not cut: a hole
  * reads as one because the 2D drawer paints it in the canvas colour.
  *
+ * `lit`: the stage as a presentation render draws it (the viewer's Preview), the board alone under the
+ * host's lights: its faces LIT (the same pictures, as a surface's colour, in linear light), the slab
+ * casting its shadow, both faces wanted from the start, and none of the working view's own layers (no
+ * overlay for a highlight or ink, no surround past the outline).
+ *
  * three.js is passed in; nothing here touches the document but through `createCanvas`.
  *
  * Importing this module has no environmental effects.
@@ -27,6 +32,8 @@ import { boardFinish } from "../plot2d/stackup.js";
 // How far a face's picture and its overlay stand off the slab, so neither fights it for depth.
 const FACE_LIFT_MM = 0.01;
 const OVERLAY_LIFT_MM = 0.02;
+// A lit face's finish: matte, so the lights' glare does not wash its picture out.
+const LIT_FACE_ROUGHNESS = 0.8;
 // The slab's edge: FR4's tan, darker on the dark canvas (a board made in its stack-up's colours: its substrate's).
 const EDGE_COLORS = Object.freeze({ dark: 0x6f6240, light: 0xb9a66a });
 
@@ -54,12 +61,12 @@ export function outlineRings(outline, sheet) {
  * @param {typeof import("three")} THREE
  * @param {{ layout: object, outline: number[][][] | null, thickness?: number, theme: "light" | "dark",
  *   createCanvas?: () => HTMLCanvasElement, pickAt?: (located: { side: string, page: number[], point: number[], distance: number }) => object | null,
- *   pickBody?: (ray: object) => { hit: object, point: number[] } | null }} options
+ *   pickBody?: (ray: object) => { hit: object, point: number[] } | null, lit?: boolean }} options
  *   `outline`: the board's outline as the payload carries it (`board.outline`, page millimetres);
  *   `pickAt`: what a located point picks, the view's (null: nothing); `pickBody`: what a part's body in
- *   front of the face picks, the view's (`boardParts.js`), tried first.
+ *   front of the face picks, the view's (`boardParts.js`), tried first. `lit`: a presentation render's stage (above).
  */
-export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THICKNESS_MM, theme = "dark", createCanvas, pickAt = null, pickBody = null }) {
+export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THICKNESS_MM, theme = "dark", createCanvas, pickAt = null, pickBody = null, lit = false }) {
   const sheet = layout.sheets[0];
   const box = faceBox(layout, sheet);
   const rings = outlineRings(outline, sheet);
@@ -76,6 +83,7 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
   const slabMaterial = new THREE.MeshStandardMaterial({ color: EDGE_COLORS[theme] ?? EDGE_COLORS.dark, roughness: 0.85, metalness: 0 });
   const slab = new THREE.Mesh(slabGeometry, slabMaterial);
   slab.position.z = -thickness;
+  slab.castShadow = lit;
   group.add(slab);
 
   // A face: the outline's triangles, each vertex at its sheet point on the side's raster.
@@ -96,25 +104,30 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
     frame.holes = [toShape(rings.outer, THREE.Path)];
     return [frame, ...rings.holes.map(ring => toShape(ring, THREE.Shape))];
   };
-  const surroundGeometries = { top: onRaster(new THREE.ShapeGeometry(surroundShapes(), 8), "top"),
+  const surroundGeometries = lit ? {} : { top: onRaster(new THREE.ShapeGeometry(surroundShapes(), 8), "top"),
     bottom: onRaster(new THREE.ShapeGeometry(surroundShapes(), 8), "bottom") };
   // A face's picture is the canvas's pixels as they are: its bytes are sampled, filtered, mipmapped and
   // blended as the 2D canvas composites them (in sRGB, not decoded to linear light and encoded back,
   // which lightens every fine dark line a smaller mip averages in), and put on screen unconverted.
+  // A lit face's picture is its surface's colour: sRGB, decoded to the linear light it is lit in.
   const texture = () => {
     const made = new THREE.Texture();
-    made.colorSpace = THREE.NoColorSpace;
+    made.colorSpace = lit ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     made.generateMipmaps = true;
     made.minFilter = THREE.LinearMipmapLinearFilter;
     made.magFilter = THREE.LinearFilter;
     return made;
   };
   const asDrawn = shader => { shader.fragmentShader = shader.fragmentShader.replace("#include <colorspace_fragment>", ""); };
+  const facing = side => (side === "bottom" ? THREE.BackSide : THREE.FrontSide);
   const layer = (side, lift, transparent, { geometry = geometries[side], map = texture(), order = transparent ? 2 : 0 } = {}) => {
-    const material = new THREE.MeshBasicMaterial({ map, toneMapped: false, transparent, depthWrite: !transparent,
-      side: side === "bottom" ? THREE.BackSide : THREE.FrontSide });
-    material.onBeforeCompile = asDrawn;
-    material.customProgramCacheKey = () => "board-face-as-drawn";
+    // Lit, a face is a matte surface in its picture's colours (solder mask over a laminate), under the host's lights.
+    const material = lit ? new THREE.MeshStandardMaterial({ map, roughness: LIT_FACE_ROUGHNESS, metalness: 0, side: facing(side) })
+      : new THREE.MeshBasicMaterial({ map, toneMapped: false, transparent, depthWrite: !transparent, side: facing(side) });
+    if (!lit) {
+      material.onBeforeCompile = asDrawn;
+      material.customProgramCacheKey = () => "board-face-as-drawn";
+    }
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.z = side === "bottom" ? faceZ(side, thickness) - lift : lift;
     mesh.visible = false;
@@ -123,14 +136,16 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
     return mesh;
   };
   const faces = { top: layer("top", FACE_LIFT_MM, false), bottom: layer("bottom", FACE_LIFT_MM, false) };
-  const overlays = { top: layer("top", OVERLAY_LIFT_MM, true), bottom: layer("bottom", OVERLAY_LIFT_MM, true) };
-  // Each face's and overlay's surround: the same picture (one texture), see-through, round the slab.
+  // The working view's own layers, which a lit stage has none of: each face's overlay, and each face's and
+  // overlay's surround, the same picture (one texture), see-through, round the slab.
+  const overlays = lit ? null : { top: layer("top", OVERLAY_LIFT_MM, true), bottom: layer("bottom", OVERLAY_LIFT_MM, true) };
   const surround = (meshes, lift, order) => Object.fromEntries(["top", "bottom"].map(side => [side,
     layer(side, lift, true, { geometry: surroundGeometries[side], map: meshes[side].material.map, order })]));
-  const faceSurrounds = surround(faces, FACE_LIFT_MM, 1), overlaySurrounds = surround(overlays, OVERLAY_LIFT_MM, 2);
+  const faceSurrounds = lit ? null : surround(faces, FACE_LIFT_MM, 1), overlaySurrounds = lit ? null : surround(overlays, OVERLAY_LIFT_MM, 2);
   const show = (side, meshes, visible) => {
     meshes[side].visible = visible;
-    (meshes === faces ? faceSurrounds : overlaySurrounds)[side].visible = visible;
+    const round = meshes === faces ? faceSurrounds : overlaySurrounds;
+    if (round) round[side].visible = visible;
   };
 
   let renderer = null;
@@ -141,7 +156,7 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
   // What each face shows: its Display drawn (by key), or not yet.
   let look = null;
   const drawnKey = { top: "", bottom: "" };
-  const wanted = { top: true, bottom: false };
+  const wanted = { top: true, bottom: lit };
   let overlayPaint = null, overlayScale = 1;
   const timings = { face: 0 };
 
@@ -167,6 +182,7 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
     return true;
   };
   const drawOverlay = side => {
+    if (!overlays) return;
     if (!renderer || !overlayPaint || !faces[side].visible) { show(side, overlays, false); return; }
     const canvas = rastersNow().drawOverlay(side, overlayPaint, { lineScale: overlayScale });
     if (!canvas) { show(side, overlays, false); return; }
@@ -280,13 +296,13 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
       const size = raster => (rasters ? rasters[raster].width * rasters[raster].height : 0);
       const sides = ["top", "bottom"];
       return {
-        texturePixels: sides.reduce((sum, side) => sum + (uploaded.has(faces[side]) ? size("base") : 0) + (uploaded.has(overlays[side]) ? size("overlay") : 0), 0),
+        texturePixels: sides.reduce((sum, side) => sum + (uploaded.has(faces[side]) ? size("base") : 0) + (overlays && uploaded.has(overlays[side]) ? size("overlay") : 0), 0),
         canvasPixels: rasters?.pixels() ?? 0, drawnSides: sides.filter(side => drawnKey[side]), faceMs: timings.face
       };
     },
     dispose() {
-      for (const mesh of [...Object.values(faces), ...Object.values(overlays)]) { mesh.material.map.dispose(); mesh.material.dispose(); }
-      for (const mesh of [...Object.values(faceSurrounds), ...Object.values(overlaySurrounds)]) mesh.material.dispose();
+      for (const mesh of [...Object.values(faces), ...Object.values(overlays || {})]) { mesh.material.map.dispose(); mesh.material.dispose(); }
+      for (const mesh of [...Object.values(faceSurrounds || {}), ...Object.values(overlaySurrounds || {})]) mesh.material.dispose();
       for (const geometry of [...Object.values(geometries), ...Object.values(surroundGeometries)]) geometry.dispose();
       slabGeometry.dispose();
       slabMaterial.dispose();

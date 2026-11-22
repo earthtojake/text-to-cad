@@ -12,9 +12,9 @@ type from some input; many integrations may produce one type, each stating which
 content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
 shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
 ``dfm`` a 3D type's manufacturing check, ``interference`` a B-rep type's check that no two parts share volume,
-``solve`` a B-rep type's stress study, ``ranges`` a mechanism's joint
-stops found from its geometry, ``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check,
-``validate`` a robot description's conformance check.
+``solve`` a B-rep type's stress study, ``ranges`` a mechanism's joint stops found from its geometry,
+``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check, ``validate`` a robot
+description's conformance check.
 
 ``model`` is the one type with no file: a model built from code and held in the engine's memory,
 addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
@@ -312,12 +312,12 @@ _TYPES = (
     DocumentTypeEntry(
         "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
                           "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
-        (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
+        (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
         (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True),
     DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
-        (*_DOCUMENT_CONTENT, "animations", "build closure"),
+        (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
         (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(

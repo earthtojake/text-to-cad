@@ -26,12 +26,13 @@ function boundsOf(THREE, objects) {
  * @param {typeof import("three")} THREE
  * @param {import("./meshObjects.js").MeshObject[]} objects  `buildMeshObjects`.
  *   The scene owns their geometries from here on (a sibling's share its source's: `createSibling`).
- * @param {{ units?: import("../viewer/sceneUnits.js").SceneUnits }} [options]  What the file measures in.
+ * @param {{ units?: import("../viewer/sceneUnits.js").SceneUnits, name?: string }} [options]  What the file measures in,
+ *   and the name of an STL's one unnamed body (the file's: its single row in the view's panel).
  * @returns {import("../viewer/sceneContract.js").KitScene & { meshCount: number }}
  *   A 3MF's objects (those with a `path`) are picked, named and lit by their place in its build:
  *   `o2.1`, the second build item's first component, as a STEP names an occurrence.
  */
-export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS } = {}) {
+export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS, name = "" } = {}) {
   const root = new THREE.Group();
   root.name = "mesh-document";
   const materials = objects.map((object) => {
@@ -45,9 +46,10 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
     mesh.castShadow = true;
     // Where "Color by part" deals this object its palette colour.
     mesh.userData.cadFillIndex = object.paletteIndex;
-    if (object.path) mesh.userData.objectPath = `o${object.path.join(".")}`;
-    // What Annotate hangs a mark on, here and in a snapshot (`annotation.js`).
-    mesh.userData.partId = mesh.userData.objectPath || `mesh:${root.children.length}`;
+    // A 3MF's object by its place in the build (`o2.1`); an STL's body by its number (`b3`, `stlBodies.js`).
+    mesh.userData.objectPath = object.path ? `o${object.path.join(".")}` : `b${object.body || root.children.length + 1}`;
+    // What Annotate hangs a mark on, here and in a snapshot (`annotation.js`): the object or body a pick names.
+    mesh.userData.partId = mesh.userData.objectPath;
     root.add(mesh);
     return material;
   });
@@ -66,7 +68,9 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
   const nameCounts = new Map();
   for (const [path, [{ mesh }]] of byPath) nameCounts.set(mesh.name || path, (nameCounts.get(mesh.name || path) || 0) + 1);
   // An object the file left unnamed has only its reader's stand-in ("3mf:2"): it is named by its place.
-  const objectName = (path, name) => (!name || /^3mf:\d+$/.test(name) ? `Object ${path}` : nameCounts.get(name) > 1 ? `${name} (${path})` : name);
+  // An STL's one body, unnamed, is named for the file (`name`); one of several unnamed, by its number.
+  const objectName = (path, given) => (path.startsWith("b") ? given || (byPath.size === 1 && name) || `Body ${path.slice(1)}`
+    : !given || /^3mf:\d+$/.test(given) ? `Object ${path}` : nameCounts.get(given) > 1 ? `${given} (${path})` : given);
   if (pickable.length) scheduleRuntimeRaycastBvh({ displayRecords: records }, { deferUntilRaycast: true });
   const raycaster = new THREE.Raycaster();
   let lastLook = null;
@@ -94,7 +98,9 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
       clipPlanes = Array.isArray(planes) ? planes : [];
       look.setClipPlanes(clipPlanes);
     },
-    /** Whether `path` (`o2.1`) is a 3MF object of this file. */
+    /** The file's objects as the view's panel lists them, one row each in build order (`{ id, label, part, children }`): a 3MF's objects, an STL's bodies. */
+    nodeTree: [...byPath.keys()].map(path => ({ id: path, label: objectName(path, byPath.get(path)[0].mesh.name), part: path, children: [] })),
+    /** Whether `path` (`o2.1`, an STL's `b3`) is an object of this file. */
     hasPart: path => byPath.has(path),
     /** A 3MF object's name alone, as its chip says it, counting nothing: the hover tip's. "" for none. */
     nameOf(path) {
@@ -107,6 +113,11 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
       if (!records) return null;
       const places = path.slice(1).split(".");
       const count = records.reduce((sum, { mesh }) => sum + Math.floor((mesh.geometry.index?.count ?? mesh.geometry.getAttribute("position").count) / 3), 0);
+      // An STL's body has no place in a build: its number and its triangles.
+      if (path.startsWith("b")) return { name: objectName(path, records[0].mesh.name), facts: [
+        { label: "Body", key: "part.body", value: `${places[0]} of ${byPath.size}` },
+        { label: "Triangles", key: "part.triangles", value: count.toLocaleString("en-US") }
+      ] };
       return { name: objectName(path, records[0].mesh.name), facts: [
         { label: "Build item", key: "part.buildItem", value: places.length > 1 ? `${places[0]}, component ${places.slice(1).join(".")}` : places[0] },
         { label: "Triangles", key: "part.triangles", value: count.toLocaleString("en-US") }
@@ -124,7 +135,7 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
       highlight = { hovered: hovered.filter(path => byPath.has(path)), selected: selected.filter(path => byPath.has(path)) };
       applyHighlight();
     },
-    // A 3MF's object under the ray, and the point hit; an STL picks nothing.
+    // The object (a 3MF's) or body (an STL's) under the ray, and the point hit.
     pick(ray) {
       if (disposed || !pickable.length) return null;
       raycaster.ray.copy(ray);
@@ -140,7 +151,7 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
      * geometry's owner, so the sibling is disposed first.
      */
     createSibling() {
-      return createMeshScene(THREE, objects.map(object => ({ ...object, geometry: shareGeometry(THREE, object.geometry) })), { units });
+      return createMeshScene(THREE, objects.map(object => ({ ...object, geometry: shareGeometry(THREE, object.geometry) })), { units, name });
     },
     dispose() {
       if (disposed) return;
@@ -162,10 +173,11 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
  *
  * @param {typeof import("three")} THREE
  * @param {object} meshData  `buildMeshDataFromStlBuffer` / `buildMeshDataFrom3MfBuffer` output.
+ * @param {{ name?: string }} [options]  `name`: the file's, which an STL's one unnamed body takes (its single row).
  */
-export function buildMeshScene(THREE, meshData) {
+export function buildMeshScene(THREE, meshData, { name = "" } = {}) {
   const objects = buildMeshObjects(THREE, meshData);
   // A 3MF says the unit its numbers are in; an STL says none.
   const units = meshData?.unit ? threeMfSceneUnits(meshData.unit) : UNITLESS_SCENE_UNITS;
-  return objects.length ? createMeshScene(THREE, objects, { units }) : null;
+  return objects.length ? createMeshScene(THREE, objects, { units, name }) : null;
 }

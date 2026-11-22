@@ -1,4 +1,5 @@
 import { displayGeometryWithNormals } from "./meshNormals.js";
+import { withStlBodies } from "./stlBodies.js";
 
 function buildBoundsFromGeometry(geometry) {
   geometry.computeBoundingBox();
@@ -39,7 +40,12 @@ function buildGeometryIndices(geometry, vertexCount) {
   return indices;
 }
 
-export function buildMeshDataFromStlGeometry(geometry, { toCreasedNormals } = {}) {
+/**
+ * An STL's mesh data: its triangles, display normals and bounds, one mesh (its `solid` blocks kept as `stlSolids`).
+ * `bodies`: split into its bodies at once, a part each (`stlBodies.js`); the viewer splits them after the model shows
+ * (`loadStlBodies`).
+ */
+export function buildMeshDataFromStlGeometry(geometry, { toCreasedNormals, bodies = false } = {}) {
   const displayGeometry = buildDisplayGeometryFromStlGeometry(geometry, toCreasedNormals);
   const positions = geometry.getAttribute("position");
   const displayPositions = displayGeometry.getAttribute("position");
@@ -49,7 +55,9 @@ export function buildMeshDataFromStlGeometry(geometry, { toCreasedNormals } = {}
       throw new Error("STL geometry is missing vertex positions");
     }
     const vertexCount = displayPositions.count;
-    return {
+    const names = geometry.userData?.groupNames || [];
+    const solids = (geometry.groups || []).map((group, index) => ({ start: group.start, count: group.count, name: String(names[index] || "").trim() }));
+    const meshData = {
       vertices: new Float32Array(displayPositions.array),
       indices: buildGeometryIndices(displayGeometry, vertexCount),
       normals: displayNormals?.itemSize === 3 ? new Float32Array(displayNormals.array) : new Float32Array(displayPositions.array.length),
@@ -59,7 +67,12 @@ export function buildMeshDataFromStlGeometry(geometry, { toCreasedNormals } = {}
       parts: [],
       has_source_colors: false,
       sourceColor: "",
+      // An ASCII STL's `solid` blocks, as three's loader keeps them: a group each, in vertices, with its name; what
+      // its bodies are split by (`stlBodies.js`). One named solid names the mesh.
+      stlSolids: solids,
+      name: solids.length === 1 ? solids[0].name : "",
     };
+    return bodies ? withStlBodies(meshData, solids) : meshData;
   } finally {
     displayGeometry.dispose?.();
   }
@@ -179,7 +192,7 @@ export function readableStlBuffer(buffer) {
   );
 }
 
-export async function buildMeshDataFromStlBuffer(buffer) {
+export async function buildMeshDataFromStlBuffer(buffer, { bodies = false } = {}) {
   const [{ STLLoader }, { toCreasedNormals }] = await Promise.all([
     import("three/examples/jsm/loaders/STLLoader.js"),
     import("three/examples/jsm/utils/BufferGeometryUtils.js"),
@@ -187,7 +200,7 @@ export async function buildMeshDataFromStlBuffer(buffer) {
   const loader = new STLLoader();
   const geometry = loader.parse(readableStlBuffer(buffer));
   try {
-    return buildMeshDataFromStlGeometry(geometry, { toCreasedNormals });
+    return buildMeshDataFromStlGeometry(geometry, { toCreasedNormals, bodies });
   } finally {
     geometry.dispose?.();
   }

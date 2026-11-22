@@ -58,15 +58,18 @@ const POINTER_ONLY = Object.freeze({ pick: () => null });
  * @param {{ handle: { current: object | null }, viewerRef: { current: object | null }, modelKey: string,
  *   layout: object, outline: number[][][] | null, display: object, colorScheme: "light" | "dark",
  *   opening: { camera: object, then: object | null, home: boolean, side: "top" | "bottom", flat?: boolean }, projection: string, shown: boolean,
- *   pickAt(located: object): object | null, onTap(point: object, event: object): void, onHover(point: object | null, event: object | null): void,
+ *   pickAt(located: object): object | null, onTap(point: object, event: object): void,
+ *   takesAway?(point: object, event: object): string | null, onHover(point: object | null, event: object | null): void,
  *   picking: boolean, overlay(ctx: CanvasRenderingContext2D, frame: object): boolean,
  *   onCamera(camera: object, side: "top" | "bottom"): void, onShown(): void }} props
  *   `shown`: the board view shows this canvas in place of the flat one (after `onShown`).
+ *   `suspended`: the view is covered (the board's Preview is up over it): it draws nothing, and what it owes as it is uncovered.
  */
 export default function Board3dView({ handle, viewerRef, modelKey, layout, outline, thickness = BOARD_THICKNESS_MM, display, colorScheme, opening, projection, shown = false,
-  pickAt, onTap, onHover, picking, overlay, onCamera, onShown, parts = null, models = null, client = null, showModels = true, bodyInk = null, pickPart = null }) {
+  pickAt, onTap, takesAway = null, onHover, picking, overlay, onCamera, onShown, parts = null, models = null, client = null, showModels = true, bodyInk = null, pickPart = null,
+  suspended = false }) {
   const live = useRef(null);
-  live.current = { pickAt, onTap, onHover, overlay, onCamera, onShown, display, colorScheme, client, bodyInk, pickPart };
+  live.current = { pickAt, onTap, takesAway, onHover, overlay, onCamera, onShown, display, colorScheme, client, bodyInk, pickPart };
   // The viewport the 3D views' overlay is handed: its runtime, and the element its pointer events arrive on.
   const viewportRef = useRef(null);
   // A part's body the ray meets in front of the face it enters (null: none, or one the board hides).
@@ -282,6 +285,11 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
     },
     requestPaint,
     fit: () => viewerRef.current?.resetZoom?.(),
+    /** Home: the view it opens with, from the side the camera is on, framed whole, eased (the corner's Home: it has no cube). */
+    home() {
+      const home = cameraOnSide({ position: [...DEFAULT_VIEW_DIRECTION], target: [0, 0, 0], up: [...WORLD_UP] }, sideNow());
+      viewerRef.current?.goHome?.({ direction: home.position, up: home.up });
+    },
     /** A page box framed, the camera's direction kept. */
     frameSheet: ([x0, y0, x1, y1]) => viewerRef.current?.zoomToBounds?.({ min: [x0, -y1, -thickness], max: [x1, -y0, 0] }),
     /** The camera turned over to `side`, eased: Flip's. */
@@ -309,7 +317,8 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
     return <>
       <ReadyTick tick={viewport.viewerReadyTick} onTick={setTick} />
       <PointerPick viewport={viewport} scene={POINTER_ONLY} enabled={picking} sameHit={() => false}
-        onPick={(_hit, { multiSelect }, pointer) => live.current.onTap({ x: pointer.x, y: pointer.y }, { shiftKey: multiSelect, pointerType: "mouse" })}
+        onPick={(_hit, { multiSelect }, pointer) => live.current.onTap({ x: pointer.x, y: pointer.y }, { shiftKey: multiSelect, pointerType: pointer.pointerType || "mouse" })}
+        takesAway={(_hit, { multiSelect }, pointer) => live.current.takesAway?.({ x: pointer.x, y: pointer.y }, { shiftKey: multiSelect, pointerType: pointer.pointerType || "mouse" }) || null}
         onHover={(_hit, pointer) => live.current.onHover(pointer ? { x: pointer.x, y: pointer.y } : null, pointer ? { pointerType: "mouse" } : null)} />
       <DoubleClickFit viewport={viewport} scene={stage} viewerRef={viewerRef} />
     </>;
@@ -317,7 +326,7 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
   // Unseen until shown: see-through (the viewport's cover with it) and deaf to the pointer, over the flat canvas.
   return <div ref={frameRef} className={shown ? "absolute inset-0 z-0" : "pointer-events-none absolute inset-0 z-0 opacity-0"} data-board-3d="">
     <ShellViewport ref={viewerRef} scene={stage} modelKey={modelKey} sceneScaleMode={SCALE} perspective={initial} {...props}
-      viewCube={false} onPerspectiveChange={perspectiveChange} onPresentationChange={presentation} onCameraSettled={requestPaint}>{children}</ShellViewport>
+      viewCube={false} suspended={suspended} onPerspectiveChange={perspectiveChange} onPresentationChange={presentation} onCameraSettled={requestPaint}>{children}</ShellViewport>
   </div>;
 }
 

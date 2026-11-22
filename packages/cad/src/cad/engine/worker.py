@@ -67,6 +67,14 @@ serialisation), and it answers no ``done``. A ``result`` request with ``document
 reads the bytes after its line (the cache's file) as ``export`` does a held document's: its
 structure and shape bytes, as a built document's.
 
+A ``{"id", "op": "preview", "script", "name", "values", "digest", "known", "cwd", "env"}`` request asks for
+one model of the script at other values of its declared parameters, which a page is trying
+(``build.preview``): built in this worker's memo and answered as ``result`` answers, the structure and the
+shape bytes of each part whose key is not in ``known``, after the line -- never kept, never written,
+never said as a build's progress (no page but the one that asked sees it). Its refusals (``ParameterRefused``:
+the script's bytes are not the ones the last run read) are answered ``{"id", "done": {"ok": false, "code",
+"error", "hint"}}``.
+
 A build runs with the cyclic collector off, and the worker collects once it is idle: the memo
 keeps every live result of the last builds, millions of objects, and a full collection walks
 all of them -- a second on a large model, paid inside whichever call allocates when it falls
@@ -685,6 +693,23 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     return answer, b"".join(data)
 
 
+def _preview(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
+    """A ``preview`` request: one model at other values of its parameters (``build.preview``)."""
+    from cad.engine import build as engine_build
+    from cad.engine.parameters import ParameterRefused
+
+    values = request.get("values")
+    if not isinstance(values, dict):
+        raise ValueError("a preview names its values: {name: number}")
+    cwd = request.get("cwd")
+    try:
+        return engine_build.preview(Path(request["script"]), str(request["name"]), values,
+                                    cwd=Path(cwd) if cwd else None, digest=request.get("digest"),
+                                    known=request.get("known") or ())
+    except ParameterRefused as refused:
+        return {"ok": False, "code": refused.code, "error": str(refused), "hint": refused.hint}, b""
+
+
 def _save(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     """A ``save`` request: the document of a model this worker built, as the xbf bytes the engine's
     cache keeps (``document.to_bytes``, the drain's bytes)."""
@@ -965,7 +990,7 @@ def main() -> int:
             send({"id": ident, "saved": header}, payload)
             owed = True
             continue
-        if op in ("export", "result"):
+        if op in ("export", "result", "preview"):
             try:
                 told_display(request.get("display"), own)
                 adopt(request.get("env"), own)
@@ -1000,6 +1025,10 @@ def main() -> int:
                     retire = bool(done.get("reports")) and retirement(done["reports"], resident, cap)
                     send({"id": ident, "done": done, "rssMb": None if resident is None else round(resident),
                           **({"retire": True} if retire else {})})
+                elif op == "preview":
+                    answer, payload = _preview(request)
+                    resident = resident_mb()
+                    send({"id": ident, "done": answer, "rssMb": None if resident is None else round(resident)}, payload)
                 else:
                     answer, payload = _result(request)
                     send({"id": ident, "done": answer}, payload)

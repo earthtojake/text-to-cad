@@ -68,19 +68,21 @@ class LibraryTest(unittest.TestCase):
         ident = file_id(self.model)
         self.assertEqual(entry, {**RecentStore().list()[0].public(), "id": ident, "kind": "stl", "record": "file",
                                  "api": f"/api/v1/documents/stl/{ident}"})
+        # Its size on disk, which the home shows beside its age.
+        self.assertEqual(entry["size"], len(STL))
         self.assertTrue(self.change("pin", str(self.model))[1]["documents"][0]["pinned"])
         self.assertFalse(self.change("unpin", str(self.model))[1]["documents"][0]["pinned"])
-        # The picture, by its document's id; in the dark theme the same one, as it has no dark one.
+        # The picture, by its document's id: its one picture, in either theme (an earlier release's page
+        # asked for the dark theme's by ``?scheme=dark``).
         status, png = self.request("GET", f"/api/v1/documents/{ident}/thumbnail")
         self.assertEqual((status, png), (200, PNG))
         self.assertEqual(self.request("GET", f"/api/v1/documents/{ident}/thumbnail?scheme=dark"), (200, PNG))
-        # A view that draws its dark theme's too sends both; the dark theme's is served by its scheme.
-        dark = PNG + b"dark"
+        # An earlier release's page sent a board's dark theme's picture beside it: not read, so not kept.
         status, answer = self.change("thumbnail", str(self.model), png=base64.b64encode(PNG).decode("ascii"),
-                                     dark=base64.b64encode(dark).decode("ascii"))
-        self.assertIsNotNone(answer["documents"][0]["thumbnailDark"])
-        self.assertEqual(self.request("GET", f"/api/v1/documents/{ident}/thumbnail?scheme=dark"), (200, dark))
-        self.assertEqual(self.request("GET", f"/api/v1/documents/{ident}/thumbnail"), (200, PNG))
+                                     dark=base64.b64encode(PNG + b"dark").decode("ascii"))
+        self.assertEqual(status, 200)
+        self.assertNotIn("thumbnailDark", answer["documents"][0])
+        self.assertEqual(self.request("GET", f"/api/v1/documents/{ident}/thumbnail?scheme=dark"), (200, PNG))
         status, answer = self.change("thumbnail", str(self.model), png=base64.b64encode(PNG).decode("ascii"))
         entry = answer["documents"][0]
         # Filtered by kind, searched by name or path, at most a number.

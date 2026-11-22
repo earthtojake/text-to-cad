@@ -203,6 +203,18 @@ export interface FileViewerProps {
   overlay?: ReactNode;
   /** The file on screen, by its absolute path; null shows the host's home. */
   file: string | null;
+  /**
+   * The file's name where the host knows it before the file is read (a CAD host's catalog row): the
+   * navbar's name while the file opens. Without it a file is named by its path's last segment, and a
+   * document named by its id is never named by the id: the name's place is empty until it is known.
+   */
+  name?: string;
+  /**
+   * The file's own path where the host knows it before the file is read (a document named by its id: the path its
+   * catalog row gives, or the id of a model's): where the tab keeps its view, read for the panel's toggle until the
+   * view is up.
+   */
+  filePath?: string | null;
   host: ViewerHost;
   renderers: readonly RendererRegistration[];
   state: FileViewerState;
@@ -239,6 +251,13 @@ export interface FileViewerProps {
    * app's file handler). The renderer's own controls over the viewport are the same either way.
    */
   chrome?: "page" | "bare";
+  /**
+   * The viewer's layout pinned, for a viewer that is not the page's own (a picture drawn out of sight,
+   * `OffscreenPicture.tsx`): neither measured nor said to the page, so its size never changes the page's.
+   * Unset (the page's viewer): measured from its own width (`responsive.js`), and its root carries
+   * `data-viewer-layout`, which the page's stylesheet reads (a phone's type a step up: `styles/globals.css`).
+   */
+  layout?: "desktop" | "mobile";
   onError?: (error: Error) => void;
   presentation?: {
     /** The host's home, shown with no file: a page of its own under the navbar, which has only its logo's menu, Back and Forward and the host's actions there. */

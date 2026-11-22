@@ -2,10 +2,10 @@
 
 The viewer is the viewport, the floating tool strip and the tool in hand's
 sub-toolbar under it, the view's panel, reference interactions, measurement and annotation
-tools, animation, loading artwork and alerts, in `@cad/ui`. The rules of its
+tools, animation, the loading indicator and alerts, in `@cad/ui`. The rules of its
 chrome — which tools a file has, how they take and give back the pointer, the view's panel,
-Preview, the keyboard — are the
-[design system](settings-ui.md); this document is the mechanism behind them.
+Preview, the keyboard — are [the viewer's layout and patterns](viewer-ux.md) and the
+[design system](design-system.md); this document is the mechanism behind them.
 
 There is one renderer per file family over a shared, format-blind [kit](#kit) and
 [shell](#shell). A STEP opens in the [engine document renderer](#engine-document-renderer)
@@ -31,11 +31,11 @@ the reverse.
 | --- | --- |
 | `viewport/` | `useViewerRuntime` (three.js renderer lifecycle, on-demand render loop and `requestRender` -- a frame asked for is drawn in the browser's next animation frame, however late a GPU behind on its frames makes that, so the page stays the browser's to pace; only a HIDDEN document, which gets no animation frames, draws from a timer, as it hides and 120 ms after each later request -- resize and device-pixel-ratio caps, context loss, keyboard orbit, `setSuspended`, teardown), `gpuDevice` (the page's one WebGL context, shared by every viewport: see [the GPU device](#the-gpu-device)), `previewViewScene` (Preview's view of the file's Render settings: no clip or explode, one scene-quality tier up, `previewSceneQuality`), `framePresentation`, `viewportBuffer`, `renderDepthPolicy`, `sceneObjects` (`disposeSceneObject`), `thumbnail`, DOM helpers. The scene in the viewport is its owner's: teardown calls the injected `disposeScene(runtime)` and `disposeStudio(runtime)` and disposes its lights' shadow maps; a runtime with a renderer of its own (no device) then loses its WebGL context (`forceContextLoss`), since three's shared textures keep every renderer that drew them reachable and only a lost context gives its GPU memory back, and one on the device lets go of its view and never ends the device's context. A torn-down runtime draws no further frame. The orbit controls let go of the page in a layout cleanup, before React detaches the canvas: they listen on its root node, which is no longer the document once it is detached. |
 | `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions — each a turn of the camera about its target, its whole orientation on the shortest turn and its distance eased, so the eye goes round and never through the target, and a half turn goes the screen's right — fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: the perspective kept by a mounted view, the reset that Zoom to fit and the live `resetCamera` share, view-cube presets, which turn the camera and keep its zoom and target), `viewportCameraKit` and `viewportCameraFit`, `turntable` (the orbit: three's OrbitControls with its rotation replaced by a turntable that goes over the top — sideways about the world's vertical, up and down about the camera's own level right, unclamped, the camera's up its own and never rolled, a drag's sideways sense held from its start; the arrow keys and the cube's drag turn through it too), `orbitControls`, `zoomPivotReanchor` (a wheel step first moves the pivot's depth onto the surface under the cursor, and a perspective pan is scaled by that surface's depth, so Render pans and zooms what the cursor is on at Solid's rate), `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube). |
-| `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `canvasColor` and `useCanvasColor` (the canvas a scene is drawn on, the `--canvas` token, and the colour of the box it fills). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@cad/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. The viewport resolves it with core's `resolveSceneSurfaceLook` (`common/sceneSettings.js`), the resolver the snapshot CLI dresses the same scenes with. |
-| `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), the content of Display's dropdown (`DisplayModeOptions`: the modes and the Grid switch's icons; `DisplayPopover` draws it), and Preview's settings form (`PreviewRenderSettings`). |
-| `tools/` | `FloatingToolBar` (the dumb strip: the tools it is handed, in groups parted by one thin rule, then the view's controls, which end the last section the tools have with no rule of their own, with a navbar or without; after a rule only where the tools are a single group), `SubToolbar` (the tool in hand's one row under the strip, its groups parted by `SubToolbarSeparator`; `SLIDER_SUB_TOOLBAR_CLASS`, the one width of a slider row; Explode's and Clip's rows are the same component in a popover from their tiles, `model-effects/ModelTools.jsx`, a strip tool with a `tile` and, for a phone's More, its `popover`), `toolModes` (the tool-mode state machine), `ToolModeMenu` (`ToolSettingsMenu`: a tool's settings dropdown, from a chevron right after its button on the strip, or a sliders button in a panel's heading), `ToolPopover` (an ordinary dropdown from its button, on a `side` and `align`ed start or end: the playbar's Playback settings), `ToolStack` (the bounded column under the strip and sub-toolbar for a renderer's own `toolPanels`, which scrolls only when what cannot give way still does not fit), `ToolPanel` (one panel of the stack, or one tab of the view's panel, `kit/shell/FlatPanel.jsx`: `fit` says how it gives way when the viewer is short, `resizable` makes a stack panel the person's to size by the grip in its bottom-right corner alone, moving only it, and a panel with a heading can fold to it), `ResizeGrip` (the one resize grip of a box over the viewport, in a bottom corner: a resizable panel's at the bottom-right, Quick Edit's at its bottom-left), `toolStackLayout` (every panel's width, the resizable panels' sizes, the folded stack panels and the Selected pane's height — `flatDetailHeight`: the kept height, else 40% of the panel (`FLAT_DETAIL_SHARE`) whatever is picked, never under 96px, the lists keeping 160px — defaults, bounds and the tab's stored record, whose old shared fields for the view's panel it still reads so that `file-viewer/filePanel.js` adopts them once; the view's panel itself is the file's, `filePanel.js`), and the format-blind tools: `annotate/` (`AnnotationOverlay`, the surface the drawing tools' gestures land on; `annotation3d`, its ink projected into the model; `AnnotationSelectionBar`, the bar of the annotations Select picked), `PreviewChrome` (Preview's chrome: the tools view's controls hidden and inert while it is up, and its own corner, `end`, with its settings panel under it, `panel`), `PlaybackMenu` (the Playback settings — Speed, Loop, Autoplay — and `ORBIT_SPEEDS`, Preview's Orbit speeds), `playbar/` (`PreviewPlaybar`, the playbar under the model, in the tools view (`toolsView`) and in Preview, the same row: the routine where there are several, Play/Pause, the scrubber, Playback settings, whose last item in the tools view is Reset; `AnimationTimeControl`, the scrubber, and `animationControlsHaveContent`; `animationClock`, `usePlaybackFrames`, `playbackPreferences`: the file's playback settings — Orbit's speed, Autoplay, and the chosen Speed and Loop), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`SelectFilterMenu`, every picking tool's Filter on its chevron, its one row `SelectionSettings.jsx`'s `FilterRow`; `selectFilter`, its pure ticks, the strip's badge and the telemetry name of each box; `usePointerPick`: taps and hover through a scene's own `pick`, each with where the pointer was; `useBoxSelectGesture`, the one box of every viewer (a window left to right, a crossing right to left, each its own look), which draws its box over a scene and holds the camera for the press, mounted by `RendererShell` for a renderer's `boxSelect` and by `useFlatBoxSelect` for a flat view's Select; `boxTake`, what a box takes of each kind, Shift adding; `useSceneSelection` and `sceneReferences`: the parts a scene's pick names, selected, lit and handed to Quick Edit as references), `measure/` (Measure, for any 3D view: `useMeasureSession`, the session; `useMeasureOverlay`, its drawing; `MeasurementCard`; `measurementChips`, its chips and its row under the strip (`MeasurementsBar`); `measureSelection`, Select's press, hover and box on a measurement; `SceneMeasure`, two points on a scene's surface, and the model's size row), `model-effects/` (Explode and Clip, for any scene that opts in: `ModelTools`, their strip tools and slider rows, each the slider control `inline`; `useSceneEffects`, the viewport applying them to the scene; `motionExclusion`, one motion at a time), `sceneTools` (the tools a scene's renderer composes around the shell: the tool in hand, Pencil and Shapes, Measure and the model effects), `quick-edit/` (`QuickEdit`, the note to the agent, and `quickEditPrompt`, the context it builds and the text it copies). Screenshot capture is `@cad/core/lib/viewer/screenshotCapture.js`. |
-| `inspector/` | `FileSheet` and its row and section primitives, `SliderField` (the slider control: every number a slider sets, in a panel or `inline` in a toolbar row), `modelTreeSearch` (`useTreeSearch`, the ranked flat search every tree shares), `VirtualRows` (a long tree's rows, windowed), `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the `Pose` row that heads every Position section, laid out as the panel's head: Default, the named poses, Custom, and its Reset in the collapse button's column), `CircuitTree` (a board's or a schematic's Parts and Nets), `ItemDetail` (what a pick is, ONE component for the Selected pane every view with a panel has and a Quick Edit chip's card, `useSelectedDetail`; with several picks the pane draws the active one under its switcher, `SelectedPane`) over `inspect.js` (the view's one description of a pick, `DetailItem`, and the `Inspect` it hands its frame: the pane's, the cards', the hover tip's; `nextActivePick`, which of several picks the pane draws, and `pickRows`, the switcher's list of them), `layerRows` (`LayerSwatch`, a layer's colour in a row's glyph slot). Every list's row is `primitives/tree-row`'s one row (`TreeRowSurface` with its `depth`, `TreeRowGlyph`, `TreeRowToggle`, `TreeRowActions`), which alone sets a row's horizontal geometry from the panel's `--tree-row-pad` and `--tree-row-actions-pad`; the filter box is `primitives/tree-filter`. |
-| `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertCard` (the card over the viewport for every alert, and `useAlertDismissal`: a card put away, and its icon in the navbar that brings it back) and `reportIssue` (`alertIssueUrl`: its Report Issue's new issue), `ViewUpdateStatus`, `loadingState` (`viewerLoadingState`), `loadAlerts` (`failureAlert`, `noGeometryAlert`). |
+| `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `canvasColor` (the canvas a scene is drawn on, the `--canvas` token, and the colour of the box it fills), `useViewportTheme` (the viewport's theme: the person's Background, Light or Dark). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@cad/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. The viewport resolves it with core's `resolveSceneSurfaceLook` (`common/sceneSettings.js`), the resolver the snapshot CLI dresses the same scenes with. |
+| `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), the content of Display's card (`DisplayModeOptions`: the modes and the Grid switch's icons, its Style's options), the settings cards (`SettingsCard`: the Display card's and Preview's one card, its placement, slide, rows and sections), and Preview's Render sections (`PreviewRenderSettings`). |
+| `tools/` | `FloatingToolBar` (the dumb strip at Figma's toolbar's proportions, a 40px bar of 28px tiles 5px in, a phone's tiles 36px: the tools it is handed, one row with no rule, then, with no navbar, the view's controls), `SubToolbar` (the tool in hand's row under the strip, Draw's two, its groups parted by `SubToolbarSeparator`; `SLIDER_SUB_TOOLBAR_CLASS`, the one width of a slider row; Explode's and Clip's rows are the same component in a popover from their tiles, `model-effects/ModelTools.jsx`, a strip tool with a `tile` and, for a phone's More, its `popover`), `toolModes` (the tool-mode state machine), `ToolModeMenu` (`ToolSettingsMenu`: a tool's settings dropdown, from a chevron right after its button on the strip, or a sliders button in a panel's heading), `ToolPopover` (an ordinary dropdown from its button, on a `side` and `align`ed start or end: Preview's playbar's Playback settings), `ToolStack` (the bounded column under the strip and sub-toolbar for a renderer's own `toolPanels`, which scrolls only when what cannot give way still does not fit), `ToolPanel` (one panel of the stack, or one tab of the view's panel, `kit/shell/FlatPanel.jsx`: `fit` says how it gives way when the viewer is short, `resizable` makes a stack panel the person's to size by the grip in its bottom-right corner alone, moving only it, and a panel with a heading can fold to it), `ResizeGrip` (the one resize grip of a box over the viewport: a resizable panel's, at its bottom-right), `toolStackLayout` (every panel's width, the resizable panels' sizes and the folded stack panels — defaults, bounds and the tab's stored record, whose old shared fields for the view's panel it still reads so that `file-viewer/filePanel.js` adopts them once; the view's panel itself is the file's, `filePanel.js`), and the format-blind tools: `annotate/` (`AnnotationOverlay`, the surface the drawing tools' gestures land on; `annotation3d`, its ink projected into the model; `AnnotationSelectionBar`, the bar of the annotations Select picked), `PreviewChrome` (Preview's chrome: the tools view's controls hidden and inert while it is up, and its own corner, `end`, with its settings panel under it, `panel`), `PlaybackMenu` (the Playback settings — Speed, Loop — and `ORBIT_SPEEDS`, Preview's Orbit speeds), `playbar/` (`AnimationSection` (the tools view's routines, the panel's Animation tab for a file with routines, one set of controls at rest, playing and paused: the Clip dropdown row, always, then Play/Pause and the scrubber, whose start is the rest pose, with no time readout, then Speed and Loop rows, and Reset at the tab's bottom right; `AnimationControls` and `JointsMotionContext`, the rows a mechanism's Joints tab draws first), `PreviewPlaybar`, Preview's playbar under the model: the routine where there are several, Play/Pause, the scrubber, Playback settings; `AnimationTimeControl`, the scrubber, and `animationControlsHaveContent`; `animationClock`, `usePlaybackFrames`, `playbackPreferences`: the file's playback settings — Orbit's speed, the chosen Speed and Loop), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`SelectFilterMenu`, every picking tool's Filter on its chevron, its one row `SelectionSettings.jsx`'s `FilterRow`; `selectFilter`, its pure ticks, the strip's badge and the telemetry name of each box; `usePointerPick`: taps and hover through a scene's own `pick`, each with where the pointer was; `useBoxSelectGesture`, the one box of every viewer (a window left to right, a crossing right to left, each its own look), which draws its box over a scene and holds the camera for the press, mounted by `RendererShell` for a renderer's `boxSelect` and by `useFlatBoxSelect` for a flat view's Select; `boxTake`, what a box takes of each kind, Shift adding; `useSceneSelection` and `sceneReferences`: the parts a scene's pick names, selected, lit and handed to Quick Edit as references), `measure/` (Measure, for any 3D view: `useMeasureSession`, the session; `useMeasureOverlay`, its drawing; `MeasurementCard`; `measurementChips`, its chips and its row under the strip (`MeasurementsBar`); `measureSelection`, Select's press, hover and box on a measurement; `SceneMeasure`, two points on a scene's surface, and the model's size row), `model-effects/` (Explode and Clip, for any scene that opts in: `ModelTools`, their strip tools and slider rows, each the slider control `inline`; `useSceneEffects`, the viewport applying them to the scene; `motionExclusion`, one motion at a time), `sceneTools` (the tools a scene's renderer composes around the shell: the tool in hand, Draw, Measure and the model effects), `quick-edit/` (`QuickEdit`, the note to the agent, and `quickEditPrompt`, the context it builds and the text it copies). Screenshot capture is `@cad/core/lib/viewer/screenshotCapture.js`. |
+| `inspector/` | `FileSheet` and its row and section primitives, `SliderField` (the slider control: every number a slider sets, in a panel or `inline` in a toolbar row), `modelTreeSearch` (`useTreeSearch`, the ranked flat search every tree shares), `VirtualRows` (a long tree's rows, windowed), `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the `Pose` row over a Joints tab's joints, a settings row labelled Position whose dropdown is as wide as its value: Default, the named poses, Custom; and its Reset, the tab's actions row, last, `KinematicsResetRow`), `PanelActions` (a tab's actions row, last and sticky: Params' Reset and Save, Joints' Reset), `CircuitTree` (a board's or a schematic's Parts and Nets), `ItemDetail` (what a pick is, in a Quick Edit chip's card, the one place a pick is read in detail: the pick in focus alone, its name and a few key facts, no list of what it holds) over `inspect.js` (the view's one description of a pick, `DetailItem`, and the `Inspect` it hands its frame: the cards' and the hover tip's), `layerRows` (`LayerSwatch`, a layer's colour in a row's glyph slot; `LayerColorMark`, a branch layer's after its name), `SceneTreeSection` (a GLB's nodes, a 3MF's objects, an STL's bodies: the Model tab, there from the view's first frame, the panel's placeholder rows in it while the file loads). Every panel view reuses the STEP/xbf Model tree's base components, never its own: `primitives/tree-row`'s one row (`TreeRowSurface` with its `depth`, `TreeRowGlyph`, `TreeRowToggle`, `TreeRowName`, `TreeRowDetail` — every count's style — `TreeRowActions`, `TreeRowHeading`), which alone sets a row's horizontal geometry — its gutter (the chevron's column), its glyph and its name, a column further a level — from the panel's `--tree-row-pad` and `--tree-row-actions-pad`; `primitives/tree-filter` (the filter box, `TreeFilterHighlight` and `TreeFilterMatch`, a search's lit match, `TreeSearchStatus`, its count); `VirtualRows`; no text size of a view's own. |
+| `status/` | `LoadingIndicator` (the view's step, said over `loading/LoadingStep.jsx`'s line and bar) and `ViewerLoadingOverlay`, `ViewerAlertCard` (the card over the viewport for every alert, and `useAlertDismissal`: a card put away, and its icon in the navbar that brings it back) and `reportIssue` (`alertIssueUrl`: its Report Issue's new issue), `ViewUpdateStatus`, `loadingState` (`viewerLoadingState`), `loadAlerts` (`failureAlert`, `noGeometryAlert`). |
 | `shell/` | The host glue every renderer needs that is not about its scene: see [Shell](#shell). |
 
 **What a view opts into.** Display's settings and `resolveViewSettings` take explicit
@@ -58,12 +58,14 @@ engine.
 disabled, onSelect, description?, menu? }` — a press is a tool's only action; a tool with
 settings has them as `menu`, a chevron right after its button (Select's filter, the only
 one), and what it can be set to while it is up is its sub-toolbar. Display is not a tool:
-its settings are a dropdown from its tile at the strip's end, before Preview
-(`kit/shell/DisplayPopover.jsx`), a 3D view's alone. A renderer
-builds its own list from `shell.tools.own(...)`, adding `shell.tools.drawing` (Pencil and Shapes) where it offers
+its settings are Display's card (`kit/shell/DisplaySettings.jsx`), the navbar's one button left of Preview, or the
+strip's end with no navbar. A renderer
+builds its own list from `shell.tools.own(...)`, adding `shell.tools.drawing` (Draw) where it offers
 them, declared in its `toolModes` as two modes (`pencil`, `shapes`) (a press on the tool in hand does nothing); the engine document's is in `xbf/XbfRenderer.jsx`.
-Routines play from the playbar under the model, which the shell adds for any file with
-routines (`kit/tools/playbar/PreviewPlaybar.jsx`), in the tools view and Preview alike. Preview is not a tool: its tile, after Display at the strip's end, enters it. Nor is Quick Edit: it is a box at the top-right, there while something is picked or annotated. `createToolModes({ defaultMode, modes })`
+Routines play, in the tools view, from the Animation tab the shell adds to the panel, last, for a file with
+routines, or, for a mechanism whose Joints tab takes its motion (`jointsHoldMotion`), from the top of that tab
+(`kit/tools/playbar/AnimationSection.jsx`), never from the strip; in Preview from Preview's playbar
+(`PreviewPlaybar.jsx`). Preview is not a tool: its button, the navbar's after Display or, with no navbar, the strip's last tile, enters it. Nor is Quick Edit: it is a bar at the view's bottom, on the strip's centre line, always there, one row, its attachments a row above it while something is picked or annotated. `createToolModes({ defaultMode, modes })`
 answers what a press does (`next`), what a saved tab may record (`persisted`) and
 which tool a file opens in (`restore`); the engine document's declaration is
 `XBF_TOOL_MODES` in `xbf/tools.js`. The scrubber follows the clock on
@@ -87,7 +89,9 @@ all of it but `pick`, and the robot and engine document renderers' all of it. A 
 not cut away, with the triangle it hit (`triangle`, for Measure). `pick(ray)` is what `usePointerPick` calls: the
 hook owns the pointer (which press is a tap, one hover pick per frame, the
 cursor), the scene says what is under the ray, and its renderer says what a hit
-means. A tap acts at once: nothing waits to tell it from a double-click.
+means. A tap acts at once, but for one that would take something out of the selection (`takesAway`: the thing
+selected pressed again, or a selected thing with Shift or a finger), which waits the double-click window
+(`DOUBLE_CLICK_WAIT_MS`, a finger's `DOUBLE_TAP_MS`) and which a double-click drops.
 `placedObjects()` is for the near/far fit alone: a camera inside a mostly empty
 aggregate box can still be well outside everything visible in it, so a scene that
 placed many things says so and is fitted on them instead of on its whole box.
@@ -161,21 +165,22 @@ calls one hook; the shell owns the rest.
 
 | module | what it is |
 | --- | --- |
-| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and the content of Display's dropdown (`shell.display`), tool modes (Pencil and Shapes are the strip tools the shell itself owns, `shell.tools.drawing`; Display, Preview and its controls are the frame's; `toolModes` is omitted altogether by a renderer with no tools of its own), the tool stack's layout (a viewer preference: `services.preferences.toolStack` — the resizable panels' sizes, the folded stack panels — changed by one patch per gesture, `frame.changeToolStack`; the view's panel is the file's, `filePanel.js`), prompt snapshots (the host's `captureRequest`), the clipboard screenshot (the drawing tools' Copy), what Quick Edit takes from the view (its file, how a copied prompt spells a path, the view as a picture, the viewer's Escape), the one Preview state (`shell.previewing` / `setPreviewing`, from `usePreviewState`; every way in and out goes through `setPreviewing`, which mounts Preview's view or takes it away and touches nothing of the editor's), Preview's scene (`frame.previewDesiredScene`: `previewViewScene(store.renderScene())`, Render over the file's settings as Preview draws them) and its viewport (`frame.previewViewRef`), Preview's Orbit (`shell.orbiting`, transient, off at every entry and exit), Render's studio code and environment prepared 600 ms after the model is on screen at Preview's quality, into the GPU device's cache Preview draws from (`previewPrepare`; it changes nothing the editor draws; not on a software renderer, the viewport's `softwareRendering`, where Preview prepares as it is entered), and Autoplay (`shell.autoplay`), alerts, shortcuts, and the live command surface (`setCamera`, `capture` and `resetCamera` act on the view on screen: Preview's while it is open). It owns no zoom control: the shell has none. |
-| `ViewFrame.jsx` | The ONE frame every renderer mounts, 2D or 3D, the canvas (`children`) the only difference: the root (`data-slot="cad-file-view"`, `data-cad-surface`, the renderer's `surface` attributes; a press on a canvas focuses it), the view's panel docked at the left (`FlatPanel`, `useFlatPanelState`: its tabs or a 3D view's sections; none on a phone; hidden, still mounted, in Preview), the stage (`data-cad-canvas`, the canvas's colour where a 3D view has one), the strip's column at the top centre of the WHOLE view (`data-cad-tool-groups`: the strip, the tool's row, the update status, the tool stack; it reaches back over the panel, `useStageReach.js`, so the panel never moves it), ONE measure of that column onto the root (`--cad-tools-bottom`, `--cad-top-right-left`, again as Quick Edit opens, closes or is resized), the corner slot, the top-right (`ViewportTopRight`: the host's notice and Quick Edit), the pill, a bottom-centre slot (a playbar), the renderer's `underlay` and `overlays`, the status at the top centre when there is no strip, the view's menu over a canvas it is handed, loading and the alert card, and what is picked (`inspect`, `inspector/inspect.js`: the view's picks and its ONE description of each — the Selected pane under the panel's lists, `ItemDetail.jsx`'s `useSelectedDetail`, the same component a Quick Edit chip's card draws; the hover tip over the canvas under Select, `HoverTip.jsx`'s `useFrameHoverTip`; the view's pick actions to both, `InspectContext`); `preview` (`PreviewChrome`'s props) wraps exactly the strip's column, the top-right and the corner. `FlatViewFrame.jsx` (a flat view's strip, status, corner and Quick Edit) and `RendererShell.jsx` mount it, and nothing else draws its parts: `scripts/test/check-kit-boundaries.mjs` fails a renderer source other than it that renders `FlatPanelPill`, `ViewportTopRight`, `ViewerAlertCard`, `ViewerLoadingOverlay`, `HoverTip` or `data-cad-tool-groups`, or calls `useStageReach` or `useFlatPanelState`, and `RendererShell.browser.test.mjs` holds the frame's contract over a 3D view and a flat one (the strip at the view's centre as the panel opens and shuts, the picture filling what the panel leaves, a phone's strip centred with no panel). |
-| `RendererShell.jsx` | A 3D view's frame, mounted on `ViewFrame.jsx` (above), which places every part named here but the viewport, Preview's view and cover and the playbar: viewport box; one centred column at the top centre (`TOOLBAR_POSITION`, `data-cad-tool-groups`) holding the tool strip (the renderer's tools, then, for a `previewable` view, the view's own controls, with a navbar or without: Projection, the state button `ProjectionToggle`; Display, the active mode's sphere, whose dropdown is `DisplayPopover`, the modes and the Grid switch; and Preview, a play triangle — on a phone rows of its More, with the zoom), under it the tool in hand's sub-toolbar (the drawing tools' `AnnotationToolbar` while Pencil or Shapes is up, else the renderer's `subToolbar`: Measure's chips), the update status, and the tool stack (`ToolStack`: the renderer's `toolPanels`; the column stops above the cube's line, `VIEWPORT_STACK_BOTTOM`); the view's panel docked at the left (`FlatPanel` over the renderer's `sidebar`, each section a tab, one state with the flat views', `useFlatPanelState`; open, it takes its width out of the canvas at any width, the picture drawn in what it leaves, nothing of it under the panel; the strip reaching back by the panel's width so it stays at the view's centre, over the panel where they meet (`useStageReach.js`: written before paint, so it never jumps); collapsed, its pill at the canvas's top-left; a phone has none, and its strip is centred as a desktop's); Quick Edit at the top-right; the view cube in the bottom-right corner (the viewport's), alone; Preview's bar in the navbar's place (`PreviewChrome`, `data-preview-bar`: the file's name, then Preview settings, a toggle whose panel docks under the bar at the view's right edge, sliding in, `panel` (`PreviewSettings.jsx`: Orbit and its speed, then Preview's own settings, `frame.previewSettings`), then Exit preview, an X; it fades with the playbar while the pointer rests, `usePreviewIdle` — no panel (hidden, a tree keeping its state), and for a file with routines Preview's own playbar under the model, `PreviewPlaybar.jsx`, fading with the bar); Preview's view (`PreviewView.jsx`, `data-preview-view`), mounted over the editor's viewport box while `shell.previewing` and unmounted as it closes, the editor's viewport `suspended` under it; the cover that answers the press ("Preparing preview…", `data-preview-cover`) until Preview's view has presented its first frame (`onPresented`), the published mesh is complete (`previewView.complete`) and its picture has converged (`pictureProgress`) — lifting at once on a view the shell set moving (Orbit, a routine playing), never on a picture that a component publication started again (`previewCover.js`); at five seconds it stops waiting for more components and lifts on the picture converged, a second later at the latest, with no cover on the way out; the playbar under the model, for a file with routines, and the file's chosen Speed and Loop applied to its routine; the loading overlay; and the alert card. While the model loads, and once a load has failed in a way the model did not survive (an alert that cannot be put away), it draws none of its controls: only the load, or the card saying why, with the update status at the top centre in the strip's row; in a compact host (`appearance.compact`), none at all: the model alone. Nothing sits at the bottom centre. It takes `studio`, the renderer's own Preview while it is open: `{ scene, overlay(viewport, drawn), animation, runtimeLifecycle, onCameraSettled }` — the scene Preview draws, built by the family's own builder over the editor's geometry, what drives it from inside Preview's viewport (handed the Render scene it draws), Preview's routine (the playbar's in Preview; Autoplay starts it on entry), and Preview viewport's lifecycle and settle. It takes `references` (what is selected, in the prompt grammar: what Quick Edit attaches and counts), `referenceChips` (how Quick Edit shows them) and `copySelection` (what ⌘C / Ctrl+C copies while the renderer's own tool is up and something is selected; null when nothing is), and, under Select, `onSelectPress`, `onSelectHover` and `selectsAnnotations` (whether Select's filter picks the annotations), and `inkTouches` (what the model is under a point of the view, `(clientX, clientY) => [{ part, ref? }]`: what the drawing tools record a mark as touching). One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-canvas`, `data-cad-toolbar`, `data-view-controls`, `data-cad-sub-toolbar`, `data-flat-panel`, `data-cad-tool-stack`, `data-tool-panel`) for every renderer. `frameProvider` wraps the WHOLE frame in the renderer's own context — the panel and the tool stack as well as the viewport, because they read it — and `onCanvasPointerDown` is a press that landed on the model, for a renderer with something to put down when the person reaches for it. The frame focuses itself on such a press either way. |
-| `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the drawing tools' surface and the annotations' ink in the model, the view cube (bottom-right, `VIEWPORT_CUBE_BOTTOM`; not mounted in Preview's viewport, while the model loads, or when the shell says so, `viewCube`), frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene, syncSceneBounds }`), which is how a renderer mounts its own overlay or pointer pick. A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under one identity) calls `commitScene()` from its own effect: the viewport re-reads what it placed, fits the stage and the depth range and applies the framing rules THEN, because a child's effects run before the viewport's own adoption effect. The one thing a commit never does ahead of the viewport is FRAME under a camera that is about to change: when the same render also changed the lens, the projection or the viewing mode, the stage is adopted at once and the framing follows once the camera has been given those props (a stored camera applied under the old projection and then converted comes out about a sixth smaller). A scene is framed once, on its `restBounds`. A scene that says `complete: false` (one still arriving) is framed on what has arrived and once more when it is whole, unless the camera on screen is by then the person's: one they dragged, wheeled, turned by keys or the cube, zoomed to a selection or set through `setCamera` during the current mount, or one a reload restored from the file's view. A rebuild of the open file is not a reframe: it keeps a camera the person took exactly, and fits again, animated as Zoom to fit does, only a camera still untouched since the page opened or the last fit, and only when the rebuild changed the rest box (`camera/cameraTouch.js`; a reload's restored view counts as touched). A file shown again in the page that left it opens on the camera it was left at, restored as a reload restores the file on screen's (the page keeps the view of each file it left, `tab-store`'s `files.retain`); a file the page has not shown starts with fresh framing. `studio` makes it Preview's viewport (opened at rest, framed afresh from the default direction, keeping no camera, no cube and no drawing tools; `orbit` turns the camera at `orbitSpeed`); `suspended` makes it draw nothing while another view covers it, and draws a frame asked of it meanwhile synchronously, before paint, as it is uncovered (`runtime.setSuspended`). `preserveInteractionPixelRatio` keeps the idle pixel ratio while the camera moves (a scene drawn with hairlines, and Preview's orbit), and `runtimeLifecycle` (`onRelease(runtime, { handoff })` while the WebGL renderer is still alive, `onContextLost()`, `onInitializationError(error)`) is for a renderer that hangs its own objects or in-flight work on the runtime. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe; a sync that finds the bounds (and every setting the fit reads) as they were refits nothing and keeps the shadow maps (`look/stageFollow.js`). What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams, the view on screen's (Preview's while it is open, the editor's again as it closes): `window.__cadCamera()` (the live camera, its depth range included, and `settling`: true while a gesture, a camera transition, a held orbit key, Preview's orbit or the controls' damping still moves it, so a test waits on the camera at rest and not on its coordinates holding still) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
+| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and what Display's card shows (the frame's `displayMode`, `projection`, `grid` and `background`), tool modes (Draw, over its `pencil` and `shapes` modes, is the strip tool the shell itself owns, `shell.tools.drawing`; Display, Preview and its controls are the frame's; `toolModes` is omitted altogether by a renderer with no tools of its own), the tool stack's layout (a viewer preference: `services.preferences.toolStack` — the resizable panels' sizes, the folded stack panels — changed by one patch per gesture, `frame.changeToolStack`; the view's panel is the file's, `filePanel.js`), prompt snapshots (the host's `captureRequest`), the clipboard screenshot (the drawing tools' Copy), what Quick Edit takes from the view (its file, how a copied prompt spells a path, the view as a picture, the viewer's Escape), the one Preview state (`shell.previewing` / `setPreviewing`, from `usePreviewState`; every way in and out goes through `setPreviewing`, which mounts Preview's view or takes it away and touches nothing of the editor's), Preview's scene (`frame.previewDesiredScene`: `previewViewScene(store.renderScene())`, Render over the file's settings as Preview draws them) and its viewport (`frame.previewViewRef`), Preview's Orbit (`shell.orbiting`, transient, off at every entry and exit), Render's studio code and environment prepared 600 ms after the model is on screen at Preview's quality, into the GPU device's cache Preview draws from (`previewPrepare`; it changes nothing the editor draws; not on a software renderer, the viewport's `softwareRendering`, where Preview prepares as it is entered), alerts, shortcuts, and the live command surface (`setCamera`, `capture` and `resetCamera` act on the view on screen: Preview's while it is open). It owns no zoom control: the shell has none. |
+| `ViewFrame.jsx` | The ONE frame every renderer mounts, 2D or 3D, the canvas (`children`) the only difference: the root (`data-slot="cad-file-view"`, `data-cad-surface`, the renderer's `surface` attributes; a press on a canvas focuses it), the view's one panel docked at the left (`FlatPanel`, `useFlatPanelState`, `sidebars.js`: its tabs or a 3D view's sections, each a tab; always pushing, collapsed on its own where it would leave the model under 640px (872px with the 232px panel); a phone's a sheet under the navbar, over the strip and the view, sliding, with no dimming; hidden, still mounted, in Preview; its toggle the navbar's, `usePanelToggles`), the stage (`data-cad-canvas`, the canvas's colour where a 3D view has one), the strip's column at the top centre of the WHOLE view (`data-cad-tool-groups`: the strip, the tool's row, the update status, the tool stack; in the top layer over the panel, `data-view-top-layer`, centred on the window, so no panel moves it), ONE measure of that column onto the root (`--cad-tools-bottom`, `--cad-top-right-left`, `--cad-corner-below`: the corner's bottom, which the notice stands under, again as the notice or the corner comes or goes; Quick Edit's bar centred on the window (on the model's area where it would stand over a pinned panel), 400px at most, its top's distance off the bottom `--cad-quick-edit-reserve`, `--cad-quick-edit-left` and `--cad-quick-edit-width`), the corner slot (the top-right), the column under it (`ViewportTopRight`: the host's notice), Quick Edit's bar at the bottom, a bottom-centre slot (Preview's playbar), the renderer's `underlay` and `overlays`, the status at the top centre when there is no strip, the view's menu over a canvas it is handed, loading and the alert card, and what is picked (`inspect`, `inspector/inspect.js`: the view's ONE description of each pick — a Quick Edit chip list's row, its kind and key facts, the one place a pick is read in detail, the panel holding only its lists; the hover tip over the canvas under Select, `HoverTip.jsx`'s `useFrameHoverTip`; the view's name for its marks, `InspectContext`); `preview` (`PreviewChrome`'s props) wraps exactly the strip's column, the top-right and the corner. `FlatViewFrame.jsx` (a flat view's strip, status, corner and Quick Edit) and `RendererShell.jsx` mount it, and nothing else draws its parts: `scripts/test/check-kit-boundaries.mjs` fails a renderer source other than it that renders `ViewportTopRight`, `ViewerAlertCard`, `ViewerLoadingOverlay`, `HoverTip` or `data-cad-tool-groups`, or calls `usePanelToggles` or `useFlatPanelState`, and `RendererShell.browser.test.mjs` holds the frame's contract over a 3D view and a flat one (the strip at the view's centre as the panel opens and shuts, the picture filling what the panel leaves, a phone's panel a sheet and its Display the desktop's card). |
+| `RendererShell.jsx` | A 3D view's frame, mounted on `ViewFrame.jsx` (above), which places every part named here but the viewport, Preview's view and cover, Preview's playbar: viewport box; one centred column at the top centre (`TOOLBAR_POSITION`, `data-cad-tool-groups`) holding the tool strip (the renderer's tools, then, for a `previewable` view with no navbar, the view's own controls: Display, `DisplaySettings.jsx`'s `useDisplaySettings` tile, then Preview, a play triangle — on a phone rows of its More: Display, the zoom, Preview); under a file's navbar Display (`DisplaySettings.jsx`: a toggle whose card — Projection | Style, Background, Show grid, and Reset — docks under the navbar at the view's right edge, `ViewFrame.jsx`'s `card`) then Preview portalled into its right end (`NavbarViewControls.jsx`, the same on a phone); the cube alone at the top-right; under it the tool in hand's sub-toolbar (the drawing tool's `AnnotationToolbar` while Draw is up, else the renderer's `subToolbar`: Measure's chips), the update status, and the tool stack (`ToolStack`: the renderer's `toolPanels`; the column stops clear of Quick Edit's bar, `VIEWPORT_STACK_BOTTOM` or the bar's measured top where that is higher); the panel (`FlatPanel` over the renderer's `sidebar`, its structure, then its `fileSections` — Params, Joints — and the Animation (none where the Joints tab takes the motion, `jointsHoldMotion`), each a tab, one state with the flat views', `useFlatPanelState`), always pushing the model aside (`sidebars.js`), the picture drawn in what it leaves; collapsed, nothing over the model; the strip and Quick Edit's bar centred on the window over it; a phone's a sheet from the left behind the navbar's toggle; the view cube in the top-right corner (the viewport's), its row under it; Preview's bar in the navbar's place (`PreviewChrome`, `data-preview-bar`: the file's name, then Preview's Display, a toggle whose card docks under the bar at the view's right edge, sliding in, `panel` (`PreviewSettings.jsx`, a settings card: Orbit and its speed, then Preview's own Render sections, `frame.previewSettings`), then Exit preview, an X; it fades with the playbar while the pointer rests, `usePreviewIdle` — no panel (hidden, a tree keeping its state), and for a file with routines Preview's own playbar under the model, `PreviewPlaybar.jsx`, fading with the bar); Preview's view (`PreviewView.jsx`, `data-preview-view`), mounted over the editor's viewport box while `shell.previewing` and unmounted as it closes, the editor's viewport `suspended` under it; the cover that answers the press ("Preparing preview…", `data-preview-cover`) until Preview's view has presented its first frame (`onPresented`), the published mesh is complete (`previewView.complete`) and its picture has converged (`pictureProgress`) — lifting at once on a view the shell set moving (Orbit, a routine playing), never on a picture that a component publication started again (`previewCover.js`); at five seconds it stops waiting for more components and lifts on the picture converged, a second later at the latest, with no cover on the way out; for a file with routines the panel's Animation tab (`AnimationSection.jsx`, after the renderer's tabs; a mechanism's motion the top of its Joints tab instead; no playbar in the tools view), Preview's playbar in Preview, and the file's chosen Speed and Loop applied to its routine; the loading overlay; and the alert card. While the model loads, and once a load has failed in a way the model did not survive (an alert that cannot be put away), it draws none of its controls: only the load, or the card saying why, with the update status at the top centre in the strip's row; in a compact host (`appearance.compact`), none at all: the model alone. Nothing sits at the bottom centre at rest. It takes `studio`, the renderer's own Preview while it is open: `{ scene, overlay(viewport, drawn), animation, runtimeLifecycle, onCameraSettled }` — the scene Preview draws, built by the family's own builder over the editor's geometry, what drives it from inside Preview's viewport (handed the Render scene it draws), Preview's routine (the playbar's in Preview, at rest on entry), and Preview viewport's lifecycle and settle. It takes `references` (what is selected, in the prompt grammar: what Quick Edit attaches and counts), `referenceChips` (how Quick Edit shows them) and `copySelection` (what ⌘C / Ctrl+C copies while the renderer's own tool is up and something is selected; null when nothing is), and, under Select, `onSelectPress`, `onSelectHover` and `selectsAnnotations` (whether Select's filter picks the annotations), and `inkTouches` (what the model is under a point of the view, `(clientX, clientY) => [{ part, ref? }]`: what the drawing tools record a mark as touching). One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-canvas`, `data-cad-toolbar`, `data-view-controls`, `data-cad-sub-toolbar`, `data-flat-panel`, `data-cad-tool-stack`, `data-tool-panel`) for every renderer. `frameProvider` wraps the WHOLE frame in the renderer's own context — the panel and the tool stack as well as the viewport, because they read it — and `onCanvasPointerDown` is a press that landed on the model, for a renderer with something to put down when the person reaches for it. The frame focuses itself on such a press either way. |
+| `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the drawing tools' surface and the annotations' ink in the model, the view cube (top-right, `VIEWPORT_CUBE_TOP`; not mounted in Preview's viewport, while the model loads, or when the shell says so, `viewCube`), frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene, syncSceneBounds }`), which is how a renderer mounts its own overlay or pointer pick. A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under one identity) calls `commitScene()` from its own effect: the viewport re-reads what it placed, fits the stage and the depth range and applies the framing rules THEN, because a child's effects run before the viewport's own adoption effect. The one thing a commit never does ahead of the viewport is FRAME under a camera that is about to change: when the same render also changed the lens, the projection or the viewing mode, the stage is adopted at once and the framing follows once the camera has been given those props (a stored camera applied under the old projection and then converted comes out about a sixth smaller). A scene is framed once, on its `restBounds`. A scene that says `complete: false` (one still arriving) is framed on what has arrived and once more when it is whole, unless the camera on screen is by then the person's: one they dragged, wheeled, turned by keys or the cube, zoomed to a selection or set through `setCamera` during the current mount, or one a reload restored from the file's view. A rebuild of the open file is not a reframe: it keeps a camera the person took exactly, and fits again, animated as Zoom to fit does, only a camera still untouched since the page opened or the last fit, and only when the rebuild changed the rest box (`camera/cameraTouch.js`; a reload's restored view counts as touched). A file shown again in the page that left it opens on the camera it was left at, restored as a reload restores the file on screen's (the page keeps the view of each file it left, `tab-store`'s `files.retain`); a file the page has not shown starts with fresh framing. `studio` makes it Preview's viewport (opened at rest, framed afresh from the default direction, keeping no camera, no cube and no drawing tools; `orbit` turns the camera at `orbitSpeed`); `suspended` makes it draw nothing while another view covers it, and draws a frame asked of it meanwhile synchronously, before paint, as it is uncovered (`runtime.setSuspended`). `preserveInteractionPixelRatio` keeps the idle pixel ratio while the camera moves (a scene drawn with hairlines, and Preview's orbit), and `runtimeLifecycle` (`onRelease(runtime, { handoff })` while the WebGL renderer is still alive, `onContextLost()`, `onInitializationError(error)`) is for a renderer that hangs its own objects or in-flight work on the runtime. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe; a sync that finds the bounds (and every setting the fit reads) as they were refits nothing and keeps the shadow maps (`look/stageFollow.js`). What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams, the view on screen's (Preview's while it is open, the editor's again as it closes): `window.__cadCamera()` (the live camera, its depth range included, and `settling`: true while a gesture, a camera transition, a held orbit key, Preview's orbit or the controls' damping still moves it, so a test waits on the camera at rest and not on its coordinates holding still) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
 | `PreviewView.jsx` | Preview's view: a `ShellViewport` of its own (`preview`, `orbit`, `orbitSpeed`), with its own view-update coordinator over `frame.previewDesiredScene`, drawing the renderer's `studio.scene` and mounting `studio.overlay(viewport, drawn)` inside it. Its canvas, scene, camera and look are its own; only the GPU device is shared with the editor's, which it never reaches. `onPresented` says when its first frame is on screen. |
 | `usePreviewScene.js` | Preview's scene for a family whose core scene has `createSibling()` (GLB, mesh, robot, engine document): the editor's scene's sibling, made as Preview opens and disposed as it closes, before the scene it shares geometry with. |
+| `usePreviewFrame.jsx` | Preview's frame, the same for every view that has Preview, over the one `previewing` state its caller holds: entering under the cover and leaving, the cover's lift (`previewCover.js`: presented, `view.complete`, the picture converged, or the cap), a new file leaving Preview, the host's navbar stepping aside (`onPreviewChange`), Preview's bar and settings panel (`PreviewChrome`'s props; the chrome's idle store, `usePreviewIdle`), Preview's view as the frame's underlay (`View`: `PreviewView.jsx`, or a view's own around it) and the Preview button (the navbar's, and the strip's entry). `RendererShell.jsx` calls it for a 3D view and `useFlatPreview.jsx` for a flat one; it returns `ViewFrame`'s props (`previewing`, `preview`, `underlay`, `overlays`). |
+| `useFlatPreview.jsx` | Preview for a view outside the shell (a flat view whose picture can be shown in 3D, lit: a board): what `useRendererShell.js` holds of Preview, under the same rules — the `previewing` state (`usePreviewState.js`), Orbit (off at every entry and exit), Preview's settings in a view settings store of their own and the scene Preview draws from them (`previewViewScene.js`), Orbit's speed, what the file's view keeps of them (`preview`, `playback`), Preview's viewport's handle — handed to `usePreviewFrame.jsx`. The view brings Preview's own view component (lazy, where its 3D code loads) and what it draws. Nothing is prepared ahead: there is no viewport until Preview is entered. `FlatViewFrame.jsx` takes its result as `preview`; `useFlatView.js`'s `useFlatHandover` takes `previewing` and `leavePreview` for the keys. |
 | `fileView.js` | The file's view `{ version, camera, display, preview, playback, renderer }`, read forgivingly and written exactly: the camera (restored in place of the open-time fit; null fits), the Display settings, Preview's Render settings (`preview`), the playback settings (`tools/playbar/playbackPreferences.js`), and the renderer's own slices, each `{ signature, value }` and restored only under the signature the renderer declares now (`readFileView(raw, signatures)`); the camera, the display, the preview and the playback are always kept. The host keys it `[file path, renderer id]` in the tab store, which keeps it for the file on screen alone. Not in it: the tool in hand, a selection, measurements, ink, Preview, a routine's time — every open starts those afresh. |
 | `liveBinding.ts` | `attachLiveBinding`: the live command surface. Base commands (`readState`, `setCamera`, `resetCamera`, `setDisplaySettings`, `capture`, `thumbnail`) mean the same for every renderer; a renderer ADDS commands by name and DECLINES the known host commands (`HOST_LIVE_COMMANDS`) that make no sense for it with the sentence the caller reads. Binding fails when a renderer does neither. |
 | `promptContext.js` | `createViewPromptContext` (a snapshot and what it depicts) and `promptDeliveryError`. A renderer with a reference vocabulary of its own passes `promptContext` instead, and may then return that vocabulary from `promptReferences`. |
 | `loadReport.js` | `shellLoadReport`: what the shell asks the status kit about one document load, as one pure function, and all it returns is the loading presentation over the viewport. A renderer whose document is a plain download passes `load` and nothing more. One whose document can be EDITED or PREVIEWED while it is open knows more than the shell can: `load.editPending` (queued work of the person's own, with nothing of it on screen), `load.currentPreview` (that work IS what is drawn, so the wait is over even though the write is not) and `load.finding` (the file is not even located yet). An alert is `load.alert`, which the frame draws as the alert card (`ViewerAlertCard`: every alert; one the model survives, a warning beside it included, can be dismissed). |
-| `useViewerShortcuts.js` | Which mounted viewer an Escape or a ⌘C / Ctrl+C belongs to (focus inside it, or the page after a press inside it); the renderer says what Escape means, and a copy is the active tool's (the drawing tools' view with its annotations, else the selection's references, `copySelection`). The order is [the design system's](settings-ui.md#keyboard). |
-| `viewportLayout.js` | The chrome's geometry: its inset from the viewer's edges (`VIEWPORT_INSET_PX`, 8px), the strip's row (`VIEWPORT_TOP_BAR_PX`, 34px), the cube's size and place (bottom-right, 2px from the right, `VIEWPORT_CORNER_INSET_PX`, and `VIEWPORT_CUBE_BOTTOM`, 8px off the bottom so its axes stay inside the view, plus `--cad-viewport-corner-bottom`, which a host whose control floats over that corner sets to lift it clear), the tool column's bottom (`VIEWPORT_STACK_BOTTOM`: an inset above the cube's line), and where the corner's pill stands (`viewCornerLayout(side)`: a flat view's zoom pill the corner's inset from the edges, `chromeInset.js`'s `CORNER_INSET_PX`, at the bottom-right, or mirrored at the bottom-left where the host sets `--cad-viewport-corner-left`; the frame reads the side, `ViewCorner.jsx`'s `viewCornerSide`, and says it to the corner, `ViewCornerSideProvider`). |
-| `ViewCorner.jsx` | The view's corner at the bottom-right: a 3D view's cube (the viewport's), alone; a flat view's zoom pill (`ZoomControl.jsx`, a floating toolbar of the strip's shape and surface); the side the host anchors the corner at (`viewCornerSide`, `ViewCornerSideProvider`, `useViewCornerSide`, `viewCornerAway`). How the view is looked at is the strip's end, not the corner's; its places are `viewportLayout.js`'s (`settings-ui.md`). |
-| `StateButton.jsx` | The one control a state of how the view is looked at is drawn with, a press switching it: Projection's (`ProjectionToggle.jsx`) and a view's own (a board's 2D/3D and Flip). Its icon is the state on screen, its name says the state (so it is a plain button, no `aria-pressed`), its tooltip what a press does and the key that does the same; it marks no state as selected, so none is drawn in a pressed fill (that fill is `ToolbarButton`'s `active`, a tool in hand). |
-| `TextGlyph.jsx` | A word as an icon, two or three characters (a board's 2D/3D: **2D**, **3D**), where the word is clearer than a picture: an `svg` on Lucide's 24-unit grid, so a strip tile and a More row size it as they size a Lucide icon, the word semibold, its figures tabular, tightly spaced, centred by its capitals, in `currentColor` and `aria-hidden`. `textGlyphIcon(text)` makes one the `icon` a control takes (`StateButton.jsx`'s). |
+| `useViewerShortcuts.js` | Which mounted viewer an Escape or a ⌘C / Ctrl+C belongs to (focus inside it, or the page after a press inside it); the renderer says what Escape means, and a copy is the active tool's (the drawing tools' view with its annotations, else the selection's references, `copySelection`). The order is [the viewer's](viewer-ux.md#keyboard). |
+| `viewportLayout.js` | The chrome's geometry: its inset from the viewer's edges (`VIEWPORT_INSET_PX`, 8px), the strip's row (`VIEWPORT_TOP_BAR_PX`, 48px, which the status takes where there is no strip; the bar itself `STRIP_BAR_PX`, 40px), the cube's size and place (`VIEWPORT_CUBE_SIZE`, 6rem; top-right, 2px from the right, `VIEWPORT_CORNER_INSET_PX`, and `VIEWPORT_CUBE_TOP`, 8px off the top as the strip is, plus `--cad-viewport-corner-top`, which a host whose control floats over that corner sets to lower it clear), the tool column's bottom (`VIEWPORT_STACK_BOTTOM`: clear of Quick Edit's row), and where a flat view's zoom stands (`viewCornerLayout(side)`'s `pill`: its outer edge the corner's inset from the edge, `chromeInset.js`'s `CORNER_INSET_PX`, its middle on the strip's, `STRIP_BAR_PX`, at the top-right, or mirrored at the top-left where the host sets `--cad-viewport-corner-left`; the frame reads the side, `ViewCorner.jsx`'s `viewCornerSide`, and says it to the corner, `ViewCornerSideProvider`). |
+| `ViewCorner.jsx` | The view's corner at the top-right (the bottom row is Quick Edit's), the camera's own control alone: a 3D view's cube (the viewport's) or a flat view's "100%" zoom dropdown (`ZoomControl.jsx`); the side the host anchors the corner at (`viewCornerSide`, `ViewCornerSideProvider`, `useViewCornerSide`: the zoom's menu opens away from it). Its places are `viewportLayout.js`'s ([the tool strip and the corner](viewer-ux.md#the-tool-strip-and-the-corner)). |
+| `TextGlyph.jsx` | A word as an icon, two or three characters (a board's 2D/3D: **2D**, **3D**), where the word is clearer than a picture: an `svg` on Lucide's 24-unit grid, so a strip tile and a More row size it as they size a Lucide icon, the word semibold, its figures tabular, tightly spaced, centred by its capitals, in `currentColor` and `aria-hidden`. `textGlyphIcon(text)` makes one the `Icon` a menu option or a More row takes. |
 | `useStageViewport.js` | A `ShellViewport` outside the shell: the applied view settings as its props (`useStageView`, Preview's view's too) and the projection's control (`projectionControl`, the shell's too); `useStageViewport`, a flat view's picture shown in 3D: its own settings, no grid or floor, its stage's background the flat canvas's colour. |
 | `DoubleClickFit.jsx` | A double-click on nothing under Select fits: every 3D view's. Under Select only, by the rule a flat view's canvas keeps too (`viewport/dom.js`'s `doubleClickFits`: the frame's root says Select is in hand, `ViewFrame.jsx`'s `selecting`). |
 | `ViewportContextMenu.jsx` | The viewport's menu on a secondary TAP (a secondary drag pans; primary and secondary together is the pan chord). The gesture, the anchor, the clamping and the dismissal are the shell's; the ITEMS are the renderer's (`contextMenuItems(press)`), asked at the moment of the press, and `onContextMenuOpenChange(open)` says while the menu is up. Every view passes its items, built from one set of groups (`viewMenu.js`, below); a flat view hands its own canvas (`canvasRef`) and pane in place of a 3D runtime. |
@@ -199,14 +204,16 @@ const shell = useRendererShell({
   //   rendererState   { signatures, read }: the renderer's slices of the file's view, read when it is written,
   //                   each restored (by the renderer, `readFileView(view.state, signatures)`) under the same signature
 });
-// Renderer-facing, beside `tools`, `display`, `toolMode`, `selectTool`, `previewing`, `requestRender`:
+// Renderer-facing, beside `tools`, `toolMode`, `selectTool`, `previewing`, `requestRender`:
 shell.requestFrame();            // a frame that keeps the shadow maps: a highlight moves and reshapes no caster
 shell.syncSceneBounds();         // the scene moved its bounds (a pose): the stage follows, no render
 shell.scheduleStateSave();       // a slice changed: write the view soon, and on unmount
-shell.playback; shell.setPlayback(patch); // the file's: Orbit's speed, Autoplay, the chosen Speed and Loop
+shell.playback; shell.setPlayback(patch); // the file's: Orbit's speed, the chosen Speed and Loop
 shell.orbiting; shell.setOrbiting(on);   // Preview's Orbit, transient: off at every entry and exit
-// The shell adds Projection, Display and Preview (a `previewable` view's, ending the strip), Preview's bar (the
-// file's name, Preview settings, Exit preview), the playbar for a file with routines, and the sub-toolbar of its own tool (the drawing tools').
+// The shell adds Display (its card: Projection, Style, Background, Show grid) and Preview (a `previewable` view's: the
+// navbar's, or ending the strip), Preview's frame (`usePreviewFrame.jsx`: its cover, its bar — the file's name, Preview
+// settings, Exit preview — and its view), for a file with routines the Animation tab (a mechanism's motion: the top of
+// its Joints tab) and Preview's playbar, and the sub-toolbar of its own tool (the drawing tools').
 const tools = [shell.tools.own({ id, label, icon, menu }), ...shell.tools.drawing].filter(Boolean); // []: no tools, and no strip
 // subToolbar: the renderer's tool in hand's row; sidebar: the file's sections, each a ToolPanel, a tab each of the view's panel
 return <RendererShell shell={shell} tools={tools} subToolbar={toolRow} sidebar={<>{treeSection}{positionSection}</>}
@@ -217,17 +224,17 @@ A CAD renderer's controls are the shell's chrome: its `tools` on the strip, the 
 hand's `subToolbar` (`kit/tools/SubToolbar.jsx`) under it, and its `sidebar`, the file's
 sections in the view's panel docked at the left (`kit/shell/FlatPanel.jsx`, a board's and a
 drawing's too), each a `ToolPanel` drawn as a tab by its name, whatever the tool: an engine
-document's Model and Position, a robot's Links and Position. A section draws
+document's Model, Params and Joints, a robot's Links and Joints. A section draws
 no heading in its tab and pads nothing: the panel's body stands its rows on the panel's lines
-(`docs/settings-ui.md`); the panel's one search searches the trees. The panel's width, whether it is
-collapsed and the tab shown are kept in the tool stack's layout (`panels.flat`, `collapsed.flat`,
-`tabs.model`). A tree is there under every tool (out of sight only in Preview, kept mounted with
+([the panel inset](design-system.md#spacing-and-the-panel-inset)); the panel's one search searches the trees. The
+panel's width, whether the person opened or closed it and the tab shown are the file's, kept in its view for the
+session (`file-viewer/filePanel.js`; the tool stack's old shared `panels.flat`, `collapsed.flat` and `tabs` are read
+once, as a file's start, then dropped). A tree is there under every tool (out of sight only in Preview, kept mounted with
 its state); a pick scrolls its row into view there. A renderer may also hand `toolPanels`, the tool stack under the strip and
 sub-toolbar, each panel its content's height, with `fit` saying how it gives way on a short
 viewer: `"tree"` first (to 128px or its content), then `"details"` together, each in
 proportion to its height (to 96px or its content), never `"fixed"`; the column scrolls only
-if the rest still does not fit. Every panel is `TOOL_PANEL_WIDTH` wide (164px, a six-tool
-strip's); `resizable` makes a panel the person's to size on its own, from the grip in its
+if the rest still does not fit. Every panel is `TOOL_PANEL_WIDTH` wide (164px); `resizable` makes a panel the person's to size on its own, from the grip in its
 bottom-right corner alone, kept under its `id`. The engine document's and the robot renderer hand none.
 
 A board is a flat view with two canvases in one frame (`ViewFrame.jsx`, through `FlatViewFrame.jsx`): the flat canvas
@@ -243,12 +250,13 @@ overwritten in place, at most 8 megapixels a face (a quarter of it on software W
 overlay, freed when 3D is left; `boardFrame.js`, the sheet to the world and back). The frame, the
 strip, the panel, the selection (`useSceneSelection` over the board's one scene), the tools'
 sessions and Quick Edit never unmount: the board view hands the active canvas's half — where a pane
-point lands on the board and how far a pick reaches, Measure's camera, Annotate's surface
+point lands on the board and how far a pick reaches, Measure's camera, the drawing tools' surface
 (`board/board3dAnnotation.js`), the framing, the zoom (`ZoomControl.jsx`'s `viewportZoom` in 3D)
-and the capture — to the same handlers. The strip's view controls (Flip, 2D/3D, Display) are the same in
-both, and the corner is the flat view's: its zoom pill, whose zoom in 3D is `viewportZoom` over the 3D
+and the capture — to the same handlers. The view's controls (Display's card's Side, Mode, Style and Background, `BoardDisplay.jsx`'s
+`boardViewGroups`) are the same in both, the card adding Projection in 3D, and the corner is the flat
+view's: its zoom, whose zoom in 3D is `viewportZoom` over the 3D
 viewport, made again once that viewport is up so the pill hears its camera; the 3D viewport draws no cube
-(`viewCube={false}`), and Display's menu ends with the projection (`DisplayMenuItems`' `projection`). A tap and the
+(`viewCube={false}`); with no navbar a phone's More has Display's row, which opens the same card. A tap and the
 pointer resting go
 through the 3D views' `usePointerPick`, handed the pointer alone: the board view picks once a frame
 (the bodies, each baked geometry with its accelerator, `viewer/raycastBvh.js`, then the face); a drag
@@ -272,7 +280,7 @@ prompt's view of the board in 3D is, and nothing leaving frames.
 
 The board's parts stand on it (`@cad/core/lib/board3d/boardParts.js`, placed by `partPlacement.js`): the
 board's models table (`board/useBoardModels.js`, `GET …/kicad_pcb/<id>/models`, asked on every revision
-and when the window takes the focus back, in 2D too, for the Selected pane's fact and the Parts' No 3D
+and when the window takes the focus back, in 2D too, for a part's card's fact and the Parts' No 3D
 model block) names each model a STEP by its document id; the 3D view opens each by that id
 (`client.engineDocument`), four at a time, reads it (`loadXbfDocument`, no look, no version wait: the
 engine may let it go), bakes it into ONE geometry with a material per colour, and shares it with every
@@ -286,6 +294,24 @@ the bodies and blocks shown on it at that moment (the stage's `shownBounds`), wh
 the slab's (what 100% means): a body arriving moves no camera, and the next fit takes it in. The
 canvas element says what it holds: `data-board-bodies`, `-blocks`, `-models`, `-mesh-mb`,
 `-models-waiting`, `-models-failed`.
+
+A board has Preview (`kit/shell/useFlatPreview.jsx`, through `FlatViewFrame.jsx`'s `preview`), where it has the layers to
+be shown in 3D: the frame's Preview is every view's (`usePreviewFrame.jsx`), and what it draws is the board's own
+(`board/BoardPreviewView.jsx`, a lazy chunk mounted only while Preview is up): `PreviewView.jsx` around a scene built
+as Preview opens, from the plot, the parts and the models table — core's stage in its `lit` form (`boardStage.js`'s
+`lit`: the two faces `MeshStandardMaterial`s whose `map` is the 2D drawer's picture, sRGB, both wanted from the start;
+the slab casting; no overlay and no surround) and its parts (`boardParts.js`'s `shadows` and `blocks: false`: the
+bodies casting, no block for a missing model), with a model loader of its own. Its scene's `bounds` are the slab with
+the bodies on it as they stand (`shownBounds`), `complete: false` while models are still wanted, each arrival adopted
+in place (`viewport.commitScene()`, once a frame) and said to the frame (`view.onComplete`, the cover's
+`view.complete`); it takes shadows on every surface (`setShadowReception`) and wears no surface look, so Preview's
+settings leave Part colours out. It draws `BOARD_DISPLAY_DEFAULTS` in the viewport's theme, whatever the Layers tab
+shows; the 3D models eye alone carries over. The working view stays mounted under it and is never told: the flat
+canvas is `suspended` (`useFlatCanvasView`'s: its size, view and fit held while the page's chrome goes and comes back
+round it, so it is uncovered exactly as it was left), the board in 3D's viewport `suspended` as a 3D file's editor
+is, both out of sight (Preview's Background may be see-through), and the flat views' keys are Preview's
+(`useFlatHandover`'s `previewing`). A live `capture` and `resetCamera` act on the view on screen, Preview's while it
+is up. Preview's settings and Orbit's speed are written with the file's view (`preview`, `playback`).
 
 A renderer whose model moves outside React (a robot's pose) keeps that state in
 its own store: `rendererState.read()` is called at the moment the view is
@@ -324,20 +350,21 @@ absent from it.
 
 It is **not on the shell**, and that is the whole design: a DXF is a finished 2D
 document, so the pane is a canvas and the drawing is painted on it. No three.js
-viewport, no scene, no Display settings, no Preview. The questions the old
+viewport, no scene, no Preview, and no Display settings of its own: its Display card is the viewport's Background
+alone. The questions the old
 Material/Bends tabs answered were about a sheet-metal part the viewer was inventing
 from the file; a drawing is not that. What it has is what a person needs to talk about
 a drawing — every view's one frame (`kit/shell/ViewFrame.jsx`) and the flat views' hooks around its canvas, a board's and a schematic's
 (`kit/shell/FlatViewFrame.jsx`, `useFlatTools`, `flatViewTools` and `useFlatHandover`): the strip
 at the top centre, the tool's row under it, the view's panel docked at the left (`kit/shell/FlatPanel.jsx`,
-where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right, the zoom pill in the corner.
+where the drawing has a Layers tab, kind `drawing`), Quick Edit's bar at the bottom, the zoom in the corner.
 
 - **Tools** (`dxf/tools.js`): **Select** (in hand: a tap picks, a plain drag draws the box,
-  every viewer's, below), **Pencil**, **Shapes** and **Measure**, no view controls (Display, Projection and
-  Preview are a 3D view's). Select picks, front to back, a measurement, then ink, then
+  every viewer's, below), **Draw** and **Measure**, and no view controls on the strip: the navbar's Display
+  opens its card, the Background alone (no rule, no Reset); Projection and Preview are a 3D view's. Select picks, front to back, a measurement, then ink, then
   the drawing's ENTITY under the pointer (`drawing2d/entities.js`'s `entityAt`: within
   6 px, a fingertip's 16; the lines over a hatch before the hatch; nothing on a hidden
-  layer); Shift adds. Its box (`useFlatBoxSelect`) takes the entities it touches
+  layer); Shift adds, as a finger's tap on something does. Its box (`useFlatBoxSelect`) takes the entities it touches
   (`entitiesInBox`, over each entity's drawn line-work, points,
   regions and words, on the layers shown), with the ink and the measurements (`boxTake.js`'s
   `takeFlatBox`). Its selection is the kit's (`useSceneSelection`,
@@ -357,13 +384,14 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right
   everything a block reference draws is its INSERT, a dimension is one entity. Quick
   Edit's chip names it by type and layer ("Circle on CUT", "Block M5_NUT on HARDWARE"),
   its card the handle, type, layer, block, centre and radius.
-- **Layers**, the panel's one tab, only where the drawing has the structure to read
-  (`layersSectionShown`): four or more layers drawn on, or any block reference; without it, no
-  panel. Each layer's pen, name, entity count and eye (hidden: not drawn, picked or snapped
-  to), and under it the block references placed on it, a click picking one; the panel's search
+- **Layers**, the panel's one tab, on every drawing once it is read (`layersSectionShown`): a drawing of
+  one layer has its one row. Each layer's pen, name, entity count and eye (hidden: not drawn, picked or snapped
+  to), and under it the block references placed on it, a level down, a click picking one — the Model
+  tree's rows, one glyph slot each: the pen in a layer's slot, or its chevron where blocks hang under it
+  (the pen then after its name); the panel's search
   ("Search the drawing") keeps the layers whose names match, and the blocks whose names do, each
   layer's chevron folding its hits while the search is up (folds of the search's own, `searchFolded`,
-  dropped as it is cleared: [the rule](settings-ui.md#the-views-panel-and-the-tool-stack)). The
+  dropped as it is cleared: [the rule](viewer-ux.md#trees)). The
   panel docking or going leaves a view the person framed where it was (`useDrawingView.js`).
 - **Quick Edit** carries the picks and the ink; its views are the window on screen as a
   plan-view camera (`planCamera`: looking straight down, `up` +Y, `orthographicHalfHeight` the
@@ -395,10 +423,11 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right
   `lineWidth = 1.25 / scale` per frame rebuilds no geometry. Model-space lineweights
   are not displayed at all.
 - **`color: null` is the default pen** (ACI 7, "whatever contrasts with the
-  background"), resolved at DRAW time against the app's `--foreground` on its
-  canvas, `--canvas` — what every view's content is drawn on. One payload therefore
-  serves both themes: flipping `.dark` repaints, it does not refetch. The tokens are
-  read off the pane, and a mutation on `<html>` schedules a frame. When they cannot be
+  background"), resolved at DRAW time against `--foreground` on the
+  canvas, `--canvas` — what every view's content is drawn on — in the viewport's scheme, the person's
+  Background (the frame scopes the canvas box to it), never the app's theme. One payload therefore
+  serves both: switching the Background repaints, it does not refetch. The tokens are
+  read off the pane, and a change of the scheme, or a mutation on `<html>`, schedules a frame. When they cannot be
   read the pair comes from `@cad/core/lib/appTheme.js`, the one place the app's colours
   are written down; the snapshot bundle, which has no stylesheet at all, paints its stills
   on that file's `background`, not the canvas.
@@ -413,7 +442,8 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right
   has the press: `controls.enabled`, which `useFlatBoxSelect` turns off for it as Box select turns
   OrbitControls off; a press that lets go before is the tool's tap), the 3D views' pans too (the right or middle button's drag, a drag
   with Ctrl, Cmd or Shift), a mouse's wheel or a pinch to zoom about the pointer and a trackpad's
-  two-finger scroll to pan, double-click to fit again, and a right-click for the view's menu (an
+  two-finger scroll to pan, double-click to fit again (dropping first a tap that waits for it: one that would take
+  something out of the selection, `takesAway`, waits the double-click window), and a right-click for the view's menu (an
   entity's reference, Select, Hide its layer; Show all layers; the framing). The view lives in a REF and the
   canvas repaints through one `requestAnimationFrame` when something changed; a pan
   never re-renders the component tree. A resize paints at once, inside the pane's
@@ -422,8 +452,9 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right
   (`dxf/DxfResize.browser.test.mjs`). The backing store is DPR-aware
   (`kit/viewport/pixelRatio.js`). What the tools draw (highlights, ink) is painted in
   the same frame, after the drawing, so a capture holds it.
-- **Navbar**: nothing of the drawing's — no zoom buttons, because zooming a drawing is
-  the pointer's: wheel or pinch about it, drag to pan, double-click to fit. The host's
+- **Navbar**: the drawing's Display, its card the Background alone; no zoom buttons: zooming a drawing is
+  the pointer's (wheel or pinch about it, drag to pan, double-click to fit), and the corner's "100%" zoom holds
+  the zoom's commands. The host's
   `captureRequest` is the canvas as a PNG, background included, delivered through
   `host.promptContext`.
 - **Empty and failed drawings.** `bounds: null` (nothing in the modelspace) is a quiet
@@ -452,8 +483,9 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right
   island, TEXT, a bulged LWPOLYLINE); `make_fixture.py` regenerates the pair.
   `DxfRenderer.browser.test.mjs` serves it and asserts on PIXELS — the fit, the theme
   flip, the red circle, the unfilled island, the hairline at 800%, zoom about the
-  pointer, pan, re-fit and the resize rule; `DxfRenderer.test.tsx` asserts that the
-  pane has no tab, tool strip or Preview.
+  pointer, pan, re-fit and the resize rule; `DxfRenderer.test.tsx` asserts its strip
+  (Select, in hand, Draw and Measure), the corner's zoom, no Preview, a Display card of the Background alone, and
+  its Layers tab from the first frame.
 
 ## GLB renderer
 
@@ -478,7 +510,7 @@ its NATIVE glTF scene, always: one path whether or not a clip is playing.
 - **Display**: `viewFeaturesForKind("glb", { parts, explodeParts })`: Solid and Clip, Parts where
   the file has several meshes, and Explode where it has two or more rigid nodes that draw
   (`explodeParts`); Preview draws Render.
-- **Tools** (`glb/tools.js`): **Select** (in hand as the file opens), **Pencil**, **Shapes**,
+- **Tools** (`glb/tools.js`): **Select** (in hand as the file opens), **Draw**,
   **Measure**, **Explode** (several parts only) and **Clip**. Select picks a NODE: the glTF
   node a mesh belongs to, marked on load (`userData.gltfNode`, `glbMeshData.js`), named
   `n<index>` after the file's `nodes[index]`; a selection is any number of nodes, each a chip
@@ -494,14 +526,16 @@ its NATIVE glTF scene, always: one path whether or not a clip is playing.
   routine playing (or owning the pose) and Clip set each put the other two back, decided by
   value. A routine lets go of Explode before it plays, so it starts from where the nodes were
   authored; a routine let go puts them back under Explode's (`syncExplode`).
-- **Animation** (`glb/useGlbAnimation.js`): clips play from the playbar under the model, the
-  shell's (`PreviewPlaybar.jsx`) — the clip where there are several, Play/Pause, the
-  scrubber and Playback settings (Reset its last item in the tools view) — in the tools view and
-  the Preview alike. The file OPENS AT REST — one `AnimationMixer` on the native scene, built by
+- **Animation** (`glb/useGlbAnimation.js`): clips play from the shell's Animation tab (the panel's last) in the tools view
+  (`AnimationSection.jsx`: the Clip dropdown row, always, one clip too, the transport, Speed and Loop, Reset at its bottom right; its scrubber's
+  start the rest pose) and from Preview's playbar in
+  Preview (`PreviewPlaybar.jsx`). The file OPENS AT REST — one `AnimationMixer` on the native scene, built by
   the first play, scrub or clip choice. Preview plays a routine of its own, a second
-  `useGlbAnimation` on its own scene's document: at rest each time it opens, playing only
-  under Autoplay, gone as it closes; the tools view's clip is never touched.
-- **Panels**: none of its own, and no view's panel: a GLB's clips are the playbar's. Preview is the shell's, as for every 3D file; it draws the
+  `useGlbAnimation` on its own scene's document: at rest each time it opens, played only by
+  the person, gone as it closes; the tools view's clip is never touched.
+- **Panels**: the view's panel from the first frame, its Model tab the file's node tree (`kit/inspector/SceneTreeSection.jsx`,
+  the panel's placeholder rows in it while the file loads; a GLB with no node, one row named for the file, which picks nothing), then, for a file
+  with clips, the shell's Animation tab. Preview is the shell's, as for every 3D file; it draws the
   scene's sibling (`createSibling()` in core's `glbScene.js`: a SkeletonUtils clone wearing
   copies of the file's authored materials, kept before any look, over the editor's geometry
   and textures, with a sibling `document` for its routine; `kit/shell/usePreviewScene.js`).
@@ -519,9 +553,13 @@ its NATIVE glTF scene, always: one path whether or not a clip is playing.
 `createMeshRenderer` (`@cad/ui/renderers/mesh`, id `mesh`) shows an `.stl`
 or a `.3mf` as what it is: triangles, and in a 3MF a colour per object.
 
-- **Scene** (core's `lib/render/meshScene.js`, `buildMeshScene`): one `Mesh` per object of the file (an STL is
-  one; a 3MF has one per object and material) and nothing else: no part table,
-  display records, edges or selectors. A 3MF's object knows its place in the build (`o2.1`:
+- **Scene** (core's `lib/render/meshScene.js`, `buildMeshScene`): one `Mesh` per object of the file (a 3MF has one per
+  object and material; an STL one per body, `b<n>`, else one, `b1`) and nothing else: no part table,
+  display records, edges or selectors. An STL's bodies are core's `lib/render/stlBodies.js` (`withStlBodies`): the
+  connected pieces of its triangles, corners welded at `STL_WELD_TOLERANCE` (a millionth) of the bounding diagonal,
+  joined by union-find, numbered largest first by triangles, an ASCII STL's named solids kept apart; past
+  `STL_BODY_LIMIT` (2,000) the file is one body. One unnamed body is named for the file (`buildMeshScene`'s `name`).
+  A 3MF's object knows its place in the build (`o2.1`:
   the second build item, its first component; `threeMfMeshData.js` reads it from three's
   loader and from the package reader alike) and its unit the one the model declares
   (`<model unit>`, read from the head of the root model part alone). Geometries
@@ -533,7 +571,11 @@ or a `.3mf` as what it is: triangles, and in a 3MF a colour per object.
   parsed in the STL worker where there is one, a 3MF that three's loader rejects
   falls back to the package reader, and the decode is cached per file revision:
   reopening a file fetches and parses nothing. Progress reads "Reading model",
-  then "Loading geometry 0/1". A new revision replaces the scene when it is ready.
+  then "Loading geometry 0/1". A new revision replaces the scene when it is ready. An STL shows first as
+  one body, the whole file; its bodies are split after (core's `loadStlBodies`, `stlMeshWorkerClient.js`: in the STL
+  worker over a copy of the triangles, else on the page, once per decode, the decode never written — on a million
+  triangles the split takes about twice the parse) and, where there are several, replace the scene, what was picked
+  in the first one let go.
 - **Look**: a mesh authors no finish, so Solid wears the viewer's surface and
   Render the studio's, over the same colours (`setSurfaceLook` never keeps an
   "authored" finish). Original keeps each object's source colour; an object
@@ -541,24 +583,24 @@ or a `.3mf` as what it is: triangles, and in a 3MF a colour per object.
   coloured the rest keep the colour their material carried. Flat is unlit,
   Single colour and Color by part override source colours (the palette is dealt
   in the order it always was, `paletteIndex`), opacity applies to every object.
-- **Display**: `viewFeaturesForKind` (Solid and Clip, and Parts for a 3MF of several objects;
+- **Display**: `viewFeaturesForKind` (Solid and Clip, and Parts for a 3MF of several objects or an STL of several bodies;
   Preview drawing Render).
 - **Tools** (`mesh/tools.js`): a 3MF has **Select** (its objects, by their place in the
-  build: `model.3mf#o2.1`; an unnamed one is "Object o2.1"), **Pencil**, **Shapes**, **Measure** (in the
+  build: `model.3mf#o2.1`; an unnamed one is "Object o2.1"), **Draw**, **Measure** (in the
   unit the file declares, approximately) and **Clip**, Select in hand as it opens. An STL is
-  one mesh in no unit: **Select**, **Pencil**, **Shapes** and **Clip**, Select in hand as it opens
-  and the view's plain navigation (it picks no part; a press on ink still picks it), and its Quick
-  Edit names the whole file. Neither has parts to move apart,
-  and their viewport menu is a 3MF object's reference and Select, then the framing (an STL's, the
-  framing alone); a double-click on empty space fits.
-- **Panels**: none, and no view's panel. Preview is the shell's, as for every 3D file;
+  in no unit: **Select** (its bodies, by their number: `model.stl#b2`), **Draw** and **Clip**, Select in hand as it
+  opens. Neither has parts to move apart, and their viewport menu is an object's or a body's reference and Select,
+  then the framing; a double-click on empty space fits.
+- **Panels**: the view's panel from the first frame, its Model tab the file's objects or bodies
+  (`kit/inspector/SceneTreeSection.jsx`, a row each, the panel's placeholder rows while the file loads; one row for a 3MF of one object or an
+  STL of one body). Preview is the shell's, as for every 3D file;
   it draws the scene's sibling (`createSibling()`: its own meshes, materials and look over the
   editor's geometry; `kit/shell/usePreviewScene.js`).
 - **Alerts**: a file that fails to parse raises the load alert ("Couldn’t load
   the model", with the loader's error in Details); one that parses to no
   triangles raises "No geometry to display".
-- **Quick Edit**: as a STEP's — a 3MF's picked objects as references, the annotation and the
-  views (Clip in their `display`); an STL's carries the file, its ink and its views.
+- **Quick Edit**: as a STEP's — the picked objects or bodies as references, the annotation and the
+  views (Clip in their `display`).
 - **Host commands**: the base live commands, and `clearSelection`; `select` is declined with
   a sentence, a `selectReference` host request is consumed and acknowledged without changing
   the view, and live state reports `selectedObjects`.
@@ -626,7 +668,7 @@ the loader asks which format it was.
   (`kit/tools/select/SelectFilterMenu.jsx`), its one row Filter: All, **Links**, then **Position** (the
   joints' knobs, shown while it is ticked, beside the links a click picks; the menu is offered where a
   control can be driven, and until the robot has loaded), both ticked when a file opens; Select's button
-  badged with Position's knobs while they are all it picks, a funnel while nothing is; then **Pencil**, **Shapes**, **Measure** (the description's metres, REP
+  badged with Position's knobs while they are all it picks, a funnel while nothing is; then **Draw**, **Measure** (the description's metres, REP
   103, each mesh as its `<mesh scale>` draws it; approximate) and **Clip**. Clip turned on puts
   the joints back at the opening pose, and a joint moved takes Clip off: the second is heard
   on the pose store itself, outside React, so a pose step still renders no component.
@@ -653,16 +695,16 @@ the loader asks which format it was.
   Select, as a STEP's does: a pick in Links returns to Select first, and leaving Select keeps
   it. Picking in the viewport is Select's while its filter ticks Links. Escape clears the
   selection. Hover and selection are drawn by the scene (`setHighlight`), with
-  the highlight ink a STEP part wears; hover is not React state. A robot has no
-  viewport menu and so no framing items; opening the file again fits it afresh.
+  the highlight ink a STEP part wears; hover is not React state. Its viewport menu, under
+  Select, is a link's or an object's reference, Select, Hide and the framing; opening the file again fits it afresh.
 - **Panel**: the view's panel's tabs, whatever the tool: **Links**
-  ([Robot links](#robot-links): headed by its filter), then **Position** where a control can be
+  ([Robot links](#robot-links): searched by the panel's search box), then **Joints** where a control can be
   driven. No tool panels.
-  `PositionControls.jsx` is the Position section's body (`RobotRenderer.jsx`) — the `Pose`
-  label and dropdown (`Default`, which puts the joints back, the SRDF group states, and
+  `PositionControls.jsx` is the Joints tab's body (`RobotRenderer.jsx`) — the `Pose`
+  row, labelled Position, and its dropdown (`Default`, which puts the joints back, the SRDF group states, and
   `Custom` for a hand-moved pose), then the slider control (`kit/inspector/SliderField.jsx`) per
   driven joint (never a fixed joint or a mimic follower),
-  its thumb named after the control.
+  its thumb named after the control, and last Reset, the tab's actions row.
 - **Host commands**: the base live commands; `clearSelection` clears the link
   selection; `select` is declined with a sentence (a robot description has no
   reference grammar), and a `selectReference` host request is consumed and
@@ -679,9 +721,9 @@ the loader asks which format it was.
 
 `createXbfRenderer` (`@cad/ui/renderers/xbf`, id `xbf`, `src/renderers/xbf`) shows a
 engine document: an `.xbf`, and a `.step` or `.stp`, which the engine reads and serves as
-one. The strip is Select with its menu's chevron, Pencil and Shapes, Measure with its own, Explode for two or more
-parts, and Clip; the view's panel an assembly's Model, then Position where the document
-carries a mechanism; and selection, hover, the menus, isolation, Escape and Quick Edit's chips
+one. The strip is Select with its menu's chevron, Draw, Measure with its own, Explode for two or more
+parts, and Clip; the panel its Model tab (a part file's one row, an assembly's tree), then Params where the
+document records any, then Joints where it carries a mechanism, each a tab; and selection, hover, the menus, isolation, Escape and Quick Edit's chips
 follow the rules of [Selection and inspection tools](#selection-and-inspection-tools).
 `XbfPanels.test.tsx` holds the panels to those controls.
 
@@ -692,21 +734,23 @@ every part is pickable at once, and with Parts and Faces or Edges ticked a part'
 engine's (`xbfTree.js`): the document's wrapper is no row, and sibling parts of one prototype
 sharing a name's stem fold, as a STEP's repeated components do. The view's menu's Select tangent faces
 and Select tangent edges add the engine's groups of the part to the selection (`GET …/part/<key>/groups`), and a chip's card reads the
-engine's facts of the element, measured on the exact shape. Position's rows are the mechanism's
+engine's facts of the element, measured on the exact shape. The Joints tab's rows are the mechanism's
 pairs (core's `lib/xbf/xbfKinematics.js`), a geared pair written through its gear, and its knobs are Select's as
 a STEP's are (`xbfJointHandles.js`). A pair the engine could not keep a value for is said in the
-section, under the rows.
+tab, under the rows.
 
-A document with motions plays them from the playbar under the model, the shell's routine transport
-(`kit/tools/playbar/PreviewPlaybar.jsx`, named by its runtime's `noun`) over `useXbfMotion.js` —
-the motions by name, each with its duration, then Play or Pause, the scrubber and Playback
-settings (Speed, Loop, Autoplay, then Reset) — and Preview's playbar plays Preview's own. Each frame
+A document with motions plays them from the shell's routine transport, named by its runtime's
+`noun`, over `useXbfMotion.js`: the top of its Joints tab (`kit/tools/playbar/AnimationSection.jsx`'s
+`AnimationControls`: a Sequence dropdown row of the motions by name, Play or Pause and the scrubber (its start the
+rest pose; no time readout), then Speed and Loop rows, the tab's one Reset at its bottom right; with no Joints tab,
+a Motion tab of its own) — and Preview's playbar plays Preview's own. Each frame
 is the motion's pair values at the clock's time, interpolated as AP242 says (`xbfMotion.js` in core:
 linear; synchronous, each step eased in and out with every pair arriving together; a function
 motion's stored samples, linear between them; the clip finite, repeated while Loop is on), the same
 values the engine's GLB baker keys (`xbfMotion.test.js` holds them to its bake), posed through
-Position's forward kinematics. While a motion owns the pose (from a play, a scrub or a choice of
-motion until Reset) Position shows its frame read-only and Select draws no knobs. A motion is one
+the mechanism's forward kinematics. While a motion owns the pose (from a play, a scrub or a choice of
+motion until it is scrubbed back to its start, paused) the Joints tab shows its frame (an edit lets the motion go)
+and Select draws no knobs. A motion is one
 of the document's motions with Explode and the pose (below): taking it up puts both at rest,
 and Explode used puts it at rest, nothing set aside.
 
@@ -726,12 +770,12 @@ its part's label whole, spaces and all (`…/bracket.step#L bracket 80 x 60 x 6 
 A GLB, a 3MF, an STL and a robot have the kit's tools as their matrix allows them
 (`kit/tools/sceneTools.jsx` composes them; each renderer adds its own Select):
 
-| | Select | Pencil, Shapes | Measure | Clip | Explode |
+| | Select | Draw | Measure | Clip | Explode |
 | --- | --- | --- | --- | --- | --- |
 | URDF, SRDF | links (and named mesh objects) | yes | metres, approximate | yes | no: a robot is posed |
 | GLB | nodes, `n<index>` | yes | metres, approximate | yes | where it has several rigid nodes that draw |
 | 3MF | objects, `o<item>[.<component>]` | yes | its declared unit, approximate | yes | no |
-| STL | no: one mesh, the whole file | yes | no: the format names no unit | yes | no |
+| STL | bodies, `b<n>` (largest first) | yes | no: the format names no unit | yes | no |
 
 ### Measure on a mesh
 
@@ -812,10 +856,10 @@ Preparation resolves metadata with the viewer's abort signal; the component
 and viewport are imported lazily after renderer selection.
 
 A CAD renderer's controls are its own, over the viewport: its tool strip, the tool in hand's
-sub-toolbar and its docked panel. Display is a dropdown from its tile at the strip's end,
-before Preview. Preview is the shell's own state in
+sub-toolbar and its docked panel. Display is the navbar's plain-cube button, left of Preview, opening its
+card (with no navbar, the strip's tile before Preview's). Preview is the shell's own state in
 every 3D renderer, with no host prop, and the navbar gives way to Preview's own bar while it
-is up (`RendererViewProps.onPreviewChange`); see [Preview](settings-ui.md#camera-animation-and-preview)
+is up (`RendererViewProps.onPreviewChange`); see [Preview](viewer-ux.md#camera-animation-and-preview)
 and [the host's side](viewer-host.md#preview-and-renderer-navigation-actions).
 
 All package exports are compiled ESM with declarations. Consumers need no
@@ -836,7 +880,7 @@ construction or ever.
 **Preferences** are the tab's `settings`, read by every renderer as `CadPreferenceSource`
 (`getSnapshot`, `subscribe`, `update`; `createCadPreferences` is the in-memory source a
 renderer built without one gets). They hold the tool stack's layout and — for the
-host — the appearance and the home's layout. The playback settings (Orbit's speed, Autoplay, Speed and
+host — the appearance and the home's layout. The playback settings (Orbit's speed, Speed and
 Loop) are not preferences: they are each file's own (`playback`, below). App light/dark appearance selects Inspect's
 fixed workbench basis; the settings contain no theme
 choice or custom scene settings.
@@ -853,7 +897,7 @@ as showing again a file the page left restores that file's:
 | --- | --- |
 | `camera` | The renderer's own: a scene's pose, lens and projection (a perspective snapshot, scoped to the model on read), restored in place of the open-time fit — null, or not a camera, fits; a flat view's (a board's, a schematic's, a drawing's) plane transform with the pane it was framed in (`kit/viewport/flatView.js`), placed on the pane it opens in by what it shows, and exactly itself on a pane of that size. |
 | `display` | The Display settings, Clip and Explode included. |
-| `playback` | The playback settings, every one of them (`kit/tools/playbar/playbackPreferences.js`): `{ orbitSpeed, autoplay, speed?, loop? }`, `DEFAULT_PLAYBACK` `{ orbitSpeed: 1, autoplay: false }`, and `speed` and `loop` once chosen in the playbar's Playback settings — unset, the routine's authored values apply. Kept between leaving and re-entering Preview, and across a reload of the tab. Whether Preview orbits is not kept: it opens still. |
+| `playback` | The playback settings, every one of them (`kit/tools/playbar/playbackPreferences.js`): `{ orbitSpeed, speed?, loop? }`, `DEFAULT_PLAYBACK` `{ orbitSpeed: 1 }` (an old record's `autoplay` is dropped), and `speed` and `loop` once chosen (the Animation or Joints tab's Speed and Loop rows, or Preview's playbar's Playback settings) — unset, the routine's authored values apply. Kept between leaving and re-entering Preview, and across a reload of the tab. Whether Preview orbits is not kept: it opens still. |
 | `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. Robot: `pose` (joint values) and `visibility` (hidden component ids) against the description's revision. Engine document: `tree` (expanded rows, the person's alone: not a pick's reveal's nor an isolation's; hidden parts, isolated assemblies) against the document's tree, and `pose` (preset, given values, couplings) against its mechanism (`xbf/xbfViewSlices.js`). GLB, mesh: none. DXF: nothing beyond its camera. Board: `board` (its Display), `isolated`, and `board3d` (`{ mode: "2d" \| "3d", camera, projection, models }`: which is up, the 3D camera as a perspective snapshot, null for the opening view (`goHome`'s), its projection, and whether the parts' 3D models show; the record's `camera` stays the flat canvas's transform). |
 
 | Not kept | Every open starts it afresh |
@@ -863,7 +907,7 @@ as showing again a file the page left restores that file's:
 | The selection, measurements, the annotations | Empty |
 | Preview, its camera and its Orbit | Off; the tools view's camera is the one kept, Preview opens still, and its settings are the file's (`playback`) |
 | The routine, its time and whether it plays | At rest |
-| Quick Edit's note | Empty, its box following what is picked or annotated |
+| Quick Edit's note | Empty, its bar following what is picked or annotated |
 | Select's menu | Filter every box ticked, Selection tool Select |
 | Hover, menus, popovers | Closed |
 
@@ -881,27 +925,27 @@ controls use `host.clipboard`. The viewport only produces screenshot pixels.
 The port and app adapters own delivery and return an acknowledged outcome.
 
 Quick Edit (`kit/tools/quick-edit/QuickEdit.jsx`) is the shared note to the agent:
-a box at the top-right, there only while it has something to carry, which
+a bar at the view's bottom, on the strip's centre line, always there (one row at rest, its attachments a row above
+it only while something is referenced), which
 `RendererShell` mounts for a renderer that hands it `references` — every 3D file's renderer
-(a picture, `compact`, gets none); a DXF and a board mount the same box over their canvas
-(`kit/shell/useFlatView.js`). Its box, header and buttons are the design system's
-([Quick Edit](settings-ui.md#quick-edit)); what it can do follows the host
+(a picture, `compact`, gets none); a DXF and a board mount the same bar over their canvas
+(`kit/shell/useFlatView.js`). Its bar, chips and buttons are [the viewer's](viewer-ux.md#quick-edit) and
+[the design system's](design-system.md#chips); what it can do follows the host
 ([prompt handoff](viewer-host.md#prompt-handoff)), never an app. The renderer hands
 the shell what is selected as `references`, in the prompt grammar (an `.xbf`'s and a STEP's in the engine's,
 `kit.xbf#kit/hand/finger.2`, `bracket.step#bracket/face 3`; a robot's links, `robot.urdf#upper_arm`; a GLB's nodes,
 `model.glb#n12`, the file's `nodes[12]`; a 3MF's objects, `model.3mf#o2.1`, its build's second
-item's first component; none for an STL, whose note names the file; the file itself always
+item's first component; an STL's bodies, `model.stl#b2`; the file itself always
 goes), and the
 shell hands Quick Edit the file, its prompt (`quickEditPrompt`: the views it
 carries — the view on screen, from `ShellViewport.promptCamera` and the renderer's
 `viewState`, its pose and hidden and isolated parts — and the files `host.promptFiles`
-makes of them, with the annotations as an annotation file), the viewer's Escape, and the box's size
-as the person drags it, kept across files. `quickEditPrompt.js` builds the context at
+makes of them, with the annotations as an annotation file) and the viewer's Escape. `quickEditPrompt.js` builds the context at
 the press, from what is live then (`createQuickEditContext`), and the text a copy writes
 (`copiedQuickEdit`, over core's `formatPromptMessage`), its files named from the workspace
 (`host.promptFiles.folders()`), the inline packet's `input` too. The drawing tools hand it whether there is
 ink, and the Annotation chip copies its `.annotation.json` file's path. Copying without
-Quick Edit is the copy shortcut — the selection's references, or, while Pencil or Shapes is up, the
+Quick Edit is the copy shortcut — the selection's references, or, while Draw is up, the
 view with its annotations — which writes the clipboard directly. See
 [ViewerHost](viewer-host.md) for lifetime, focus, supported content and clipboard
 representation limits.
@@ -911,7 +955,8 @@ subscription shape and publishes
 `selectReference: { selector, key? }` or `captureRequest: { key }`. A fresh key
 requests another operation even when its selector or target file is unchanged.
 Selecting a reference also expands the matching model tree row's ancestors (with every box ticked)
-and scrolls it into view; the model tree is on screen whenever Select is.
+and scrolls it into view; the model tree is on screen whenever the panel is (pinned or peeking; on a phone, its
+sheet), under every tool.
 Repeating the request reveals the existing selection again without toggling it off; a face-group
 reference keeps the group highlighted and reveals its active face.
 Both toolbar capture and host capture commands use the same implementation.
@@ -922,9 +967,9 @@ remount. A capture waits for ready geometry; a selected reference waits until it
 can resolve against the current model.
 
 `@cad/ui/file-viewer/presentation` exports the lightweight
-`ViewerLoadingOverlay` for host bootstrap and generic viewer loading presentations.
-Its markup and wording are the original CAD artwork. It mounts inside a relative
-container and requires no CAD client.
+`ViewerLoadingOverlay` for host bootstrap and generic viewer loading presentations:
+the one loading indicator (`loading/LoadingStep.jsx`, a step line over a thin bar) on the viewport's Background it
+is handed. It mounts inside a relative container and requires no CAD client.
 
 The optional `live: LiveViewBinding` registration binds a mounted
 `LiveViewController` for app-owned view tools. It reports the actual resource
@@ -994,8 +1039,9 @@ zoom and pose. This policy belongs to the interactive UI; snapshot/export
 framing remains independent. The orientation control labels its positive X/Y/Z
 axes and retains its snap and drag interactions.
 
-See [settings controls](settings-ui.md), [render types](render-types.md)
-and [renderer contracts](renderers.md) for changes inside the shared package.
+See the [design system](design-system.md) (the tokens, the two scales, the components, touch),
+[the viewer's layout and patterns](viewer-ux.md) (what goes where and why, the patterns),
+[render types](render-types.md) and [renderer contracts](renderers.md) for changes inside the shared package.
 
 ## STEP and source separation
 
@@ -1013,9 +1059,9 @@ Filter ticks any of vertices, edges and faces, which a press takes whole (none: 
 back to a different entity type. Every face and edge is to hand from the start, so nothing waits
 on topology.
 Shift-click adds/removes entities. A double-click on a face or edge (outside the
-Parts filter) turns the view square to it and selects nothing (the selection is as
-its first click found it); on a component or
-subassembly it isolates it, and on empty space it leaves isolation.
+Parts filter) turns the view square to it, its first click's pick standing; on a component or
+subassembly it isolates it, the selection kept, and on empty space it leaves isolation, or, with nothing
+isolated, fits the model.
 
 **Look at** (`kit/camera/lookAt.js`, an engine document's side `xbf/xbfLookAt.js`, the
 viewport's `lookAt` / `lookAtAnnotation`). A double-click under Select on a face, an edge
@@ -1041,17 +1087,16 @@ Kinds and axes come from the element itself (the scene's `elementGeometry`,
 `@cad/core/lib/xbf/xbfEntities.js`): a face's surface read off its nodes and the normals
 the engine meshed it with (a plane's normal, a cylinder's axis, origin and radius), an edge's
 polyline read as Measure reads it (straight, or a flat circle about its centre); its points
-where its instance stands now, the pose and Explode included. A click acts at once: nothing
-waits to tell it from a double-click. The first click of a double-click therefore
-selects, briefly, whatever it hit; the second is not a click of its own (the browser
-counts it, `xbf/clickActivation.js` holds it for the `dblclick` that owns the gesture),
-and the double-click begins by putting the selection back the way its first click
-found it — through the same setters every pick goes through, so Quick Edit's chips,
-the tree and the viewport follow — before it isolates, leaves isolation or looks at it.
-The one click that still waits is one under a tool a pick would leave (Explode, Clip:
-a pick there takes up Select): it is held for the double-click window, so a double-click
-there isolates and stays in the tool, and a lone click selects and switches to Select once
-the window has passed. A coarse pointer has no double-click: every tap picks at once.
+where its instance stands now, the pose and Explode included. A click acts at once. The first click of a
+double-click therefore selects whatever it hit, and that pick stands; the second is not a click of its own (the
+browser counts it, `xbf/clickActivation.js` holds it for the `dblclick` that owns the gesture), and the
+double-click isolates, leaves isolation or looks at what it is on. Two clicks wait the double-click window (220ms)
+instead, and a double-click drops them: one that would take the selection away (the thing selected pressed again,
+or a selected thing with Shift or a finger: `pickTakesAway`), so a double-click never shows the selection going and coming back; and one under a tool a pick
+would leave (Explode, Clip: a pick there takes up Select), so a double-click there isolates and stays in the tool.
+A lone one acts once the window has passed (under Explode or Clip, selecting and switching to Select). A press on
+empty space clears at once. A finger's double tap (within 300ms, its window) is a double-click and a long press the
+view's menu; a finger's tap adds to the selection, and on a selected thing takes it away.
 Every copied reference — a chip's click, ⌘C, both menus — carries the
 file's prefix: the file's absolute path, the real file name with its extension.
 Escape clears the
@@ -1098,15 +1143,27 @@ changes selection only, not CAD geometry.
 An engine document's tabs of the view's panel (`xbf/XbfRenderer.jsx`), in
 order, whatever the tool:
 
-- **Model** (an assembly's): searched by the panel's search box ("Search the model"); while
-  parts are hidden, a status line ("3 hidden", **Show all** its action); then the model tree (`XbfModelTree.jsx`). Its
-  tab is there under every tool (Preview hides the panel), the tree kept mounted. A part
-  file has no model tree: its tree would be its one row.
-- **Position** (where the document carries a mechanism): the `Pose` row with its Reset, and
-  the joint values (`XbfPositionSection.jsx`); reaching for one of
+- **Model** (every document with a part, first and open at first): searched by the panel's search box
+  ("Search the model"); while parts are hidden, a status line ("3 hidden", **Show all** its action); then the
+  model tree (`XbfModelTree.jsx`). Its tab is there under every tool (Preview hides the panel), the tree kept
+  mounted. A part file's tree is its one row, the row an assembly gives each part: its name, which selects
+  it, and its eye; no Isolate, as a part has nothing to isolate it from.
+- **Params** (where the document records any: the structure's `parameters`, read by
+  `@cad/core/lib/xbf/xbfParameters.js`): the named numbers the model's script declares, drafts, their
+  preview and Save (`XbfParametersSection.jsx`'s `useXbfParameters`, held by the renderer for as long as
+  the file is on screen, so its drafts and what it saved outlive the tab's mount); see
+  [Parameters](viewer-ux.md#parameters). The one control of the viewer that changes a design. A
+  preview of the drafts (`client.previewModelParameters`, asked at the cadence the model's preview time
+  sets: [Parameters](viewer-ux.md#parameters)) is drawn in the document's place
+  (`useXbfScene`'s `preview`: read as a version is, only the parts it changed fetched, the camera where it
+  is) and is never the document: the renderer's `document` and `revision`, which Export, the view's slices
+  and the tab read, stay the document's; Measure follows what is drawn (`sceneRevision`).
+- **Joints** (where the document carries a mechanism): its motions first, where it has any, a hairline under
+  them; then the `Pose` row and the joint values (`XbfPositionSection.jsx`); and ONE Reset for both, the tab's
+  actions row at its bottom right. Reaching for one of
   its controls puts the other motions at rest.
 
-A part file with no mechanism has no sidebar. What is selected is Quick Edit's chips
+Every document with a part has a panel, its Model first (`xbfPanelSections`); only an empty one has none. What is selected is Quick Edit's chips
 (`xbf/xbfChips.jsx`'s `useXbfSelectionChips`): a component
 or subassembly a chip of its own, faces and edges a chip for each kind on each part,
 each chip's card the key measurements. A chip shows a part's name cut at sixteen characters
@@ -1190,19 +1247,19 @@ Explode and Clip follow Measure on the strip; Explode only with two or more part
 (hidden, never disabled, once the document is known; idle until it is). Each is a popover from
 its tile (`kit/tools/model-effects/ModelTools.jsx`'s `useModelTools`), not a tool in hand, with
 no enable checkbox: Explode's name, its slider, its amount and Reset explode; Clip's axis
-(`ClipAxisSelect`, "X ⌄", whose dropdown holds the axes as one row of radio items, then Part
-colours and Reverse, drawn as Display's menu), its slider, its amount and Reset clip
+(`ClipAxisSelect`, "X ⌄", whose dropdown holds the axes as one row of buttons, as the app menu's Theme row
+draws its own, then a rule, Part colours and Reverse), its slider, its amount and Reset clip
 (`ModelViewControls.js`). Opening one takes up no tool and leaves the selection as it is; an
 edit applies the effect and the slider at zero removes it; Reset puts the amount back at zero —
 Clip's axis and settings stay. The effect stays on the model when the popover closes and under
 every tool, a dot in the tile's corner while it is set. Clip's plane and slider range share the
 original bounds, unaffected by pose or Explode. The lifecycle is
-[the design system's](settings-ui.md#tools-and-lifecycle).
+[the viewer's](viewer-ux.md#tools).
 
-Position is no tool: its controls are the view's panel's Position tab, and its joint
+Joints is no tool: its controls are the view's panel's Joints tab, and its joint
 handles are Select's while Select's filter ticks Position. Robot viewers use the same shell,
-the shared `Pose` row, whose Default and Reset put the pose back (`kit/inspector/kinematicsControls.jsx`),
-and the same filter kind. Display is not a tool: opening its popover leaves the tool in hand,
+the shared `Pose` row and the tab's Reset, whose Default and Reset put the pose back (`kit/inspector/kinematicsControls.jsx`),
+and the same filter kind. Display is not a tool: opening its card leaves the tool in hand,
 and the selection, as they are.
 
 **The tree's rows are a window.** A large assembly opens onto thousands of rows, so the
@@ -1217,9 +1274,9 @@ always have their row; a row carries its level
 (`aria-level`) in place of the nesting it no longer has. A face or edge picked
 in the viewport is revealed at its part's row, wherever the part sits in the tree.
 
-The model tree rows are the panel's one row (`TreeRowSurface`, `dense`: 24px rows, its glyph slot
+The model tree rows are the panel's one row (`TreeRowSurface`, `dense`: 28px rows, a phone's 36, its glyph slot
 on the panel's 16px line and 10px further a level, hung from faint lines under their owners'
-chevrons, their kind icons light: `docs/settings-ui.md`). A part is a
+chevrons, their kind icons light: [Rows](design-system.md#rows)). A part is a
 leaf: its faces and edges are the viewport's to pick, never rows. An assembly's disclosure
 button expands its children; the rest of the row selects it. A folded row (a part repeated under
 one name, `pin (8)`) is pressed the same way: its chevron opens and shuts it, and the rest of the
@@ -1227,7 +1284,7 @@ row selects every part under it, which the row then holds, lit, as an assembly's
 selection, so a press on a row selects it and opens nothing (`xbfTree.js`'s `xbfHeldPaths`), and a second plain press on
 it, while its parts are what is selected, lets them go, as any row's does (`xbfSelectionFilter.js`'s `nextSelectionIds`:
 the one thing selected, exactly, pressed again; Shift, Cmd or Ctrl add or take away each part). The rows walk by the
-keyboard (`primitives/tree-keys.js`, [Keyboard](settings-ui.md#keyboard)). Labels keep the row's width;
+keyboard (`primitives/tree-keys.js`, [Keyboard](viewer-ux.md#keyboard)). Labels keep the row's width;
 measurements belong to Quick Edit's chips' cards. An assembly row's actions (`XbfPartActions.jsx`), shown on hover and kept
 shown while they are on, are Isolate (not in a part file; while that node is isolated, an X that
 leaves isolation, shown the whole time) and then Hide (the eye, off while isolated). A double-click
@@ -1294,36 +1351,39 @@ shut it, and leaving isolation shuts what isolating opened (an isolation a reloa
 again as isolating opened it). Later expansion and manual scrolling
 must not pull the view back to that row.
 
-A chip's card is read-only: under the reference's name (which copies the reference) and its ID —
-one monospace line, its middle cut past 28 characters (`elideMiddle`: "L bracket 80 x…~7f355a89aedf"),
-the whole reference as the engine resolves it its hint, and a click on it copying what the title
-copies — its rows are its key measurements alone (`xbfChips.jsx`'s `xbfMeasurementRows`, the engine's facts of the element):
-a face's area and a round face's radii, an edge's length, radii and an arc's sweep, a part's
-size, volume and mass, a subassembly's size, volume and mass — no type, centre, normal,
-component or source material row. A click on the chip copies its references (as Copy References
+A chip's card is read-only: under the reference's name (whose copy icon copies the whole reference,
+`<file>#<selector>`; the card shows no ID row, the reference being of use only
+copied) its rows are a few key facts alone (`xbfChips.jsx`'s `xbfDescriber`, from the engine's facts of the element):
+a face's part and area, an edge's part and length, a part's size, volume and mass, a subassembly's
+part count, size, volume and mass, each to three significant figures (a number of four figures whole) in the unit it reads
+best in — no type, centre, normal, radius, component, source material or child row. A click on the chip copies its references (as Copy References
 writes them, with the file's absolute path); the tree and viewport menus copy too, and
 measurement previews are the Measure tool's. There is no source feature view.
 
 Tool order, sub-toolbars, the view's panel and cleanup policies are defined in
-[the shared design system](settings-ui.md#tools-and-lifecycle). Keep renderer
+[the viewer's layout and patterns](viewer-ux.md#tools). Keep renderer
 implementations aligned with that contract instead of defining another layout here.
 
 A selection outlives Select: under any other tool the view still lights it and
-Quick Edit still carries it as chips, until it is cleared (its chips' X, Quick
-Edit's X, Escape, or a new pick). Picking is Select's alone: choosing a row in the
+Quick Edit still carries it as chips, until it is cleared (its chips' X, Escape, a
+press on the background, or a new pick). Picking is Select's alone: choosing a row in the
 Model (or a host `selectReference`) under another tool returns to Select
 first. Every tool works alongside a selection, as it does alongside a pose, Explode,
 Clip and the annotations (the two motions among them replace each other: one motion at a time).
 
 ### Position
 
-Position edits persist when switching tools or tabs, or folding its section. A robot's new
+Position edits persist when switching tools or tabs, or shutting the panel. A robot's new
 revision keeps the values, and the named pose they were chosen as, when its driven joints and
 named poses are the ones in hand (`poseLogic`, `robot/poseStore.js`); when they changed, the
 pose starts at the new defaults — the old values are never fitted onto other joints. Its
-Pose row's Default restores an engine document's as-built values (`xbf/XbfPositionSection.jsx`)
-or the robot opening pose (including SRDF `home`). Preview's pose is its own. The Position
-section's layout is [the design system's](settings-ui.md#position-and-references).
+Position row's Default restores an engine document's as-built values (`xbf/XbfPositionSection.jsx`)
+or the robot opening pose (including SRDF `home`). Preview's pose is its own. A paused motion never locks
+Position: its frame is shown, and an edit lets the motion go (`onRelease`, explicitly) and takes over from that
+frame. An engine document's pose is keyed by its mechanism (`useXbfPose`): a parameter edit (which also lets a
+motion go, `useXbfParameters`' `onEdit`) keeps it while the joints are the same, and resets it to Default when
+they changed. The Joints
+tab's layout is [the viewer's](viewer-ux.md#joints).
 
 Position's knobs (its filter kind's glyph lucide `Spline`) drag a model's joints by handles
 in the viewport, under Select while its filter ticks Position. They exist where
@@ -1409,23 +1469,26 @@ a routine's. Each format has one write path (`write` in `robot/poseStore.js`;
 
 ### Routines
 
-Routines play from the playbar under the model, the shell's, for a file with routines
-(`kit/tools/playbar/PreviewPlaybar.jsx`, never a tab of the panel), in the tools view and
-Preview alike, the same transparent row on no surface: with two or more routines, the one in
-hand, a dropdown of them (choosing one puts it at its start, paused, owning the pose); then Play
-or Pause, the scrubber (`AnimationTimeControl`) and **Playback settings** (`PlaybackMenu`: Speed —
-the presets, and an authored speed outside them — Loop and Autoplay, and in the tools view, last
-after a rule, **Reset animation** (`reset`), which stops the routine, lets go of the pose and puts
-the model at rest, disabled while it is: neither playing nor `enabled`), opening from its cog.
+Routines are never a tool of the strip, nor a bar under the model in the tools view. There they play from the
+view's panel's **Animation** tab, last (`kit/tools/playbar/AnimationSection.jsx`, `data-animation-section`; none for a
+file without routines), one set of controls at rest, playing and paused: the routine, a labelled dropdown row
+(Clip; a mechanism's motions, Sequence) listing every routine, one too, a choice playing it from its start (the
+shell's `playClip`), then Play or Pause and the scrubber, with no time readout
+(`AnimationTimeControl`, its time its value text; scrubbed to 0 while not playing, the routine lets go,
+`onRelease`: there is no Stop), then Speed (a dropdown: the presets, and an authored speed outside them), Loop,
+labelled rows, and Reset in the tab's actions row at its bottom right (no Reset in the transport). A mechanism with joints
+and motions has no Motion tab: the shell hands its motion to the renderer's Joints tab (`jointsHoldMotion`,
+`JointsMotionContext`), drawn first there, one Reset for both. Leaving the tab or shutting the panel leaves a routine playing. In Preview the routine plays from Preview's
+playbar (`PreviewPlaybar.jsx`): one transparent row on no surface, the routines' dropdown where there are
+several, Play or Pause, the scrubber and **Playback settings** (`PlaybackMenu`, opening from its cog).
 There is no Restart; the scrubber's start is the restart. A routine opens at rest. In the tools view a
 paused routine's frame stays on the model, as a pose does. Each view's routine is its own, on
 its own scene: Preview's (`RendererShell`'s `previewView.animation`) is at rest each time the
-Preview opens, plays only when the file's Autoplay (`playback.autoplay` of its view,
-`kit/tools/playbar/playbackPreferences.js`, off by default) is on, and goes with Preview's
+Preview opens, plays only when the person plays it (there is no Autoplay), and goes with Preview's
 view as it closes; the tools view's is never touched, and stands as it was left. Preview
-opens still, whatever Orbit did last (`shell.orbiting`). Speed and Loop are the file's, one set, chosen in the Playback settings
-and applied to its routine (`RendererShell.jsx`) once chosen (`playback.speed`,
-`playback.loop`; unset, the routine's own); they, Orbit's speed and Autoplay are kept between
+opens still, whatever Orbit did last (`shell.orbiting`). Speed and Loop are the file's, one set, chosen in the tab's rows
+or Preview's Playback settings and applied to its routine (`RendererShell.jsx`) once chosen (`playback.speed`,
+`playback.loop`; unset, the routine's own); they and Orbit's speed are kept between
 leaving and re-entering Preview, and across a reload of the tab. Nothing under the pointer
 is pickable in Preview or while a routine plays.
 
@@ -1444,28 +1507,37 @@ and the scrubber is the clock's only React subscriber. A tick is one animation f
 player advances the time by what the frame took (`advanceAnimationElapsed` in core's
 `common/animationClock.js`) and draws it; nothing paces the frames.
 
-### Pencil and Shapes
+### Draw
 
 Drawing is the viewer's own ink ([annotations](annotation.md)), with no drawing SDK
-behind it, and two strip tools: **Pencil** (the Pen, the Highlighter, the Eraser) and **Shapes** (the Rectangle,
-Line, Arrow, Ellipse, Text). An engine document (an .xbf or a STEP), a GLB, a mesh, a robot, a DXF and a KiCad board offer them. (The tools themselves are the
+behind it, and one strip tool, **Draw**, over two modes: freehand (`pencil`: the Pen, the Highlighter, the Eraser) and the
+shapes (`shapes`: the Rectangle, Line, Arrow, Ellipse and Text). An engine document (an .xbf or a STEP), a GLB, a mesh, a robot, a DXF and a KiCad board offer them. (The tools themselves are the
 SHELL's — `kit/tools/annotate`, `shell.tools.drawing` — and a renderer puts them on its strip;
 `renderers/shell-harness` also mounts them, for tests.)
 
-Each is one plain tool of the strip, a button (`shell.tools.drawing`, the icon of what it draws with now — the pen's and the
-rectangle's at first), with no chevron or menu: a press takes up the one last chosen. Their tool modes are `pencil` and
-`shapes`; `useAnnotationSession(family, …)` is told which is in hand and keeps both choices (`pencil`, `shape`). Both share
+It is one plain tool of the strip (`annotation/toolbar.jsx`'s `drawStripTool`, `shell.tools.drawing`), no chevron or menu: its
+button (the icon of what it draws with now: the pen's at first) takes up the one last drawn with (`session.lastFamily`); what it
+draws with is chosen in its row (`AnnotationToolbar`'s tools, both families', `takeFamily` taking the family up). Its tool modes are `pencil` and `shapes`, the strip's one tool
+(`drawFamilies`; a drawing key takes the family up, `pressToolKey`); telemetry counts the tool as `draw` and each tool chosen by
+its own name (`pencil_pen`, `shapes_rectangle`, …). `useAnnotationSession(family, …)` is told which is in hand and keeps both
+choices (`pencil`, `shape`). Both share
 the session's ink and history, but not the style: it is kept per drawing kind, three slots (`session.styles`) — the Pen,
 the Highlighter and Shapes (all five shapes share one) — each with its own colour, stroke width and placement, and
-`session.style` is the slot of the tool in hand. While either is up one sub-toolbar, "Annotation
-controls", hangs under the strip (`annotation/toolbar.jsx`'s `AnnotationToolbar`, drawn by `RendererShell.jsx`), one row at
-every width (a phone's wraps where it has no room, its buttons 36px tiles):
+`session.style` is the slot of the tool in hand. While Draw is up one sub-toolbar, "Annotation
+controls", hangs under the strip (`annotation/toolbar.jsx`'s `AnnotationToolbar`, drawn by `RendererShell.jsx`), two
+rows on one surface with no rule (a phone's wrap where they have no room, its buttons 36px tiles):
 
-- The **tools of the one that is up**, a button each, the one in hand pressed: choosing one is how Pencil and Shapes change
-  what they draw with.
-- After a rule, **Colour**, **Stroke width** (a straight line at the weight) and **Placement**, dropdowns, then
-  **Clear annotations**: two sections, no more. They show and set the tool in hand's own slot; under the **Eraser**, which
-  puts nothing down, the three are disabled (greyed out, still on the row so it does not jump) and Clear stays as it was.
+- The **tools** (`DRAWING_ROW_ENTRIES`), a button each, the one in hand pressed: the first row the seven that put ink
+  down, Pen, Highlighter, Line, Arrow, Rectangle, Ellipse and Text; the second row starts with the Eraser, which takes
+  ink already down — choosing one is how Draw changes what it draws with, its family taken up.
+- After it on the second row, **Colour**, **Stroke width** (its button three lines thin to thick; each weight in its
+  menu a straight line at that weight) and **Placement**, dropdowns, then **Undo**, **Redo** and **Clear annotations**.
+  The dropdowns show and set the tool in hand's own slot; under the **Eraser**, which puts nothing down, the three are
+  disabled (greyed out, still on the row so it does not jump), and Undo, Redo and Clear stay as they were. Every stroke
+  is solid: there is no line style. Undo and Redo (lucide's `Undo2`, `Redo2`) call `session.undo` and `session.redo`,
+  are off where the history has no step that way (`canUndo`, `canRedo`), and show their keys in their tooltips
+  (`toolShortcuts.js`'s `undoShortcuts`, by the host's `environment.platform`). The second row is seven controls, as
+  the first is seven tools: Eraser, Colour, Stroke width, Placement, Undo, Redo and Clear.
 
 The tools: the Pen, smoothed as it is drawn, its width following pressure (a stylus's own, or simulated from speed with a
 mouse); the Highlighter, the same line at five times the stroke width, 0.35 opaque, round-ended, with no pressure
@@ -1482,16 +1554,14 @@ Before the press, the pointer resting on a mark lights it as a part is lit, a fa
 halo, and the part under it is not lit (`RendererShell.jsx`'s `hoverSelectable`).
 The colour, Stroke width and Placement set what the tool in hand draws
 next, never ink already down. Placement is **On surface** (the default) or **On plane**.
-Pencil opens on the pen and Shapes on the rectangle, each in neon red, 2px, On surface; the Highlighter opens in
+Draw opens on the pen, and its shapes on the rectangle, each in neon red, 2px, On surface; the Highlighter opens in
 neon yellow (`#ffe600`, on the palette in both schemes), 2px, On surface.
 
 The ink Select has picked has a bar of its own (`kit/tools/annotate/AnnotationSelectionBar.jsx`):
 the tool strip's surface, a size smaller, just above the ink (below it where there is
 no room above) and following it as the camera and its parts move. Its Color, Stroke
 width (strokes picked) dropdowns restyle the pick, one
-step each; **Fill** (a closed shape picked) fills its interior in its colour, the fill
-joining the shape's group so it is picked, restyled and deleted with it, and again
-takes it away; **Delete** deletes everything Select has picked, a measurement too.
+step each; **Delete** deletes everything Select has picked, a measurement too.
 
 An annotation is not an overlay picture. Each mark is projected into the model in
 3D as it is put down (`kit/tools/annotate/annotation3d.js`), so it stays where it was drawn
@@ -1525,32 +1595,34 @@ fainter halo (its hover, through the shell's `onSelectHover`), and the part unde
 A file view has one set of annotations (`annotation/session.js`). It has no panel: while
 there is ink it is Quick Edit's **Annotation** chip, its pen first — a click copies the path
 of its `.annotation.json` file, its X clears the annotations as one step to undo. ⌘C or
-Ctrl+C, while Pencil or Shapes is up, copies the view as it is on screen, ink included, as a PNG
+Ctrl+C, while Draw is up, copies the view as it is on screen, ink included, as a PNG
 (`host.clipboard.writeImage`).
 
 With them put down the ink stays in the model, and its chip in Quick Edit. The next
 drawing tool adds to it. Annotations are session-only and never written to tab or file state.
 
 **Undo and Redo** are the annotations' (`kit/shell/useViewerHistory.js`, the shell's):
-each piece of ink put down, erased, restyled or filled, and a clear, is a step.
-They are the keyboard's, with no buttons: ⌘Z and ⇧⌘Z (Ctrl+Z and Ctrl+Y) walk them from anywhere
-in the viewer but a text field. A Quick Edit note
+each piece of ink put down, erased or restyled, and a clear, is a step.
+⌘Z and ⇧⌘Z (Ctrl+Z and Ctrl+Y) walk them from anywhere in the viewer but a text field, and so do the
+Undo and Redo buttons on Draw's row. A Quick Edit note
 carries the annotations as files: the annotation file, the views they were drawn in as a
 snapshot job, and a picture of each ([annotations](annotation.md#lifetime-and-capture)).
 
 ### File navbar
 
-The file navbar is [FileViewer's](file-viewer.md#the-navbar-and-the-explorer): the logo,
+The file navbar is [FileViewer's](file-viewer.md#the-navbar-and-the-explorer): the panel's toggle, where the
+file has a panel, then the logo,
 which opens the app menu (Back to home, the person's settings, feedback, the links, the
 version), Back and Forward where the host keeps the view's history, the file's name (which
 opens the explorer) and its ⋯ menu at the left (the web viewer's Export is a submenu of the
-⋯); at the right only what a host or a file adds: the renderer's actions, then, outermost, the host's actions
+⋯); at the right only what a host or a file adds: the renderer's actions, then the view's own controls, Display
+and Preview, which the view portals into the navbar's view slot, then, outermost, the host's actions
 (the CAD app's Full size). A host that shows the view alone (`chrome: "bare"`,
 the CAD app's file handler) has no navbar; in Preview no host has one. The CAD renderers publish one navbar action, and only while a person has put away an
 alert card the model survives: the card's own icon, which brings it back (see
 [Inspect, Render and live revisions](#inspect-render-and-live-revisions)). What a person
-tells the agent is Quick Edit's. The view's own controls (Display, a popover from its tile,
-and Preview) end the renderer's tool strip, never the navbar's row. The renderer's update
+tells the agent is Quick Edit's. With no navbar, the view's own controls (Display, its card,
+and Preview) end the renderer's tool strip. The renderer's update
 status is in the viewport, under the strip, never in the navbar. So a view drawn as a
 picture (`compact`, as the home draws its thumbnails) needs no navbar at all.
 
@@ -1562,21 +1634,24 @@ not on the shell, answers it with its canvas through the same port.
 ### Preview and the camera
 
 Camera framing, routines and Preview follow the shared
-[interaction contract](settings-ui.md#camera-animation-and-preview).
+[interaction contract](viewer-ux.md#camera-animation-and-preview).
 `useViewportCamera` owns initial fit and orientation transitions. Preview's camera is
 its own viewport's: framed afresh from the default direction each time it opens and kept
 nowhere, while the editor's camera stays where it was, untouched, under it.
 `zoomRuntimeToBounds` is the single framing act used by context-menu
 Zoom to Fit and live `resetCamera`. Cube shortcuts preserve zoom and pan.
 
-Preview is one `previewing` state the shell owns (`usePreviewState` in
-`useRendererShell.js`); a renderer whose own gates run before the shell's hook holds
+Preview is one `previewing` state the shell owns (`usePreviewState`, `kit/shell/usePreviewState.js`); a renderer whose
+own gates run before the shell's hook holds
 it and passes it in as `preview`, as the engine document's does. It is a 3D view's: a renderer that
 offers it declares `previewable` (the engine document's, GLB, the meshes and robots do), and one that
-does not has no Preview button and stays in its normal view whatever sets the state. The
-Preview tile, last on the strip, sets it — after covering the view in the frame of the
+does not has no Preview button and stays in its normal view whatever sets the state. A board, a flat view whose
+picture is shown in 3D, has it too, holding the same state outside the shell (`useFlatPreview.jsx`; see the board's
+paragraphs under [Shell](#shell)). Everything of Preview that is not a family's own scene is one hook for both,
+`usePreviewFrame.jsx`. The
+Preview button, the navbar's after Display or, with no navbar, the strip's last tile, sets it — after covering the view in the frame of the
 press ("Preparing preview…", until Preview's view has presented, its published mesh is complete and the
-picture has converged) — and Escape or Exit preview, an X beside Preview settings in Preview's bar, clears it;
+picture has converged) — and Escape or Exit preview, an X beside Display in Preview's bar, clears it;
 no host prop reaches it.
 Preview is a view of its own (`kit/shell/PreviewView.jsx`): RendererShell mounts it over the
 editor's viewport box while the state is on and unmounts it as it goes. The editor's viewport
@@ -1589,13 +1664,13 @@ While it is up, the frame drops the tool strip and its sub-toolbar, the tool sta
 resize handles, Quick Edit, view cube (not mounted), alert card and viewport menu, hides the
 view's panel (its sections kept mounted; Preview's own routine plays from its playbar under the
 model), and every
-renderer gate reads the same state: picks, hover, highlights, Measure, Pencil and Shapes, joint
+renderer gate reads the same state: picks, hover, highlights, Measure, Draw, joint
 handles and Select are off, and Explode and Clip suspended, without discarding their values.
 The navbar goes too, in every host: the shell says Preview is up (`view.onPreviewChange`) and
 FileViewer hides it until it closes. In its place `PreviewChrome` draws Preview's bar over the
 view's top edge, on no surface: the file's name at its left as words, and at its right Preview
-settings, a toggle pressed while its panel is open (the panel docked under the bar's right end,
-sliding in from the view's right edge, `SIDEBAR_SLIDE_CLASS`:
+settings, a toggle pressed while its card is open (the Settings card, Display's family, docked under the bar's
+right end and sliding in from the view's right edge as the peek does, `SettingsCard.jsx`'s `SettingsCardDock`:
 `kit/shell/PreviewSettings.jsx`, Orbit, off at every entry, and its speed, then Preview's own
 settings, `PreviewRenderSettings`), and Exit preview. The bar and the playbar fade together after
 two seconds without pointer movement (counted from the frame that shows them, so a long frame is
@@ -1637,7 +1712,7 @@ renderer (core's `createCadWebGlRenderer`). Read-only seam: `window.__cadGpuDevi
 
 A URDF or SRDF opens in Select, with **Links** the view's panel's first tab (searched by the
 panel's search box), then
-**Position** where a joint can be driven (`LinksSection`, `PositionControls`),
+**Joints** where a joint can be driven (`LinksSection`, `PositionControls`),
 whatever the tool. Links is always present: it is the description's kinematic tree, not an
 inventory of mesh names. `robot/robotTree.js` builds it as plain data.
 Links are the rows, carrying no icon; a child link sits under its parent link
@@ -1672,12 +1747,13 @@ links, or of components, can be selected, never both (Shift in the viewport,
 Shift/Ctrl/Cmd on a row add), each a chip in Quick Edit (`robot/robotReferences.jsx`). A
 link with no geometry selects its row and chip only. Viewport picks are Select's while its
 filter ticks Links. As for an engine document, a robot selection outlives Select: a pick in Links returns
-to Select, leaving Select keeps it, and Escape clears it. A click acts at once, as an engine document's does; a
+to Select, leaving Select keeps it, and Escape clears it. A click acts at once but for one that would take a pick
+away, which waits the double-click window, as an engine document's does; a
 robot's double-click on empty space fits the model, as every view's does. Its viewport menu is a
 link's or an object's reference, Select, Hide, and the framing.
 
 Each link or component row has the Hide/Reveal eye of an assembly row
-(`settings-ui.md`; `robot/RobotVisibilityButton.jsx`), also in search results.
+([the panel's trees](viewer-ux.md#trees); `robot/RobotVisibilityButton.jsx`), also in search results.
 A link hides its own visuals, leaving child links visible and all joints active.
 A partially hidden link hides its remaining visuals; a fully hidden one reveals
 all of them (`robot/visibility.js`). Hidden geometry is excluded from rendering,
@@ -1688,23 +1764,16 @@ payload's revision beside the pose (`robot/useRobotVisibility.js`); a live reloa
 retains only ids still present.
 
 The `tcad:four_bar` extension is a nonlinear mimic: the engine's URDF reader resolves it
-(`cad_server.robot_payload`) and core's articulation player follows it (`common/articulation.js`). Its dependent joint has no Position slider or joint handle;
-its chip card names its four-bar driver instead of an affine mimic formula.
+(`cad_server.robot_payload`) and core's articulation player follows it (`common/articulation.js`). Its dependent joint has no slider in the Joints tab and no joint handle.
 The authoring contract specifies the namespace, geometry and range constraints.
 
-A link's chip card (`LinkDetails.jsx`), headed by the link's name, reads back what the
-description says about the link, in sections: its SRDF planning groups (`groupNamesByLink`) and end effectors;
-**Inertial** (mass, centre of mass in the link frame, and the six inertia terms
-laid out as the symmetric tensor); **Geometry** (each visual and collision as
-its mesh path or its primitive with dimensions, plus only what the description
-bothered to say: a scale that is not 1, an origin that is not zero, the visual's
-colour); the **Parent joint** (name, type, parent link, axis, lower/upper limits
-as written plus degrees, effort, velocity, mimic, origin); and the **Child
-joints**. The engine keeps those facts as the description wrote them, in the payload's
+A link's chip card (`LinkDetails.jsx`), headed by the link's name, is the link in focus alone and a
+few key facts: its mass, and the joint that holds it to its parent (name, type, and the parent link,
+a press selecting it; "Root link" for the root) — never its geometry, inertia tensor or child links
+(the Links tree is the hierarchy). The engine keeps every fact as the description wrote them, in the payload's
 `links` and `joints` (`joints[].origin`, `limit`, `mimic`; `links[].inertial` with
 `origin` and `inertia`, `visuals` and `collisions`, each mesh file with the host path
-the engine resolved for it), beside the articulation it renders from. A named object shows its link, colour,
-triangles and size.
+the engine resolved for it), beside the articulation it renders from. A named object shows its link and size.
 
 What names something else can be followed. A mesh path is a link that opens
 that file, by its absolute path, through the host's `onOpenFile`: the renderer resolves
@@ -1723,17 +1792,16 @@ A renderer's sidebar sections are `ToolPanel`s drawn as tabs of the view's panel
 surface, scroller or grip of its own, never folding, each named by its tab and its body the tab's
 page; the panel scrolls each tab and is sized from the grip on its right edge. A
 renderer's own `toolPanels` are `ToolPanel`s in the tool stack under the strip and
-sub-toolbar (`kit/tools/ToolStack.jsx`): every panel one width (164px, a six-tool strip's),
+sub-toolbar (`kit/tools/ToolStack.jsx`): every panel one width (164px),
 each exactly its content's height — up to its cap, for a `resizable` one, which opens at the
 column's height — until the column runs out; then a `"tree"` panel scrolls inside itself
 first, the `"details"` ones next, each in proportion to its height, and a `"fixed"` one
 never; and if those still do not fit, the column scrolls. The resizable panels' sizes and the
 folded stack panels are one of the tab's settings (`CadPreferences.toolStack`); the view's panel —
-open or collapsed, its width, its tab, the Selected pane's height — is the file's, in its view
+open or collapsed, its width, its tab — is the file's, in its view
 (`file-viewer/filePanel.js`).
-The strip, its sub-toolbars, the panel's pill and the stack's panels share one
-translucent surface, lightly blurred (the playbar is on none: a transparent row, in the tools view as
-in Preview); every menu and popover over the viewport a more opaque one
+The strip, its sub-toolbars and the stack's panels share one
+translucent surface, lightly blurred (Preview's playbar is on none: a transparent row); every menu and popover over the viewport a more opaque one
 with more blur and the same border; Preview's settings, read while they are up, one between them
 (the view's panel is docked, on the chrome's own colour, `bg-sidebar`) (`lib/floatingSurface.js`); every scroll region is the
 `ScrollArea` primitive. A submenu is portaled, never drawn inside its parent menu, which that
@@ -1743,12 +1811,16 @@ The shared dark UI and **the canvas** are neutral greys, no hue, as Figma's and 
 themes are: the tokens at chroma 0 on the shadcn lightness steps. The canvas is the content area
 behind every view, 2D and 3D, one colour from one token, `--canvas` (`oklch(0.235 0 0)` dark,
 `oklch(0.94 0 0)` light), a step under the navbar and the panel (`--sidebar`). A 3D view's tools
-view draws its scene on it (`resolveViewSceneSettings`'s `canvas`, read live by `useCanvasColor`), a
+view draws its scene on it (`resolveViewSceneSettings`'s `canvas`), a
 board on it in its palette (`plot2d/theme.js`, drawn again in the browser when the theme switches),
 a schematic's sheet on it and a drawing on it; what cannot read a stylesheet takes core's
-`lib/appTheme.js` copy, which `src/styles/canvas.test.js` holds equal. Preview keeps its studio
-(`previewDefaults`: `#222222` dark, white light), and the stills their own light backgrounds, whatever the theme.
-The shared loading star and the marks use blue branding.
+`lib/appTheme.js` copy, which `src/styles/canvas.test.js` holds equal. **Which** canvas, and in which light or dark the
+whole picture is drawn, is the viewport's theme, the person's Background (Light by default: a grey gradient down a 3D
+view, `resolveViewSceneSettings`'s `canvas` a `[top, bottom]` pair; or Dark), never the app's
+(`@cad/core/lib/viewportTheme.js`, `kit/look/useViewportTheme.js`, [the viewport's scheme](design-system.md#the-viewports-scheme)).
+Preview keeps its studio (`previewDefaults`: `#222222` dark, white light, in the viewport's light or dark), and the
+stills their own light backgrounds, whatever the setting.
+The marks use blue branding.
 
 ## Inspect, Render and live revisions
 
@@ -1807,14 +1879,14 @@ fit does: the strip's reach is the frame's `--cad-tools-bottom` (`runtimeCamera.
 target stands above the box's centre by half of what the strip takes. The 100% ruler and a resize's
 rescale read the reach the last fit measured, so a sub-toolbar coming and going moves neither. The editor's view, covered by Preview, is resized with the page and never re-fitted at that size: it
 rescales, so leaving Preview gives back the fit it opened with. A 3D view shows no percentage but a
-board's, in its corner's pill (`ZoomControl.jsx`'s `viewportZoom`); the viewport's `zoomPercent()`,
+board's, in its corner's zoom (`ZoomControl.jsx`'s `viewportZoom`); the viewport's `zoomPercent()`,
 `subscribeCamera()` and `zoomBy(factor)` serve that pill, the zoom keys and a phone's Zoom submenu,
 and the `window.__cadCamera()` test seam reads it (`zoomPercent`). The viewport's `goHome()` frames what
 is shown from the opening direction, or from the direction and up a view seen from another side hands it:
-a board's 3D view eases to it as it opens, from its bottom turned over the board. No control calls it:
-there is no Home button, and a person brings a view back with the cube and Zoom to fit. The acts that frame the
+a board's 3D view eases to it as it opens, from its bottom turned over the board, and the live `resetCamera` eases to
+it; there is no Home button on the picture and no camera reset in Display's card. The acts that frame the
 model are every view's context menu (Zoom to fit, Zoom to selection), a double-click on empty space, and the live
-`resetCamera`; the view cube (bottom-right, absent in Preview) turns
+`resetCamera`; the view cube (top-right, absent in Preview) turns
 the camera and keeps its zoom and pan, F frames the model, as the zoom's menu does, and opening a
 file the page has not shown fits the model afresh (a
 reload of the page restores the camera the file on screen was left at, and a file the page left is shown again at the one it was left at).

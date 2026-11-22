@@ -9,7 +9,7 @@ import { compactSuffix, hasPickGlyph, pickGlyphNode } from "../../inspector/pick
 // A chip's own size and look (`ReferenceChips.jsx`): 20px tall, its background, its glyph first,
 // then its words. It is the note's 20px line, top to bottom, so it sits in the text's rows without
 // spacing them out. Selected (`markSelectedPills`), it is highlighted as selected text is.
-const CHIP_CLASS = "mx-px inline-flex h-5 cursor-default select-none items-center gap-1 whitespace-nowrap rounded-sm bg-accent/70 px-1.5 align-top text-tiny leading-5 text-foreground data-[selected]:bg-selection data-[selected]:text-selection-foreground data-[selected]:ring-1 data-[selected]:ring-primary";
+const CHIP_CLASS = "mx-px inline-flex h-5 cursor-default select-none items-center gap-1 whitespace-nowrap rounded-sm bg-accent/70 px-1.5 align-top text-xs leading-5 text-foreground data-[selected]:bg-selection data-[selected]:text-selection-foreground data-[selected]:ring-1 data-[selected]:ring-primary";
 const PILL = "[data-quick-edit-note-ref]";
 const GLYPH_CLASS = "size-2.5 shrink-0";
 

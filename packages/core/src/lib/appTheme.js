@@ -9,12 +9,13 @@
  * palette, never from a token. All of them need the same colours as the app.
  *
  * So they live here, ONCE, as the numbers `packages/ui/src/styles/tokens.css` declares:
- * `--background` `oklch(1 0 0)` / `oklch(0.28 0 0)`, `--foreground` `oklch(0.145 0 0)` /
+ * `--background` `oklch(1 0 0)` / `#2c2c2c`, `--foreground` `oklch(0.145 0 0)` /
  * `oklch(0.985 0 0)`, and `--canvas` `oklch(0.94 0 0)` / `oklch(0.235 0 0)`, light / dark.
  * `canvas` is the content area behind every view, 2D and 3D: the board's canvas, the
  * schematic's surround, a drawing's and a 3D view's. Change a token and change these
- * together; `packages/ui/src/styles/canvas.test.js` reads the stylesheet and fails when the
- * canvas pair drifts from it.
+ * together; `packages/ui/src/styles/canvas.test.js` reads the stylesheet and fails when any of
+ * the three drifts from it. The viewport's own colours (its Background setting, the scene's
+ * selection, grid and axes) are `viewportTheme.js`'s.
  *
  * No DOM, no React, no imports: the headless bundle, `node --test` and the
  * viewer all load this file directly.
@@ -22,8 +23,8 @@
 
 /** `{ background, foreground, canvas }` as `#rrggbb`, per colour scheme. */
 export const APP_THEME_COLORS = Object.freeze({
-  light: Object.freeze({ background: "#ffffff", foreground: "#171717", canvas: "#ebebeb" }),
-  dark: Object.freeze({ background: "#292929", foreground: "#fafafa", canvas: "#1e1e1e" })
+  light: Object.freeze({ background: "#ffffff", foreground: "#0a0a0a", canvas: "#ebebeb" }),
+  dark: Object.freeze({ background: "#2c2c2c", foreground: "#fafafa", canvas: "#1e1e1e" })
 });
 
 /**

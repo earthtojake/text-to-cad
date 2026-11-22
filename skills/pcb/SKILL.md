@@ -24,7 +24,7 @@ and edits through its IPC API. There is no board model or build step; the files 
 | Check a change | `cad kicad_pcb drc`, snapshots | [Check each change](#check-each-change) |
 | Review before ordering | DRC, then measurements, then the checklist | [Before ordering](#before-ordering) |
 | Export fabrication files, a BOM, or a STEP for an enclosure | `cad kicad_pcb export`, `cad kicad_sch export` | [Manufacturing](references/manufacturing.md) |
-| Show a board or a schematic; a viewer question; a missing 3D model | `cad viewer --json FILE` | [Show the model](#show-the-model), [views](references/views.md) |
+| Show a board or a schematic; what the person can see or pick in it; a missing 3D model | `cad viewer --json FILE` | [Show the model](#show-the-model), [views](references/views.md) |
 
 ## Setup
 
@@ -42,7 +42,7 @@ board (its copper pours are refilled on a copy first) run KiCad's own `kicad-cli
 `cad run` gives a script the same. Things to know about that KiCad:
 
 - **It is a nightly (10.99).** A file it saves is in the nightly's format, which a stable KiCad app
-  refuses to open; viewing and snapshots still work, and the viewer's Open in says which KiCad on
+  refuses to open; viewing and snapshots still work, and the viewer tells the person which KiCad on
   this computer can open the file. Say so before the first save of a board the person opens in a
   stable KiCad.
 - **It runs headless with private settings**, never the person's KiCad app or its settings: never open

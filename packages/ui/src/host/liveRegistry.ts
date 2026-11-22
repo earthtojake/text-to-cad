@@ -9,11 +9,10 @@ export interface LiveView {
   /**
    * The model on its own, for a library card: once the view has settled — the whole file loaded
    * and drawn — framed whole from the default direction at `size`, whatever the person's camera,
-   * panels or window. Nothing on screen changes. A view that draws the file in the dark theme's own
-   * colours too (a KiCad board's) hands its light picture carrying the dark one as `dark`, which the
-   * library keeps beside it (`CadClient.keepThumbnail`) and shows in the dark theme.
+   * panels or window. Nothing on screen changes. The picture is the light viewport's, which the
+   * library keeps (`CadClient.keepThumbnail`) and the home shows in both themes.
    */
-  thumbnail(size: ThumbnailSize): Promise<Blob & { dark?: Blob }>;
+  thumbnail(size: ThumbnailSize): Promise<Blob>;
 }
 
 /** The mounted view's live controller, bound by whichever renderer is showing. */

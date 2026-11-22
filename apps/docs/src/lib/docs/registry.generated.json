@@ -41,7 +41,8 @@
         "mechanism",
         "configuration sequences",
         "animations",
-        "build closure"
+        "build closure",
+        "parameters"
       ],
       "operations": [
         {
@@ -129,7 +130,8 @@
         "mechanism",
         "configuration sequences",
         "animations",
-        "build closure"
+        "build closure",
+        "parameters"
       ],
       "operations": [
         {

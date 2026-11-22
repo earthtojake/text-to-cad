@@ -29,8 +29,8 @@ export function shortcutOfEvent(event) {
 export const ariaShortcut = shortcut => (shortcut ? shortcut.replace(/^⇧/, "Shift+") : undefined);
 
 /**
- * What a key does with the strip it is pressed over: a drawing tool's key takes its strip tool up
- * (Pencil or Shapes) with that tool in hand (`selectDrawing`), any other tool's takes that tool up,
+ * What a key does with the strip it is pressed over: a drawing tool's key takes Draw up in that tool's
+ * family (Pencil's or Shapes' mode) with that tool in hand (`selectDrawing`), any other tool's takes that tool up,
  * and F frames the model (`fit`). A tool already in hand stays so. True when the key did something.
  *
  * @param {KeyboardEvent} event
@@ -43,9 +43,12 @@ export function pressToolKey(event, { tools, selectDrawing = null, fit = null })
   const take = tool => { if (tool && !tool.disabled) { if (!tool.active) tool.onSelect(); return true; } return false; };
   const drawing = selectDrawing && Object.keys(DRAWING_SHORTCUTS).find(id => DRAWING_SHORTCUTS[id] === key);
   if (drawing) {
-    const strip = tools.find(tool => tool.id === toolFamily(drawing));
+    const family = toolFamily(drawing);
+    // Draw, whose modes both families are (`drawFamilies`), takes that family up; a strip of its own per family, its own.
+    const strip = tools.find(tool => tool.id === family || tool.drawFamilies?.includes(family));
     if (!strip || strip.disabled) return false;
     selectDrawing(drawing);
+    if (strip.takeFamily) { strip.takeFamily(family); return true; }
     return take(strip);
   }
   if (key === TOOL_SHORTCUTS.fit && fit) { fit(); return true; }
@@ -62,6 +65,12 @@ export const ZOOM_FACTOR = 1.5;
 export const zoomShortcuts = platform => (platform === "darwin"
   ? { in: "⌘+", out: "⌘-", actual: "⇧0", fit: TOOL_SHORTCUTS.fit, selection: "⇧2" }
   : { in: "Ctrl+=", out: "Ctrl+-", actual: "⇧0", fit: TOOL_SHORTCUTS.fit, selection: "⇧2" });
+
+/**
+ * Undo's and Redo's keys, as the viewer binds them (`kit/shell/useViewerShortcuts.js`) and a tooltip shows them: ⌘Z
+ * and ⇧⌘Z on a Mac (the host's `environment.platform`), Ctrl+Z and Ctrl+Y elsewhere.
+ */
+export const undoShortcuts = platform => (platform === "darwin" ? { undo: "⌘Z", redo: "⇧⌘Z" } : { undo: "Ctrl+Z", redo: "Ctrl+Y" });
 
 /** What a keydown asks of the zoom: "in", "out", "fit", "selection", "actual", or null. */
 export function zoomKeyOfEvent(event) {

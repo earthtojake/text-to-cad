@@ -11,13 +11,14 @@ import { useI18n } from "@cad/ui/i18n";
 export function playbarWords(runtime, t) {
   const kind = runtime?.noun === "Motion" ? "motion" : "animation";
   const say = (word, params) => t(`playbar.${kind}.${word}`, params);
-  return { title: say("title"), reset: say("reset"), play: say("play"), pause: say("pause"), playback: say("playback"),
+  return { title: say("title"), play: say("play"), pause: say("pause"), playback: say("playback"),
     list: say("list"), current: name => say("current", { name }) };
 }
 
-// The playbar under the model (`PreviewPlaybar.jsx`) is the one transport, in the tools
-// view and Preview alike: the routine, Play/Pause, this scrubber and the Playback settings
-// (`PlaybackMenu.jsx`).
+// The transport: in the tools view the panel's Animation tab (`AnimationSection.jsx`: the clips, Play/Pause, the
+// time, this scrubber, whose start is the rest pose, then Speed and Loop); in Preview its playbar
+// (`PreviewPlaybar.jsx`: the routine, Play/Pause, this scrubber and the Playback settings,
+// `PlaybackMenu.jsx`).
 //
 // Every animation source shares this transport UI. It only edits the clip and clock state of
 // the runtime it is handed; evaluating a clip is its owner's.

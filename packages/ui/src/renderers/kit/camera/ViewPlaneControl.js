@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { VIEW_CUBE_CORNERS, VIEW_CUBE_EDGES, viewPlaneTitle } from "./viewportCameraKit.js";
+import { axisColors } from "@cad/core/lib/viewportTheme.js";
 import { useI18n } from "../../../i18n/react.js";
 import { useControlUsage } from "../../../usage/controls.js";
 
@@ -16,7 +17,6 @@ const ORIENTATION_FALLBACK = Object.freeze({
 
 // Each face names its side on the cube, in the view's language (`viewCube.face.*`).
 const FACE_SIDES = Object.freeze({ z: "top", zNeg: "bottom", yNeg: "front", y: "back", x: "right", xNeg: "left" });
-const AXIS_COLORS = Object.freeze({ x: "rgb(239, 83, 80)", y: "rgb(76, 175, 80)", z: "rgb(66, 133, 244)" });
 const DEFAULT_VIEW_PLANE_SIZE = "7rem";
 const HOME_CORNER_ID = "iso+-+";
 // What a hover changes eases in, briefly; what it lights is one plain, lighter shade.
@@ -156,8 +156,11 @@ function ViewPlaneControl({
   viewPlaneSize,
   viewPlaneHeader = null,
   activateViewPlaneFace,
-  orbitViewCube
+  orbitViewCube,
+  // The viewport's light or dark (`lib/viewportTheme.js`): the axes in the one XYZ palette, as the grid's.
+  scheme = "light"
 }) {
+  const AXIS_COLORS = axisColors(scheme);
   // The cube's own subscription to the camera's orientation (`createViewPlaneOrientationStore`):
   // a moving camera re-renders the cube and nothing around it.
   const viewPlaneOrientation = useSyncExternalStore(orientationStore.subscribe, orientationStore.getSnapshot, orientationStore.getSnapshot);
@@ -295,7 +298,7 @@ function ViewPlaneControl({
 
   return (
     <div
-      className="pointer-events-none absolute z-30 flex flex-col items-center gap-0"
+      className="pointer-events-none absolute z-30 flex flex-col items-center gap-0" data-view-cube=""
       style={{ ...(viewPlaneOffsetLeft != null ? { left: `${viewPlaneOffsetLeft}px` } : {
         left: "var(--cad-viewport-corner-left, auto)", right: `var(--cad-viewport-corner-right, ${viewPlaneOffsetRight}px)` }),
         ...(viewPlaneOffsetTop != null ? { top: viewPlaneOffsetTop } : { bottom }) }}
@@ -328,9 +331,11 @@ function ViewPlaneControl({
                 <polygon points={face.points.map((point) => point.join(",")).join(" ")}
                   fill="color-mix(in oklch, var(--background) 90%, var(--foreground))" stroke="var(--background)" strokeWidth="0.6" strokeLinejoin="round" />
                 <path d={roundedInsetFace(face.points)} fill={fill} pointerEvents="none" style={HOVER_TRANSITION} />
+                {/* A face's name: 0.5 of the face's half-size, 10px on a face seen square-on in the 96px cube
+                    (the type scale's floor for text drawn into the viewport), foreshortened with its face. */}
                 {face.facing > 0.25 ? (
                   <text x="0" y="0" transform={face.labelTransform} textAnchor="middle" dominantBaseline="central"
-                    fontSize="0.43" fontWeight={hovered || active ? 600 : 500} fill={hovered || active ? "var(--foreground)" : "color-mix(in oklch, var(--foreground) 90%, transparent)"}
+                    fontSize="0.5" fontWeight={hovered || active ? 600 : 500} fill={hovered || active ? "var(--foreground)" : "color-mix(in oklch, var(--foreground) 90%, transparent)"}
                     opacity={Math.min(1, face.facing * 1.6)} pointerEvents="none" aria-hidden="true">
                     {face.label}
                   </text>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ZOOM_FACTOR, ariaShortcut, pressToolKey, pressZoomKey, shortcutOfEvent, zoomShortcuts } from "./toolShortcuts.js";
+import { ZOOM_FACTOR, ariaShortcut, pressToolKey, pressZoomKey, shortcutOfEvent, undoShortcuts, zoomShortcuts } from "./toolShortcuts.js";
 
 const key = (code, extra = {}) => ({ code, key: code.slice(3).toLowerCase(), ...extra });
 
@@ -54,4 +54,10 @@ test("the zoom's keys: + and - (⌘ or Ctrl too) zoom, ⇧1 fits, ⇧2 frames wh
   }
   assert.equal(pressZoomKey({ key: "=" }, null), false, "a view that takes no zoom keys");
   assert.deepEqual([zoomShortcuts("darwin").in, zoomShortcuts("win32").out, zoomShortcuts("linux").actual], ["⌘+", "Ctrl+-", "⇧0"]);
+});
+
+// Undo's and Redo's keys as the viewer binds them (`useViewerShortcuts.js`): ⌘Z and ⇧⌘Z on a Mac, Ctrl+Z and Ctrl+Y elsewhere.
+test("Undo's and Redo's keys are spelled for the host's platform", () => {
+  assert.deepEqual([undoShortcuts("darwin"), undoShortcuts("win32"), undoShortcuts(undefined)],
+    [{ undo: "⌘Z", redo: "⇧⌘Z" }, { undo: "Ctrl+Z", redo: "Ctrl+Y" }, { undo: "Ctrl+Z", redo: "Ctrl+Y" }]);
 });

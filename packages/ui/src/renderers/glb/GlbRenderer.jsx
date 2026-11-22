@@ -12,6 +12,7 @@ import { PointerPick } from "../kit/tools/select/usePointerPick.js";
 import { sceneCopyText, useSceneDescribe, useSceneInspect, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
 import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
+import SceneTreeSection from "../kit/inspector/SceneTreeSection.jsx";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
 import { useGlbAnimation } from "./useGlbAnimation.js";
@@ -76,9 +77,11 @@ function GlbSurface({ view, data }) {
   const escape = useMemo(() => ({
     active: selection.active || measure.drafting || measure.selected.length > 0,
     // Escape cancels a measurement in progress, then lets go of what is picked.
-    handle: () => {
+    handle: ({ toolInHand = false } = {}) => {
       const now = measureRef.current;
       if (now.drafting) { now.cancelDraft(); return true; }
+      // The tool in hand goes down first (the shell's), keeping what is picked, as a STEP's Escape does.
+      if (toolInHand) return false;
       if (now.selected.length) { now.select([]); return true; }
       if (selectionRef.current.active) { selectionRef.current.clear(); return true; }
       return false;
@@ -147,18 +150,25 @@ function GlbSurface({ view, data }) {
     run: () => { const box = scene?.selectionBounds?.(selectionRef.current.selected); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
   };
 
-  // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows. No panel, so no Selected pane.
+  // The view's panel, from the first frame: the Model tab, the file's node tree (`SceneTreeSection.jsx`), a row a node,
+  // a pick in it taking Select up and picking the node as a press on the model does; empty while the file loads. A GLB
+  // of one node has its one row, and one with no node its one row too, the file's, which picks nothing.
+  const tree = useMemo(() => (scene ? scene.nodeTree?.length ? scene.nodeTree : [{ id: "file", label: view.file.name, part: null, children: [] }] : null),
+    [scene, view.file.name]);
+  const sidebar = <SceneTreeSection tree={tree} selection={selection} active={!previewing}
+    onPick={() => { if (shellRef.current?.toolMode !== GLB_TOOL.SELECT) shellRef.current?.selectTool(GLB_TOOL.SELECT); }} />;
+  // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows.
   const described = useSceneDescribe(scene);
   const inspect = useSceneInspect({ scene: previewing ? null : scene, selection, describe: described });
 
   return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} previewView={previewView}
-    inspect={inspect}
+    inspect={inspect} sidebar={sidebar}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameNode}
     onClearReferences={() => { selection.clear(); measure.select([]); }}
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}
     viewportOverlay={viewport => { viewportRef.current = viewport; return <>
       {sceneTools.overlay(viewport)}
-      <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} />
+      <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} takesAway={selection.takesAway} touchAdds />
     </>; }} />;
 }
 

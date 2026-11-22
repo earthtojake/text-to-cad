@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { fitTransform } from '@cad/core/lib/drawing2d/transform.js';
 import { useFlatCanvasView } from './useFlatCanvasView.js';
 import { flatViewRecord } from './flatView.js';
+import { DEFAULT_PANEL_WIDTH } from '../shell/sidebars.js';
 
 // Every flat view's canvas (a board, a schematic's sheet, a drawing): the view the file was left at,
 // placed on the pane the picture is laid out in. A reload with the view's panel open lays the picture
@@ -11,7 +12,7 @@ import { flatViewRecord } from './flatView.js';
 
 const BOUNDS = [0, 0, 160, 100] as const;
 const VIEW = { width: 1440, height: 800 };
-const PANEL = 216;
+const PANEL = DEFAULT_PANEL_WIDTH;
 let pane = { ...VIEW };
 const observers = new Set<() => void>();
 const resize = (next: { width: number; height: number }) => act(() => { pane = next; observers.forEach(callback => callback()); });
@@ -33,8 +34,10 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); observers.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-function Canvas({ content, restored, onViewMoved }: { content: unknown; restored: object | null; onViewMoved: (view: unknown) => void }) {
-  const view = useFlatCanvasView({ content, bounds: content ? BOUNDS : null, restored, onViewMoved,
+type Tap = (point: { x: number; y: number }, event: PointerEvent) => unknown;
+function Canvas({ content, restored, onViewMoved, onTap = null, takesAway = null }: { content: unknown; restored: object | null;
+  onViewMoved: (view: unknown) => void; onTap?: Tap | null; takesAway?: Tap | null }) {
+  const view = useFlatCanvasView({ content, bounds: content ? BOUNDS : null, restored, onViewMoved, onTap, takesAway,
     paint: (_ctx: unknown, frame: { transform: { scale: number; offsetX: number; offsetY: number } | null }) => { if (frame.transform) painted.push({ ...frame.transform }); } });
   return <div ref={view.containerRef}><canvas ref={view.canvasRef} /></div>;
 }
@@ -94,4 +97,61 @@ it('a record an earlier build kept, the transform alone, is taken as it is', asy
   await settle();
   expect(painted.at(-1)).toEqual(left);
   expect(moved).not.toHaveBeenCalled();
+});
+
+// A tap that would take something out of the selection waits the double-click window, and the double-click drops it
+// before it fits: a double-click on a picked item never shows it going and coming back (`docs/viewer-ux.md`, "Selection
+// and gestures", as a 3D view's pick holds it). A lone one acts once the window has passed (a finger's window is its
+// double tap's); a tap on something else lets it act first; one the renderer no longer takes (a tool put down, the view
+// moved off it) is dropped, and so is one still waiting as the canvas goes.
+it('holds a tap that takes the selection away for the double-click window, and a double-click drops it', async () => {
+  const onTap = vi.fn();
+  // What is under the left half of the pane is picked: a tap there would take it away.
+  let picked = true;
+  const takesAway = vi.fn((point: { x: number }) => (picked && point.x < 100 ? 'left' : null));
+  const view = render(<Canvas content={{ revision: 1 }} restored={null} onViewMoved={() => {}} onTap={onTap} takesAway={takesAway} />);
+  await settle();
+  const canvas = document.querySelector('canvas')!;
+  const tap = (clientX: number, pointerType = 'mouse') => act(() => {
+    for (const type of ['pointerdown', 'pointerup']) {
+      canvas.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, button: 0, pointerType, clientX, clientY: 50 }));
+    }
+  });
+  const taps = () => onTap.mock.calls.map(([point]) => point.x);
+  vi.useFakeTimers();
+  try {
+    // A double-click on it: both clicks wait, and the double-click drops them.
+    tap(50);
+    tap(50);
+    act(() => { canvas.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: 50, clientY: 50 })); });
+    vi.advanceTimersByTime(1000);
+    expect(taps()).toEqual([]);
+    // A lone click acts once the window has passed: 220ms for a mouse, a finger's 300ms.
+    tap(50);
+    vi.advanceTimersByTime(219);
+    expect(taps()).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(taps()).toEqual([50]);
+    tap(50, 'touch');
+    vi.advanceTimersByTime(299);
+    expect(taps()).toEqual([50]);
+    vi.advanceTimersByTime(1);
+    expect(taps()).toEqual([50, 50]);
+    // A tap on something else in the window: the waiting one acts first, then this one, at once.
+    tap(50);
+    tap(150);
+    expect(taps()).toEqual([50, 50, 50, 150]);
+    // Taken no more when its window has passed: dropped.
+    tap(50);
+    picked = false;
+    vi.advanceTimersByTime(220);
+    picked = true;
+    // Still waiting as the canvas goes: dropped.
+    tap(50);
+    view.unmount();
+    vi.advanceTimersByTime(300);
+    expect(taps()).toEqual([50, 50, 50, 150]);
+  } finally {
+    vi.useRealTimers();
+  }
 });

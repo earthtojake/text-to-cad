@@ -15,7 +15,7 @@ The `cad` skill turns a request for a part or an assembly into a Python script w
 
 ## How it works
 
-A model is a function with no parameters, decorated with `@model`, that returns a build123d shape. Its dimensions are the arguments of a plain helper, and each configuration is a `@model` of its own, with its own id and page. Units are millimetres and +Z is up.
+A model is a function with no arguments, decorated with `@model`, that returns a build123d shape. Its dimensions are the arguments of a plain helper, and each configuration is a `@model` of its own, with its own id and page. Units are millimetres and +Z is up.
 
 ```python
 import build123d as bd
@@ -51,6 +51,8 @@ cad run src/bracket.py
 ```
 
 Each call in `__main__` prints how its model built, its `id:` and its `view:` page. The id comes from the script's path and the function's name, so it is the same on every run and the open page follows it. A warm worker in the server keeps every kernel operation the script ran: a comment re-runs nothing, and a changed dimension re-runs only what reads it. Your agent checks each change with `cad model snapshot "$ID" tmp/review.png` and an `assert` on the dimensions you gave, and resolves a face you picked in the viewer with `cad model inspect`.
+
+A number you are likely to tune, such as a wall, a fit or a hole count, can be declared as a parameter at the top of the script, with its range and unit: `WALL = model.param("wall", 2.0, min=1, max=5, unit="mm")`. The viewer's Params tab lists the model's parameters: change one there and save it, and the number is rewritten in the script and the model rebuilt. Or ask your agent, which edits the number in the script and runs it.
 
 An assembly's body calls each part model, places it, labels it and returns a `Compound`. Each part keeps its own document and id, and the labels name each placement in the viewer's tree, in references and in exports.
 
@@ -103,7 +105,7 @@ cad model interference "$ID" --fit pin base
 
 `--fit` names a pair meant to overlap, such as a pin in a bore. Exit 0 is clear, 1 means a pair shares volume, and 3 means a pair could not be measured, which is not a pass.
 
-An explode, a reveal or a showcase is `animation()`, a set of glTF channels on parts and no part of the mechanism. The viewer's Position panel poses the joints, with your states as presets, and a playbar plays the sequences. In a GLB every configuration sequence becomes a named animation clip and every `animation()` is baked in, for Blender, three.js and the viewer to play. STEP, STL and 3MF carry placements only.
+An explode, a reveal or a showcase is `animation()`, a set of glTF channels on parts and no part of the mechanism. The viewer's Joints tab poses the joints, with your states as presets, and its Motion tab plays the sequences. In a GLB every configuration sequence becomes a named animation clip and every `animation()` is baked in, for Blender, three.js and the viewer to play. STEP, STL and 3MF carry placements only.
 
 ## DXF profiles and flat patterns
 
@@ -196,6 +198,7 @@ Each finding carries a rule id, the measured `value`, the `limit`, the `source` 
 
 - "Make a 60 by 40 mm mounting plate, 4 mm thick, with four 4.5 mm holes 6 mm in from the corners."
 - "Add a hinge to the lid of the enclosure, 0 to 110 degrees, and name two poses, shut and open."
+- "Make the bracket's wall thickness and hole count something I can tune, then make the wall 2.5 mm."
 - "Make a 4 second explode animation of the hinged box and export it as a GLB."
 - "Make the flat pattern of this plate as a DXF for a laser. It is 3 mm 5052 aluminium and I want 0.15 mm kerf compensation."
 - "Can this bracket be CNC milled from 6061 on a 3-axis mill? My shop has 3, 6 and 10 mm end mills."

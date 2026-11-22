@@ -1,63 +1,27 @@
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
-import { Children, useEffect, useId, useRef, useState } from "react";
+import { FieldLabel } from "@cad/ui/primitives/field-label";
+import { Children, useEffect, useRef, useState } from "react";
 import { cn } from "@cad/ui/utils";
-import { Checkbox } from "@cad/ui/primitives/checkbox";
 import { ColorPicker } from "@cad/ui/primitives/color-picker";
 import { useI18n } from "@cad/ui/i18n";
 
-export const FILE_SHEET_CONTROL_ROW_CLASSES = "space-y-1 px-2";
+// A sheet's rows pad nothing at the sides: in the view's panel they stand on its inset (`--panel-inset`, the body's
+// padding), and a surface of its own (Preview's settings) pads them.
+export const FILE_SHEET_CONTROL_ROW_CLASSES = "space-y-1";
 export const FILE_SHEET_ROW_STACK_CLASSES = "space-y-3";
-// Section headers sit at the navbar's size (12px, normal weight) — a sheet's headings
-// and the chrome above it read as the same level of structure. Row labels stay
-// 11px muted, so a header separates from its rows by both size and colour.
+// A sheet is on the type scale's 12/16 (`docs/design-system.md`, "The type scale"): its headings, labels,
+// values and status alike, a heading told apart from its rows by colour (labels muted, values and headings
+// the foreground), never by size; a value badge, small metadata, 11/16.
 export const FILE_SHEET_SECTION_TITLE_CLASSES = "text-xs text-sidebar-foreground";
-export const FILE_SHEET_FIELD_LABEL_CLASSES = "block min-w-0 truncate text-tiny leading-4 text-muted-foreground";
-export const FILE_SHEET_STATUS_TEXT_CLASSES = "px-2 text-tiny leading-4 text-muted-foreground";
+export const FILE_SHEET_STATUS_TEXT_CLASSES = "text-xs leading-(--cad-leading-xs) text-muted-foreground";
 
-// A trigger must clip and ellipsize its own value: the Radix trigger only sets
-// whitespace-nowrap, so without this a long option pushes its chevron out
-// through the border instead of truncating.
-const FILE_SHEET_SELECT_TRIGGER_BASE_CLASSES = "!h-7 px-2 !text-tiny overflow-hidden [&_svg]:size-3.5 [&>span]:min-w-0 [&>span]:truncate";
-export const FILE_SHEET_SELECT_TRIGGER_CLASSES = `${FILE_SHEET_SELECT_TRIGGER_BASE_CLASSES} w-full`;
-export const FILE_SHEET_VALUE_BADGE_CLASSES = "shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-micro leading-none tabular-nums text-muted-foreground";
+export const FILE_SHEET_VALUE_BADGE_CLASSES = "shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-tiny leading-none tabular-nums text-foreground";
 export const FILE_SHEET_VALUE_BADGE_INPUT_CLASSES = [
-  "h-7 w-20 shrink-0 rounded-md border border-input bg-transparent px-2 py-1 text-right text-tiny leading-none tabular-nums text-foreground shadow-xs outline-none",
+  "h-control w-20 shrink-0 rounded-md border border-input bg-transparent px-2 py-1 text-right text-xs leading-none tabular-nums text-foreground shadow-xs outline-none",
   "m-0 box-border min-w-0 theme-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground",
   "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30"
 ].join(" ");
-// The value of the slider control (`SliderField.jsx`): no border, outline or ring in any state; plain
-// right-aligned text at rest, a soft wash (the foreground at 9%) under the pointer and the keyboard.
-const FILE_SHEET_QUIET_INPUT_CLASSES = [
-  "m-0 box-border min-w-0 shrink-0 rounded-sm border-0 bg-transparent px-1 text-right text-tiny leading-4 tabular-nums text-foreground",
-  "shadow-none outline-none ring-0 theme-none transition-colors hover:bg-foreground/[0.09] focus:bg-foreground/[0.09] focus-visible:ring-0",
-  "disabled:opacity-50 disabled:hover:bg-transparent"
-].join(" ");
-export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-7 px-2 text-tiny !text-foreground";
-
-/** A section heading: 24px, regular 11px, never a disclosure (`docs/settings-ui.md`). */
-export const FILE_SHEET_SECTION_HEADING_CLASSES = "flex h-6 min-w-0 items-center gap-2 px-2 text-tiny font-normal leading-4 text-foreground";
-
-/**
- * One settings section: a heading and its rows, a rule above it when another section precedes
- * it. A section a feature switches on and off (`enabled`, `onEnabledChange`) ends its heading in
- * that feature's checkbox, at the right, the title naming it; while it is off the section is its
- * heading alone.
- */
-export function FileSheetSettingsSection({ title, children, enabled, onEnabledChange, sectionId }) {
-  const titleId = useId();
-  const switchable = typeof onEnabledChange === "function";
-  const open = !switchable || enabled === true;
-  return <section aria-labelledby={titleId} data-settings-section={sectionId}
-    className="[&+section]:mt-1 [&+section]:border-t [&+section]:pt-1 border-border">
-    <h2 className="m-0">
-      {switchable ? <label className={cn(FILE_SHEET_SECTION_HEADING_CLASSES, "cursor-pointer justify-between")}>
-        <span id={titleId} className="truncate">{title}</span>
-        <Checkbox aria-labelledby={titleId} checked={open} onCheckedChange={checked => onEnabledChange(checked === true)} />
-      </label> : <span id={titleId} className={FILE_SHEET_SECTION_HEADING_CLASSES}>{title}</span>}
-    </h2>
-    {children == null || !open ? null : <div data-settings-section-body="" className="space-y-1 pb-1">{children}</div>}
-  </section>;
-}
+export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-control px-2 text-xs !text-foreground";
 
 /**
  * A setting's row: its label in a fixed column and its control filling the rest, 24px, so the
@@ -65,21 +29,23 @@ export function FileSheetSettingsSection({ title, children, enabled, onEnabledCh
  * under Grid); the control keeps the full accessible name.
  */
 export function FileSheetSettingRow({ label, children, disabled = false, className }) {
-  return <div className={cn("grid h-6 min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-center gap-2 px-2", className)}>
-    <TooltipHint content={label} overflowOnly><span className={cn(FILE_SHEET_FIELD_LABEL_CLASSES, disabled && "opacity-50")}>{label}</span></TooltipHint>
+  return <div className={cn("grid h-icon-button min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-center gap-2", className)}>
+    <TooltipHint content={label} overflowOnly><FieldLabel className="leading-(--cad-leading-xs)">{label}</FieldLabel></TooltipHint>
     <div className="flex min-w-0 items-center gap-1">{children}</div>
   </div>;
 }
 
 // Figma-like property: the icon/unit carries the visible meaning; its accessible
 // name and shared hover hint keep the exact setting discoverable.
-export function FileSheetNumberProperty({ label, Icon, value, onValueCommit }) {
+// `disabled`: shown, not editable (while what it sets is being written).
+export function FileSheetNumberProperty({ label, Icon, value, onValueCommit, disabled = false, className }) {
   const { t } = useI18n();
   return (
-    <TooltipHint content={label}><div  className="flex h-7 min-w-0 items-center gap-1 rounded-md border border-input bg-muted/30 px-2 focus-within:ring-1 focus-within:ring-ring">
+    <TooltipHint content={label}><div className={cn("flex h-control min-w-0 items-center gap-1 rounded-md border border-input bg-muted/30 px-2 focus-within:ring-1 focus-within:ring-ring",
+      disabled && "cursor-not-allowed opacity-50 [&_input]:cursor-not-allowed", className)}>
       {Icon ? <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
-      <FileSheetValueInput ariaLabel={t("field.value", { name: label })} value={value} onValueCommit={onValueCommit}
-        className="h-6 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-left shadow-none focus-visible:ring-0 dark:bg-transparent" />
+      <FileSheetValueInput ariaLabel={t("field.value", { name: label })} value={value} onValueCommit={onValueCommit} disabled={disabled}
+        className="h-icon-button min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-left shadow-none focus-visible:ring-0 dark:bg-transparent" />
     </div></TooltipHint>
   );
 }
@@ -87,8 +53,8 @@ export function FileSheetNumberProperty({ label, Icon, value, onValueCommit }) {
 export function FileSheetColorProperty({ label, value, onChange, opacity, onOpacityChange, className }) {
   const withOpacity = typeof onOpacityChange === "function";
   return (
-    <div className={cn("min-w-0 px-2", className)}>
-      <TooltipHint content={label}><div className="flex h-7 min-w-0 items-center overflow-hidden rounded-md border border-input bg-muted/30">
+    <div className={cn("min-w-0", className)}>
+      <TooltipHint content={label}><div className="flex h-control min-w-0 items-center overflow-hidden rounded-md border border-input bg-muted/30">
         <FileSheetColorPicker value={value} onChange={onChange} opacity={opacity} onOpacityChange={onOpacityChange}
           showOpacity={withOpacity} aria-label={label}
           className="min-w-0 flex-1 rounded-none border-0 bg-transparent shadow-none dark:bg-transparent" />
@@ -111,18 +77,18 @@ export function FileSheetSubsection({ title, children, contentClassName }) {
     // below a section's last row read as equal. Inside, rows sit 12px apart and
     // the heading takes 12px to clear them.
     <div className="pb-4 first:pt-2 first:[&_.cad-sheet-subsection-separator]:hidden">
-      <div className="cad-sheet-subsection-separator mx-2 mb-4 h-px bg-border/60" />
+      <div className="cad-sheet-subsection-separator mb-4 h-px bg-border/60" />
       {/* Titleless subsections are a rule plus rows: for a couple of settings
           that belong to the sheet as a whole rather than to any named group, and
           would otherwise need a heading invented for them. */}
       {title ? (
         <div
           className={cn(
-            "flex min-h-5 min-w-0 items-center justify-between gap-2 px-2",
+            "flex min-h-5 min-w-0 items-center justify-between gap-2",
             hasRows && "pb-3"
           )}
         >
-          <span className={cn("min-w-0 truncate leading-4", FILE_SHEET_SECTION_TITLE_CLASSES)}>{title}</span>
+          <span className={cn("min-w-0 truncate leading-(--cad-leading-xs)", FILE_SHEET_SECTION_TITLE_CLASSES)}>{title}</span>
         </div>
       ) : null}
       {hasRows ? <div className={cn(FILE_SHEET_ROW_STACK_CLASSES, contentClassName)}>{children}</div> : null}
@@ -142,11 +108,11 @@ export function FileSheetControlRow({ label, value, trailing, children, classNam
         <div
           className={cn(
             "flex items-center justify-between gap-2",
-            hasContent ? "min-h-4" : "min-h-7"
+            hasContent ? "min-h-4" : "min-h-control"
           )}
         >
           {label != null ? (
-            <span className={FILE_SHEET_FIELD_LABEL_CLASSES}>{label}</span>
+            <FieldLabel className="leading-(--cad-leading-xs)">{label}</FieldLabel>
           ) : <span />}
           {trailing != null ? trailing : value != null ? (
             <span className={FILE_SHEET_VALUE_BADGE_CLASSES}>{value}</span>
@@ -183,7 +149,6 @@ export function FileSheetValueInput({
   disabled = false,
   ariaLabel,
   inputMode = "decimal",
-  quiet = false,
   className,
   style,
   ...props
@@ -194,6 +159,7 @@ export function FileSheetValueInput({
   const [editing, setEditing] = useState(false);
   const skipCommitRef = useRef(false);
   const selectOnEditRef = useRef(false);
+  const pointerFocusRef = useRef(false);
   const visibleValue = editing ? draftValue : displayValue;
 
   useEffect(() => {
@@ -219,7 +185,8 @@ export function FileSheetValueInput({
       // typed digit, and the second keystroke then overwrites the first.
       window.cancelAnimationFrame?.(pendingSelectFrameRef.current);
       pendingSelectFrameRef.current = window.requestAnimationFrame?.(() => {
-        if (selectOnEditRef.current === false) {
+        // select() focuses the field too: a frame that lands after it was left must not take it back.
+        if (selectOnEditRef.current === false || (typeof document !== "undefined" && document.activeElement !== input)) {
           return;
         }
         input?.select?.();
@@ -249,13 +216,15 @@ export function FileSheetValueInput({
         setEditing(true);
         selectInputValue(event.currentTarget);
       }}
-      onClick={(event) => {
-        selectOnEditRef.current = true;
-        setEditing(true);
-        selectInputValue(event.currentTarget);
+      onPointerDown={(event) => {
+        // A press that focuses the field selects its value as the press ends; a later press places the caret.
+        pointerFocusRef.current = typeof document !== "undefined" && document.activeElement !== event.currentTarget;
       }}
       onMouseUp={(event) => {
+        if (!pointerFocusRef.current) return;
+        pointerFocusRef.current = false;
         event.preventDefault();
+        event.currentTarget.select?.();
       }}
       onBlur={() => {
         setEditing(false);
@@ -292,20 +261,17 @@ export function FileSheetValueInput({
           event.currentTarget.blur();
         }
       }}
-      className={cn(
-        quiet ? FILE_SHEET_QUIET_INPUT_CLASSES : FILE_SHEET_VALUE_BADGE_INPUT_CLASSES,
-        className
-      )}
-      style={quiet ? style : { borderColor: editing ? "var(--ring)" : undefined, ...style }}
+      className={cn(FILE_SHEET_VALUE_BADGE_INPUT_CLASSES, className)}
+      style={{ borderColor: editing ? "var(--ring)" : undefined, ...style }}
       aria-label={ariaLabel}
     />
   );
 }
 
 // An empty or info line. The one style for every in-sheet message.
-export function FileSheetStatusText({ children, className }) {
+export function FileSheetStatusText({ children, className, ...props }) {
   return (
-    <p className={cn(FILE_SHEET_STATUS_TEXT_CLASSES, className)}>
+    <p {...props} className={cn(FILE_SHEET_STATUS_TEXT_CLASSES, className)}>
       {children}
     </p>
   );
@@ -317,9 +283,9 @@ export function FileSheetValueField({ label, value }) {
   const displayValue = String(value ?? "");
   return (
     <div className="block min-w-0">
-      <span className={FILE_SHEET_FIELD_LABEL_CLASSES}>{label}</span>
+      <FieldLabel className="leading-(--cad-leading-xs)">{label}</FieldLabel>
       <TooltipHint content={displayValue} overflowOnly><div
-        className="mt-1 min-h-7 truncate rounded-md border border-border/70 bg-muted/25 px-2 py-1 text-tiny leading-4 text-foreground">
+        className="mt-1 min-h-control truncate rounded-md border border-border/70 bg-muted/25 px-2 py-1 text-xs leading-(--cad-leading-xs) text-foreground">
         {displayValue}
       </div></TooltipHint>
     </div>
@@ -330,7 +296,7 @@ export function FileSheetFieldGrid({ columns = 2, children, className, ...props 
   return (
     <div
       {...props}
-      className={cn("grid gap-1 px-2", className)}
+      className={cn("grid gap-1", className)}
       style={{ gridTemplateColumns: typeof columns === "number" ? `repeat(${columns}, minmax(0, 1fr))` : columns }}
     >
       {children}

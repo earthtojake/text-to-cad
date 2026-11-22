@@ -124,10 +124,11 @@ stderr is no one's); a pass with nothing to do says nothing, and a pass that fai
 engine from starting.
 
 A record's `revision` is its closure's key (the same code, the same revision, after a
-restart too), or a token of the build's own where the closure has none. A served document's
+restart too) -- digested with the document's parameters' record where it records any (`models.revision`,
+**Parameters**) -- or a token of the build's own where the closure has none. A served document's
 generation (its structure's `version`, which a page waits on and the viewer's export compares)
 is a token of its build's own: a rebuild is a new generation, and no generation is a counter that
-a restart starts again. A document is what its last run made: a run of the same closure in the worker
+a restart starts again. A document is what its last run made: a run of the same revision in the worker
 that holds the last build (nothing ran, or it ran to the same bytes) keeps its generation, so a page
 waiting on it is not woken and an export of the revision it shows still writes it. Recents is the registry's view (`cad_server.viewer.recents`): pinned
 first, then by last activity, the later of a row's `opened` (a page opened it) and `updated` (a

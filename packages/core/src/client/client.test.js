@@ -443,23 +443,18 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     if (path === '/api/v1/local/reveal') return options.body.includes('gone') ? Response.json({ error: 'That file is no longer there.' }, { status: 404 }) : new Response(null, { status: 204 });
     if (path === '/api/v1/local/pick') return Response.json({ path: '/models/picked.step' });
     if (path === '/api/v1/local/link') return Response.json({ link: '1700000000.mac', expires: 1700000000 });
-    if (path === '/api/v1/documents') return Response.json({ documents: [{ id: 'd1', path: '/models/a.step', kind: 'step', record: 'file' }] });
+    if (path === '/api/v1/documents') return Response.json({ documents: [{ id: 'd1', path: '/models/a.step', kind: 'step', record: 'file', size: 2048 }] });
     if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { share: true } });
     return Response.json({ path });
   } });
   t.after(() => client.dispose());
-  // A row as the library reads it: its record's kind is the library's, its document's beside it.
-  const row = { id: 'd1', path: '/models/a.step', kind: 'file', record: 'file', documentKind: 'step' };
+  // A row as the library reads it: its record's kind is the library's, its document's beside it, its size on disk kept.
+  const row = { id: 'd1', path: '/models/a.step', kind: 'file', record: 'file', documentKind: 'step', size: 2048 };
   assert.deepEqual(await client.recents(), [row]);
   assert.deepEqual(await client.changeRecents({ action: 'open', path: '/models/a.step' }), [row]);
   await client.keepThumbnail(new Blob([thumbnail], { type: 'image/png' }), '/models/a.step');
-  // A picture drawn in the dark theme's colours too carries it: both are kept.
-  await client.keepThumbnail(Object.assign(new Blob([thumbnail], { type: 'image/png' }), { dark: new Blob([thumbnail], { type: 'image/png' }) }), '/models/a.kicad_pcb');
-  // A picture, by its document's id, versioned by the picture's name; in the dark theme its dark one where it has one.
+  // A picture, by its document's id, versioned by the picture's name: its one picture, in either theme.
   assert.equal(client.thumbnailUrl({ id: 'd1', thumbnail: 'a.png' }), 'http://one.test/api/v1/documents/d1/thumbnail?v=a.png');
-  assert.equal(client.thumbnailUrl({ id: 'd1', thumbnail: 'a.png' }, { scheme: 'dark' }), 'http://one.test/api/v1/documents/d1/thumbnail?v=a.png');
-  assert.equal(client.thumbnailUrl({ id: 'd1', thumbnail: 'a.png', thumbnailDark: 'b.png' }, { scheme: 'dark' }),
-    'http://one.test/api/v1/documents/d1/thumbnail?v=b.png&scheme=dark');
   assert.equal(await client.thumbnail({ id: 'd1', thumbnail: 'a.png' }), 'data:image/png;base64,iVBORw==');
   assert.equal(await client.thumbnail({ id: 'd2', thumbnail: 'none.png' }), null);
   assert.equal(await client.pick(), '/models/picked.step');
@@ -480,7 +475,6 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/api/v1/documents', 'GET', null, null],
     ['/api/v1/documents', 'PATCH', '1', { action: 'open', path: '/models/a.step' }],
     ['/api/v1/documents', 'PATCH', '1', { action: 'thumbnail', path: '/models/a.step', png: 'iVBORw==' }],
-    ['/api/v1/documents', 'PATCH', '1', { action: 'thumbnail', path: '/models/a.kicad_pcb', png: 'iVBORw==', dark: 'iVBORw==' }],
     ['/api/v1/documents/d1/thumbnail', 'GET', null, null], ['/api/v1/documents/d2/thumbnail', 'GET', null, null],
     ['/api/v1/local/pick', 'POST', '1', null],
     ['/api/v1/local/reveal', 'POST', '1', { path: '/models/a.step' }], ['/api/v1/local/reveal', 'POST', '1', { path: '/models/gone.step' }],
@@ -567,4 +561,68 @@ test('an id deleted while it is on screen leaves the catalog: asked again, it is
   const failure = await client.resolveEntry(id).catch((error) => error);
   assert.deepEqual([isMissingFileError(failure), failure.state], [true, 'unsaved']);
   client.dispose();
+});
+
+test("a model's parameters are saved by one guarded POST of names and numbers, and a refusal carries the engine's code", async (t) => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const calls = [];
+  const saved = { id, written: [{ name: 'wall', from: 2, to: 2.5, file: '/m/bracket.py', line: 7 }], rebuilt: [id] };
+  let refusal = null;
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    const parsed = new URL(url);
+    calls.push([parsed.pathname + parsed.search, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.headers?.['content-type'] ?? null,
+      options.body ? JSON.parse(options.body) : null]);
+    return refusal ? Response.json(refusal, { status: 409 }) : Response.json(saved);
+  } });
+  t.after(() => client.dispose());
+  assert.deepEqual(await client.setModelParameters(id, { wall: 2.5, holes: 8 }), saved);
+  assert.deepEqual(calls, [[`/api/v1/documents/model/${id}/parameters`, 'POST', '1', 'application/json', { values: { wall: 2.5, holes: 8 } }]]);
+  // A refusal is the engine's own sentence, with its code, its hint and (a parameter that cannot be written) its reason.
+  refusal = { error: 'bracket.py changed since it last ran', hint: 'run the script first', code: 'script_changed' };
+  const changed = await client.setModelParameters(id, { wall: 3 }).catch(error => error);
+  assert.deepEqual([changed.message, changed.code, changed.hint, 'reason' in changed], ['bracket.py changed since it last ran', 'script_changed', 'run the script first', false]);
+  refusal = { error: 'pitch is declared in lib/spec.py', hint: 'change it there', code: 'not_writable', reason: 'shared' };
+  assert.equal((await client.setModelParameters(id, { pitch: 45 }).catch(error => error)).reason, 'shared');
+  // A failure that is no refusal of the engine's (no code) is raised as every request's is.
+  refusal = { error: 'Internal server error' };
+  const failed = await client.setModelParameters(id, { wall: 3 }).catch(error => error);
+  assert.deepEqual([failed.name, failed.code, failed.failure.status], ['ViewerRequestError', undefined, 409]);
+  // Never a path, never text, never nothing: refused here, and no request is made.
+  const sent = calls.length;
+  await assert.rejects(client.setModelParameters('/m/bracket.py', { wall: 3 }), /document id/);
+  for (const values of [{ wall: '3' }, { wall: NaN }, { wall: null }, {}, null, [3]]) await assert.rejects(client.setModelParameters(id, values), /finite number/);
+  assert.equal(calls.length, sent);
+});
+
+test("a model's preview is one guarded POST of names, numbers and the page's token, answered with where its geometry is read", async (t) => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const held = `${id}~preview-0123456789abcdef`;
+  const calls = [];
+  let answer = { id, preview: { id: held, version: '0123456789abcdef', basis: 'v1', values: { wall: 3 }, seconds: 0.2, memo: { hits: 4, misses: 1 } } };
+  let refusal = null;
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    const parsed = new URL(url);
+    calls.push([parsed.pathname, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
+    return refusal ? Response.json(refusal, { status: 409 }) : Response.json(answer);
+  } });
+  t.after(() => client.dispose());
+  const shown = await client.previewModelParameters(id, { wall: 3 }, { page: 'page-1' });
+  assert.deepEqual(calls, [[`/api/v1/documents/model/${id}/preview`, 'POST', '1', { values: { wall: 3 }, page: 'page-1' }]]);
+  assert.equal(shown.preview.url, `http://one.test/api/v1/documents/model/${encodeURIComponent(held)}`, 'read as a document is');
+  assert.equal(shown.preview.version, '0123456789abcdef');
+  // The document's own values (`{}` too: Reset) let the page's previews go; a request a newer one replaced is said so.
+  answer = { id, preview: null };
+  assert.deepEqual(await client.previewModelParameters(id, {}, { page: 'page-1' }), { id, preview: null });
+  answer = { id, superseded: true };
+  assert.deepEqual(await client.previewModelParameters(id, { wall: 4 }, { page: 'page-1' }), { id, superseded: true });
+  refusal = { error: 'bracket does not build at these values: ValueError: too thick', hint: 'try other values', code: 'build_failed',
+    detail: 'Traceback ...\nValueError: too thick' };
+  const failed = await client.previewModelParameters(id, { wall: 4.8 }, { page: 'page-1' }).catch(error => error);
+  assert.deepEqual([failed.code, failed.hint, failed.detail], ['build_failed', 'try other values', 'Traceback ...\nValueError: too thick']);
+  const sent = calls.length;
+  await assert.rejects(client.previewModelParameters(id, { wall: 3 }, {}), /page/);
+  await assert.rejects(client.previewModelParameters(id, { wall: 3 }, { page: '../x' }), /page/);
+  await assert.rejects(client.previewModelParameters(id, { wall: '3' }, { page: 'p' }), /finite number/);
+  await assert.rejects(client.previewModelParameters('/m/bracket.py', { wall: 3 }, { page: 'p' }), /document id/);
+  assert.equal(calls.length, sent);
 });

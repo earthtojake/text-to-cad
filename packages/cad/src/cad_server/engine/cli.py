@@ -141,8 +141,8 @@ def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | Non
                                                "An element answers what the kernel measures of it, placed where its "
                                                "occurrence stands, and what made it; a part or an assembly its volume, "
                                                "mass and world bounds, a part its placement. Without it: what the document holds (its state, parts, "
-                                               "bounds, volume, materials, joints, couplings, states, sequences, animations and "
-                                               "declared files), then its build closure")
+                                               "bounds, volume, materials, joints, couplings, states, sequences, animations, "
+                                               "parameters and declared files), then its build closure")
 
 
 def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> argparse.ArgumentParser:
@@ -587,6 +587,30 @@ def _parts(paths: list[str]) -> str:
     return f"{len(paths)} parts: {', '.join(paths[:shown])} and {len(paths) - shown} more"
 
 
+# Why a parameter cannot be set, in a line's words (``cad.engine.parameters.REASONS``).
+_NOT_WRITABLE = {"file": "read-only: a file's", "no_worker": "read-only until its script runs again",
+                 "shared": "read-only: declared in another file",
+                 "expression": "read-only: no plain number of its own in the code"}
+
+
+def parameter(row: dict[str, Any]) -> str:
+    """A parameter's line in ``summary_text``: its name, its value as the code spells it, its unit, its range and
+    step, where it is declared, and why it is read-only where it is."""
+    bounds = (f"{row['min'] if row.get('min') is not None else '-inf'} to "
+              f"{row['max'] if row.get('max') is not None else 'inf'}"
+              if row.get("min") is not None or row.get("max") is not None else "")
+    said = [f"{row['name']}  {row['value']}" + (f" {row['unit']}" if row.get("unit") else "") + f"  {row['kind']}"]
+    if bounds:
+        said.append(bounds)
+    if row.get("step") is not None:
+        said.append(f"step {row['step']}")
+    if row.get("source"):
+        said.append(f"in {row['source']}")
+    if not row.get("writable"):
+        said.append(_NOT_WRITABLE.get(str(row.get("reason")), "read-only"))
+    return ", ".join(said)
+
+
 def summary_text(summary: dict[str, Any]) -> str:
     """``cad xbf inspect DOC``'s first screen (``api._summary``): a line per fact the document
     holds, its lists one item per line under it; a fact it has none of says so. A line naming parts
@@ -693,6 +717,7 @@ def summary_text(summary: dict[str, Any]) -> str:
                       for row in summary["states"]])
     listed("sequences", [f"{row['name']}  {_said.number(row['duration'])} s" for row in summary["sequences"]])
     listed("animations", [f"{row['name']}  {_said.number(row['duration'])} s" for row in summary["animations"]])
+    listed("parameters", [parameter(row) for row in summary.get("parameters") or []])
     # The files the model's decorators declare, not what an export wrote beside it.
     listed("declared files", summary["files"])
     return "\n".join(plain(line) for line in lines)
@@ -1028,7 +1053,7 @@ VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, st
                  _snapshot),
     "serve": ("serve a document over HTTP and print its URL", _serve_arguments, _serve),
     "inspect": ("what a document holds -- its state, parts, bounds, volume, materials, joints, couplings, states, "
-                "sequences, animations and declared files -- then its build closure (its source, modules, inputs "
+                "sequences, animations, parameters and declared files -- then its build closure (its source, modules, inputs "
                 "and key); or what one thing a ref names is and what made it. Nothing is built or meshed",
                 _inspect_arguments, _inspect),
     "status": ("the cad server's workers, what each is building, and its served documents", _status_arguments,
