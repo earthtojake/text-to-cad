@@ -284,7 +284,9 @@ function GroupMember({ chip }) {
   return <li className="flex min-w-0 flex-col rounded-sm hover:bg-accent/50" data-quick-edit-group-member={chip.key}
     onPointerEnter={event => { if (event.pointerType === "mouse") chip.onHover?.(true); }}
     onPointerLeave={event => { if (event.pointerType === "mouse") chip.onHover?.(false); }}>
-    <div className="flex h-icon-button min-w-0 items-center gap-1 px-1.5">
+    {/* One inset round the list (the list's 6px and the row's): its icon 12px from the left and the top, its x 12px
+        from the right; the row a line tall, its x's press `.cad-hit`. */}
+    <div className="flex min-w-0 items-center gap-1 py-0.5 pr-1 pl-1.5 leading-(--cad-leading-xs)">
       <button type="button" aria-label={chip.label} className={cn("flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
         copyable ? "cursor-pointer" : "cursor-default")} onClick={() => { if (copyable) void copyChip(flash, chip); }} data-quick-edit-group-show="">
         {copied ? <span className="inline-flex items-center gap-1"><Check className="size-2.5" aria-hidden="true" />{t("chip.copied")}</span>
@@ -338,7 +340,7 @@ export function referenceFacts(facts) {
  */
 function ReferenceFacts({ facts }) {
   const shown = referenceFacts(facts);
-  return shown.length ? <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 pr-1.5 pb-1.5 pl-6 text-tiny leading-(--cad-leading-xs) text-muted-foreground" data-quick-edit-ref-facts="">
+  return shown.length ? <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 pr-1 pb-1.5 pl-[22px] text-tiny leading-(--cad-leading-xs) text-muted-foreground" data-quick-edit-ref-facts="">
     {shown.map(fact => <div key={String(fact.label)} className="contents">
       <dt className="whitespace-nowrap">{String(fact.label)}</dt>
       <dd className="min-w-0 tabular-nums [overflow-wrap:anywhere]">{plainText(fact.value) ? String(fact.value) : fact.value}</dd>
