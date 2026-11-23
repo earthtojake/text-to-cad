@@ -842,8 +842,8 @@ const renderers = [createXbfRenderer({ client, preferences })];
 
 `source.id` names the file source a document's key is made of, independently of the
 backend's port. The client serves a
-file by its absolute path and catalogs only the files on screen; `client.folder(path)`
-and `client.search(path, query)` are the explorer's reads, and `isMissingFileError(error)`
+file by its absolute path and catalogs only the files on screen; `client.projects()` and
+`client.project(id)` read the projects a person opened and their documents, and `isMissingFileError(error)`
 says the file asked for is not there. The host owns source access, file selection,
 URL/history, title, navigation, browser storage and application color scheme. It calls
 `client.dispose()` when the connection is no longer owned.
@@ -1307,7 +1307,7 @@ then the framing group; `xbfModelMenu`). A single-part document has no part menu
 the part opens this one too — so there it opens with the part menu's reference group for the
 whole part: Copy Reference. The tree starts directly below the model tree
 section's head, its filter (`TreeFilterInput`, `primitives/tree-filter`, shared with the
-explorer), with a conditional Show all after it; in the view's panel, the panel's search. While
+Links), with a conditional Show all after it; in the view's panel, the panel's search. While
 parts are hidden a status line heads the tree (`3 hidden` and **Show all**; what is isolated says
 so on its own row): a box on the panel's 8px lines, its glyph on the 16px one, its words where the rows' names start, its action's
 text ending on the right 16px line. Clicking empty tree space clears selection.
@@ -1610,11 +1610,11 @@ snapshot job, and a picture of each ([annotations](annotation.md#lifetime-and-ca
 
 ### File navbar
 
-The file navbar is [FileViewer's](file-viewer.md#the-navbar-and-the-explorer): the panel's toggle, where the
+The file navbar is [FileViewer's](file-viewer.md#the-navbar-and-the-project): the panel's toggle, where the
 file has a panel, then the logo,
 which opens the app menu (Back to home, the person's settings, feedback, the links, the
-version), Back and Forward where the host keeps the view's history, the file's name (which
-opens the explorer) and its ⋯ menu at the left (the web viewer's Export is a submenu of the
+version), Back and Forward where the host keeps the view's history, the project's name where the file is in one
+(which goes to the home at it), the file's name and its ⋯ menu at the left (the web viewer's Export is a submenu of the
 ⋯); at the right only what a host or a file adds: the renderer's actions, then the view's own controls, Display
 and Preview, which the view portals into the navbar's view slot, then, outermost, the host's actions
 (the CAD app's Full size). A host that shows the view alone (`chrome: "bare"`,

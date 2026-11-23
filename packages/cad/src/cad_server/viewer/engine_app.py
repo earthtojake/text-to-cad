@@ -2,9 +2,9 @@
 
 One engine serves one page, at its origin. Every document is addressed by path, ``/<id>``
 (``cad.engine.ids``): a model's id, or a file's once a launcher or the page registers it. The
-home is ``/``: Recents; the explorer opens where it was last, else the person's home folder. A
-launch's folder (``launch``'s ``start``) resolves only the relative files it names. There are no
-page sessions and no per-launch folders.
+home is ``/``: the projects a person opened (``projects.py``) and the standalone documents. A
+launch's folder (``launch``'s ``start``) resolves only the relative files and folders it names. There
+are no page sessions and no per-launch folders.
 """
 from __future__ import annotations
 
@@ -312,16 +312,19 @@ class EngineApp:
     def launch(self, options):
         """A launch of the one page (``cad viewer``, a text-only host's link, the dev client's
         ``--api-only``): each file it names (``files``: on-disk CAD files, a relative one read from its
-        folder, ``start``, or ids the engine holds) is registered and given its page, ``/<id>``. ``url`` is the first file's page, else the home's, each with the link
-        (``link``), which ``token`` is too -- the user's token itself only for the dev client's ``--api-only``,
-        whose proxy outlives a link."""
+        folder, ``start``, or ids the engine holds) is registered and given its page, ``/<id>``, and each
+        folder it names is opened as a project (``projects``: ``{id, name, root, made}``, ``projects.py``). ``url`` is the
+        first file's page, else the home's (``home``), each with the link (``link``), which ``token`` is too --
+        the user's token itself only for the dev client's ``--api-only``, whose proxy outlives a link."""
         from .main import Unopened, resolve_dist_dir
         start = os.path.abspath(options.get('start') or os.path.expanduser('~'))
         dist = '' if options.get('api_only') else resolve_dist_dir(options.get('dist') or '')
         if not options.get('api_only') and not dist:
             return {'failed': 'The viewer client is not built; build apps/web or install the cad wheel'}
+        names = options.get('files') or []
+        folders = [name for name in names if self.folder(name, start)]
         try:
-            documents = [self.document(name, start) for name in options.get('files') or []]
+            documents = [self.document(name, start) for name in names if name not in folders]
         except ValueError as error:
             # With the ``cad`` command's reason for a FILE it does not open (``main.Unopened``), which the
             # launcher exits by.
@@ -330,13 +333,38 @@ class EngineApp:
             reused = self._default is not None
             app = self.default_app(dist or None)
             app.start = to_posix_path(start)
+        try:
+            projects = [self.project(app, name, start) for name in folders]
+        except ValueError as error:
+            return {'failed': str(error), 'reason': 'invalid_argument'}
         link = self.link()
         for document in documents:
             document['url'] = f'{self.server.url}/{document["id"]}?token={link}'
-        return {'ok': True, 'url': documents[0]['url'] if documents else f'{self.server.url}/?token={link}',
+        home = f'{self.server.url}/?token={link}'
+        return {'ok': True, 'url': documents[0]['url'] if documents else home, 'home': home,
                 'apiUrl': self.server.url, 'token': self.token if options.get('api_only') else link,
                 'port': self.server.port, 'pid': os.getpid(),
-                'start': app.start, 'documents': documents, 'action': 'reused' if reused else 'started'}
+                'start': app.start, 'documents': documents, 'projects': projects, 'action': 'reused' if reused else 'started'}
+
+    @staticmethod
+    def folder(name, start):
+        """Whether a launch's ``name``, read from ``start`` where it is relative, is a folder (not an id)."""
+        from cad.engine.ids import is_id
+
+        return not is_id(name) and os.path.isdir(os.path.join(start, os.path.expanduser(name)))
+
+    @staticmethod
+    def project(app, name, start):
+        """The folder a launch names, opened as a project (``projects.Projects.add``): ``{id, name, root,
+        made}``; ``ValueError`` naming why for a folder that is none (the home folder, one above it)."""
+        from .projects import Refused, public
+
+        try:
+            record, made = app.projects.add(os.path.abspath(os.path.join(start, os.path.expanduser(name))))
+        except Refused as refusal:
+            raise ValueError(f'{refusal}: {refusal.hint}') from None
+        found = public(record)
+        return {'id': found['id'], 'name': found['name'], 'root': found['root'], 'made': made}
 
     def document(self, name, start):
         """A file or an id a launch names, as ``{id, file}``: a file registered by its canonical path

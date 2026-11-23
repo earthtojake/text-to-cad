@@ -64,6 +64,7 @@
      "page": "home",
      "pick": "<pick>",
      "platform": "<platform>",
+     "projects": [],
      "protocol": 9,
      "recents": [],
      "surface": "sidebar",

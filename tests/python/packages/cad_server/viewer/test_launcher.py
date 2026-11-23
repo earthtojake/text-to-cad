@@ -123,6 +123,24 @@ class LauncherTest(unittest.TestCase):
                                                 r'HttpOnly; SameSite=Strict$')
         return {'Cookie': headers['set-cookie'].split(';')[0]}
 
+    def test_a_folder_named_opens_as_a_project_on_the_home(self):
+        work = self.root / 'work'
+        (work / 'STL').mkdir(parents=True)
+        (work / 'STL' / 'tag.stl').write_bytes(b'solid t\nendsolid t\n')
+        launched = self.launch('work')
+        [project] = launched['projects']
+        self.assertEqual((project['name'], project['made'], launched['url'], launched['documents']),
+                         ('work', True, launched['home'], []))
+        status, _, body = self.get(launched, '/api/v1/projects')
+        [listed] = json.loads(body)['projects']
+        self.assertEqual((status, listed['id'], [row['name'] for row in listed['documents']]), (200, project['id'], ['tag.stl']))
+        # Again, from inside it: the same project; a file in it is its page, as any file's is.
+        again = self.launch('.', 'tag.stl', cwd=work / 'STL')
+        self.assertEqual((again['projects'][0]['id'], again['projects'][0]['made']), (project['id'], False))
+        self.assertEqual(again['url'], again['documents'][0]['url'])
+        # The home folder is no project, and says what to open instead.
+        self.assertIn('home folder', self.launch(str(Path.home()), ok=False, reason='invalid_argument'))
+
     def test_launches_reuse_one_engine_which_keeps_the_latest_launch_s_folder(self):
         b, c = self.root / 'b', self.root / 'c'
         b.mkdir()

@@ -1,6 +1,5 @@
 /** Package-owned contracts for the shared navigation primitives. */
 import type { ComponentType, ReactNode } from "react";
-import type { FileSource } from "../types.js";
 
 /* -------------------------------------------------------------------- */
 /* The file menu                                                         */
@@ -31,29 +30,23 @@ export function openInMenu(platform: Platform, capabilities: ReadonlySet<EntryAc
 export function fileManagerName(platform: Platform, t?: (key: string) => string): string;
 
 /* -------------------------------------------------------------------- */
-/* The explorer                                                          */
+/* The project's list                                                    */
 /* -------------------------------------------------------------------- */
 
 /**
- * The file explorer the navbar's file name opens: one folder at a time from the open file's folder,
- * its subfolders opening inline (a double-click opens one in their place), a breadcrumb to climb (an
- * ellipsis for the folders above the crumbs that fit), and a search under the folder it is in. A
- * pick is `onOpen`.
+ * The Project tab the view's panel leads with where the document is in a project (`../projectPanel.js`): its models,
+ * then its CAD files by folder below the project's, each a dense panel row of its glyph and name, the one on screen
+ * marked; a press is `onOpen`. Nothing above the project, and no search.
  */
-export const FolderExplorer: ComponentType<{
-  source: Pick<FileSource, "list" | "search">;
-  /** The open file, by its absolute path (a document with no file of its own: its id). */
-  file: string;
-  /** Where it starts: the open file's folder unless given (a model's: where the explorer was last, else home). */
-  folder?: string | null;
-  onOpen: (path: string) => void;
-  /** The folder it is in, each time it changes (its first included). */
-  onFolderChange?: (folder: string) => void;
+export const ProjectList: ComponentType<{
+  project: Pick<import("../types.js").FileProject, "root" | "documents" | "truncated" | "missing" | "error">;
+  /** The document on screen, by its path (a model's: its id). */
+  current: string;
+  onOpen: (document: import("../types.js").ProjectDocument) => void;
 }>;
-/** The folders from the top of `path`'s filesystem down to it, `/`-separated. */
-export function folderTrail(path: string): { name: string; path: string }[];
-/** The folder holding `path`. */
-export function parentFolder(path: string): string;
+/** A project's documents as its list groups them: its models, then its files by their folder below the project's (`""`: its own). */
+export function projectGroups<Row extends { path: string; kind?: string; folder?: string }>(documents: readonly Row[], root: string):
+  { models: Row[]; folders: { folder: string; rows: Row[] }[] };
 
 /** The one status screen, used by every full-area state in both apps: quiet, a 22rem column centred in the area. */
 export const EmptyState: ComponentType<{
@@ -72,11 +65,11 @@ export function fuzzyMatch(
 
 /**
  * The one navbar, over a file and over a host's home (with no file, history or Back to home). Left: the logo, which opens the app's menu
- * (`AppMenu`), Back and Forward where the host keeps the view's history (`history`), the open file's
- * name, with no glyph (the door to the name menu: Models and Files, where the host has them) and its ⋯ (Copy path, Open in, then
- * the host's own items: the viewer's Export). Over a file with a panel, the panel's toggle comes
- * first, before the logo. Right: `trailing` (the file's actions), then `actions`, outermost.
- * Back and Forward are a desktop row's alone: a phone's has no room for them.
+ * (`AppMenu`), Back and Forward where the host keeps the view's history (`history`), the project the document is in
+ * (`project`: its name, muted, then a slash, which goes to the home at it), the open file's name, with no glyph, and its
+ * ⋯ (Copy path, Open in, the host's own items: the viewer's Export, then for a document in no project Import its folder
+ * as a project). Over a file with a panel, the panel's toggle comes first, before the logo. Right: `trailing` (the
+ * file's actions), then `actions`, outermost. Back and Forward are a desktop row's alone: a phone's has no room for them.
  */
 export const ViewerNavbar: ComponentType<{
   /** The host's home, where it has one: the app menu's Back to home. */
@@ -89,21 +82,19 @@ export const ViewerNavbar: ComponentType<{
   file?: string | null;
   /** The document's name where its path does not give it (a model's). */
   name?: string;
-  /** What the open document is: a model (built from code) or a file. Its glyph before the name, and the name menu's first tab. */
-  kind?: "model" | "file";
-  /** The name menu's Files: the explorer, rooted at `folder` where given (a model's: where it was last, else home). */
-  explorer?: { source: Pick<FileSource, "list" | "search">; folder?: string | null; onOpen: (path: string) => void; onFolderChange?: (folder: string) => void } | null;
-  /** The name menu's Recent: the host's library, in the explorer's style, a row opening its document. */
-  recent?: { list(): Promise<readonly import("../types.js").RecentDocument[]>; onOpen: (path: string) => void } | null;
+  /** The project the document is in: its name before the document's, which goes to the home at it (`onOpen`). */
+  project?: { name: string; onOpen: () => void } | null;
   /**
    * The ⋯ after the name: Copy path, then Open in (Browser, and the file manager by its name), each
-   * where `capabilities` has it, then `items` (the host's own: the viewer's Export submenu). None
-   * where it would be empty.
+   * where `capabilities` has it, then `items` (the host's own: the viewer's Export submenu), then Import its folder as
+   * a project where `onImportFolder` is given. None where it would be empty.
    */
   fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; sourceMissing?: boolean;
     /** The host's apps for the document's files, asked each time the menu opens. */
     apps?: (options: { signal: AbortSignal }) => Promise<import("../types.js").OpenInFiles | null>;
-    onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => void; items?: ReactNode } | null;
+    onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => void; items?: ReactNode;
+    /** Import its folder as a project: a document in no project. */
+    onImportFolder?: (() => void) | null } | null;
   trailing?: ReactNode;
   /** The host's own actions (the CAD app's Full size, inline). */
   actions?: ReactNode;
@@ -112,7 +103,7 @@ export const ViewerNavbar: ComponentType<{
    * same neutral button open or shut (`aria-expanded` says which).
    */
   panels?: import("../panelToggles.js").PanelToggles | null;
-  /** Over the home: the two places its controls go ("Recent" and its count; the search and Open), on the grid's column (`../navbarSlots.js`). */
+  /** Over the home: the two places its controls go (its heading; the search and Import), on the grid's column (`../navbarSlots.js`). */
   homeSlots?: { left(element: HTMLElement | null): void; right(element: HTMLElement | null): void } | null;
   viewSlot?: ((element: HTMLElement | null) => void) | null;
   className?: string;

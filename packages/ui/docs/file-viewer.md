@@ -1,8 +1,9 @@
 # FileViewer
 
 `@cad/ui/file-viewer` exports the complete file view: one file by its
-absolute path, under the navbar (or alone, `chrome: "bare"`), with the name menu its name opens
-(Models and Files), renderer loading, and the loading and error pages.
+absolute path, under the navbar (or alone, `chrome: "bare"`), with the project it is in (its name
+in the navbar, and its list as the Project tab of the view's panel), renderer loading, and the
+loading and error pages.
 It imports no concrete renderer. Applications compose registrations from the
 separate `@cad/ui/renderers/*` entry points and their own
 `defineFileRenderer` definitions ([renderers](renderers.md)). A CAD host composes
@@ -26,16 +27,14 @@ lifetime. Changing their object identity cancels outstanding document work.
 path is absolute and `/`-separated (`/a/b.step`, `C:/a/b.step`); containment and
 authorization remain in the host service. The host controls navigation
 (`navigation.openFile(path)` where the view can show another file, and `home()` where it
-has a home; a view that shows one file alone has neither, and no name menu) and keeps
+has a home; a view that shows one file alone has neither, and no project) and keeps
 `FileViewerState` in its tab store (`@cad/ui/tab-store`; `useTabViewerState`
 derives it): `renderers`, under encoded `[file path, renderer ID]` keys, each the
 file's view.
 
-A source reads files and never writes them. `stat(path)` answers a file's metadata;
-where its files can be browsed, `list(directory)` answers a folder's entries and
-`search(directory, query)` the files under a folder whose path below it holds the
-query, saying when it stopped early. What the file menu offers is the host's
-separate `fileActions` capabilities. Sources receive an `AbortSignal` for each read;
+A source reads files and never writes them. `stat(path)` answers a file's metadata; it
+browses no folder: moving between files is the project's (`project`, below). What the file
+menu offers is the host's separate `fileActions` capabilities. Sources receive an `AbortSignal` for each read;
 noncancellable reads still check the signal before returning. A renderer that
 acquires a resource (a URL lease, a worker) returns its release as the prepared
 document's `dispose`; FileViewer calls it on navigation, reload, cancellation and
@@ -79,7 +78,7 @@ no file (every CAD host's model library), under the navbar; `loading`; and
 not exist, `error` what the source raised (a host reads its own fields on it). Per-file renderer state is also accepted during a departing renderer's
 cleanup, while it still belongs to the same source.
 
-## The navbar and the explorer
+## The navbar and the project
 
 The navbar is drawn over every file from the moment one is asked for, and over the
 host's home — only its logo and menu, without Back to home, Back and Forward where the
@@ -104,18 +103,21 @@ bar in its place and gives it back as it closes. Over a file, left to right:
 - Back and Forward, where the host keeps the view's own history (`history`, a
   `ViewerHistory`: the CAD app's views; a browser's page has its own and hands none): two
   arrows, each there always and disabled where it has nowhere to go;
-- the open file's name, alone (no glyph; its chevron where it opens the name menu): a
-  button that opens the name menu where the view can show another document, and plain text
-  otherwise;
+- where the document is in a project (`project`), the project's name and a slash, muted (Figma's
+  location before a file's name): a press goes to the host's home at that project (`project.onShow`).
+  Where the row is narrow it gives way first: the file's name keeps its width, up to 65% of the row;
+- the open file's name, alone: no glyph, no chevron, and no menu of its own;
 - the ⋯ file menu: Copy path; Open in, a submenu of Browser (`fileActions.perform.browser`)
   and the file manager by its name (Finder, File Explorer, File manager: `reveal`); then the
-  host's own items (`fileMenuItems`: the viewer's Export submenu). Each only where the
+  host's own items (`fileMenuItems`: the viewer's Export submenu); and last, for a document in no
+  project, Import its folder as a project (`onImportFolder`, where the host can: its chooser,
+  starting at the document's folder, so the person picks the level). Each only where the
   host's `fileActions` can do it (Copy path and the file manager need a file on disk: a
   model's act on its script, `sourceFile`, and it has neither where none is named; a source moved
   or deleted, `sourceMissing`, draws what opens it disabled with its reason), and no ⋯
   where there is nothing. The menu and its submenus are shadcn's own width.
 
-The logo, Back and Forward, the name (where it opens the name menu) and the ⋯ are one kind of control: transparent
+The logo, Back and Forward, the project's name and the ⋯ are one kind of control: transparent
 at rest, the same accent background while the pointer is on it and while its menu is open, a
 pointer cursor, and no tooltip.
 
@@ -125,42 +127,18 @@ which the view portals into the navbar's view slot (`navbarSlots.js`); and last,
 (`navbarActions`: the CAD app's Full size, inline). Back and Forward are a desktop row's alone: a phone's has no room
 for them. Preview's settings and Exit preview are Preview's bar's.
 
-The name menu is a popover under the file's name, a fixed 17.5rem wide and never resized. It
-floats over the view, so opening it resizes nothing, and it is built anew on each opening. Two
-stock shadcn Tabs top it, **Models** and **Files**, each as wide as its label, over the
-explorer's own style; it opens on Models over a model and on Files over a file, and a menu with
-one of the two has no tabs. **Models** (`navigation/ModelList.jsx`) lists the models of the
-host's library (`FileViewerProps.recent`, a `list()` of `RecentDocument`s; a row whose `kind` is
-a model's or a shape's), by last activity (the later of each row's `opened` and `updated`),
-eight at most, in the explorer's compact rows: the model's glyph, the name, and its age with no
-verb at the right, under "Filter models..." (every word in the name, the filter taking the
-keyboard as the explorer's does); the model on screen is highlighted, a row opens it through
-`navigation.openFile`, and there is no footer.
-**Files** is the explorer (`navigation/FolderExplorer.jsx`). It starts in the open file's
-folder, or `explorerFolder` for a document with no file of its own (a model's: the folder the
-explorer was last in, which `onExplorerFolderChange` hands the host each time it changes, else
-the person's home folder; never the script's),
-its filter taking the keyboard (on a phone the menu holds focus itself, so no
-keyboard comes up). It lists one folder at a time through `source.list`: the folder's
-subfolders, then its CAD files, the open file highlighted, in compact rows (a folder's glyph
-its disclosure chevron). A press on a subfolder opens it inline, under itself and a little
-further in, reading it through `source.list` the first time; a double-click opens it in the
-explorer's place. A breadcrumb shows as many of
-the last three folders of the one it is in as fit whole, measured before it is painted:
-a crumb is never cut, the farthest giving way first to a "…" button whose menu lists the
-folders above the crumbs to jump to, and only the folder it is in, alone beside the "…",
-is cut to the row. A crumb, as a double-click does, opens a folder in place, and there is
-no up arrow. "Filter files..." searches every file nested under the folder it is
-in through `source.search`: the client waits 150 ms after the last keystroke and
-aborts the search before it, and each match shows its path below the folder, the
-subfolders muted before the name. An answer that is `truncated` adds "Stopped early.
-Keep typing to narrow the search." The viewer server bounds both reads
-(`GET /api/v1/local/folder`, with `q` a search): hidden and build folders are left out of each,
-and a search stops at 200 results, about 1.5 s or depth 24, walking a folder it reaches
-twice once. A pick opens the file through `navigation.openFile` and closes the popover.
-Up and Down move between the filter and the rows; Escape closes it like any popover.
+The project's documents are the **Project** tab the view's panel leads with (`projectPanel.js`, read by the
+view's frame: before the view's own tabs, and the one tab of a view that has none), its list
+`navigation/ProjectList.jsx`: the project's models under Models, then its CAD files under Files, the project
+folder's own first and then each folder's under its path below the project's, each a dense panel row of its glyph
+and name, the one on screen marked (`aria-current`). A press opens a document through `navigation.openFile`; Up and
+Down move between the rows. Nothing above the project is listed and the tab has no search: the panel's search
+covers the view's own trees. While the host reads the project's documents (`project.documents: null`) the tab says
+so; `truncated` (the host's walk of the folder stopped early), `missing` (its folder is gone) and `error` each say
+theirs. The tab is handed to the frame beside the renderer, never through it: a project read again redraws the list
+alone. A view that shows its file alone (no `navigation.openFile`) has none.
 
 The browser harness beside FileViewer exercises injected renderers, source and file
-changes, navigation actions, the explorer and the file menu, the mobile breakpoint,
+changes, navigation actions, the project's name and the file menu, the mobile breakpoint,
 and resource disposal. Run it with the package test command after building the shared
 packages. Chromium must be available for the browser tests.

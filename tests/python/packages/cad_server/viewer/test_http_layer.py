@@ -9,6 +9,7 @@ status-code assertion.
 
 from __future__ import annotations
 
+import base64
 import http.client
 import json
 import os
@@ -290,7 +291,9 @@ class Documents(HttpLayerTestCase):
         self.assertEqual(envelope["exports"], ["threemf", "glb"])
         entry = envelope["entry"]
         self.assertEqual(entry["file"], str(part).replace(os.sep, "/"))
-        self.assertEqual(list(entry), ["file", "kind", "url", "hash", "bytes", "id"])
+        # The project it is in, none here (``projects.py``).
+        self.assertEqual(list(entry), ["file", "kind", "url", "hash", "bytes", "id", "project"])
+        self.assertIsNone(entry["project"])
         self.assertEqual((entry["id"], envelope["version"]), (ident, entry["hash"]))
         # By its id: the same document, its row as the engine keys it (its canonical path).
         status, _, body = self.fixture.request("GET", f"/api/v1/documents/{ident}")
@@ -415,8 +418,9 @@ class Documents(HttpLayerTestCase):
                                             "state": "reading", "retryMs": 1500, "building": frame})
 
 
-class ExplorerRoutes(HttpLayerTestCase):
-    """The explorer's two reads (``folders.py``) over HTTP: a folder by its absolute path."""
+class FolderRoutes(HttpLayerTestCase):
+    """A folder's two reads of the v1 API (``folders.py``) over HTTP, by its absolute path: no view reads them now, and
+    v1 keeps every route it has."""
 
     def read(self, route, path, **query):
         target = f"/api/v1/local/{route}?path={quote(str(path), safe='')}" + "".join(f"&{k}={quote(v)}" for k, v in query.items())
@@ -442,12 +446,57 @@ class ExplorerRoutes(HttpLayerTestCase):
 
 
 class Pick(HttpLayerTestCase):
-    """The home's Open: the desktop's chooser, held for the page (and never opened by a test)."""
+    """The home's Import: the desktop's chooser, held for the page (and never opened by a test)."""
 
-    def pick(self, **behaviour):
-        with mock.patch.object(FilePicker, "choose", **behaviour):
-            status, _, body = self.fixture.request("POST", "/api/v1/local/pick", headers={"x-cad-viewer": "1"})
+    def pick(self, payload=None, **behaviour):
+        with mock.patch.object(FilePicker, "choose", **behaviour) as choose:
+            status, _, body = self.fixture.request("POST", "/api/v1/local/pick", headers={"x-cad-viewer": "1"},
+                                                   body=None if payload is None else json.dumps(payload).encode())
+        self.asked = choose.call_args
         return status, json.loads(body)
+
+    def test_a_folder_is_chosen_where_the_page_says_and_anything_else_says_why(self):
+        folder = os.path.join(self.fixture.root, "arm")
+        os.makedirs(folder)
+        self.assertEqual(self.pick({"folder": True, "start": self.fixture.root}, return_value=folder),
+                         (200, {"path": folder.replace(os.sep, "/")}))
+        self.assertEqual(self.asked, mock.call(folder=True, start=self.fixture.root))
+        # A folder gone since the page named it: the chooser starts where it would.
+        self.pick({"folder": True, "start": os.path.join(self.fixture.root, "gone")}, return_value=None)
+        self.assertEqual(self.asked, mock.call(folder=True, start=None))
+        part = os.path.join(self.fixture.root, "part.step")
+        Path(part).write_bytes(b"x")
+        status, answer = self.pick({"folder": True}, return_value=part)
+        self.assertEqual((status, answer["error"]), (400, f"{part} is not a folder"))
+        for payload in ({"folder": "yes"}, {"folder": True, "start": "relative"}, {"file": True}, []):
+            with self.subTest(payload=payload):
+                self.assertEqual(self.pick(payload, return_value=None)[0], 400)
+        status, answer = self.pick({"folder": True}, side_effect=PickerFailed("no chooser here"))
+        self.assertEqual((status, answer["hint"]), (500, "open it with `cad viewer <folder>` instead"))
+
+    def test_each_desktops_chooser_is_asked_for_a_folder_where_it_starts(self):
+        from cad_server._internal import picker
+
+        start = os.path.join(self.fixture.root, "it's ok; $(no)")
+        found = {"zenity": "/usr/bin/zenity", "kdialog": None, "powershell.exe": "C:/ps.exe", "pwsh.exe": None}
+        with mock.patch.object(picker.executables, "find", side_effect=found.get), \
+                mock.patch.dict(os.environ, {"DISPLAY": ":0"}):
+            with mock.patch.object(picker.sys, "platform", "darwin"):
+                argv, _, structured = picker._command(True, start)
+                self.assertEqual((argv[-2:], structured), (["folder", start], True))
+                self.assertEqual(picker._command()[0][-2:], ["file", ""])
+            with mock.patch.object(picker.sys, "platform", "linux"):
+                argv, _, structured = picker._command(True, start)
+                self.assertEqual((argv[1:], structured), (["--file-selection", "--title=Import folder", "--directory",
+                                                           f"--filename={os.path.join(start, '')}"], False))
+                found.update(zenity=None, kdialog="/usr/bin/kdialog")
+                self.assertEqual(picker._command(True, start)[0][1:], ["--title", "Import folder", "--getexistingdirectory", start])
+            with mock.patch.object(picker.sys, "platform", "win32"):
+                script = picker._command(True, start)[0][-1]
+                # The folder rides as base64: no character of it is PowerShell's to read.
+                self.assertNotIn(start, script)
+                self.assertIn(base64.b64encode(start.encode("utf-8")).decode("ascii"), script)
+                self.assertIn("FolderBrowserDialog", script)
 
     def test_a_cad_file_is_its_path_and_anything_else_says_why(self):
         chosen = os.path.join(self.fixture.root, "part.step")

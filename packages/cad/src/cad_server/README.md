@@ -27,7 +27,8 @@ cad_server/
                          #   registry), each a shell over the function or parser that does the work
   viewer/                # the engine's HTTP application (engine_app), launcher (main), routes
                          #   (http_app: /api/v1, its document kinds in kinds), files by
-                         #   absolute path (backend), a file's catalog row (scanner), the explorer's reads (folders), the model library
+                         #   absolute path (backend), a file's catalog row (scanner), the folders a person opened as
+                         #   projects and their documents (projects), the model library
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
                          #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's

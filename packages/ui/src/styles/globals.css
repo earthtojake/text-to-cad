@@ -215,20 +215,18 @@
    (`--cad-host-bottom-inset`), whichever is more. Added together, a library that fits would still scroll. */
 .cad-library-content { box-sizing: border-box; width: 100%; max-width: 1128px; margin: 0 auto; padding: 20px 24px max(40px, calc(var(--cad-host-bottom-inset, 0px) + 16px)); container-type: inline-size; }
 /* The control row, the page's first line (Figma's Recents): every control 28px tall. Under a navbar it is the filter row
-   (the type filter at its left, the grid/list switch at its right: "Recent", the search and Open are the navbar's); a
-   home with no navbar has "Recent" and its count at its left, a plain heading, and every control at its right. */
+   (the type filter at its left, the grid/list switch at its right: "Home", the search and Import are the navbar's); a
+   home with no navbar has "Home" at its left, a plain heading, and every control at its right. */
 .cad-library-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
 .cad-library-heading { display: inline-flex; align-items: center; gap: 8px; height: 28px; margin: 0; padding: 0;
   font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); font-weight: 600; letter-spacing: -0.01em; color: var(--foreground); }
-.cad-library-count { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: 999px; background: var(--muted);
-  font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); font-weight: 500; letter-spacing: 0; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .cad-library-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cad-library-kind { color: var(--foreground); padding: 0 8px; }
 .cad-library-kind > svg { color: var(--muted-foreground); }
 .cad-library-kind[data-state=open] { background: var(--accent); }
 .cad-library-search { position: relative; width: 240px; }
-/* Home's navbar (`ViewerNavbar.jsx`'s `homeSlots`): "Recent" in the navbar's type, 13/20 at weight 500, its count after
-   it; the filter row under the navbar holds the filter at its left and the grid/list switch at its right. Under 700px
+/* Home's navbar (`ViewerNavbar.jsx`'s `homeSlots`): "Home" in the navbar's type, 13/20 at weight 500; the filter row
+   under the navbar holds the filter at its left and the grid/list switch at its right. Under 700px
    of navbar the search is its 28px icon until it is pressed (`data-open`), then the field, 200px. */
 [data-navbar-home] .cad-library-heading { font-size: var(--cad-text-ui); line-height: var(--cad-leading-ui); font-weight: 500; letter-spacing: 0; white-space: nowrap; }
 .cad-library-toolbar[data-library-toolbar=filters] { flex-wrap: nowrap; height: 28px; margin-bottom: 12px; }
@@ -320,6 +318,25 @@
   .cad-library-table [data-column=kind] { display: none; }
 }
 .cad-library-empty { margin: 48px 0 0; text-align: center; color: var(--muted-foreground); line-height: 1.6; }
+/* The sections, each project's then the standalone documents': a 28px head of the project's folder glyph and name
+   (the cards' label's type at the heading's weight), its folder muted after it, its ⋯ at the row's end, 8px over its
+   documents; 32px between two sections. A project brought into view (`data-focus`) has its name in the brand's colour. */
+.cad-library-section + .cad-library-section { margin-top: 32px; }
+.cad-library-section { scroll-margin-top: 16px; }
+.cad-library-section-head { display: flex; align-items: center; gap: 8px; min-width: 0; height: 28px; margin-bottom: 8px; }
+.cad-library-section-title { display: inline-flex; flex: none; align-items: center; gap: 8px; max-width: 60%; min-width: 0; margin: 0;
+  font-size: var(--cad-text-ui); line-height: var(--cad-leading-ui); font-weight: 600; color: var(--foreground); }
+.cad-library-section[data-focus] .cad-library-section-title, .cad-library-section[data-focus] .cad-library-section-title .cad-library-glyph { color: var(--brand); }
+.cad-library-section-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); color: var(--muted-foreground); }
+.cad-library-section-actions { flex: none; margin-left: auto; color: var(--muted-foreground); }
+.cad-library-section-actions button[data-state=open] { background: var(--accent); color: var(--foreground); }
+.cad-library-section-empty { margin: 0; color: var(--muted-foreground); }
+.cad-library-more { margin-top: 8px; padding: 2px 6px; margin-left: -6px; border-radius: 6px; color: var(--muted-foreground); cursor: pointer; }
+.cad-library-more:hover { background: var(--accent); color: var(--foreground); }
+.cad-library-more:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+/* What came of an Import's Folder or a project removed: one line over the sections. */
+.cad-library-note { margin: 0 0 16px; padding: 6px 10px; border-radius: 6px; background: var(--brand-subtle); color: var(--foreground); }
 /* No models yet: the C mark on the model area, a 15/20 title, one short line, Open file where the host has
    a chooser, and the formats the viewer opens. */
 .cad-library-welcome { display: flex; flex-direction: column; align-items: center; max-width: 560px; margin: 24px auto 0; text-align: center; }
@@ -328,6 +345,7 @@
 .cad-library-welcome-stage img { display: block; width: 64px; height: 64px; user-select: none; -webkit-user-drag: none; }
 .cad-library-welcome-title { margin: 0 0 4px; font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); font-weight: 600; letter-spacing: -0.01em; color: var(--foreground); }
 .cad-library-welcome-body { margin: 0 0 16px; color: var(--muted-foreground); }
+.cad-library-welcome-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .cad-library-welcome-formats { margin: 16px 0 0; font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); letter-spacing: .02em; color: var(--muted-foreground); }
 /* While the list is read: the cards' own shapes, pulsing. */
 .cad-library [data-loading] .cad-library-open { cursor: default; }

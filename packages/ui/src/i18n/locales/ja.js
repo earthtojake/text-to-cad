@@ -244,38 +244,103 @@ export default {
   "language.ja": "日本語",
   "language.ko": "한국어",
 
-  "explorer.folders": "フォルダー",
-  "explorer.foldersAbove": "上位のフォルダー",
-  "explorer.filterLabel": "ファイルを絞り込む",
-  "explorer.filterPlaceholder": "ファイルを絞り込む…",
-  "explorer.loading": "読み込み中…",
-  "explorer.searching": "検索中…",
-  "explorer.readFailed": "このフォルダーを読み込めませんでした",
-  "explorer.searchFailed": "このフォルダーを検索できませんでした",
-  "explorer.noCadFiles": "CAD ファイルはありません",
-  "explorer.noCadFilesHere": "ここに CAD ファイルはありません",
-  "explorer.noMatches": "一致するファイルはありません",
-  "explorer.noMatchesYet": "まだ一致するファイルはありません。入力を続けて検索を絞り込んでください。",
-  "explorer.stoppedEarly": "検索を途中で止めました。入力を続けて絞り込んでください。",
-  "explorer.models": "モデル",
-  "explorer.files": "ファイル",
-  "explorer.noModels": "まだモデルはありません",
-  "explorer.modelsFailed": "モデルを読み込めませんでした",
-  "explorer.filterModelsLabel": "モデルを絞り込む",
-  "explorer.filterModelsPlaceholder": "モデルを絞り込む…",
-  "explorer.noModelsMatch": "一致するモデルはありません",
 
-  "home.recentFiles": "最近",
+  "project.tab": "プロジェクト",
+
+
+  "project.models": "モデル",
+
+
+  "project.files": "ファイル",
+
+
+  "project.loading": "読み込み中…",
+
+
+  "project.empty": "まだモデルも CAD ファイルもありません。",
+
+
+  "project.readFailed": "このプロジェクトを読み込めませんでした。",
+
+
+  "project.folderMissing": "このプロジェクトのフォルダーが見つかりません。",
+
+
+  "project.truncated": "一部のファイルだけを表示しています。このフォルダーには一度に表示できる数より多くのファイルがあります。",
+
+
+  "project.showAria": "{name} をホームで表示",
+
+
+  "project.importFolder": "このフォルダーをプロジェクトとして読み込む…",
+
+
+  "home.title": "ホーム",
+
+
+  "home.import": "読み込む",
+
+
+  "home.importFile": "ファイル…",
+
+
+  "home.importFolder": "フォルダー…",
+
+
+  "home.importFileButton": "ファイルを読み込む",
+
+
+  "home.importFolderButton": "フォルダーを読み込む",
+
+
+  "home.standalone": "単独のドキュメント",
+
+
+  "home.projectActionsAria": "プロジェクト {name} の操作",
+
+
+  "home.projectRemove": "CAD から削除",
+
+
+  "home.projectRemoved": "{name} を削除しました。ディスク上は何も変わっておらず、そのドキュメントは単独に戻りました。",
+
+
+  "home.projectMade": "{name} をプロジェクトにしました。フォルダーには何も書き込んでいません。",
+
+
+  "home.projectAgain": "{name} はすでにプロジェクトです。",
+
+
+  "home.projectInside": "{name} は、すでにプロジェクトである {project} の中にあります。",
+
+
+  "home.projectEmpty": "まだモデルも CAD ファイルもありません。",
+
+
+  "home.projectMissing": "このプロジェクトのフォルダーが見つかりません。削除するか、フォルダーを元に戻してください。",
+
+
+  "home.projectTruncated": "一部のファイルだけを表示しています。このフォルダーには一度に表示できる数より多くのファイルがあります。",
+
+
+  "home.showAll": "すべて表示 ({count})",
+
+
+  "home.showFewer": "表示を減らす",
+
+
+  "home.emptyTitle": "まだ何もありません",
+
+
+  "home.emptyBody": "ファイルやフォルダーを読み込むか、エージェントにモデルを作ってもらいましょう。",
+
+
   "home.searchAria": "モデルを検索",
   "home.searchPlaceholder": "検索",
   "home.layout": "レイアウト",
-  "home.open": "開く",
   "home.grid": "グリッド",
   "home.list": "リスト",
   "home.openAria": "{name} を開く",
-  "home.emptyTitle": "まだ何も開いていません",
-  "home.emptyBody": "CAD ファイルを開くか、エージェントにモデルを作ってもらいましょう。",
-  "home.openFile": "ファイルを開く",
   "home.formatModel": "モデル",
   "home.noMatchingModels": "一致するモデルはありません。",
   "home.filesAria": "ファイル",

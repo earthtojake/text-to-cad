@@ -127,10 +127,9 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
             # The file list's icons: a per-format cascade was a place a new format inherited
             # the wrong icon.
             UI_ROOT / "file-viewer/navigation/entryIconKind.js",
-            # The file list, the SHARED explorer, and the file source that feeds it — drawn
-            # by every app alike, so a format check in either is a format one app lists and
-            # another does not.
-            UI_ROOT / "file-viewer/navigation/FolderExplorer.jsx",
+            # The SHARED project list, and the file source — drawn by every app alike, so a
+            # format check in either is a format one app lists and another does not.
+            UI_ROOT / "file-viewer/navigation/ProjectList.jsx",
             UI_ROOT / "cad-viewer/catalog.ts",
         ):
             source = path.read_text(encoding="utf-8")

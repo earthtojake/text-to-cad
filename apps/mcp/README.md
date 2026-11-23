@@ -58,7 +58,8 @@ to `host.presentation`, in one change.
 - **Inline (no app: the development switch alone).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
   the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the panel's toggle first, then the
-  logo, which opens the app menu; Back and Forward; the file name that opens the name menu; the ⋯,
+  logo, which opens the app menu; Back and Forward; the project's name where the file is in one, then the file
+  name; the ⋯,
   the file menu: Copy path, Copy link (the engine's own page of the document,
   `<engine origin>/<id>?token=<link>`, the origin from the launch and the link asked through the
   tunnel; never the tunnel's address), then Open in › Browser and Finder (File Explorer, File manager), a
@@ -228,20 +229,21 @@ the launch's `_meta` first (`host/capability.ts`).
   model by the id its script printed (a script is never a document), and
   nothing here branches on a surface's name but one: `surface: file` (below).
 - **A launch is enough to start.** It also carries what the server is — its
-  `protocol`, `version` and `platform` — and the home's carries its `recents`,
+  `protocol`, `version` and `platform` — and the home's carries its `recents` and `projects`,
   so the page asks nothing before it draws. A launch from another build (a tab
   the host restored after another release was installed, a past chat's card) says so: the page
   reads only its own protocol's.
-- **Every view but a file handler's has a home**: the library (the documents opened or built
+- **Every view but a file handler's has a home**: the projects and the library (the documents opened or built
   before, in any view or the web viewer). Back to home, first in the menu the navbar's logo
   opens, goes to it. The sidebar (`cad_home`) and a tab with nothing to show open on it; a
   model opened from it is shown in place. The home has the same navbar (the logo's menu, Back
   and Forward and Full size; no file, so no ⋯); it starts with its control
   row, its links the app menu's.
-- **A view browses from its file's folder.** The file name in the navbar opens the name menu:
-  Models, and Files, the explorer, starting at the file's folder. A pick shows the file in
-  place. Nothing says where a view may browse: a tab, a card and the web viewer browse the
-  same way.
+- **A view moves within its project.** A document in a project (a folder a person opened as one: the home's
+  Import › Folder, a standalone document's Import its folder as a project, `cad viewer <folder>`) has the project's
+  name before its own in the navbar, which goes to the home at it, and the project's models and files as the Project
+  tab its panel leads with; a press shows the document in place. A tab, a card and the web viewer do the same, and
+  nothing browses the disk outside a project.
 - **A view keeps its own history.** As a browser keeps a tab's: every file a
   view showed, and the home, in order, the agent's shows and the person's own
   moves alike (`ModelView.tsx`), handed to the viewer as `history`. The navbar's Back
@@ -257,10 +259,10 @@ the launch's `_meta` first (`host/capability.ts`).
   chat are no room for a dialog, and a chat keeps several cards at once.
 - ***Open with CAD* is the file alone.** `cad_file` (`surface: file`) shows the
   file the host handed over, and nothing else, for as long as it is open: no home
-  and no explorer (the host's own file tree is its navigation), no Back or Forward,
+  and no project (the host's own file tree is its navigation), no Back or Forward,
   and a renderer's link to another file (a robot's mesh) is plain text. It is drawn
   under the same 40px navbar as every other view (`chrome: "page"`), so the panel's toggle is there: first the
-  panel's toggle, then its logo and app menu, the file's name (no name menu) and its ⋯ (no Open in › Browser; File
+  panel's toggle, then its logo and app menu, the file's name and its ⋯ (no Open in › Browser; File
   info, the file's facts), then at the right the view's Display and Preview, then Full size where the host offers it.
   Preview's bar hides the
   navbar as it does everywhere. Its launch carries no page (`browser`). The agent reads it
@@ -506,10 +508,10 @@ values have no reader and cannot hide it. Settings files need no conversion.
 `ModelView.tsx` is the page: the shared `CadViewer` (`@cad/ui/cad-viewer`,
 the one the web Viewer shows) showing the launch's model, with this host's ports — its
 tunnel (which also carries a Quick Edit's views and annotation to the server, which makes their files: `promptFiles`), the
-explorer's folders and search over it (`createCadFileSource`), its chat, its file menu
+file source over it (`createCadFileSource`), its chat, its file menu
 (copy path, Reveal), the app menu's links (its Send feedback and
 an alert's Report Issue open a new issue), followed through `ui/open-link`,
-and its home: the library. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps
+and its home: the projects and the library. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps
 its view — camera, Display settings, pose — through updates of it, and leaving it for
 another model or the home sets that view aside, in memory, until the model is shown again in the same view, as in
 the web Viewer. A view the
@@ -578,10 +580,9 @@ built by `scripts/bundle/bundle.sh`.
 ## Live models
 
 A model is shown by its document's id, as the web Viewer shows it: the view reads the document
-the engine holds and never builds or imports a script, and no folder lists one. It is in the
-library by the engine's record, which its run wrote, with its picture; its name menu opens on
-Models, and its Files lists the folder the explorer was last in this view, else the person's
-home folder: never the script's. Rebuilding the model updates the
+the engine holds and never builds or imports a script, and no project lists one. It is in the
+library by the engine's record, which its run wrote, with its picture, and in the project its script is in, where
+there is one. Rebuilding the model updates the
 same view through the document version stream.
 
 The stdio peer exits with its host session; it deletes only that MCP session.

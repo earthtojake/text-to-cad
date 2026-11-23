@@ -30,17 +30,33 @@ export interface FileMetadata extends FileEntry {
   mediaType?: string;
   revision?: string;
 }
-/** A document of the host's library, as the name menu's Recent lists it (`@cad/ui/library`'s rows). */
-export interface RecentDocument {
+/** A document of a project, as its Project list shows it (`@cad/ui/library`'s rows). */
+export interface ProjectDocument {
   /** A file's absolute path, a model's id: what `navigation.openFile` opens. */
   path: string;
   name: string;
   /** `model` or `shape` for a document built from code; a file otherwise. */
   kind?: string;
-  /** When a page last opened it, and when it was last updated, in seconds. */
-  opened?: number | null;
-  updated?: number | null;
+  /** A file's folder (a model's script's), `/`-separated: the list groups files by it. */
+  folder?: string;
   missing?: boolean;
+}
+/**
+ * The project the document on screen is in (`FileViewerProps.project`): its name before the document's in the navbar,
+ * which goes to the host's home at it (`onShow`), and its documents, the Project tab the view's panel leads with --
+ * null while they are read, with `truncated` where the host's walk of its folder stopped early, `missing` where its
+ * folder is gone, `error` where they could not be read.
+ */
+export interface FileProject {
+  id: string;
+  name: string;
+  /** Its folder, `/`-separated. */
+  root: string;
+  documents: readonly ProjectDocument[] | null;
+  truncated?: boolean;
+  missing?: boolean;
+  error?: string | null;
+  onShow(): void;
 }
 /**
  * One app Open in offers for a file: its id (what `openApp` names) and its name, as drawn (a KiCad's says its
@@ -72,16 +88,11 @@ export interface FileActions {
   apps?: (entry: Pick<FileEntry, "path" | "kind">, options?: { signal?: AbortSignal }) => Promise<OpenInFiles | null>;
   openApp?: (entry: Pick<FileEntry, "path" | "kind">, target: string, app: string) => void | Promise<void>;
 }
-/**
- * The files a view reads, by absolute path (`/`-separated): one file's metadata, one folder's
- * subfolders and files, and a search under a folder that says when it stopped early.
- */
+/** The files a view reads, by absolute path (`/`-separated): one file's metadata. */
 export interface FileSource {
   /** Stable identity: what a document's key is named by. */
   id: string;
   stat: (path: string, options: { signal: AbortSignal }) => Promise<FileMetadata>;
-  list?: (directory: string, options: { signal: AbortSignal }) => Promise<readonly FileEntry[]>;
-  search?: (directory: string, query: string, options: { signal: AbortSignal }) => Promise<{ paths: readonly string[]; truncated: boolean }>;
 }
 export interface FileViewerState {
   /**
@@ -231,18 +242,15 @@ export interface FileViewerProps {
   /** The view's own history, where the host keeps one: Back and Forward after the navbar's logo, over a file and on the home. */
   history?: ViewerHistory;
   /**
-   * The host's library (a CAD host's Home), where it has one: the name menu's Models tab lists its
-   * models, by last activity, and a row opens its model through `navigation.openFile`.
+   * The project the document on screen is in, where it is in one: its name before the document's in the navbar, and
+   * its documents in the Project tab the view's panel leads with, each opened through `navigation.openFile`.
    */
-  recent?: { list(): Promise<readonly RecentDocument[]> };
+  project?: FileProject | null;
   /**
-   * Where the name menu's Files starts for a document with no file of its own (a model's): the folder
-   * the explorer was last in, else the person's home folder. Never the script it was built from. A
-   * file's Files starts in its own folder.
+   * Import its folder as a project, from the ⋯ of a document in no project, where the host can (`project` none): the
+   * host's chooser, starting at the document's folder.
    */
-  explorerFolder?: string | null;
-  /** The folder the explorer is in, each time it changes: the host keeps it for `explorerFolder`. */
-  onExplorerFolderChange?(folder: string): void;
+  onImportFolder?: (() => void) | null;
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */
   notice?: ReactNode;
   /**

@@ -10,7 +10,10 @@ opened, ``created``, and last, ``opened``, whether it is pinned), and every mode
 engine writes when it registers the build), as is every shape a program handed over (``kind:
 "shape"``). The home's picture of each is UI state on its record (``preview``), the PNG under
 ``recents/thumbnails`` named by the record and its content: the light viewport's, which the home
-shows in both themes.
+shows in both themes. A project's file the home pictures before any page opened it (``projects.py``)
+is given a record to keep its picture on, with no ``opened``: Recents lists a file only once a page
+opened it (``RecentStore.list``), and a project lists its files whatever their records
+(``RecentStore.entries``).
 
 The pictures are bounded however often a document is edited: a record names one, a new picture
 replaces it at once (``RecentStore.thumbnail``: the old one goes as the new is named), only
@@ -192,10 +195,10 @@ class RecentStore:
         found = canonical(path)
 
         def change(record):
-            record = dict(record or {"id": file_id(found), "kind": "file", "created": now})
-            record.update(root=os.path.dirname(found), home=os.path.basename(found), opened=now,
-                          namespace=os.path.dirname(found), name=os.path.basename(found))
-            return record
+            # Where it is now, as its record says it (``root``, ``home``): one an earlier release wrote is
+            # said again as this one says it.
+            made = _file_record(found, now)
+            return {**made, **(record or {}), **{key: made[key] for key in ("root", "home", "namespace", "name")}, "opened": now}
 
         return self.registry.update(file_id(found), change)
 
@@ -209,14 +212,20 @@ class RecentStore:
     def thumbnail(self, path: str, png: bytes) -> str:
         """Keep a PNG for an entry (a file's path, or a model's id): its name. It replaces the record's
         picture in place: written and named under the record's lock, the one it named before then
-        removed (``_sweep_thumbnails``). An entry with no record keeps nothing."""
+        removed (``_sweep_thumbnails``). A file with no record (one of a project's, which the home
+        pictures before any page opens it) is given one, not opened: it keeps the picture, and Recents
+        lists it only once a page opens it. A model's id with no record keeps nothing."""
+        from cad.engine.ids import is_id
+
         ident = self._ident(path)
         name = _picture_name(ident, png)
         before: set[str] = set()
 
         def change(record):
             if record is None:
-                return None
+                if is_id(path) or not _cad_file(path):
+                    return None
+                record = _file_record(path)
             before.update(pictures(record))
             if not (self.thumbnails / name).exists():
                 self.state.write(f"{THUMBNAILS}/{name}", png)
@@ -243,7 +252,13 @@ class RecentStore:
     # -- reads -----------------------------------------------------------------
 
     def list(self) -> list[Recent]:
-        """Pinned first, then by last activity (``Recent.activity``), newest first; at most ``LIMIT``."""
+        """Recents: pinned first, then by last activity (``Recent.activity``), newest first; at most ``LIMIT``.
+        A file is in it once a page opened it (a project's file pictured on the home alone is not)."""
+        listed = [entry for entry in self.entries() if entry.kind != "file" or entry.opened is not None]
+        return sorted(listed, key=lambda entry: (not entry.pinned, -entry.activity))[:LIMIT]
+
+    def entries(self) -> list[Recent]:
+        """Every record's entry, in no order: every model's and shape's, and every file's, opened or not."""
         from cad_server.engine import registry as registering
         from cad_server.engine.models import Models
 
@@ -252,10 +267,12 @@ class RecentStore:
             preview = record.get("preview") or {}
             common = {"pinned": bool(record.get("pinned")), "thumbnail": preview.get("thumbnail"),
                       "pictured": preview.get("pictured"), "created": record.get("created")}
-            if record.get("kind") == "file" and record.get("opened"):
+            if record.get("kind") == "file":
                 path = str(registering.home(self.registry, record))
                 updated, size = _on_disk(path)
-                entries.append(Recent(path=path, opened=float(record["opened"]), updated=updated, size=size, **common))
+                opened = record.get("opened")
+                entries.append(Recent(path=path, opened=float(opened) if isinstance(opened, (int, float)) and opened else None,
+                                      updated=updated, size=size, **common))
             elif record.get("kind") in ("model", "shape"):
                 program = registering.program(self.registry, record)
                 entries.append(Recent(path=record["id"], kind=record["kind"], name=record.get("name") or record.get("entry"),
@@ -265,8 +282,7 @@ class RecentStore:
                                       shown=Models.shown(str(program) if program else None)
                                       if record["kind"] == "shape" else None, updated=record.get("built"),
                                       opened=record.get("opened"), **common))
-        ordered = sorted(entries, key=lambda entry: (not entry.pinned, -entry.activity))
-        return ordered[:LIMIT]
+        return entries
 
     def _sweep_thumbnails(self, replaced: set[str] | frozenset[str] = frozenset()) -> None:
         """The pictures held to their bound (the module): the pictures of the ``LIMIT`` records used
@@ -307,6 +323,22 @@ class RecentStore:
             return (self.thumbnails / name).stat().st_size
         except OSError:
             return 0
+
+
+def _cad_file(path: str) -> bool:
+    """Whether ``path`` is a CAD file there now, of a type every view opens."""
+    from .scanner import VIEWER_EXTENSIONS, extension_of
+
+    return extension_of(path) in VIEWER_EXTENSIONS and os.path.isfile(path)
+
+
+def _file_record(path: str, now: float | None = None) -> dict[str, Any]:
+    """A new record of the CAD file at the canonical path ``path``, made ``now``: never opened yet."""
+    from cad.engine.ids import file_id
+
+    folder, name = os.path.dirname(path), os.path.basename(path)
+    return {"id": file_id(path), "kind": "file", "created": time.time() if now is None else now,
+            "root": folder, "home": name, "namespace": folder, "name": name}
 
 
 def _picture_name(ident: str, png: bytes) -> str:

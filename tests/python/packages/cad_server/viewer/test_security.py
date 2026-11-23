@@ -307,6 +307,7 @@ class TheTwoGatesCoverTheDataRoutes(SecurityTestCase):
             f"/api/v1/documents?path={ref}",
             f"/api/v1/local/files?path={ref}",
             f"/api/v1/local/folder?path={quote(self.fixture.root, safe='')}",
+            "/api/v1/projects",
             "/api/v1/documents",
             "/api/v1/look",
             "/app",

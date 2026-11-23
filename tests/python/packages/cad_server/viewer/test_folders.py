@@ -1,4 +1,4 @@
-"""The explorer's reads: one folder at a time, and a bounded search under a folder."""
+"""A folder's reads of the v1 API (the explorer's, before projects): one folder at a time, and a bounded search under it."""
 
 from __future__ import annotations
 

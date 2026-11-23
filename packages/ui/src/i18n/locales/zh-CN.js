@@ -245,38 +245,103 @@ export default {
   "language.ja": "日本語",
   "language.ko": "한국어",
 
-  "explorer.folders": "文件夹",
-  "explorer.foldersAbove": "上层文件夹",
-  "explorer.filterLabel": "筛选文件",
-  "explorer.filterPlaceholder": "筛选文件…",
-  "explorer.loading": "加载中…",
-  "explorer.searching": "搜索中…",
-  "explorer.readFailed": "无法读取此文件夹",
-  "explorer.searchFailed": "无法搜索此文件夹",
-  "explorer.noCadFiles": "无 CAD 文件",
-  "explorer.noCadFilesHere": "此处无 CAD 文件",
-  "explorer.noMatches": "没有匹配的文件",
-  "explorer.noMatchesYet": "暂无匹配文件。继续输入可缩小搜索范围。",
-  "explorer.stoppedEarly": "搜索提前停止。继续输入可缩小范围。",
-  "explorer.models": "模型",
-  "explorer.files": "文件",
-  "explorer.noModels": "还没有模型",
-  "explorer.modelsFailed": "无法读取模型",
-  "explorer.filterModelsLabel": "筛选模型",
-  "explorer.filterModelsPlaceholder": "筛选模型…",
-  "explorer.noModelsMatch": "没有匹配的模型",
 
-  "home.recentFiles": "最近",
+  "project.tab": "项目",
+
+
+  "project.models": "模型",
+
+
+  "project.files": "文件",
+
+
+  "project.loading": "正在加载…",
+
+
+  "project.empty": "这里还没有模型或 CAD 文件。",
+
+
+  "project.readFailed": "无法读取此项目。",
+
+
+  "project.folderMissing": "此项目的文件夹已不存在。",
+
+
+  "project.truncated": "未列出全部文件：此文件夹中的文件超出了一次可列出的数量。",
+
+
+  "project.showAria": "在主页中显示 {name}",
+
+
+  "project.importFolder": "将其文件夹导入为项目…",
+
+
+  "home.title": "主页",
+
+
+  "home.import": "导入",
+
+
+  "home.importFile": "文件…",
+
+
+  "home.importFolder": "文件夹…",
+
+
+  "home.importFileButton": "导入文件",
+
+
+  "home.importFolderButton": "导入文件夹",
+
+
+  "home.standalone": "独立文档",
+
+
+  "home.projectActionsAria": "项目 {name} 的操作",
+
+
+  "home.projectRemove": "从 CAD 中移除",
+
+
+  "home.projectRemoved": "已移除 {name}。磁盘上的内容没有改变，其中的文档恢复为独立文档。",
+
+
+  "home.projectMade": "{name} 现在是一个项目。没有向该文件夹写入任何内容。",
+
+
+  "home.projectAgain": "{name} 已经是一个项目。",
+
+
+  "home.projectInside": "{name} 位于已经是项目的 {project} 中。",
+
+
+  "home.projectEmpty": "这里还没有模型或 CAD 文件。",
+
+
+  "home.projectMissing": "此项目的文件夹已不存在。请移除它，或把文件夹放回原处。",
+
+
+  "home.projectTruncated": "未列出全部文件：此文件夹中的文件超出了一次可列出的数量。",
+
+
+  "home.showAll": "显示全部 {count} 个",
+
+
+  "home.showFewer": "收起",
+
+
+  "home.emptyTitle": "这里还没有内容",
+
+
+  "home.emptyBody": "导入一个文件或文件夹，或让你的智能体制作一个模型。",
+
+
   "home.searchAria": "搜索模型",
   "home.searchPlaceholder": "搜索",
   "home.layout": "布局",
-  "home.open": "打开",
   "home.grid": "网格",
   "home.list": "列表",
   "home.openAria": "打开 {name}",
-  "home.emptyTitle": "还没有打开任何文件",
-  "home.emptyBody": "打开一个 CAD 文件，或让你的智能体制作一个模型。",
-  "home.openFile": "打开文件",
   "home.formatModel": "模型",
   "home.noMatchingModels": "没有匹配的模型。",
   "home.filesAria": "文件",

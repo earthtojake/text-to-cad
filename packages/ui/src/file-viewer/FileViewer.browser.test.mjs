@@ -38,43 +38,23 @@ async function waitPayload(value) { await page.waitForFunction((expected) => doc
 // this harness's App); here, what needs a layout. Two frames on: what a change asked for has been drawn.
 const settle = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
-test("the file's name opens the explorer under it, over the view, its long folder scrolling inside it; a pick is shown through the host and puts it away", async () => {
+test("a document in a project has the project's name before its own, which gives way first in a narrow row and goes to the home at it", async () => {
   await reset();
   await waitPayload("root-a notes");
-  await page.evaluate(() => { for (let index = 0; index < 80; index += 1) window.harness.a.files.set(`/work/many-${String(index).padStart(2, "0")}.txt`, "many"); });
-  const view = () => payload().evaluate((element) => element.closest(".overflow-hidden")?.getBoundingClientRect().toJSON());
-  const before = await view();
-  await pane().locator("[data-file-name]").click();
-  const explorer = page.locator("[data-file-explorer]");
-  await explorer.locator('[data-path="/work/many-00.txt"]').waitFor();
-  // Measured where it comes to rest, once its opening animation has run.
-  await explorer.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)));
-  assert.deepEqual(await view(), before, "the view keeps its box");
-  const [name, box] = await Promise.all([pane().locator("[data-file-name]").boundingBox(), explorer.boundingBox()]);
-  assert.ok(box.y >= name.y + name.height && box.y + box.height <= page.viewportSize().height, `under the name, inside the page: ${JSON.stringify([name, box])}`);
-  assert.ok(await explorer.locator('[data-slot="scroll-area-viewport"]').evaluate((element) => element.scrollHeight > element.clientHeight), "its rows scroll inside it");
-  await explorer.locator('[data-path="/work/next.txt"]').click();
-  await waitPayload("root-a next");
-  assert.deepEqual(await page.evaluate(() => window.harness.opened), ["/work/next.txt"]);
-  // The pick puts the explorer away (once its closing animation has run).
-  await explorer.waitFor({ state: "detached" });
-});
-
-test("the explorer opens with its filter taking the keyboard, under a breadcrumb of whole folder names: those that do not fit beside the folder it is in are the ellipsis's", async () => {
-  await reset();
-  const deep = "/work/assemblies/STEP/planetary_gear_assembly/planetary_gear_assembly.txt";
-  await page.evaluate((path) => { window.harness.a.files.set(path, "root-a planetary"); window.harness.open(path); }, deep);
-  await waitPayload("root-a planetary");
-  await pane().locator("[data-file-name]").click();
-  const crumbs = page.locator('[data-file-explorer] nav[aria-label="Folders"] button');
-  await page.locator('[data-file-explorer] [data-path$="planetary_gear_assembly.txt"]').waitFor();
-  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Filter files");
-  // Every crumb is its folder's whole name; "assemblies" did not fit beside the rest, so it went into the ellipsis.
-  assert.deepEqual(await crumbs.evaluateAll((buttons) => buttons.map((button) => [button.getAttribute("aria-label") || button.textContent, button.scrollWidth <= button.clientWidth])),
-    [["Folders above", true], ["STEP", true], ["planetary_gear_assembly", true]]);
-  await crumbs.first().click();
-  assert.deepEqual(await page.getByRole("menuitem").allTextContents(), ["/", "work", "assemblies"]);
-  await page.keyboard.press("Escape");
+  assert.equal(await pane().locator("[data-navbar-project]").count(), 0, "a document in no project has none");
+  await page.evaluate(() => window.harness.project({ id: "p1", name: "a-project-with-a-rather-long-name-indeed", root: "/work", documents: [] }));
+  const crumb = pane().locator("[data-navbar-project] button");
+  await crumb.waitFor();
+  // In a narrow pane the project's name truncates before the document's does.
+  await page.setViewportSize({ width: 420, height: 700 });
+  await page.evaluate(() => { document.querySelector('[data-testid="primary"]').parentElement.style.width = "420px"; });
+  await settle();
+  const [project, name] = await Promise.all([crumb.evaluate((button) => button.firstElementChild.scrollWidth > button.firstElementChild.clientWidth),
+    pane().locator("[data-file-name] span").evaluate((span) => span.scrollWidth <= span.clientWidth)]);
+  assert.deepEqual({ project, name }, { project: true, name: true }, "the project's name truncated, the document's whole");
+  await crumb.click();
+  assert.deepEqual(await page.evaluate(() => window.harness.events.filter((event) => event.startsWith("project:"))), ["project:p1"]);
+  await page.setViewportSize({ width: 1280, height: 720 });
 });
 
 test("the renderer is not re-rendered by the frame's own chrome: a navbar action it published or a resize within a layout", async () => {

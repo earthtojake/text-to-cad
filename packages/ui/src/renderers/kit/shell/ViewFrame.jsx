@@ -12,6 +12,7 @@ import { InspectContext } from "../inspector/inspect.js";
 import FlatPanel, { flatPanelShortcut, useFlatPanelState } from "./FlatPanel.jsx";
 import HoverTip, { useFrameHoverTip } from "./HoverTip.jsx";
 import { usePanelToggles } from "../../../file-viewer/panelToggles.js";
+import { PROJECT_TAB, useProjectPanel } from "../../../file-viewer/projectPanel.js";
 import { ViewerElementContext, ViewerHostContext } from "../../../host/context.js";
 import { Sheet, SheetContent, SheetTitle } from "@cad/ui/primitives/sheet";
 import { usePhoneSheetPlace } from "./usePhoneSheetPlace.js";
@@ -32,8 +33,9 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * `FlatViewFrame.jsx` (a picture drawn flat) mount it; nothing else draws the frame's parts.
  *
  * - **The panel** (`sidebars.js`), the one sidebar, at the left (`FlatPanel.jsx`, `panel`; its width and tab the
- *   file's, `filePanel.js`): the file's structure, then the file's own settings (Parameters, Joints, Animation), as
- *   its tabs. Open, it always pushes the model aside (a view that would leave the model under 640px beside it starts it collapsed, unwritten:
+ *   file's, `filePanel.js`): where the document is in a project, the project's list first (Project, the host's:
+ *   `file-viewer/projectPanel.js`, the one tab of a view that has no panel of its own), then the file's structure, then
+ *   the file's own settings (Parameters, Joints, Animation), as its tabs. Open, it always pushes the model aside (a view that would leave the model under 640px beside it starts it collapsed, unwritten:
  *   `sidebars.js`); ⌘\ (Ctrl+\) toggles it (`panelControl`). Its toggle is the
  *   navbar's (`file-viewer/panelToggles.js`), its first control: a collapsed panel leaves nothing over the model but
  *   while a mouse rests on that toggle, when it peeks over the view, pushing nothing (`usePanelPeek.js`), until the
@@ -111,7 +113,7 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  */
 export default function ViewFrame({ rootRef = null, surface = null, className = "", rootHandlers = null, stageColor = undefined,
   canvasBoxRef = null, busy = undefined, children, underlay = null, overlays = null, file, mobile, compact, chromeHidden, failed = undefined, previewing = false, selecting = false,
-  preview = null, tools, views = [], toolRow = null, toolStack = null, status = null, panel = null, panelControl = null,
+  preview = null, tools, views = [], toolRow = null, toolStack = null, status = null, panel: own = null, panelControl = null,
   layout, onLayoutChange, corner = null, navbar = null, card = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
   contextMenu = null, onCanvasPress = null, inspect = null, viewport = null }) {
   const { t } = useI18n();
@@ -139,8 +141,12 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   const quickEditRow = useRef(null);
   const [cornerSide, setCornerSide] = useState("right");
 
-  // ---- the panel (`sidebars.js`): the file's structure and its own settings, as tabs; a phone's a sheet ----------------
-  const sided = Boolean(panel && (panel.sections || panel.tabs?.length));
+  // ---- the panel (`sidebars.js`): the project's list, the file's structure and its own settings, as tabs; a phone's a sheet
+  // The project the document is in leads the panel (its list, the host's), and is the whole panel of a view with none.
+  const project = useProjectPanel();
+  const lead = useMemo(() => (project ? { id: PROJECT_TAB, label: project.label, content: project.content, search: false } : null), [project]);
+  const panel = own ?? (lead ? { kind: PROJECT_TAB, label: lead.label, searchLabel: lead.label, tabs: [] } : null);
+  const sided = Boolean(lead || (panel && (panel.sections || panel.tabs?.length)));
   // A phone's sheet: closed until its toggle opens it, and kept nowhere.
   const [sheetOpen, setSheetOpen] = useState(false);
   const viewerElement = useContext(ViewerElementContext);
@@ -206,7 +212,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   const panelNode = has && !mobile ? <FlatPanel mode="docked" open={mode !== "closed" || peek.shown} peek={mode === "closed" && peek.shown}
     peekLeaving={peek.leaving} peekEntered={peek.entered} onPeekExited={peek.exited} loading={panelLoading}
     surfaceRef={peek.panelRef} surfaceProps={peek.panelHandlers} hidden={previewing} onClose={toggle}
-    label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab}
+    label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} lead={lead} tab={flat.tab} onTabChange={flat.changeTab}
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
   // A phone's: the same panel, its tabs, search and every tab's content, the same components at the same sizes (a tree
   // row's own touch height aside), in a sheet from the left over the model (`FlatPanel`'s "page" mode), in the viewer's element.
@@ -221,7 +227,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
       aria-describedby={undefined} className={cn("h-auto w-[85%] max-w-[20rem] gap-0 overflow-hidden border-border p-0", PANEL_SHEET_LEFT_CLASS)} data-panel-sheet="">
       <SheetTitle className="sr-only">{panel.label}</SheetTitle>
       <FlatPanel mode="page" open onClose={closeSheet} loading={panelLoading} label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null}
-        sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}
+        sections={panel.sections ?? null} lead={lead} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}
         onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} />
     </SheetContent>
   </Sheet> : null;

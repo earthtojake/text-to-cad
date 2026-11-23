@@ -64,7 +64,8 @@ SOURCE_EXTENSIONS = frozenset(SOURCE_KINDS)
 # What every CAD view lists and opens: every document type's files.
 VIEWER_EXTENSIONS = frozenset(extension for entry in DOCUMENT_TYPES.values() for extension in entry.extensions)
 
-# The folders the explorer's search never walks (``folders.py``), beside every hidden one. Matched
+# The folders a project's walk never enters (``projects.py``), nor a folder's search (``folders.py``), beside every
+# hidden one. Matched
 # with EXACT case: ``Dist/`` and ``Build/`` are walked, only the lowercase spellings are skipped.
 VIEWER_SKIPPED_DIRECTORIES = frozenset(
     {"__cadgen__", "__pycache__", "build", "coverage", "dist", "node_modules", "viewer"}

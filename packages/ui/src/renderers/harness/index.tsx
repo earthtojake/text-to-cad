@@ -92,8 +92,7 @@ function workspace(id: string, store: TabStore) {
   const capture = () => request({ captureRequest: { key: Date.now() } });
   const selectReference = (selector: string) => request({ selectReference: { selector, key: Date.now() } });
   const client = createCadClient({ origin: `${location.origin}/${id}`, pollIntervalMs: 0 });
-  // The pane's files: the one it shows, which is also all its explorer lists and finds.
-  const name = file.split('/').pop() || file;
+  // The pane's files: the one it shows.
   const source: FileSource = {
     id,
     // A spec may hold the file's stat back (`window.__cadHoldStat`, a promise): the page's own phase, before any view is up.
@@ -101,8 +100,6 @@ function workspace(id: string, store: TabStore) {
       await (window as unknown as { __cadHoldStat?: Promise<void> }).__cadHoldStat;
       return { path, name: path.split('/').pop() || path, kind: 'file', size: 400, extension: path.split('.').pop() || '' };
     },
-    list: async () => [{ path: file, name, kind: 'file' }],
-    search: async () => ({ paths: [file], truncated: false })
   };
   const destination = { kind: (window as unknown as { __cadPromptDestination?: 'clipboard' }).__cadPromptDestination || 'composer' as const, available: true };
   // `?home=1`: a host with a home and the file's ⋯ (Copy path), as the web viewer is, so the navbar's left end is whole.

@@ -12,6 +12,8 @@ export interface CadEntry {
   script?: string;
   /** Whether the document's source (a model's script, a file) is on disk now (its envelope's `source.present`). */
   sourcePresent?: boolean;
+  /** The project it is in (a file by its path, a model by its script: the nearest above it); null for a standalone one. */
+  project?: CadProjectRef | null;
   kind?: string;
   format?: string;
   sourceFormat?: string;
@@ -39,11 +41,11 @@ export interface CadServerInfo {
   identityToken?: string;
   /** The folder of the most recent launch (`cad viewer`), which a launch's relative files are read from. */
   start?: string;
-  /** Whether this computer has a file chooser for the home's Open. */
+  /** Whether this computer has a chooser for the home's Import (a file, a folder). */
   pick?: boolean;
   /** `darwin`, `win32` or `linux`: which file manager Reveal opens. */
   platform?: string;
-  /** The person's home folder, `/`-separated: where the explorer starts with nowhere else to. */
+  /** The person's home folder, `/`-separated: a path in it is said from `~`, and it is no project. */
   home?: string;
   /** The engine process answering (`os.getpid()`). */
   pid?: number;
@@ -81,6 +83,22 @@ export interface CadRecent {
   kind: 'file' | 'model' | 'shape';
   /** A model's or a shape's: the script it was built from (a shape's home). */
   script?: string;
+  /** The id of the project it is in; null for a standalone one. */
+  project?: string | null;
+}
+/** A project as a document names it: its id, its name (its folder's) and its folder, `/`-separated. */
+export interface CadProjectRef { id: string; name: string; root: string }
+/**
+ * A folder a person opened as a project (`GET /api/v1/projects`): when it was first and last opened as one
+ * (seconds), whether its folder is gone, and its documents -- its models, by name, then its CAD files, by
+ * folder then name, as the library's rows -- and whether its walk stopped early (`truncated`).
+ */
+export interface CadProject extends CadProjectRef {
+  created: number | null;
+  opened: number | null;
+  missing: boolean;
+  documents: CadRecent[];
+  truncated: boolean;
 }
 /** Whether the person's usage stats are sent (`/api/v1/settings`' `telemetry`; nothing asks): `reason` says who decided. */
 export interface CadConsent { share: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
@@ -92,10 +110,6 @@ export interface CadCatalog {
   missing?: string;
   [key: string]: unknown;
 }
-/** One folder's subfolders and CAD files (`GET /api/v1/local/folder`). */
-export interface CadFolder { path: string; entries: { name: string; kind: 'directory' | 'file' }[]; truncated: boolean }
-/** The CAD files nested under a folder whose path below it holds the query (`GET /api/v1/local/folder?q=`). */
-export interface CadSearch { path: string; results: string[]; truncated: boolean }
 export interface CadCatalogSnapshot {
   entries: CadEntry[];
   revision: number;
@@ -240,8 +254,6 @@ export interface CadWorkspaceService {
   /** The row the catalog has of a document (its path, or its id), joined by the document's id; null when it has none. */
   entryOf?(path: string): CadEntry | null;
   serverInfo(options?: CadRequestOptions & { fresh?: boolean }): Promise<CadServerInfo>;
-  folder(path: string, options?: CadRequestOptions): Promise<CadFolder>;
-  search(path: string, query: string, options?: CadRequestOptions): Promise<CadSearch>;
   /** The home's library, newest first. */
   recents(options?: CadRequestOptions): Promise<CadRecent[]>;
   /**
@@ -255,8 +267,22 @@ export interface CadWorkspaceService {
   thumbnail(model: { id?: string; thumbnail?: string | null }, options?: CadRequestOptions): Promise<string | null>;
   /** The URL of a library picture (`GET /api/v1/documents/<id>/thumbnail`), versioned by the picture's name. */
   thumbnailUrl(model: { id?: string; thumbnail?: string | null }): string;
-  /** Open: the model the person picks with the desktop's chooser, by its absolute path, or null. */
-  pick(): Promise<string | null>;
+  /**
+   * Import: the file the person picks with the desktop's chooser -- or the folder (`folder`), the chooser
+   * opening in `start` where one is named -- by its absolute path, or null.
+   */
+  pick(options?: { folder?: boolean; start?: string | null }): Promise<string | null>;
+  /** The projects, each with its documents, the latest activity first (`GET /api/v1/projects`). */
+  projects?(options?: CadRequestOptions): Promise<CadProject[]>;
+  /** One project and its documents (`GET /api/v1/projects/<id>`). */
+  project?(id: string, options?: CadRequestOptions): Promise<CadProject>;
+  /**
+   * A folder opened as a project, by its absolute path (`POST /api/v1/projects`): the project, and whether it was
+   * made now (false: the folder was one already, or is inside the one answered).
+   */
+  openProject?(path: string): Promise<{ project: Omit<CadProject, 'documents' | 'truncated'>; made: boolean }>;
+  /** A project forgotten: its record alone, nothing in its folder. The projects as they now are. */
+  removeProject?(id: string): Promise<CadProject[]>;
   /** Show a file, by its absolute path, in the desktop's file manager. */
   reveal(path: string): Promise<void>;
   /** Open in: the document's files and the apps this computer has for each (`GET /api/v1/local/open-in?id=`). */

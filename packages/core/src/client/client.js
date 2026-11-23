@@ -83,6 +83,8 @@ const catalogOf = (envelopes) => ({ entries: envelopes.map(rowOfEnvelope).filter
  */
 export const libraryRow = (row) => ({ ...row, kind: row.record, documentKind: row.kind });
 const libraryRows = (reply) => (Array.isArray(reply?.documents) ? reply.documents.map(libraryRow) : []);
+/** A project as the routes answer it, its documents' rows as the library reads them (`libraryRow`). */
+export const projectOf = (project) => ({ ...project, documents: libraryRows(project), truncated: project?.truncated === true });
 
 /**
  * An explicit connection to a viewer, which serves files by absolute path. Its catalog holds
@@ -349,19 +351,10 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       }
       return server;
     },
-    // One folder's subfolders and CAD files, and the CAD files nested under a folder whose path
-    // below it holds `query` (bounded by the server, which says when it stopped early).
-    folder(path, { signal } = {}) {
-      return request(`${API}/local/folder`, { params: { path }, signal, timeoutMs: 10_000, operation: 'folder' });
-    },
-    search(path, query, { signal } = {}) {
-      // `q` rides in the query even empty: it is what makes the read a search.
-      return request(`${API}/local/folder?q=${encodeURIComponent(query ?? '')}`, { params: { path }, signal, timeoutMs: 10_000, operation: 'search' });
-    },
     // What every CAD view on this machine shares, and the host's own effects, through this client's
     // fetch: the web page's own server, or the CAD app's through its tunnel. The home's library of
-    // models and their pictures, Open with the desktop's chooser, Reveal, the person's analytics
-    // answer and language, and whether a newer text-to-cad is out.
+    // models and their pictures, the projects, Import with the desktop's chooser, Reveal, the person's
+    // analytics answer and language, and whether a newer text-to-cad is out.
     recents({ signal } = {}) {
       return request(`${API}/documents`, { signal, operation: 'recents' }).then(libraryRows);
     },
@@ -381,8 +374,30 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       // Its one picture, the light viewport's, which the home shows in both themes.
       return cadApiUrl(`${API}/documents/${encodeURIComponent(model.id)}/thumbnail`, { origin, params: { v: model.thumbnail } });
     },
-    pick() {
-      return request(`${API}/local/pick`, { method: 'POST', headers: { 'x-cad-viewer': '1' }, operation: 'pick' }).then((reply) => reply.path ?? null);
+    pick({ folder = false, start = null } = {}) {
+      // A file, or a folder (opening in `start` where one is named): the person's answer, or null.
+      const body = folder ? { folder: true, ...(start ? { start } : {}) } : {};
+      return request(`${API}/local/pick`, { method: 'POST', headers: JSON_POST, body, operation: 'pick' }).then((reply) => reply.path ?? null);
+    },
+    // The projects (`GET /api/v1/projects`): folders a person opened as one, each with its documents
+    // (rows as the library's, `libraryRow`), the latest activity first.
+    projects({ signal } = {}) {
+      return request(`${API}/projects`, { signal, operation: 'projects' })
+        .then((reply) => (Array.isArray(reply?.projects) ? reply.projects.map(projectOf) : []));
+    },
+    project(id, { signal } = {}) {
+      return request(`${API}/projects/${encodeURIComponent(id)}`, { signal, operation: 'projects' }).then(projectOf);
+    },
+    // A folder opened as a project, by its absolute path: `{ project, made }` (`made` false: it was one
+    // already, or is inside one, which is the project answered).
+    openProject(path) {
+      return request(`${API}/projects`, { method: 'POST', headers: JSON_POST, body: { path }, operation: 'projects' })
+        .then((reply) => ({ project: reply.project, made: reply.made === true }));
+    },
+    // A project forgotten (its record alone: nothing in its folder changes): the projects as they now are.
+    removeProject(id) {
+      return request(`${API}/projects/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'x-cad-viewer': '1' }, operation: 'projects' })
+        .then((reply) => (Array.isArray(reply?.projects) ? reply.projects.map(projectOf) : []));
     },
     async reveal(path) {
       const response = await fetchImpl(cadApiUrl(`${API}/local/reveal`, { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify({ path }) });

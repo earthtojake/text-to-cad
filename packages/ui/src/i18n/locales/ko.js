@@ -244,38 +244,103 @@ export default {
   "language.ja": "日本語",
   "language.ko": "한국어",
 
-  "explorer.folders": "폴더",
-  "explorer.foldersAbove": "상위 폴더",
-  "explorer.filterLabel": "파일 필터",
-  "explorer.filterPlaceholder": "파일 필터…",
-  "explorer.loading": "불러오는 중…",
-  "explorer.searching": "검색 중…",
-  "explorer.readFailed": "이 폴더를 읽을 수 없습니다",
-  "explorer.searchFailed": "이 폴더를 검색할 수 없습니다",
-  "explorer.noCadFiles": "CAD 파일 없음",
-  "explorer.noCadFilesHere": "여기에 CAD 파일이 없습니다",
-  "explorer.noMatches": "일치하는 파일이 없습니다",
-  "explorer.noMatchesYet": "아직 일치하는 파일이 없습니다. 계속 입력해 검색 범위를 좁혀 보세요.",
-  "explorer.stoppedEarly": "검색을 일찍 멈췄습니다. 계속 입력해 범위를 좁혀 보세요.",
-  "explorer.models": "모델",
-  "explorer.files": "파일",
-  "explorer.noModels": "아직 모델이 없습니다",
-  "explorer.modelsFailed": "모델을 읽을 수 없습니다",
-  "explorer.filterModelsLabel": "모델 필터",
-  "explorer.filterModelsPlaceholder": "모델 필터…",
-  "explorer.noModelsMatch": "일치하는 모델이 없습니다",
 
-  "home.recentFiles": "최근",
+  "project.tab": "프로젝트",
+
+
+  "project.models": "모델",
+
+
+  "project.files": "파일",
+
+
+  "project.loading": "불러오는 중…",
+
+
+  "project.empty": "아직 모델이나 CAD 파일이 없습니다.",
+
+
+  "project.readFailed": "이 프로젝트를 읽을 수 없습니다.",
+
+
+  "project.folderMissing": "이 프로젝트의 폴더가 없습니다.",
+
+
+  "project.truncated": "일부 파일만 표시됩니다. 이 폴더에는 한 번에 표시할 수 있는 것보다 많은 파일이 있습니다.",
+
+
+  "project.showAria": "홈에서 {name} 보기",
+
+
+  "project.importFolder": "이 폴더를 프로젝트로 가져오기…",
+
+
+  "home.title": "홈",
+
+
+  "home.import": "가져오기",
+
+
+  "home.importFile": "파일…",
+
+
+  "home.importFolder": "폴더…",
+
+
+  "home.importFileButton": "파일 가져오기",
+
+
+  "home.importFolderButton": "폴더 가져오기",
+
+
+  "home.standalone": "독립 문서",
+
+
+  "home.projectActionsAria": "프로젝트 {name} 작업",
+
+
+  "home.projectRemove": "CAD에서 제거",
+
+
+  "home.projectRemoved": "{name}을(를) 제거했습니다. 디스크의 내용은 바뀌지 않았고, 문서는 다시 독립 문서가 되었습니다.",
+
+
+  "home.projectMade": "{name}이(가) 이제 프로젝트입니다. 폴더에는 아무것도 쓰지 않았습니다.",
+
+
+  "home.projectAgain": "{name}은(는) 이미 프로젝트입니다.",
+
+
+  "home.projectInside": "{name}은(는) 이미 프로젝트인 {project} 안에 있습니다.",
+
+
+  "home.projectEmpty": "아직 모델이나 CAD 파일이 없습니다.",
+
+
+  "home.projectMissing": "이 프로젝트의 폴더가 없습니다. 제거하거나 폴더를 원래 자리에 되돌려 놓으세요.",
+
+
+  "home.projectTruncated": "일부 파일만 표시됩니다. 이 폴더에는 한 번에 표시할 수 있는 것보다 많은 파일이 있습니다.",
+
+
+  "home.showAll": "{count}개 모두 보기",
+
+
+  "home.showFewer": "간단히 보기",
+
+
+  "home.emptyTitle": "아직 아무것도 없습니다",
+
+
+  "home.emptyBody": "파일이나 폴더를 가져오거나 에이전트에게 모델을 만들어 달라고 하세요.",
+
+
   "home.searchAria": "모델 검색",
   "home.searchPlaceholder": "검색",
   "home.layout": "레이아웃",
-  "home.open": "열기",
   "home.grid": "그리드",
   "home.list": "목록",
   "home.openAria": "{name} 열기",
-  "home.emptyTitle": "아직 연 항목이 없습니다",
-  "home.emptyBody": "CAD 파일을 열거나 에이전트에게 모델을 만들어 달라고 하세요.",
-  "home.openFile": "파일 열기",
   "home.formatModel": "모델",
   "home.noMatchingModels": "일치하는 모델이 없습니다.",
   "home.filesAria": "파일",

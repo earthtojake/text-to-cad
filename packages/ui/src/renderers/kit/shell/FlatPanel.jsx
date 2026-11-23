@@ -47,7 +47,9 @@ import { PANEL_SURFACE_PX } from "../../../file-viewer/panelToggles.js";
  *
  * Its tabs are handed in (`tabs`, a board's and a schematic's), or are the sections drawn in it
  * (`sections`: a 3D view's `ToolPanel`s — its Model tree or Links, Position and the rest — each a tab by its
- * name, in their order, `ToolPanel.jsx`'s tabbed form). `useFlatPanelState` is what a view keeps of it.
+ * name, in their order, `ToolPanel.jsx`'s tabbed form); either way after the host's own tab where it has one
+ * (`lead`: the Project list of the project the document is in, `file-viewer/projectPanel.js`), first, which the
+ * search never covers. `useFlatPanelState` is what a view keeps of it.
  */
 
 /**
@@ -236,14 +238,14 @@ function rowlessTabs(body, searchable) {
  *   searchLabel: string, tabs: { id: string, label: string, content: import("react").ReactNode, search?: boolean, icon?: import("react").ComponentType }[],
  *   tab: string, onTabChange(id: string): void, width: number, maxWidth: number, onWidthChange(width: number): void,
  *   focusSearch: number, peek?: boolean, peekLeaving?: boolean, peekEntered?: boolean, onPeekExited?: () => void, surfaceRef?: import("react").Ref<HTMLElement>,
- *   surfaceProps?: object | null, loading?: boolean }} props
+ *   surfaceProps?: object | null, loading?: boolean, lead?: { id: string, label: string, content: import("react").ReactNode, search: false } | null }} props
  *   `focusSearch`: a count; each new value opens the search with the keyboard in its box (/). `peek`: the collapsed
  *   panel shown over the view on a rest on its toggle (`usePanelPeek.js`), its surface `surfaceRef` and its pointer
  *   handlers `surfaceProps`; `peekLeaving`, that peek sliding out, `peekEntered`, one already standing (no slide in), `onPeekExited` once it has. `loading`: the view's file
  *   is still loading: a structure tab with no row yet shows placeholder rows (`FlatPanelRowsLoading`), busy, until its
  *   rows arrive.
  */
-export default function FlatPanel({ mode, open, onClose, label, searchLabel, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, hidden = false,
+export default function FlatPanel({ mode, open, onClose, label, searchLabel, tabs: given = null, sections = null, lead = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, hidden = false,
   peek = false, peekLeaving = false, peekEntered = false, onPeekExited, surfaceRef, surfaceProps = null, loading = false }) {
   const { t } = useI18n();
   const page = mode === "page";
@@ -279,7 +281,9 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
       return next.every((entry, at) => entry === current[at]) ? current : next;
     });
   });
-  const tabs = given ?? registered;
+  // The host's tab before the view's own, whichever way they come (`lead`: the Project list, `file-viewer/projectPanel.js`).
+  const own = given ?? registered;
+  const tabs = useMemo(() => (lead ? [lead, ...own] : own), [lead, own]);
   // The tabs the search covers, and how many rows it finds in each (told by the tabs, `useFlatPanelMatches`).
   const searchableKey = tabs.filter(entry => isStructureTab(entry, sections)).map(entry => entry.id).join("\u0000");
   const searchable = useMemo(() => new Set(searchableKey ? searchableKey.split("\u0000") : []), [searchableKey]);
@@ -502,6 +506,20 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   const searchBox = searchOpen ? <TreeFilterInput label={searchLabel} placeholder={t("flatPanel.searchPlaceholder")} value={query} onChange={setQuery} onKeyDown={onSearchKeyDown}
     inputRef={input} dense onDismiss={closeSearch} dismissLabel={t("flatPanel.closeSearch")} className="min-w-0 flex-1 px-0 shadow-none" data-flat-panel-search=""
     style={SEARCH_BOX_HANG} /> : null;
+  // A handed-in tab's section (every tab's where they are handed in; the lead's where the view's are its sections).
+  const tabSection = entry => {
+    // Searching several tabs, each that finds something is a group of the one list, under its name and count.
+    const group = grouped && groups.includes(entry.id);
+    const shown = grouped ? group : entry.id === displayed;
+    return <section key={entry.id} role={searchOpen ? undefined : "tabpanel"} id={ids_(entry.id).panel} aria-label={entry.label}
+      aria-labelledby={searchOpen ? undefined : ids_(entry.id).tab} hidden={!shown} aria-busy={rowless.has(entry.id) || undefined}
+      data-flat-panel-section={entry.id} data-flat-panel-group={group ? "" : undefined}>
+      {group ? <TreeRowHeading as="h3" data-flat-panel-group-heading={entry.id}>
+        {entry.label}<span className="ml-1 tabular-nums" data-flat-panel-group-count="">{counts[entry.id]}</span></TreeRowHeading> : null}
+      <FlatPanelTab panel={panel} id={entry.id} shown={shown}>{entry.content}</FlatPanelTab>
+      {rowless.has(entry.id) ? <FlatPanelRowsLoading /> : null}
+    </section>;
+  };
   // Nothing found: one line, where the one tree finds nothing, or where no searched tab does.
   const nothing = searching && (grouped ? tabs.every(entry => !searchable.has(entry.id) || counts[entry.id] === 0) : counts[displayed] === 0);
   const aside = <PanelSurface mode={page ? "page" : "push"} label={label} open={open} hidden={hidden} peek={peek} peekLeaving={peekLeaving} peekEntered={peekEntered} onPeekExited={onPeekExited}
@@ -524,19 +542,8 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
     </>}>
       <FlatPanelContext.Provider value={panel}>
         <div ref={body} className={BODY_CLASS} style={BODY_STYLE} data-flat-panel-body="">
-          {sections ? <ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider> : tabs.map(entry => {
-            // Searching several tabs, each that finds something is a group of the one list, under its name and count.
-            const group = grouped && groups.includes(entry.id);
-            const shown = grouped ? group : entry.id === displayed;
-            return <section key={entry.id} role={searchOpen ? undefined : "tabpanel"} id={ids_(entry.id).panel} aria-label={entry.label}
-              aria-labelledby={searchOpen ? undefined : ids_(entry.id).tab} hidden={!shown} aria-busy={rowless.has(entry.id) || undefined}
-              data-flat-panel-section={entry.id} data-flat-panel-group={group ? "" : undefined}>
-              {group ? <TreeRowHeading as="h3" data-flat-panel-group-heading={entry.id}>
-                {entry.label}<span className="ml-1 tabular-nums" data-flat-panel-group-count="">{counts[entry.id]}</span></TreeRowHeading> : null}
-              <FlatPanelTab panel={panel} id={entry.id} shown={shown}>{entry.content}</FlatPanelTab>
-              {rowless.has(entry.id) ? <FlatPanelRowsLoading /> : null}
-            </section>;
-          })}
+          {sections ? <>{lead ? tabSection(lead) : null}<ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider></>
+            : tabs.map(tabSection)}
           {nothing ? <p className="py-6 text-center text-muted-foreground" data-flat-panel-empty="">{t("flatPanel.nothingMatches", { query: query.trim() })}</p> : null}
         </div>
       </FlatPanelContext.Provider>

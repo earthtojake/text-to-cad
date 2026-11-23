@@ -473,9 +473,12 @@ class TabServerTest(_Session):
         status, found = self.http("GET", f"http://cad.invalid/api/v1/documents?path={quote(part, safe='')}")
         self.assertEqual((status, [row["entry"]["file"] for row in found["documents"]]), (200, [part.replace(os.sep, "/")]))
         self.assertEqual(self.http("GET", f"/api/v1/local/files?path={quote(part, safe='')}"), (200, STL))
-        # The explorer lists a folder; hidden ones stay out of it.
-        status, folder = self.http("GET", f"/api/v1/local/folder?path={quote(str(self.tmp / 'elsewhere'), safe='')}")
-        self.assertEqual((status, folder["entries"]), (200, [{"name": "loose.stl", "kind": "file"}]))
+        # A folder opened as a project lists its CAD files, the hidden folder's left out; the home lists it.
+        status, opened = self.http("POST", "/api/v1/projects", {"path": str(self.tmp / "elsewhere")})
+        self.assertEqual((status, opened["project"]["name"]), (201, "elsewhere"))
+        status, project = self.http("GET", f"/api/v1/projects/{opened['project']['id']}")
+        self.assertEqual((status, [row["name"] for row in project["documents"]]), (200, ["loose.stl"]))
+        self.assertEqual([found["id"] for found in self.http("GET", "/api/v1/projects")[1]["projects"]], [opened["project"]["id"]])
         self.assertEqual(self.http("GET", "/api/v1/documents?path=parts%2Fbracket.stl")[0], 400)
         # A view copies through its host's frame, and no view stops a viewer (this app has no shutdown);
         # nothing outside the API and the CAD app's module is the tunnel's.

@@ -174,17 +174,33 @@ it('a model opened from the home is shown in place, joins the library with its p
   expect(server.asked('/api/v1/local/reveal')).toEqual([{ path: '/work/parts/a.step' }]);
 });
 
-it('every view has the home and browses from its file\'s folder, but the host\'s file handler shows its file alone', () => {
+it('every view has the home and its projects, but the host\'s file handler shows its file alone', () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'home', model: null, surface: 'tab', pick: false }} />);
-  // A thread's empty tab is the home; a computer with no chooser has no Open.
-  expect([viewer.props!.file, viewer.props!.library?.pick]).toEqual(['', undefined]);
-  expect(viewer.props!.host.files.list).toBeDefined();
+  // A thread's empty tab is the home; a computer with no chooser has no Import (a file, a folder).
+  expect([viewer.props!.file, viewer.props!.library?.pick, viewer.props!.library?.importFolder]).toEqual(['', undefined, undefined]);
+  expect([typeof viewer.props!.library?.projects, typeof viewer.props!.library?.removeProject]).toEqual(['function', 'function']);
   cleanup();
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
-  // No home, and a source that neither lists nor searches: no explorer either.
+  // No home, and so no project: a file handler's own file tree is its navigation.
   expect([viewer.props!.file, viewer.props!.library]).toEqual(['/work/a.step', undefined]);
-  expect([viewer.props!.host.files.list, viewer.props!.host.files.search]).toEqual([undefined, undefined]);
+});
+
+it("the home's projects came with its launch, each document's row as the library reads one; Import's Folder opens the folder chosen as a project", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const document = { id: '6f1c2a4e-1b2c-5d3e-8f4a-000000000001', kind: 'stl', record: 'file' as const, api: '/api/v1/documents/stl/6f1c2a4e-1b2c-5d3e-8f4a-000000000001',
+    path: '/work/tag/a.stl', name: 'a.stl', folder: '/work/tag', opened: null, updated: 1, created: null, pinned: false, missing: false, thumbnail: null,
+    pictured: null, project: 'p1' };
+  const project = { id: 'p1', name: 'tag', root: '/work/tag', created: 1, opened: 1, missing: false, truncated: false, documents: [document] };
+  server.answers['/api/v1/local/pick'] = () => new Status(200, { path: '/work/tag/STL' });
+  server.answers['/api/v1/projects'] = () => new Status(200, { project: { id: 'p1', name: 'tag', root: '/work/tag' }, made: false });
+  render(<App bridge={bridge as any} server={server as any} launch={{ ...home, pick: true, projects: [project] }} />);
+  const [seeded] = await viewer.props!.library!.projects!();
+  expect(seeded.documents[0]).toMatchObject({ id: document.id, kind: 'file', documentKind: 'stl', project: 'p1' });
+  expect(server.asked('/api/v1/projects')).toEqual([]);  // nothing read: they came with the launch
+  // Import's Folder: the chooser of a folder, opening where the page names, then the folder opened as a project.
+  expect(await viewer.props!.library!.importFolder!('/work/tag')).toEqual({ project: { id: 'p1', name: 'tag', root: '/work/tag' }, made: false, folder: '/work/tag/STL' });
+  expect([server.asked('/api/v1/local/pick'), server.asked('/api/v1/projects')]).toEqual([[{ folder: true, start: '/work/tag' }], [{ path: '/work/tag/STL' }]]);
 });
 
 it("the host's file handler keeps the file it opened: a show sent to it changes nothing, and gives it no home", async () => {
@@ -194,8 +210,7 @@ it("the host's file handler keeps the file it opened: a show sent to it changes 
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
   // A show's launch names no surface: it is not this view's to take.
   await act(async () => { replies.shift()!({ events: [{ seq: 1, type: 'show', launch: { protocol: 7, page: 'viewer', model: '/work/b.step' } }] }); });
-  expect([viewer.props!.file, viewer.props!.library, viewer.props!.history, viewer.props!.host.files.list])
-    .toEqual(['/work/a.step', undefined, undefined, undefined]);
+  expect([viewer.props!.file, viewer.props!.library, viewer.props!.history]).toEqual(['/work/a.step', undefined, undefined]);
 });
 
 it("a capture the agent asks with its show is of the model it showed, once that is loaded and drawn: never the one it left, never a refusal while it loads", async () => {
@@ -353,7 +368,7 @@ it("a view keeps its own history of files, as a browser's tab does: the agent's 
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'viewer', model: '/work/a.step' }} />);
   const at = () => [viewer.props!.file, viewer.props!.history!.canGoBack, viewer.props!.history!.canGoForward];
   expect(at()).toEqual(['/work/a.step', false, false]);
-  // The agent shows b, and the person opens c from the explorer: each a step.
+  // The agent shows b, and the person opens c from the Project list: each a step.
   await agentShows('/work/b.step', 1);
   expect(at()).toEqual(['/work/b.step', true, false]);
   act(() => viewer.props!.onShow('/work/c.step'));

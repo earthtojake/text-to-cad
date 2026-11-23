@@ -3,10 +3,10 @@
 A local-filesystem CAD review app. This directory is the React CLIENT; the
 backend is the installation's engine, hosting the `cad_server.viewer` HTTP app.
 The built client ships inside the same wheel. `cad viewer [FILE ...]` opens the
-engine's one page and exits. The page addresses every document by path, `/<uuid>`: a
-model's id, or a file's id once a launcher (or the page itself) registers it, derived from
-the file's canonical path. `/` is the home: the library alone, the documents opened or built
-before. Python scripts are never documents. There is no hosted deployment.
+engine's one page and exits; a FILE that is a folder is opened as a project, on the home. The page addresses every
+document by path, `/<uuid>`: a model's id, or a file's id once a launcher (or the page itself) registers it, derived
+from the file's canonical path. `/` is the home: the projects, then the documents opened or built before that are in
+none. Python scripts are never documents. There is no hosted deployment.
 
 This app is the browser host of `@cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
@@ -15,7 +15,7 @@ the shared CAD interface.
 persistence, the file menu's reveal route, and the app menu's links.
 `src/App.tsx` composes an explicit `ViewerHost` and hands it to the shared
 `CadViewer` (`@cad/ui/cad-viewer`), which registers one renderer per file
-family and draws the navbar and the explorer. The catalog exposes CAD
+family and draws the navbar and the project's list. The catalog exposes CAD
 artifacts only. Explicit exports write only the requested download to temporary server storage.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
 adding viewer features; browser effects belong in this app's adapters.
@@ -166,13 +166,11 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
 
 ## Behaviours worth knowing before concluding something is broken
 
-- **A file is named by its absolute path, and nothing walks a tree.** The
-  catalog is the named file's row, computed when it is asked for; a file under
-  a hidden folder opens like any other. The explorer reads one folder at a
-  time, and its search skips hidden folders and `__cadgen__`, `__pycache__`,
-  `build`, `coverage`, `dist`, `node_modules` and `viewer` (exact case) — except the folders
-  on the way to the engine's cache (`~/.cache/cad`, each model's
-  `documents/<id>/document.xbf`), which it lists.
+- **A file is named by its absolute path, and nothing walks a tree but a project's folder.**
+  The catalog is the named file's row, computed when it is asked for; a file under
+  a hidden folder opens like any other. A project's documents are a bounded walk of its
+  folder, which skips hidden folders and `__cadgen__`, `__pycache__`, `build`, `coverage`,
+  `dist`, `node_modules` and `viewer` (exact case), and the folders of the projects inside it.
   [docs/backend.md](docs/backend.md) has the rules.
 - **Verify a link by loading the page**, never by curling `/api/v1/local/files` —
   that route serves raw files; an engine document is opened with `POST /api/v1/documents` and
@@ -269,7 +267,7 @@ the app, with no source alias or JSX loader. Web supplies its file source (`crea
 from `@cad/ui/catalog`, over its CAD client), URL navigation (`onShow`, the `/<id>` path
 and history), browser persistence, the document title and appearance, the viewer's links
 (`ViewerHost.links`: its version, its build's GitHub and Discord, `src/host/viewerLinks.js`) and
-the tab's colour scheme (`colorScheme`); the navbar, the explorer, the tool strip, the view's
+the tab's colour scheme (`colorScheme`); the navbar, the project's list, the tool strip, the view's
 panel and Preview are the shared package's. Native file operations are host capabilities: the
 web offers Copy path and Reveal in the file manager of the machine the server runs on, and has
 no filesystem-writing or editing endpoint. The host boundary is
@@ -320,8 +318,9 @@ The web host owns URL/history, the tab's persistence, appearance, version links
 and native service adapters. Shared renderers own all model interaction. STEP and
 robots open in Select, its selection filter the chevron after its button; the tool in hand's
 controls are a row under the strip (Draw's, two). An assembly's Model (Links for a robot) and Joints
-are tabs of the view's panel, docked at the left, whatever the tool. The
-file's name in the navbar opens its name menu: Models and Files (the explorer).
+are tabs of the view's panel, docked at the left, whatever the tool. A document in a
+project has the project's name before its own in the navbar, and the project's models and
+files as the Project tab its panel leads with, one click from each other.
 Every file's tools are on a strip at the top centre (each format's are
 [the viewer's tools](../../packages/ui/docs/viewer-ux.md#tools)).
 How the file is looked at is the navbar's **Display** (the plain cube, a card: a 3D view's Projection, then Style,
@@ -334,13 +333,9 @@ bottom, centred on the window as the strip is, the bottom row its alone. DXF is 
 2D canvas with pan, zoom, snapshot and Quick Edit, its strip Select, Draw and Measure (no view controls on it), its
 Display card the Background alone, and its Layers tab in the view's panel from the first frame.
 
-The name menu is a popover under the file's name, two tabs over the explorer's own rows:
-**Models**, the library's eight latest models (no file), by last activity, each its glyph, its
-name and its age ("2h ago"), the one on screen marked, under "Filter models..."; and **Files**, the
-explorer: the file's folder (a model's, the folder the explorer was last in this tab, else the
-person's home folder), one folder at a
-time, with "Filter files..." to find a file anywhere under it. It opens on Models over a model
-and on Files over a file. Below 600px of
+A project is a folder a person opened as one (Import's Folder on the home, a standalone
+document's Import its folder as a project, or `cad viewer <folder>`); the Project tab lists its
+models, then its CAD files by folder, the one on screen marked, and nothing above it. Below 600px of
 FileViewer width (a phone) the chrome is touch-sized (the phone's scale) and the panel is a sheet under the navbar.
 Preview is the navbar's button right of Display (with no navbar, the strip's last tile): it takes the whole page,
 hiding the navbar, the tool strip and Quick Edit, opens still (Orbit, in its settings, is
@@ -406,14 +401,19 @@ No snapshot is written while drawing or typing, and no image is rendered.
 
 ### The home
 
-The bare URL is the home: the library every CAD view shares (`@cad/ui/library`),
+The bare URL is the home: the projects and the library every CAD view shares (`@cad/ui/library`),
 and nothing else, laid out after Figma's Recents in a centred column (1128px at most, on 24px
 gutters, 32px under the navbar). It starts with one control row of 28px
-controls: "Recent" and its count at the left, the 15/20 heading on the row's line, and at the right the type filter, a dropdown
+controls: "Home" at the left, the 15/20 heading on the row's line, and at the right the type filter, a dropdown
 ("All ▾": All, Models, Files) where both kinds are listed, the search, the grid/list
-switch and, where the server's computer has a file chooser (`pick` in its info), **Open**,
-which opens the desktop's own chooser (`POST /api/v1/local/pick`, `cad_server._internal.picker`) and shows
-the file picked. The grid's tiles are framed cards, at least 232px wide (four across the full column): the
+switch and, where the server's computer has a chooser (`pick` in its info), **Import**: File…, which opens
+the desktop's own chooser (`POST /api/v1/local/pick`, `cad_server._internal.picker`) and shows the file picked, and
+Folder…, which opens it for a folder and opens that folder as a project (`POST /api/v1/projects`), brought into view
+with a line saying what came of it ("heart-tag is now a project. Nothing was written to the folder.", or that the
+folder is inside a project already, which is the one opened). Then each project (`GET /api/v1/projects`, the latest
+activity first): a section headed by its name, its folder from `~` and its ⋯ (Copy path, Reveal, Remove from CAD,
+which forgets the project and changes nothing on disk), then its documents -- its models, then its CAD files --
+eight until Show all; then the documents of no project, under "Standalone". The grid's tiles are framed cards, at least 232px wide (four across the full column): the
 picture (the light viewport's, on the model area's light gradient in both themes, its format's badge at its
 top-left), then, in a compact caption, the kind's glyph (a model's cube, a file's plain file outline, whatever
 its kind) beside its name over a file's size (the server's `size`) and its last activity with its verb ("Edited now",
@@ -436,15 +436,16 @@ again, `cad run <the program that built it>` -- and Go home, titled for the stat
 names: "This model is not saved" (`unsaved`) or "This model’s script is gone" (`detached`); a file
 that is not there shows "File does not exist".
 
-A file is opened by its path (the name menu, the home) and shown by its id: the page asks the
+A file is opened by its path (the Project list, the home) and shown by its id: the page asks the
 server for the file's envelope (`GET /api/v1/documents?path=<abs>`), whose row carries the document's `id`,
 and moves to `/<id>`. Rows join by that id (`client.entryOf`), so a symlinked or case-variant
-spelling of one file is one row. A model (a document with no file of its own) has no file to browse from: its ⋯ menu
-acts on the document and on the script that builds it ([Export and job status](#export-and-job-status)), and
-its Files lists the folder the explorer was last in this tab, else the person's home folder
-(`home` in the server's info); a file's its own folder.
+spelling of one file is one row. A model (a document with no file of its own): its ⋯ menu
+acts on the document and on the script that builds it ([Export and job status](#export-and-job-status)), and it is
+in the project its script is in. A document's row says its project (`project`: the nearest project above its file,
+a model's script), which the navbar and the Project tab follow as the row is read again.
 
-The home reads the library over `GET /api/v1/documents`, each row with three times, `updated` (a
+The home reads the projects over `GET /api/v1/projects` and the library over `GET /api/v1/documents`, each row
+with the project it is in (`project`) and three times, `updated` (a
 file's time on disk, a model's run), `opened` (when a page last opened it) and `created` (when the
 engine first made its record: a model's first run, a file's first open; null for a record from before
 it was kept), ordered pinned
@@ -487,9 +488,8 @@ from `cad_server.analytics.CONTROLS`, since telemetry schema 7). The server hold
 ### File storage and host actions
 
 The web `FileSource` is `createCadFileSource` from `@cad/ui/catalog` over
-the CAD client, the one the CAD app uses: a file's catalog row, one folder's entries
-(`GET /api/v1/local/folder`) and the CAD files under a folder (the same, with `q`), with no
-writes or native filesystem mutations. Catalog content/revision changes are
+the CAD client, the one the CAD app uses: a file's catalog row, with no writes or native
+filesystem mutations, and no folder read. Catalog content/revision changes are
 distinct from transient metadata progress, so progress updates do not restart a
 prepared document. Native path copying and file reveal are the host's file actions
 (the shared `createCadFileActions`, in `App.tsx`), which the navbar's ⋯ shows. Path
@@ -511,8 +511,9 @@ and the web stay consistent without host-specific copies of those controls.
 
 The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
-left the logo (the C mark, on the home and over a file alike), which opens the app menu, then the open file's name (no glyph),
-which opens the name menu (Models and Files), with its ⋯ (Export, over a file that writes formats). The app menu holds Back to home (the home), the
+left the logo (the C mark, on the home and over a file alike), which opens the app menu, then, for a document in a
+project, the project's name and a slash (to the home at that project), then the open file's name (no glyph),
+with its ⋯ (Export, over a file that writes formats; Import its folder as a project, for a document in no project). The app menu holds Back to home (the home), the
 person's settings (Language — Automatic or a named language —, Telemetry, Theme), Send feedback (a new issue titled "Feedback: "),
 GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
 (X), as in the CAD app, over a file and on the home alike.
@@ -546,11 +547,9 @@ composer has no camera action: its note to the agent is Quick Edit.
 
 A model's page is `/<id>`, its document's id, which `cad run SCRIPT.py` prints (`view:`). The
 page reads the document the engine holds, by id (`GET /api/v1/documents/<id>`); it never builds or
-imports a script, and no folder lists one. A model has no file of its own: its ⋯ menu has the
-document's actions and its script's ([Export and job status](#export-and-job-status)); its
-name menu opens on Models, and its Files lists the folder the explorer was last in this tab
-(the tab's settings), else the person's home folder (the server's `home`): never the folder
-of the script that built it. It is in the
+imports a script, and no project lists one. A model has no file of its own: its ⋯ menu has the
+document's actions and its script's ([Export and job status](#export-and-job-status)), and it is in the project its
+script is in, if any, whose Project tab lists it with the project's files. It is in the
 library by its id (the engine's record), and its picture is taken by
 its id as a file's is: on screen once it settles, once per build, and on the home only while
 the engine holds it. Once its worker retires or

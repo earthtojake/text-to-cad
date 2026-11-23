@@ -1,8 +1,8 @@
-"""The explorer's two reads: one folder's entries, and the CAD files nested under a folder.
+"""Two reads of the v1 API (``GET /api/v1/local/folder``): one folder's entries, and the CAD files nested under a folder.
 
-A view browses from its file's folder, one folder at a time, so nothing walks a tree to show it:
-``list_folder`` is one directory read. Filtering walks the folder it starts from, bounded so that no
-folder -- a home, a whole disk -- can hold a request up or wear the server down: it stops at a
+They were the explorer's, which projects replaced (``projects.py``): no view of this release reads them, and the
+route stays because v1 only ever adds one. ``list_folder`` is one directory read. Filtering walks the folder it
+starts from, bounded so that no folder -- a home, a whole disk -- can hold a request up or wear the server down: it stops at a
 number of matches, a depth and a deadline, says when it stopped early, skips hidden and build
 folders, and never walks a folder twice (a link back into one is how a walk would never end).
 
@@ -48,7 +48,7 @@ def absolute_folder(path: object) -> str:
 
 
 def _cache() -> str:
-    """The engine's cache folder, resolved: the hidden folder the explorer lists all the same."""
+    """The engine's cache folder, resolved: the hidden folder both reads list all the same."""
     from cad.engine.places import cache_dir
 
     return os.path.realpath(cache_dir())

@@ -1,9 +1,10 @@
 """Open the running server's viewer page: the home, or each file named (no server running: its one line, which
 says to run ``cad server start``).
 
-The page is the engine's one page, whose explorer opens where it was last, else your home folder.
-Each FILE (an on-disk CAD file, a relative one read from this folder, or a document id the engine
-holds) is registered and printed as its page, ``/<id>``."""
+The page is the engine's one page. Each FILE (an on-disk CAD file, a relative one read from this folder, or a
+document id the engine holds) is registered and printed as its page, ``/<id>``. A folder is opened as a
+project: its models and CAD files are listed together, beside each of them and on the home, whose page is
+printed. Nothing is written to the folder."""
 # A FILE that is not there, or that the viewer does not open -- a model's script among them -- is the
 # command line's (the ``cad`` command's failure contract, ``cad_server._internal.cli_errors``): refused
 # here, before the engine is asked, as the engine refuses it (``unopened``); a document id the engine does
@@ -39,9 +40,10 @@ class Unopened(ValueError):
 def unopened(name, start):
     """Why a launch's FILE ``name`` -- read from ``start`` when it is relative, as the engine reads it -- is no
     file the viewer opens, as ``(reason, words)`` (``cad_server._internal.cli_errors.REASONS``), or None for one
-    it opens: a model's script (``part.py``, ``part.py::fn``), whose run makes its documents and prints each
-    one's page, ``wrong_type``; a path that is not there, ``not_found``; a file of no type the viewer opens,
-    ``wrong_type``. A document id is not a FILE here: the engine alone knows what it holds."""
+    it opens, or a folder (a project's): a model's script (``part.py``, ``part.py::fn``), whose run makes its
+    documents and prints each one's page, ``wrong_type``; a path that is not there, ``not_found``; a file of no
+    type the viewer opens, ``wrong_type``. A document id is not a FILE here: the engine alone knows what it holds,
+    and which folder is no project (``projects.Refused``) is the engine's to say too."""
     import shlex
 
     from .content_types import extension_of
@@ -54,6 +56,8 @@ def unopened(name, start):
     path = os.path.join(start, os.path.expanduser(name))
     if not os.path.exists(path):
         return 'not_found', f'no such file: {name}'
+    if os.path.isdir(path):
+        return None
     if extension_of(path) not in VIEWER_EXTENSIONS or not os.path.isfile(path):
         return 'wrong_type', f'no CAD file at {os.path.abspath(path)}'
     return None
@@ -77,7 +81,8 @@ def build_parser(prog=DEFAULT_PROG):
 
     parser = command_parser(prog=prog, description=__doc__)
     parser.add_argument('files', nargs='*', metavar='FILE',
-                        help='a CAD file to open (or a document id the engine holds): its page is /<id>')
+                        help='a CAD file to open (or a document id the engine holds): its page is /<id>; '
+                             'a folder opens as a project, on the home')
     parser.add_argument('--host', default=None, help='Pin the engine bind address; default loopback.')
     parser.add_argument('--port', type=int, default=None, help='Pin this installation’s engine HTTP port.')
     parser.add_argument('--json', action='store_true', help='Print launch information without opening a browser.')
@@ -123,8 +128,10 @@ def main(argv=None, *, prog=DEFAULT_PROG):
     if options['json']:
         print(json.dumps(answer), flush=True)
     else:
-        # The page of each file named, a line each; the home's when none is.
-        for url in [document['url'] for document in answer.get('documents') or []] or [answer['url']]:
+        # The page of each file named, a line each; the home's, where a folder was opened as a project or
+        # nothing was named.
+        pages = [document['url'] for document in answer.get('documents') or []]
+        for url in pages + ([answer.get('home') or answer['url']] if answer.get('projects') or not pages else []):
             print(url, flush=True)
     if not options['json'] and not options['no_open'] and not options['api_only']:
         from .browser_open import CannotOpen, open_page

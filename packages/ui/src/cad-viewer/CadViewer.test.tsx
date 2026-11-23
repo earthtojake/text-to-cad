@@ -31,7 +31,6 @@ function cadClient() {
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     refresh: vi.fn(async () => ({ entries: [] })),
     resolveEntry: vi.fn(async () => { throw new Error('unused'); }),
-    folder: vi.fn(), search: vi.fn(),
     publish(entries: Record<string, unknown>[]) { snapshot = { ...snapshot, hydrated: true, refreshing: false, entries, revision: snapshot.revision + 1 }; for (const listener of [...listeners]) listener(); },
   };
 }
@@ -57,7 +56,7 @@ test('the viewer shows one file by its absolute path, the home with none, and wh
   await act(async () => client.publish([{ file: 'C:/models/a.step' }]));
   expect(shown).toEqual([null, 'C:/models/a.step']);
 
-  // A file the viewer asks for (a pick in the explorer, a renderer's link) is the host's to show;
+  // A file the viewer asks for (a row of the Project list, a renderer's link) is the host's to show;
   // the file on screen is shown already.
   act(() => props().host.navigation.openFile!('C:\\models\\b.step'));
   act(() => props().host.navigation.openFile!('C:/models/a.step'));
@@ -210,7 +209,7 @@ test("the person's settings and the host's links go to the app menu over every f
   expect(props().appSettings).toBe(appSettings);
   expect(props().host.links).toEqual(expect.objectContaining({ version: '0.7.4' }));
   const home = render(props().presentation!.home as ReactElement);
-  await home.findByRole('heading', { name: 'Recent' });
+  await home.findByRole('heading', { name: 'Home' });
   expect(home.queryByRole('link')).toBeNull();
 });
 
@@ -269,15 +268,51 @@ test("What's new is said over the home, and over a file once its view is up: nev
   act(() => release());
 });
 
-test("a model's Files starts where the explorer was last this tab, else the person's home folder, never the script's", async () => {
-  const client = Object.assign(cadClient(), { serverInfo: vi.fn(async () => ({ home: '/Users/me' })) });
-  const tabStore = createTabStore(memoryTabRecord());
+test("a document in a project has its project's name before its own and its list, read again while it is shown; the name shows the home at the project", async () => {
+  const listed = { id: 'p1', name: 'parts', root: '/models/parts', created: 1, opened: 1, missing: false, truncated: false,
+    documents: [{ path: '/models/parts/a.step', name: 'a.step', kind: 'file', folder: '/models/parts' }] };
+  const base = cadClient();
+  const client = Object.assign(base, { serverInfo: vi.fn(async () => ({ home: '/Users/me' })), project: vi.fn(async () => listed),
+    entryOf: (path: string) => (base.getSnapshot() as unknown as { entries: Record<string, unknown>[] }).entries.find(entry => entry.file === path) ?? null });
+  const shows: string[] = [];
+  const view = (file: string, extra: object = {}) => <CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())}
+    live={createLiveRegistry()} file={file} library={library} onShow={next => shows.push(next)} {...extra} />;
+  const { rerender } = render(view('/models/parts/a.step'));
+  expect(props().project).toBeNull();
+  await act(async () => client.publish([{ id: 'f1', file: '/models/parts/a.step', project: { id: 'p1', name: 'parts', root: '/models/parts' } }]));
+  // Its name from its row, its documents as the client reads them.
+  expect(props().project?.name).toBe('parts');
+  await vi.waitFor(() => expect(props().project?.documents).toEqual(listed.documents));
+  expect(client.project).toHaveBeenCalledWith('p1', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  // Its name shows the home, at that project; the person's home folder says its folder from `~`.
+  act(() => props().project!.onShow());
+  expect(shows.at(-1)).toBe('');
+  rerender(view(''));
+  await vi.waitFor(() => expect((props().presentation!.home as { props: { focus: string; home: string } }).props).toMatchObject({ focus: 'p1', home: '/Users/me' }));
+  // A host with no home has no project to show.
+  rerender(view('/models/parts/a.step', { library: undefined }));
+  expect(props().project).toBeNull();
+});
+
+test("a document in no project offers to import its folder as a project, the chooser starting at its folder (a model's: its script's), and is read again once it is one", async () => {
+  const base = cadClient();
+  const client = Object.assign(base, { entryOf: (path: string) => (base.getSnapshot() as unknown as { entries: Record<string, unknown>[] }).entries
+    .find(entry => entry.file === path || entry.id === path) ?? null });
+  const importFolder = vi.fn(async () => ({ project: { id: 'p1', name: 'parts', root: '/models/parts' }, made: true, folder: '/models/parts' }));
+  const view = (file: string) => <CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())}
+    live={createLiveRegistry()} file={file} library={{ ...library, importFolder }} onShow={() => {}} />;
+  const { rerender } = render(view('/models/parts/a.step'));
+  await act(async () => client.publish([{ id: 'f1', file: '/models/parts/a.step', project: null }]));
+  client.refresh.mockClear();
+  await act(async () => { props().onImportFolder!(); });
+  expect(importFolder).toHaveBeenLastCalledWith('/models/parts');
+  expect(client.refresh).toHaveBeenCalledTimes(1);
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
-  render(<CadViewer client={client as never} host={ports(client)} tabStore={tabStore} live={createLiveRegistry()} file={id} library={library} onShow={() => {}} />);
-  // First, home: nothing was browsed in this tab yet.
-  await vi.waitFor(() => expect(props().explorerFolder).toBe('/Users/me'));
-  // The folder the explorer is in is the tab's, and where Files starts from then on.
-  act(() => props().onExplorerFolderChange!('/Users/me/parts'));
-  expect(tabStore.settings.getSnapshot().explorer.folder).toBe('/Users/me/parts');
-  expect(props().explorerFolder).toBe('/Users/me/parts');
+  rerender(view(id));
+  await act(async () => client.publish([{ id, file: id, sourcePath: null, script: '/models/gear/src/gear.py', project: null }]));
+  await act(async () => { props().onImportFolder!(); });
+  expect(importFolder).toHaveBeenLastCalledWith('/models/gear/src');
+  // In a project already, it has none.
+  await act(async () => client.publish([{ id, file: id, sourcePath: null, script: '/models/gear/src/gear.py', project: { id: 'p2', name: 'gear', root: '/models/gear' } }]));
+  expect(props().project?.name).toBe('gear');
 });

@@ -34,7 +34,7 @@ the phone's. Every primitive and shared class reads them; script that counts pix
 | --- | --- | --- | --- |
 | `--cad-control` (`h-control`, `size-control`) | 28 | 36 | strip and sub-toolbar tiles, navbar buttons, panel tabs, head buttons and settings rows, a tab's actions, Quick Edit's buttons, dropdown triggers, fields |
 | `--cad-icon-button` (`size-icon-button`) | 24 | 36 | small icon buttons (a card's X), a settings card's controls, the `xs` button |
-| `--cad-row` (`min-h-row`), `--cad-row-sm` | 28, 24 | 36 | menu and dropdown items, the panel's tree rows; the explorer's rows |
+| `--cad-row` (`min-h-row`), `--cad-row-sm` | 28, 24 | 36 | menu and dropdown items, the panel's tree rows; a list's rows outside the panel |
 | `--cad-chip` (`h-chip`) | 20 | 28 | chips |
 | `--cad-glyph`, `--cad-glyph-sm` | 16, 14 | 18, 16 | a tile's icon; Quick Edit's action icons, a chip's X button |
 | `--cad-pad` (`px-pad`), `--cad-step` (`gap-step`) | 8, 4 | 10, 4 | a control's side padding; the gap between neighbouring tiles |
@@ -182,7 +182,7 @@ layout, never a surface. Why: chrome reads as chrome over any canvas, light or d
 | --- | --- | --- | --- |
 | Docked chrome | `bg-sidebar` | opaque, a 1px rule on its inner edge | the navbar, the docked panel, a tab's actions row |
 | Floating chrome | `FLOATING_CHROME_SURFACE_CLASS` | the popover colour at 90%, a border, `shadow-md`, `backdrop-blur-sm` | the strip, sub-toolbars, the tool stack, Quick Edit's bar, the bar over picked ink |
-| Popups | `FLOATING_SURFACE_CLASS` | the popover colour at 95%, a border, `shadow-sm`, `backdrop-blur-md` | dropdown lists, tool menus, the app menu, the view's menu, the name menu, chip lists |
+| Popups | `FLOATING_SURFACE_CLASS` | the popover colour at 95%, a border, `shadow-sm`, `backdrop-blur-md` | dropdown lists, tool menus, the app menu, the view's menu, chip lists |
 | Cards | `PANEL_PEEK_CARD_CLASS`, `SettingsCard` | opaque `bg-sidebar`, a border, `shadow-md`, 10px corners | the panel's peek, the Display card, Preview's Settings |
 | On the picture | the picture's scheme | the zoom: the foreground at 6% (10% under the pointer, 14% open), haloed; the update status: the background at 95% | the corner's zoom, the update status; Preview's bar has no surface |
 
@@ -325,7 +325,7 @@ popup, one keyboard and one touch rule, so a fix lands in every picker.
 
 ### Rows
 
-One primitive draws every list in the panel and the explorer: `TreeRowSurface` with `TreeRowGlyph` or
+One primitive draws every list in the panel, the Project list among them: `TreeRowSurface` with `TreeRowGlyph` or
 `TreeRowToggle`, `TreeRowName`, `TreeRowDetail`, `TreeRowActions` and `TreeRowHeading`, long lists through
 `VirtualRows`. Only it sets a row's horizontal geometry: no list pads a row, draws a chevron or sets a text size.
 Why: a fix to the row lands in every list. What a row does: [Trees](viewer-ux.md#trees).
@@ -343,7 +343,6 @@ Why: a fix to the row lands in every list. What a row does: [Trees](viewer-ux.md
   name fades out under them.
 - **A heading** (`TreeRowHeading`) is a muted line the control tall, on the inset, at regular weight. **Placeholder
   rows** (`TreeRowsLoading`) stand on the rows' lines while a tab loads, in the muted colour at 20%.
-- **The explorer's rows** are the same primitive at 24px (36 on a phone) in `text-xs`, 5px in, padding themselves.
 - **Settings rows.** `PanelSelectRow` is a `FieldLabel` and a `ValueDropdown`, the control tall, the dropdown at least
   half the row and 6rem. `PanelSwitchRow` is an optional 16px icon, the label and the switch at the right end; the
   whole row is the switch's label. A parameter with no range is `FileSheetSettingRow`, its field in a 5.5rem column.

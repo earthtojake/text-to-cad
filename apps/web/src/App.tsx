@@ -124,8 +124,8 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     setShownPath(path);
     if (path) void client.changeRecents({ action: 'open', path }).catch(() => {});
   }, [client]);
-  // The home: the library every CAD view shares, and Open with the desktop's chooser where the
-  // server's computer has one. A card's picture is the server's, by name.
+  // The home: the projects and the library every CAD view shares, and Import with the desktop's chooser where the
+  // server's computer has one -- a file, shown, or a folder, opened as a project. A card's picture is the server's, by name.
   const library = useMemo<ModelLibrarySource>(() => ({
     list: () => client.recents(),
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
@@ -135,7 +135,16 @@ export default function App({ client, server, tabStore, language: chosenLanguage
       for (const key of [entry.id, normalizePath(entry.path)]) if (key && entry.name) names.current.set(key, entry.name);
       await show(entry.path);
     },
-    ...(server.pick ? { pick: async () => { const picked = await client.pick(); if (picked) await show(picked); } } : {}),
+    projects: () => client.projects?.() ?? Promise.resolve([]),
+    removeProject: project => client.removeProject?.(project.id) ?? Promise.resolve([]),
+    ...(server.pick ? {
+      pick: async () => { const picked = await client.pick(); if (picked) await show(picked); },
+      importFolder: async (start?: string) => {
+        const folder = await client.pick({ folder: true, start });
+        if (!folder || !client.openProject) return null;
+        return { ...await client.openProject(folder), folder };
+      },
+    } : {}),
   }), [client, server.pick, show]);
   const appearance = useTabAppearance(tabStore);
   const changeColorScheme = useCallback((value: string) => tabStore.settings.update({ appearance: value as Appearance }), [tabStore]);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Box, Ellipsis, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
+import { Box, ChevronDown, Ellipsis, Folder, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
 import { Button } from "../primitives/button.jsx";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../primitives/alert-dialog.jsx";
 import { ValueDropdown } from "../primitives/value-dropdown.jsx";
@@ -15,7 +15,7 @@ import type { EntryAction } from "../file-viewer/navigation/index.js";
 import type { FileActions } from "../file-viewer/types.js";
 import { useControlUsage } from "../usage/controls.js";
 import { useNavbarSlots } from "../file-viewer/navbarSlots.js";
-import { activityLabel, ageLabel } from "../lib/age.js";
+import { activityLabel, ageLabel, lastActivity } from "../lib/age.js";
 import logo from "../assets/logo-c.svg";
 
 /** A model someone opened: kept by the host, which also says where it is shown from. */
@@ -48,6 +48,34 @@ export interface LibraryModel {
    * not say), which a row removes from the list, the file untouched.
    */
   kind?: "file" | "model" | "shape";
+  /** The id of the project it is in (`LibraryProject`): its section's; none, a standalone document's. */
+  project?: string | null;
+}
+
+/** A folder a person opened as a project, with its documents, as the host lists it (a CAD host's `CadProject`). */
+export interface LibraryProject<Model extends LibraryModel = LibraryModel> {
+  id: string;
+  /** Its folder's name. */
+  name: string;
+  /** Its folder, `/`-separated. */
+  root: string;
+  /** When it was last opened as a project, in seconds. */
+  opened: number | null;
+  /** Its folder is gone: listed, until the person removes it. */
+  missing: boolean;
+  /** Its models, then its CAD files, as the host lists them. */
+  documents: readonly Model[];
+  /** The host's walk of its folder stopped early: not every file of it is listed. */
+  truncated?: boolean;
+}
+
+/** What came of Import's Folder: the project the folder chosen is, whether it was made now, and that folder. */
+export interface ImportedProject {
+  project: { id: string; name: string; root: string };
+  /** False: the folder was a project already, or is inside the one answered. */
+  made: boolean;
+  /** The folder the person chose, `/`-separated. */
+  folder: string;
 }
 
 /** Whether a row deletes the model (a document built from code) rather than removing a file from the list. */
@@ -88,10 +116,40 @@ export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
   thumbnail(model: Model): Promise<string | null>;
   open(model: Model): Promise<void>;
   /**
-   * Open: choose a file with the desktop's own file chooser, and show it. A host on a computer with
-   * no chooser has none, and the Home no Open.
+   * Import's File: choose a file with the desktop's own file chooser, and show it. A host on a computer with
+   * no chooser has none, and the Home's Import no File.
    */
   pick?(): Promise<void>;
+  /** The projects, the latest activity first, each with its documents. A host with none lists none. */
+  projects?(): Promise<readonly LibraryProject<Model>[]>;
+  /**
+   * Import's Folder: a folder chosen with the desktop's chooser -- opening in `start` where one is named -- opened as
+   * a project; null when the person cancels. A host on a computer with no chooser has none.
+   */
+  importFolder?(start?: string): Promise<ImportedProject | null>;
+  /** Remove from CAD: the project's record alone, nothing in its folder. The projects as they now are. */
+  removeProject?(project: LibraryProject<Model>): Promise<readonly LibraryProject<Model>[]>;
+}
+
+/** How many of a project's documents its section shows before its Show all. */
+export const PROJECT_TILES = 8;
+
+/**
+ * A project's documents as its section lists them: pinned first, then its models before its files, each by last
+ * activity (when it was last opened or changed), newest first; the host's order where two tie.
+ */
+export function projectOrder<Model extends LibraryModel>(documents: readonly Model[]): Model[] {
+  return documents.map((item, index) => ({ item, index })).sort((a, b) => Number(b.item.pinned) - Number(a.item.pinned)
+    || Number(deletes(b.item)) - Number(deletes(a.item)) || (lastActivity(b.item) ?? 0) - (lastActivity(a.item) ?? 0) || a.index - b.index)
+    .map(({ item }) => item);
+}
+
+/** `path` as the home says it: from `~` where it is in the person's home folder (`home`). */
+export function tildePath(path: string, home?: string | null): string {
+  const base = (home ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
+  const shown = path.replace(/\\/g, "/");
+  if (!base) return shown;
+  return shown === base ? "~" : shown.startsWith(`${base}/`) ? `~${shown.slice(base.length)}` : shown;
 }
 
 /** A card wants a picture: it has none, or it was updated (a file written, a model run) since it was taken. */
@@ -185,52 +243,74 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
     </li>)}</ul>;
 }
 
+
 /**
- * The host's home: the models opened before, from every view, to open again. The viewer's navbar
- * is over it (its logo's app menu, the host's update and Full size, as over a file); the host's
- * links are that menu's. The page is a centred column (1128px at most, on its own 24px gutters). It
- * starts with its control row, one line of 24px controls: at the
- * left "Recent", the page's heading (the Home's one larger text); at the right the type filter ("All ▾": All, Models, Files),
- * there where models and files are both listed, the search, the grid/list switch and, where the host
- * has a chooser, Open, all there with no models yet too. Then the documents, pinned first, as cards (a picture over the kind's
- * glyph, the name and its last activity with its verb: "Edited 2m ago", "Viewed 16m ago") or as rows
- * (Name, Updated, Created), every
- * model a card and a row of its own: its name, its glyph and its age, never where it was built
- * from. Each card has one ⋯ menu: Open, a file's Copy path and Reveal where the host can (a model
- * has neither), Pin or Unpin, then Delete, which asks first (an AlertDialog saying what
- * goes and what stays on disk) and takes the card off the list at once; a pinned card shows its pin. It is the
- * library and Open: nothing else opens a file from here. It is drawn on the navbar's colour.
+ * The host's home: the projects, each with its documents, then the standalone documents opened before, from every
+ * view, to open again. The viewer's navbar is over it (its logo's app menu, the host's update and Full size, as over a
+ * file); the host's links are that menu's. The page is a centred column (1128px at most, on its own 24px gutters). It
+ * starts with its control row, one line of 24px controls: at the left "Home", the page's heading (the Home's one larger
+ * text); at the right the type filter ("All ▾": All, Models, Files), there where models and files are both listed, the
+ * search, the grid/list switch and, where the host has a chooser, Import (its File and its Folder), all there with
+ * nothing yet too.
  *
- * Nothing waits unseen. While the list is read, placeholder cards (or rows) stand where the models
- * will be. A model being opened shows a spinner over its picture, and the library takes no other
- * open until the host has opened it or failed to. A card on screen that wants a picture
- * (`wantsPicture`) is handed to `picture`, where the viewer draws one out of sight — one card at a
- * time, each once while the page is up — and the list is read again once one is kept.
+ * Then each project (`projects`: a folder a person opened as one), the latest activity first: a section headed by its
+ * name, its folder (from `~`) and its ⋯ (Copy path, Reveal, Remove from CAD, which forgets the project and nothing on
+ * disk), then its documents -- pinned first, its models, then its files, each by last activity -- `PROJECT_TILES` of
+ * them until its Show all. Then the standalone documents, those in no project, pinned first, under "Standalone" where
+ * there are projects. Each document is a card (a picture over the kind's glyph, the name and its last activity with its
+ * verb: "Edited 2m ago", "Viewed 16m ago") or a row (Name, Updated, Created): its name, its glyph and its age, never
+ * where it was built from. Each has one ⋯ menu: Open, a file's Copy path and Reveal where the host can (a model has
+ * neither), Pin or Unpin, then Delete, which asks first (an AlertDialog saying what goes and what stays on disk) and
+ * takes the card off the list at once; a pinned card shows its pin. A project's file is listed for being in its folder:
+ * it has no Delete, and a Pin once a page has opened it. A search and the type filter narrow every section, a section
+ * with nothing left gone. It is drawn on the navbar's colour.
+ *
+ * `focus` (a project's id: the navbar's project name, pressed) brings that project's section into view, marked, as
+ * Import's Folder does the project it opened, with a line saying what came of it.
+ *
+ * Nothing waits unseen. While the list is read, placeholder cards (or rows) stand where the documents will be. A
+ * document being opened shows a spinner over its picture, and the library takes no other open until the host has
+ * opened it or failed to. A card on screen that wants a picture (`wantsPicture`) is handed to `picture`, where the
+ * viewer draws one out of sight — one card at a time, each once while the page is up — and the list is read again
+ * once one is kept.
  */
-export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, picture, fileActions }: {
+export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, picture, fileActions, focus = null, home = null }: {
   library: ModelLibrarySource<Model>;
-  /** What the host can do with a file on disk (Copy path, Reveal): each file's menu offers it. */
+  /** What the host can do with a file on disk (Copy path, Reveal): each file's menu offers it, and each project's. */
   fileActions?: FileActions;
   /** Grid or list; the host keeps the choice (the tab's settings). */
   layout?: LibraryLayout;
   onLayoutChange?(layout: LibraryLayout): void;
   /** Draw and keep a model's picture; true once it is kept. */
   picture?(model: Model): Promise<boolean>;
+  /** The project to bring into view: the navbar's project name was pressed over one of its documents. */
+  focus?: string | null;
+  /** The person's home folder, where the host knows it: a project's folder is said from `~` in it. */
+  home?: string | null;
 }) {
   const [items, setItems] = useState<readonly Model[] | null>(null);
+  const [projects, setProjects] = useState<readonly LibraryProject<Model>[] | null>(null);
   const [query, setQueryState] = useState("");
   // What a person does on the home, counted (`usage/controls.js`): a search begun, never what it looks for.
   const usage = useControlUsage();
   const setQuery = (next: string) => { if (!query.trim() && next.trim()) usage.used("home_search"); setQueryState(next); };
   const [error, setError] = useState("");
+  // What came of the last Import's Folder or Remove from CAD, in a line under the controls.
+  const [note, setNote] = useState("");
   const { t, locale } = useI18n();
   // The host's library as it is now: a host may hand a new one each render.
   const current = useRef(library);
   current.current = library;
   const images = useRef(new Map<string, Promise<string | null>>());
-  // The same list again is not news: the cards keep their state and are not drawn again.
-  const refresh = useCallback(() => current.current.list().then(next =>
-    setItems(previous => previous && JSON.stringify(previous) === JSON.stringify(next) ? previous : next)), []);
+  // The same list again is not news: the cards keep their state and are not drawn again. The projects are read with
+  // it (`readProjects`); a read of them that fails keeps the ones shown.
+  const readProjects = useCallback(() => (current.current.projects ? current.current.projects().then(found => found, () => undefined)
+    : Promise.resolve([])).then(found => {
+    if (found !== undefined) setProjects(previous => previous && JSON.stringify(previous) === JSON.stringify(found) ? previous : found);
+  }), []);
+  const refresh = useCallback(() => Promise.all([current.current.list(), readProjects()]).then(([next]) => {
+    setItems(previous => previous && JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+  }), [readProjects]);
   // Read on mount, again every couple of seconds while the home is up (a model rebuilt meanwhile
   // is updated later than its picture, and is pictured again), and when the page is shown.
   useEffect(() => {
@@ -275,7 +355,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     return image;
   }, []);
   const fail = (failure: unknown) => setError(message(failure));
-  // The model being opened: the host may take a moment, and a second press must not open twice.
+  // The document being opened: the host may take a moment, and a second press must not open twice.
   const [opening, setOpening] = useState<string | null>(null);
   const open = (item: Model) => {
     if (opening) return;
@@ -284,9 +364,35 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     setOpening(item.path);
     void current.current.open(item).catch(fail).finally(() => setOpening(null));
   };
-  // Open, at the control row's right end: the host's chooser, where its computer has one.
-  const pick = library.pick ? () => { usage.used("home_pick"); setError(""); void current.current.pick?.().catch(fail); } : null;
-  const change = (action: "pin" | "unpin" | "remove" | "delete", item: Model) => current.current.change(action, item).then(setItems, fail);
+  // The project brought into view and marked: the one the host names (`focus`), or the one Import's Folder opened.
+  const [focused, setFocused] = useState<string | null>(focus);
+  useEffect(() => { if (focus) setFocused(focus); }, [focus]);
+  const sections = useRef(new Map<string, HTMLElement>());
+  // Once its section is drawn: a project Import's Folder just opened is listed a moment after it is named.
+  const focusListed = Boolean(focused && projects?.some(project => project.id === focused));
+  useEffect(() => {
+    if (focused && focusListed) sections.current.get(focused)?.scrollIntoView?.({ block: "start" });
+  }, [focused, focusListed]);
+  // Import, at the control row's right end: the host's chooser of a file (shown as it is chosen) or of a folder (opened
+  // as a project, brought into view and said), where its computer has one.
+  const importFile = library.pick ? () => { usage.used("home_pick"); setError(""); setNote(""); void current.current.pick?.().catch(fail); } : null;
+  const importFolder = library.importFolder ? () => {
+    usage.used("home_import_folder");
+    setError("");
+    setNote("");
+    void current.current.importFolder?.().then(imported => {
+      if (!imported) return;
+      const { project, made, folder } = imported;
+      setFocused(project.id);
+      setNote(made ? t("home.projectMade", { name: project.name })
+        : folder.replace(/\/+$/, "") === project.root.replace(/\/+$/, "") ? t("home.projectAgain", { name: project.name })
+          : t("home.projectInside", { name: folder.split("/").filter(Boolean).pop() ?? folder, project: project.name }));
+      return refresh();
+    }).catch(fail);
+  } : null;
+  // A change answers the library as it now is; a project's documents, which it may have changed too, are read again.
+  const change = (action: "pin" | "unpin" | "remove" | "delete", item: Model) => current.current.change(action, item)
+    .then(next => { setItems(next); void readProjects(); }, fail);
   // Delete, once the person says so: a model's (or a shape's) document and its record, that model
   // alone; a file's record alone, the file kept. The card leaves the list at once.
   const [confirming, setConfirming] = useState<Model | null>(null);
@@ -298,46 +404,93 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   };
   const all = (items ?? []).filter(item => !gone.has(item.path));
   const [kind, setKind] = useState<LibraryKind>("all");
-  // Home's navbar (`file-viewer/navbarSlots.js`): "Recent" and its count, the search and Open go there, on the grid's
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  // Home's navbar (`file-viewer/navbarSlots.js`): its heading, the search and Import go there, on the grid's
   // column; where there is no navbar they stand in the page's own first row.
   const slots = useNavbarSlots();
   // A narrow navbar (under 700px: `styles/globals.css`) shows the search as its icon until it is pressed.
   const [searchOpen, setSearchOpen] = useState(false);
-  // The host lists pinned models first; a search and the type filter keep that order.
-  const shown = shownModels(all, query, kind);
+  const filtering = Boolean(query.trim()) || kind !== "all";
+  // Each project's documents, and the standalone ones: those of no project the home lists.
+  const known = new Set((projects ?? []).map(project => project.id));
+  const projectSections = (projects ?? []).map(project => {
+    const documents = projectOrder(project.documents.filter(item => !gone.has(item.path)));
+    return { project, documents, matching: shownModels(documents, query, kind) };
+  });
+  const standalone = all.filter(item => !item.project || !known.has(item.project));
+  // The host lists pinned documents first; a search and the type filter keep that order.
+  const shown = shownModels(standalone, query, kind);
   // The type filter is there only where there is something to tell apart: models and files both listed.
-  const kinds = all.some(deletes) && all.some(item => !deletes(item));
+  const everything = [...all, ...projectSections.flatMap(section => section.documents)];
+  const kinds = everything.some(deletes) && everything.some(item => !deletes(item));
   const now = Date.now();
   // What the host can do with a card's document: Copy path, Copy link and Reveal for a file on disk;
-  // a model is no file, and takes Copy link alone (its page needs no file).
+  // a model is no file, and takes Copy link alone (its page needs no file). A project's folder: Copy path and Reveal.
   const fileItems = entryMenu(fileActions?.platform ?? "linux", new Set(Object.keys(fileActions?.perform ?? {}) as EntryAction[]), t);
   const modelItems = fileItems.filter(entry => entry.action === "copy-link");
+  const folderItems = fileItems.filter(entry => entry.action === "copy-path" || entry.action === "reveal");
   const HOME_CONTROLS = { "copy-path": "home_copy_path", "copy-link": "home_copy_link", reveal: "home_reveal" } as const;
+  const PROJECT_CONTROLS = { "copy-path": "home_project_copy_path", reveal: "home_project_reveal" } as const;
   const perform = (action: EntryAction, item: Model) => {
     if (action in HOME_CONTROLS) usage.used(HOME_CONTROLS[action as keyof typeof HOME_CONTROLS]);
     void Promise.resolve(fileActions?.perform?.[action]?.({ path: item.path, kind: "file", ...(item.id ? { id: item.id } : {}) })).catch(fail);
   };
   // A card's pin and its one menu (Open, what the host can do with a file on disk, Pin or Unpin, then
   // Delete), there while the pointer is on the card (Figma's star): the pin toggles, and a pinned
-  // card shows it, filled, whatever the pointer does.
+  // card shows it, filled, whatever the pointer does. A project's file has no Delete (its folder lists it), and a Pin
+  // once a page has opened it (its record).
   // Pin or Unpin, from the card's pin or its menu: counted alike.
   const pin = (item: Model) => { usage.used(item.pinned ? "home_unpin" : "home_pin"); void change(item.pinned ? "unpin" : "pin", item); };
-  const actions = (item: Model) => <div className="cad-library-actions" data-pinned={item.pinned || undefined}>
-    <Button variant="ghost" size="icon-xs" className="cad-library-pin" aria-label={t(item.pinned ? "home.unpin" : "home.pin")} aria-pressed={item.pinned}
-      onClick={() => pin(item)}><Pin aria-hidden="true" fill={item.pinned ? "currentColor" : "none"} /></Button>
+  const actions = (item: Model, inProject: boolean) => {
+    const pinnable = !inProject || deletes(item) || item.pinned || item.opened !== null;
+    const deletable = !inProject || deletes(item);
+    return <div className="cad-library-actions" data-pinned={item.pinned || undefined}>
+      {pinnable ? <Button variant="ghost" size="icon-xs" className="cad-library-pin" aria-label={t(item.pinned ? "home.unpin" : "home.pin")} aria-pressed={item.pinned}
+        onClick={() => pin(item)}><Pin aria-hidden="true" fill={item.pinned ? "currentColor" : "none"} /></Button> : null}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon-xs" aria-label={t("home.actionsAria", { name: item.name })}><Ellipsis aria-hidden="true" /></Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-40">
+          <DropdownMenuItem disabled={item.missing} onSelect={() => open(item)}>{t("home.menuOpen")}</DropdownMenuItem>
+          {(deletes(item) ? modelItems : fileItems).map(entry => <DropdownMenuItem key={entry.action} onSelect={() => perform(entry.action, item)}>{entry.label}</DropdownMenuItem>)}
+          {pinnable ? <DropdownMenuItem onSelect={() => pin(item)}>{t(item.pinned ? "home.unpin" : "home.pin")}</DropdownMenuItem> : null}
+          {deletable ? <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(item)}>{t("home.delete")}</DropdownMenuItem>
+          </> : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>;
+  };
+  // A project's ⋯: its folder's Copy path and Reveal where the host can, then Remove from CAD, which forgets the project
+  // alone (no question: nothing on disk changes, and opening the folder again brings it back).
+  const removeProject = library.removeProject ? (project: LibraryProject<Model>) => {
+    usage.used("home_project_remove");
+    setError("");
+    void current.current.removeProject?.(project).then(next => {
+      setProjects(next);
+      setNote(t("home.projectRemoved", { name: project.name }));
+      return refresh();
+    }).catch(fail);
+  } : null;
+  const projectMenu = (project: LibraryProject<Model>) => folderItems.length || removeProject ? <div className="cad-library-section-actions">
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-xs" aria-label={t("home.actionsAria", { name: item.name })}><Ellipsis aria-hidden="true" /></Button>
+        <Button variant="ghost" size="icon-xs" aria-label={t("home.projectActionsAria", { name: project.name })}><Ellipsis aria-hidden="true" /></Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-40">
-        <DropdownMenuItem disabled={item.missing} onSelect={() => open(item)}>{t("home.menuOpen")}</DropdownMenuItem>
-        {(deletes(item) ? modelItems : fileItems).map(entry => <DropdownMenuItem key={entry.action} onSelect={() => perform(entry.action, item)}>{entry.label}</DropdownMenuItem>)}
-        <DropdownMenuItem onSelect={() => pin(item)}>{t(item.pinned ? "home.unpin" : "home.pin")}</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(item)}>{t("home.delete")}</DropdownMenuItem>
+        {folderItems.map(entry => <DropdownMenuItem key={entry.action} disabled={entry.action === "reveal" && project.missing} onSelect={() => {
+          usage.used(PROJECT_CONTROLS[entry.action as keyof typeof PROJECT_CONTROLS]);
+          void Promise.resolve(fileActions?.perform?.[entry.action]?.({ path: project.root, kind: "directory" })).catch(fail);
+        }}>{entry.label}</DropdownMenuItem>)}
+        {removeProject ? <>
+          {folderItems.length ? <DropdownMenuSeparator /> : null}
+          <DropdownMenuItem variant="destructive" onSelect={() => removeProject(project)}>{t("home.projectRemove")}</DropdownMenuItem>
+        </> : null}
       </DropdownMenuContent>
     </DropdownMenu>
-  </div>;
+  </div> : null;
   // What Delete asks first: what goes, and what stays on disk; its words stay while the dialog leaves.
   const lastAsked = useRef<Model | null>(null);
   if (confirming) lastAsked.current = confirming;
@@ -374,17 +527,18 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     <span className="cad-library-status" data-column="updated">{item.missing ? t("home.fileUnavailable") : age(item.updated)}</span>
     <span className="cad-library-status" data-column="created">{age(item.created)}</span>
   </>;
-  const models = layout === "list"
-    ? <div className="cad-library-table"><Columns /><ul className="cad-library-list" aria-label={t("home.filesAria")}>{shown.map(item => <li key={item.path} className="cad-library-row" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
+  // One section's documents, as cards or as rows under their header.
+  const documents = (list: readonly Model[], inProject: boolean) => layout === "list"
+    ? <div className="cad-library-table"><Columns /><ul className="cad-library-list" aria-label={t("home.filesAria")}>{list.map(item => <li key={item.path} className="cad-library-row" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
       <div className="cad-library-main">
         <button type="button" className="cad-library-open" disabled={item.missing} aria-label={t("home.openAria", { name: item.name })} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
           {name(item)}
           {columns(item)}
         </button>
-        {actions(item)}
+        {actions(item, inProject)}
       </div>
     </li>)}</ul></div>
-    : <ul className="cad-library-grid" aria-label={t("home.filesAria")}>{shown.map(item => <li key={item.path} className="cad-library-card" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
+    : <ul className="cad-library-grid" aria-label={t("home.filesAria")}>{list.map(item => <li key={item.path} className="cad-library-card" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
       <div className="cad-library-main">
         <button type="button" className="cad-library-open" disabled={item.missing} aria-label={t("home.openAria", { name: item.name })} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
           <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} badge={format(item)} />
@@ -397,13 +551,46 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
             </span>
           </span>
         </button>
-        {actions(item)}
+        {actions(item, inProject)}
       </div>
     </li>)}</ul>;
-  // Open, the host's chooser: neutral, as every control of the row is (never a filled primary).
-  const openButton = (label: string) => <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" onClick={pick ?? undefined}>
-    <FolderOpen className="size-4" aria-hidden="true" />{label}</Button>;
-  const heading = <h1 className="cad-library-heading" data-library-heading={slots ? "navbar" : "page"}>{t("home.recentFiles")}{items !== null && shown.length ? <span className="cad-library-count">{shown.length}</span> : null}</h1>;
+  // Each project, headed by its name, its folder and its ⋯, then its documents up to its Show all; with a search or the
+  // type filter, those that match, every one, and a project with none is left out.
+  const projectNodes = projectSections.map(({ project, documents: listedDocuments, matching }) => {
+    if (filtering && !matching.length) return null;
+    const whole = filtering || expanded.has(project.id);
+    const toggle = () => {
+      if (!expanded.has(project.id)) usage.used("home_project_more");
+      setExpanded(previous => { const next = new Set(previous); if (!next.delete(project.id)) next.add(project.id); return next; });
+    };
+    return <section key={project.id} className="cad-library-section" aria-label={project.name} data-project={project.id}
+      data-focus={focused === project.id || undefined} ref={element => { if (element) sections.current.set(project.id, element); else sections.current.delete(project.id); }}>
+      <div className="cad-library-section-head">
+        <h2 className="cad-library-section-title"><Folder className="cad-library-glyph" aria-hidden="true" /><span className="cad-library-label">{project.name}</span></h2>
+        <span className="cad-library-section-path" title={project.root}>{tildePath(project.root, home)}</span>
+        {projectMenu(project)}
+      </div>
+      {project.missing ? <p className="cad-library-section-empty">{t("home.projectMissing")}</p>
+        : !listedDocuments.length ? <p className="cad-library-section-empty">{t("home.projectEmpty")}</p>
+          : documents(whole ? matching : matching.slice(0, PROJECT_TILES), true)}
+      {!filtering && listedDocuments.length > PROJECT_TILES ? <button type="button" className="cad-library-more" aria-expanded={whole} onClick={toggle}>
+        {whole ? t("home.showFewer") : t("home.showAll", { count: listedDocuments.length })}</button> : null}
+      {project.truncated && whole ? <p className="cad-library-section-empty">{t("home.projectTruncated")}</p> : null}
+    </section>;
+  });
+  const anyProjectShown = projectNodes.some(Boolean);
+  // Import, the host's chooser of a file or a folder: neutral, as every control of the row is (never a filled primary).
+  const importMenu = importFile || importFolder ? <DropdownMenu modal={false}>
+    <DropdownMenuTrigger asChild>
+      <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui">
+        <FolderOpen className="size-4" aria-hidden="true" />{t("home.import")}<ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" /></Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="min-w-40">
+      {importFile ? <DropdownMenuItem onSelect={importFile}>{t("home.importFile")}</DropdownMenuItem> : null}
+      {importFolder ? <DropdownMenuItem onSelect={importFolder}>{t("home.importFolder")}</DropdownMenuItem> : null}
+    </DropdownMenuContent>
+  </DropdownMenu> : null;
+  const heading = <h1 className="cad-library-heading" data-library-heading={slots ? "navbar" : "page"}>{t("home.title")}</h1>;
   // The type filter: the one value dropdown (`primitives/value-dropdown.jsx`), drawn as the row's ghost control.
   const kindMenu: ReactNode = kinds ? <ValueDropdown value={kind} label={t("home.kindsAria")} align={slots ? "start" : "end"}
     options={(["all", "models", "files"] as const).map(value => ({ value, label: t(`home.kind.${value}`) }))}
@@ -425,6 +612,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     <Button variant="ghost" size="icon-xs" className="size-control" aria-label={t("home.grid")} aria-pressed={layout === "grid"} onClick={() => { usage.used("home_layout_grid"); onLayoutChange("grid"); }}><LayoutGrid className="size-4" aria-hidden="true" /></Button>
     <Button variant="ghost" size="icon-xs" className="size-control" aria-label={t("home.list")} aria-pressed={layout === "list"} onClick={() => { usage.used("home_layout_list"); onLayoutChange("list"); }}><List className="size-4" aria-hidden="true" /></Button>
   </div> : null;
+  // Nothing at all yet: no project, no document.
+  const empty = !all.length && !projectSections.length;
   // A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits.
   return <div className="cad-library h-full overflow-y-auto text-ui" data-library-layout={layout}>
     <main className="cad-library-content" aria-label={t("home.modelsAria")}>
@@ -432,7 +621,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
           layout either way, 28px, on the grid's column: the row keeps its shape from the first open to the hundredth. */}
       {slots ? <>
         {slots.left ? createPortal(heading, slots.left) : null}
-        {slots.right ? createPortal(<>{search}{pick ? openButton(t("home.open")) : null}</>, slots.right) : null}
+        {slots.right ? createPortal(<>{search}{importMenu}</>, slots.right) : null}
       </> : null}
       <div className="cad-library-toolbar" data-library-toolbar={slots ? "filters" : "page"}>
         {slots ? (kindMenu ?? <span />) : heading}
@@ -440,20 +629,34 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
           {slots ? null : kindMenu}
           {slots ? null : search}
           {layoutSwitch}
-          {slots || !pick ? null : openButton(t("home.open"))}
+          {slots ? null : importMenu}
         </div>
       </div>
       {error ? <div className="cad-library-error" role="alert"><p>{error}</p></div> : null}
+      {note ? <p className="cad-library-note" role="status">{note}</p> : null}
       {items === null ? <Placeholders layout={layout} />
-        : (query || kind !== "all") && all.length && !shown.length ? <p className="cad-library-empty" role="status">{t("home.noMatchingModels")}</p>
-          : !all.length ? <div className="cad-library-welcome" data-library-empty="">
+        : filtering && !empty && !shown.length && !anyProjectShown ? <p className="cad-library-empty" role="status">{t("home.noMatchingModels")}</p>
+          : empty ? <div className="cad-library-welcome" data-library-empty="">
             <span className="cad-library-welcome-stage"><img src={logo} alt="" draggable={false} /></span>
             <h2 className="cad-library-welcome-title">{t("home.emptyTitle")}</h2>
             <p className="cad-library-welcome-body">{t("home.emptyBody")}</p>
-            {pick ? openButton(t("home.openFile")) : null}
+            {importFile || importFolder ? <div className="cad-library-welcome-actions">
+              {importFile ? <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" onClick={importFile}>
+                <FolderOpen className="size-4" aria-hidden="true" />{t("home.importFileButton")}</Button> : null}
+              {importFolder ? <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" onClick={importFolder}>
+                <Folder className="size-4" aria-hidden="true" />{t("home.importFolderButton")}</Button> : null}
+            </div> : null}
             <p className="cad-library-welcome-formats" aria-hidden="true">{WELCOME_FORMATS}</p>
           </div>
-            : models}
+            : <>
+              {projectNodes}
+              {shown.length ? <section className="cad-library-section" aria-label={t("home.standalone")} data-standalone="">
+                {projectSections.length ? <div className="cad-library-section-head">
+                  <h2 className="cad-library-section-title"><span className="cad-library-label">{t("home.standalone")}</span></h2>
+                </div> : null}
+                {documents(shown, false)}
+              </section> : null}
+            </>}
       {confirm}
     </main>
   </div>;

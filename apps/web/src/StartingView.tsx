@@ -50,7 +50,7 @@ export function StartingView({ error, tabStore }: { error?: Error; tabStore: Tab
   return <div className="fixed inset-0 flex flex-col overflow-hidden" inert data-starting-view="">
     <div className="isolate min-h-0 flex-1">
       <FileViewer file={file} host={host as never} renderers={[]} state={{ renderers: record.files }} onStateChange={NOTHING}
-        explorerFolder="/" presentation={presentation} />
+        presentation={presentation} />
     </div>
   </div>;
 }

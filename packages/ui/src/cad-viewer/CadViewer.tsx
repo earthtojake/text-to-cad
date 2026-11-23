@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ExportControls } from '../export/ExportControls.js';
-import type { CadWorkspaceService } from '@cad/core/client';
+import type { CadProject, CadProjectRef, CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
 import { EmptyState, StatusAction } from '../file-viewer/navigation/index.js';
-import type { AppSetting, ColorSchemeSetting, LanguageSetting, ViewerHistory } from '../file-viewer/types.js';
+import type { AppSetting, ColorSchemeSetting, FileProject, LanguageSetting, ViewerHistory } from '../file-viewer/types.js';
 import { I18nProvider, translator } from '../i18n/index.js';
 import type { ViewerHost } from '../host/types.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
@@ -25,6 +25,41 @@ import { WhatsNewDialog } from '../whats-new/WhatsNewDialog.js';
 const STEP_FILE = /\.(?:step|stp)$/i;
 // The title of a model's document the engine does not hold, by the state it names (any other: not held).
 const NOT_HELD_TITLES: Record<string, string> = { unsaved: "file.notSaved", detached: "file.detached" };
+// How often the project of the document on screen is read again while it is shown: a model built or a file written in
+// it meanwhile joins its list.
+const PROJECT_MS = 3_000;
+
+/**
+ * The project `ref` names (the document on screen's: its catalog row's `project`) with its documents, read through the
+ * client, again every `PROJECT_MS` while the page is shown and as it is shown again; the same answer twice is not news.
+ * null while there is none, and until the first read of it answers.
+ */
+function useProject(client: CadWorkspaceService, ref: CadProjectRef | null | undefined) {
+  const id = ref?.id ?? null;
+  const [read, setRead] = useState<{ id: string; project: CadProject | null; error: string | null } | null>(null);
+  useEffect(() => {
+    const reader = client.project?.bind(client);
+    if (!id || !reader) return undefined;
+    const controller = new AbortController();
+    const load = () => reader(id, { signal: controller.signal }).then(project => {
+      if (controller.signal.aborted) return;
+      setRead(previous => previous?.id === id && JSON.stringify(previous.project) === JSON.stringify(project) && !previous.error
+        ? previous : { id, project, error: null });
+    }, error => {
+      if (controller.signal.aborted) return;
+      setRead(previous => ({ id, project: previous?.id === id ? previous.project : null, error: error instanceof Error ? error.message : String(error) }));
+    });
+    void load();
+    const again = () => { if (document.visibilityState !== 'hidden') void load(); };
+    const timer = setInterval(again, PROJECT_MS);
+    document.addEventListener('visibilitychange', again);
+    return () => { controller.abort(); clearInterval(timer); document.removeEventListener('visibilitychange', again); };
+  }, [client, id]);
+  return read?.id === id ? read : null;
+}
+
+/** The folder a path is in, `/`-separated. */
+const folderOf = (path: string) => path.slice(0, Math.max(path.lastIndexOf('/'), 0)) || '/';
 
 export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   /** The CAD client: the catalog of the files on screen, and every document's resources. */
@@ -58,10 +93,11 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
    */
   onShown?(file: string | null, id: string | null): void;
   /**
-   * The home's library: the models opened before, to open again. A host with one shows it
-   * wherever no file is open, and the navbar's logo leads to it from a file. Without one (a host
-   * whose own navigation shows one file, as a file handler does) a view has a file and nothing else:
-   * no home, no explorer, and no link to another file.
+   * The home's library: the projects and the documents opened before, to open again. A host with one shows it
+   * wherever no file is open, and the navbar's logo leads to it from a file; a document in a project has its project's
+   * name before its own, which leads to the home at that project, and its project's list beside it. Without one (a
+   * host whose own navigation shows one file, as a file handler does) a view has a file and nothing else: no home, no
+   * project, and no link to another file.
    */
   library?: ModelLibrarySource<Model>;
   /**
@@ -181,7 +217,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const viewing = useSyncExternalStore(live.subscribe, live.current, live.current);
   const onScreen = !path || Boolean(viewing);
 
-  // A file the viewer asks for — a pick in the explorer, a renderer's link — is shown by the host.
+  // A file the viewer asks for — a row of the Project list, a renderer's link — is shown by the host.
   // A view with no library shows its file and nothing else: it opens no other, and has no home.
   const openFile = useCallback((next: string) => {
     const wanted = normalizePath(next);
@@ -189,12 +225,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   }, []);
   const homed = Boolean(library);
   const home = useCallback(() => latest.current.onShow(''), []);
-  // The name menu's Recent: the home's library, read through the library the host hands now.
-  const libraryNow = useRef(library);
-  libraryNow.current = library;
-  const recent = useMemo(() => (homed ? { list: () => libraryNow.current?.list() ?? Promise.resolve([]) } : undefined), [homed]);
-  // Where a model's Files starts: the folder the explorer was last in this tab, else the person's
-  // home folder (the server's), never the folder of the script that built it.
+  // The person's home folder (the server's): the home says a project's folder from `~` in it.
   const [homeFolder, setHomeFolder] = useState<string | null>(null);
   useEffect(() => {
     if (!homed) return undefined;
@@ -202,11 +233,30 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     void Promise.resolve().then(() => client.serverInfo({ signal: controller.signal })).then(info => { if (typeof info.home === 'string' && info.home) setHomeFolder(info.home); }, () => {});
     return () => controller.abort();
   }, [client, homed]);
-  const explorerFolder = settings.explorer.folder ?? homeFolder;
-  const keepExplorerFolder = useCallback((folder: string) => {
-    if (preferences.getSnapshot().explorer.folder !== folder) preferences.update({ explorer: { folder } });
-  }, [preferences]);
   const viewerHost = useMemo<ViewerHost>(() => ({ ...host, navigation: homed ? { openFile, home } : {} }), [host, openFile, home, homed]);
+
+  // The project the document on screen is in (its row's, the nearest project above its file or its script): its name
+  // before the document's, which shows the home at that project (`focus`), and its list beside the view. A host with no
+  // home has neither.
+  const [focus, setFocus] = useState<string | null>(null);
+  useEffect(() => { if (path) setFocus(null); }, [path]);
+  const projectRef = homed ? (entry?.project as CadProjectRef | null | undefined) ?? null : null;
+  const projectRead = useProject(client, projectRef);
+  const project = useMemo<FileProject | null>(() => (projectRef ? {
+    id: projectRef.id, name: projectRef.name, root: projectRef.root,
+    documents: projectRead?.project?.documents ?? null, truncated: Boolean(projectRead?.project?.truncated),
+    missing: Boolean(projectRead?.project?.missing), error: projectRead?.project ? null : projectRead?.error ?? null,
+    onShow: () => { setFocus(projectRef.id); latest.current.onShow(''); },
+  } : null), [projectRef?.id, projectRef?.name, projectRef?.root, projectRead]);
+  // A document in no project: its ⋯'s Import its folder as a project, the host's chooser starting at its folder (a
+  // model's script's), so the person picks the level. Its row says the project it is in once the catalog is read again.
+  const importFolder = library?.importFolder;
+  const source = entry ? (entry.sourcePath === null ? (typeof entry.script === 'string' ? entry.script : '') : String(entry.file || '')) : '';
+  const onImportFolder = useMemo(() => (homed && importFolder && source ? () => {
+    void importFolder(folderOf(normalizePath(source))).then(imported => {
+      if (imported) void client.refresh({ markRefreshing: false }).catch(() => {});
+    }).catch(error => onError(error instanceof Error ? error : new Error(String(error))));
+  } : null), [homed, importFolder, source, client, onError]);
 
   // The home's pictures for cards without a current one, drawn out of sight one at a time and kept as
   // the file on screen's are. A STEP or a model's document the engine does not hold is left to
@@ -240,7 +290,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const goHome = useMemo(() => homed ? <StatusAction onClick={home}>{t("file.goHome")}</StatusAction> : null, [homed, home, t]);
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture}
-      fileActions={host.fileActions} /> : undefined,
+      fileActions={host.fileActions} focus={focus} home={homeFolder} /> : undefined,
     // On the viewport's Background as the tab has it, as the view's own cover and its picture are: no flash between them.
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading background={settings.viewportBackground} /></div>,
     // A document named by its id that the engine does not hold says why, and the command that
@@ -251,13 +301,13 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
         title={isDocumentId(path) ? t(NOT_HELD_TITLES[String((error as { state?: unknown } | null)?.state)] ?? "file.notHeld") : t("file.missing")}
         description={isDocumentId(path) ? message : undefined} />
       : <EmptyState title={t("file.openFailed")} description={message} action={goHome} />,
-  }), [library, layout, changeLayout, path, picture, host.fileActions, entry, goHome, t, settings.viewportBackground]);
+  }), [library, layout, changeLayout, path, picture, host.fileActions, focus, homeFolder, entry, goHome, t, settings.viewportBackground]);
   // What a person does on the screen is counted for the host (`usage/controls.js`); never what a picture drawn
   // out of sight does, which is outside it.
   return <I18nProvider locale={locale}>
     <ControlUsageProvider report={host.usage?.controls}>
     <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
-      colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
+      colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} project={project} onImportFolder={onImportFolder} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
     {whatsNew && onScreen ? <WhatsNewDialog entry={whatsNew.entry} onDismiss={whatsNew.onDismiss} /> : null}
     {drawing && !path ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}

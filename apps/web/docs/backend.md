@@ -125,12 +125,19 @@ file to hash it never holds up its deletion: the catalog opens models with delet
 sharing on Windows, and a model that vanishes mid-read gets an empty hash on that
 request and has no row on the next.
 
-The explorer's two reads are `GET /api/v1/local/folder?path=<abs>` (one folder's
-subfolders and CAD files, natural order) and the same with `&q=`
-(the CAD files under a folder whose path below it holds `q`, bounded by matches,
-depth and time, and saying when it stopped early; `cad_server.viewer.folders`). A
-relative path is a 400, a path that is not a folder a 404, one that cannot be
-read a 403.
+Nothing browses the disk but a project's walk (`cad_server.viewer.projects`). A project is a folder a person
+opened as one -- `POST /api/v1/projects` with `{"path"}` (Import's Folder on the home, a standalone document's Import
+its folder as a project), or `cad viewer <folder>` -- kept as one record in the state folder
+(`<state>/projects/<id>.json`, its id derived from the folder's canonical path); nothing is written to the folder. A
+folder inside a project is that project (`made: false`): projects do not nest by accident. The home folder, a folder
+above it and a disk's root are no project (a 400 saying what to open instead); a path that is not a folder is a 404,
+one that is not absolute a 400. A document is in the nearest project above it: a file by its path, a model by its
+script, a shape by where it was handed over. A project's documents are its models (the registry's, whose script is
+in it), by name, then its CAD files, by folder then name: a breadth-first walk of its folder that skips hidden and
+build folders and the folders of the projects inside it, walks no folder twice, and stops at 1000 files, depth 24 or
+1.5 s (`truncated`), kept two seconds so the home and every page's Project list asking each second cost one walk. A
+project's file the home pictures before any page opened it is given a record to keep its picture on, with no
+`opened`: the library lists a file only once a page opened it.
 
 `/api/v1/local/files` (and a file document's `source`) sends only CAD files, and never a file whose own name is hidden:
 a model script, a config, a `.json` beside a model or a key is a 404 whatever path names
@@ -189,22 +196,26 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 
 | Route | Purpose |
 |---|---|
-| `GET /api/v1/server` | Server identity: `app` (`cad-viewer`), `release` (the release the engine runs), `identityToken`, `platform` (which file manager Reveal opens), `user`, `home` (the person's home folder: where a model's Files starts with nowhere else to start), `start` (the folder of the most recent launch, which its relative files are read from), `pick` (whether the home offers Open: the machine has a file chooser), `port`, `pid`; `instance`, a random token of this start of the engine (a page that reconnects to another reloads); and `kinds` (`reads`, the document kinds, and `exports`, each kind's formats). |
+| `GET /api/v1/server` | Server identity: `app` (`cad-viewer`), `release` (the release the engine runs), `identityToken`, `platform` (which file manager Reveal opens), `user`, `home` (the person's home folder: a page says a path in it from `~`, and it is no project), `start` (the folder of the most recent launch, which its relative files and folders are read from), `pick` (whether the home offers Import: the machine has a chooser), `port`, `pid`; `instance`, a random token of this start of the engine (a page that reconnects to another reloads); and `kinds` (`reads`, the document kinds, and `exports`, each kind's formats). |
 | `GET`/`PUT /api/v1/settings` | The person's settings, one for every CAD view: `{language: {locale}, telemetry: {share, reason, policy}}` (`cad_server/language.py`; whether usage stats are sent, and why: nothing asks). PUT takes part of it, `{language: {locale}}` (null is Automatic), `{telemetry: {share}}` (the app menu's toggle; `saved` says whether it was kept), and answers the whole; it takes what GET answers, the read-only `reason` and `policy` ignored, so a page puts back what it read with one value changed. `telemetry` is null on a server that keeps no usage stats. |
 | `GET /api/v1/look`, `/api/v1/look/environment` | The look the regular display modes are drawn in, and its Radiance image. |
-| `GET /api/v1/documents` | The model library every CAD view shares, `{documents}`: pinned first, then by last activity; each row with `opened` (when a page last opened it) and `updated` (a file's time on disk, a model's run: a script is never read for it), its document's `id`, `kind` and `api`, and its record's kind (`record`: `file`, `model`, `shape`). `?kind=`, `?q=` (in its name or path), `?limit=`; `?path=<abs>` one file's envelope (above). `GET /api/v1/documents/<kind>` is that kind's rows. |
+| `GET /api/v1/documents` | The model library every CAD view shares, `{documents}`: pinned first, then by last activity; each row with `opened` (when a page last opened it) and `updated` (a file's time on disk, a model's run: a script is never read for it), its document's `id`, `kind` and `api`, its record's kind (`record`: `file`, `model`, `shape`), and the id of the project it is in (`project`, null for a standalone one). `?kind=`, `?q=` (in its name or path), `?limit=`; `?path=<abs>` one file's envelope (above). `GET /api/v1/documents/<kind>` is that kind's rows. |
 | `POST /api/v1/documents` | `{path}` (or `{id}`): a file opened as a document (above). |
 | `PATCH /api/v1/documents` | `{action, path, png?}`: `open` (an existing CAD file on screen, counted for analytics; a model's id, whose record notes the time), `pin`, `unpin`, `remove` (a file's record, the file kept), `delete` (a model's document and record: the engine's `delete`), `thumbnail`; answers the library as it now is. |
-| `GET /api/v1/documents/<id>` | The document's envelope (above), or a 404 saying why. |
+| `GET /api/v1/documents/<id>` | The document's envelope (above), or a 404 saying why. Its row (`entry`) says the project it is in, `{id, name, root}` or null (`project`), so its digest moves when the project does. |
+| `GET /api/v1/projects` | The projects, `{projects}`, the latest activity first (when each was last opened as one, or one of its documents opened, built or written): each `{id, name, root, created, opened, missing, documents, truncated}`, its documents rows as `GET /api/v1/documents` lists them, each with its `project`. |
+| `POST /api/v1/projects` | `{path}`, a folder's absolute path, opened as a project: `201 {project, made: true}`, or `200 {project, made: false}` with the project it already is or is inside. 400 for the home folder, one above it or a disk's root; 404 for no folder. |
+| `GET /api/v1/projects/<id>` | One project and its documents, as the list has it; 404 for no such project. |
+| `DELETE /api/v1/projects/<id>` | The project forgotten: its record alone, nothing in its folder; its documents are standalone again. Answers the projects as they now are. |
 | `DELETE /api/v1/documents/<id>` | A model's document and record deleted (the engine's `delete`); a file's record forgotten, the file kept. 204. |
 | `GET /api/v1/documents/<id>/version` | Its version, waited on (`?after=&wait=&progress=`): the engine's version wait. |
 | `GET /api/v1/documents/<id>/thumbnail` | Its library picture (`?v=` its name, which the page sends to keep an older one out of a cache). |
 | `POST /api/v1/documents/<id>/exports` | An export of it (below). |
 | `GET /api/v1/documents/<kind>/<id>/...` | Its kind's reads: a model's, an `.xbf`'s and a STEP's `structure`, `parts/<key>` (and `faces\|edges\|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`, `POST mesh`; a DXF's `drawing` (below); a KiCad board's `plot` and `drc`, and a schematic's `plot` (`cad_server.viewer.plots`; the payload is `@cad/core`'s `docs/plot-payload.md`); a robot description's `structure` (`cad_server.robot_payload`: its articulation, its visuals at rest) and `parts/<hash>`, a primitive the engine meshed, by its digest; and every file's `source`, its bytes. |
 | `GET /api/v1/local/files?path=...` | A CAD file's bytes, by its absolute path (a robot's link mesh, a file a model's file names beside it). |
-| `GET /api/v1/local/folder?path=...[&q=...]` | One folder's subfolders and CAD files; with `q`, the CAD files under it whose path holds `q`, bounded. |
+| `GET /api/v1/local/folder?path=...[&q=...]` | One folder's subfolders and CAD files; with `q`, the CAD files under it whose path holds `q`, bounded (`cad_server.viewer.folders`). The explorer's, which projects replaced: no view reads it, and v1 keeps every route it has. |
 | `POST /api/v1/local/reveal` | `{path}`: show a file in the desktop's file manager. |
-| `POST /api/v1/local/pick` | Open the machine's own file chooser (`cad_server._internal.picker`) and answer the file picked; the home offers it where the server's `pick` says there is one. |
+| `POST /api/v1/local/pick` | Open the machine's own chooser (`cad_server._internal.picker`) and answer the file picked, `{path}` or `{cancelled: true}`; with `{folder: true, start?}`, a folder, the chooser opening in `start` (an absolute folder) where it is named. The home's Import offers it where the server's `pick` says there is one. |
 | `POST /api/v1/local/clipboard` | A PNG onto this machine's clipboard: the web page's picture copy, which asks the browser for no permission. |
 | `GET /api/v1/local/link` | `{link, expires}`: the link (the same text every call until the token is rotated) the page writes into its own address (`token=`), so the address copied into another browser on this machine opens the same page (`src/host/addressLink.js`). The page's alone: a CAD card's tunnel never reaches it. |
 | `POST /api/v1/local/activity` | What the page did, for telemetry: `{touched: true}`, a person touched it; `{quickEdit: true}`, a Quick Edit went; `{controls: [{control, count, seconds}]}`, the view controls used (names from `cad_server.analytics.CONTROLS`); `{crash}`, the page crashed (core's `crashOf`: its type and frames, checked again by the server, never a message). Its body may run to 16 KiB. |

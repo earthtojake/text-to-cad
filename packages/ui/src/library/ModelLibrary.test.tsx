@@ -5,7 +5,7 @@ import { ModelLibrary } from '../../dist/library/ModelLibrary.js';
 import { activityLabel, ageLabel, lastActivity } from '../../dist/lib/age.js';
 import { ControlUsageProvider } from '../../dist/usage/controls.js';
 import { ViewerHostContext } from '../../dist/host/context.js';
-import type { LibraryModel, ModelLibrarySource } from './ModelLibrary.js';
+import type { LibraryModel, LibraryProject, ModelLibrarySource } from './ModelLibrary.js';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -32,54 +32,58 @@ async function menu(name: string) {
 }
 const items = (open: HTMLElement) => within(open).getAllByRole('menuitem').map(item => item.textContent);
 
-it('starts with its control row: Recent at the left, the search and the grid/list switch at the right, and no wordmark or links (the app menu\'s)', async () => {
+it('starts with its control row: Home at the left, the search and the grid/list switch at the right, and no wordmark or links (the app menu\'s)', async () => {
   render(<ModelLibrary library={library([])} onLayoutChange={() => {}} />);
-  await screen.findByText('Nothing opened yet');
+  await screen.findByText('Nothing here yet');
   const main = screen.getByRole('main', { name: 'CAD models' });
   const row = main.firstElementChild!;
-  expect(row.querySelector('h1')?.textContent).toBe('Recent');
+  expect(row.querySelector('h1')?.textContent).toBe('Home');
   expect([...row.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Search models', 'Grid', 'List']);
   // The search keeps its placeholder; every control is the scale's control (28px), its icons 16px.
   expect(screen.getByRole('searchbox', { name: 'Search models' }).getAttribute('placeholder')).toBe('Search');
   expect(screen.getByRole('searchbox', { name: 'Search models' }).className).toContain('h-control');
   expect(['Grid', 'List'].map(name => [screen.getByRole('button', { name }).className.includes('size-control'),
     screen.getByRole('button', { name }).querySelector('svg')?.getAttribute('class')?.includes('size-4')])).toEqual([[true, true], [true, true]]);
-  // No count with nothing listed; the one picture is the welcome's C mark.
+  // No count; the one picture is the welcome's C mark.
   expect(row.querySelector('.cad-library-count')).toBeNull();
   expect([...main.querySelectorAll('img')].map(image => Boolean(image.closest('[data-library-empty]')))).toEqual([true]);
   expect(screen.queryByRole('navigation')).toBeNull();
   expect(screen.queryByRole('link')).toBeNull();
 });
 
-it('ends its control row in Open where the host has a chooser, counted, and none where it has not', async () => {
+it('ends its control row in Import where the host has a chooser -- a file, or a folder opened as a project -- counted, and none where it has not', async () => {
   const reports: { control: string; count: number; seconds: number }[][] = [];
   const pick = vi.fn(async () => {});
-  const view = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={library([], { pick })} onLayoutChange={() => {}} /></ControlUsageProvider>);
-  await screen.findByText('Nothing opened yet');
+  const importFolder = vi.fn(async () => null);
+  const view = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={library([], { pick, importFolder })} onLayoutChange={() => {}} /></ControlUsageProvider>);
+  await screen.findByText('Nothing here yet');
   const row = screen.getByRole('main', { name: 'CAD models' }).firstElementChild!;
-  // Last of the row, after the grid/list switch: the folder icon, "Open", 28px as its neighbours, neutral (never a filled primary).
-  expect([...row.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label') ?? node.textContent)).toEqual(['Search models', 'Grid', 'List', 'Open']);
-  const open = screen.getByRole('button', { name: 'Open', exact: true });
-  expect([open.getAttribute('data-variant'), open.className.includes('h-control'), Boolean(open.querySelector('svg.lucide-folder-open'))]).toEqual(['outline', true, true]);
-  await act(async () => { fireEvent.click(open); });
+  // Last of the row, after the grid/list switch: the folder icon, "Import", 28px as its neighbours, neutral (never a filled primary).
+  expect([...row.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label') ?? node.textContent)).toEqual(['Search models', 'Grid', 'List', 'Import']);
+  const trigger = screen.getByRole('button', { name: 'Import', exact: true });
+  expect([trigger.getAttribute('data-variant'), trigger.className.includes('h-control'), Boolean(trigger.querySelector('svg.lucide-folder-open'))]).toEqual(['outline', true, true]);
+  await act(async () => { fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  expect(items(await screen.findByRole('menu'))).toEqual(['File…', 'Folder…']);
+  await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'File…' })); });
   expect(pick).toHaveBeenCalledTimes(1);
-  // With nothing opened yet, the welcome's Open file is the same chooser.
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Open file' })); });
-  expect(pick).toHaveBeenCalledTimes(2);
+  // With nothing yet, the welcome's Import file and Import folder are the same choosers.
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Import file' })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Import folder' })); });
+  expect([pick.mock.calls.length, importFolder.mock.calls.length]).toEqual([2, 1]);
   view.unmount();
-  expect(reports.flat()).toEqual([{ control: 'home_pick', count: 2, seconds: 0 }]);
+  expect(reports.flat()).toEqual([{ control: 'home_pick', count: 2, seconds: 0 }, { control: 'home_import_folder', count: 1, seconds: 0 }]);
 });
 
 it('opens and pins through the host, and with nothing yet says how a file gets here', async () => {
   render(<ModelLibrary library={library([])} onLayoutChange={() => {}} />);
   // The toolbar keeps its search and layout switch with nothing to list yet; the page welcomes: the
-  // title, one line, and no Open file where the host has no chooser.
-  expect(await screen.findByRole('heading', { name: 'Nothing opened yet' })).toBeTruthy();
-  expect(screen.getByText('Open a CAD file, or ask your agent to make a model.')).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Open file' })).toBeNull();
+  // title, one line, and no Import where the host has no chooser.
+  expect(await screen.findByRole('heading', { name: 'Nothing here yet' })).toBeTruthy();
+  expect(screen.getByText('Import a file or a folder, or ask your agent to build a model.')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Import file' })).toBeNull();
   expect(screen.getByRole('searchbox', { name: 'Search models' })).toBeTruthy();
   expect(screen.getByRole('group', { name: 'Layout' })).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Open', exact: true })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Import', exact: true })).toBeNull();
   cleanup();
 
   const inPlace = library([model('a.step'), model('b.stl', { missing: true })]);
@@ -524,15 +528,115 @@ it("shows every card's light picture in both themes, never turned, and badges it
   expect(['video.kicad_pcb', 'plate.dxf', 'arm'].map(name => picture(name).querySelector('.cad-library-format')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'Model']);
 });
 
-// A file's size, the server's, goes before its age; a model has none; the count beside Recent is what is shown.
-it("says a file's size before its age, a model's age alone, and counts what is shown beside Recent", async () => {
+// A file's size, the server's, goes before its age; a model has none.
+it("says a file's size before its age, and a model's age alone", async () => {
   const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
   const now = Date.now() / 1000;
   render(<ModelLibrary library={library([model('plate.step', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 1_700_000 }),
     model('tiny.stl', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 900 }), model('arm', { path: id, kind: 'model', opened: null, updated: now - 2 * 3600 })])} />);
   const status = async (name: string) => (await screen.findByRole('button', { name: `Open ${name}` })).querySelector('.cad-library-status')!.textContent;
   expect([await status('plate.step'), await status('tiny.stl'), await status('arm')]).toEqual(['1.6 MB · Viewed 5h ago', '900 B · Viewed 5h ago', 'Edited 2h ago']);
-  expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Recent3');
-  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'plate' } });
-  expect(screen.getByRole('heading', { level: 1 }).querySelector('.cad-library-count')?.textContent).toBe('1');
+  expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Home');
+});
+
+// A project as the host lists it: `count` files in its folder, each of the project, and `models` models.
+const project = (id: string, name: string, files: number, models = 0, extra: Partial<LibraryProject> = {}): LibraryProject => ({
+  id, name, root: `/Users/sam/cad/${name}`, opened: 1, missing: false,
+  documents: [
+    ...Array.from({ length: models }, (_, index) => model(`${name}_model_${index}`, { path: `8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f${String(index).padStart(2, '0')}`,
+      kind: 'model', project: id, opened: null })),
+    ...Array.from({ length: files }, (_, index) => model(`part_${index}.stl`, { path: `/Users/sam/cad/${name}/STL/part_${index}.stl`, project: id,
+      opened: null, created: null })),
+  ],
+  ...extra,
+});
+
+it('lists each project as a section of its documents, models first, eight until its Show all, then the documents of no project under Standalone', async () => {
+  const reports: { control: string; count: number; seconds: number }[][] = [];
+  const tag = project('p1', 'heart-tag', 9, 2);
+  const recents = [model('opened.stl', { path: '/Users/sam/cad/heart-tag/STL/part_0.stl', project: 'p1' }), model('loose.step'), model('other.stl')];
+  const view = render(<ControlUsageProvider report={counts => reports.push(counts)}>
+    <ModelLibrary library={library(recents, { projects: async () => [tag] })} home="/Users/sam" />
+  </ControlUsageProvider>);
+  const section = await screen.findByRole('region', { name: 'heart-tag' });
+  expect(within(section).getByRole('heading', { level: 2 }).textContent).toBe('heart-tag');
+  // Its folder, from `~`.
+  expect(section.querySelector('.cad-library-section-path')?.textContent).toBe('~/cad/heart-tag');
+  const cards = () => within(section).getAllByRole('listitem').map(item => within(item).getAllByRole('button')[0].getAttribute('aria-label'));
+  expect(cards()).toEqual(['Open heart-tag_model_0', 'Open heart-tag_model_1', ...Array.from({ length: 6 }, (_, index) => `Open part_${index}.stl`)]);
+  await act(async () => { fireEvent.click(within(section).getByRole('button', { name: 'Show all 11' })); });
+  expect(cards()).toHaveLength(11);
+  expect(within(section).getByRole('button', { name: 'Show fewer' }).getAttribute('aria-expanded')).toBe('true');
+  // A file of the project's that no page opened: no pin, and no Delete (its folder lists it).
+  expect(within(section.querySelectorAll('li')[2] as HTMLElement).queryByRole('button', { name: 'Pin' })).toBeNull();
+  expect(items(await menu('part_0.stl'))).toEqual(['Open']);
+  // The documents of no project, under Standalone; the project's own opened file is its section's alone.
+  const standalone = screen.getByRole('region', { name: 'Standalone' });
+  expect(within(standalone).getByRole('heading', { level: 2 }).textContent).toBe('Standalone');
+  expect(within(standalone).getAllByRole('listitem').map(item => within(item).getAllByRole('button')[0].getAttribute('aria-label')))
+    .toEqual(['Open loose.step', 'Open other.stl']);
+  view.unmount();
+  expect(reports.flat()).toEqual([{ control: 'home_project_more', count: 1, seconds: 0 }]);
+});
+
+it('narrows every section with a search, leaving out a section with nothing that matches', async () => {
+  render(<ModelLibrary library={library([model('loose.step')], { projects: async () => [project('p1', 'heart-tag', 3), project('p2', 'gear', 2)] })} />);
+  await screen.findByRole('region', { name: 'gear' });
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'part_2' } });
+  expect(screen.getAllByRole('region').map(region => region.getAttribute('aria-label'))).toEqual(['heart-tag']);
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'nothing' } });
+  expect(screen.getByRole('status').textContent).toBe('No matching models.');
+});
+
+it("gives each project a menu: its folder's Copy path and Reveal, and Remove from CAD, which forgets the project alone and says so", async () => {
+  const perform = { 'copy-path': vi.fn(async () => {}), reveal: vi.fn(async () => {}) };
+  let listed = [project('p1', 'heart-tag', 1)];
+  const removeProject = vi.fn(async () => { listed = []; return listed; });
+  render(<ModelLibrary library={library([], { projects: async () => listed, removeProject })} fileActions={{ platform: 'darwin', perform }} />);
+  await screen.findByRole('region', { name: 'heart-tag' });
+  const trigger = screen.getByRole('button', { name: 'Actions for the project heart-tag' });
+  await act(async () => { fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  expect(items(await screen.findByRole('menu'))).toEqual(['Copy path', 'Reveal in Finder', 'Remove from CAD']);
+  await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'Copy path' })); });
+  expect(perform['copy-path']).toHaveBeenCalledWith({ path: '/Users/sam/cad/heart-tag', kind: 'directory' });
+  await act(async () => { fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  await act(async () => { fireEvent.click(await screen.findByRole('menuitem', { name: 'Remove from CAD' })); });
+  expect(removeProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }));
+  expect(await screen.findByText('heart-tag removed. Nothing on disk changed, and its documents are standalone again.')).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'heart-tag' })).toBeNull();
+});
+
+it("brings the project Import's Folder opened into view, marked, and says what came of it", async () => {
+  const scrolled = vi.fn();
+  Element.prototype.scrollIntoView = scrolled;
+  let listed: LibraryProject[] = [];
+  const answers = [{ project: { id: 'p2', name: 'gear', root: '/w/gear' }, made: true, folder: '/w/gear' },
+    { project: { id: 'p2', name: 'gear', root: '/w/gear' }, made: false, folder: '/w/gear/STEP' },
+    { project: { id: 'p2', name: 'gear', root: '/w/gear' }, made: false, folder: '/w/gear' }];
+  const importFolder = vi.fn(async () => { listed = [project('p2', 'gear', 1, 0, { root: '/w/gear' })]; return answers.shift()!; });
+  render(<ModelLibrary library={library([], { projects: async () => listed, importFolder, pick: async () => {} })} />);
+  await screen.findByText('Nothing here yet');
+  const choose = async () => {
+    await act(async () => { fireEvent.pointerDown(screen.getByRole('button', { name: 'Import', exact: true }), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+    await act(async () => { fireEvent.click(await screen.findByRole('menuitem', { name: 'Folder…' })); });
+  };
+  await choose();
+  expect(await screen.findByText('gear is now a project. Nothing was written to the folder.')).toBeTruthy();
+  const section = screen.getByRole('region', { name: 'gear' });
+  expect(section.hasAttribute('data-focus')).toBe(true);
+  expect(scrolled).toHaveBeenCalled();
+  await choose();
+  expect(await screen.findByText('STEP is inside gear, which is already a project.')).toBeTruthy();
+  await choose();
+  expect(await screen.findByText('gear is already a project.')).toBeTruthy();
+});
+
+it("brings the project the host names into view: the navbar's project name, pressed", async () => {
+  const scrolled = vi.fn();
+  Element.prototype.scrollIntoView = scrolled;
+  render(<ModelLibrary library={library([], { projects: async () => [project('p1', 'heart-tag', 1), project('p2', 'gear', 1)] })} focus="p2" />);
+  const gear = await screen.findByRole('region', { name: 'gear' });
+  expect([gear.hasAttribute('data-focus'), screen.getByRole('region', { name: 'heart-tag' }).hasAttribute('data-focus')]).toEqual([true, false]);
+  await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
+  expect(scrolled.mock.contexts[0]).toBe(gear);
 });

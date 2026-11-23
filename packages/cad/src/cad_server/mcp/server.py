@@ -729,15 +729,17 @@ class Server:
         return _stamped(launch)
 
     def _home(self, *, surface: str | None = None) -> dict[str, Any]:
-        """The launch that shows the home: the models opened before, which come with it so its cards
-        draw at once -- each row as ``GET /api/v1/documents`` lists it (``Recent.row``: its document's
-        id, by which its picture is read) -- and Open with the desktop's chooser."""
+        """The launch that shows the home: the projects and the documents opened before, which come with
+        it so its cards draw at once -- as ``GET /api/v1/projects`` and ``GET /api/v1/documents`` list them
+        (each row its document's id, by which its picture is read, and its project's) -- and Import with
+        the desktop's chooser."""
         try:
-            recents = [row for row in (entry.row() for entry in self.recents.list()) if row is not None]
+            app = self.tunnel.app
+            recents, projects = app.documents({})["documents"], app.project_list()["projects"]
         except Exception:  # the home opens whatever the library says
             LOG.exception("could not read recents")
-            recents = []
-        launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "home", "model": None, "recents": recents}
+            recents, projects = [], []
+        launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "home", "model": None, "recents": recents, "projects": projects}
         if surface:
             launch["surface"] = surface
         return _stamped(launch)

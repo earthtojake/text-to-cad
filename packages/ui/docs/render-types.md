@@ -41,7 +41,7 @@ renderer slice; no shared component learns its name.
 `isMeshRenderFormat` / `isRobotRenderFormat` calls in the non-test sources of the engine document
 renderer (`packages/ui/src/renderers/xbf`): both budgets are 0 and may not grow. It also asserts
 that those sources, the file list's icon resolver (`file-viewer/navigation/entryIconKind.js`), the
-shared explorer (`file-viewer/navigation/FolderExplorer.jsx`) and the file source that feeds it
+project's list (`file-viewer/navigation/ProjectList.jsx`) and the file source
 (`cad-viewer/catalog.ts`) contain neither. `scripts/test/check-kit-boundaries.mjs`
 (`npm run check:boundaries`) holds the kit the same way: `renderers/kit` names no file format and
 imports no file-family core module, `renderCapabilities.js` among them

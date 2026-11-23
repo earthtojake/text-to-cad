@@ -102,7 +102,8 @@ test('a phone\'s scale: the primitives read the tokens (36px controls, each text
       gaps: boxes.slice(1).map((box, at) => Math.round(box.left - boxes[at].right)), centred: boxes.every(box => Math.abs(box.top + box.height / 2 - (top.top + top.height / 2)) < 1) };
   }, SELECTORS);
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-viewer-navbar]').getBoundingClientRect().height === 48);
-  assert.deepEqual(await row(), { left: 10, heights: [36, 36, 36, 36], widths: [36, 36, 36], gaps: [0, 0, 0], centred: true }, 'the left end, regular');
+  // The name is text, no control: its line's height, centred on the row with the controls either side of it.
+  assert.deepEqual(await row(), { left: 10, heights: [36, 36, 20, 36], widths: [36, 36, 36], gaps: [0, 0, 0], centred: true }, 'the left end, regular');
   // What each primitive draws at, read off the page: [height, font size / line height].
   const drawn = selector => page.locator(selector).first().evaluate(element => {
     const style = getComputedStyle(element);
@@ -123,7 +124,7 @@ test('a phone\'s scale: the primitives read the tokens (36px controls, each text
     const style = getComputedStyle(element);
     return { fill: style.backgroundColor, ring: element.matches(':focus-visible') };
   });
-  for (const selector of ['[data-navbar-menu]', '[data-file-name]']) {
+  for (const selector of ['[data-navbar-menu]', '[data-testid="file-actions"]']) {
     await pane.locator(`[data-viewer-navbar] ${selector}`).tap();
     await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'open', selector);
     await page.touchscreen.tap(200, 500);

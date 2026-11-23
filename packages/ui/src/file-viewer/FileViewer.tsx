@@ -6,6 +6,8 @@ import { Button } from "../primitives/button.jsx";
 import LoadingStep from "../loading/LoadingStep.jsx";
 import { EmptyState, ViewerNavbar } from "./navigation/index.js";
 import type { EntryAction } from "./navigation/index.js";
+import { ProjectList } from "./navigation/ProjectList.jsx";
+import { ProjectPanelContext } from "./projectPanel.js";
 import { useFileDocument } from "./hooks/useFileDocument.js";
 import type { FileNavigationAction, FileViewerProps, JsonValue, FileViewerState } from "./types.js";
 import { ViewerMobileContext, useViewerMobileMeasure } from "./responsive.js";
@@ -30,7 +32,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, name, filePath = null, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page", layout }: FileViewerProps) {
+export function FileViewer({ file, name, filePath = null, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, project = null, onImportFolder = null, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page", layout }: FileViewerProps) {
   // The language the host names (`environment.locale`): this frame's own strings, and everything
   // drawn under it (`I18nProvider`), the nodes the host hands it included.
   const locale = host.environment.locale;
@@ -240,14 +242,10 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const trailing = shownActions.length ? <>
     {shownActions.map(({ id, label, hint, icon: Icon, disabled, active, onInvoke }) => <TooltipHint key={id} content={hint ?? label}><Button type="button" variant="ghost" size="icon-xs" className="size-control shrink-0 rounded-md text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground" aria-label={label} disabled={disabled} aria-pressed={active} onClick={() => { try { void Promise.resolve(onInvoke()).catch(error => onError?.(error)); } catch (error) { onError?.(error instanceof Error ? error : new Error(String(error))); } }}><Icon className="size-4" aria-hidden="true" /></Button></TooltipHint>)}
   </> : null;
-  // The on-disk file the view browses from and acts on: the file's own path, or none for a document
-  // with no file of its own (a model's, by its id): it has no file menu, and its Files tab starts
-  // where the explorer was last, else the person's home folder (`explorerFolder`), never the
-  // folder of the script it was built from.
+  // The on-disk file the view acts on: the file's own path, or none for a document with no file of its own (a model's,
+  // by its id), whose file menu acts on the script that builds it.
   const navigationPath = shown ? (shown.file.navigationPath === undefined ? shown.file.path : shown.file.navigationPath)
     : path && !isDocumentId(path) ? path : null;
-  const model = !navigationPath && Boolean(path) && (shown ? shown.file.navigationPath === null : isDocumentId(path));
-  const folder = navigationPath ? null : explorerFolder;
   // The ⋯ menu: what the host can do with the document on screen -- Copy path and Reveal its file on
   // disk (a model's: the script that builds it, where its metadata names one), its page in the
   // browser whatever it is -- and the host's own items (`fileMenuItems`: the viewer's Export).
@@ -265,23 +263,29 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     const target = (action: EntryAction) => action === "browser" || action === "copy-link" ? path : onDisk;
     const document = { path: path ?? "", kind: "file" as const };
     const apps = appsOf && openApp && path ? (options: { signal: AbortSignal }) => appsOf(document, options) : undefined;
-    return path && (capabilities.size || fileMenuItems) ? {
-      platform: host.fileActions?.platform ?? "linux", capabilities, sourceMissing, items: fileMenuItems, apps,
+    // Import its folder as a project: a document in no project, on disk (a model's script's folder), where the host can.
+    const importFolder = !project && onDisk && onImportFolder ? onImportFolder : null;
+    return path && (capabilities.size || fileMenuItems || importFolder) ? {
+      platform: host.fileActions?.platform ?? "linux", capabilities, sourceMissing, items: fileMenuItems, apps, onImportFolder: importFolder,
       onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => {
         const done = action === "app" ? (app ? openApp?.(document, app.target, app.app) : undefined)
           : perform?.[action]?.({ path: target(action) ?? "", kind: "file" });
         void Promise.resolve(done).catch(error => onError?.(error));
       },
     } : null;
-  }, [path, onDisk, sourceMissing, perform, appsOf, openApp, host.fileActions?.platform, fileMenuItems, onError]);
-  // The name opens its menu where this view shows another document: Files -- the explorer, rooted at
-  // the file's folder, or for a model where the explorer was last -- where the host's files can be browsed, and
-  // Models, the host's library's models, where it has one. A pick shows the document here. A view that shows
-  // its file alone opens neither.
-  const explorer = useMemo(() => (navigationPath || folder) && source.list && source.search && onOpenFile
-    ? { source, folder, onOpen: onOpenFile, onFolderChange: onExplorerFolderChange } : null,
-    [navigationPath, folder, source, onOpenFile, onExplorerFolderChange]);
-  const recentMenu = useMemo(() => recent && onOpenFile ? { list: () => recent.list(), onOpen: onOpenFile } : null, [recent, onOpenFile]);
+  }, [path, onDisk, sourceMissing, perform, appsOf, openApp, host.fileActions?.platform, fileMenuItems, onError, project, onImportFolder]);
+  // The project the document is in: its name before the document's, which goes to the home at it, and its documents
+  // as the Project tab the view's panel leads with (`projectPanel.js`), a press opening one here. A view that shows its
+  // file alone (no `openFile`) has neither. Handed to the panel beside the renderer, never through it: a project read
+  // again redraws the list alone.
+  const projectCrumb = useMemo(() => (project ? { name: project.name, onOpen: project.onShow } : null), [project]);
+  // The row on screen is the file's by its own path (`filePath`: a host shows a file by its document's id), a model's
+  // by its id.
+  const current = filePath ?? path ?? "";
+  const projectPanel = useMemo(() => (project && onOpenFile ? {
+    label: t("project.tab"),
+    content: <ProjectList project={project} current={current} onOpen={(row: { path: string }) => onOpenFile(row.path)} />,
+  } : null), [project, onOpenFile, current, t]);
   // The logo's app menu: the host's links and the person's settings (Back to home is `onHome`).
   const menu = useMemo(() => host.links || appSettings?.length || colorScheme || language ? { links: host.links, appSettings, colorScheme, language, platform: appearance.platform } : null,
     [host.links, appSettings, colorScheme, language, appearance.platform]);
@@ -296,11 +300,11 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const homeSlots = useMemo(() => (navbar && !path && home ? { left: homeLeft, right: homeRight } : null), [navbar, path, home, homeLeft, homeRight]);
   return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><NavbarSlotsContext.Provider value={homeSlots}><NavbarViewSlotContext.Provider value={navbar && path ? viewSlot : null}><PanelPeekContext.Provider value={peek}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={layout ? undefined : mobile ? "mobile" : "desktop"} data-viewer-pinned-layout={layout} tabIndex={-1}>
     {navbar ? (path
-      ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name || name} kind={model ? "model" : "file"} explorer={explorer} recent={recentMenu} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}
+      ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name || name} project={projectCrumb} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}
         panels={panelToggles} viewSlot={setViewSlot} />
       : <ViewerNavbar menu={menu} history={history} actions={navbarActions} homeSlots={home ? homeSlotRefs : null} />) : null}
     <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-      <div ref={bodyBox} className="min-w-0 flex-1 overflow-hidden">{body}</div>
+      <div ref={bodyBox} className="min-w-0 flex-1 overflow-hidden"><ProjectPanelContext.Provider value={projectPanel}>{body}</ProjectPanelContext.Provider></div>
       {overlay}
     </div>
   </div></PanelPeekContext.Provider></NavbarViewSlotContext.Provider></NavbarSlotsContext.Provider></ViewerElementContext.Provider></ViewerHostContext.Provider></ViewerMobileContext.Provider></I18nProvider>;

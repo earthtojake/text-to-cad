@@ -1,9 +1,7 @@
-import { ArrowLeft, ArrowRight, ChevronDown, Ellipsis } from "lucide-react";
+import { ArrowLeft, ArrowRight, Ellipsis } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "@cad/ui/primitives/popover";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@cad/ui/primitives/tabs";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { useI18n } from "@cad/ui/i18n";
@@ -12,21 +10,16 @@ import { cn } from "@cad/ui/utils";
 
 import logo from "../../assets/logo-c.svg";
 import { NAVBAR_CONTROLS_CLASS, NAVBAR_ROW_CLASS } from "../../lib/navbarRow.js";
-import { FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
 import { useViewerMobile } from "../responsive.js";
 
 import { AppMenu } from "./AppMenu.jsx";
 import { OpenInMark } from "./appMarks.jsx";
 import { openInMenu } from "./entry-menu.js";
-import { FolderExplorer } from "./FolderExplorer.jsx";
-import { ModelList } from "./ModelList.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 
 // The file menu's items as telemetry names them (`usage/controls.js`): an app chosen in Open in is
 // `file_open_app`, never which app; Open in's Browser is counted by none.
 const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", "copy-link": "file_copy_link", reveal: "file_reveal", app: "file_open_app" });
-// The name menu's tabs as telemetry names them: Files is the explorer.
-const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
 
 /**
  * The row above a file and above the host's home in a page's chrome (`FileViewer`'s `chrome: "page"`,
@@ -39,10 +32,12 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  * alike), which opens the app's menu (`AppMenu`: Back to home
  * where the host has a home, then the person's settings, feedback and links); Back and Forward,
  * where the host keeps the view's own history (`history`), on a desktop's row alone (a phone's has
- * no room for them); the open document's name, which opens the name menu (Models, the host's library's models, and Files, the explorer)
- * where the view can show another; and the ⋯ menu of what can be done with the document: Copy path,
- * Open in (Browser, the file manager) and the host's own items (the viewer's Export) — a model's
- * Copy path and file manager acting on its script. The menu and its submenus are shadcn's own width.
+ * no room for them); where the document is in a project, the project's name and a slash, muted, which goes to the
+ * home at that project (`project`: Figma's location before a file's name); the open document's name; and the ⋯ menu
+ * of what can be done with the document: Copy path, Open in (Browser, the file manager), the host's own items (the
+ * viewer's Export) and, for a document in no project, Import its folder as a project — a model's Copy path and file
+ * manager acting on its script. The menu and its submenus are shadcn's own width. Moving between a project's
+ * documents is the Project list's, beside the model (`file-viewer/projectPanel.js`): the row has no menu for it.
  *
  * The view's panel toggle (`panels.left`, which the view's frame says: `../panelToggles.js`), the row's first control,
  * before the logo, over a file that has a panel (never over the home); the strip's 28px tile, the same neutral button
@@ -138,11 +133,12 @@ function useOpenInApps(open, apps) {
  * or was); Copy link (its page, with a fresh link: every document, its source there or not); Open in, a submenu of the places it opens in (`openInMenu`: the document's page in the
  * browser, the CAD app's, and the desktop's file manager by its name; then, once the host answers,
  * the source's apps, each export's apps and Default app, a separator between groups); then the
- * host's own items (`items`: the viewer's Export submenu). Each only where the host can do it,
- * and no ⋯ where it can do none. While the source was moved or deleted, what opens it is drawn
+ * host's own items (`items`: the viewer's Export submenu); last, for a document in no project, Import its folder as a
+ * project (`onImportFolder`: the desktop's chooser, starting at its folder, so the person picks the level). Each only
+ * where the host can do it, and no ⋯ where it can do none. While the source was moved or deleted, what opens it is drawn
  * disabled with the reason: Open in itself where nothing in it can open, else each such entry.
  */
-function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, onAction, items: hostItems = null }) {
+function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, onAction, items: hostItems = null, onImportFolder = null }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const [open, setOpen] = useState(false);
@@ -151,7 +147,7 @@ function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, 
   // A link to the page needs no source: always there where the host can make one.
   const copyLink = capabilities.has("copy-link");
   const openIn = openInMenu(platform, capabilities, t, { sourceMissing, files });
-  if (!copy && !copyLink && !openIn.length && !hostItems) return null;
+  if (!copy && !copyLink && !openIn.length && !hostItems && !onImportFolder) return null;
   const perform = (action, app) => { if (FILE_ACTION_CONTROLS[action]) usage.used(FILE_ACTION_CONTROLS[action]); onAction(action, app); };
   const openable = openIn.some(item => item.enabled);
   const label = t("file.openIn");
@@ -179,84 +175,39 @@ function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, 
         </DropdownMenuSubContent>
       </DropdownMenuSub> : null}
       {hostItems}
+      {onImportFolder ? <>
+        {copy || copyLink || openIn.length || hostItems ? <DropdownMenuSeparator /> : null}
+        <DropdownMenuItem data-import-folder="" disabled={sourceMissing} onSelect={() => { usage.used("file_import_folder"); onImportFolder(); }}>
+          {t("project.importFolder")}</DropdownMenuItem>
+      </> : null}
     </DropdownMenuContent>
   </DropdownMenu>;
 }
 
 /**
- * What the name opens: Models and Files, two stock tabs sized to their labels on top of the
- * explorer's own style, each there only where the host has it (one alone has no tabs). Models is
- * the host's library's models, by last activity, a row opening its model; Files is the explorer
- * (`FolderExplorer`), from the file's folder, or for a model where the explorer was last. Built anew on each opening, on Models over a model and on Files over a file.
+ * The open document's name, with no glyph: until the host knows it, a file's path's last segment; a document named by
+ * its id is never named by the id, its name's place empty until its name is known. After a project's name (`after`) it
+ * keeps its width, up to 65% of the row's, and the project's name gives way instead.
  */
-function NameMenu({ path, kind, explorer, recent, onPick }) {
-  const { t } = useI18n();
-  const usage = useControlUsage();
-  const [tab, setTab] = useState(() => firstTab(kind, explorer, recent));
-  // The tab on screen as last chosen: a press and the focus it brings both ask for the same tab.
-  const shownTab = useRef(tab);
-  const files = explorer ? <FolderExplorer source={explorer.source} file={path} folder={explorer.folder} onFolderChange={explorer.onFolderChange}
-    onOpen={next => onPick(explorer.onOpen, next)} /> : null;
-  const models = recent ? <ModelList recent={recent} current={path} onOpen={next => { usage.used("models_open"); onPick(recent.onOpen, next); }} /> : null;
-  if (!files || !models) return files ?? models;
-  // A tab a person turns to is a use of it, as the one the menu opens on is (`FileName`).
-  return <Tabs value={tab} onValueChange={next => { if (next !== shownTab.current) usage.used(TAB_CONTROLS[next]); shownTab.current = next; setTab(next); }} className="flex min-h-0 flex-1 flex-col gap-0" data-name-menu="">
-    <TabsList className="mx-2 mt-2 h-control w-fit shrink-0 self-start">
-      <TabsTrigger value="models">{t("explorer.models")}</TabsTrigger>
-      <TabsTrigger value="files">{t("explorer.files")}</TabsTrigger>
-    </TabsList>
-    <TabsContent value="models" className="flex min-h-0 flex-col">{models}</TabsContent>
-    <TabsContent value="files" className="flex min-h-0 flex-col">{files}</TabsContent>
-  </Tabs>;
+function FileName({ path, name: given, after = false }) {
+  const name = given || (isDocumentId(path) ? "" : path.split("/").pop() || path);
+  return <span className={cn("flex min-w-0 items-center gap-1", after && "max-w-[65%] shrink-0", "px-[calc(var(--cad-pad)-4px)]")} data-file-name=""><span className="truncate">{name}</span></span>;
 }
 
-/** The tab the name menu opens on: Models over a model, Files over a file, or the one there is. */
-const firstTab = (kind, explorer, recent) => (!explorer ? "models" : !recent ? "files" : kind === "model" ? "models" : "files");
-
 /**
- * The open document's name, with no glyph. Where the view can show another document it is also the
- * name menu's door: the name and its chevron, transparent until the pointer is on it, opening the
- * menu under it. Where it cannot, it is the name alone, in the same place.
+ * The project a document is in, before its name (`project / document`): the project's name, muted, which goes to the
+ * home at that project, then a slash. Where the row is narrow it gives way first: the name keeps its width.
  */
-function FileName({ path, name: given, kind = "file", explorer, recent }) {
-  const [open, setOpen] = useState(false);
-  const mobile = useViewerMobile();
+function ProjectCrumb({ project }) {
+  const { t } = useI18n();
   const usage = useControlUsage();
-  // Until the host knows it, a file is named by its path's last segment; a document named by its id
-  // is never named by the id: its name's place is empty until its name is known.
-  const name = given || (isDocumentId(path) ? "" : path.split("/").pop() || path);
-  if (!explorer && !recent) return <span className={cn("flex min-w-0 items-center gap-1", "px-[calc(var(--cad-pad)-4px)]")} data-file-name=""><span className="truncate">{name}</span></span>;
-  // Opened, the tab's filter has the keyboard (the explorer's, or the Models tab's), so typing
-  // finds a document at once; Down takes it into the rows. A phone keeps its keyboard down, the menu
-  // holding focus itself. Nothing else is focused for the person on opening.
-  const focusFilter = event => {
-    event.preventDefault();
-    const content = event.currentTarget;
-    (mobile ? content : content.querySelector("input") ?? content).focus({ preventScroll: true });
-  };
-  const intoRows = event => {
-    if (event.key !== "ArrowDown" || event.target !== event.currentTarget) return;
-    const first = event.currentTarget.querySelector("[data-model-row]:not(:disabled), [data-explorer-row]");
-    if (!first) return;
-    event.preventDefault();
-    first.focus();
-  };
-  const pick = (opener, next) => { setOpen(false); opener(next); };
-  // Opened, the tab it opens on is a use of that tab (`usage/controls.js`: `models`, `explorer`).
-  return <Popover open={open} onOpenChange={next => { if (next && !open) usage.used(TAB_CONTROLS[firstTab(kind, explorer, recent)]); setOpen(next); }}>
-    <PopoverTrigger asChild>
-      <button type="button" className={cn(NAV_ITEM_CLASS, "min-w-0 shrink gap-1 text-left", "px-[calc(var(--cad-pad)-4px)]")} data-file-name="">
-        <span className="truncate">{name}</span>
-        {/* The name opens its menu; the chevron says so. A plain name (no menu) has none. */}
-        <ChevronDown className="ml-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-      </button>
-    </PopoverTrigger>
-    <PopoverContent align="start" sideOffset={8} data-file-explorer="" onOpenAutoFocus={focusFilter} onKeyDown={intoRows}
-      className={cn(FLOATING_SURFACE_CLASS, "flex max-h-[min(28rem,var(--radix-popover-content-available-height))] w-[17.5rem] max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0")}>
-      {/* Remounted on each opening, so it starts on its first tab, in the open file's folder. */}
-      <NameMenu path={path} kind={kind} explorer={explorer} recent={recent} onPick={pick} />
-    </PopoverContent>
-  </Popover>;
+  return <span className="flex min-w-0 shrink items-center" data-navbar-project="">
+    <button type="button" aria-label={t("project.showAria", { name: project.name })} onClick={() => { usage.used("project_crumb"); project.onOpen(); }}
+      className={cn(NAV_ITEM_CLASS, "min-w-0 shrink text-muted-foreground", "px-[calc(var(--cad-pad)-4px)]")}>
+      <span className="truncate">{project.name}</span>
+    </button>
+    <span className="shrink-0 text-muted-foreground" aria-hidden="true">/</span>
+  </span>;
 }
 
 /** Home's column, the grid's (`styles/globals.css`'s `.cad-library-content`): 1128px at most, 24px gutters. */
@@ -266,8 +217,8 @@ const HOME_ROW_STYLE = Object.freeze({ containerType: "inline-size", containerNa
 
 /**
  * Where Home's controls stand on the row: on the grid's column, so the logo's mark (and Back and Forward after it), then
- * "Recent" and its count, start over the grid's first tile, as the logo precedes the file's name on a file's page, and
- * the search and Open end over its last tile; never over the host's actions at the row's right end. The row's
+ * the home's heading, start over the grid's first tile, as the logo precedes the file's name on a file's page, and
+ * the search and Import end over its last tile; never over the host's actions at the row's right end. The row's
  * background stays full width: these are its padding (the logo stays the row's first child, the one button over the
  * home and every file). In a pane narrower than the column they meet the
  * row's own padding, as on a file's page. Measured whenever the row changes size.
@@ -282,7 +233,7 @@ function useHomeColumn(header, trail, on) {
       const margin = (width - HOME_COLUMN_PX) / 2;
       const actions = trail.current?.getBoundingClientRect().width || 0;
       // What the row adds to its own 8px a side. The mark stands HOME_MARK_PX in from the row's edge (its 8px, its
-      // button's 6px, the artwork's 2px); the host's actions keep the row's right end, Open ending before them.
+      // button's 6px, the artwork's 2px); the host's actions keep the row's right end, Import ending before them.
       const next = { left: Math.round(Math.max(0, margin + HOME_GUTTER_PX - HOME_MARK_PX)),
         right: Math.round(Math.max(0, Math.max(0, margin) + HOME_GUTTER_PX - HOME_ROW_PAD_PX - (actions ? actions + HOME_CLEAR_PX : 0))) };
       setInsets(now => (now?.left === next.left && now?.right === next.right ? now : next));
@@ -333,15 +284,14 @@ function PanelToggleButton({ toggle }) {
  * @param {import("../types.js").ViewerHistory | null} [props.history] The view's own history, where the host keeps one: Back and Forward after the logo.
  * @param {string | null} [props.file] The open file, by its absolute path (a document with no file of its own: its id).
  * @param {string} [props.name] The document's name where its path does not give it (a model's).
- * @param {"model" | "file"} [props.kind] What the open document is: its glyph, and the name menu's first tab.
- * @param {{ source: Pick<import("../types").FileSource, "list" | "search">, folder?: string | null, onOpen(path: string): void } | null} [props.explorer]
- *   Where the host's files can be browsed: the name menu's Files, from `folder` where given.
- * @param {{ list(): Promise<readonly import("../types").RecentDocument[]>, onOpen(path: string): void } | null} [props.recent]
- *   The host's library: the name menu's Models, its models alone.
+ * @param {{ name: string, onOpen(): void } | null} [props.project] The project the document is in: its name before the
+ *   document's, which goes to the home at that project.
  * @param {{ platform: import("./entry-menu.js").Platform, capabilities: ReadonlySet<import("./entry-menu.js").EntryAction>, sourceMissing?: boolean,
  *   apps?: (options: { signal: AbortSignal }) => Promise<import("./entry-menu.js").OpenInFiles | null>,
- *   onAction(action: import("./entry-menu.js").EntryAction | "app", app?: { target: string, app: string }): void, items?: import("react").ReactNode } | null} [props.fileMenu]
- *   The ⋯ after the name: what the host can do with the document on screen, and its own items (Export).
+ *   onAction(action: import("./entry-menu.js").EntryAction | "app", app?: { target: string, app: string }): void, items?: import("react").ReactNode,
+ *   onImportFolder?: (() => void) | null } | null} [props.fileMenu]
+ *   The ⋯ after the name: what the host can do with the document on screen, its own items (Export), and for a document
+ *   in no project, Import its folder as a project.
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
  * @param {{ left(element: HTMLElement | null): void, right(element: HTMLElement | null): void } | null} [props.homeSlots]
@@ -352,7 +302,7 @@ function PanelToggleButton({ toggle }) {
  *   (`../navbarSlots.js`'s `NavbarViewSlotContext`).
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, trailing = null, actions = null, panels = null, homeSlots = null, viewSlot = null, className }) {
+export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, project = null, fileMenu = null, trailing = null, actions = null, panels = null, homeSlots = null, viewSlot = null, className }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const onHome = goHome ? () => { usage.used("home"); goHome(); } : goHome;
@@ -370,7 +320,8 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
     {/* A phone's row has no room for them: Back and Forward are a desktop's alone. */}
     {history && !mobile ? <HistoryButtons viewHistory={history} /> : null}
     {file ? <span className="flex min-w-0 items-center">
-      <FileName path={file} name={name} kind={kind} explorer={explorer} recent={recent} />
+      {project ? <ProjectCrumb project={project} /> : null}
+      <FileName path={file} name={name} after={Boolean(project)} />
       {fileMenu ? <FileMenu {...fileMenu} /> : null}
     </span> : null}
   </nav>;
@@ -383,7 +334,7 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
     <header ref={header} className={cn(NAVBAR_ROW_CLASS, "relative border-border bg-sidebar text-foreground", className)} data-viewer-navbar=""
       style={homing ? { ...HOME_ROW_STYLE, ...(homeInsets ? { paddingLeft: HOME_ROW_PAD_PX + homeInsets.left, paddingRight: HOME_ROW_PAD_PX + homeInsets.right } : null) } : undefined}>
       {leadNav}
-      {/* Over the home: "Recent" and its count after the logo, the search and Open at the column's right. */}
+      {/* Over the home: its heading after the logo, the search and Import at the column's right. */}
       {homing ? <div className="flex min-w-0 flex-1 items-center justify-between gap-2" data-navbar-home="">
         <div ref={homeSlots.left} className="flex min-w-0 items-center" data-navbar-home-left="" />
         <div ref={homeSlots.right} className="flex shrink-0 items-center gap-2" data-navbar-home-right="" />

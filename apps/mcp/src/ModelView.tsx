@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createHttpPromptFiles, libraryRow, type CadClient } from '@cad/core/client';
+import { createHttpPromptFiles, libraryRow, projectOf, type CadClient } from '@cad/core/client';
 import { unavailablePromptContext } from '@cad/core/prompt';
 import { CadViewer, createCadFileActions, createCadFileSource, normalizePath } from '@cad/ui/cad-viewer';
 import type { AppSetting, ColorSchemeSetting, LanguageSetting } from '@cad/ui/file-viewer';
@@ -75,12 +75,9 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   engineOrigin?: string;
 }) {
   // Codex's file handler shows its file alone: the host's own file tree is its navigation, so it
-  // has neither the home nor the explorer (a source that cannot list or search offers none).
+  // has neither the home nor a project's list (a view with no library has neither).
   const homed = !alone;
-  const source = useMemo(() => {
-    const { list, search, ...alone } = createCadFileSource(client);
-    return homed ? { ...alone, list, search } : alone;
-  }, [client, homed]);
+  const source = useMemo(() => createCadFileSource(client), [client]);
   // The view's own history, as a browser keeps a tab's: what it showed — files, by absolute path,
   // and the home ('') — the agent's shows and the person's own moves alike. Back and Forward walk
   // them; a move after a Back drops what was ahead, and showing what is already on screen adds
@@ -125,11 +122,12 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   }), [sync, client]);
   useEffect(() => { reporter.showing(file || null); }, [reporter, file]);
 
-  // Every other view has the home: the models opened before, from every view and the web viewer.
+  // Every other view has the home: the projects and the documents opened before, from every view and the web viewer.
   // What it opens is shown in place.
-  // The home's first list came with its launch, its rows as `GET /api/v1/documents` lists them: the
+  // The home's first lists came with its launch, as `GET /api/v1/documents` and `GET /api/v1/projects` list them: the
   // cards draw at once, each its picture read by its document's id, and later reads ask.
   const seeded = useRef(launch.recents ?? null);
+  const seededProjects = useRef(launch.projects ?? null);
   const library = useMemo<ModelLibrarySource | undefined>(() => homed ? {
     list: () => {
       const first = seeded.current;
@@ -139,8 +137,22 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
     thumbnail: model => client.thumbnail(model),
     open: async entry => { navigate(normalizePath(entry.path)); },
-    // Open, with the desktop's chooser where this computer has one: what it picks is shown in place.
-    ...(launch.pick ? { pick: async () => { const picked = await client.pick(); if (picked) navigate(normalizePath(picked)); } } : {}),
+    projects: () => {
+      const first = seededProjects.current;
+      seededProjects.current = null;
+      return first ? Promise.resolve(first.map(projectOf)) : client.projects?.() ?? Promise.resolve([]);
+    },
+    removeProject: project => client.removeProject?.(project.id) ?? Promise.resolve([]),
+    // Import, with the desktop's chooser where this computer has one: a file it picks is shown in place, a folder
+    // opened as a project.
+    ...(launch.pick ? {
+      pick: async () => { const picked = await client.pick(); if (picked) navigate(normalizePath(picked)); },
+      importFolder: async (start?: string) => {
+        const folder = await client.pick({ folder: true, start });
+        if (!folder || !client.openProject) return null;
+        return { ...await client.openProject(folder), folder };
+      },
+    } : {}),
   } : undefined, [client, homed, launch.pick, navigate]);
   // Back and Forward, wherever the view can go elsewhere: not a file handler's, which shows its file alone.
   const viewerHistory = useMemo(() => homed ? {

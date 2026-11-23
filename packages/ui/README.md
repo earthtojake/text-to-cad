@@ -3,11 +3,11 @@
 The shared React interface for text-to-cad. `FileViewer` is the complete file view:
 one file by its absolute path (`/a/b.step`, `C:/a/b.step`, `/`-separated in every
 app), or the host's home with none, under a navbar — the logo that opens the app's
-menu, the file's name and the name menu it opens (Models and Files), the file menu — with the file's
-content and the loading and error states ([FileViewer](docs/file-viewer.md)).
+menu, the project the file is in and the file's name, the file menu — with the file's
+content, the project's list beside it, and the loading and error states ([FileViewer](docs/file-viewer.md)).
 `CadViewer` (`@cad/ui/cad-viewer`) is the viewer every app shows:
-FileViewer over a CAD client, with the six CAD renderers, the home (the model
-library) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
+FileViewer over a CAD client, with the six CAD renderers, the home (the projects and the
+documents opened before) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.
 
 The viewer's tools, panel, settings, tooltips and keyboard follow two binding documents, the same in
@@ -77,21 +77,18 @@ scene's colours written once), the chrome in the app's ([the palette](docs/desig
 [the viewport's scheme](docs/design-system.md#the-viewports-scheme)).
 Every control's label is `FieldLabel` (muted), its value the foreground.
 
-File-tab chrome uses normal-weight type. The navbar's file name, the explorer's and
-the model tree's rows, and filter matches use muted/primary text color for emphasis,
-never bold weight. The explorer's rows are compact 24px lines in 12px text, the size of
-the section titles and the filter above them, a folder opening inline under itself; the
-view's panel's lists — every one of them, the Model, the Links, the Parts, the Nets, the Hierarchy,
+File-tab chrome uses normal-weight type. The navbar's file name, the panel's rows, and
+filter matches use muted/primary text color for emphasis, never bold weight. The
+view's panel's lists — every one of them, the Project, the Model, the Links, the Parts, the Nets, the Hierarchy,
 the Layers — share the STEP/xbf Model tree's base components (`primitives/tree-row.jsx`'s row, slot,
 name, detail and heading, `primitives/tree-filter.jsx`'s search highlight and count, `VirtualRows`),
 never a view's own, in the panel's 12px text, one glyph slot a row
 ([the panel's trees](docs/viewer-ux.md#trees)). Both inset
 row backgrounds 5px from their horizontal edges, including selected, hovered and
 filtered rows; nesting adds indentation inside that gutter.
-The name menu is a popover under the navbar's file name: Models and Files as stock Tabs over
-the explorer's rows (`ModelList.jsx`, `FolderExplorer.jsx`),
-17.5rem wide, no taller than 28rem or the room below it, with no resize handle. It
-floats over the view and never resizes it or moves its tools. A file's controls are
+Moving between documents is the project's: a document in a project has the project's name before
+its own in the navbar, which goes to the home at it, and the project's models and files as the
+Project tab its view's panel leads with (`ProjectList.jsx`), one click from each other. A file's controls are
 the viewer's own: the tool strip at the view's top centre, the tool in hand's sub-toolbar
 under it, and the one panel docked at its left, the canvas the narrower for it while it pushes it aside (a mouse
 resting on its collapsed toggle peeks it over the view instead, a floating card pushing nothing, pinned only by the toggle).
@@ -111,8 +108,8 @@ src/
   annotation/        the drawing tool's (Draw: freehand and shapes) session, toolbar and ink geometry (its 3D ink is renderers/kit/tools/annotate)
   cad-viewer/        CadViewer (FileViewer + the six CAD renderers + the home), and a CAD client as a FileSource
   file-viewer/       FileViewer, typed source/renderer contracts, the document lifecycle hook
-    navigation/     the navbar, the app menu and its links, the folder explorer, the file menu
-  library/           a host's home: the models opened before, to open again, and their pictures
+    navigation/     the navbar, the app menu and its links, the project's list, the file menu
+  library/           a host's home: the projects and the documents opened before, to open again, and their pictures
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
     xbf/            an engine document (.xbf) and a STEP: model tree, Params, Joints
@@ -143,9 +140,8 @@ This package ships the viewer renderers. A renderer only one app registers is
 that app's own, built on the same public `defineFileRenderer` contract (see
 [renderers](docs/renderers.md)).
 
-File listing is independent of renderer matching: the explorer shows every entry
-the host's source lists. A host that opens arbitrary files registers a
-fallback renderer (`fallback: true`) for the types nothing else matches.
+A host that opens arbitrary files registers a fallback renderer (`fallback: true`) for the
+types nothing else matches.
 
 ```tsx
 import { FileViewer } from '@cad/ui/file-viewer';
@@ -269,7 +265,7 @@ reads what the engine serves of it through the viewer (`client.engineDocument`,
 `/api/v1/documents/<kind>/<id>`) — its structure and one buffer per part — and reads no source or sidecar. A
 rebuild reaches the view as the engine's next version, and only the parts the edit changed are
 fetched. Both the tools view and its independent Preview draw the engine's meshes.
-The Model tab's tree shares the explorer's row and filter primitives. Its rows are the
+The Model tab's tree shares the panel's row and filter primitives. Its rows are the
 document's assemblies and parts, a part a leaf whose faces and edges the viewport picks;
 its expansion controls viewport selection, and its filter searches
 names without expanding anything. See [the engine document renderer](docs/cad-renderer.md#engine-document-renderer)
@@ -358,12 +354,12 @@ or a file adds: a dismissed alert's icon, the host's actions (the
 CAD app's Full size), after the view's own, which it portals into the navbar's view slot (Display, then a 3D view's
 or a board's Preview). A host whose own frame is its navigation shows
 the view alone (`chrome: "bare"`, the CAD app's file handler), with no navbar at all. With no
-file a view shows the host's home, the model library, under the same navbar (its logo and menu,
+file a view shows the host's home under the same navbar (its logo and menu,
 without Back to home, Back and Forward where the host keeps the view's history, and the host's
-actions): one control row (Recent; the type filter, the search, grid or list),
-then the library alone: the documents opened or built before, pinned first, as Figma-style
-tiles with their pictures or as a table of rows, each with its pin and a ⋯ menu ending in
-Delete, which asks first. A file that
+actions): one control row (Home; the type filter, the search, grid or list, Import: a file, or a
+folder opened as a project), then each project with its documents and the standalone documents
+opened or built before, pinned first, as Figma-style tiles with their pictures or as a table of
+rows, each with its pin and a ⋯ menu ending in Delete, which asks first. A file that
 does not exist shows "File does not exist" and its path, and any other failure to open
 "Could not open that file" and why, each with Go home where the host has a home. A
 renderer's loading and update status is its own, in its viewport. An error appears as a

@@ -9,6 +9,7 @@ import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenu
 import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 import { usePanelToggles } from '../../dist/file-viewer/panelToggles.js';
 import { PANEL_PEEK_DELAY_MS } from '../../dist/file-viewer/panelPeek.js';
+import { useProjectPanel } from '../../dist/file-viewer/projectPanel.js';
 import { ModelLibrary } from '../../dist/library/ModelLibrary.js';
 import { readFileSync } from 'node:fs';
 
@@ -199,7 +200,7 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   expect(navbar()!.querySelector('[data-navbar-panel]')).toBeNull();
 });
 
-it('draws the home\'s own controls in its navbar on the grid\'s column: the logo, then Recent and its count, at the left, the search and Open at the right; the filter and the layout in a row over the grid', async () => {
+it('draws the home\'s own controls in its navbar on the grid\'s column: the logo, then Home, at the left, the search and Import at the right; the filter and the layout in a row over the grid', async () => {
   const user = userEvent.setup();
   const models = [{ path: '/work/a.step', name: 'a.step', folder: '/work', opened: 1, updated: 1, created: null, pinned: false, missing: false, thumbnail: null, pictured: null },
     { path: 'model-1', name: 'bracket', folder: null, opened: 1, updated: 1, created: null, pinned: false, missing: false, thumbnail: null, pictured: null, kind: 'model' }];
@@ -214,10 +215,10 @@ it('draws the home\'s own controls in its navbar on the grid\'s column: the logo
   await screen.findByText('a.step');
   const home = navbar()!.querySelector<HTMLElement>('[data-navbar-home]')!;
   const left = home.querySelector('[data-navbar-home-left]')!, right = home.querySelector('[data-navbar-home-right]')!;
-  expect([left.querySelector('h1')!.textContent, right.querySelector('input')!.getAttribute('aria-label'), within(right as HTMLElement).getByRole('button', { name: 'Open' }) !== null])
-    .toEqual(['Recent2', 'Search models', true]);
+  expect([left.querySelector('h1')!.textContent, right.querySelector('input')!.getAttribute('aria-label'), within(right as HTMLElement).getByRole('button', { name: 'Import' }) !== null])
+    .toEqual(['Home', 'Search models', true]);
   // On the grid's column at 1440, (1440 − 1128) / 2 + 24 = 180px from either edge, the background full width: the
-  // logo's mark (16px into its row) at 180, "Recent" after it, and Open ending at 180 from the right: the row's padding.
+  // logo's mark (16px into its row) at 180, "Home" after it, and Import ending at 180 from the right: the row's padding.
   await waitFor(() => expect([navbar()!.style.paddingLeft, navbar()!.style.paddingRight]).toEqual(['172px', '180px']));
   const lead = navbar()!.querySelector('nav')!;
   expect([lead.nextElementSibling === home, home.firstElementChild === left]).toEqual([true, true]);
@@ -435,58 +436,70 @@ it('ends the app menu with the version the host runs, a link to its release note
   expect(document.querySelector('[data-app-menu] [data-menu-footer]')!.className).toContain('text-tiny');
 });
 
-it('opens the explorer from the file\'s name where the host\'s files can be browsed, and a pick there is shown through the host', async () => {
+it('hands the view the Project tab where the document is in a project: its models, then its files by folder, the one on screen marked, a press opening another through the host; and its name before the file\'s goes to the home at it', async () => {
   const user = userEvent.setup();
   const opened: string[] = [];
-  const browsing = { ...host, navigation: { openFile: (path: string) => { opened.push(path); } }, files: { ...host.files,
-    list: async (folder: string) => folder === '/models/parts' ? [{ path: FILE, name: 'a.step', kind: 'file' }, { path: '/models/parts/b.step', name: 'b.step', kind: 'file' }] : [],
-    search: async () => ({ paths: [], truncated: false }) } };
-  open({ host: browsing });
-  await screen.findByText('shown');
-  expect(fileName().tagName).toBe('BUTTON');
-  await user.click(fileName());
-  await screen.findByText('b.step');
-  // It opens in the file's folder: the pick is the host's to show, and the explorer goes.
-  await user.click(document.querySelector<HTMLElement>('[data-file-explorer] [data-path="/models/parts/b.step"]')!);
-  expect([opened, document.querySelector('[data-file-explorer]')]).toEqual([['/models/parts/b.step'], null]);
-  cleanup();
-  // A source that lists but cannot search has no explorer: its name is a name.
-  open({ host: { ...host, files: { ...host.files, list: browsing.files.list } } });
-  await screen.findByText('shown');
-  expect(fileName().tagName).toBe('SPAN');
+  const shown = vi.fn();
+  // A view that draws the Project tab where its frame would: its label and its list.
+  const framed = defineFileRenderer({
+    id: 'framed', priority: 1, matches: () => true,
+    load: async () => ({ default: () => { const panel = useProjectPanel(); return panel ? <section aria-label={panel.label}>{panel.content}</section> : <p>no project</p>; } }),
+    prepare: async () => ({ data: null }),
+  });
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const project = { id: 'p1', name: 'parts', root: '/models/parts', onShow: shown, documents: [
+    { path: id, name: 'bracket', kind: 'model', folder: '/models/parts/src' },
+    { path: FILE, name: 'a.step', kind: 'file', folder: '/models/parts' },
+    { path: '/models/parts/STEP/b.step', name: 'b.step', kind: 'file', folder: '/models/parts/STEP' },
+  ] };
+  const browsing = { ...host, navigation: { openFile: (path: string) => { opened.push(path); }, home() {} } };
+  const view = render(<FileViewer file={FILE} host={browsing as any} renderers={[framed]} state={{}} onStateChange={() => {}} project={project as any} />);
+  const tab = await screen.findByRole('region', { name: 'Project' });
+  expect([...tab.querySelectorAll('[data-tree-heading], [data-project-row], [data-project-folder]')].map(node => node.textContent))
+    .toEqual(['Models', 'bracket', 'Files', 'a.step', 'STEP', 'b.step']);
+  expect(within(tab).getByRole('button', { name: 'a.step' }).getAttribute('aria-current')).toBe('page');
+  await user.click(within(tab).getByRole('button', { name: 'b.step' }));
+  await user.click(within(tab).getByRole('button', { name: 'bracket' }));
+  expect(opened).toEqual(['/models/parts/STEP/b.step', id]);
+  // Its name before the file's, which goes to the home at it.
+  await user.click(screen.getByRole('button', { name: 'Show parts on Home' }));
+  expect(shown).toHaveBeenCalledTimes(1);
+  // While its documents are read, it says so; a document in no project, or a view that shows its file alone, has none.
+  view.rerender(<FileViewer file={FILE} host={browsing as any} renderers={[framed]} state={{}} onStateChange={() => {}} project={{ ...project, documents: null } as any} />);
+  expect(within(screen.getByRole('region', { name: 'Project' })).getByRole('status').textContent).toBe('Loading…');
+  view.rerender(<FileViewer file={FILE} host={browsing as any} renderers={[framed]} state={{}} onStateChange={() => {}} project={null} />);
+  expect([screen.queryByText('no project') !== null, screen.queryByRole('button', { name: 'Show parts on Home' })]).toEqual([true, null]);
+  view.rerender(<FileViewer file={FILE} host={{ ...host, navigation: {} } as any} renderers={[framed]} state={{}} onStateChange={() => {}} project={project as any} />);
+  expect(screen.queryByRole('region', { name: 'Project' })).toBeNull();
+  // A file the host shows by its document's id is marked by its own path (`filePath`).
+  view.rerender(<FileViewer file="7a2b3c4d-1b2c-5d3e-8f4a-0123456789ab" filePath="/models/parts/STEP/b.step" host={browsing as any} renderers={[framed]}
+    state={{}} onStateChange={() => {}} project={project as any} />);
+  const marked = await screen.findByRole('region', { name: 'Project' });
+  expect(within(marked).getByRole('button', { name: 'b.step' }).getAttribute('aria-current')).toBe('page');
 });
 
-it('has no file menu on a document with no file of its own, which its name names, and no name menu where it has nothing to list', async () => {
+it('has no file menu on a document with no file of its own, which its name names; a document in no project offers Import its folder as a project where the host can', async () => {
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
-  const list = vi.fn(async () => []);
-  const model = { ...host, fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } }, files: { id: 'one', list,
-    search: async () => ({ paths: [], truncated: false }),
+  const model = { ...host, fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } }, files: { id: 'one',
     stat: async (path: string) => ({ path, name: 'bracket', navigationPath: null, kind: 'file' as const, extension: 'xbf', size: 0 }) } };
   open({ host: model, file: id });
   await screen.findByText('shown');
-  // Its name is the model's, a name and no button; no file menu; nothing is listed.
+  // Its name is the model's, a name and no button; no file menu.
   expect([fileName().tagName, fileName().textContent]).toEqual(['SPAN', 'bracket']);
   expect(labels()).not.toContain('File actions');
-  expect(list).not.toHaveBeenCalled();
   cleanup();
-  // With the host's library and where the explorer was last: the name opens Models first, and Files
-  // lists that folder -- never the folder of the script the model was registered from -- and says
-  // each folder it is in, for the host to keep.
-  const user = userEvent.setup();
-  const registered = { ...model, navigation: { openFile: vi.fn() }, files: { ...model.files,
-    stat: async (path: string) => ({ path, name: 'bracket', navigationPath: null, kind: 'file' as const, extension: 'xbf', size: 0 }) } };
-  const rows = [{ path: id, name: 'bracket', kind: 'model', opened: null, updated: Date.now() / 1000 }];
-  const kept = vi.fn();
-  render(<FileViewer file={id} host={registered as any} renderers={[renderer]} state={{}} onStateChange={() => {}} recent={{ list: async () => rows }}
-    explorerFolder="/home/me/last" onExplorerFolderChange={kept} />);
+  // A file in no project: its ⋯ ends in Import its folder as a project, which the host does; in a project, it has none.
+  const onImportFolder = vi.fn();
+  const withMenu = { ...host, fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } } };
+  const view = render(<FileViewer file={FILE} host={withMenu as any} renderers={[renderer]} state={{}} onStateChange={() => {}} onImportFolder={onImportFolder} />);
   await screen.findByText('shown');
-  expect(fileName().tagName).toBe('BUTTON');
-  await user.click(fileName());
-  expect(screen.getByRole('tab', { name: 'Models' }).getAttribute('aria-selected')).toBe('true');
-  await user.click(screen.getByRole('tab', { name: 'Files' }));
-  await waitFor(() => expect(list).toHaveBeenCalledWith('/home/me/last', expect.anything()));
-  expect(kept).toHaveBeenCalledWith('/home/me/last');
-  expect(labels()).not.toContain('File actions');
+  await act(async () => { fireEvent.pointerDown(screen.getByTestId('file-actions'), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  await act(async () => { fireEvent.click(await screen.findByRole('menuitem', { name: 'Import its folder as a project…' })); });
+  expect(onImportFolder).toHaveBeenCalledTimes(1);
+  view.rerender(<FileViewer file={FILE} host={withMenu as any} renderers={[renderer]} state={{}} onStateChange={() => {}} onImportFolder={onImportFolder}
+    project={{ id: 'p1', name: 'parts', root: '/models/parts', documents: [], onShow() {} }} />);
+  await act(async () => { fireEvent.pointerDown(screen.getByTestId('file-actions'), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  expect(within(await screen.findByRole('menu')).getAllByRole('menuitem').map(item => item.textContent)).not.toContain('Import its folder as a project…');
 });
 
 it('puts Open in › Browser and the host\'s own items (Export) in the file menu; a model\'s Copy path and file manager act on its script, disabled with the reason where it is gone', async () => {

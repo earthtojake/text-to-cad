@@ -33,9 +33,10 @@ test("each language is named in its own language, the same in every dictionary",
 
 test("Traditional Chinese is Taiwan's own words, not Simplified Chinese converted", () => {
   assert.equal(zhTW["file.missing"], "檔案不存在");
-  assert.equal(zhTW["explorer.folders"], "資料夾");
-  assert.equal(zhCN["explorer.folders"], "文件夹");
-  assert.equal(zhTW["explorer.searching"], "搜尋中…");
+  assert.equal(zhTW["home.importFolderButton"], "匯入資料夾");
+  assert.equal(zhCN["home.importFolderButton"], "导入文件夹");
+  assert.equal(zhTW["project.files"], "檔案");
+  assert.equal(zhTW["project.loading"], "正在載入…");
 });
 
 test("normalizeLocale takes the exact locale, else the case-folded one, else nothing", () => {

@@ -64,10 +64,11 @@ class LibraryTest(unittest.TestCase):
         status, answer = self.change("thumbnail", str(self.model), png=base64.b64encode(PNG).decode("ascii"))
         [entry] = answer["documents"]
         # The record's row, its document named: its id, its kind and where its reads are; the record's
-        # own kind is ``record`` -- a file's row: removed from the list, its file untouched.
+        # own kind is ``record``, and the project it is in, none (``projects.py``) -- a file's row: removed
+        # from the list, its file untouched.
         ident = file_id(self.model)
         self.assertEqual(entry, {**RecentStore().list()[0].public(), "id": ident, "kind": "stl", "record": "file",
-                                 "api": f"/api/v1/documents/stl/{ident}"})
+                                 "api": f"/api/v1/documents/stl/{ident}", "project": None})
         # Its size on disk, which the home shows beside its age.
         self.assertEqual(entry["size"], len(STL))
         self.assertTrue(self.change("pin", str(self.model))[1]["documents"][0]["pinned"])

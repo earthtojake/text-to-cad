@@ -53,7 +53,7 @@ chrome that floats over the picture. The home is the navbar over the library.
   everything in the view: the panel, the strip and the row under it, the update line, the corner, the Display card,
   Quick Edit and Preview's chrome. A renderer brings its canvas, tools, tool rows, tabs and document state, and the
   frame never looks inside a format ([cad-renderer.md](cad-renderer.md#kit)).
-- A pick or a tool never opens the panel or the explorer, and never closes the pinned panel.
+- A pick or a tool never opens the panel, and never closes the pinned panel.
 - A host shows a file under the navbar (`chrome: "page"`, every host today) or alone (`"bare"`). A compact view (the
   home's thumbnails, a small inline view) draws the model alone: no navbar, panel, tools, corner or Quick Edit.
 - An open Display card stands over the strip and covers the cube; menus, tooltips and dialogs stand over everything
@@ -66,9 +66,11 @@ chrome that floats over the picture. The home is the navbar over the library.
 - It is there from the first paint: the web page draws a static bar before its script runs, then `StartingView.tsx`
   draws the real frame, toggle, logo and name included. Why: nothing appears or moves as the app takes over.
 - **Left**, edge to edge: the panel toggle (over a file that has a panel); the logo, which opens the app menu; Back and
-  Forward where the host keeps the view's history (the CAD app; desktop only, disabled with nowhere to go); the file's
-  name (no glyph; a chevron where it opens the name menu); its ⋯. Past the toggle they have no fill at rest, the
-  accent fill on hover and while their menu is open, and no tooltip, since each says what it is.
+  Forward where the host keeps the view's history (the CAD app; desktop only, disabled with nowhere to go); for a
+  document in a project, the project's name and a slash, muted, which goes to the home at that project (Figma's
+  location before a file's name; in a narrow row it gives way first); the file's name (no glyph, no menu of its own);
+  its ⋯. Past the toggle they have no fill at rest, the accent fill on hover and while their menu is open, and no
+  tooltip, since each says what it is.
 - **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning), Display, Preview,
   then the host's actions (the CAD app's Full size).
 - The first glyph stands 16px in, on the page's gutter: the panel toggle's icon, on the panel's 16px line; else the
@@ -82,25 +84,43 @@ chrome that floats over the picture. The home is the navbar over the library.
 - **The app menu** (the logo's), over every file and the home, also while a file loads or after it failed: Back to
   home; Language, the host's switches (Telemetry) and Theme; Send feedback, GitHub, Discord; a muted footer with the
   version and "Made by". Its rows come from the host; settings rows keep it open. A file's view settings are never here.
-- **The name menu**, a 17.5rem popover under the name that moves nothing, has two tabs: Models (the library's models by
-  last activity, at most 8; the home has the rest) and Files (an explorer from the file's folder, one folder at a time,
-  its filter searching the files under it). It opens on Models over a model and on Files over a file. Its filter takes
-  the keyboard as it opens (not on a phone, where that would raise the keyboard); a pick opens the file and closes it.
 - **The ⋯ file menu**: Copy path, Copy link, Open in ▸ (Browser, the file manager, the source's apps, each export's
-  apps, Default app), then the host's items, Export ▸ last, each only where the host can do it. Apps are looked up as
-  the menu opens; where the source was moved or deleted, what would open it is disabled and says why.
+  apps, Default app), then the host's items, Export ▸, then, for a document in no project, Import its folder as a
+  project (the desktop's chooser opening at its folder, so the person picks the level), each only where the host can
+  do it. Apps are looked up as the menu opens; where the source was moved or deleted, what would open it is disabled
+  and says why.
+- **The Project tab**: a document in a project has the project's models, then its CAD files by folder, as the first
+  tab of its view's panel (the one tab of a view with none of its own), one click from each other, the one on screen
+  marked (`ProjectList.jsx`). Nothing above the project is listed, and it has no search. Why: jumping to another
+  document of the same work is the job that matters, and a list beside the model keeps it one click away, where a
+  menu under the name was found and used by few.
+
+#### Projects
+
+- A folder becomes a project only when a person or an agent opens it as one: Import's Folder on the home, a standalone
+  document's Import its folder as a project, or `cad viewer <folder>`. Nothing else makes one: a run never does, and
+  nothing is written to the folder. Removing one forgets it, and nothing on disk changes.
+- A document is in the nearest project above it: a file by its path, a model by its script. A folder opened inside a
+  project is that project (they do not nest by accident). Every other document is standalone.
+- Nothing browses the disk outside a project: a document is picked up by a `cad` command or by Import.
 
 #### The home
 
-- The same navbar, with "Recent" and its count after the logo (whose menu has no Back to home), and at the right the
-  search and Open (where the host has a file chooser), lined up with the library's column. No toggle and no ⋯.
+- The same navbar, with "Home" after the logo (whose menu has no Back to home), and at the right the search and
+  Import (where the host has a chooser: File…, Folder…), lined up with the library's column. No toggle and no ⋯.
 - A centred column at most 1128px wide on 24px gutters, 20px under the navbar, with no hero (`library/ModelLibrary.tsx`,
   the `.cad-library` rules). A filter row: the type filter (All, Models, Files, only when both kinds are listed) at the
   left, the grid/list switch at the right.
+- Each project is a section, the latest activity first: its folder glyph and name, its folder from `~`, and its ⋯
+  (Copy path, Reveal, Remove from CAD, which says nothing on disk changed); then its documents, pinned first, its
+  models, then its files, eight until Show all. Then the standalone documents, under "Standalone" where there are
+  projects. The project the navbar's name named, or the one Import's Folder just opened, is scrolled to and its name
+  drawn in the brand's colour, with a line saying what came of the import.
 - Cards in columns at least 232px wide (the picture on the light gradient, then the name, size and age), or 44px rows.
   Each has a pin and a ⋯ (Open, Copy path, Copy link, Reveal, Pin, Delete, which asks first), shown on hover or focus
-  and always on touch. Pinned cards come first, then by last activity. With nothing opened yet the page shows the C
-  mark, "Nothing opened yet", one line, Open file, and the formats the viewer opens.
+  and always on touch; a project's file, listed for being in its folder, has no Delete, and a Pin once a page opened
+  it. Pinned cards come first, then by last activity. With nothing yet the page shows the C mark, "Nothing here yet",
+  one line, Import file and Import folder, and the formats the viewer opens.
 
 ### The panel
 
@@ -620,7 +640,7 @@ store) and forgotten with it. Nothing is in localStorage, and nothing is shared 
 in a session, and settings that outlived it would surprise the next one.
 
 - **Tab-wide**: the appearance (System, Light or Dark; a new tab follows the system), the viewport's Background (Light
-  unless picked), the home's layout, the folder the explorer was last in, and the tool stack's layout.
+  unless picked), the home's layout, and the tool stack's layout.
 - **Per file**, by its path and its view: the panel's open state, width and tab; the Display card's values; the
   camera; Explode and Clip; the pose; hidden and isolated parts and the tree's folds; a board's layers, side, mode and
   3D projection; Preview's settings; Speed and Loop.
@@ -651,7 +671,7 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   text is selected or a field has the focus. **⌘Z, ⇧⌘Z** (Ctrl+Z, Ctrl+Y) undo and redo ink and measurements.
   **Delete** or Backspace deletes picked ink and measurements.
 - **A board**, while it has the keyboard: ⌘H (Ctrl+H) cycles Others, 3 switches 2D and 3D, ⇧F flips the board.
-- **Escape** undoes the innermost thing first: an open menu or dropdown, the Display card, the explorer, the panel's
+- **Escape** undoes the innermost thing first: an open menu or dropdown, the Display card, the panel's
   search or its peek; then Preview; then the view's own steps, one a press and in the same order in every view: picked
   ink, a box being drawn or a measurement under way, the tool in hand going back to Select (its effect kept), the
   measurements picked, then the selection, then (in a view that isolates) the isolation. Why: Escape leaves the tool first, as in design tools, and the

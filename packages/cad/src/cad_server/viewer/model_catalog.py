@@ -19,9 +19,8 @@ def held(ident: str) -> tuple[dict | None, str, str]:
 
 def entry(value: str) -> dict | None:
     """The catalog row of the model document ``value`` (its id) while the engine holds it; None for
-    anything else. The row's ``file`` is the id: a model has no file to browse (``sourcePath``), and
-    its name menu's Files opens where the explorer was last, else the person's home folder; nothing
-    reads the script. Its ``hash`` is the build the engine holds (its ``version``), so a page that
+    anything else. The row's ``file`` is the id: a model has no file of its own (``sourcePath``), and
+    nothing reads the script. Its ``hash`` is the build the engine holds (its ``version``), so a page that
     shows the model hears a rebuild as it hears a file written again: its picture is taken again."""
     if not is_id(value):
         return None

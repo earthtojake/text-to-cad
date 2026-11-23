@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { unavailablePromptContext } from "@cad/core/prompt";
 import { FileViewer, defineFileRenderer } from "../index.js";
-import type { FileActions, FileEntry, FileMetadata, FileRendererProps, FileSource, FileViewerState, JsonValue } from "../types.js";
+import type { FileActions, FileMetadata, FileProject, FileRendererProps, FileSource, FileViewerState, JsonValue } from "../types.js";
 
 const events: string[] = [];
 // Every file the viewer asked its host to show: the host contract under test.
@@ -24,17 +24,6 @@ function memorySource(id: string) {
   const source: FileSource = {
     id,
     stat: async (path) => { if (!files.has(path)) throw new Error(`File does not exist: ${path}`); return metadata(path); },
-    // One folder: the folders and files directly in it.
-    list: async (directory) => {
-      const prefix = directory.endsWith("/") ? directory : `${directory}/`;
-      const entries = new Map<string, FileEntry>();
-      for (const path of [...files.keys()].filter(path => path.startsWith(prefix)).sort()) {
-        const [name, ...below] = path.slice(prefix.length).split("/");
-        entries.set(name, { path: `${prefix}${name}`, name, kind: below.length ? "directory" : "file" });
-      }
-      return [...entries.values()].sort((left, right) => (left.kind === right.kind ? 0 : left.kind === "directory" ? -1 : 1));
-    },
-    search: async (directory, query) => ({ paths: [...files.keys()].filter(path => path.startsWith(`${directory}/`) && path.includes(query)).sort(), truncated: false }),
   };
   const read = async (path: string, signal: AbortSignal) => {
     if (path.endsWith("/slow.txt")) await new Promise<void>((resolve, reject) => {
@@ -85,14 +74,18 @@ export function App() {
   // (`"pinned"`, as it is), or measured (`"measured"`, a viewer that forgot to pin it), or none.
   const [picture, setPicture] = useState<"none" | "pinned" | "measured">("none");
   const [pictureState, setPictureState] = useState<FileViewerState>({});
+  // The project the file on screen is in, where a spec names one: its name before the file's in the navbar.
+  const [project, setProject] = useState<FileProject | null>(null);
+  const showProject = (named: Omit<FileProject, "onShow"> | null) =>
+    setProject(named ? { ...named, onShow: () => { events.push(`project:${named.id}`); } } : null);
   Object.assign(window, { harness: { a, b, events, opened, rendererCallbacks, renders, cleanupWrites, state, open: setFile,
-    setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, picture: setPicture } });
+    setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, picture: setPicture, project: showProject } });
   // A host is made once for its source, as an app makes it (FileViewer's props are compared by identity).
   const primaryHost = useMemo(() => host(root, (path) => { opened.push(path); setFile(path); }), [root]);
   return <div style={{ width: "1000px", height: "650px" }}>
     <section data-testid="primary" style={{ height: "400px", display: "flex", flexDirection: "column" }}>
       {/* A host that shows one file at a time: a pick moves this view to the file. */}
-      <FileViewer file={file} host={primaryHost} renderers={renderers} state={state} onStateChange={setState} />
+      <FileViewer file={file} host={primaryHost} renderers={renderers} state={state} onStateChange={setState} project={project} />
     </section>
     {second ? <section data-testid="secondary" style={{ height: "240px" }}><FileViewer file={`${FOLDER}/notes.txt`} host={host(b, () => {})} renderers={renderers} state={otherState} onStateChange={setOtherState} /></section> : null}
     {picture === "none" ? null : <div aria-hidden="true" data-offscreen-picture="" data-testid="picture"

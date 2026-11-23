@@ -7,8 +7,9 @@ import { normalizeViewportBackground } from '@cad/core/lib/viewportTheme.js';
  *
  *   { version, settings, files }
  *
- * `settings` is tab-wide — the tool stack's layout, the appearance, the viewport's background, how
- * the home lays out its library and the folder the explorer was last in — and replaces every global preference.
+ * `settings` is tab-wide — the tool stack's layout, the appearance, the viewport's background and how
+ * the home lays out its library — and replaces every global preference. (The folder the name menu's Files was last
+ * in, `explorer`, an earlier release's, is read as nothing: projects replaced the explorer.)
  * `files` is the view of the file on screen (`kit/shell/fileView.js`: its camera, its Display
  * settings, its playback, its renderer's own slices) under `[absolute file path, renderer id]`,
  * and nothing else: a write puts a file last and drops any other (`TAB_FILE_LIMIT`), and a host
@@ -41,8 +42,6 @@ export interface TabSettings {
   viewportBackground: ViewportBackground;
   /** The home's library: its models as a grid of cards (the default) or a list. */
   library: { layout: LibraryLayout };
-  /** The folder the name menu's Files was last in, this tab: where a model's Files starts; null, none yet. */
-  explorer: { folder: string | null };
 }
 export interface TabRecord {
   version: typeof TAB_RECORD_VERSION;
@@ -63,11 +62,6 @@ function normalizeLibrary(value: unknown): TabSettings['library'] {
   return { layout: LIBRARY_LAYOUTS.includes(layout as LibraryLayout) ? (layout as LibraryLayout) : 'grid' };
 }
 
-function normalizeExplorer(value: unknown): TabSettings['explorer'] {
-  const folder = plainObject(value) ? value.folder : undefined;
-  return { folder: typeof folder === 'string' && folder ? folder : null };
-}
-
 /** The settings as the tab keeps them, from anything a store handed back. */
 export function normalizeTabSettings(value: unknown): TabSettings {
   const record = plainObject(value) ? value : {};
@@ -76,7 +70,6 @@ export function normalizeTabSettings(value: unknown): TabSettings {
     appearance: normalizeAppearance(record.appearance),
     viewportBackground: normalizeViewportBackground(record.viewportBackground) as ViewportBackground,
     library: normalizeLibrary(record.library),
-    explorer: normalizeExplorer(record.explorer),
   };
 }
 

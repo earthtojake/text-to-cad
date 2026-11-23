@@ -133,19 +133,26 @@ test('a file the server does not have is a missing file, said so', async (t) => 
   assert.equal(isMissingFileError(new Error('offline')), false);
 });
 
-test('a folder is read one at a time, and a search under it asks the server with its query', async (t) => {
+test('projects are read, opened by a folder and removed, each document a row as the library reads it', async (t) => {
   const calls = [];
-  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => {
-    calls.push(new URL(url));
-    return json(!new URL(url).searchParams.has('q') ? { path: '/m', entries: [{ name: 'arm', kind: 'directory' }], truncated: false }
-      : { path: '/m', results: ['/m/arm/link.step'], truncated: true });
+  const project = { id: 'p1', name: 'tag', root: '/m/tag', created: 1, opened: 2, missing: false, truncated: true,
+    documents: [{ id: 'd1', path: '/m/tag/a.stl', kind: 'stl', record: 'file', project: 'p1' }] };
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    const path = new URL(url).pathname;
+    calls.push([path, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
+    if (path === '/api/v1/projects' && options.method === 'POST') return json({ project: { id: 'p1', name: 'tag', root: '/m/tag' }, made: false });
+    if (path === '/api/v1/projects/p1' && options.method === 'DELETE') return json({ projects: [] });
+    return json(path === '/api/v1/projects' ? { projects: [project] } : project);
   } });
   t.after(() => client.dispose());
-  assert.deepEqual((await client.folder('/m')).entries, [{ name: 'arm', kind: 'directory' }]);
-  assert.deepEqual(await client.search('/m', 'link'), { path: '/m', results: ['/m/arm/link.step'], truncated: true });
-  assert.deepEqual(calls.map((url) => [url.origin, url.pathname, Object.fromEntries(url.searchParams)]), [
-    ['http://one.test', '/api/v1/local/folder', { path: '/m' }],
-    ['http://one.test', '/api/v1/local/folder', { path: '/m', q: 'link' }],
+  const read = { ...project, documents: [{ id: 'd1', path: '/m/tag/a.stl', kind: 'file', record: 'file', documentKind: 'stl', project: 'p1' }] };
+  assert.deepEqual(await client.projects(), [read]);
+  assert.deepEqual(await client.project('p1'), read);
+  assert.deepEqual(await client.openProject('/m/tag/sub'), { project: { id: 'p1', name: 'tag', root: '/m/tag' }, made: false });
+  assert.deepEqual(await client.removeProject('p1'), []);
+  assert.deepEqual(calls, [
+    ['/api/v1/projects', 'GET', null, null], ['/api/v1/projects/p1', 'GET', null, null],
+    ['/api/v1/projects', 'POST', '1', { path: '/m/tag/sub' }], ['/api/v1/projects/p1', 'DELETE', '1', null],
   ]);
 });
 
@@ -458,6 +465,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   assert.equal(await client.thumbnail({ id: 'd1', thumbnail: 'a.png' }), 'data:image/png;base64,iVBORw==');
   assert.equal(await client.thumbnail({ id: 'd2', thumbnail: 'none.png' }), null);
   assert.equal(await client.pick(), '/models/picked.step');
+  assert.equal(await client.pick({ folder: true, start: '/models' }), '/models/picked.step');
   await client.reveal('/models/a.step');
   await assert.rejects(client.reveal('/models/gone.step'), /no longer there/);
   assert.deepEqual(await client.consent(), { share: true }, 'the settings\' telemetry');
@@ -476,7 +484,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/api/v1/documents', 'PATCH', '1', { action: 'open', path: '/models/a.step' }],
     ['/api/v1/documents', 'PATCH', '1', { action: 'thumbnail', path: '/models/a.step', png: 'iVBORw==' }],
     ['/api/v1/documents/d1/thumbnail', 'GET', null, null], ['/api/v1/documents/d2/thumbnail', 'GET', null, null],
-    ['/api/v1/local/pick', 'POST', '1', null],
+    ['/api/v1/local/pick', 'POST', '1', {}], ['/api/v1/local/pick', 'POST', '1', { folder: true, start: '/models' }],
     ['/api/v1/local/reveal', 'POST', '1', { path: '/models/a.step' }], ['/api/v1/local/reveal', 'POST', '1', { path: '/models/gone.step' }],
     ['/api/v1/settings', 'GET', null, null],
     ['/api/v1/settings', 'PUT', '1', { telemetry: { share: true } }], ['/api/v1/settings', 'PUT', '1', { telemetry: { share: false } }],

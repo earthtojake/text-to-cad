@@ -245,38 +245,103 @@ export default {
   "language.ja": "日本語",
   "language.ko": "한국어",
 
-  "explorer.folders": "資料夾",
-  "explorer.foldersAbove": "上層資料夾",
-  "explorer.filterLabel": "篩選檔案",
-  "explorer.filterPlaceholder": "篩選檔案…",
-  "explorer.loading": "載入中…",
-  "explorer.searching": "搜尋中…",
-  "explorer.readFailed": "無法讀取這個資料夾",
-  "explorer.searchFailed": "無法搜尋這個資料夾",
-  "explorer.noCadFiles": "沒有 CAD 檔案",
-  "explorer.noCadFilesHere": "這裡沒有 CAD 檔案",
-  "explorer.noMatches": "沒有符合的檔案",
-  "explorer.noMatchesYet": "目前沒有符合的檔案。繼續輸入以縮小搜尋範圍。",
-  "explorer.stoppedEarly": "搜尋已提前停止。繼續輸入以縮小範圍。",
-  "explorer.models": "模型",
-  "explorer.files": "檔案",
-  "explorer.noModels": "還沒有模型",
-  "explorer.modelsFailed": "無法讀取模型",
-  "explorer.filterModelsLabel": "篩選模型",
-  "explorer.filterModelsPlaceholder": "篩選模型…",
-  "explorer.noModelsMatch": "沒有符合的模型",
 
-  "home.recentFiles": "最近",
+  "project.tab": "專案",
+
+
+  "project.models": "模型",
+
+
+  "project.files": "檔案",
+
+
+  "project.loading": "正在載入…",
+
+
+  "project.empty": "這裡還沒有模型或 CAD 檔案。",
+
+
+  "project.readFailed": "無法讀取此專案。",
+
+
+  "project.folderMissing": "此專案的資料夾已不存在。",
+
+
+  "project.truncated": "未列出全部檔案：此資料夾中的檔案超出一次可列出的數量。",
+
+
+  "project.showAria": "在首頁顯示 {name}",
+
+
+  "project.importFolder": "將其資料夾匯入為專案…",
+
+
+  "home.title": "首頁",
+
+
+  "home.import": "匯入",
+
+
+  "home.importFile": "檔案…",
+
+
+  "home.importFolder": "資料夾…",
+
+
+  "home.importFileButton": "匯入檔案",
+
+
+  "home.importFolderButton": "匯入資料夾",
+
+
+  "home.standalone": "獨立文件",
+
+
+  "home.projectActionsAria": "專案 {name} 的操作",
+
+
+  "home.projectRemove": "從 CAD 移除",
+
+
+  "home.projectRemoved": "已移除 {name}。磁碟上的內容沒有變更，其中的文件恢復為獨立文件。",
+
+
+  "home.projectMade": "{name} 現在是一個專案。沒有寫入任何內容到該資料夾。",
+
+
+  "home.projectAgain": "{name} 已經是一個專案。",
+
+
+  "home.projectInside": "{name} 位於已經是專案的 {project} 中。",
+
+
+  "home.projectEmpty": "這裡還沒有模型或 CAD 檔案。",
+
+
+  "home.projectMissing": "此專案的資料夾已不存在。請移除它，或將資料夾放回原處。",
+
+
+  "home.projectTruncated": "未列出全部檔案：此資料夾中的檔案超出一次可列出的數量。",
+
+
+  "home.showAll": "顯示全部 {count} 個",
+
+
+  "home.showFewer": "收合",
+
+
+  "home.emptyTitle": "這裡還沒有內容",
+
+
+  "home.emptyBody": "匯入一個檔案或資料夾，或請你的代理程式製作一個模型。",
+
+
   "home.searchAria": "搜尋模型",
   "home.searchPlaceholder": "搜尋",
   "home.layout": "版面配置",
-  "home.open": "開啟",
   "home.grid": "格狀",
   "home.list": "清單",
   "home.openAria": "開啟 {name}",
-  "home.emptyTitle": "尚未開啟任何檔案",
-  "home.emptyBody": "開啟一個 CAD 檔案，或請你的代理程式製作一個模型。",
-  "home.openFile": "開啟檔案",
   "home.formatModel": "模型",
   "home.noMatchingModels": "沒有符合的模型。",
   "home.filesAria": "檔案",

@@ -1,8 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ViewerNavbar } from '../../../dist/file-viewer/navigation/ViewerNavbar.js';
-import { MODEL_ROWS, modelRows } from '../../../dist/file-viewer/navigation/ModelList.js';
 import { ControlUsageProvider } from '../../../dist/usage/controls.js';
 
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
@@ -10,135 +8,58 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const FILE = '/home/me/models/a.step';
 const MODEL = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
-const chevron = () => document.querySelector('[data-file-name] svg.lucide-chevron-down');
-const glyph = () => document.querySelector('[data-file-name] [data-glyph]')?.getAttribute('data-glyph');
-const now = Date.now() / 1000;
-const ROWS = [
-  { path: FILE, name: 'a.step', kind: 'file', opened: now - 2 * 3600, updated: now - 30 * 86400, missing: false },
-  { path: MODEL, name: 'bracket', kind: 'model', opened: null, updated: now - 5 * 60, missing: false },
-  { path: '/home/me/models/gone.stl', name: 'gone.stl', kind: 'file', opened: now - 3 * 86400, updated: null, missing: true },
-];
-const explorer = (list = async () => []) => ({ source: { list: vi.fn(list), search: vi.fn(async () => ({ paths: [], truncated: false })) }, onOpen: vi.fn() });
-const recent = (rows = ROWS) => ({ list: vi.fn(async () => rows), onOpen: vi.fn() });
+const name = () => document.querySelector('[data-file-name]')!;
+const fileMenu = (extra = {}) => ({ platform: 'darwin' as const, capabilities: new Set(['copy-path'] as const), onAction: vi.fn(), ...extra });
 
-it('shows the name alone, with no glyph, and a chevron where it opens the name menu; a plain name has none', () => {
-  const { rerender } = render(<ViewerNavbar file={FILE} explorer={explorer()} />);
-  const trigger = document.querySelector('[data-file-name]')!;
-  expect(trigger.tagName).toBe('BUTTON');
-  expect(trigger.textContent).toBe('a.step');
-  expect(glyph()).toBeUndefined();
-  expect([...trigger.querySelectorAll('svg')]).toEqual([chevron()]);
-  expect(chevron()?.getAttribute('aria-hidden')).toBe('true');
-  expect(chevron()?.getAttribute('class')).toContain('shrink-0');
-  rerender(<ViewerNavbar file={FILE} explorer={null} />);
-  expect(document.querySelector('[data-file-name]')!.tagName).toBe('SPAN');
-  expect(chevron()).toBeNull();
-  rerender(<ViewerNavbar file={MODEL} name="bracket" kind="model" explorer={null} />);
-  expect([document.querySelector('[data-file-name]')!.textContent, document.querySelector('[data-file-name] svg')]).toEqual(['bracket', null]);
+// The ⋯ menu, opened as a press opens it.
+async function openMenu() {
+  await act(async () => { fireEvent.pointerDown(screen.getByTestId('file-actions'), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  return screen.findByRole('menu');
+}
+
+it('shows the name alone, with no glyph and no menu of its own: moving between documents is the Project list\'s', () => {
+  const { rerender } = render(<ViewerNavbar file={FILE} />);
+  expect([name().tagName, name().textContent, name().querySelector('svg')]).toEqual(['SPAN', 'a.step', null]);
+  // A model's document is named by its name, never by its id; until the name is known, its place is empty.
+  rerender(<ViewerNavbar file={MODEL} name="bracket" />);
+  expect(name().textContent).toBe('bracket');
+  rerender(<ViewerNavbar file={MODEL} />);
+  expect(name().textContent).toBe('');
+  expect(document.querySelector('[data-navbar-project]')).toBeNull();
 });
 
-it('opens Models and Files as two tabs sized to their labels, on Files over a file and on Models over a model', async () => {
-  const user = userEvent.setup();
-  render(<ViewerNavbar file={FILE} explorer={explorer()} recent={recent()} />);
-  await user.click(document.querySelector<HTMLElement>('[data-file-name]')!);
-  const menu = document.querySelector<HTMLElement>('[data-file-explorer]')!;
-  const tabs = within(menu).getAllByRole('tab');
-  expect(tabs.map(tab => [tab.textContent, tab.getAttribute('aria-selected')])).toEqual([['Models', 'false'], ['Files', 'true']]);
-  // The tabs as wide as their labels, not the menu; the menu the explorer's natural width.
-  expect(within(menu).getByRole('tablist').className).toMatch(/\bw-fit\b/);
-  expect(menu.className).toContain('w-[17.5rem]');
-  // Files is the explorer itself: its breadcrumb and filter.
-  expect(document.querySelector('[data-file-explorer] [data-folder-explorer]')).not.toBeNull();
-  expect(screen.getByRole('textbox', { name: 'Filter files' })).toBeTruthy();
-  cleanup();
-  render(<ViewerNavbar file={MODEL} name="bracket" kind="model" explorer={{ ...explorer(), folder: '/home/me/models' }} recent={recent()} />);
-  await user.click(document.querySelector<HTMLElement>('[data-file-name]')!);
-  expect(screen.getByRole('tab', { name: 'Models' }).getAttribute('aria-selected')).toBe('true');
-  expect(await screen.findByText('bracket', { selector: '[data-model-row] *' })).toBeTruthy();
-});
-
-it('lists models alone on Models, by last activity, each row its glyph, name and age, the one on screen marked, and a row opens its model', async () => {
-  const user = userEvent.setup();
-  const other = { path: '7a2d3b5f-2c3d-6e4f-9a5b-0123456789ab', name: 'arm', kind: 'model', opened: now - 3 * 3600, updated: null, missing: true };
-  const menu = recent([...ROWS, other]);
-  render(<ViewerNavbar file={MODEL} name="bracket" kind="model" explorer={explorer()} recent={menu} />);
-  await user.click(document.querySelector<HTMLElement>('[data-file-name]')!);
-  await screen.findByText('arm');
-  const rows = [...document.querySelectorAll<HTMLElement>('[data-model-row]')];
-  // No file: a.step and gone.stl are Files' and the Home's.
-  expect(rows.map(row => [row.querySelector('[data-glyph]')?.getAttribute('data-glyph'), row.textContent])).toEqual([
-    ['model', 'bracket5m ago'], ['model', 'arm3h ago']]);
-  expect(rows.map(row => row.getAttribute('aria-current'))).toEqual(['true', null]);
-  expect((rows[1] as HTMLButtonElement).disabled).toBe(true);
-  // No footer, no extra rows: the Home is one click away.
-  expect(document.querySelector('[data-model-list] [data-model-row]:last-of-type')).toBe(rows[1]);
-  // Down from the menu walks into the rows.
-  fireEvent.keyDown(document.querySelector('[data-file-explorer]')!, { key: 'ArrowDown' });
-  expect(document.activeElement).toBe(rows[0]);
-  await user.click(rows[0]);
-  expect(menu.onOpen).toHaveBeenCalledWith(MODEL);
-  expect(document.querySelector('[data-file-explorer]')).toBeNull();
-});
-
-it('filters Models under "Filter models...", which has the keyboard on opening, Down taking it into the rows and Up back', async () => {
-  const user = userEvent.setup();
-  const rows = [...ROWS, { path: '7a2d3b5f-2c3d-6e4f-9a5b-0123456789ab', name: 'arm plate', kind: 'model', opened: now - 3600, updated: null, missing: false }];
+it("puts the project's name and a slash before the document's, muted, the project's giving way first, and a press on it goes to the home at it, counted", () => {
   const reports: { control: string; count: number }[][] = [];
+  const onOpen = vi.fn();
   const view = render(<ControlUsageProvider report={counts => reports.push(counts)}>
-    <ViewerNavbar file={MODEL} name="bracket" kind="model" explorer={explorer()} recent={recent(rows)} /></ControlUsageProvider>);
-  await user.click(document.querySelector<HTMLElement>('[data-file-name]')!);
-  await screen.findByText('arm plate');
-  const filter = screen.getByRole('textbox', { name: 'Filter models' });
-  expect([filter.getAttribute('placeholder'), document.activeElement]).toEqual(['Filter models...', filter]);
-  const names = () => [...document.querySelectorAll('[data-model-row]')].map(row => row.querySelector('[data-model-age]')!.previousElementSibling!.textContent);
-  expect(names()).toEqual(['bracket', 'arm plate']);
-  await user.keyboard('ARM');
-  expect(names()).toEqual(['arm plate']);
-  await user.keyboard('{ArrowDown}');
-  expect(document.activeElement).toBe(document.querySelector('[data-model-row]'));
-  await user.keyboard('{ArrowUp}');
-  expect(document.activeElement).toBe(filter);
-  await user.clear(filter);
-  await user.keyboard('gone');
-  // a.step and gone.stl are files: nothing of Models matches.
-  expect([names(), screen.getByText('No models match').tagName]).toEqual([[], 'P']);
+    <ViewerNavbar file={FILE} project={{ name: 'heart-tag', onOpen }} /></ControlUsageProvider>);
+  const crumb = document.querySelector('[data-navbar-project]')!;
+  const button = within(crumb as HTMLElement).getByRole('button', { name: 'Show heart-tag on Home' });
+  expect([button.textContent, crumb.textContent, button.className.includes('text-muted-foreground')]).toEqual(['heart-tag', 'heart-tag/', true]);
+  // Before the name, in the row's order; the name keeps its width, the project's name shrinks.
+  expect(crumb.compareDocumentPosition(name()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect([crumb.className.includes('min-w-0'), name().className.includes('shrink-0'), name().className.includes('max-w-[65%]')]).toEqual([true, true, true]);
+  fireEvent.click(button);
+  expect(onOpen).toHaveBeenCalledTimes(1);
   view.unmount();
-  const said = Object.fromEntries(reports.flat().map(({ control, count }) => [control, count]));
-  expect(said).toEqual({ models: 1, models_filter: 2 });
+  expect(reports.flat()).toEqual([{ control: 'project_crumb', count: 1, seconds: 0 }]);
 });
 
-it('keeps Models to the eight latest, and a menu with one of the two has no tabs', async () => {
-  const many = Array.from({ length: 12 }, (_, index) => ({ path: `/m/${index}`, name: `m${index}`, kind: 'model', opened: index, updated: null }));
-  expect(modelRows([...many, { path: '/m/a.step', name: 'a.step', kind: 'file', opened: 99, updated: null }]).map(row => row.name))
-    .toEqual(['m11', 'm10', 'm9', 'm8', 'm7', 'm6', 'm5', 'm4']);
-  expect(MODEL_ROWS).toBe(8);
-  const user = userEvent.setup();
-  render(<ViewerNavbar file={MODEL} name="bracket" kind="model" recent={recent()} />);
-  await user.click(document.querySelector<HTMLElement>('[data-file-name]')!);
-  await screen.findByText('bracket', { selector: '[data-model-row] *' });
-  expect(screen.queryByRole('tab')).toBeNull();
-});
-
-it('starts a model\'s Files in the folder it is handed (where the explorer was last, else home)', async () => {
-  const user = userEvent.setup();
-  const files = explorer(async () => [{ path: '/home/me/models/b.step', name: 'b.step', kind: 'file' }]);
-  render(<ViewerNavbar file={MODEL} name="bracket" kind="model" explorer={{ ...files, folder: '/home/me/models' }} recent={recent()} />);
-  await user.click(document.querySelector<HTMLElement>('[data-file-name]')!);
-  await act(async () => { await user.click(screen.getByRole('tab', { name: 'Files' })); });
-  await screen.findByText('b.step');
-  expect(files.source.list).toHaveBeenCalledWith('/home/me/models', expect.anything());
-});
-
-it("counts the name menu's tabs as a person sees them, Models and Files (the explorer), and a row opened from Models", async () => {
-  const user = userEvent.setup();
+it("ends a document's ⋯ in Import its folder as a project where the host can, after the rest, disabled while its source is gone, counted", async () => {
   const reports: { control: string; count: number }[][] = [];
+  const onImportFolder = vi.fn();
   const view = render(<ControlUsageProvider report={counts => reports.push(counts)}>
-    <ViewerNavbar file={MODEL} name="bracket" kind="model" explorer={explorer()} recent={recent()} /></ControlUsageProvider>);
-  await user.click(document.querySelector<HTMLElement>('[data-file-name]')!); // opens on Models
-  await user.click(screen.getByRole('tab', { name: 'Files' }));
-  await user.click(screen.getByRole('tab', { name: 'Models' }));
-  await user.click((await screen.findByText('bracket', { selector: '[data-model-row] *' })).closest('button')!);
+    <ViewerNavbar file={FILE} fileMenu={fileMenu({ onImportFolder })} /></ControlUsageProvider>);
+  const menu = await openMenu();
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Import its folder as a project…']);
+  expect(within(menu).getAllByRole('separator')).toHaveLength(1);
+  await act(async () => { fireEvent.click(within(menu).getByRole('menuitem', { name: 'Import its folder as a project…' })); });
+  expect(onImportFolder).toHaveBeenCalledTimes(1);
   view.unmount();
-  const said = Object.fromEntries(reports.flat().map(({ control, count }) => [control, count]));
-  expect(said).toEqual({ models: 2, explorer: 1, models_open: 1 });
+  expect(reports.flat()).toEqual([{ control: 'file_import_folder', count: 1, seconds: 0 }]);
+  // A ⋯ with it alone, and with no separator; a source gone draws it disabled.
+  render(<ViewerNavbar file={FILE} fileMenu={fileMenu({ capabilities: new Set(), onImportFolder, sourceMissing: true })} />);
+  const alone = await openMenu();
+  expect(within(alone).queryByRole('separator')).toBeNull();
+  expect(within(alone).getByRole('menuitem', { name: 'Import its folder as a project…' }).getAttribute('data-disabled')).toBe('');
 });

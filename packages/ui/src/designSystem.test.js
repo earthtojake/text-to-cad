@@ -36,8 +36,7 @@ test("viewer chrome uses the type scale and the viewer breakpoint, never window 
 // `[scrollbar-width:none]`, its clipped edge faded instead) shows no scrollbar to style.
 const NATIVE_SCROLLER = /\boverflow(?:-[xy])?-(?:auto|scroll)\b/;
 const PAGES = ["library/ModelLibrary.tsx"];
-const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "file-viewer/navigation/FolderExplorer.jsx", "primitives/dropdown-menu.jsx",
-  "renderers/kit/status/ViewerAlertCard.jsx"];
+const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "primitives/dropdown-menu.jsx", "renderers/kit/status/ViewerAlertCard.jsx"];
 
 test("every scroll region in the viewer's chrome is the ScrollArea primitive, never a native scroller", () => {
   const found = [];
@@ -51,9 +50,9 @@ test("every scroll region in the viewer's chrome is the ScrollArea primitive, ne
   for (const file of SCROLL_REGIONS) assert.match(readFileSync(join(root, file), "utf8"), /<ScrollArea\b/, `${file} scrolls in a ScrollArea`);
 });
 
-// The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"): the controls text-ui (13/20), the
-// heading, Recent, the one larger text (15/20 semibold), a name 12/16 (text-xs) and its facts, the count, a
-// format's badge and the table's header 11/16 (text-tiny); a tile's glyph 16px.
+// The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"): the controls and a
+// section's title text-ui (13/20), the heading, Home, the one larger text (15/20 semibold), a name 12/16 (text-xs) and
+// its facts, a project's folder, a format's badge and the table's header 11/16 (text-tiny); a tile's glyph 16px.
 test("the Home is the chrome's type scale: the heading 15/20, names 12/16, facts 11/16, and 16px glyphs", () => {
   // Its rules, without the comments that stand before them.
   const css = readFileSync(join(root, "styles/globals.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -63,14 +62,15 @@ test("the Home is the chrome's type scale: the heading 15/20, names 12/16, facts
   });
   assert.deepEqual(sizes, [
     [".cad-library-heading", "var(--cad-text-heading)"],
-    [".cad-library-count", "var(--cad-text-tiny)"],
-    // In the navbar (a host's home under it), Recent is the navbar's 13/20.
+    // In the navbar (a host's home under it), Home is the navbar's 13/20.
     ["[data-navbar-home] .cad-library-heading", "var(--cad-text-ui)"],
     [".cad-library-format", "var(--cad-text-tiny)"],
     [".cad-library-card .cad-library-label", "var(--cad-text-xs)"],
     [".cad-library-status", "var(--cad-text-tiny)"],
     [".cad-library-columns", "var(--cad-text-tiny)"],
     [".cad-library-row .cad-library-label", "var(--cad-text-xs)"],
+    [".cad-library-section-title", "var(--cad-text-ui)"],
+    [".cad-library-section-path", "var(--cad-text-tiny)"],
     [".cad-library-welcome-title", "var(--cad-text-heading)"],
     [".cad-library-welcome-formats", "var(--cad-text-tiny)"],
   ]);
@@ -137,9 +137,8 @@ test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1
 
 // The panel's rows have ONE owner of their horizontal geometry (`docs/design-system.md`, "Spacing and the panel inset"): the row
 // primitive pads a row by its `depth` and draws its guides, and the view's panel sets the lines. No
-// list pads a row, nor brings its own glyph column or chevron: only the primitive and the explorer
-// (which pads its own rows) read the old constants.
-const ROW_OWNERS = ["primitives/tree-row.jsx", "file-viewer/navigation/FolderExplorer.jsx", "file-viewer/navigation/ModelList.jsx"];
+// list pads a row, nor brings its own glyph column or chevron: only the primitive reads the old constants.
+const ROW_OWNERS = ["primitives/tree-row.jsx"];
 const ROW_CONSTANTS = /\b(TREE_ROW_INSET_PX|TREE_INDENT_PX|LAYER_ROW_INSET_PX|TreeRowGuides)\b/;
 const ROW_PADDING = /padding(?:Left|Right|Inline|InlineStart|InlineEnd)?\b|(?<![\w-])p[lrxse]?-/;
 // The opening tag at `from`, to its closing `>`: braces and quotes skipped.

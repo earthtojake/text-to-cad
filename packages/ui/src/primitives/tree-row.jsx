@@ -4,8 +4,8 @@ import { ChevronRight } from 'lucide-react';
 import { cn } from '@cad/ui/utils';
 import { DESKTOP_SCALE, PHONE_SCALE, scaleFor } from '../lib/scale.js';
 
-// Every tree's row is one compact line at THE scale (`globals.css`): the explorer's a small row (`--cad-row-sm`, 24px
-// on a desktop) in 12px text, a list of the view's panel a row (`--cad-row`, 28px) in the panel's one text size
+// Every tree's row is one compact line at THE scale (`globals.css`): a list outside the panel a small row (`--cad-row-sm`,
+// 24px on a desktop) in 12px text, a list of the view's panel a row (`--cad-row`, 28px) in the panel's one text size
 // (`dense`: `--cad-text-panel`); a phone's both 36px, from the scale, never from the row.
 export const TREE_ROW_HEIGHT = DESKTOP_SCALE.rowSm;
 export const TREE_ROW_DENSE_HEIGHT = DESKTOP_SCALE.row;
@@ -15,7 +15,7 @@ export const TREE_ROW_TOUCH_HEIGHT = PHONE_SCALE.row;
 export const useTreeRowHeight = () => scaleFor(useViewerMobile()).row;
 /** What each level of a tree adds to a row's indent: little, its rows hung from a faint line under each owner's glyph. */
 export const TREE_INDENT_PX = 10;
-/** The explorer's rows' left padding (`FolderExplorer.jsx`, `ModelList.jsx`): the default of `--tree-row-pad`. */
+/** A row's left padding where its panel sets none: the default of `--tree-row-pad`. */
 export const TREE_ROW_INSET_PX = 5;
 /** A row's glyph — its disclosure chevron, its kind's icon — small and light, 12px. */
 export const TREE_GLYPH_CLASS = 'size-3 shrink-0 text-muted-foreground/70';
@@ -32,7 +32,7 @@ export const TREE_ROW_NAME_CLASS = 'flex h-full min-w-0 flex-1 items-center gap-
 // Where a row's geometry comes from: whoever holds the rows sets these once (the view's panel, `PanelSurface.jsx`:
 // its rows hang half its inset out past it, `--tree-row-hang`, their fill reaching that far, and pad half its inset,
 // `--tree-row-pad`, so their first glyph stands on the inset and their last action's glyph ends the inset from the
-// right, `--tree-row-actions-pad`); the defaults are the explorer's, whose rows hang out by nothing.
+// right, `--tree-row-actions-pad`); the defaults are a list's outside the panel, whose rows hang out by nothing.
 const PAD = `var(--tree-row-pad, ${TREE_ROW_INSET_PX}px)`;
 const HANG = 'var(--tree-row-hang, 0px)';
 const GLYPH = 'var(--tree-row-glyph, 12px)';
@@ -46,7 +46,7 @@ const rowPadding = depth => (depth ? `calc(${PAD} + ${depth * TREE_INDENT_PX}px)
  * branch's chevron (`TreeRowToggle`) or a leaf's kind icon or marker (`TreeRowGlyph`: a layer's colour
  * takes the slot instead of an icon), never two, so every name at a level starts on one column — its
  * name (`TREE_ROW_NAME_CLASS`: `TreeRowName` and `TreeRowDetail`), then its actions (`TreeRowActions`),
- * `actions` of them, which the name fades out under. Without a `depth` (the explorer's rows) the caller pads it. `dense`: the panel's text,
+ * `actions` of them, which the name fades out under. Without a `depth` the caller pads it. `dense`: the panel's text,
  * its names at full strength.
  */
 export const TreeRowSurface = forwardRef(function TreeRowSurface({
@@ -84,7 +84,7 @@ export function TreeRowGlyph({ className, children, ...props }) {
   return <span data-tree-row-glyph='' aria-hidden='true' className={cn(SLOT_CLASS, className)} {...props}>{children}</span>;
 }
 
-/** A branch's disclosure: one light chevron, turned down while it is open. The explorer draws it bare. */
+/** A branch's disclosure: one light chevron, turned down while it is open. */
 export function TreeRowChevron({ expanded }) {
   return <ChevronRight className={cn(TREE_GLYPH_CLASS, 'transition-transform duration-100', expanded && 'rotate-90')} aria-hidden='true' />;
 }
@@ -158,16 +158,6 @@ export function TreeRowHeading({ as: Component = 'h3', className, children, ...p
   return <Component className={cn('flex h-control min-w-0 items-center text-ui font-normal text-muted-foreground', className)} data-tree-heading='' {...props}>
     <span className='min-w-0 truncate'>{children}</span>
   </Component>;
-}
-
-/**
- * The faint lines an explorer row `depth` levels down hangs from, for rows that pad themselves:
- * `inset` is where the row's first level starts, and `column` the width its chevron is centred in.
- */
-export function TreeRowGuides({ depth, inset = 0, column = 12 }) {
-  if (!depth) return null;
-  return Array.from({ length: depth }, (_, level) => <span key={level} aria-hidden='true' data-tree-guide=''
-    className='pointer-events-none absolute inset-y-0 w-px bg-border' style={{ left: inset + level * TREE_INDENT_PX + column / 2 - 0.5 }} />);
 }
 
 // The names' widths of the loading rows, as shares of the room after the glyph: uneven, so they read as a list.

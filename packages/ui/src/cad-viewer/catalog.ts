@@ -5,13 +5,13 @@ import type { FileActions, FileMetadata, FileSource } from '../file-viewer/types
 
 /**
  * `@cad/ui/catalog`: CAD files as the viewer reads them, by absolute path, and documents the
- * engine holds by their id alone (a model's), which have no file to browse. Pure — no React
+ * engine holds by their id alone (a model's), which have no file of their own. Pure — no React
  * and no transport — so a host's adapters and their unit tests import it alone.
  *
- * A view shows one file and browses from its folder. The source a host hands the viewer
- * (`createCadFileSource`) reads the file's catalog entry, lists a folder at a time and searches
- * under one, all through a CAD client; the file menu (`createCadFileActions`) copies a file's
- * path and reveals it. Every path is absolute, in forward slashes, in every app.
+ * A view shows one file. The source a host hands the viewer (`createCadFileSource`) reads the
+ * file's catalog entry through a CAD client; the file menu (`createCadFileActions`) copies a file's
+ * path and reveals it. Moving between files is a project's (the server's projects, which a host's
+ * library reads). Every path is absolute, in forward slashes, in every app.
  */
 
 /** `path` in the viewer's one spelling: forward slashes, and no trailing one but the top's (`/`, `C:/`). */
@@ -39,12 +39,11 @@ export function contentRevision(entry: CadEntry): string {
 }
 
 /**
- * The files a view reads, through a CAD client: a file's metadata from its catalog entry, one
- * folder's subfolders and CAD files, and a bounded search under a folder. A file's revision is its
- * content's (`contentRevision`), never compiler progress. (A renderer follows its file's updates
- * through the client itself.)
+ * The files a view reads, through a CAD client: a file's metadata from its catalog entry. A file's
+ * revision is its content's (`contentRevision`), never compiler progress. (A renderer follows its
+ * file's updates through the client itself.)
  */
-export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEntry' | 'folder' | 'search'>,
+export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEntry'>,
   { id = 'local' }: { id?: string } = {}): FileSource {
   return {
     id,
@@ -64,14 +63,6 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEn
         ...(entry.sourcePresent === false ? { sourceMissing: true } : {}), kind: 'file', size: Number(entry.bytes || 0),
         extension: byId ? 'xbf' : name.split('.').pop()?.toLowerCase() || '', mediaType: byId ? 'cad-document' : 'cad',
         revision: contentRevision(entry) };
-    },
-    async list(directory, { signal }) {
-      const folder = await client.folder(directory, { signal });
-      return folder.entries.map(entry => ({ path: joinPath(folder.path, entry.name), name: entry.name, kind: entry.kind }));
-    },
-    async search(directory, query, { signal }) {
-      const found = await client.search(directory, query, { signal });
-      return { paths: found.results.map(normalizePath), truncated: found.truncated };
     },
   };
 }

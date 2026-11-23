@@ -25,7 +25,10 @@ export interface Launch {
   platform?: string;
   /** The home's library as it stood, so the home draws its cards without asking first. */
   recents?: Recent[];
-  /** Whether this computer has a file chooser for the home's Open. */
+  /** The projects as they stood (`GET /api/v1/projects`'s), each with its documents' rows: the home's sections, at once. */
+  projects?: { id: string; name: string; root: string; created: number | null; opened: number | null; missing: boolean;
+    documents: Recent[]; truncated?: boolean }[];
+  /** Whether this computer has a chooser for the home's Import (a file, a folder). */
   pick?: boolean;
   /**
    * The ways to the engine that need no call, where it gives a page (`cad_server/mcp/server.py`'s
