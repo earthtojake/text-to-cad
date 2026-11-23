@@ -505,14 +505,14 @@ it('ends the app menu with the version the host runs, a link to its release note
     return shown;
   };
   const notes = 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.15';
-  expect(await footer(viewerLinks({ version: '0.7.15' }))).toEqual(['v0.7.15Made by @earthtojake', notes]);
-  expect(await footer(viewerLinks({ version: '0.7.15', build: 'b80844940-dirty' }))).toEqual(['v0.7.15-dev.b80844940-dirtyMade by @earthtojake', notes]);
-  // Its links are muted, 11/16, the foreground and underlined under the pointer or the keyboard: never the brand's blue.
+  expect(await footer(viewerLinks({ version: '0.7.15' }))).toEqual(['v0.7.15', notes]);
+  expect(await footer(viewerLinks({ version: '0.7.15', build: 'b80844940-dirty' }))).toEqual(['v0.7.15-dev.b80844940-dirty', notes]);
+  // Its one link is muted, 11/16, the foreground and underlined under the pointer or the keyboard: never the brand's blue.
   open({ host: { ...host, links: viewerLinks({ version: '0.7.15' }) } });
   await screen.findByText('shown');
   await user.click(screen.getByRole('button', { name: 'Menu' }));
   const links = [...document.querySelectorAll<HTMLElement>('[data-app-menu] [data-menu-footer] a')];
-  expect(links.length).toBe(2);
+  expect(links.length).toBe(1);
   for (const link of links) {
     expect(link.className).not.toMatch(/brand/);
     expect(['text-muted-foreground', 'hover:text-foreground', 'hover:underline', 'focus-visible:underline'].every(name => link.className.split(' ').includes(name))).toBe(true);

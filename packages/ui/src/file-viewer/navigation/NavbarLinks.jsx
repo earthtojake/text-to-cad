@@ -9,8 +9,7 @@ import { issueUrl } from "./links.js";
  * The host's links (`ViewerHost.links`, built by `viewerLinks` in `links.js`), as the viewer shows
  * them: Send feedback (`feedbackUrl`), GitHub, Discord and X (`useOutwardLinks`), which are icons in the panel's foot
  * (`../PanelFoot.jsx`: the bottom of the sidebar, on the home and over a document) and, in a host with no home, items
- * of the app menu the logo opens (`AppMenu.jsx`); and in the app menu's footer the version (its release notes) and "Made by @…" (`MadeBy`, the
- * host's X account). Every link opens the host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
+ * of the app menu the logo opens (`AppMenu.jsx`); and in the app menu's footer the version (its release notes). Every link opens the host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
  * frame that cannot hands it to `links.open` (the host's own browser).
  */
 
@@ -62,16 +61,4 @@ export function useOutwardLinks(links, platform) {
     x: link("x", "X", links?.x, XMark),
     feedback: link("feedback", t("menu.feedback"), links ? feedbackUrl(links, platform) : "", MessageCircle),
   };
-}
-
-/**
- * Who made it: "Made by @handle", the host's X account, in the app menu's footer.
- * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
- */
-export function MadeBy({ links, onError }) {
-  const { t } = useI18n();
-  const follow = useFollow(links, onError);
-  const handle = String(links.x || "").replace(/\/+$/, "").split("/").pop();
-  if (!links.x || !handle) return null;
-  return <a href={links.x} target="_blank" rel="noreferrer" onClick={follow} className="text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline" data-link="made-by">{t("menu.madeBy", { handle })}</a>;
 }

@@ -228,7 +228,6 @@ export default {
   "menu.language": "语言",
   "menu.languageAutomatic": "自动（{language}）",
   "menu.feedback": "发送反馈",
-  "menu.madeBy": "由 @{handle} 制作",
   "menu.settings": "设置",
 
   "consent.shareUsage": "遥测",

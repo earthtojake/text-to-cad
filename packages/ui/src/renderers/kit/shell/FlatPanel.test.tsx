@@ -279,7 +279,7 @@ it("ends in the panel's foot where the host has a home, pinned, peeking or a pho
   await act(async () => { fireEvent.pointerDown(within(foot()!).getByRole('button', { name: 'Settings' }), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
   const settings = await screen.findByRole('menu', { name: 'Settings' });
   expect([settings.querySelector('[data-menu-theme]') !== null, settings.querySelector('[data-link]:not([data-link="made-by"])'), settings.querySelector('[data-menu-footer]')?.textContent])
-    .toEqual([true, null, 'v0.7.4Made by @earthtojake']);
+    .toEqual([true, null, 'v0.7.4']);
   cleanup();
   // A host with no home hands no menu (its logo opens it), and a panel outside a file viewer has none: no foot.
   render(panel({}));

@@ -228,7 +228,6 @@ export default {
   "menu.language": "語言",
   "menu.languageAutomatic": "自動（{language}）",
   "menu.feedback": "提供意見回饋",
-  "menu.madeBy": "由 @{handle} 製作",
   "menu.settings": "設定",
 
   "consent.shareUsage": "遙測",

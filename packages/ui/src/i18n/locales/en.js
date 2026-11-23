@@ -236,7 +236,6 @@ export default {
   "menu.language": "Language",
   "menu.languageAutomatic": "Automatic ({language})",
   "menu.feedback": "Send feedback",
-  "menu.madeBy": "Made by @{handle}",
   "menu.settings": "Settings",
 
   // The menu's on/off settings (the host's app settings).

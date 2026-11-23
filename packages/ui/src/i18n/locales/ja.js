@@ -227,7 +227,6 @@ export default {
   "menu.language": "言語",
   "menu.languageAutomatic": "自動（{language}）",
   "menu.feedback": "フィードバックを送信",
-  "menu.madeBy": "制作: @{handle}",
   "menu.settings": "設定",
 
   "consent.shareUsage": "テレメトリ",

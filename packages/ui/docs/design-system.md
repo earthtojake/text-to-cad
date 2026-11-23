@@ -150,7 +150,7 @@ The tokens are shadcn's neutral set (`styles/tokens.css`), greys with no hue, as
   the document just left, and the logo. It is never a button's fill or a link in the chrome, and the panel toggle stays neutral. Why:
   blue says "on" only while nothing else is blue. `--brand-icon` is at least 3:1 on the pressed fill and on white;
   `--brand-text` is darker, for text, as that blue reads dark and odd on a glyph.
-- **A link in the chrome** (the app menu's version, "Made by") is muted `text-tiny` that turns the foreground and
+- **A link in the chrome** (the app menu's version) is muted `text-tiny` that turns the foreground and
   underlined under the pointer or keyboard focus. A slider's colours are its own `--slider-*` tokens.
 - **The scene's colours are core's** (`@cad/core/lib/viewportTheme.js`): selection #2979ff (more saturated than the
   brand on purpose: it is read against a model), its fill #4f9dff, hover #8dc5ff, a selected edge #1a73e8, the box

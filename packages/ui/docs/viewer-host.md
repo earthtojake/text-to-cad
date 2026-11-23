@@ -620,8 +620,7 @@ where the host has a tracker
 (`feedbackUrl`, `NavbarLinks.jsx`), for the person to finish, naming the version and
 `environment.platform` — it has no label: the project has none for feedback, and what is
 said may be a bug, a request or a question — then **GitHub** and **Discord**; and last, in
-gray, two rows: "v<version>" and under it "Made by @<handle>": the version links its release notes
-(`links.release`) and `MadeBy` the host's X account. The version is the release's own build's
+gray, "v<version>", which links its release notes (`links.release`). The version is the release's own build's
 as it is (`v0.10.0`), and any other build's with its id (`v0.10.0-dev.b80844940`, the commit
 it was built from, `-dirty` with uncommitted changes): `viewerLinks({ version, build })`,
 where each app's Vite config names the build through `@cad/ui/build-id`, and a new

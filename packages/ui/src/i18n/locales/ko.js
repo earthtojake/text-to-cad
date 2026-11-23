@@ -227,7 +227,6 @@ export default {
   "menu.language": "언어",
   "menu.languageAutomatic": "자동({language})",
   "menu.feedback": "피드백 보내기",
-  "menu.madeBy": "만든 사람 @{handle}",
   "menu.settings": "설정",
 
   "consent.shareUsage": "원격 분석",

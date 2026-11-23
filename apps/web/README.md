@@ -552,8 +552,7 @@ left the logo (the C mark, on the home and over a file alike), which is the link
 project, the project's name and a slash (to that project's page on the home), then the open file's name (no glyph),
 with its ⋯ (Export, over a file that writes formats; Search documents, ⌘K; Import its folder as a project, for a document in no project). The foot of the sidebar, on the home and over a file, holds GitHub, Discord, X and Send feedback (a new issue titled "Feedback: ") as icons, and Settings, a cog whose menu (the app menu) holds the
 person's settings (Language — Automatic or a named language —, Telemetry, Theme)
-and, in gray, the version (a link to its release notes) and "Made by @…"
-(X), as in the CAD app.
+and, in gray, the version (a link to its release notes), as in the CAD app.
 Its first control, before the logo, is the panel's toggle, over a file and over the home; at its right end the view portals its own Display (the
 plain cube) and a 3D file's or a board's Preview;
 in Preview the navbar gives way to Preview's own bar. This host

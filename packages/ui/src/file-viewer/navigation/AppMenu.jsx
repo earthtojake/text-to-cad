@@ -14,7 +14,7 @@ import { TooltipHint } from "../../primitives/tooltip.jsx";
 import { FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
 
 import { useViewerMobile } from "../responsive.js";
-import { MadeBy, useFollow, useOutwardLinks } from "./NavbarLinks.jsx";
+import { useFollow, useOutwardLinks } from "./NavbarLinks.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 
 const NONE = Object.freeze([]);
@@ -137,18 +137,14 @@ export function AppMenu({ trigger, side = "bottom", align = "start", label, outw
     ? <a href={links.release} target="_blank" rel="noreferrer" onClick={follow} className="min-w-0 truncate text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
       data-menu-version="">v{links.version}</a>
     : <span className="min-w-0 truncate" data-menu-version="">v{links.version}</span>}</TooltipHint> : null;
-  const madeBy = links?.x ? <MadeBy links={links} /> : null;
   return <DropdownMenu modal={false} onOpenChange={() => setLanguageOpen(false)}>
     <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
     <DropdownMenuContent side={side} align={align} sideOffset={6} collisionPadding={8} aria-label={label ?? t("navbar.menu")} data-app-menu=""
       className={cn(FLOATING_SURFACE_CLASS, "w-48 max-w-(--radix-dropdown-menu-content-available-width) data-[state=closed]:animate-none!")}>
       {groups.map((group, index) => <Fragment key={index}>{index ? <DropdownMenuSeparator /> : null}{group}</Fragment>)}
-      {version || madeBy ? <>
+      {version ? <>
         {groups.length ? <DropdownMenuSeparator /> : null}
-        <div className="flex min-w-0 flex-col gap-0.5 whitespace-nowrap px-2 py-1.5 text-tiny text-muted-foreground tabular-nums" data-menu-footer="">
-          {version ? <div className="flex min-w-0">{version}</div> : null}
-          {madeBy ? <div className="flex min-w-0">{madeBy}</div> : null}
-        </div>
+        <div className="flex min-w-0 whitespace-nowrap px-2 py-1.5 text-tiny text-muted-foreground tabular-nums" data-menu-footer="">{version}</div>
       </> : null}
     </DropdownMenuContent>
   </DropdownMenu>;

@@ -1418,7 +1418,7 @@ it("ends its sidebar in a row of icons, pinned: the host's links at the left (Gi
     const menu = await settings(side);
     expect([menu.hasAttribute('data-app-menu'), menuRows(menu), menu.querySelector('[data-link="github"], [data-link="discord"], [data-link="feedback"]'),
       menu.querySelector('[data-menu-footer]')?.textContent, cog(side).getAttribute('data-state')])
-      .toEqual([true, ['Telemetry', 'System', 'Light', 'Dark'], null, 'v0.7.4Made by @earthtojake', 'open']);
+      .toEqual([true, ['Telemetry', 'System', 'Light', 'Dark'], null, 'v0.7.4', 'open']);
     // A setting turns without closing it.
     await act(async () => { fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: 'Telemetry' })); });
     await act(async () => { fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Dark' })); });

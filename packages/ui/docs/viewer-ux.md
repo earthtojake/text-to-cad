@@ -105,7 +105,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   muted at rest, Display in the accent fill while its card is open, tooltips below (none on a phone). In Preview the
   navbar is hidden, and Preview's own bar stands in its place.
 - **The app menu** is Settings, the cog in the panel's foot ([The panel's foot](#the-panels-foot)): Language, the
-  host's switches (Telemetry) and Theme, then a muted footer with the version and "Made by". Send feedback, GitHub and
+  host's switches (Telemetry) and Theme, then a muted footer with the version. Send feedback, GitHub and
   Discord are icons beside it, not items. In a host with no home it is the logo's, and holds those three too. Its rows
   come from the host; settings rows keep it open. A file's view settings are never here, and neither is a way to
   another page: the logo goes home, and the search is a key and a document's ⋯.
@@ -272,7 +272,7 @@ rule below holds on both pages; "the view" is the page it stands beside, "the mo
   where the host gives that link), then Send feedback (the round chat bubble: a new issue on the host's tracker).
   A press opens the link the host's way. Muted at rest, the foreground under the pointer.
 - **At its right corner, Settings**, a cog, which opens the app menu upward: Language, the host's switches
-  (Telemetry), Theme, and the version and "Made by". The cog is lit while its menu is open.
+  (Telemetry), Theme, and the version. The cog is lit while its menu is open.
 - **On the panel's lines**: the first icon and the cog's stand on the two insets, as the head's icons do. At the
   panel's narrowest (200px) the row fits; links that would not fit wrap upward, and the cog keeps its corner.
 - **A tab's own actions row** (Params' Reset and Save) stays in the scroller, directly over the foot's rule, flush
