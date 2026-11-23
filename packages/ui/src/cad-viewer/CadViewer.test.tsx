@@ -207,17 +207,44 @@ test('a model document on screen is pictured by its id once it settles, once per
   await vi.waitFor(() => expect(kept).toEqual([['build 1', id], ['build 2', id]]));
 });
 
-test("the person's settings and the host's links go to the app menu over every file and the home; the home has no links of its own", async () => {
+test("the person's settings and the host's links go to the file viewer for the app menu (the home's Settings); the home has no links of its own", async () => {
   const client = cadClient();
   const appSettings = [{ id: 'analytics', label: 'Share anonymous usage data', checked: false, onCheckedChange: () => {} }];
   render(<CadViewer client={client as never} host={ports(client, { links: viewerLinks({ version: '0.7.4' }) })} tabStore={createTabStore(memoryTabRecord())}
     live={createLiveRegistry()} file="/models/parts/a.step" library={library} appSettings={appSettings} onShow={() => {}} />);
-  // FileViewer's navbar logo opens them (its own suite).
+  // FileViewer hands them to the home's sidebar for its Settings row (their own suites).
   expect(props().appSettings).toBe(appSettings);
   expect(props().host.links).toEqual(expect.objectContaining({ version: '0.7.4' }));
   const home = render(props().presentation!.home as ReactElement);
   await home.findByRole('heading', { name: 'Home' });
   expect(home.queryByRole('link')).toBeNull();
+});
+
+test("the home's sidebar is kept in the tab's settings as a file's panel is in its view: the person's choice and its width, handed back to the home each time it is shown and after a reload", () => {
+  const client = cadClient();
+  const storage = memoryTabRecord();
+  const page = (tabStore: ReturnType<typeof createTabStore>, file = '') => <CadViewer client={client as never} host={ports(client)} tabStore={tabStore} live={createLiveRegistry()}
+    file={file} library={library} onShow={() => {}} />;
+  const home = () => props().presentation!.home as { props: { panel: object | null; onPanelChange(panel: object): void } };
+  const tabStore = createTabStore(storage);
+  const { rerender, unmount } = render(page(tabStore));
+  // Nothing chosen yet: nothing kept, and the home's width decides.
+  expect([home().props.panel, tabStore.settings.getSnapshot().library]).toEqual([null, { layout: 'grid', sort: 'activity' }]);
+  act(() => home().props.onPanelChange({ open: false }));
+  act(() => home().props.onPanelChange({ open: false, width: 304 }));
+  expect(tabStore.settings.getSnapshot().library).toEqual({ layout: 'grid', sort: 'activity', panel: { open: false, width: 304 } });
+  // It is the home's, beside its layout and its order: neither write drops the other, and a file shown meanwhile keeps none of it.
+  act(() => (home().props as unknown as { onLayoutChange(layout: string): void }).onLayoutChange('list'));
+  rerender(page(tabStore, '/models/a.step'));
+  rerender(page(tabStore));
+  expect([home().props.panel, tabStore.settings.getSnapshot().library.layout, tabStore.getSnapshot().files]).toEqual([{ open: false, width: 304 }, 'list', {}]);
+  // A reload of the tab (its storage read again) brings it back; what the person undid is gone from it.
+  unmount();
+  const reloaded = createTabStore(storage);
+  render(page(reloaded));
+  expect(home().props.panel).toEqual({ open: false, width: 304 });
+  act(() => home().props.onPanelChange({}));
+  expect(reloaded.settings.getSnapshot().library).toEqual({ layout: 'list', sort: 'activity' });
 });
 
 test('a document named by its id is its row, joined by id: the host hears its file and its id, and one the engine does not hold says why', async () => {
@@ -343,7 +370,7 @@ test("the home's place is the host's where it keeps one, the view's own otherwis
   expect(homeProps().place).toEqual({ view: 'recents' });
   act(() => homeProps().onPlaceChange({ view: 'pinned' }));
   expect([homeProps().place, shows.at(-1)]).toEqual([{ view: 'pinned' }, ['', { view: 'pinned' }]]);
-  // The navbar's logo, and the app menu's Back to home, lead to the home's first place; a press's event is no place.
+  // The navbar's logo leads to the home's first place; a press's event is no place.
   act(() => (props().host.navigation.home as (event?: unknown) => void)({ view: window, type: 'click' }));
   expect([homeProps().place, shows.at(-1)]).toEqual([{ view: 'recents' }, ['', { view: 'recents' }]]);
   act(() => props().host.navigation.home!({ view: 'project', project: 'p1' }));

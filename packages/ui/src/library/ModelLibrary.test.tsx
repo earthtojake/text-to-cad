@@ -1,11 +1,15 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 // The built module: its Settings is the renderer kit's, whose JSX lives in .js files this runner does not compile.
 import { ModelLibrary } from '../../dist/library/ModelLibrary.js';
 import { activityLabel, ageLabel, lastActivity } from '../../dist/lib/age.js';
 import { ControlUsageProvider } from '../../dist/usage/controls.js';
 import { ViewerHostContext } from '../../dist/host/context.js';
-import { ViewerMobileContext } from '../../dist/file-viewer/responsive.js';
+import { FileViewer } from '../../dist/file-viewer/index.js';
+import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
+import { PANEL_PEEK_DELAY_MS, PANEL_PEEK_EXIT_FALLBACK_MS, PANEL_PEEK_LEAVE_MS } from '../../dist/file-viewer/panelPeek.js';
+import { testHost } from '../../dist/host/testing/host.js';
 import { PLACE_ROWS, below, sortDocuments } from '../../dist/library/ModelLibrary.js';
 import type { LibraryModel, LibraryNavigation, LibraryProject, ModelLibrarySource } from './ModelLibrary.js';
 
@@ -578,8 +582,8 @@ it('lists its places in a sidebar: Recents, Pinned with its count, each project 
   </ControlUsageProvider>);
   await screen.findByRole('button', { name: 'Open loose.step' });
   const sidebar = screen.getByRole('navigation', { name: 'Places' });
-  // The panel's surface and its rows: a glyph, the name, its count on the right; none where there is nothing to count.
-  expect(sidebar.getAttribute('data-panel-surface')).toBe('home');
+  // The panel's surface (the viewer's own, docked) and its rows: a glyph, the name, its count on the right; none where there is nothing to count.
+  expect([sidebar.closest('aside')!.getAttribute('data-panel-surface'), sidebar.closest('aside')!.getAttribute('aria-label')]).toEqual(['docked', 'Sidebar']);
   const rows = [...sidebar.querySelectorAll<HTMLElement>('[data-place]')];
   expect(rows.map(row => [row.getAttribute('data-place'), row.textContent, row.hasAttribute('data-tree-row'), row.querySelectorAll('svg').length]))
     .toEqual([['recents', 'Recents', true, 1], ['pinned', 'Pinned2', true, 1], ['project:p1', 'heart-tag11', true, 1], ['project:p2', 'lamp', true, 1], ['standalone', 'Standalone2', true, 1]]);
@@ -1020,63 +1024,394 @@ it('shows the document just left even where it is past the first of a long place
   expect([opens().length, opens().at(-1), document.querySelectorAll('[data-from]').length]).toEqual([PLACE_ROWS + 5, `Open ${last.name}`, 1]);
 });
 
-// A home with no room for a sidebar: its places are a menu on its heading.
-const narrowMenu = async () => {
-  await act(async () => { fireEvent.pointerDown(screen.getByRole('button', { name: /^Places: / }), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
-  return screen.findByRole('menu');
-};
-
-it("has no sidebar at the phone's scale: the heading is a menu button listing the same places with the same counts", async () => {
-  const reports: { control: string; count: number; seconds: number }[][] = [];
-  const importFolder = vi.fn(async () => null);
-  const source = library([model('loose.step', { pinned: true })], { projects: async () => [project('p1', 'heart-tag', 3), project('p2', 'lamp', 0, 0, { missing: true })], importFolder, removeProject: async () => [] });
-  const places: unknown[] = [];
-  const phone = () => render(<ControlUsageProvider report={counts => reports.push(counts)}><ViewerMobileContext.Provider value={true}>
-    <ModelLibrary library={source} onPlaceChange={next => places.push(next)} /></ViewerMobileContext.Provider></ControlUsageProvider>);
-  let view = phone();
-  await screen.findByRole('button', { name: 'Open loose.step' });
-  expect([screen.queryByRole('navigation'), document.querySelector('[data-library-narrow]') !== null]).toEqual([null, true]);
-  // The page's heading is the button: it names the place on screen, and the heading row has no name of its own.
-  const trigger = screen.getByRole('button', { name: 'Places: Recents' });
-  expect([trigger.closest('h1') !== null, trigger.textContent, screen.getByRole('main').querySelector('h2')]).toEqual([true, 'Recents', null]);
-  let open = await narrowMenu();
-  expect(within(open).getAllByRole('menuitemradio').map(item => [item.getAttribute('data-place'), item.textContent, item.getAttribute('aria-checked')]))
-    .toEqual([['recents', 'Recents', 'true'], ['pinned', 'Pinned1', 'false'], ['project:p1', 'heart-tag3', 'false'], ['project:p2', 'lamp', 'false'], ['standalone', 'Standalone1', 'false']]);
-  // "Projects" over the projects, and the +'s words last, where the host has a chooser.
-  expect([open.querySelector('[data-slot=dropdown-menu-label]')?.textContent, within(open).getAllByRole('menuitem').map(item => item.textContent)])
-    .toEqual(['Projects', ['Open a folder as a project']]);
-  await act(async () => { fireEvent.click(within(open).getByRole('menuitemradio', { name: /heart-tag/ })); });
-  expect(places).toEqual([{ view: 'project', project: 'p1' }]);
-  expect([screen.getByRole('button', { name: 'Places: heart-tag' }).textContent, opens().length]).toEqual(['heart-tag', 3]);
-  // The project's ⋯ stays in reach.
-  expect(screen.getByRole('button', { name: 'Actions for the project heart-tag' })).toBeTruthy();
-  view.unmount();
-  cleanup();
-  view = phone();
-  await screen.findByRole('button', { name: 'Open loose.step' });
-  open = await narrowMenu();
-  await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Open a folder as a project' })); });
-  expect(importFolder).toHaveBeenCalledTimes(1);
-  view.unmount();
-  expect(reported(reports)).toEqual({ home_place_project: 1, home_import_folder: 1 });
-});
-
-it('has no sidebar in a home narrower than 720px, measured on the home and never the window', async () => {
+// A narrow home keeps its sidebar's ways (`LibrarySidebar.jsx`): what narrows is the place's own gutters.
+it('puts the place on the narrow gutters in a home narrower than 720px, measured on the home and never the window; its heading stays Home and the place keeps its name', async () => {
   let width = 719;
   const boxes = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     const wide = this.classList.contains('cad-library') ? width : 0;
     return { x: 0, y: 0, left: 0, top: 0, right: wide, bottom: 0, width: wide, height: 0, toJSON() {} } as DOMRect;
   });
-  let resized!: () => void;
-  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resized = callback; } observe() {} disconnect() {} });
+  const resized: (() => void)[] = [];
+  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resized.push(callback); } observe() {} disconnect() {} });
   try {
     render(<ModelLibrary library={library([model('a.step')])} />);
     await screen.findByRole('button', { name: 'Open a.step' });
-    expect([screen.queryByRole('navigation'), screen.getByRole('button', { name: 'Places: Recents' }) !== null]).toEqual([null, true]);
-    // Wide enough again: the sidebar, and Home.
+    const narrow = () => document.querySelector('[data-library-narrow]') !== null;
+    // No menu of places on the heading: Home, and the place's name in its own row, at any width.
+    expect([narrow(), screen.getByRole('heading', { level: 1 }).textContent, screen.getByRole('main').querySelector('h2')?.textContent, screen.queryByRole('button', { name: /^Places/ })])
+      .toEqual([true, 'Home', 'Recents', null]);
     width = 720;
-    await act(async () => { resized(); });
-    expect([screen.getByRole('navigation', { name: 'Places' }) !== null, screen.queryByRole('button', { name: /^Places: / }), screen.getByRole('heading', { level: 1 }).textContent])
-      .toEqual([true, null, 'Home']);
+    await act(async () => { resized.forEach(callback => callback()); });
+    expect([narrow(), screen.getByRole('heading', { level: 1 }).textContent]).toEqual([false, 'Home']);
   } finally { boxes.mockRestore(); }
+});
+
+// The home under the viewer's navbar, as a host shows it (`FileViewer`): the sidebar is the viewer's panel over this
+// page (`LibrarySidebar.jsx`, on `file-viewer/panelFrame.jsx`), so its toggle is the navbar's first control. The page
+// is `width` wide: the home's frame, the home and the viewer all measure it.
+function page({ width = 1200, panel, onPanelChange, onPlaceChange, links = true, projects = [] as LibraryProject[], platform = 'darwin', home: homeProps = {}, report }:
+  { width?: number; panel?: object | null; onPanelChange?: (panel: object) => void; onPlaceChange?: (place: unknown) => void; links?: boolean | object; projects?: LibraryProject[];
+    platform?: string; home?: object; report?: (counts: { control: string; count: number; seconds: number }[]) => void } = {}) {
+  let wide = width;
+  const observers: { callback: (entries: unknown[]) => void; targets: Element[] }[] = [];
+  vi.stubGlobal('ResizeObserver', class {
+    entry: { callback: (entries: unknown[]) => void; targets: Element[] };
+    constructor(callback: (entries: unknown[]) => void) { this.entry = { callback, targets: [] }; observers.push(this.entry); }
+    observe(target: Element) { this.entry.targets.push(target); }
+    unobserve() {}
+    disconnect() { this.entry.targets = []; }
+  });
+  const MEASURED = '.cad-library-frame, .cad-library, .text-to-cad-file-viewer';
+  const boxes = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const own = this.matches(MEASURED) ? wide : 0;
+    return { x: 0, y: 0, left: 0, top: 0, right: own, bottom: 0, width: own, height: 0, toJSON() {} } as DOMRect;
+  });
+  const home = vi.fn();
+  const host = testHost({ navigation: { openFile() {}, home }, environment: { colorScheme: 'light', platform },
+    ...(links ? { links: links === true ? viewerLinks({ version: '0.7.4', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x' }) : links as any } : null) });
+  const source = library([model('loose.step')], { projects: async () => projects });
+  const share = vi.fn(), theme = vi.fn();
+  const view = render(<ControlUsageProvider report={report}><FileViewer file={null} host={host} renderers={[]} state={{}} onStateChange={() => {}}
+    appSettings={links ? [{ id: 'analytics', label: 'Telemetry', checked: true, onCheckedChange: share }] : undefined}
+    colorScheme={links ? { preference: 'system', onPreferenceChange: theme } : undefined}
+    presentation={{ home: <ModelLibrary library={source} panel={panel as any} onPanelChange={onPanelChange} onPlaceChange={onPlaceChange as any} {...homeProps} /> }} /></ControlUsageProvider>);
+  return {
+    view, home, share, theme,
+    /** The page resized: what measures itself is told, as a ResizeObserver tells it. */
+    resize: (next: number) => act(() => { wide = next; for (const { callback, targets } of observers) if (targets.some(target => target.matches(MEASURED))) callback([]); }),
+    restore: () => boxes.mockRestore(),
+    toggle: () => document.querySelector<HTMLElement>('[data-viewer-navbar] [data-navbar-panel="left"]')!,
+    sidebar: () => document.querySelector<HTMLElement>('aside[data-library-sidebar]'),
+    frame: () => document.querySelector<HTMLElement>('.cad-library-frame')!,
+  };
+}
+// Where the sidebar is: pinned beside the place, peeking over it, or gone; and what its toggle says.
+const where = (home: ReturnType<typeof page>) => {
+  const side = home.sidebar();
+  const state = !side || side.hidden ? 'gone' : side.hasAttribute('data-panel-peek') ? 'peek' : side.getAttribute('data-library-sidebar') === 'page' ? 'sheet' : 'pinned';
+  return [state, home.toggle().getAttribute('aria-expanded'), home.toggle().getAttribute('aria-label')];
+};
+const mouse = { pointerType: 'mouse' };
+
+it("its sidebar is the viewer's panel: pinned it pushes the place, its toggle the navbar's first control; collapsed it leaves nothing; the person's choice is kept and stands at any width", async () => {
+  const kept: object[] = [];
+  const home = page({ width: 1200, onPanelChange: next => kept.push(next) });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    // Wide enough, with no choice: pinned, beside the place (in the frame's row, before it, taking its own width).
+    expect(where(home)).toEqual(['pinned', 'true', 'Hide panel']);
+    const side = home.sidebar()!;
+    expect([side.parentElement === home.frame(), side.nextElementSibling === screen.getByRole('main'), side.style.width, side.className.split(' ').includes('shrink-0'),
+      side.className.split(' ').includes('absolute'), home.frame().getAttribute('data-sidebar')]).toEqual([true, true, '232px', true, false, 'push']);
+    // The same toggle as over a document: first in the row, before the logo, the sidebar's glyph, its key in its hint.
+    const row = [...document.querySelectorAll('[data-viewer-navbar] nav > *')].map(node => node.querySelector('[data-navbar-panel]') ? 'toggle' : node.getAttribute('data-navbar-logo') ? 'logo' : '?');
+    expect(row).toEqual(['toggle', 'logo']);
+    expect([Boolean(home.toggle().querySelector('svg[data-sidebar-icon]')), home.toggle().getAttribute('aria-keyshortcuts')]).toEqual([true, '⌘\\']);
+    // Collapsed: nothing of it left, and that is their choice, written once.
+    fireEvent.click(home.toggle());
+    expect([where(home), home.frame().getAttribute('data-sidebar'), kept]).toEqual([['gone', 'false', 'Show panel'], 'closed', [{ open: false }]]);
+    // The choice stands however wide the home is; and open, however narrow.
+    await home.resize(1800);
+    expect(where(home)).toEqual(['gone', 'false', 'Show panel']);
+    fireEvent.click(home.toggle());
+    await home.resize(640);
+    expect([where(home), kept]).toEqual([['pinned', 'true', 'Hide panel'], [{ open: false }, { open: true }]]);
+  } finally { home.restore(); }
+});
+
+it("until the person chooses, the home's width opens or collapses its sidebar, again at every resize, and nothing is written", async () => {
+  const kept: object[] = [];
+  // 871px: one short of the 640px the place keeps beside the default 232px.
+  const home = page({ width: 871, onPanelChange: next => kept.push(next) });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    expect(where(home)).toEqual(['gone', 'false', 'Show panel']);
+    await home.resize(872);
+    expect(where(home)).toEqual(['pinned', 'true', 'Hide panel']);
+    await home.resize(700);
+    expect([where(home), kept]).toEqual([['gone', 'false', 'Show panel'], []]);
+  } finally { home.restore(); }
+});
+
+it('peeks the collapsed sidebar as a card over the place while a mouse rests on its toggle; never kept, put away by Escape or a press on the place, pinned only by the toggle', async () => {
+  const kept: object[] = [];
+  const home = page({ width: 1200, panel: { open: false }, onPanelChange: next => kept.push(next) });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    expect(where(home)).toEqual(['gone', 'false', 'Show panel']);
+    vi.useFakeTimers();
+    const wait = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+    const rest = () => { fireEvent.pointerEnter(home.toggle(), mouse); wait(PANEL_PEEK_DELAY_MS); };
+    // The panel's delay, then the same sidebar over the page: a card, taking no room, the page still its full width.
+    fireEvent.pointerEnter(home.toggle(), mouse);
+    wait(PANEL_PEEK_DELAY_MS - 1);
+    expect(where(home)[0]).toBe('gone');
+    wait(1);
+    expect([where(home), home.sidebar()!.className.split(' ').includes('absolute'), Boolean(home.sidebar()!.querySelector('[data-panel-peek-card]')),
+      home.frame().getAttribute('data-sidebar'), within(home.sidebar()!).getByRole('navigation', { name: 'Places' }) !== null])
+      .toEqual([['peek', 'false', 'Show panel'], true, true, 'closed', true]);
+    // No grip on a peek: its width is not set there.
+    expect(within(home.sidebar()!).queryByRole('separator')).toBeNull();
+    // It goes once the pointer has left both for the panel's delay, sliding out (jsdom plays none: its fallback ends it).
+    fireEvent.pointerLeave(home.toggle(), mouse);
+    wait(PANEL_PEEK_LEAVE_MS);
+    expect(home.sidebar()!.hasAttribute('data-panel-peek-leaving')).toBe(true);
+    wait(PANEL_PEEK_EXIT_FALLBACK_MS);
+    expect(where(home)[0]).toBe('gone');
+    // Escape puts it away; so does a press on the place. A place chosen in it does not: nothing done inside pins or closes it.
+    rest();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    wait(PANEL_PEEK_EXIT_FALLBACK_MS);
+    expect(where(home)[0]).toBe('gone');
+    fireEvent.pointerLeave(home.toggle(), mouse);
+    rest();
+    fireEvent.pointerEnter(home.sidebar()!, mouse);
+    fireEvent.click(home.sidebar()!.querySelector<HTMLElement>('[data-place="pinned"]')!);
+    expect([where(home)[0], screen.getByRole('main').querySelector('h2')?.textContent]).toEqual(['peek', 'Pinned']);
+    fireEvent.pointerDown(screen.getByRole('main'));
+    wait(PANEL_PEEK_EXIT_FALLBACK_MS);
+    expect([where(home)[0], kept]).toEqual(['gone', []]);
+    // A click on the toggle while it peeks pins it where it stands, and that is a choice.
+    fireEvent.pointerLeave(home.toggle(), mouse);
+    rest();
+    fireEvent.click(home.toggle());
+    expect([where(home), kept]).toEqual([['pinned', 'true', 'Hide panel'], [{ open: true }]]);
+    // No peek for a finger, nor with a button held.
+    fireEvent.click(home.toggle());
+    fireEvent.pointerLeave(home.toggle(), mouse);
+    fireEvent.pointerEnter(home.toggle(), { pointerType: 'touch' });
+    wait(PANEL_PEEK_DELAY_MS * 2);
+    fireEvent.pointerLeave(home.toggle(), { pointerType: 'touch' });
+    fireEvent.pointerEnter(home.toggle(), { pointerType: 'mouse', buttons: 1 });
+    wait(PANEL_PEEK_DELAY_MS * 2);
+    expect(where(home)[0]).toBe('gone');
+  } finally { vi.useRealTimers(); home.restore(); }
+});
+
+it('⌘\\ and Ctrl+\\ show and hide the sidebar and pin a peek, as the toggle does; never from a field being typed in, nor \\ alone', async () => {
+  const kept: object[] = [];
+  const home = page({ width: 1200, onPanelChange: next => kept.push(next) });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    const key = (target: Element, held: object) => fireEvent.keyDown(target, { key: '\\', code: 'Backslash', ...held });
+    key(document.body, {});
+    key(screen.getByRole('searchbox', { name: 'Search models' }), { metaKey: true });
+    key(document.body, { metaKey: true, shiftKey: true });
+    expect([where(home)[0], kept]).toEqual(['pinned', []]);
+    // The key is the viewer's while it is: the page's own does not follow.
+    expect(key(document.body, { metaKey: true })).toBe(false);
+    expect([where(home), kept]).toEqual([['gone', 'false', 'Show panel'], [{ open: false }]]);
+    key(document.body, { ctrlKey: true });
+    expect(where(home)[0]).toBe('pinned');
+    // A peek, pinned by the key.
+    key(document.body, { ctrlKey: true });
+    vi.useFakeTimers();
+    fireEvent.pointerEnter(home.toggle(), mouse);
+    act(() => { vi.advanceTimersByTime(PANEL_PEEK_DELAY_MS); });
+    expect(where(home)[0]).toBe('peek');
+    key(document.body, { metaKey: true });
+    expect([where(home)[0], kept.at(-1)]).toEqual(['pinned', { open: true }]);
+  } finally { vi.useRealTimers(); home.restore(); }
+});
+
+it("its width is the panel's: 232px at first, 200 to 480 by its grip, and what the person set is kept with their choice and drawn again", async () => {
+  const kept: object[] = [];
+  const home = page({ width: 1400, onPanelChange: next => kept.push(next) });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    const grip = () => within(home.sidebar()!).getByRole('separator', { name: 'Resize panel' });
+    expect([home.sidebar()!.style.width, grip().getAttribute('aria-valuenow'), grip().getAttribute('aria-valuemin'), grip().getAttribute('aria-valuemax')])
+      .toEqual(['232px', '232', '200', '480']);
+    // The arrows nudge it; Home and End take it to its bounds. Each is written whole, the choice with it.
+    fireEvent.keyDown(grip(), { key: 'ArrowRight' });
+    expect([home.sidebar()!.style.width, kept]).toEqual(['248px', [{ width: 248 }]]);
+    fireEvent.keyDown(grip(), { key: 'End' });
+    fireEvent.keyDown(grip(), { key: 'Home' });
+    fireEvent.click(home.toggle());
+    expect([kept.slice(1), where(home)[0]]).toEqual([[{ width: 480 }, { width: 200 }, { open: false, width: 200 }], 'gone']);
+    // A drag writes once, as it lets go, within the bounds.
+    fireEvent.click(home.toggle());
+    fireEvent.pointerDown(grip(), { button: 0, pointerId: 1, clientX: 200 });
+    fireEvent.pointerMove(grip(), { pointerId: 1, clientX: 320 });
+    expect([home.sidebar()!.style.width, kept.length]).toEqual(['320px', 5]);
+    fireEvent.pointerMove(grip(), { pointerId: 1, clientX: 900 });
+    fireEvent.pointerUp(grip(), { pointerId: 1, clientX: 900 });
+    expect([home.sidebar()!.style.width, kept.at(-1)]).toEqual(['480px', { open: true, width: 480 }]);
+  } finally { home.restore(); cleanup(); }
+  // What the host kept is what the home comes up with: its width within the bounds whatever was stored, its choice at any width.
+  for (const [panel, drawn] of [[{ open: true, width: 300 }, '300px'], [{ width: 9999 }, '480px'], [{ width: 12 }, '200px']] as const) {
+    const again = page({ width: 1400, panel });
+    try { expect([where(again)[0], again.sidebar()!.style.width]).toEqual(['pinned', drawn]); } finally { again.restore(); cleanup(); }
+  }
+});
+
+it('with no host to keep it, the home keeps its sidebar for as long as it is up; a host that kept it closed has it closed from the first frame', async () => {
+  const own = page({ width: 1400 });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    fireEvent.click(own.toggle());
+    await own.resize(1900);
+    expect(where(own)[0]).toBe('gone');
+  } finally { own.restore(); cleanup(); }
+  const kept = page({ width: 1400, panel: { open: false, width: 320 } });
+  try {
+    // Before anything is read: the toggle is in the navbar and says the sidebar is shut.
+    expect(where(kept)).toEqual(['gone', 'false', 'Show panel']);
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    fireEvent.click(kept.toggle());
+    expect([where(kept)[0], kept.sidebar()!.style.width]).toEqual(['pinned', '320px']);
+  } finally { kept.restore(); }
+});
+
+it("on a phone the sidebar is the panel's sheet under the navbar: closed until its toggle opens it, a place chosen in it closes it, and nothing of it is kept", async () => {
+  const kept: object[] = [], places: unknown[] = [];
+  const home = page({ width: 390, onPanelChange: next => kept.push(next), onPlaceChange: next => places.push(next), projects: [project('p1', 'heart-tag', 2)] });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    await waitFor(() => expect(document.querySelector('[data-viewer-layout]')?.getAttribute('data-viewer-layout')).toBe('mobile'));
+    const sheet = () => document.querySelector<HTMLElement>('[data-panel-sheet]');
+    expect([sheet(), home.sidebar(), home.toggle().getAttribute('aria-expanded'), screen.queryByRole('navigation', { name: 'Places' })]).toEqual([null, null, 'false', null]);
+    fireEvent.click(home.toggle());
+    await waitFor(() => expect(sheet()).not.toBeNull());
+    // The panel's sheet: from the left, in the viewer's element, no scrim, no grip; the same places and Settings.
+    expect([sheet()!.getAttribute('role'), sheet()!.closest('.text-to-cad-file-viewer') !== null, sheet()!.className.includes('max-w-[20rem]'),
+      document.querySelector('[data-slot="sheet-overlay"]')!.hasAttribute('data-scrim'), where(home), within(sheet()!).queryByRole('separator')])
+      .toEqual(['dialog', true, true, false, ['sheet', 'true', 'Hide panel'], null]);
+    expect([...sheet()!.querySelectorAll('[data-place]')].map(row => row.getAttribute('data-place'))).toEqual(['recents', 'pinned', 'project:p1', 'standalone']);
+    // A place chosen is shown, and the sheet gives the page back.
+    fireEvent.click(sheet()!.querySelector<HTMLElement>('[data-place="project:p1"]')!);
+    await waitFor(() => expect(sheet()).toBeNull());
+    expect([places, screen.getByRole('main').querySelector('h2')?.textContent, home.toggle().getAttribute('aria-expanded')]).toEqual([[{ view: 'project', project: 'p1' }], 'heart-tag', 'false']);
+    // Its key opens and shuts it; Escape shuts it. Never kept.
+    fireEvent.keyDown(document.body, { key: '\\', code: 'Backslash', ctrlKey: true });
+    await waitFor(() => expect(sheet()).not.toBeNull());
+    fireEvent.keyDown(sheet()!, { key: 'Escape' });
+    await waitFor(() => expect(sheet()).toBeNull());
+    expect(kept).toEqual([]);
+    // Wide again: the sheet's state is gone, and the width decides as it did.
+    fireEvent.click(home.toggle());
+    await waitFor(() => expect(sheet()).not.toBeNull());
+    await home.resize(1200);
+    await waitFor(() => expect(sheet()).toBeNull());
+    expect([where(home), kept]).toEqual([['pinned', 'true', 'Hide panel'], []]);
+  } finally { home.restore(); }
+});
+
+it('Escape puts a peek of the sidebar away before it goes back to the document just left; a pinned sidebar never takes the key', async () => {
+  const onBack = vi.fn();
+  const home = page({ width: 1200, panel: { open: false }, projects: [project('p1', 'heart-tag', 2)],
+    home: { place: { view: 'project', project: 'p1' }, from: { path: '/Users/sam/cad/heart-tag/STL/part_0.stl', name: 'part_0.stl' }, onBack } });
+  try {
+    await screen.findByRole('button', { name: 'Back to part_0.stl' });
+    vi.useFakeTimers();
+    fireEvent.pointerEnter(home.toggle(), mouse);
+    act(() => { vi.advanceTimersByTime(PANEL_PEEK_DELAY_MS); });
+    expect(where(home)[0]).toBe('peek');
+    // The first Escape is the peek's; the next goes back.
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    act(() => { vi.advanceTimersByTime(PANEL_PEEK_EXIT_FALLBACK_MS); });
+    expect([where(home)[0], onBack.mock.calls.length]).toEqual(['gone', 0]);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(onBack).toHaveBeenCalledTimes(1);
+    // Pinned, it is no layer of its own: Escape goes straight back, and it stays.
+    fireEvent.click(home.toggle());
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect([onBack.mock.calls.length, where(home)[0]]).toEqual([2, 'pinned']);
+  } finally { vi.useRealTimers(); home.restore(); }
+});
+
+// The sidebar's foot: the host's links as icons at its left and Settings' cog at its right corner, which opens what is
+// left of the app's menu (`AppMenu`); the file viewer hands the home both where the host has a home.
+const foot = (surface: HTMLElement) => surface.querySelector<HTMLElement>('[data-app-foot]')!;
+const cog = (surface: HTMLElement) => within(foot(surface)).getByRole('button', { name: 'Settings' });
+const footLinks = (surface: HTMLElement) => [...foot(surface).querySelectorAll<HTMLAnchorElement>('[data-app-foot-links] a')];
+async function settings(surface: HTMLElement) {
+  await act(async () => { fireEvent.pointerDown(cog(surface), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  return screen.findByRole('menu', { name: 'Settings' });
+}
+const menuRows = (menu: HTMLElement) => [...menu.querySelectorAll('[role^="menuitem"]')].map(item => item.textContent || item.getAttribute('aria-label'));
+
+it("ends its sidebar in a row of icons, pinned: the host's links at the left (GitHub, Discord, X, then Send feedback), each followed the host's way, and Settings' cog at the right, whose menu holds the settings alone", async () => {
+  const reports: { control: string; count: number; seconds: number }[][] = [];
+  const opened: string[] = [];
+  const home = page({ width: 1200, report: counts => reports.push(counts),
+    links: viewerLinks({ version: '0.7.4', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x', open: async (url: string) => { opened.push(url); } }) });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    // Pinned: the surface's last block, after its one scroller, so it stays while the places scroll.
+    const side = home.sidebar()!;
+    expect([foot(side).parentElement === side, foot(side).previousElementSibling?.getAttribute('data-slot'), foot(side).closest('nav')]).toEqual([true, 'scroll-area', null]);
+    // The links, in order, each an icon named for assistive technology and in a hint; then, apart, the cog.
+    expect(footLinks(side).map(link => [link.getAttribute('aria-label'), link.getAttribute('data-link'), link.getAttribute('target'), link.querySelectorAll('svg').length, link.textContent]))
+      .toEqual([['GitHub', 'github', '_blank', 1, ''], ['Discord', 'discord', '_blank', 1, ''], ['X', 'x', '_blank', 1, ''], ['Send feedback', 'feedback', '_blank', 1, '']]);
+    expect(footLinks(side).map(link => link.getAttribute('href')!.replace(/\?.*/, '')))
+      .toEqual(['https://github.com/earthtojake/text-to-cad', 'https://discord.gg/x', 'https://x.com/earthtojake', 'https://github.com/earthtojake/text-to-cad/issues/new']);
+    expect([foot(side).lastElementChild === cog(side), cog(side).closest('[data-app-foot-links]'), cog(side).getAttribute('aria-haspopup'), cog(side).querySelectorAll('svg').length,
+      [...footLinks(side), cog(side)].every(tile => tile.className.split(' ').includes('size-control'))]).toEqual([true, null, 'menu', 1, true]);
+    await userEvent.setup().hover(footLinks(side)[1]);
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Discord');
+    // A press follows the link as the app menu's item did: through the host where it opens links itself; Send feedback is counted.
+    expect(fireEvent.click(footLinks(side)[0])).toBe(false);
+    expect(fireEvent.click(footLinks(side)[3])).toBe(false);
+    await waitFor(() => expect(opened.map(url => url.replace(/\?.*/, ''))).toEqual(['https://github.com/earthtojake/text-to-cad', 'https://github.com/earthtojake/text-to-cad/issues/new']));
+    expect(new URL(opened[1]).searchParams.get('title')).toBe('Feedback: ');
+    // The cog opens the app's menu with what is left: the person's settings and the version; no links, no way home, no search.
+    const menu = await settings(side);
+    expect([menu.hasAttribute('data-app-menu'), menuRows(menu), menu.querySelector('[data-link="github"], [data-link="discord"], [data-link="feedback"]'),
+      menu.querySelector('[data-menu-footer]')?.textContent, cog(side).getAttribute('data-state')])
+      .toEqual([true, ['Telemetry', 'System', 'Light', 'Dark'], null, 'v0.7.4Made by @earthtojake', 'open']);
+    // A setting turns without closing it.
+    await act(async () => { fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: 'Telemetry' })); });
+    await act(async () => { fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Dark' })); });
+    expect([home.share.mock.calls, home.theme.mock.calls, Boolean(document.querySelector('[data-app-menu]'))]).toEqual([[[false]], [['dark']], true]);
+    home.view.unmount();
+    expect(reported(reports)).toEqual({ feedback: 1, theme_dark: 1 });
+  } finally { home.restore(); cleanup(); }
+  // Only the links the host gives; with none of them, the cog alone.
+  const some = page({ width: 1200, links: { version: '0.7.4', release: '', x: '', github: 'https://github.com/a/b', discord: '', issues: '' } });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    expect([footLinks(some.sidebar()!).map(link => link.getAttribute('aria-label')), cog(some.sidebar()!) !== null]).toEqual([['GitHub'], true]);
+  } finally { some.restore(); cleanup(); }
+});
+
+it("has the same foot in the peek and in a phone's sheet; a peek stays up while Settings' menu is, and through a press in it", async () => {
+  const home = page({ width: 1200, panel: { open: false } });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    vi.useFakeTimers();
+    fireEvent.pointerEnter(home.toggle(), mouse);
+    act(() => { vi.advanceTimersByTime(PANEL_PEEK_DELAY_MS); });
+    expect([where(home)[0], footLinks(home.sidebar()!).map(link => link.getAttribute('aria-label')), cog(home.sidebar()!).getAttribute('aria-label')])
+      .toEqual(['peek', ['GitHub', 'Discord', 'X', 'Send feedback'], 'Settings']);
+    act(() => { fireEvent.pointerDown(cog(home.sidebar()!), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+    fireEvent.pointerLeave(home.toggle(), mouse);
+    act(() => { vi.advanceTimersByTime(PANEL_PEEK_LEAVE_MS * 4); });
+    expect([where(home)[0], Boolean(document.querySelector('[data-app-menu]'))]).toEqual(['peek', true]);
+    // A press in that menu (it stands outside the sidebar, over the page) is no press on the page: the peek stays.
+    act(() => { fireEvent.pointerDown(document.querySelector('[data-app-menu] [role="menuitemcheckbox"]')!, { button: 0, pointerType: 'mouse' }); });
+    act(() => { vi.advanceTimersByTime(PANEL_PEEK_EXIT_FALLBACK_MS); });
+    expect(where(home)[0]).toBe('peek');
+  } finally { vi.useRealTimers(); home.restore(); cleanup(); }
+  const phone = page({ width: 390 });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    await waitFor(() => expect(document.querySelector('[data-viewer-layout]')?.getAttribute('data-viewer-layout')).toBe('mobile'));
+    fireEvent.click(phone.toggle());
+    const sheet = await waitFor(() => { const found = document.querySelector<HTMLElement>('[data-panel-sheet]'); expect(found).not.toBeNull(); return found!; });
+    expect([foot(sheet).previousElementSibling?.getAttribute('data-slot'), footLinks(sheet).map(link => link.getAttribute('aria-label'))])
+      .toEqual(['scroll-area', ['GitHub', 'Discord', 'X', 'Send feedback']]);
+    expect(menuRows(await settings(sheet))).toEqual(['Telemetry', 'System', 'Light', 'Dark']);
+  } finally { phone.restore(); cleanup(); }
+});
+
+it('has no foot where the host hands nothing for it, nor under no file viewer', async () => {
+  const bare = page({ width: 1200, links: false });
+  try {
+    await screen.findByRole('button', { name: 'Open loose.step' });
+    expect([document.querySelector('[data-app-foot]'), screen.queryByRole('button', { name: 'Settings' })]).toEqual([null, null]);
+  } finally { bare.restore(); cleanup(); }
+  render(<ModelLibrary library={library([model('a.step')])} />);
+  await screen.findByRole('button', { name: 'Open a.step' });
+  expect([document.querySelector('[data-app-foot]'), screen.getByRole('navigation', { name: 'Places' }) !== null]).toEqual([null, true]);
 });

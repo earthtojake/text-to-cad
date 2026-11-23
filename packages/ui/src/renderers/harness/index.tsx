@@ -14,6 +14,7 @@ import { createRobotRenderer } from '@cad/ui/renderers/robot';
 import { createXbfRenderer } from '@cad/ui/renderers/xbf';
 import { createHarnessRenderer } from '@cad/ui/renderers/shell-harness';
 import type { ViewerHost } from '@cad/ui/host';
+import { viewerLinks } from '@cad/ui/links';
 import type { LiveViewController } from '@cad/ui/renderers/xbf';
 import type { ViewerCommands as CadCommands } from '@cad/ui/renderers/workspace';
 // The module the built renderers publish their export view through (the viewer's ExportControls
@@ -103,9 +104,12 @@ function workspace(id: string, store: TabStore) {
   };
   const destination = { kind: (window as unknown as { __cadPromptDestination?: 'clipboard' }).__cadPromptDestination || 'composer' as const, available: true };
   // `?home=1`: a host with a home and the file's ⋯ (Copy path), as the web viewer is, so the navbar's left end is whole.
+  // `&links=1`: with its links too, as the web viewer has them, so the panel ends in its foot (the links and Settings).
   const homed = new URLSearchParams(location.search).get('home') === '1';
+  const linked = homed && new URLSearchParams(location.search).get('links') === '1';
   const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); }, ...(homed ? { home() {} } : null) },
-    ...(homed ? { fileActions: { platform: keyboardPlatform, perform: { 'copy-path': async () => {} } } } : null), environment: { colorScheme, platform: keyboardPlatform, locale },
+    ...(homed ? { fileActions: { platform: keyboardPlatform, perform: { 'copy-path': async () => {} } } } : null),
+    ...(linked ? { links: viewerLinks({ version: '0.7.4' }) } : null), environment: { colorScheme, platform: keyboardPlatform, locale },
     clipboard: { writeText: async text => { promptMessages.push(await text); }, writeImage: async () => {} },
     promptFiles: createHttpPromptFiles({ origin: `${location.origin}/${id}` }),
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async context => {

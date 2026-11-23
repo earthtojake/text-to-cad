@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_PANEL_WIDTH } from "./file-viewer/panelToggles.js";
 
 // The viewer's chrome follows `docs/design-system.md`, "Two scales": type from the token scale (text-tiny,
 // text-xs, text-ui, text-heading), and layout from the ONE viewer breakpoint (useViewerMobile)
@@ -32,13 +33,13 @@ test("viewer chrome uses the type scale and the viewer breakpoint, never window 
 // Every scroll region of the chrome is the one ScrollArea primitive (`primitives/scroll-area.jsx`):
 // thin overlay bars in the theme's colours, never the platform's scrollbar. The home (the model
 // library) is a page, not chrome: the place on screen scrolls as a page does, with the platform's own scrollbar, and
-// its sidebar, which is chrome, in a ScrollArea. A
+// its sidebar, which is chrome (the panel's surface, `file-viewer/PanelSurface.jsx`), in the panel's ScrollArea. A
 // strip that scrolls with no bar at all (the panel's tabs, `FlatPanel.jsx`: its scrollbar hidden,
 // `[scrollbar-width:none]`, its clipped edge faded instead) shows no scrollbar to style.
 const NATIVE_SCROLLER = /\boverflow(?:-[xy])?-(?:auto|scroll)\b/;
 const PAGES = ["library/ModelLibrary.tsx"];
 const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "primitives/dropdown-menu.jsx", "renderers/kit/status/ViewerAlertCard.jsx",
-  "search/DocumentSearch.tsx", "library/LibraryPlaces.jsx"];
+  "search/DocumentSearch.tsx", "file-viewer/PanelSurface.jsx"];
 
 test("every scroll region in the viewer's chrome is the ScrollArea primitive, never a native scroller", () => {
   const found = [];
@@ -55,7 +56,7 @@ test("every scroll region in the viewer's chrome is the ScrollArea primitive, ne
 // The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"): the controls and Home
 // text-ui (13/20), the place's name the one larger text (15/20 semibold), a name, a project's folder and the way back
 // 12/16 (text-xs), a card's facts, a format's badge, a key and the table's header 11/16 (text-tiny); a tile's glyph
-// 16px. Its sidebar is the panel's surface: the panel's one size, from the same token.
+// 16px. Its sidebar is the panel's own surface (`file-viewer/PanelSurface.jsx`), which sets the panel's one size itself.
 test("the Home is the chrome's type scale: the place's name 15/20, names 12/16, facts 11/16, and 16px glyphs", () => {
   // Its rules, without the comments that stand before them.
   const css = readFileSync(join(root, "styles/globals.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -64,8 +65,6 @@ test("the Home is the chrome's type scale: the place's name 15/20, names 12/16, 
     return size ? [[selector.trim().replace(/\s+/g, " "), size]] : [];
   });
   assert.deepEqual(sizes, [
-    // The sidebar: the panel's surface (`data-panel-surface`), where text-ui is the panel's one size.
-    [".cad-library-sidebar", "var(--cad-text-ui)"],
     [".cad-library-title", "var(--cad-text-heading)"],
     [".cad-library-path", "var(--cad-text-xs)"],
     [".cad-library-back", "var(--cad-text-xs)"],
@@ -130,11 +129,20 @@ test("menus are the xs step on the row and tooltips the tiny step, from the prim
 
 // The logo stands on the page's gutter (`docs/viewer-ux.md`, "The navbar"): the navbar's 8px, the logo centred in its 28px tile (6px)
 // and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page. The Home itself is full width:
-// a 232px sidebar on the panel's surface with its content on the panel's 16px inset, and the place on screen on 24px
-// gutters, 20px under the navbar (12px by 16px with no sidebar), its tiles 232px at least.
-test("the navbar's logo's drawn mark stands 16px in, and the Home is a 232px sidebar beside the place on its own gutters", () => {
+// its sidebar the viewer's panel (its surface, its 232px default width) with its content on the panel's 16px inset and
+// Settings pinned at its foot, and the place on screen on 24px gutters, 20px under the navbar (12px by 16px in a narrow
+// home), its tiles 232px at least.
+test("the navbar's logo's drawn mark stands 16px in, and the Home is the panel's sidebar beside the place on its own gutters", () => {
   const css = readFileSync(join(root, "styles/globals.css"), "utf8");
-  assert.match(css, /\.cad-library-sidebar \{[^}]*width: 232px;[^}]*border-right: 1px solid var\(--border\); background: var\(--sidebar\);/);
+  // The sidebar is the panel's surface, never a rule of the Home's own: its width, rule and colour are the panel's.
+  assert.doesNotMatch(css, /\.cad-library-sidebar \{/);
+  const sidebar = readFileSync(join(root, "library/LibrarySidebar.jsx"), "utf8");
+  assert.match(sidebar, /<PanelSurface mode="push"/);
+  assert.match(sidebar, /width: clampPanelWidth\(record\.width\)/);
+  assert.equal(DEFAULT_PANEL_WIDTH, 232);
+  // It ends in the panel's foot, the one a document's panel ends in: its rule the panel's full width, its tiles on the inset.
+  assert.match(sidebar, /const foot = <PanelFoot \/>;/);
+  assert.match(readFileSync(join(root, "file-viewer/PanelFoot.jsx"), "utf8"), /border-t border-border" style=\{FOOT_STYLE\} data-app-foot=""/);
   assert.match(css, /\.cad-library-places \{[^}]*padding: 8px var\(--panel-inset\) /);
   assert.match(css, /\.cad-library-content \{[^}]*flex: 1 1 0; min-width: 0; padding: 20px 24px /);
   assert.doesNotMatch(css, /\.cad-library-content \{[^}]*max-width/);

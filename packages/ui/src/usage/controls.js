@@ -84,7 +84,7 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   // Quick Edit's bar coming, and put away by its X: whether it is in the way.
   'quick_edit_shown', 'quick_edit_dismissed', 'board_side', 'board_dimension',
   // The navbar, its file menu (Open in new tab, a standalone document's Import its folder as a project, Previous and
-  // Next in project, which [ and ] count too), the project's name before the document's, and the app menu. The name
+  // Next in project, which [ and ] count too), the project's name before the document's, the logo (`home`: the way home) and the app menu. The name
   // menu's Models and Files (the explorer), gone since projects replaced them (`models` ... `explorer_filter`): no
   // view sends them now, but older releases do. Then the search of every document: opened, a document picked from
   // it, and one opened beside the view.
@@ -101,7 +101,7 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'home_search', 'home_filter_all', 'home_filter_models', 'home_filter_files', 'home_layout_grid', 'home_layout_list',
   'home_open', 'home_pick', 'home_copy_path', 'home_copy_link', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',
   'home_import_folder', 'home_project_copy_path', 'home_project_reveal', 'home_project_remove', 'home_project_more',
-  // The home's places (a row of its sidebar, an item of its heading's menu), its Sort, a document's and a project's Open
+  // The home's places (a row of its sidebar: pinned, peeking or a phone's sheet), its Sort, a document's and a project's Open
   // in new tab (or Open in browser), and the way back to the document just left (its button, or Escape).
   'home_place_recents', 'home_place_pinned', 'home_place_standalone', 'home_place_project',
   'home_sort_activity', 'home_sort_name', 'home_sort_kind', 'home_open_new_tab', 'home_project_open_new_tab', 'home_back',

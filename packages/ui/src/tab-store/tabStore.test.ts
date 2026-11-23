@@ -29,6 +29,11 @@ test('the record normalizes: every setting to its bounds, the files to well-keye
   // The home's order is kept with its layout; one that is not an order is the default.
   expect(readTabRecord({ version: 2, settings: { library: { sort: 'kind' } }, files: {} }).settings.library).toEqual({ layout: 'grid', sort: 'kind' });
   expect(readTabRecord({ version: 2, settings: { library: { layout: 'list', sort: 'size' } }, files: {} }).settings.library).toEqual({ layout: 'list', sort: 'activity' });
+  // The home's sidebar, kept as a file's panel is: its choice and its width where they are what they should be, no tab, and no field with neither.
+  const library = (panel: unknown) => readTabRecord({ version: 2, settings: { library: { layout: 'list', panel } }, files: {} }).settings.library;
+  expect(library({ open: false, width: 304.4, tab: 'parts', right: true })).toEqual({ layout: 'list', sort: 'activity', panel: { open: false, width: 304 } });
+  expect(library({ open: true })).toEqual({ layout: 'list', sort: 'activity', panel: { open: true } });
+  expect([library({ open: 'yes', width: -3 }), library('wide'), library(undefined)]).toEqual(Array(3).fill({ layout: 'list', sort: 'activity' }));
   // The viewport's Background, the person's: Light or Dark; anything else Light, the old Follow theme ("theme") too.
   for (const value of ['light', 'dark'] as const) expect(readTabRecord({ version: 2, settings: { viewportBackground: value }, files: {} }).settings.viewportBackground).toBe(value);
   for (const value of ['theme', 'cinematic']) expect(readTabRecord({ version: 2, settings: { viewportBackground: value }, files: {} }).settings.viewportBackground).toBe('light');

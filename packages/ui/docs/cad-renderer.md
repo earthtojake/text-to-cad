@@ -1612,8 +1612,8 @@ snapshot job, and a picture of each ([annotations](annotation.md#lifetime-and-ca
 
 The file navbar is [FileViewer's](file-viewer.md#the-navbar-and-the-project): the panel's toggle, where the
 file has a panel, then the logo,
-which opens the app menu (Back to home, Search documents, the person's settings, feedback, the links, the
-version), Back and Forward where the host keeps the view's history, the project's name where the file is in one
+which leads home where the host has a home (and opens the app menu where it has none: the person's settings,
+feedback, the links, the version), Back and Forward where the host keeps the view's history, the project's name where the file is in one
 (which goes to the home at it), the file's name and its ⋯ menu at the left (the web viewer's Export is a submenu of the
 ⋯); at the right only what a host or a file adds: the renderer's actions, then the view's own controls, Display
 and Preview, which the view portals into the navbar's view slot, then, outermost, the host's actions

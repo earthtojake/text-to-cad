@@ -534,7 +534,7 @@ test('3D entered from the 2D bottom eases to Home’s tilt under the board, Flip
   assert.deepEqual(errors, []);
 });
 
-// The panel is ONE surface (`kit/shell/PanelSurface.jsx`): its tabs and its rows are drawn in its 12/16 type, never the
+// The panel is ONE surface (`file-viewer/PanelSurface.jsx`): its tabs and its rows are drawn in its 12/16 type, never the
 // chrome's 13px.
 test('the panel draws its tabs and rows in one type, 12/16', async (t) => {
   const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });

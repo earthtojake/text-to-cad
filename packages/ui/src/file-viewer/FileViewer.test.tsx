@@ -91,6 +91,24 @@ it('has the panel\'s toggle from a document page\'s first frame, in the state it
   expect(toggle()).toBeNull();
 });
 
+it("ends the stand-in panel in the panel's foot from a document page's first frame where the host has a home; a host with no home has none, and keeps the logo's menu", async () => {
+  const ID = '906f6bff-80e7-5331-b842-dd377b720a7b';
+  const links = viewerLinks({ version: '0.7.4' });
+  const pending = { ...host, links, files: { id: 'slow', stat: () => new Promise(() => {}) } };
+  const foot = () => document.querySelector<HTMLElement>('[data-app-foot]');
+  // A host with a home: the links and Settings at the stand-in's bottom, under its placeholder rows, where the view's
+  // panel will have them.
+  render(<FileViewer file={ID} host={{ ...pending, navigation: { openFile() {}, home() {} } } as any} renderers={[renderer]} state={{}} onStateChange={() => {}} />);
+  const frame = document.querySelector<HTMLElement>('aside[data-panel-loading]')!;
+  expect([foot()!.parentElement === frame, frame.lastElementChild === foot(), foot()!.previousElementSibling!.className.includes('flex-1'),
+    [...foot()!.querySelectorAll('[data-app-foot-links] a')].map(link => link.getAttribute('aria-label')), within(foot()!).getByRole('button', { name: 'Settings' }) !== null,
+    screen.queryByRole('button', { name: 'Menu' })]).toEqual([true, true, true, ['GitHub', 'Discord', 'X', 'Send feedback'], true, null]);
+  cleanup();
+  // No home: the same links are the logo's menu's, so the panel has no foot.
+  render(<FileViewer file={ID} host={pending as any} renderers={[renderer]} state={{}} onStateChange={() => {}} />);
+  expect([Boolean(document.querySelector('aside[data-panel-loading]')), foot(), screen.getByRole('button', { name: 'Menu' }) !== null]).toEqual([true, null, true]);
+});
+
 it('peeks the stand-in panel from a page\'s first frame, a mouse resting on the collapsed toggle, and a press there pins it as the view\'s toggle does', async () => {
   const ID = '906f6bff-80e7-5331-b842-dd377b720a7b';
   let answer = () => {};
@@ -127,7 +145,7 @@ it('peeks the stand-in panel from a page\'s first frame, a mouse resting on the 
   expect(last.renderers[JSON.stringify([ID, 'framed'])].panel).toEqual({ open: true });
 });
 
-it('draws the navbar over every file, named by its name, and over the home with only its menu, Back and Forward, the host\'s actions; never over a view shown small', async () => {
+it('draws the navbar over every file, named by its name, and over the home with only the logo, Back and Forward, the host\'s actions; never over a view shown small', async () => {
   open({});
   await screen.findByText('shown');
   // The name, as words where nothing can be browsed; no logo with no home, no ⋯ where the host can do nothing.
@@ -138,24 +156,25 @@ it('draws the navbar over every file, named by its name, and over the home with 
   await screen.findByText('shown');
   expect(navbar()).toBeNull();
   cleanup();
-  // The home has the same navbar: the logo's menu, Back and Forward where the host keeps the view's
+  // The home has the same navbar: the logo (the way to Recents), Back and Forward where the host keeps the view's
   // history, and the host's actions, as over a file; no file, no box for view controls.
-  const back = vi.fn();
-  open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home() {} } }, file: null,
+  const back = vi.fn(), home = vi.fn();
+  open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home } }, file: null,
     history: { canGoBack: true, canGoForward: false, back, forward() {} },
     navbarActions: <button type="button" aria-label="Full size" />,
     presentation: { home: <p>home</p> } } as any);
   await screen.findByText('home');
   expect([labels(), document.querySelector('[data-file-name]'), document.querySelector('[data-view-controls]')])
-    .toEqual([['Menu', 'Back', 'Forward', 'Full size'], null, null]);
+    .toEqual([['Home', 'Back', 'Forward', 'Full size'], null, null]);
   expect((screen.getByRole('button', { name: 'Forward' }) as HTMLButtonElement).disabled).toBe(true);
   await userEvent.setup().click(screen.getByRole('button', { name: 'Back' }));
   expect(back).toHaveBeenCalledOnce();
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Menu' }));
-  expect(screen.queryByRole('menuitem', { name: 'Back to home' })).toBeNull();
+  // Over the home the logo goes to Recents, and opens no menu: the app's menu is the home's (Settings, in its sidebar).
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Home' }));
+  expect([home.mock.calls.length, screen.queryByRole('menu')]).toEqual([1, null]);
 });
 
-it('draws the view\'s panel toggle first in the navbar, before the logo: the same neutral button open or shut, its state aria-expanded, its icon the sidebar\'s; none over the home', async () => {
+it('draws the view\'s panel toggle first in the navbar, before the logo: the same neutral button open or shut, its state aria-expanded, its icon the sidebar\'s; none over a home that has no sidebar', async () => {
   const user = userEvent.setup();
   const left = vi.fn();
   // A view whose frame says its toggle, as `ViewFrame.jsx` does.
@@ -174,8 +193,8 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   const toggle = () => navbar()!.querySelector<HTMLElement>('[data-navbar-panel="left"]')!;
   await waitFor(() => expect(toggle()).not.toBeNull());
   // The toggle, then the logo, then the name and its ⋯; nothing of it at the row's right.
-  const order = [...navbar()!.querySelectorAll('[data-navbar-menu], [data-file-name], [data-testid="file-actions"], [data-navbar-panel], [aria-label="Full size"]')]
-    .map(node => node.getAttribute('data-navbar-panel') ?? (node.hasAttribute('data-navbar-menu') ? 'logo' : null) ?? node.getAttribute('aria-label') ?? (node.hasAttribute('data-file-name') ? 'name' : '?'));
+  const order = [...navbar()!.querySelectorAll('[data-navbar-logo], [data-file-name], [data-testid="file-actions"], [data-navbar-panel], [aria-label="Full size"]')]
+    .map(node => node.getAttribute('data-navbar-panel') ?? (node.hasAttribute('data-navbar-logo') ? 'logo' : null) ?? node.getAttribute('aria-label') ?? (node.hasAttribute('data-file-name') ? 'name' : '?'));
   expect(order).toEqual(['left', 'logo', 'name', 'File actions', 'Full size']);
   const look = () => [toggle().getAttribute('aria-label'), toggle().getAttribute('aria-expanded'), toggle().getAttribute('aria-pressed'), toggle().getAttribute('data-variant')];
   expect(look()).toEqual(['Show panel', 'false', null, 'ghost']);
@@ -194,10 +213,28 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   expect(look()).toEqual(['Hide panel', 'true', null, 'ghost']);
   expect(left.mock.calls.length).toBe(1);
   cleanup();
-  // The home: no toggle.
+  // A home that says no panel of its own: no toggle.
   open({ host: { ...host, navigation: { openFile() {}, home() {} } }, file: null, presentation: { home: <p>home</p> } } as any);
   await screen.findByText('home');
   expect(navbar()!.querySelector('[data-navbar-panel]')).toBeNull();
+  cleanup();
+  // A home that says its sidebar's toggle, as a view's frame says its panel's, has it from its first frame, first in the
+  // row; a document shown after it has its own, and the home's is gone with the home.
+  function Sided() {
+    const [shown, setShown] = React.useState(true);
+    usePanelToggles(React.useMemo(() => ({ left: { open: shown, label: shown ? 'Hide panel' : 'Show panel', shortcut: '⌘\\', toggle: () => setShown(value => !value) } }), [shown]), { early: true });
+    return <p>home</p>;
+  }
+  const homed = { ...host, navigation: { openFile() {}, home() {} } };
+  const page = (file: string | null) => <FileViewer file={file} host={homed as any} renderers={[renderer]} state={{}} onStateChange={() => {}} presentation={{ home: <Sided /> } as any} />;
+  const view = render(page(null));
+  expect([look(), navbar()!.querySelector('nav')!.firstElementChild!.contains(toggle()), toggle().compareDocumentPosition(screen.getByRole('button', { name: 'Home' })) & Node.DOCUMENT_POSITION_FOLLOWING])
+    .toEqual([['Hide panel', 'true', null, 'ghost'], true, Node.DOCUMENT_POSITION_FOLLOWING]);
+  await user.click(toggle());
+  expect(look()).toEqual(['Show panel', 'false', null, 'ghost']);
+  view.rerender(page(FILE));
+  await screen.findByText('shown');
+  await waitFor(() => expect(navbar()!.querySelector('[data-navbar-panel]')).toBeNull());
 });
 
 it('draws the home\'s own controls in its navbar on the grid\'s column: the logo, then Home, at the left, the search and Import at the right; the filter and the layout in a row over the grid', async () => {
@@ -222,8 +259,9 @@ it('draws the home\'s own controls in its navbar on the grid\'s column: the logo
   expect([navbar()!.style.paddingLeft, navbar()!.style.paddingRight]).toEqual(['', '']);
   const lead = navbar()!.querySelector('nav')!;
   expect([lead.nextElementSibling === home, home.firstElementChild === left]).toEqual([true, true]);
-  // No panel toggles and no ⋯ on the home; the app menu is the logo's.
-  expect([navbar()!.querySelector('[data-navbar-panel]'), navbar()!.querySelector('[data-testid="file-actions"]')]).toEqual([null, null]);
+  // The sidebar's toggle first, before the logo, and no ⋯ on the home; the app menu is the sidebar's Settings.
+  expect([lead.firstElementChild!.querySelector('[data-navbar-panel="left"]')?.getAttribute('aria-expanded'), lead.lastElementChild!.getAttribute('data-navbar-logo'),
+    navbar()!.querySelector('[data-testid="file-actions"]'), navbar()!.querySelector('[data-navbar-menu]')]).toEqual(['true', 'home', null, null]);
   // The page's own row: the filter at its left and the layout switch at its right, no heading, no search.
   const row = document.querySelector<HTMLElement>('.cad-library-toolbar')!;
   expect([row.getAttribute('data-library-toolbar'), row.querySelector('h1'), row.querySelector('input'), row.querySelector('.cad-library-kind')!.textContent,
@@ -239,19 +277,19 @@ it('draws the home\'s own controls in its navbar on the grid\'s column: the logo
   boxes.mockRestore();
 });
 
-it('heads the home and a document with the one C mark, in one button that never changes', async () => {
+it('heads the home and a document with the one C mark, in one control that never changes', async () => {
   const homed = { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home() {} } };
   const view = (file: string | null) => <FileViewer file={file} host={homed as any} renderers={[renderer]} state={{}} onStateChange={() => {}}
     presentation={{ home: <p>home</p> } as any} />;
   const { rerender } = render(view(null));
   await screen.findByText('home');
-  const logo = screen.getByRole('button', { name: 'Menu' });
+  const logo = screen.getByRole('button', { name: 'Home' });
   // One mark, the C: no wordmark beside or behind it, and nothing that moves between the two.
   const images = () => [...logo.querySelectorAll('img')].map(image => image.getAttribute('src'));
   expect([logo.getAttribute('data-logo'), images()]).toEqual(['mark', [expect.stringMatching(/C(%20| )logo/)]]);
   rerender(view(FILE));
   await screen.findByText('shown');
-  expect(screen.getByRole('button', { name: 'Menu' })).toBe(logo);
+  expect(screen.getByRole('button', { name: 'Home' })).toBe(logo);
   expect([logo.getAttribute('data-logo'), images()]).toEqual(['mark', [expect.stringMatching(/C(%20| )logo/)]]);
   expect(document.querySelector('.cad-navbar-wordmark, .cad-navbar-logo-box')).toBeNull();
 });
@@ -271,7 +309,7 @@ it('draws no navbar where the host asks for the view alone (`chrome: "bare"`): o
   // The default is the page's chrome: the same props draw the navbar.
   open({ ...everything, chrome: undefined });
   await screen.findByText('shown');
-  expect(labels()).toEqual(['Menu', 'Back', 'Forward', 'Full size']);
+  expect(labels()).toEqual(['Home', 'Back', 'Forward', 'Full size']);
 });
 
 it('keeps the right of the navbar for the host\'s actions (Full size) alone, and hides the navbar while the renderer says its Preview is up', async () => {
@@ -304,7 +342,7 @@ it('draws Back and Forward between the logo and the file\'s name where the host 
   const view = render(<FileViewer file={FILE} host={homed as any} renderers={[renderer]} state={{}} onStateChange={() => {}}
     history={{ canGoBack: true, canGoForward: false, back, forward }} />);
   await screen.findByText('shown');
-  expect(left()).toEqual(['Menu', 'Back', 'Forward', 'name:a.step']);
+  expect(left()).toEqual(['Home', 'Back', 'Forward', 'name:a.step']);
   const [backButton, forwardButton] = [screen.getByRole('button', { name: 'Back' }), screen.getByRole('button', { name: 'Forward' })];
   expect([backButton.hasAttribute('disabled'), forwardButton.hasAttribute('disabled')]).toEqual([false, true]);
   act(() => { backButton.click(); forwardButton.click(); });
@@ -313,7 +351,7 @@ it('draws Back and Forward between the logo and the file\'s name where the host 
   // A host that keeps none (a browser's page has its own) gets neither.
   open({ host: homed });
   await screen.findByText('shown');
-  expect(left()).toEqual(['Menu', 'name:a.step']);
+  expect(left()).toEqual(['Home', 'name:a.step']);
   cleanup();
   // A phone's row has no room for them: a view under 600px wide draws neither, its history kept.
   const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 390, height: 700, top: 0, left: 0, right: 390, bottom: 700, x: 0, y: 0, toJSON() {} } as DOMRect);
@@ -321,35 +359,30 @@ it('draws Back and Forward between the logo and the file\'s name where the host 
     history={{ canGoBack: true, canGoForward: true, back, forward }} />);
   await screen.findByText('shown');
   await waitFor(() => expect(document.querySelector('[data-viewer-layout]')?.getAttribute('data-viewer-layout')).toBe('mobile'));
-  expect(left()).toEqual(['Menu', 'name:a.step']);
+  expect(left()).toEqual(['Home', 'name:a.step']);
   rect.mockRestore();
 });
 
-it('opens the app menu from the logo: Back to home where the host has a home, the person\'s settings and the host\'s links; its ⋯ offers what the host can do with the file', async () => {
+it("makes the logo the way home wherever the host has a home: a real link where the home has an address, a button otherwise, with a hint; no menu there, and its ⋯ offers what the host can do with the file", async () => {
   const user = userEvent.setup({ skipHover: true });
   const home = vi.fn();
-  const share = vi.fn();
   const perform = { 'copy-path': vi.fn(), reveal: vi.fn() };
   const links = viewerLinks({ version: '0.7.4', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x' });
-  open({ host: { ...host, links, environment: { colorScheme: 'light', platform: 'win32' }, navigation: { openFile() {}, home }, fileActions: { platform: 'win32', perform } },
-    appSettings: [{ id: 'analytics', label: 'Share anonymous usage data', checked: true, onCheckedChange: share }] } as any);
+  const homed = (navigation: object = {}) => ({ ...host, links, environment: { colorScheme: 'light', platform: 'win32' },
+    navigation: { openFile() {}, home, ...navigation }, fileActions: { platform: 'win32', perform } });
+  const settings = { appSettings: [{ id: 'analytics', label: 'Share anonymous usage data', checked: true, onCheckedChange() {} }] };
+  // A host whose pages have no address (an app's frame): a button, named Home.
+  open({ host: homed(), ...settings } as any);
   await screen.findByText('shown');
-  expect(labels()).toEqual(['Menu', 'File actions']);
-  await user.click(screen.getByRole('button', { name: 'Menu' }));
-  const menu = document.querySelector('[data-app-menu]')!;
-  expect([...menu.querySelectorAll('[role^="menuitem"]')].map(item => item.textContent)).toEqual(['Back to home', 'Share anonymous usage data', 'Send feedback', 'GitHub', 'Discord']);
-  expect(menu.querySelector('[data-menu-footer]')?.textContent).toContain('v0.7.4');
-  // Send feedback: a new issue on the project's tracker, begun "Feedback: ", for the person to
-  // finish, naming the version and the platform; no label: the project has none for feedback.
-  const feedback = new URL(screen.getByRole('menuitem', { name: 'Send feedback' }).getAttribute('href')!);
-  expect([`${feedback.origin}${feedback.pathname}`, feedback.searchParams.get('title'), feedback.searchParams.get('labels')])
-    .toEqual(['https://github.com/earthtojake/text-to-cad/issues/new', 'Feedback: ', null]);
-  expect(feedback.searchParams.get('body')).toMatch(/- CAD: 0\.7\.4\n- Platform: win32$/);
-  // A setting turns without closing the menu; Back to home goes home.
-  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Share anonymous usage data' }));
-  expect([share.mock.calls, Boolean(document.querySelector('[data-app-menu]'))]).toEqual([[[false]], true]);
-  await user.click(screen.getByRole('menuitem', { name: 'Back to home' }));
-  expect(home).toHaveBeenCalledOnce();
+  expect(labels()).toEqual(['Home', 'File actions']);
+  const button = screen.getByRole('button', { name: 'Home' });
+  expect([button.tagName, button.getAttribute('data-navbar-logo'), button.getAttribute('aria-haspopup'), navbar()!.querySelector('[data-navbar-menu]')]).toEqual(['BUTTON', 'home', null, null]);
+  // Its hint says where it goes.
+  await userEvent.setup().hover(button);
+  expect((await screen.findByRole('tooltip')).textContent).toBe('Home');
+  await user.click(button);
+  // It goes home, and opens no menu: the person's settings and the host's links are the home's (Settings).
+  expect([home.mock.calls.length, document.querySelector('[data-app-menu]'), screen.queryByRole('menu')]).toEqual([1, null, null]);
   await user.click(screen.getByRole('button', { name: 'File actions' }));
   // Copy path, then Open in: the file manager by its name (Windows': File Explorer), no Browser where the host has none.
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in']);
@@ -358,12 +391,63 @@ it('opens the app menu from the logo: Back to home where the host has a home, th
   await user.click(screen.getByRole('menuitem', { name: 'File Explorer' }));
   expect(perform.reveal).toHaveBeenCalledWith({ path: FILE, kind: 'file' });
   cleanup();
-  // A host with no home still has the menu, without Back to home; one that can only copy offers only that.
-  open({ host: { ...host, links, fileActions: { perform: { 'copy-path': perform['copy-path'] } } } });
+  // A host that gives the home an address (the web page): a real link to Recents. A plain click goes home in this
+  // view, the link's own navigation held back; ⌘ or Ctrl and a click, Shift, a middle click are the browser's.
+  const hrefOf = vi.fn((target: any) => ('home' in target ? `/?view=${target.home.view}` : null));
+  home.mockClear();
+  open({ host: homed({ hrefOf }), ...settings } as any);
   await screen.findByText('shown');
-  await user.click(screen.getByRole('button', { name: 'Menu' }));
-  expect(screen.queryByRole('menuitem', { name: 'Back to home' })).toBeNull();
+  const link = screen.getByRole('link', { name: 'Home' });
+  expect([link.getAttribute('href'), link.getAttribute('data-navbar-logo'), hrefOf.mock.calls.some(([target]) => JSON.stringify(target) === '{"home":{"view":"recents"}}')])
+    .toEqual(['/?view=recents', 'home', true]);
+  expect(fireEvent.click(link)).toBe(false);
+  expect(home).toHaveBeenCalledTimes(1);
+  for (const modifier of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }, { button: 1 }]) expect(fireEvent.click(link, modifier)).toBe(true);
+  expect(home).toHaveBeenCalledTimes(1);
+  cleanup();
+  // A page still loading, and one that failed, have the logo as the way home; counted as the way home always was.
+  const { ControlUsageProvider } = await import('../../dist/usage/controls.js');
+  const reports: { control: string; count: number }[][] = [];
+  home.mockClear();
+  const pending = { ...homed({ hrefOf }), files: { id: 'slow', stat: () => new Promise(() => {}) } };
+  const loading = render(<ControlUsageProvider report={counts => reports.push(counts)}>
+    <FileViewer file={FILE} host={pending as any} renderers={[renderer]} state={{}} onStateChange={() => {}} /></ControlUsageProvider>);
+  fireEvent.click(screen.getByRole('link', { name: 'Home' }));
+  loading.unmount();
+  const failing = { ...homed(), files: { id: 'gone', stat: async () => { throw new Error('No such file'); } } };
+  open({ host: failing });
+  await screen.findByText('No such file');
+  fireEvent.click(screen.getByRole('button', { name: 'Home' }));
+  expect([home.mock.calls.length, reports.flat()]).toEqual([2, [{ control: 'home', count: 1, seconds: 0 }]]);
+});
+
+it("keeps the app menu on the logo where the host has no home (a view that shows one file alone): the person's settings and the host's links, no way home", async () => {
+  const user = userEvent.setup({ skipHover: true });
+  const share = vi.fn();
+  const perform = { 'copy-path': vi.fn() };
+  const links = viewerLinks({ version: '0.7.4', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x' });
+  open({ host: { ...host, links, environment: { colorScheme: 'light', platform: 'win32' }, fileActions: { perform } },
+    appSettings: [{ id: 'analytics', label: 'Share anonymous usage data', checked: true, onCheckedChange: share }] } as any);
+  await screen.findByText('shown');
+  expect(labels()).toEqual(['Menu', 'File actions']);
+  const logo = screen.getByRole('button', { name: 'Menu' });
+  expect([logo.getAttribute('data-navbar-logo'), logo.hasAttribute('data-navbar-menu'), screen.queryByRole('link', { name: 'Home' })]).toEqual(['menu', true, null]);
+  await user.click(logo);
+  const menu = document.querySelector('[data-app-menu]')!;
+  expect([menu.getAttribute('aria-label'), [...menu.querySelectorAll('[role^="menuitem"]')].map(item => item.textContent)])
+    .toEqual(['Menu', ['Share anonymous usage data', 'Send feedback', 'GitHub', 'Discord']]);
+  expect(menu.querySelector('[data-menu-footer]')?.textContent).toContain('v0.7.4');
+  // Send feedback: a new issue on the project's tracker, begun "Feedback: ", for the person to
+  // finish, naming the version and the platform; no label: the project has none for feedback.
+  const feedback = new URL(screen.getByRole('menuitem', { name: 'Send feedback' }).getAttribute('href')!);
+  expect([`${feedback.origin}${feedback.pathname}`, feedback.searchParams.get('title'), feedback.searchParams.get('labels')])
+    .toEqual(['https://github.com/earthtojake/text-to-cad/issues/new', 'Feedback: ', null]);
+  expect(feedback.searchParams.get('body')).toMatch(/- CAD: 0\.7\.4\n- Platform: win32$/);
+  // A setting turns without closing the menu.
+  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Share anonymous usage data' }));
+  expect([share.mock.calls, Boolean(document.querySelector('[data-app-menu]'))]).toEqual([[[false]], true]);
   await user.keyboard('{Escape}');
+  // One that can only copy offers only that.
   await user.click(screen.getByRole('button', { name: 'File actions' }));
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path']);
 });
@@ -531,8 +615,7 @@ it("offers Open in new tab (or Open in browser) for the document on screen where
   expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path']);
 });
 
-it("opens the search with ⌘K on a Mac and Ctrl+K elsewhere, from a field too, and from the app menu's Search documents, its key at the right; never in Preview or over another dialog", async () => {
-  const user = userEvent.setup({ skipHover: true });
+it("opens the search with ⌘K on a Mac and Ctrl+K elsewhere, from a field too, and from Search documents in the document's ⋯, its key at the right; never in Preview or over another dialog", async () => {
   const onSearch = vi.fn();
   let report: ((previewing: boolean) => void) | undefined;
   const previewed = defineFileRenderer({ id: 'previewed', priority: 2, matches: () => true, prepare: async () => ({ data: null }),
@@ -561,17 +644,40 @@ it("opens the search with ⌘K on a Mac and Ctrl+K elsewhere, from a field too, 
   view.rerender(<FileViewer file={FILE} host={homed('win32') as any} renderers={[previewed]} state={{}} onStateChange={() => {}} onSearch={onSearch} />);
   fireEvent.keyDown(document.body, { key: 'K', ctrlKey: true });
   expect(onSearch).toHaveBeenCalledTimes(2);
-  // The app menu: Back to home, then Search documents with its key.
-  await user.click(screen.getByRole('button', { name: 'Menu' }));
-  const item = await screen.findByRole('menuitem', { name: /Search documents/ });
-  const items = [...document.querySelectorAll('[data-app-menu] [role^="menuitem"]')];
-  expect([items[0].textContent, items[1].textContent]).toEqual(['Back to home', 'Search documentsCtrl+K']);
-  await user.click(item);
+  // The document's ⋯: Search documents with its key, in a group of its own where the host can do nothing else with the file.
+  const fileMenu = async () => {
+    await act(async () => { fireEvent.pointerDown(screen.getByTestId('file-actions'), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+    return screen.findByRole('menu');
+  };
+  let menu = await fileMenu();
+  expect([within(menu).getAllByRole('menuitem').map(item => item.textContent), within(menu).queryByRole('separator')]).toEqual([['Search documentsCtrl+K'], null]);
+  await act(async () => { fireEvent.click(within(menu).getByRole('menuitem', { name: /Search documents/ })); });
   expect(onSearch).toHaveBeenCalledTimes(3);
-  // A host with no search has neither.
-  view.rerender(<FileViewer file={FILE} host={homed('win32') as any} renderers={[previewed]} state={{}} onStateChange={() => {}} />);
-  fireEvent.keyDown(document.body, { key: 'K', ctrlKey: true });
-  expect(onSearch).toHaveBeenCalledTimes(3);
+  cleanup();
+  // The first of the last group, before Previous and Next in project: every document where the host has the search,
+  // in a project of several or not.
+  const acting = { ...homed('darwin'), fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } } };
+  const shown = render(<FileViewer file={FILE} host={acting as any} renderers={[renderer]} state={{}} onStateChange={() => {}} onSearch={onSearch}
+    project={{ ...PROJECT, onShow() {} } as any} />);
+  await screen.findByText('shown');
+  menu = await fileMenu();
+  expect([within(menu).getAllByRole('menuitem').map(item => item.firstChild?.nodeType === 1 ? item.textContent : item.firstChild?.textContent),
+    within(menu).getAllByRole('separator').length, within(menu).getByRole('menuitem', { name: /Search documents/ }).querySelector('[data-slot="dropdown-menu-shortcut"]')?.textContent])
+    .toEqual([['Copy path', 'Search documents⌘K', 'Previous in project', 'Next in project'], 1, '⌘K']);
+  fireEvent.keyDown(menu, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  // A standalone document: Search documents, then Import its folder as a project, one group.
+  shown.rerender(<FileViewer file={FILE} host={acting as any} renderers={[renderer]} state={{}} onStateChange={() => {}} onSearch={onSearch} onImportFolder={() => {}} />);
+  menu = await fileMenu();
+  expect([within(menu).getAllByRole('menuitem').map(item => item.textContent), within(menu).getAllByRole('separator').length])
+    .toEqual([['Copy path', 'Search documents⌘K', 'Import its folder as a project…'], 1]);
+  cleanup();
+  // A host with no search has neither the key nor the item.
+  render(<FileViewer file={FILE} host={acting as any} renderers={[previewed]} state={{}} onStateChange={() => {}} />);
+  await screen.findByRole('textbox', { name: 'note' });
+  fireEvent.keyDown(document.body, { key: 'k', metaKey: true });
+  menu = await fileMenu();
+  expect([onSearch.mock.calls.length, within(menu).getAllByRole('menuitem').map(item => item.textContent)]).toEqual([3, ['Copy path']]);
 });
 
 it('has no file menu on a document with no file of its own, which its name names; a document in no project offers Import its folder as a project where the host can', async () => {

@@ -81,7 +81,7 @@ cleanup, while it still belongs to the same source.
 ## The navbar and the project
 
 The navbar is drawn over every file from the moment one is asked for, and over the
-host's home — only its logo and menu, without Back to home, Back and Forward where the
+host's home — there the home's sidebar's toggle, the logo, Back and Forward where the
 host keeps the view's history, and the host's actions, where they stand over
 a file — never for a `compact` view (a
 picture: the home's thumbnails), never where the host asks for the view alone
@@ -90,17 +90,19 @@ picture: the home's thumbnails), never where the host asks for the view alone
 Preview is up (`RendererViewProps.onPreviewChange`): the viewer's Preview draws its own
 bar in its place and gives it back as it closes. Over a file, left to right:
 
-- the view's panel toggle, where the file has a panel (`panelToggles.js`, said by the view's frame): the strip's
+- the panel's toggle, where the page has a panel (`panelToggles.js`, said by the panel's frame, `panelFrame.jsx`: a
+  file's view's, and over the home its sidebar's): the strip's
   28px tile, the same neutral button open or shut, which shows and hides the panel (`⌘\` or `Ctrl+\`), a mouse
   resting on it peeking the collapsed panel over the view;
-- the text-to-cad "C" logo (named Menu, with no chevron; the same 16px mark over the home),
-  which opens the app menu
-  (`navigation/AppMenu.jsx`): Back to home where the host has a home
-  (`navigation.home`), Search documents with its key where the host has the search (`onSearch`),
-  the person's settings (`appSettings`), Send feedback, GitHub,
-  Discord and, in gray, the version and who made it. FileViewer builds it from
-  `host.links`, `appSettings` and `environment.platform`. A host with no home has the
-  logo and the menu too, without Back to home;
+- the text-to-cad "C" logo (the same 16px mark over the home). Where the host has a home (`navigation.home`) it is
+  the way home (Recents), named Home with a hint saying so: a real link where the host gives the home an address
+  (`navigation.hrefOf({ home: { view: "recents" } })`: a plain click goes home in this view, a modified or middle
+  click is the browser's), a button otherwise; it opens no menu. Where the host has no home it is named Menu and
+  opens the app menu (`navigation/AppMenu.jsx`): the person's settings (`appSettings`), Send feedback, GitHub,
+  Discord and, in gray, the version and who made it. FileViewer builds that menu from
+  `host.links`, `appSettings` and `environment.platform`; where the host has a home it hands it down instead
+  (`navbarSlots.js`'s `AppMenuContext`) to the panel's foot (`PanelFoot.jsx`), the row at the bottom of the sidebar on
+  the home and over a document: the links as icons, and Settings, a cog whose menu holds the settings;
 - Back and Forward, where the host keeps the view's own history (`history`, a
   `ViewerHistory`: the CAD app's views; a browser's page has its own and hands none): two
   arrows, each there always and disabled where it has nowhere to go;
@@ -116,7 +118,8 @@ bar in its place and gives it back as it closes. Over a file, left to right:
   is `browser`, and left out where Open in's Browser is there already); Open in, a submenu of Browser
   (`fileActions.perform.browser`) and the file manager by its name (Finder, File Explorer, File
   manager: `reveal`); then the host's own items (`fileMenuItems`: the viewer's Export submenu); and
-  last, after a rule, the project: Previous in project and Next in project, their keys `[` and `]`
+  last, after a rule, other documents and the project: Search documents with its key at the right (`onSearch`:
+  every document, where the host has the search), then Previous in project and Next in project, their keys `[` and `]`
   at the right, each off at its end (a project of more than one document), or for a document in no
   project, Import its folder as a project (`onImportFolder`, where the host can: its chooser,
   starting at the document's folder, so the person picks the level). Each only where the
@@ -127,7 +130,8 @@ bar in its place and gives it back as it closes. Over a file, left to right:
 
 The logo, Back and Forward, the project's name and the ⋯ are one kind of control: transparent
 at rest, the same accent background while the pointer is on it and while its menu is open, a
-pointer cursor, and no tooltip (the project's folder tile has one: its name).
+pointer cursor, and no tooltip (the logo has one where it is the way home, "Home"; the project's folder tile has
+one: its name).
 
 At the right, only what a host or a file adds: a renderer's actions; the view's own controls, Display (the plain
 cube, whose card holds how the picture is drawn, a 3D view's Projection among it) and a 3D view's or a board's Preview,
@@ -143,9 +147,18 @@ re-renders no view), and the view's own keys reach them (`useProjectKey`, from `
 single keys, never in a field, held, with a modifier or in Preview. The ⋯'s Previous and Next do the same; both are
 counted (`project_previous`, `project_next`). A view that shows its file alone (no `navigation.openFile`) has none.
 
-`onSearch`, where the host has the search of every document (`CadViewer` mounts `search/DocumentSearch.tsx`), is the
-app menu's Search documents and ⌘K (Ctrl+K off a Mac, by `environment.platform`), bound by FileViewer from anywhere on
-the page but Preview, and never over another dialog ([Search](viewer-ux.md#search)).
+`onSearch`, where the host has the search of every document (`CadViewer` mounts `search/DocumentSearch.tsx`), is
+Search documents in a document's ⋯ and ⌘K (Ctrl+K off a Mac, by `environment.platform`), bound by FileViewer from
+anywhere on the page but Preview, and never over another dialog ([Search](viewer-ux.md#search)). Over the home the key
+and the navbar's own search remain.
+
+The panel's frame is one for a file and the home (`panelFrame.jsx`: pinned or collapsed by the person's choice, else
+by the page's width; the peek; a phone's sheet; the toggle), on one surface (`PanelSurface.jsx`: the chrome's colour,
+the grip, the peek's card, a foot pinned under its scroller). A view's frame mounts it for the file's panel
+(`renderers/kit/shell/ViewFrame.jsx`) and the home for its sidebar (`library/LibrarySidebar.jsx`); FileViewer hands
+both the page's one peek (`PanelPeekContext`) and draws whichever toggle is said. Both end in the one foot
+(`PanelFoot.jsx`), where the host has a home; FileViewer's stand-in for a loading file's panel draws it too, so it is
+there from the first frame.
 
 The browser harness beside FileViewer exercises injected renderers, source and file
 changes, navigation actions, the project's name and the file menu, the mobile breakpoint,

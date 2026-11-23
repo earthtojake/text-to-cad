@@ -15,8 +15,8 @@ around it are few, and each stands in the same place for every file.
 
 | Region | Holds | Never holds | Why |
 |---|---|---|---|
-| **Navbar**, across the top | Left: the panel toggle, the logo's app menu, Back and Forward (the CAD app), the project's name, the file's name and its ⋯. Right: a put-away alert, Display, Preview, the host's actions | Tools, a switch for one file type, the camera, a list of documents | One bar, the same over every file and the home, so each control is where the person last found it |
-| **Panel**, at the left | The file's structure (Model, Links, Parts, Nets, Layers), then what the file declares (Params, Joints, Animation), and one search over its trees | Tools, how the picture is drawn, what is selected, other documents | It is where the file is read and where its own settings are set. One panel keeps structure and settings together and leaves the model the rest of the view |
+| **Navbar**, across the top | Left: the panel toggle, the logo (the way home), Back and Forward (the CAD app), the project's name, the file's name and its ⋯. Right: a put-away alert, Display, Preview, the host's actions | Tools, a switch for one file type, the camera, a list of documents, the person's settings | One bar, the same over every file and the home, so each control is where the person last found it |
+| **Panel**, at the left | Over a file: its structure (Model, Links, Parts, Nets, Layers), then what the file declares (Params, Joints, Animation), and one search over its trees. Over the home: its places. At its foot on both: the app's links (GitHub, Discord, X, Send feedback) and Settings | Tools, how the picture is drawn, what is selected; over a file, other documents | It is where the page on screen is read: a file's structure and its own settings, the home's places. One panel, behaving one way on both pages, leaves the rest of the view to the model or the place. The app's own links and settings have one place, its foot, the same on the home and over a document |
 | **Tool strip**, top centre of the view | The file's own tools, and under it the row of the tool in hand | View controls (Display, Preview, projection, zoom), a tool the file cannot use | Tools are used most, so they stay in reach, in the same place and order in every file |
 | **The corner**, top right of the view | Camera navigation only: the cube on a 3D view, one "100%" zoom menu on a flat view | Display settings, tools, +/− buttons, a Home button | The corner is where the picture is looked at from. A setting or a tool there would mix moving the camera with changing the picture |
 | **Display card**, under the navbar at the right | How the picture is drawn: Projection, Style, Background, Show grid, and a board's Side and Mode | A camera reset, anything changed often | One place for every file type, so a person always finds it. It is changed now and then, so it waits behind a button |
@@ -40,6 +40,9 @@ These reasons decide the cases the table does not:
 - **The panel is the document's own.** Moving to another document is the navbar's (the project's name), the keys' (`[`
   and `]`, ⌘K) and the search's, never a tab beside the model. Why: a list of other documents leading the panel hid the
   model's own tree, which is what the panel is for.
+- **What is the app's, not a file's or a place's, is the panel's foot**: the links out and the person's settings, in
+  one row under a rule at the panel's bottom, the same on every page that has a panel
+  ([The panel's foot](#the-panels-foot)). Nothing else of the app's is in the panel.
 - **The browser's tabs are the viewer's tabs.** There are no document tabs in the page: wherever a document or a project
   is named, opening it in a new tab is laid out plainly (a real link, Open in new tab, ⌘Enter).
 - **Nothing moves under the pointer.** The strip and Quick Edit are centred on the whole view and no panel moves them. A
@@ -52,8 +55,8 @@ These reasons decide the cases the table does not:
 ## The page
 
 The viewer has two pages. A file's page is the navbar over the view: the panel at the view's left, the picture, and the
-chrome that floats over the picture. The home is the navbar over the library: its places at the left, and the place on
-screen.
+chrome that floats over the picture. The home is the navbar over the library: its places in the same panel at the left
+([The panel](#the-panel)), and the place on screen.
 
 - `FileViewer.tsx` owns the navbar and its menus. `ViewFrame.jsx`, the one frame every renderer mounts (2D or 3D), owns
   everything in the view: the panel, the strip and the row under it, the update line, the corner, the Display card,
@@ -70,12 +73,23 @@ screen.
 - One row, the control's height plus 12px (40px; 48px on a phone), the strip's height, on `bg-sidebar` with a rule
   under it, the same over every file and the home (`ViewerNavbar.jsx`, `navbarRow.js`).
 - It is there from the first paint: the web page draws a static bar before its script runs, then `StartingView.tsx`
-  draws the real frame, toggle, logo and name included. Why: nothing appears or moves as the app takes over.
-- **Left**, edge to edge: the panel toggle (over a file that has a panel); the logo, which opens the app menu; Back and
+  draws the real frame, toggle, logo and name included; for the home, its sidebar too, open or shut and as wide as the
+  tab kept it, with placeholder rows. Why: nothing appears or moves as the app takes over.
+- **Left**, edge to edge: the panel toggle (over a file that has a panel, and over the home); the logo; Back and
   Forward where the host keeps the view's history (the CAD app; desktop only, disabled with nowhere to go); for a
   document in a project, the project's name and a slash, muted, which goes to that project's page on the home (Figma's
   location before a file's name); the file's name (no glyph, no menu of its own); its ⋯. Past the toggle they have no
-  fill at rest, the accent fill on hover and while their menu is open, and no tooltip, since each says what it is.
+  fill at rest, the accent fill on hover and while their menu is open; the name and the ⋯ have no tooltip, since each
+  says what it is.
+- **The logo is the way home**, wherever the host has a home: over a document, over one still loading or that failed
+  to open, and over the home itself, where it goes to Recents. It is a real link where the host gives the home an
+  address (the web page): a plain click goes home in this view, and ⌘ or Ctrl and a click, a middle click or the
+  link's own menu open the home in a new tab. Elsewhere (the CAD app) it is a button. Its hint says "Home". It opens no
+  menu. Why: the mark in a page's corner is where people press to go home, and a menu there hid the way behind a
+  second press.
+- **A host with no home** (a view that shows one file alone, as the CAD app's file handler does) has no foot in its
+  panel ([The panel's foot](#the-panels-foot)), so there the logo opens the app menu itself, with no hint, and the
+  menu holds everything: nothing is offered twice.
 - **The project's name** is a real link where the host gives the project's page an address (the web page): a plain
   click shows it in this view, and ⌘ or Ctrl and a click, a middle click or the link's own menu open it in a new tab. It
   truncates as the row narrows down to 80px; under that, and always on a phone, it is a control-sized folder tile named
@@ -86,20 +100,22 @@ screen.
   logo's drawn mark (the row's 8px, the tile's 6px and the artwork's 2px).
 - The panel toggle is a 28px tile with the sidebar glyph, the same neutral button open or shut (`aria-expanded` says
   which; the panel beside the model already shows it). Its tooltip, "Show panel" or "Hide panel" with ⌘\, opens to its
-  right and hides while the panel peeks.
+  right and hides while the panel peeks. Over the home it is the same tile, for the home's sidebar.
 - Display and Preview are control-sized tiles (28px; 36px on a phone) 2px apart, the plain cube and the play triangle ([Icons](design-system.md#icons)):
   muted at rest, Display in the accent fill while its card is open, tooltips below (none on a phone). In Preview the
   navbar is hidden, and Preview's own bar stands in its place.
-- **The app menu** (the logo's), over every file and the home, also while a file loads or after it failed: Back to
-  home and Search documents (⌘K at its right, where the host has a library); Language, the host's switches (Telemetry)
-  and Theme; Send feedback, GitHub, Discord; a muted footer with the version and "Made by". Its rows come from the
-  host; settings rows keep it open. A file's view settings are never here.
+- **The app menu** is Settings, the cog in the panel's foot ([The panel's foot](#the-panels-foot)): Language, the
+  host's switches (Telemetry) and Theme, then a muted footer with the version and "Made by". Send feedback, GitHub and
+  Discord are icons beside it, not items. In a host with no home it is the logo's, and holds those three too. Its rows
+  come from the host; settings rows keep it open. A file's view settings are never here, and neither is a way to
+  another page: the logo goes home, and the search is a key and a document's ⋯.
 - **The ⋯ file menu**, from the document itself outwards: Copy path, Copy link; where it opens: Open in new tab (from
   an app's frame, Open in browser, left out where Open in's Browser already is it), Open in ▸ (Browser, the file
   manager, the source's apps, each export's apps, Default app); what is made of it: the host's items, Export ▸; last,
-  after a rule, its project: Previous in project and Next in project with `[` and `]` at the right (a project of more
-  than one document; each off at its end), or, for a document in no project, Import its folder as a project (the
-  desktop's chooser opening at its folder, so the person picks the level). Each only where the host can do it. Apps
+  after a rule, other documents and its project: Search documents with ⌘K (Ctrl+K) at the right (every document,
+  where the host has a library), then Previous in project and Next in project with `[` and `]` at the right (a project
+  of more than one document; each off at its end), or, for a document in no project, Import its folder as a project
+  (the desktop's chooser opening at its folder, so the person picks the level). Each only where the host can do it. Apps
   are looked up as the menu opens; where the source was moved or deleted, what would open it is disabled and says why.
 - **Moving between documents** replaced the Project tab that once led the panel: the project's name goes to its page
   on the home; `[` and `]` step through the project, in the order it lists its documents, stopping at its ends; and the
@@ -109,7 +125,7 @@ screen.
 #### Search
 
 - One search of every document in every project (`search/DocumentSearch.tsx`), over a document and over the home:
-  ⌘K (Ctrl+K off a Mac) from anywhere but Preview, a text field too, or the app menu's Search documents. Escape, a
+  ⌘K (Ctrl+K off a Mac) from anywhere but Preview, a text field too, or Search documents in a document's ⋯. Escape, a
   press outside or a pick closes it, and the focus goes back where it was. It never opens over another dialog.
 - A card near the top of the page, about 560px wide, on the popups' surface, nothing dimmed behind it; on a phone a
   sheet the width of the view under the navbar, as the panel's is. Its input has the keyboard; under it the results; on
@@ -142,13 +158,16 @@ screen.
 
 #### The home
 
-- The same navbar, with "Home" after the logo (whose menu has no Back to home), and at the right the search and
-  Import (where the host has a chooser: File…, Folder…). No toggle and no ⋯. The search narrows the place on screen.
+- The same navbar: the sidebar's toggle, the logo (which goes to Recents), then "Home", and at the right the search
+  and Import (where the host has a chooser: File…, Folder…). No ⋯. The search narrows the place on screen.
 - **One place at a time** (`library/ModelLibrary.tsx`, the `.cad-library` rules): Recents (the default: every document
   opened lately, across projects), Pinned, one project's page, or Standalone (the documents in no project). Why: each
   is a question a person asks ("what was I on?", "what is in this project?"), and one list answers one question.
-- **The sidebar** (`library/LibraryPlaces.jsx`) lists the places: 232px, the panel's width, on the panel's surface
-  (`bg-sidebar`, a rule on its right), the home's full height, its rows the panel's rows on the panel's 16px inset.
+- **The sidebar** lists the places (`library/LibraryPlaces.jsx`) and behaves as the viewer's panel does, because it is
+  that panel over another page (`library/LibrarySidebar.jsx`, on `file-viewer/panelFrame.jsx` and `PanelSurface.jsx`):
+  pinned it pushes the place, collapsed it leaves nothing, it peeks from its toggle, ⌘\ shows and hides it, its grip
+  sets its width, and on a phone it is a sheet ([The panel](#the-panel)). Its rows are the panel's rows on the panel's
+  16px inset. Why: one sidebar to learn, not two that look alike and differ.
   - Recents; Pinned with its count; "Projects", with a "+" that is Import's Folder (where the host has a chooser), over
     one row a project (its folder glyph, name and count, the latest activity first; one whose folder is gone muted);
     then Standalone with its count.
@@ -156,6 +175,8 @@ screen.
     Down move between the rows, Home and End to the first and the last.
   - Every row is always there, so the list keeps its shape: Pinned with nothing pinned has no count, and its page says
     how a document gets there. A count of none is not written.
+  - It ends in the panel's foot, as a document's panel does: the app's links and Settings
+    ([The panel's foot](#the-panels-foot)).
 - **The place** fills the rest, on the page's colour, on 24px gutters, 20px under the navbar. Its heading row: the
   place's name, the page's one larger text (a project's after its folder glyph, with its folder from `~` and its ⋯:
   Open in new tab, Copy path, Reveal, Remove from CAD, which says nothing on disk changed and goes to Recents); at the
@@ -187,11 +208,17 @@ screen.
   project, nothing pinned, a project whose folder is gone, one no longer in CAD), and under a project's last document
   when the host's walk of its folder stopped early. With nothing at all yet, Recents shows the C mark, "Nothing here
   yet", one line, Import file and Import folder, and the formats the viewer opens.
-- **Narrower than 720px, and on a phone**, there is no sidebar: the navbar's "Home" becomes a menu button naming the
-  place on screen, its menu the same places with the same counts (and the "+"'s words last). The place is on 16px
-  gutters, 12px under the navbar, one card across; Import is its icon. The width is the home's, never the window's.
+- **Narrower than 720px, and on a phone**, the place is on 16px gutters, 12px under the navbar, one card across on a
+  phone; Import is its icon. The sidebar is collapsed there until the person opens it (the panel's rule, from 872px
+  down), and a phone's is the sheet. The width is the home's, never the window's.
 
 ### The panel
+
+One panel at the page's left, the same over a document and over the home. Over a document it holds the file's structure
+and settings (`FlatPanel.jsx`); over the home, the places ([The home](#the-home)); and both end in the same foot
+([The panel's foot](#the-panels-foot)). How it shares the page
+is one frame for both (`file-viewer/panelFrame.jsx`, `PanelSurface.jsx`, `panelToggles.js`, `panelPeek.js`), so every
+rule below holds on both pages; "the view" is the page it stands beside, "the model" the picture or the place.
 
 - One panel, docked at the view's left at its full height, on `bg-sidebar` with a rule on its right (`FlatPanel.jsx`,
   `PanelSurface.jsx`, `sidebars.js`).
@@ -202,7 +229,8 @@ screen.
   over the view, 4px in from the window's left, the navbar and the view's bottom, its contents where a pinned panel's
   stand. It slides in over 100ms and out over 80ms, pushes nothing, and works from the page's first frame. It goes
   150ms after the pointer has left both toggle and card (`PANEL_PEEK_LEAVE_MS`; not while a menu opened from it is up), on Escape, or on a
-  press on the model. Only a click on the toggle or ⌘\ pins it; nothing done inside it does, and a peek is never kept.
+  press on the model (on the home, on the place). Only a click on the toggle or ⌘\ pins it; nothing done inside it
+  does (a place chosen in the home's is shown under it), and a peek is never kept.
   There is no peek for a finger, a held button or keyboard focus. Why: a glance at the tree should not resize the
   picture or move the camera.
 - **Width.** 232px at first (`DEFAULT_PANEL_WIDTH`), 200 to 480 by its grip, the same at every desktop width. Why 232:
@@ -212,13 +240,37 @@ screen.
   where the view is at least 872px wide (`MIN_MODEL_WIDTH`, 640, plus 232), collapsed below, following resizes. Once
   they open, close or pin it on that file, their choice holds at any width. A peek is no choice.
 - Its open state, width and tab are kept per file for the session, never globally ([Settings memory](#settings-memory)).
-  Why: everything else about a file is kept per file, and forgotten with the tab.
+  Why: everything else about a file is kept per file, and forgotten with the tab. The home's open state and width are
+  kept the same way, the home in the file's place: with the tab's settings, where its layout and Sort are.
 - **From the first frame** the toggle and the name are in the navbar and the panel is open or shut as it will be, its
-  tab showing placeholder rows. Neither arrives late and pushes the model aside.
+  tab showing placeholder rows. Neither arrives late and pushes the model aside. The home's is there with its places
+  from its first frame too.
 - Every tab stays mounted, so a tree keeps its folds, and each keeps its own scroll. The first tab opens by default.
 - **Rows** are the control's height on the panel's 16px inset in every tab: a tree's rows ([Trees](#trees)), and the
   settings rows (`panelRows.jsx`), each a muted label on the left line and its control ending on the right one, a
   dropdown half the row wide ([Spacing and the panel inset](design-system.md#spacing-and-the-panel-inset)).
+
+#### The panel's foot
+
+- **One row at the panel's bottom, the same on the home and over a document** (`file-viewer/PanelFoot.jsx`, one
+  component), in the pinned panel, the peek and the phone's sheet alike. A hairline rule, the panel's full width,
+  parts it from what is above; under the rule, 8px, the row of control-sized icon tiles, 8px. It is pinned: the
+  panel's content scrolls above it.
+- **At its left, the app's links**, each an icon with its name in a hint above it: GitHub, Discord and X (each only
+  where the host gives that link), then Send feedback (the round chat bubble: a new issue on the host's tracker).
+  A press opens the link the host's way. Muted at rest, the foreground under the pointer.
+- **At its right corner, Settings**, a cog, which opens the app menu upward: Language, the host's switches
+  (Telemetry), Theme, and the version and "Made by". The cog is lit while its menu is open.
+- **On the panel's lines**: the first icon and the cog's stand on the two insets, as the head's icons do. At the
+  panel's narrowest (200px) the row fits; links that would not fit wrap upward, and the cog keeps its corner.
+- **A tab's own actions row** (Params' Reset and Save) stays in the scroller, directly over the foot's rule, flush
+  against it wherever the tab is scrolled ([A tab's actions](design-system.md#a-tabs-actions)).
+- **Only where the host has a home.** There the logo is the way home, so the links and Settings need a place of their
+  own. A host with no home keeps them in the logo's menu and its panel has no foot; a document whose view has no
+  panel has none either, and the home is one press away.
+- Why here, and why in a document's panel, which otherwise holds only the file: the app's own links and settings have
+  one place, the bottom of the sidebar, the same on the home and over a document, so a person finds them without
+  leaving the document, and a logo that opens a menu is not also the way home.
 
 #### The head and its tabs
 
@@ -341,7 +393,8 @@ The bar where a person writes a note to their agent about what is on screen (`Qu
   stay in it, without tooltips.
 - **The panel is a sheet** from the left, under the navbar and over the strip, the model and Quick Edit: 85% of the
   width, at most 20rem, with no scrim. It slides in over 100ms and out over 80ms, starts closed, is never kept open,
-  and has no grip and no peek. Inside are the same tabs, search and rows, with row actions always shown.
+  and has no grip and no peek. Inside are the same tabs, search and rows, with row actions always shown, and the
+  panel's foot at its bottom. The home's sidebar is the same sheet, with its places; a place chosen in it closes it.
   - It closes on a tap outside it (a tap on the picture only closes it), a swipe left of at least 48px, Escape, the
     toggle or ⌘\. A tap on Display, Preview or the file's name closes it and does that control's job in the same tap.
   - A press on a row of a board's or schematic's tree closes it and frames what was chosen.
@@ -711,8 +764,9 @@ store) and forgotten with it. Nothing is in localStorage, and nothing is shared 
 in a session, and settings that outlived it would surprise the next one.
 
 - **Tab-wide**: the appearance (System, Light or Dark; a new tab follows the system), the viewport's Background (Light
-  unless picked), the home's layout and its Sort, and the tool stack's layout. The home's place is the host's: the
-  page's address in the web page, a step of the view's history in the CAD app.
+  unless picked), the home's layout and its Sort, the home's sidebar (the person's choice of open or closed, and the
+  width they dragged it to; nothing until they choose), and the tool stack's layout. The home's place is the host's:
+  the page's address in the web page, a step of the view's history in the CAD app.
 - **Per file**, by its path and its view: the panel's open state, width and tab; the Display card's values; the
   camera; Explode and Clip; the pose; hidden and isolated parts and the tree's folds; a board's layers, side, mode and
   3D projection; Preview's settings; Speed and Loop.
@@ -721,8 +775,8 @@ in a session, and settings that outlived it would surprise the next one.
 - **Never kept**: the tool in hand (every open starts in Select), the selection, measurements, ink, an open card, menu
   or peek, the phone's sheet, Orbit, where a routine was, and the home's search and Show.
 - **The person's own settings** (the language, the telemetry switch, the What's new already seen) are the host's,
-  kept in `settings.json` in the state folder and the same everywhere. The app menu changes them; a file's view
-  settings are never there.
+  kept in `settings.json` in the state folder and the same everywhere. The app menu (Settings, in the panel's foot)
+  changes them; a file's view settings are never there.
 
 ## Keyboard
 
@@ -739,9 +793,10 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   fit, ⇧2 the selection, ⇧0 100%. These repeat.
 - **The arrow keys** orbit the viewer that has the focus or the pointer; never in Preview, a text field or a tree row,
   or with ⌘, Ctrl or Alt held.
-- **The panel**: ⌘\ (Ctrl+\) shows or hides it, and pins a peek. "/" opens it on its search (a peek searches where it
-  is). On a phone ⌘\ opens and shuts the sheet, and "/" does nothing. Neither works in Preview. Tabs, tree rows and
-  the grip keep the keys in [Keyboard focus](design-system.md#keyboard-focus).
+- **The panel**: ⌘\ (Ctrl+\) shows or hides it, and pins a peek, over a document and over the home (there, from
+  anywhere but a field being typed in). "/" opens a document's on its search (a peek searches where it is). On a phone
+  ⌘\ opens and shuts the sheet, and "/" does nothing. Neither works in Preview. Tabs, tree rows and the grip keep the
+  keys in [Keyboard focus](design-system.md#keyboard-focus).
 - **⌘C** (Ctrl+C) copies the view with its ink as a picture under Draw, else the selection's references; never while
   text is selected or a field has the focus. **⌘Z, ⇧⌘Z** (Ctrl+Z, Ctrl+Y) undo and redo ink and measurements.
   **Delete** or Backspace deletes picked ink and measurements.
@@ -759,8 +814,9 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 
 - Every hint is the one `TooltipHint` ([Tooltips](design-system.md#tooltips)); below is which controls have one.
 - **Which side**: above the strip's tools and Quick Edit's buttons; below Draw's row, the effects' Resets, the zoom,
-  the navbar's Display and Preview, and Preview's bar; to the right of the panel toggle.
-- **No hint** where the control says what it is: the logo, Back, Forward, the project's name, the name, the ⋯, the X
+  the navbar's Display and Preview, the logo ("Home") and Preview's bar; to the right of the panel toggle; above the
+  icons of the panel's foot.
+- **No hint** where the control says what it is: the logo where it opens the app menu, Back, Forward, the project's name, the name, the ⋯, the X
   on a chip or a card, Play/Pause, the scrubber, the Playback menu, Clip's axis, Colour, Clear, and buttons with words.
   Exit preview is the one X with a hint; the project's folder tile names its project in one, and a search row's Open
   in new tab says so in one. A finger never raises a hint, and the navbar's Display and Preview have none on a phone.
@@ -806,3 +862,9 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 - **The home as one long page of sections, a project each.** A project deep in the page was a scroll away, and each
   showed eight documents until asked. A place at a time, from a sidebar, puts each one click away, whole.
 - **Document tabs inside the viewer.** The browser has tabs; every document and project opens in one.
+- **A sidebar of the home's own, and a menu of places on a narrow home's heading.** Two sidebars that looked alike and
+  behaved differently; the home's is the viewer's panel, collapsed, peeking and a sheet as that one is.
+- **The app menu on the logo, where there is a home.** It put the way home behind a second press. The logo goes
+  home; the links and Settings are the foot of the sidebar, on the home and over a document.
+- **Settings as a row of words, with the links inside its menu.** Three links one press deep in a menu named for
+  something else; they are icons in the foot, and the cog's menu holds settings alone.

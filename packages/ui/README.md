@@ -2,8 +2,8 @@
 
 The shared React interface for text-to-cad. `FileViewer` is the complete file view:
 one file by its absolute path (`/a/b.step`, `C:/a/b.step`, `/`-separated in every
-app), or the host's home with none, under a navbar — the logo that opens the app's
-menu, the project the file is in and the file's name, the file menu — with the file's
+app), or the host's home with none, under a navbar — the panel's toggle, the logo that
+leads home, the project the file is in and the file's name, the file menu — with the file's
 content and the loading and error states ([FileViewer](docs/file-viewer.md)).
 `CadViewer` (`@cad/ui/cad-viewer`) is the viewer every app shows:
 FileViewer over a CAD client, with the six CAD renderers, the home (the projects and the
@@ -304,7 +304,11 @@ panel's is, pushing nothing, kept nowhere and pinned only by the toggle (`kit/sh
 person opens or closes it on a file, it follows the view, collapsed where it would leave the model under 640px, never
 written, and after that their choice holds on that file at any width (`kit/shell/sidebars.js`); it is 232px wide
 (budgeted for three tabs) until its grip sets another width, from 200 to 480px at any window width, its toggle the navbar's first control, before the logo (`file-viewer/panelToggles.js`; ⌘\); on a
-phone the toggle opens it as a sheet from the left (`primitives/sheet.jsx`).
+phone the toggle opens it as a sheet from the left (`primitives/sheet.jsx`). How it shares the page is one frame
+(`file-viewer/panelFrame.jsx`, on `file-viewer/PanelSurface.jsx`), which the home's sidebar mounts too: the same
+panel over the home, holding its places (`library/LibrarySidebar.jsx`). Both end in one foot
+(`file-viewer/PanelFoot.jsx`), where the host has a home: under a full-width rule, the host's links as icons (GitHub,
+Discord, X, Send feedback) and Settings, a cog.
 Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is
 the description's link tree, with the Model's rows and search box; see
@@ -344,26 +348,30 @@ Authored material color, finish and opacity are read-only in every style. There
 is no Materials editor or persisted material override. See [View styles](docs/render-mode.md) and
 [loading](docs/loading.md).
 
-The navbar leads, over a file with a panel, with the panel's toggle, then the logo (the C mark, over the
-home and over a document alike), which opens the app's menu: Back to home where the host
-has a home, Search documents (⌘K) where it has a library, the person's settings (Language, Telemetry, Theme), Send feedback
-(a new issue titled "Feedback: " where the host has a tracker), GitHub, Discord and, in
-gray, the version and who made it. Where the host keeps the view's own history (the CAD
+The navbar leads, over a file with a panel and over the home, with the panel's toggle, then the logo (the C mark,
+over the home and over a document alike), which is the way home wherever the host has a home: a link to it where the
+host gives it an address, a button otherwise, with a hint saying so. The app's links — GitHub, Discord, X and Send
+feedback (a new issue titled "Feedback: " where the host has a tracker) — are icons in the panel's foot, the row at
+the bottom of the sidebar on the home and over a document, beside Settings, a cog whose menu holds the person's
+settings (Language, Telemetry, Theme) and, in gray, the version and who made it. A host with no home (a view
+that shows one file alone) has no foot, and there the logo opens the app's menu with all of it. Where the host keeps the view's own history (the CAD
 app's views), Back and Forward follow on a desktop (a phone has no room for them), disabled where they have nowhere to go. It names the
 project the file is in (a folder tile on a phone) and the file (no glyph), and offers its ⋯ menu (Copy path; Open in new
 tab where the host can open a page beside; Open in,
 a submenu of Browser where the host has one and Finder, File Explorer or File manager; then
-Export, a submenu of the formats; then Previous and Next in project, `[` and `]`, or for a document in no project
+Export, a submenu of the formats; then Search documents (⌘K) where the host has a library, Previous and Next in
+project, `[` and `]`, or for a document in no project
 Import its folder as a project; a model's Copy path and file manager act on its script). They share one look: transparent until the
-pointer is on them or their menu is open, with no tooltip. At the right is only what a host
+pointer is on them or their menu is open, with no tooltip but the logo's "Home". At the right is only what a host
 or a file adds: a dismissed alert's icon, the host's actions (the
 CAD app's Full size), after the view's own, which it portals into the navbar's view slot (Display, then a 3D view's
 or a board's Preview). A host whose own frame is its navigation shows
 the view alone (`chrome: "bare"`, the CAD app's file handler), with no navbar at all. With no
-file a view shows the host's home under the same navbar (its logo and menu,
-without Back to home, Back and Forward where the host keeps the view's history, and the host's
+file a view shows the host's home under the same navbar (its sidebar's toggle, the logo, which goes to Recents,
+Back and Forward where the host keeps the view's history, and the host's
 actions, and the home's own Home, search and Import: a file, or a folder opened as a project): a
-sidebar of places (Recents, Pinned, each project, Standalone) and the place on screen, its
+sidebar of places (Recents, Pinned, each project, Standalone, over the panel's foot), which is the viewer's panel
+over the home (pinned, collapsed, peeking, a phone's sheet), and the place on screen, its
 documents as Figma-style tiles with their pictures or as a table of rows, shown, sorted and laid
 out from its heading row, each with its pin and a ⋯ menu (Open, Open in new tab, ending in
 Delete, which asks first); a card is a real link where the host gives documents an address

@@ -65,7 +65,7 @@ holds.
 | `--cad-text-panel` | 12/16 | 14/20 | every step inside the panel and the settings cards |
 
 - **No other size**: no 10px step, no `text-[Npx]`, no font size in a stylesheet but the scale's variables.
-- **One size per surface.** Inside the panel, the settings cards and the Home's sidebar (`[data-panel-surface]`) and a
+- **One size per surface.** Inside the panel (a file's, and the Home's sidebar, which is the same surface: `[data-panel-surface]`), the settings cards and a
   pick's card (`[data-detail-card]`), every step is the panel's size and text is told apart by colour and weight. A menu portalled
   out of them keeps the chrome's scale. Why: nothing there jumps in size, and a pick reads alike in panel and card.
 - **A menu item** is its `text-xs` line in 6px of vertical padding, at least the row tall, set by the primitives alone.
@@ -91,7 +91,8 @@ vertical step.
   by 7px (11 on a phone), a value field by 7px.
 - **Vertical steps.** The body starts 8px under the head. A slider control is 48px (its 28px line, its 12px band, 8px
   under). A settings row is the control tall with 8px under it; the Animation tab's rows are 4px apart. A tab's
-  actions row stands 8px under the last control, with 8px under its buttons.
+  actions row stands 8px under the last control, with 8px under its buttons. The panel's foot is pinned under its
+  scroller: a full-width rule, then its row with 8px over and under it ([The panel's foot](#the-panels-foot)).
 - **A card's inset is 12px on all four sides**: the panel inset less the card's 4px gap, so its content stands where
   the docked panel's does.
 - **Over the view**, the strip and the tool stack stand 8px in (`CHROME_INSET_PX`), the corner's zoom 12px
@@ -313,9 +314,9 @@ popup, one keyboard and one touch rule, so a fix lands in every picker.
 
 ### Menus
 
-- **A menu of actions is a `DropdownMenu`**: the file's ⋯, the app menu, the view's menu, a tab's overflow, a tool's
-  chevron, the zoom, and the places of a Home too narrow for its sidebar (radio items, the place on screen ticked,
-  each with its 16px glyph and its count muted at the right). A tree row's right-click menu is `ContextMenu`, with the same items. A picker drawn as a toolbar
+- **A menu of actions is a `DropdownMenu`**: the file's ⋯, the app menu (opened upward from Settings' cog in the
+  panel's foot, the cog lit while it is open), the view's menu, a tab's overflow, a tool's
+  chevron and the zoom. A tree row's right-click menu is `ContextMenu`, with the same items. A picker drawn as a toolbar
   tile (Draw's colour and stroke, Clip's axis, Preview's routines) keeps its tile and opens a `DropdownMenu`.
 - **The menu** is `rounded-md` with 4px of padding, at least 8rem wide, 4px to 6px from its trigger and 8px from the
   window's edges. A menu taller than its room scrolls in a `ScrollArea`.
@@ -440,6 +441,27 @@ so the two look and move alike.
   explain the buttons stand right-aligned above them. Which tabs have actions: [Parameters](viewer-ux.md#parameters),
   [Joints](viewer-ux.md#joints), [Animation](viewer-ux.md#animation).
 
+### The panel's foot
+
+`PanelFoot` (`file-viewer/PanelFoot.jsx`) is the last block of a panel, on the home and over a document: the app's
+links and Settings. One component, mounted by the home's sidebar and by the view's panel (`PanelSurface`'s `foot`), in
+the pinned panel, the peek and the phone's sheet. What it holds and why it is there:
+[The panel's foot](viewer-ux.md#the-panels-foot).
+
+- **A rule, then one row.** A 1px rule in the border's colour, the panel's full width (as the rule under the tabs),
+  then the row: 8px, the tiles, 8px (more where a host's composer floats over the bottom,
+  `--cad-host-bottom-inset`). It stands outside the scroller, so nothing scrolls it away.
+- **Icon tiles**, the head's icon button: the control square, a 14px glyph, muted at rest, the foreground on a faint
+  fill under the pointer, 2px apart. The row pads by the inset less a tile's own padding, so the first glyph and the
+  cog's stand on the panel's two lines. Each has a hint above it and an accessible name.
+- **The links at the left**, a link each (`<a>`, opened the host's way): GitHub, Discord and X as their marks
+  (`navigation/brandMarks.jsx`, one colour, the text's), then Send feedback, lucide's `MessageCircle`. Links that do
+  not fit wrap upward.
+- **The cog at the right corner**, lucide's `Settings`, is the app menu's trigger: on the accent fill while the menu
+  is open, the menu above it, its right edge on the cog's. It never wraps and never moves.
+- **Under a tab's actions.** A tab's sticky actions row ends flush on the foot's rule. The foot's own background is
+  the panel's (a peek's card shows through).
+
 ### Tooltips
 
 Every hint is a `TooltipHint`, never a native `title` (Quick Edit's chip list still shows a reference's full name
@@ -466,7 +488,8 @@ with one).
   line (on the chrome's colour) the control + 16 and + 8 tall, parted from the results by a full-width rule. On a phone
   it is a sheet the view's width under the navbar, with no keys' line. Why: it is looked through, not at, and the page
   under it stays in sight.
-- **Sheets** are shadcn's `Sheet`: three quarters of the window wide, at most 20rem. The phone's panel is one, 85%
+- **Sheets** are shadcn's `Sheet`: three quarters of the window wide, at most 20rem. The phone's panel is one (a
+  file's, and the Home's sidebar: `PanelSheet`), 85%
   wide, with no scrim (its overlay is clear, so a press beside it closes it and reaches nothing under it), sliding with
   the peek's timings and closed by a 48px swipe towards its edge ([A phone](viewer-ux.md#a-phone)).
 - **No window breakpoints**: a dialog or a sheet sizes itself by its caps, never by `sm:` or `md:`, as the viewer is
@@ -530,13 +553,13 @@ transitions and drawn sizes, not class names, and a test of a layout that is gon
 | `kit/look/sceneColors.test.js` | no view hard-codes a selection, hover or box blue |
 | `file-viewer/panelPeek.test.js` | the slide's classes carry its duration constants; the fallback outlasts the slide |
 | `kit/inspector/FieldLabels.test.tsx` | every control's label is `FieldLabel`, its value the foreground |
-| `kit/shell/PanelInset.browser.test.mjs` | every piece of the panel's content on the 16px inset, in every tab of several files, placeholder rows too |
+| `kit/shell/PanelInset.browser.test.mjs` | every piece of the panel's content on the 16px inset, in every tab of several files, placeholder rows too; a document's panel's foot under its rule, a tab's actions flush against it, in the peek and the phone's sheet |
 | `RendererShell.browser.test.mjs`: "a phone's scale", "every control and every text on the walk is its scale's" | 36px controls and each text 2px up on a phone, and no fill or ring left by a tap; on a phone and a desktop, every control and text on the view, the Display card, each tab, a menu, Quick Edit and Preview's Settings is its scale's |
 | … "every popup trigger opens on one tap and shuts on a second tap on it" | the touch rule in the navbar, the strip, the Display card, the sheet and Preview's Settings |
 | … "the type scale and the strip's proportions, as drawn" | the 40px strip of 28px tiles, the 32px head with its rule under the strip, panel and menu text 12/16, the navbar 13/20, a tooltip 11/16 |
 | … "a toolbar button under the pointer is seen…", "Preview's bar takes the backdrop's ink…" | hover fills and ink read on their surface |
 | … "three tabs and the search fit the 232px panel…", "Display's card is the peek card's mirror…" | the tab budget; the card's top, gaps and 12px inset, its 288px width, its dropdowns one width, nothing cut |
-| `library/ModelLibrary.browser.test.mjs` | the Home's 232px sidebar on the panel's surface and inset, its 28px rows and the marked place; the place's heading and gutters; a card and a place as real links; the ring round the document just left, in view; no sidebar under 720px, and a phone's 36px controls |
+| `library/ModelLibrary.browser.test.mjs` | the Home's sidebar as the panel: 232px on the panel's surface and inset, its 28px rows and the marked place, pushing while pinned and gone collapsed, its peek card 4px in, its grip's bounds, a phone's sheet; the panel's foot under its full-width rule, its tiles on the inset, fitting at 200px, the cog's menu over it; the logo as a link home; the place's heading and gutters; a card and a place as real links; the ring round the document just left, in view; a phone's 36px controls |
 | `scripts/test/check-ui-strings.mjs`, `i18n/i18n.test.mjs` | no English literal in the chrome; the locales mirror `en.js` |
 | `tests/python/global/test_document_links.py` | every relative link and `#anchor` in these docs lands on a heading |
 

@@ -458,7 +458,7 @@ it("a place on the home is a step of the view's history: a project's page, Pinne
   expect(at()).toEqual(['', { view: 'project', project: 'p1' }, true, true]);
   act(() => viewer.props!.history!.back());
   expect(at()).toEqual(['', { view: 'recents' }, false, true]);
-  // The home with no place named (the logo, the app menu's Back to home) is Recents.
+  // The home with no place named (the navbar's logo, the way home) is Recents.
   act(() => viewer.props!.history!.forward());
   act(() => viewer.props!.onShow(''));
   expect(at()).toEqual(['', { view: 'recents' }, true, false]);

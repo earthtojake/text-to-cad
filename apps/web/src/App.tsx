@@ -166,7 +166,7 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   }), [client, server.pick, show]);
   const appearance = useTabAppearance(tabStore);
   const changeColorScheme = useCallback((value: string) => tabStore.settings.update({ appearance: value as Appearance }), [tabStore]);
-  // The app menu's Theme row, over every file and on the home.
+  // The app menu's Theme row (the menu Settings' cog opens, in the sidebar's foot).
   const colorScheme = useMemo(() => ({ preference: appearance.preference, onPreferenceChange: changeColorScheme }), [appearance.preference, changeColorScheme]);
   useEffect(() => { applyColorSchemeToDocument(appearance.colorScheme, document.documentElement); }, [appearance.colorScheme]);
   // The person's language: inferred from the browser's languages until they choose one in the app menu,

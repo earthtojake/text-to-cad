@@ -3,6 +3,9 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, expect, it, vi } from 'vitest';
 import FlatPanel, { FlatPanelChanged, fitTabs, useFlatPanel, useFlatPanelMatches } from './FlatPanel.jsx';
 import { DEFAULT_PANEL_WIDTH } from './sidebars.js';
+import { PanelActions } from '../inspector/PanelActions.jsx';
+import { AppMenuContext } from '../../../file-viewer/navbarSlots.js';
+import { viewerLinks } from '../../../file-viewer/navigation/links.js';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -238,4 +241,47 @@ it('marks a changed tab with a dot and ", changed", in the row and in â‹¯, and â
   fireEvent.pointerDown(screen.getByRole('button', { name: 'More tabs' }), { button: 0, ctrlKey: false, pointerType: 'mouse' });
   const item = within(await screen.findByRole('menu', { name: 'More tabs' })).getByRole('menuitem', { name: 'Animation, changed' });
   expect(Boolean(item.querySelector('[data-tool-changed]'))).toBe(true);
+});
+
+// The panel's foot (`file-viewer/PanelFoot.jsx`): the app's links and Settings, the one the home's sidebar ends in,
+// under the panel's one scroller in every form, where the file viewer hands the app's menu (a host with a home).
+it("ends in the panel's foot where the host has a home, pinned, peeking or a phone's page: under its scroller and a full-width rule, a tab's sticky actions row in the scroller directly over it; none without", async () => {
+  const menu = { links: viewerLinks({ version: '0.7.4' }), colorScheme: { preference: 'system', onPreferenceChange() {} }, platform: 'darwin' };
+  const tabs = [{ id: 'parameters', label: 'Params', search: false, content: <><p>arm_length</p><PanelActions><button type="button">Reset</button></PanelActions></> },
+    { id: 'tree', label: 'Model', content: <p>tree</p> }];
+  const panel = (extra: object) => <FlatPanel mode="docked" open onClose={() => {}} label="Panel" searchLabel="Search" tabs={tabs} tab="parameters" onTabChange={() => {}}
+    width={DEFAULT_PANEL_WIDTH} maxWidth={400} onWidthChange={() => {}} focusSearch={0} {...extra} />;
+  const foot = () => document.querySelector<HTMLElement>('aside[data-flat-panel] [data-app-foot]');
+  const view = render(<AppMenuContext.Provider value={menu as any}>{panel({})}</AppMenuContext.Provider>);
+  const placed = () => {
+    const aside = document.querySelector<HTMLElement>('aside[data-flat-panel]')!;
+    const scroller = aside.querySelector<HTMLElement>('[data-flat-panel-scroller]')!, sticky = aside.querySelector<HTMLElement>('[data-panel-foot]')!;
+    return {
+      // After the one scroller, never in it; its rule the panel's full width (it pads itself, under no padded parent).
+      after: foot()!.previousElementSibling?.getAttribute('data-slot'), scrolled: scroller.contains(foot()!), ruled: foot()!.className.split(' ').includes('border-t'),
+      padded: foot()!.parentElement!.className.includes('px-'),
+      // The tab's own actions stay in the scroller, sticky at its bottom edge, the body's last thing (no padding under them).
+      sticky: [scroller.contains(sticky), sticky.className.includes('sticky bottom-0'), aside.querySelector('[data-flat-panel-body]')!.className.includes('[&:has(>section:not([hidden])_[data-panel-foot])]:pb-0')],
+      links: [...foot()!.querySelectorAll('[data-app-foot-links] a')].map(link => link.getAttribute('aria-label')),
+      cog: within(foot()!).getByRole('button', { name: 'Settings' }).getAttribute('aria-haspopup'),
+    };
+  };
+  const whole = { after: 'scroll-area', scrolled: false, ruled: true, padded: false, sticky: [true, true, true], links: ['GitHub', 'Discord', 'X', 'Send feedback'], cog: 'menu' };
+  expect(placed()).toEqual(whole);
+  // Docked, it is the panel's last block before its grip; in a peek, inside the card's clipped content, with no grip.
+  expect(foot()!.nextElementSibling?.hasAttribute('data-panel-grip')).toBe(true);
+  view.rerender(<AppMenuContext.Provider value={menu as any}>{panel({ peek: true })}</AppMenuContext.Provider>);
+  expect([placed(), foot()!.parentElement!.style.clipPath !== '', document.querySelector('[data-panel-grip]')]).toEqual([whole, true, null]);
+  // A phone's page: the same foot at the sheet's bottom.
+  view.rerender(<AppMenuContext.Provider value={menu as any}>{panel({ mode: 'page' })}</AppMenuContext.Provider>);
+  expect([placed(), document.querySelector('aside[data-flat-panel]')!.getAttribute('data-panel-surface')]).toEqual([whole, 'page']);
+  // Its cog opens what is left of the app's menu: the settings and the version, no links.
+  await act(async () => { fireEvent.pointerDown(within(foot()!).getByRole('button', { name: 'Settings' }), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  const settings = await screen.findByRole('menu', { name: 'Settings' });
+  expect([settings.querySelector('[data-menu-theme]') !== null, settings.querySelector('[data-link]:not([data-link="made-by"])'), settings.querySelector('[data-menu-footer]')?.textContent])
+    .toEqual([true, null, 'v0.7.4Made by @earthtojake']);
+  cleanup();
+  // A host with no home hands no menu (its logo opens it), and a panel outside a file viewer has none: no foot.
+  render(panel({}));
+  expect([foot(), document.querySelector('[data-panel-foot]') !== null]).toEqual([null, true]);
 });

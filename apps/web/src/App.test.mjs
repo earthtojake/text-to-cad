@@ -187,7 +187,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.ok(libraryCalls.some(([url]) => url === '/api/v1/local/pick'));
     assert.equal(viewer().file, PICKED);
     assert.equal(new URL(window.location.href).pathname, `/${PICKED}`);
-    // Back to home leads to the bare URL: the home is a step of the browser's history, as a file is,
+    // The way home (the navbar's logo) leads to the bare URL: the home is a step of the browser's history, as a file is,
     // so the browser's Back and Forward walk between them (the page hands no history of its own).
     const beforeHome = window.history.length;
     await act(async () => { viewer().onShow(''); await new Promise(resolve => setTimeout(resolve, 10)); });

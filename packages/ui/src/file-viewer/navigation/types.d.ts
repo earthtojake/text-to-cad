@@ -45,21 +45,26 @@ export function fuzzyMatch(
 ): { score: number; indices: number[] } | null;
 
 /**
- * The one navbar, over a file and over a host's home (with no file, history or Back to home). Left: the logo, which opens the app's menu
- * (`AppMenu`), Back and Forward where the host keeps the view's history (`history`), the project the document is in
+ * The one navbar, over a file and over a host's home (with no file). Left: the panel's toggle, over a file with a panel
+ * and over the home, whose sidebar is the same panel; the logo, the way home where the host has a home (`onHome`: a
+ * link where the home has an address, `homeHref`) and the app's menu's button (`AppMenu`, `menu`) where it has none;
+ * Back and Forward where the host keeps the view's history (`history`), the project the document is in
  * (`project`: its name, muted, then a slash, which goes to the home at it: a link where it has an address; a folder tile
  * in a narrow row and on a phone), the open file's name, with no glyph, and its ⋯ (Copy path, Copy link, Open in new tab,
- * Open in, the host's own items: the viewer's Export, then Previous and Next in project, or for a document in no project
- * Import its folder as a project). Over a file with a panel, the panel's toggle comes first, before the logo. Right: `trailing` (the
+ * Open in, the host's own items: the viewer's Export, then Search documents, Previous and Next in project and, for a
+ * document in no project, Import its folder as a project). Right: `trailing` (the
  * file's actions), then `actions`, outermost. Back and Forward are a desktop row's alone: a phone's has no room for them.
  */
 export const ViewerNavbar: ComponentType<{
-  /** The host's home, where it has one: the app menu's Back to home. */
+  /** The host's home, where it has one: the logo goes to it (Recents), with a hint saying so, and opens no menu. */
   onHome?: () => void;
-  /** The rest of the app's menu: the host's links and the person's settings. */
-  menu?: { links?: import("../../host/types.js").ViewerLinks; appSettings?: readonly import("../types.js").AppSetting[]; colorScheme?: import("../types.js").ColorSchemeSetting; language?: import("../types.js").LanguageSetting; platform?: string;
-    /** The search of every document (⌘K), where the host has one: the menu's Search documents. */
-    onSearch?: (() => void) | null } | null;
+  /** The home's own address, where the host gives it one: the logo is then a real link (a modified click is the browser's). */
+  homeHref?: string | null;
+  /**
+   * The app's menu (the host's links and the person's settings), which the logo opens where the host has no home. A
+   * host with a home keeps it in the panel's foot (`../PanelFoot.jsx`), at the bottom of the sidebar.
+   */
+  menu?: { links?: import("../../host/types.js").ViewerLinks; appSettings?: readonly import("../types.js").AppSetting[]; colorScheme?: import("../types.js").ColorSchemeSetting; language?: import("../types.js").LanguageSetting; platform?: string } | null;
   /** The view's own history, where the host keeps one: Back and Forward, each disabled where there is nowhere to go. */
   history?: import("../types.js").ViewerHistory | null;
   /** The open file, by its absolute path. */
@@ -85,13 +90,15 @@ export const ViewerNavbar: ComponentType<{
     /** Open in new tab (or Open in browser): the document on screen beside this view, `label` the item's words. */
     beside?: { label: string; onSelect(): void } | null;
     /** Previous and Next in project, each null at its end: a document in a project of more than one. */
-    neighbours?: { previous: (() => void) | null; next: (() => void) | null } | null } | null;
+    neighbours?: { previous: (() => void) | null; next: (() => void) | null } | null;
+    /** Search documents, the first of the last group, its key (`shortcut`) at the right: where the host has the search. */
+    search?: { onSelect(): void; shortcut?: string } | null } | null;
   trailing?: ReactNode;
   /** The host's own actions (the CAD app's Full size, inline). */
   actions?: ReactNode;
   /**
-   * The view's panel toggle (`../panelToggles.js`, said by its frame): the row's first control, before the logo, the
-   * same neutral button open or shut (`aria-expanded` says which).
+   * The panel's toggle (`../panelToggles.js`, said by its frame: a file's view's, or the home's sidebar's): the row's
+   * first control, before the logo, the same neutral button open or shut (`aria-expanded` says which).
    */
   panels?: import("../panelToggles.js").PanelToggles | null;
   /** Over the home: the two places its controls go (its heading; the search and Import), on the grid's column (`../navbarSlots.js`). */
@@ -101,20 +108,24 @@ export const ViewerNavbar: ComponentType<{
 }>;
 
 /**
- * The app's menu, from the navbar's logo: Back to home (`onHome`), Search documents (`onSearch`), the
- * person's settings (`appSettings`), Send feedback, GitHub and Discord, then the version and who
- * made it. `trigger` is the button that opens it.
+ * The app's menu: the person's settings (Language, `appSettings`, Theme), Send feedback, GitHub and Discord (unless
+ * `outward` is false), then the version and who made it. `trigger` is the button that opens it: the cog in the panel's
+ * foot (`../PanelFoot.jsx`), which opens it upward (`side: "top"`) with the settings alone (the links are icons beside
+ * it), or the navbar's logo where the host has no home.
  */
 export const AppMenu: ComponentType<{
   trigger: import("react").ReactElement;
-  onHome?: () => void;
+  side?: "top" | "bottom";
+  align?: "start" | "end";
+  /** The menu's name, where its trigger names it ("Settings"); "Menu" without. */
+  label?: string;
+  /** Whether it lists the links out (Send feedback, GitHub, Discord); false where they are drawn beside its trigger. */
+  outward?: boolean;
   links?: import("../../host/types.js").ViewerLinks;
   appSettings?: readonly import("../types.js").AppSetting[];
   colorScheme?: import("../types.js").ColorSchemeSetting;
   language?: import("../types.js").LanguageSetting;
   platform?: string;
-  /** The search of every document: Search documents, after Back to home, with its key. */
-  onSearch?: (() => void) | null;
 }>;
 
 /**

@@ -224,12 +224,12 @@ export default {
   "file.kicadSchematicTooNew": "{app} 無法開啟此電路圖：它由較新版本的 KiCad 儲存。",
   "file.defaultApp": "預設應用程式",
 
-  "menu.backToHome": "回到首頁",
   "menu.theme": "主題",
   "menu.language": "語言",
   "menu.languageAutomatic": "自動（{language}）",
   "menu.feedback": "提供意見回饋",
   "menu.madeBy": "由 @{handle} 製作",
+  "menu.settings": "設定",
 
   "consent.shareUsage": "遙測",
   "consent.shareUsageEnvironment": "遙測（由你的環境設定）",
@@ -335,6 +335,7 @@ export default {
 
 
   "home.placesAria": "位置",
+  "home.sidebar": "側邊欄",
 
 
   "home.addProject": "將資料夾開啟為專案",

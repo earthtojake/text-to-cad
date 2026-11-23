@@ -59,7 +59,8 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* The view's one panel (`PanelSurface.jsx`, `FlatPanel.jsx`: docked, peeking or a phone's page) and the settings
+/* The view's one panel (`PanelSurface.jsx`, `FlatPanel.jsx`: docked, peeking or a phone's page), the home's sidebar
+ * (the same surface, `library/LibrarySidebar.jsx`) and the settings
  * cards (`SettingsCard.jsx`: Display, Preview's Settings) are surfaces with ONE text size:
  * every step of the scale drawn in one is the panel's, so a heading, a label, a row, a field and a
  * muted detail are told apart by colour and weight, never by size, whatever class a list inside it
@@ -196,13 +197,13 @@
   }
 }
 
-/* The navbar's logo, the app menu's trigger (`ViewerNavbar.jsx`): the C mark, 16px, the same over the home
- * and over a document. */
+/* The navbar's logo (`ViewerNavbar.jsx`: the way home, or the app menu's button where the host has no home): the C
+ * mark, 16px, the same over the home and over a document. */
 .cad-navbar-mark { display: block; width: 16px; height: 16px; max-width: none; user-select: none; -webkit-user-drag: none; }
 
 /* The host's home (`library/`): every document the viewer knows, one place at a time, to open again. The navbar is
- * over it (Home, the search, Import; a bar of the page's own where there is none); under it, a sidebar of places on the
- * panel's surface and the place on screen on the page's colour, full width. The chrome's type scale: the place's name
+ * over it (Home, the search, Import; a bar of the page's own where there is none); under it, a sidebar of places, the
+ * viewer's panel over this page, and the place on screen on the page's colour, full width. The chrome's type scale: the place's name
  * text-heading (15/20, weight 600, the one larger text); the controls text-ui (13/20); the sidebar the panel's one size;
  * a tile's name 12/16 at 500 over its facts, 11/16 muted; the table's cells the same two. Every control is the scale's
  * (28px; a phone's 36), its icons 16px, and neutral: the chosen layout's icon and the document just left's ring alone are
@@ -214,19 +215,22 @@
 /* With no navbar over it, the page's own bar in the navbar's place and shape: Home at its left, the search and Import at its right. */
 .cad-library-bar { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 8px; box-sizing: border-box;
   height: calc(var(--cad-control) + 12px); padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--sidebar); }
-.cad-library-frame { display: flex; flex: 1 1 0; min-height: 0; }
-/* The sidebar: 232px (the view's panel's width), docked chrome (`bg-sidebar`, a rule on its inner edge), the home's
-   full height. Its content is on the panel's 16px inset, 8px under the navbar; its groups (Recents and Pinned, the
-   projects, Standalone) 16px apart; a row's fill hangs 8px past the inset (`primitives/tree-row.jsx`). */
-.cad-library-sidebar { display: flex; flex: none; flex-direction: column; box-sizing: border-box; width: 232px; min-height: 0;
-  border-right: 1px solid var(--border); background: var(--sidebar); font-size: var(--cad-text-ui); line-height: var(--cad-leading-ui); }
+/* The frame under the navbar: the sidebar, then the place in the room it leaves. A peek of the collapsed sidebar stands
+   over it, at its left (`file-viewer/panelPeek.js`). */
+.cad-library-frame { position: relative; display: flex; flex: 1 1 0; min-width: 0; min-height: 0; }
+/* The sidebar is the viewer's panel (`file-viewer/PanelSurface.jsx`: docked chrome, `bg-sidebar`, a rule on its inner
+   edge, the home's full height, 232px until the person drags its grip; a card while it peeks; a phone's sheet). Its
+   content is on the panel's 16px inset, 8px under the navbar; its groups (Recents and Pinned, the projects,
+   Standalone) 16px apart; a row's fill hangs 8px past the inset (`primitives/tree-row.jsx`). */
 .cad-library-places { display: flex; flex-direction: column; gap: 16px; padding: 8px var(--panel-inset) max(16px, calc(var(--cad-host-bottom-inset, 0px) + 8px)); }
 .cad-library-places ul { margin: 0; padding: 0; list-style: none; }
 .cad-library-places-head { display: flex; align-items: center; min-width: 0; }
 /* The "+" by Projects: a small icon button, its glyph ending on the inset. */
 .cad-library-places-add { flex: none; margin-right: -6px; color: var(--muted-foreground); }
 .cad-library-places-note { margin: 0; padding: 4px 0; color: var(--muted-foreground); }
-.cad-library-place-count { flex: none; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+/* Over the panel's foot (`file-viewer/PanelFoot.jsx`: the host's links and Settings, under its rule) the places end 8px
+   over it; the foot keeps clear of a host's composer itself. */
+[data-library-sidebar]:has([data-app-foot]) .cad-library-places { padding-bottom: 8px; }
 /* The place on screen. Below its last row: 40px, or room to scroll it clear of a host's composer floating over the
    bottom (`--cad-host-bottom-inset`), whichever is more. Added together, a library that fits would still scroll. */
 .cad-library-content { box-sizing: border-box; flex: 1 1 0; min-width: 0; padding: 20px 24px max(40px, calc(var(--cad-host-bottom-inset, 0px) + 16px)); container-type: inline-size; }
@@ -248,11 +252,9 @@
   font: inherit; font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); color: var(--muted-foreground); }
 @media (hover: none) { .cad-library-key { display: none; } .cad-library-back { padding-right: 8px; } }
 /* "Home" in the navbar's type, 13/20 at weight 500, in the navbar (`ViewerNavbar.jsx`'s `homeSlots`) and in the page's
-   own bar; with no sidebar it is the places' menu button, the same type. */
+   own bar. */
 .cad-library-heading { display: inline-flex; align-items: center; gap: 8px; min-width: 0; height: var(--cad-control); margin: 0; padding: 0;
   font-size: var(--cad-text-ui); line-height: var(--cad-leading-ui); font-weight: 500; white-space: nowrap; color: var(--foreground); }
-.cad-library-place-button { margin-left: -8px; font-weight: 500; }
-.cad-library-place-button[data-state=open] { background: var(--accent); }
 .cad-library-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 /* Show and Sort: a muted label, then the value dropdown as the row's ghost control. */
 .cad-library-field { display: inline-flex; align-items: center; min-width: 0; }

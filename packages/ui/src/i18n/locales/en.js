@@ -232,12 +232,12 @@ export default {
   "file.defaultApp": "Default app",
 
   // The app's menu, from the navbar's logo.
-  "menu.backToHome": "Back to home",
   "menu.theme": "Theme",
   "menu.language": "Language",
   "menu.languageAutomatic": "Automatic ({language})",
   "menu.feedback": "Send feedback",
   "menu.madeBy": "Made by @{handle}",
+  "menu.settings": "Settings",
 
   // The menu's on/off settings (the host's app settings).
   "consent.shareUsage": "Telemetry",
@@ -307,6 +307,7 @@ export default {
   "home.project": "Project",
   "home.projects": "Projects",
   "home.placesAria": "Places",
+  "home.sidebar": "Sidebar",
   "home.addProject": "Open a folder as a project",
   "home.loadingProjects": "Loading projects",
   "home.projectsEmpty": "No projects yet.",

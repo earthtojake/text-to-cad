@@ -21,7 +21,8 @@ import { useControlUsage } from "../usage/controls.js";
 import { useNavbarSlots } from "../file-viewer/navbarSlots.js";
 import { activityLabel, ageLabel, lastActivity } from "../lib/age.js";
 import { hasOpenPopup, ownsEscape } from "../lib/popups.js";
-import { PlacesMenu, PlacesSidebar, plainClick } from "./LibraryPlaces.jsx";
+import { plainClick } from "./LibraryPlaces.jsx";
+import { LibraryFrame } from "./LibrarySidebar.jsx";
 import logo from "../assets/logo-c.svg";
 
 /** A model someone opened: kept by the host, which also says where it is shown from. */
@@ -286,9 +287,11 @@ function PressTarget({ href = null, disabled = false, onPress, children, ...prop
 
 /** Escape's key, as a keyboard prints it: a key's name, the same in every language. */
 const ESCAPE_KEY = "Esc";
-/** The home narrower than this has no sidebar: its places are a menu on its heading. */
+/** The home narrower than this is on the narrow page's gutters (16px), as a phone's is. */
 const NARROW_PX = 720;
-/** One place of the home as its row and its menu item draw it. */
+/** What the home keeps of its sidebar (`LibrarySidebar.jsx`): the person's choice of open or closed, and its width. */
+export interface LibraryPanel { open?: boolean; width?: number }
+/** One place of the home as its row draws it. */
 interface PlaceRow { place: HomeLocation; key: string; label: string; count: number; Icon: ComponentType<any>; missing?: boolean }
 /** What the home asks of the host's navigation: a target's address, and a target opened beside this view. */
 export type LibraryNavigation = Pick<ViewerHost["navigation"], "hrefOf" | "openBeside">;
@@ -303,11 +306,14 @@ export interface LibraryOrigin {
 
 /**
  * The host's home: every document the viewer knows, one place at a time, to open again. The viewer's navbar is over it
- * (its logo's app menu, the host's update and Full size, as over a file), holding "Home", the search and, where the
+ * (the sidebar's toggle, the logo, the host's update and Full size, as over a file), holding "Home", the search and, where the
  * host has a chooser, Import (its File and its Folder); with no navbar they stand in a bar of the page's own. The page
  * is on the page's colour (`--background`), full width.
  *
- * At its left, a sidebar of places on the panel's surface (232px, `bg-sidebar`, a rule on its right): Recents (`place`'s
+ * At its left, a sidebar of places (`LibrarySidebar.jsx`), which is the viewer's panel over this page: pinned it pushes
+ * the place, collapsed it leaves nothing but a peek from its toggle, a phone's is a sheet, its width the person's by its
+ * grip (232px at first), and what the person chose of it is kept (`panel`, `onPanelChange`). It ends in the panel's
+ * foot (the host's links and Settings), as a document's panel does. Its places: Recents (`place`'s
  * default: every document opened lately, across projects, as `library.list()` gives them), Pinned with its count, then
  * "Projects" with a "+" (Import's Folder, where the host has a chooser) over one row a project (`projects()`: its folder
  * glyph, name and count, the latest activity first; one whose folder is gone muted), then Standalone, the documents
@@ -327,8 +333,7 @@ export interface LibraryOrigin {
  * listed for being in its folder: it has no Delete, and a Pin once a page has opened it. A search narrows the place on
  * screen.
  *
- * Narrower than `NARROW_PX`, and at the phone's scale, there is no sidebar: the heading ("Home" in the navbar) is a
- * menu button listing the same places with the same counts.
+ * Narrower than `NARROW_PX`, and at the phone's scale, the place is on 16px gutters, 12px under the navbar.
  *
  * `from` (the document the navbar's project name was pressed over) rings that document's card in the brand's colour,
  * brought into view, and puts "Back to <name>" in the heading row; Escape, while no menu, dialog or field has the
@@ -341,7 +346,7 @@ export interface LibraryOrigin {
  * while the page is up — and the list is read again once one is kept.
  */
 export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, sort = "activity", onSortChange, picture, fileActions,
-  place: placed, onPlaceChange, onPlaceShown, from = null, onBack, navigation, home = null }: {
+  place: placed, onPlaceChange, onPlaceShown, from = null, onBack, navigation, home = null, panel = null, onPanelChange }: {
   library: ModelLibrarySource<Model>;
   /** What the host can do with a file on disk (Copy path, Reveal): each file's menu offers it, and each project's. */
   fileActions?: FileActions;
@@ -366,6 +371,10 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   navigation?: LibraryNavigation;
   /** The person's home folder, where the host knows it: a project's folder is said from `~` in it. */
   home?: string | null;
+  /** The sidebar as the person left it, where the host keeps it (the tab's settings); without it the home keeps its own while it is up. */
+  panel?: LibraryPanel | null;
+  /** The person opened or closed the sidebar, or dragged its width: the whole of what is kept. */
+  onPanelChange?(panel: LibraryPanel): void;
 }) {
   const [items, setItems] = useState<readonly Model[] | null>(null);
   const [projects, setProjects] = useState<readonly LibraryProject<Model>[] | null>(null);
@@ -451,7 +460,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     setOpening(item.path);
     void current.current.open(item).catch(fail).finally(() => setOpening(null));
   };
-  // The person's own move to a place: a row of the sidebar, an item of the heading's menu.
+  // The person's own move to a place: a row of the sidebar.
   const PLACE_CONTROLS = { recents: "home_place_recents", pinned: "home_place_pinned", standalone: "home_place_standalone", project: "home_place_project" } as const;
   const visit = (next: HomeLocation) => {
     if (placeKey(next) === here) return;
@@ -501,8 +510,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const slots = useNavbarSlots();
   // A narrow navbar (under 700px: `styles/globals.css`) shows the search as its icon until it is pressed.
   const [searchOpen, setSearchOpen] = useState(false);
-  // No sidebar at the phone's scale, nor in a home narrower than `NARROW_PX` (measured on the home, never the window;
-  // a home not laid out yet has its sidebar).
+  // The narrow page's gutters at the phone's scale, and in a home narrower than `NARROW_PX` (measured on the home,
+  // never the window).
   const mobile = useViewerMobile();
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const [tight, setTight] = useState(false);
@@ -730,8 +739,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       {importFolder ? <DropdownMenuItem onSelect={importFolder}>{t("home.importFolder")}</DropdownMenuItem> : null}
     </DropdownMenuContent>
   </DropdownMenu> : null;
-  // The places, as the sidebar's rows and the heading's menu list them (`LibraryPlaces.jsx`): Recents, Pinned, each
-  // project, Standalone. A wide home has the sidebar; a narrow one the same places in a menu on its heading.
+  // The places, as the sidebar's rows list them (`LibraryPlaces.jsx`): Recents, Pinned, each project, Standalone.
   const fixed = (view: "recents" | "pinned" | "standalone", count: number, Icon: PlaceRow["Icon"]): PlaceRow =>
     ({ place: { view }, key: view, label: view === "standalone" ? t("home.standalone") : t(`home.place.${view}`), count, Icon });
   const places = {
@@ -742,11 +750,10 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     current: here, onVisit: visit, onAddProject: importFolder,
     loading: projects === null && !projectsFailed,
     note: projects === null ? (projectsFailed ? t("home.projectsFailed") : null) : projects.length ? null : t("home.projectsEmpty"),
+    hrefOf: hrefOf ? (target: HomeLocation) => hrefOf({ home: target }) : null,
   };
-  const sidebar = <PlacesSidebar {...places} hrefOf={hrefOf ? (target: HomeLocation) => hrefOf({ home: target }) : null} />;
-  const placeMenu = <PlacesMenu {...places} name={placeName} />;
-  // The page's heading: "Home", in the navbar where there is one; with no sidebar, the places' menu.
-  const heading = <h1 className="cad-library-heading" data-library-heading={slots ? "navbar" : "page"}>{narrow ? placeMenu : t("home.title")}</h1>;
+  // The page's heading: "Home", in the navbar where there is one.
+  const heading = <h1 className="cad-library-heading" data-library-heading={slots ? "navbar" : "page"}>{t("home.title")}</h1>;
   // Show and Sort: each a muted label and the one value dropdown (`primitives/value-dropdown.jsx`), drawn as the row's
   // ghost control.
   const CHOICE_CLASS = "cad-library-choice min-w-0 w-auto gap-1 border-0 bg-transparent px-2 shadow-none hover:bg-accent dark:bg-transparent";
@@ -815,19 +822,16 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       {slots.left ? createPortal(heading, slots.left) : null}
       {slots.right ? createPortal(<>{search}{importMenu}</>, slots.right) : null}
     </> : <div className="cad-library-bar">{heading}<div className="cad-library-controls">{search}{importMenu}</div></div>}
-    <div className="cad-library-frame">
-      {narrow ? null : sidebar}
+    <LibraryFrame places={places} panel={panel} onPanelChange={onPanelChange}>
       {/* A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits. */}
       <main className="cad-library-content overflow-y-auto" aria-label={t("home.modelsAria")}>
         {/* The place's heading row, every control the scale's: its name (a project's with its folder and its ⋯) and the
             way back at the left; Show, Sort and the layout at the right. It keeps its shape from place to place. */}
         <div className="cad-library-toolbar" data-library-toolbar="filters">
           <div className="cad-library-place">
-            {narrow ? null : <>
-              {shownProject ? <Folder className="cad-library-glyph" aria-hidden="true" /> : null}
-              <h2 className="cad-library-title">{placeName}</h2>
-              {shownProject ? <TooltipHint content={shownProject.root} overflowOnly><span className="cad-library-path truncate">{tildePath(shownProject.root, home)}</span></TooltipHint> : null}
-            </>}
+            {shownProject ? <Folder className="cad-library-glyph" aria-hidden="true" /> : null}
+            <h2 className="cad-library-title">{placeName}</h2>
+            {shownProject ? <TooltipHint content={shownProject.root} overflowOnly><span className="cad-library-path truncate">{tildePath(shownProject.root, home)}</span></TooltipHint> : null}
             {shownProject ? projectMenu(shownProject) : null}
             {backControl}
           </div>
@@ -838,6 +842,6 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
         {body}
         {confirm}
       </main>
-    </div>
+    </LibraryFrame>
   </div>;
 }

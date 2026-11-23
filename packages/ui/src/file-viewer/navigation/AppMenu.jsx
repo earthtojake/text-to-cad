@@ -1,10 +1,10 @@
-import { ArrowLeft, Check, Info, MessageCircle, Monitor, Moon, Search, Sun } from "lucide-react";
+import { Check, Info, Monitor, Moon, Sun } from "lucide-react";
 import { Fragment, useState } from "react";
 
 import { DropdownMenu as MenuPrimitive } from "radix-ui";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuInlineSub, DropdownMenuInlineSubContent, DropdownMenuInlineSubTrigger, DropdownMenuItem,
-  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent,
+  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
   DropdownMenuSubTrigger, DropdownMenuTrigger
 } from "@cad/ui/primitives/dropdown-menu";
 import { LOCALES, useI18n } from "@cad/ui/i18n";
@@ -14,11 +14,8 @@ import { TooltipHint } from "../../primitives/tooltip.jsx";
 import { FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
 
 import { useViewerMobile } from "../responsive.js";
-import { DiscordMark, GitHubMark } from "./brandMarks.jsx";
-import { feedbackUrl, MadeBy, useFollow } from "./NavbarLinks.jsx";
+import { MadeBy, useFollow, useOutwardLinks } from "./NavbarLinks.jsx";
 import { useControlUsage } from "../../usage/controls.js";
-import { prefersCoarsePointer } from "../../lib/coarsePointer.js";
-import { searchShortcut } from "../../search/searchKey.js";
 
 const NONE = Object.freeze([]);
 // A setting's row: 32px, its name and its control spaced apart, the control's centre on one line.
@@ -38,43 +35,36 @@ const languageOptions = (language, t) => [
 ];
 
 /**
- * The app's menu, from the navbar's logo over every file and over the host's home: what is the
- * person's rather than a file's. First, where the host has a home, Back to home (`onHome`), and where it has the search
- * of every document, Search documents (`onSearch`), its key (⌘K, Ctrl+K off a Mac) at its right. Then the
- * person's settings, a press keeping the menu open: Language (`language`), one row naming the language in
+ * The app's menu: what is the person's rather than a file's. Where the host has a home it opens from the cog in the
+ * panel's foot (`../PanelFoot.jsx`: the bottom of the sidebar, on the home and over a document), upward
+ * (`side: "top"`), and holds the settings alone (`outward: false`: the links out are icons beside the cog); in a host
+ * that shows one file alone, which has no foot, it opens from the navbar's logo (`ViewerNavbar.jsx`) and holds the
+ * links too. First the person's
+ * settings, a press keeping the menu open: Language (`language`), one row naming the language in
  * force, whose submenu offers Automatic (the language the context infers, named) and each language under
  * its own name; the host's on/off settings (`appSettings`: Telemetry), a checkbox at the right, filled while on, and
  * an info icon whose hint says what the setting means; then Theme (`colorScheme`), its System, Light and
- * Dark a segmented control, the one in force lit; then Send feedback (a new issue on the host's tracker, naming the version and the
- * `platform`), GitHub and Discord; and last, in gray, the version this host runs (a link to its
+ * Dark a segmented control, the one in force lit; then, with `outward`, Send feedback (a new issue on the host's
+ * tracker, naming the version and the `platform`), GitHub and Discord (`NavbarLinks.jsx`'s `useOutwardLinks`); and
+ * last, in gray, the version this host runs (a link to its
  * release notes) and, under it, who made it. The menu is 12rem wide and never wider: a long
  * setting's name wraps, and a custom build's long version truncates, whole in its hint. Every link
- * opens the host's way (`links.open`).
+ * opens the host's way (`links.open`). `label` names the menu where its trigger does ("Settings"); else it is "Menu".
  *
- * @param {{ trigger: import("react").ReactElement, onHome?: () => void,
+ * @param {{ trigger: import("react").ReactElement, side?: "top" | "bottom", align?: "start" | "end", label?: string, outward?: boolean,
  *   links?: import("../../host/types.js").ViewerLinks, appSettings?: readonly import("../types.js").AppSetting[],
- *   colorScheme?: import("../types.js").ColorSchemeSetting, platform?: string }} props
+ *   colorScheme?: import("../types.js").ColorSchemeSetting, language?: import("../types.js").LanguageSetting, platform?: string }} props
  */
-export function AppMenu({ trigger, onHome, onSearch = null, links, appSettings = NONE, colorScheme, language, platform }) {
+export function AppMenu({ trigger, side = "bottom", align = "start", label, outward: withLinks = true, links, appSettings = NONE, colorScheme, language, platform }) {
   const { t } = useI18n();
   const mobile = useViewerMobile();
   // A phone's Language row opens its choices in place; each opening of the menu starts it closed.
   const [languageOpen, setLanguageOpen] = useState(false);
   const follow = useFollow(links);
   const usage = useControlUsage();
-  const feedback = links ? feedbackUrl(links, platform) : "";
-  const outward = [
-    feedback ? { id: "feedback", label: t("menu.feedback"), href: feedback, icon: MessageCircle } : null,
-    links?.github ? { id: "github", label: "GitHub", href: links.github, icon: GitHubMark } : null,
-    links?.discord ? { id: "discord", label: "Discord", href: links.discord, icon: DiscordMark } : null,
-  ].filter(Boolean);
+  const out = useOutwardLinks(links, platform);
+  const outward = withLinks ? [out.feedback, out.github, out.discord].filter(Boolean) : [];
   const groups = [
-    [
-      ...(onHome ? [<DropdownMenuItem key="home" onSelect={onHome} data-menu-home=""><ArrowLeft aria-hidden="true" />{t("menu.backToHome")}</DropdownMenuItem>] : []),
-      // The search of every document, its key at the right (none on a touch screen, which has no keys to hint at).
-      ...(onSearch ? [<DropdownMenuItem key="search" onSelect={onSearch} data-menu-search=""><Search aria-hidden="true" />{t("search.menu")}
-        {prefersCoarsePointer() ? null : <DropdownMenuShortcut>{searchShortcut(platform)}</DropdownMenuShortcut>}</DropdownMenuItem>] : []),
-    ],
     // The person's settings, one group of like rows — Language, the host's on/off settings, Theme: a name
     // on the left in the menu's own text and its control on the right — the language in force, a checkbox
     // filled while on, Theme's segmented System, Light and Dark. A press keeps the menu open.
@@ -138,8 +128,8 @@ export function AppMenu({ trigger, onHome, onSearch = null, links, appSettings =
         </MenuPrimitive.RadioGroup>
       </div>] : []),
     ],
-    outward.map(({ id, label, href, icon: Icon }) => <DropdownMenuItem key={id} asChild>
-      <a href={href} target="_blank" rel="noreferrer" onClick={event => { if (id === "feedback") usage.used("feedback"); follow?.(event); }} data-link={id}><Icon className="size-3.5" aria-hidden="true" />{label}</a>
+    outward.map(({ id, label, href, Icon, onClick }) => <DropdownMenuItem key={id} asChild>
+      <a href={href} target="_blank" rel="noreferrer" onClick={onClick} data-link={id}><Icon className="size-3.5" aria-hidden="true" />{label}</a>
     </DropdownMenuItem>),
   ].filter(group => group.length);
   // Only the version shortens to fit the line, never the rest of it, and says itself whole when it does.
@@ -150,7 +140,7 @@ export function AppMenu({ trigger, onHome, onSearch = null, links, appSettings =
   const madeBy = links?.x ? <MadeBy links={links} /> : null;
   return <DropdownMenu modal={false} onOpenChange={() => setLanguageOpen(false)}>
     <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-    <DropdownMenuContent align="start" sideOffset={6} collisionPadding={8} aria-label={t("navbar.menu")} data-app-menu=""
+    <DropdownMenuContent side={side} align={align} sideOffset={6} collisionPadding={8} aria-label={label ?? t("navbar.menu")} data-app-menu=""
       className={cn(FLOATING_SURFACE_CLASS, "w-48 max-w-(--radix-dropdown-menu-content-available-width) data-[state=closed]:animate-none!")}>
       {groups.map((group, index) => <Fragment key={index}>{index ? <DropdownMenuSeparator /> : null}{group}</Fragment>)}
       {version || madeBy ? <>

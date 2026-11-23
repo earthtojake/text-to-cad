@@ -58,7 +58,7 @@ to `host.presentation`, in one change.
 - **Inline (no app: the development switch alone).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
   the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the panel's toggle first, then the
-  logo, which opens the app menu; Back and Forward; the project's name where the file is in one, then the file
+  logo, which goes home (a button: a page in an app's frame has no address); Back and Forward; the project's name where the file is in one, then the file
   name; the ⋯,
   the file menu: Copy path, Copy link (the engine's own page of the document,
   `<engine origin>/<id>?token=<link>`, the origin from the launch and the link asked through the
@@ -234,11 +234,16 @@ the launch's `_meta` first (`host/capability.ts`).
   the host restored after another release was installed, a past chat's card) says so: the page
   reads only its own protocol's.
 - **Every view but a file handler's has a home**: the projects and the library (the documents opened or built
-  before, in any view or the web viewer). Back to home, first in the menu the navbar's logo
-  opens, goes to it. The sidebar (`cad_home`) and a tab with nothing to show open on it; a
-  model opened from it is shown in place. The home has the same navbar (the logo's menu, Back
-  and Forward and Full size; no file, so no ⋯), its links the app menu's. It shows one place at a time, from its
-  sidebar (Recents, Pinned, each project, Standalone; in a card or a narrow tab, a menu on its heading), as the
+  before, in any view or the web viewer). The navbar's logo goes to it (Recents), from a file and over the home.
+  The sidebar (`cad_home`) and a tab with nothing to show open on it; a
+  model opened from it is shown in place. The home has the same navbar (its sidebar's toggle, the logo, Back
+  and Forward and Full size; no file, so no ⋯). It shows one place at a time, from its
+  sidebar (Recents, Pinned, each project, Standalone), which is the viewer's panel over the home: pinned it pushes
+  the place, in a card or a narrow tab it is collapsed until its toggle (or ⌘\) opens it or a mouse resting there
+  peeks it, at a phone's width it is a sheet, and the person's choice and width are kept in the tab's own store. It
+  ends in the panel's foot, as a file's panel does: GitHub, Discord, X and Send feedback as icons, and **Settings**, a
+  cog whose menu holds Language, Telemetry, Theme and the version,
+  as the
   web viewer's does ([the home](../../packages/ui/docs/viewer-ux.md#the-home)). A page in an app's frame has no
   address of its own, so nothing on it is a link (every card and row is a button); where a launch carried a page, a
   document's ⋯ has **Open in browser**, its page in the web viewer (`navigation.openBeside`, `kind: "browser"`,
@@ -269,7 +274,8 @@ the launch's `_meta` first (`host/capability.ts`).
   and no project (the host's own file tree is its navigation), no Back or Forward,
   and a renderer's link to another file (a robot's mesh) is plain text. It is drawn
   under the same 40px navbar as every other view (`chrome: "page"`), so the panel's toggle is there: first the
-  panel's toggle, then its logo and app menu, the file's name and its ⋯ (no Open in › Browser; File
+  panel's toggle, then its logo, which opens the app menu there, links and all (a view with no home has no foot in
+  its panel), the file's name and its ⋯ (no Open in › Browser; File
   info, the file's facts), then at the right the view's Display and Preview, then Full size where the host offers it.
   Preview's bar hides the
   navbar as it does everywhere. Its launch carries no page (`browser`). The agent reads it

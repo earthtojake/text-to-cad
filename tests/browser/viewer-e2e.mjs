@@ -334,8 +334,9 @@ async function formatGate() {
       }
       const preview = await page.locator("[data-viewer-navbar] button[data-view-preview]").count();
       if (preview !== (fixture.threeD ? 1 : 0)) failures.push(`${fixture.format}: ${preview} Preview buttons in the navbar`);
-      const menus = await page.getByRole("button", { name: "Menu", exact: true }).count();
-      if (menus !== 1) failures.push(`${fixture.format}: ${menus} app menus (one on every file)`);
+      // The logo is the way home, a link to it, on every file; the links and Settings are the panel's foot's.
+      const logos = await page.locator("[data-viewer-navbar]").getByRole("link", { name: "Home", exact: true }).count();
+      if (logos !== 1) failures.push(`${fixture.format}: ${logos} logos linking home (one on every file)`);
       const menu = await canvasMenuItems(page, canvas);
       // Every view has the menu, its framing always (`kit/shell/viewMenu.js`); a file of parts, its tree's entries too.
       for (const item of framing) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);

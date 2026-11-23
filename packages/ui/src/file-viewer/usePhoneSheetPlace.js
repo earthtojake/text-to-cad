@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 /**
- * Where a phone's sidebar sheet stands (`ViewFrame.jsx`): under the viewer's navbar, so the navbar (the panel's toggle,
+ * Where a phone's sidebar sheet stands (`panelFrame.jsx`'s `PanelSheet`): under the viewer's navbar, so the navbar (the panel's toggle,
  * the file's name, Display, Preview) stays in sight above it, its top the navbar's bottom edge, measured while the sheet
  * is open and again as the viewer or the navbar resizes (the page scrolled, the keyboard shown). With no navbar (a
  * host that shows the view alone) it stands from the window's top, as the stock Sheet does.

@@ -143,7 +143,7 @@ export interface AppSetting {
   onCheckedChange: (checked: boolean) => void;
 }
 /**
- * The person's colour scheme: System, Light or Dark, in the app menu over every file. The host keeps
+ * The person's colour scheme: System, Light or Dark, in the app menu. The host keeps
  * it and resolves System (the web against the OS, the CAD app against its host's theme).
  */
 export interface ColorSchemeSetting {
@@ -232,13 +232,13 @@ export interface FileViewerProps {
   renderers: readonly RendererRegistration[];
   state: FileViewerState;
   onStateChange: (next: FileViewerState) => void;
-  /** The person's colour scheme, its rows in the app menu the navbar's logo opens over every file. */
+  /** The person's colour scheme, its row in the app menu (Settings' cog, in the sidebar's foot; the navbar's logo's where the host has no home). */
   colorScheme?: ColorSchemeSetting;
-  /** The person's language, its row in the app menu over every file (Automatic, or one they chose). */
+  /** The person's language, its row in the app menu (Automatic, or one they chose). */
   language?: LanguageSetting;
   /**
-   * The person's on/off settings, in the app menu the navbar's logo opens over every file, with
-   * the host's links (`host.links`).
+   * The person's on/off settings, in the app menu: the menu Settings' cog opens in the sidebar's foot (`PanelFoot.jsx`,
+   * where the host's links, `host.links`, are icons), or, where the host has no home, the navbar's logo's.
    */
   appSettings?: readonly AppSetting[];
   /** The view's own history, where the host keeps one: Back and Forward after the navbar's logo, over a file and on the home. */
@@ -250,7 +250,7 @@ export interface FileViewerProps {
   project?: FileProject | null;
   /**
    * The search of every document, where the host has one (`@cad/ui`'s `search/DocumentSearch.tsx`, which `CadViewer`
-   * mounts): ⌘K (Ctrl+K) anywhere outside Preview, and the app menu's Search documents.
+   * mounts): ⌘K (Ctrl+K) anywhere outside Preview, and Search documents in a document's ⋯.
    */
   onSearch?: (() => void) | null;
   /**
@@ -275,7 +275,11 @@ export interface FileViewerProps {
   layout?: "desktop" | "mobile";
   onError?: (error: Error) => void;
   presentation?: {
-    /** The host's home, shown with no file: a page of its own under the navbar, which has only its logo's menu, Back and Forward and the host's actions there. */
+    /**
+     * The host's home, shown with no file: a page of its own under the navbar, which has there its sidebar's toggle
+     * (which the home says, `panelToggles.js`), the logo, Back and Forward and the host's actions. The host's links
+     * and the app's menu are the panel's foot's (`PanelFoot.jsx`), which the home's sidebar ends in.
+     */
     home?: ReactNode;
     loading?: ReactNode;
     /**

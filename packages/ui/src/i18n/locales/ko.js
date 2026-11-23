@@ -223,12 +223,12 @@ export default {
   "file.kicadSchematicTooNew": "{app}에서 이 회로도를 열 수 없습니다. 더 새로운 버전의 KiCad로 저장되었습니다.",
   "file.defaultApp": "기본 앱",
 
-  "menu.backToHome": "홈으로",
   "menu.theme": "테마",
   "menu.language": "언어",
   "menu.languageAutomatic": "자동({language})",
   "menu.feedback": "피드백 보내기",
   "menu.madeBy": "만든 사람 @{handle}",
+  "menu.settings": "설정",
 
   "consent.shareUsage": "원격 분석",
   "consent.shareUsageEnvironment": "원격 분석(환경에서 설정됨)",
@@ -334,6 +334,7 @@ export default {
 
 
   "home.placesAria": "위치",
+  "home.sidebar": "사이드바",
 
 
   "home.addProject": "폴더를 프로젝트로 열기",

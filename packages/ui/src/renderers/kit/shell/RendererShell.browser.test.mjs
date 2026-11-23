@@ -94,7 +94,7 @@ test('a phone\'s scale: the primitives read the tokens (36px controls, each text
   await page.addStyleTag({ content: '#root > div { width: 390px !important; height: 700px !important; }' });
   const pane = page.getByTestId('one');
   await pane.locator('[data-viewer-navbar] [data-testid="file-actions"]').waitFor();
-  const SELECTORS = ['[data-navbar-panel="left"]', '[data-navbar-menu]', '[data-file-name]', '[data-testid="file-actions"]'];
+  const SELECTORS = ['[data-navbar-panel="left"]', '[data-navbar-logo]', '[data-file-name]', '[data-testid="file-actions"]'];
   const row = () => pane.locator('[data-viewer-navbar]').evaluate((bar, selectors) => {
     const top = bar.getBoundingClientRect();
     const boxes = selectors.map(selector => bar.querySelector(selector).getBoundingClientRect());
@@ -124,11 +124,14 @@ test('a phone\'s scale: the primitives read the tokens (36px controls, each text
     const style = getComputedStyle(element);
     return { fill: style.backgroundColor, ring: element.matches(':focus-visible') };
   });
-  for (const selector of ['[data-navbar-menu]', '[data-testid="file-actions"]']) {
+  // The logo is the way home where the host has one (no menu of its own); the ⋯ opens its menu.
+  for (const selector of ['[data-navbar-logo]', '[data-testid="file-actions"]']) {
     await pane.locator(`[data-viewer-navbar] ${selector}`).tap();
-    await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'open', selector);
-    await page.touchscreen.tap(200, 500);
-    await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'closed', selector);
+    if (selector !== '[data-navbar-logo]') {
+      await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'open', selector);
+      await page.touchscreen.tap(200, 500);
+      await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'closed', selector);
+    }
     // Its colour transition (`transition-colors`) run out: what is left is what stays.
     await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAnimations()
       .every(animation => animation.playState === 'finished'), selector);
@@ -299,7 +302,8 @@ test('a finger on a phone: the navbar\'s menus stay open, a held press opens the
   await page.addStyleTag({ content: '#root > div { width: 390px !important; height: 700px !important; }' });
   const pane = page.getByTestId('one');
   await pane.locator('[data-viewer-navbar] [data-testid="file-actions"]').waitFor();
-  for (const [selector, name] of [['[data-navbar-menu]', 'app menu'], ['[data-testid="file-actions"]', '⋯']]) {
+  // The ⋯ (the app's menu is the home's where the host has a home: `ModelLibrary.browser.test.mjs` taps it there).
+  for (const [selector, name] of [['[data-testid="file-actions"]', '⋯']]) {
     const trigger = pane.locator(`[data-viewer-navbar] ${selector}`);
     await trigger.tap();
     await page.locator('[role=menu]').first().waitFor();

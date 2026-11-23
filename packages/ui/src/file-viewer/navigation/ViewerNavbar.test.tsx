@@ -115,3 +115,50 @@ it("puts Open in new tab with the places it opens in, and Previous and Next in p
   await act(async () => { fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open in new tab' })); });
   expect(beside.onSelect).toHaveBeenCalledTimes(1);
 });
+
+it("draws the logo as the way home where it is handed one (a link with an address, a button without), and as the app menu's button where it is handed only a menu; over the home too, after the panel's toggle", async () => {
+  const onHome = vi.fn();
+  const menu = { colorScheme: { preference: 'system' as const, onPreferenceChange() {} } };
+  const logo = () => document.querySelector<HTMLElement>('[data-navbar-logo]');
+  // With a home: the way home, whatever menu it is also handed, over a file and over the home (no file) alike.
+  const { rerender } = render(<ViewerNavbar file={FILE} onHome={onHome} homeHref="/" menu={menu} />);
+  expect([logo()!.tagName, logo()!.getAttribute('href'), logo()!.getAttribute('aria-label'), logo()!.getAttribute('data-navbar-logo'), logo()!.querySelectorAll('img').length])
+    .toEqual(['A', '/', 'Home', 'home', 1]);
+  expect(fireEvent.click(logo()!)).toBe(false);
+  expect(fireEvent.click(logo()!, { ctrlKey: true })).toBe(true);
+  expect(onHome).toHaveBeenCalledTimes(1);
+  const toggle = { open: true, label: 'Hide panel', shortcut: '⌘\\', toggle: vi.fn() };
+  rerender(<ViewerNavbar onHome={onHome} menu={menu} panels={{ left: toggle }} homeSlots={{ left() {}, right() {} }} />);
+  expect([logo()!.tagName, logo()!.getAttribute('type'), logo()!.getAttribute('aria-haspopup')]).toEqual(['BUTTON', 'button', null]);
+  fireEvent.click(logo()!);
+  expect([onHome.mock.calls.length, screen.queryByRole('menu')]).toEqual([2, null]);
+  // The panel's toggle is the row's first control over the home as over a file.
+  const first = document.querySelector('nav')!.firstElementChild!.querySelector<HTMLElement>('[data-navbar-panel="left"]')!;
+  expect([first.getAttribute('aria-expanded'), first.getAttribute('aria-label'), first.compareDocumentPosition(logo()!) & Node.DOCUMENT_POSITION_FOLLOWING])
+    .toEqual(['true', 'Hide panel', Node.DOCUMENT_POSITION_FOLLOWING]);
+  fireEvent.click(first);
+  expect(toggle.toggle).toHaveBeenCalledTimes(1);
+  // With no home: the app menu's button, as it was.
+  rerender(<ViewerNavbar file={FILE} menu={menu} />);
+  expect([logo()!.getAttribute('aria-label'), logo()!.getAttribute('data-navbar-logo'), logo()!.hasAttribute('data-navbar-menu')]).toEqual(['Menu', 'menu', true]);
+  await act(async () => { fireEvent.pointerDown(logo()!, { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  expect((await screen.findByRole('menu', { name: 'Menu' })).querySelector('[data-menu-theme]')).not.toBeNull();
+  // With neither: no logo.
+  rerender(<ViewerNavbar file={FILE} />);
+  expect(logo()).toBeNull();
+});
+
+it("leads the ⋯'s last group with Search documents and its key, before Previous and Next in project, and alone where there is nothing else", async () => {
+  const onSelect = vi.fn();
+  const { rerender } = render(<ViewerNavbar file={FILE} fileMenu={fileMenu({ search: { onSelect, shortcut: '⌘K' }, neighbours: { previous: null, next: vi.fn() } })} />);
+  let menu = await openMenu();
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Search documents⌘K', 'Previous in project[', 'Next in project]']);
+  expect(within(menu).getAllByRole('separator')).toHaveLength(1);
+  const search = within(menu).getByRole('menuitem', { name: /Search documents/ });
+  expect([search.hasAttribute('data-menu-search'), search.querySelector('svg') !== null, search.previousElementSibling?.getAttribute('role')]).toEqual([true, true, 'separator']);
+  await act(async () => { fireEvent.click(search); });
+  expect(onSelect).toHaveBeenCalledTimes(1);
+  rerender(<ViewerNavbar file={FILE} fileMenu={fileMenu({ capabilities: new Set(), search: { onSelect } })} />);
+  menu = await openMenu();
+  expect([within(menu).getAllByRole('menuitem').map(item => item.textContent), within(menu).queryByRole('separator')]).toEqual([['Search documents'], null]);
+});

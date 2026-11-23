@@ -223,12 +223,12 @@ export default {
   "file.kicadSchematicTooNew": "{app} ではこの回路図を開けません。新しいバージョンの KiCad で保存されています。",
   "file.defaultApp": "既定のアプリ",
 
-  "menu.backToHome": "ホームへ戻る",
   "menu.theme": "テーマ",
   "menu.language": "言語",
   "menu.languageAutomatic": "自動（{language}）",
   "menu.feedback": "フィードバックを送信",
   "menu.madeBy": "制作: @{handle}",
+  "menu.settings": "設定",
 
   "consent.shareUsage": "テレメトリ",
   "consent.shareUsageEnvironment": "テレメトリ（環境で設定済み）",
@@ -334,6 +334,7 @@ export default {
 
 
   "home.placesAria": "場所",
+  "home.sidebar": "サイドバー",
 
 
   "home.addProject": "フォルダーをプロジェクトとして開く",

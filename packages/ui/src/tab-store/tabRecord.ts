@@ -8,7 +8,7 @@ import { normalizeViewportBackground } from '@cad/core/lib/viewportTheme.js';
  *   { version, settings, files }
  *
  * `settings` is tab-wide — the tool stack's layout, the appearance, the viewport's background and how
- * the home lays out and sorts its library — and replaces every global preference. (The folder the name menu's Files was last
+ * the home lays out and sorts its library, with the home's sidebar as the person left it — and replaces every global preference. (The folder the name menu's Files was last
  * in, `explorer`, an earlier release's, is read as nothing: projects replaced the explorer.)
  * `files` is the view of the file on screen (`kit/shell/fileView.js`: its camera, its Display
  * settings, its playback, its renderer's own slices) under `[absolute file path, renderer id]`,
@@ -34,6 +34,13 @@ export type ViewportBackground = 'light' | 'dark';
 export type LibraryLayout = 'grid' | 'list';
 /** How the home orders the documents of the place on screen: by last activity (the default), by name, or by kind. */
 export type LibrarySort = 'activity' | 'name' | 'kind';
+/**
+ * The home's sidebar as the person left it (`library/LibrarySidebar.jsx`), kept as a file's panel is in its view
+ * (`file-viewer/filePanel.js`), the home in the file's place: `open`, their choice (opened, `true`, or closed, `false`),
+ * which holds at any width, absent until they choose (the home's width then decides); `width`, what they dragged it
+ * to. A peek, a phone's sheet and what the home's width does are never written.
+ */
+export interface LibraryPanelRecord { open?: boolean; width?: number }
 export interface ToolStackLayout { panels: Record<string, { width?: number; height?: number }>; collapsed: Record<string, boolean> }
 export interface TabSettings {
   /** The tool stack's layout (`kit/tools/toolStackLayout.js`): the resizable panels' sizes and the folded panels (the view's panel is each file's). */
@@ -42,8 +49,8 @@ export interface TabSettings {
   appearance: Appearance;
   /** The viewport's background in every file and view (`@cad/core/lib/viewportTheme.js`): Light unless the person picks. */
   viewportBackground: ViewportBackground;
-  /** The home's library: its models as a grid of cards (the default) or a list, and how they are ordered. */
-  library: { layout: LibraryLayout; sort: LibrarySort };
+  /** The home's library: its models as a grid of cards (the default) or a list, how they are ordered, and its sidebar where the person set it. */
+  library: { layout: LibraryLayout; sort: LibrarySort; panel?: LibraryPanelRecord };
 }
 export interface TabRecord {
   version: typeof TAB_RECORD_VERSION;
@@ -56,14 +63,22 @@ const plainObject = (value: unknown): value is Record<string, unknown> => Boolea
 const APPEARANCES: readonly Appearance[] = ['system', 'light', 'dark'];
 const LIBRARY_LAYOUTS: readonly LibraryLayout[] = ['grid', 'list'];
 const LIBRARY_SORTS: readonly LibrarySort[] = ['activity', 'name', 'kind'];
+/** The widest a kept panel width is read as, whatever was stored (`filePanel.js`'s bound; the panel draws within its own). */
+const PANEL_WIDTH_MAX = 4000;
 export function normalizeAppearance(value: unknown): Appearance {
   return APPEARANCES.includes(value as Appearance) ? (value as Appearance) : 'system';
 }
 
 function normalizeLibrary(value: unknown): TabSettings['library'] {
-  const { layout, sort } = plainObject(value) ? value : {} as Record<string, unknown>;
+  const { layout, sort, panel } = plainObject(value) ? value : {} as Record<string, unknown>;
+  // The sidebar's fields that are what they should be, read as a file's panel is (`file-viewer/filePanel.js`'s
+  // `readFilePanel`, whose module this one, with no React in it, does not import); a home's has no tab. None, no field.
+  const { open, width } = plainObject(panel) ? panel : {} as Record<string, unknown>;
+  const kept: LibraryPanelRecord = { ...(typeof open === 'boolean' ? { open } : null),
+    ...(typeof width === 'number' && Number.isFinite(width) && width > 0 ? { width: Math.round(Math.min(PANEL_WIDTH_MAX, width)) } : null) };
   return { layout: LIBRARY_LAYOUTS.includes(layout as LibraryLayout) ? (layout as LibraryLayout) : 'grid',
-    sort: LIBRARY_SORTS.includes(sort as LibrarySort) ? (sort as LibrarySort) : 'activity' };
+    sort: LIBRARY_SORTS.includes(sort as LibrarySort) ? (sort as LibrarySort) : 'activity',
+    ...(Object.keys(kept).length ? { panel: kept } : null) };
 }
 
 /** The settings as the tab keeps them, from anything a store handed back. */

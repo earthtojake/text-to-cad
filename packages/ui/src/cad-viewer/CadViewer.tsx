@@ -8,7 +8,7 @@ import type { AppSetting, ColorSchemeSetting, FileProject, LanguageSetting, View
 import { I18nProvider, translator } from '../i18n/index.js';
 import type { HomeLocation, ViewerHost } from '../host/types.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
-import { ModelLibrary, RECENTS, type LibraryModel, type LibraryOrigin, type ModelLibrarySource } from '../library/ModelLibrary.js';
+import { ModelLibrary, RECENTS, type LibraryModel, type LibraryOrigin, type LibraryPanel, type ModelLibrarySource } from '../library/ModelLibrary.js';
 import { useModelThumbnail } from '../library/thumbnails.js';
 import { OffscreenPicture, cadRenderers, type ModelPictureSource } from './OffscreenPicture.js';
 import type { LibraryLayout, LibrarySort } from '../tab-store/tabRecord.js';
@@ -104,7 +104,7 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   onShown?(file: string | null, id: string | null): void;
   /**
    * The home's library: the projects and the documents opened before, to open again. A host with one shows it
-   * wherever no file is open, and the navbar's logo leads to it from a file; a document in a project has its project's
+   * wherever no file is open, and the navbar's logo leads to it from a file (a link where the host gives it an address); a document in a project has its project's
    * name before its own, which leads to the home at that project, and [ and ] move through its project; ⌘K searches
    * every document in it. Without one (a host whose own navigation shows one file, as a file handler does) a view has a
    * file and nothing else: no home, no project, no search, and no link to another file.
@@ -115,14 +115,14 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
    * card's.
    */
   onThumbnail?(png: Blob, file: string): Promise<unknown>;
-  /** The person's colour scheme, its rows in the app menu over every file and on the home. */
+  /** The person's colour scheme, its row in the app menu: Settings' cog, in the sidebar's foot on the home and over a document (the logo's menu, in a view with no home). */
   colorScheme?: ColorSchemeSetting;
   /**
-   * The person's language, its row in the app menu over every file and on the home: Automatic
+   * The person's language, its row in the app menu: Automatic
    * (what the context infers) or one they chose. The language in force is the host's `environment.locale`.
    */
   language?: LanguageSetting;
-  /** The host's on/off settings, in the app menu the logo opens over every file and on the home (analytics). */
+  /** The host's on/off settings, in the app menu (analytics). */
   appSettings?: readonly AppSetting[];
   /** The host's notice: a file's viewport, top-right, once the file is on screen; never the home. */
   notice?: ReactNode;
@@ -321,8 +321,13 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // A file opened meanwhile has the screen, and the GPU, to itself.
   useEffect(() => { if (path) drawn(false); }, [path, drawn]);
 
-  // The home's layout and its order, the tab's (`tab-store`): kept as the person leaves the home and comes back.
-  const { layout, sort } = settings.library;
+  // The home's layout and its order, the tab's (`tab-store`): kept as the person leaves the home and comes back; and
+  // its sidebar as they left it (open or closed, its width), kept there too, as a file's panel is kept in its view.
+  const { layout, sort, panel: libraryPanel } = settings.library;
+  const changeLibraryPanel = useCallback((next: LibraryPanel) => {
+    const { panel: _previous, ...rest } = preferences.getSnapshot().library;
+    preferences.update({ library: { ...rest, ...(Object.keys(next).length ? { panel: next } : null) } });
+  }, [preferences]);
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { ...preferences.getSnapshot().library, layout: next } }), [preferences]);
   const changeSort = useCallback((next: LibrarySort) => preferences.update({ library: { ...preferences.getSnapshot().library, sort: next } }), [preferences]);
   const placeShown = useCallback((shownAs: string) => { if (!latest.current.path) latest.current.onHomeShown?.(place, shownAs); }, [place]);
@@ -331,7 +336,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} sort={sort} onSortChange={changeSort} picture={picture}
       fileActions={host.fileActions} place={place} onPlaceChange={home} onPlaceShown={placeShown} from={origin} onBack={back} navigation={links}
-      home={homeFolder} /> : undefined,
+      home={homeFolder} panel={libraryPanel ?? null} onPanelChange={changeLibraryPanel} /> : undefined,
     // On the viewport's Background as the tab has it, as the view's own cover and its picture are: no flash between them.
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading background={settings.viewportBackground} /></div>,
     // A document named by its id that the engine does not hold says why, and the command that
@@ -342,9 +347,9 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
         title={isDocumentId(path) ? t(NOT_HELD_TITLES[String((error as { state?: unknown } | null)?.state)] ?? "file.notHeld") : t("file.missing")}
         description={isDocumentId(path) ? message : undefined} />
       : <EmptyState title={t("file.openFailed")} description={message} action={goHome} />,
-  }), [library, layout, changeLayout, sort, changeSort, path, picture, host.fileActions, place, home, placeShown, origin, back, links, homeFolder, entry, goHome, t, settings.viewportBackground]);
-  // The search of every document (⌘K, the app menu's Search documents), over a document and the home alike, where
-  // the host has a library (`search/`).
+  }), [library, layout, changeLayout, sort, changeSort, path, picture, host.fileActions, place, home, placeShown, origin, back, links, homeFolder, libraryPanel, changeLibraryPanel, entry, goHome, t, settings.viewportBackground]);
+  // The search of every document (⌘K, and Search documents in a document's ⋯), over a document and the home alike,
+  // where the host has a library (`search/`).
   const search = useDocumentSearch();
   const searchCurrent = useMemo(() => ({ id: shownId, path: shown, project: projectRef ? { id: projectRef.id, name: projectRef.name } : null }),
     [shownId, shown, projectRef?.id, projectRef?.name]);

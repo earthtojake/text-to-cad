@@ -9,7 +9,8 @@ import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { ChangedDot } from "../tools/ChangedDot.jsx";
 import { ToolStackContext } from "../tools/ToolStack.jsx";
 import { FilePanelContext, hasLegacyFilePanel, legacyFilePanel, legacyFilePanelTab, readFilePanel, withoutLegacyFilePanel } from "../../../file-viewer/filePanel.js";
-import { PanelSurface, usePanelWidth } from "./PanelSurface.jsx";
+import { PanelFoot } from "../../../file-viewer/PanelFoot.jsx";
+import { PanelSurface, usePanelWidth } from "../../../file-viewer/PanelSurface.jsx";
 import { DEFAULT_PANEL_WIDTH, MAX_PANEL_WIDTH, MIN_PANEL_WIDTH, clampPanelWidth } from "./sidebars.js";
 import { PANEL_SURFACE_PX } from "../../../file-viewer/panelToggles.js";
 
@@ -44,6 +45,11 @@ import { PANEL_SURFACE_PX } from "../../../file-viewer/panelToggles.js";
  *   the same head, tabs, search and rows as docked (no grip, no Back); a pick in it closes it.
  *
  * Every tab stays mounted, shown or not, so a tree keeps its expansion; each keeps its own scroll.
+ *
+ * Under its one scroller, pinned at its bottom edge in every form (docked, peeking, a phone's page), the panel's foot
+ * (`file-viewer/PanelFoot.jsx`: the host's links and Settings under a full-width rule), where the host has a home: the
+ * same foot the home's sidebar ends in. A tab's own sticky actions row (`PanelActions`) stays in the scroller, directly
+ * over it.
  *
  * Its tabs are handed in (`tabs`, a board's and a schematic's), or are the sections drawn in it
  * (`sections`: a 3D view's `ToolPanel`s — its Model tree or Links, Position and the rest — each a tab by its
@@ -115,7 +121,7 @@ export function useFlatPanelState({ frameRef, kind, toolStack, onToolStackChange
   return { frameWidth, record: panel, change, tab, changeTab, width, maxWidth, changeWidth, focusSearch, askSearch };
 }
 
-// The panel's lines, surface, head row, scroller and grip are `PanelSurface.jsx`'s.
+// The panel's lines, surface, head row, scroller and grip are `file-viewer/PanelSurface.jsx`'s.
 /**
  * Which tabs the head's row shows, measured: `ids` in order, `widths` each one's drawn width, `room` the row's width
  * for tabs (and the ⋯ menu's button, `more` wide), `gap` between them. Every tab that fits shows; where they do not
@@ -152,8 +158,6 @@ const STRUCTURE_SECTIONS = new Set(["tree"]);
 export const isStructureTab = (entry, sections) => Boolean(entry) && (sections ? STRUCTURE_SECTIONS.has(entry.id) : entry.search !== false);
 export const FLAT_PANEL_DEFAULT_WIDTH = DEFAULT_PANEL_WIDTH;
 export const FLAT_PANEL_MIN_WIDTH = MIN_PANEL_WIDTH;
-/** The toggle's key, as its tooltip shows it: ⌘\ on a Mac (the host's `environment.platform`), Ctrl+\ elsewhere. */
-export const flatPanelShortcut = platform => (platform === "darwin" ? "⌘\\" : "Ctrl+\\");
 
 const FlatPanelContext = createContext(null);
 /**
@@ -341,7 +345,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
     event.stopPropagation();
     onClose();
   };
-  // The width: the person's, from the grip on the right edge, one write when it lets go (`PanelSurface.jsx`).
+  // The width: the person's, from the grip on the right edge, one write when it lets go (`file-viewer/PanelSurface.jsx`).
   const { drawnWidth, grip } = usePanelWidth({ width, minWidth: FLAT_PANEL_MIN_WIDTH, maxWidth, onWidthChange });
 
   const active = tabs.some(entry => entry.id === tab) ? tab : tabs[0]?.id;
@@ -508,7 +512,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
     asideRef={surfaceRef} {...surfaceProps}
     width={drawnWidth} grip={page ? null : grip} gripLabel={t("flatPanel.resize")} onKeyDown={onPanelKeyDown} data-flat-panel={mode} headRule={!single}
     headRef={head} headInsets={HEAD_INSETS} headProps={{ "data-flat-panel-head": "", "data-searching": searchOpen ? "" : undefined }} scrollerRef={scroller}
-    scrollerProps={{ "data-flat-panel-scroller": "" }}
+    scrollerProps={{ "data-flat-panel-scroller": "" }} foot={<PanelFoot />}
     head={<>
     {/* The head, one row as Figma's Layers panel's, the same on a phone: the tabs (or one tab's title) across its
         width, ⋯ where some do not fit, and the search's icon at its right end; its rule 8px under it, a lone

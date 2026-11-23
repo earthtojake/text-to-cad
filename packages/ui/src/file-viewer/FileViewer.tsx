@@ -8,7 +8,7 @@ import { EmptyState, ViewerNavbar } from "./navigation/index.js";
 import type { EntryAction } from "./navigation/index.js";
 import { ProjectKeysContext, projectNeighbours } from "./projectKeys.js";
 import { useControlUsage } from "../usage/controls.js";
-import { useSearchKey } from "../search/searchKey.js";
+import { searchShortcut, useSearchKey } from "../search/searchKey.js";
 import { useFileDocument } from "./hooks/useFileDocument.js";
 import type { FileNavigationAction, FileViewerProps, JsonValue, FileViewerState } from "./types.js";
 import { ViewerMobileContext, useViewerMobileMeasure } from "./responsive.js";
@@ -16,10 +16,11 @@ import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { I18nProvider, translator } from "../i18n/index.js";
 import { mayTakeKeyboard } from "./takeKeyboard.js";
 import { FilePanelContext, filePanelOf, withFilePanel } from "./filePanel.js";
-import { PANEL_HEAD_ROW, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX, PanelFrameContext, PanelTogglesContext, clampPanelWidth, sidebarLayout } from "./panelToggles.js";
+import { PANEL_HEAD_ROW, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX, PanelFrameContext, PanelTogglesContext, clampPanelWidth, panelShortcut, sidebarLayout } from "./panelToggles.js";
 import { TreeRowsLoading } from "../primitives/tree-row.jsx";
-import { NavbarSlotsContext, NavbarViewSlotContext } from "./navbarSlots.js";
+import { AppMenuContext, NavbarSlotsContext, NavbarViewSlotContext } from "./navbarSlots.js";
 import type { PanelToggles } from "./panelToggles.js";
+import { PanelFoot } from "./PanelFoot.jsx";
 import { PANEL_PEEK_ASIDE_CLASS, PANEL_PEEK_CARD_CLASS, PANEL_PEEK_CARD_STYLE, PANEL_PEEK_CONTENT_STYLE, PanelPeekContext, panelPeekMotionClass, usePanelPeek } from "./panelPeek.js";
 
 class RenderBoundary extends Component<{ children: ReactNode; title: string; onError?: (error: Error) => void }, { error: Error | null }> {
@@ -44,6 +45,8 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const { loaded, key, path, reload } = useFileDocument(file, source, renderers);
   const currentKey = useRef(key);
   currentKey.current = key;
+  // The host's home is on screen: no file, and a home to show.
+  const home = loaded.status === "empty" && Boolean(presentation?.home);
   const reloadCurrent = useCallback(() => { if (currentKey.current === key) reload(); }, [key, reload]);
   const latest = useRef({ state, onStateChange, sourceId: source.id });
   latest.current = { state, onStateChange, sourceId: source.id };
@@ -64,9 +67,9 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const [previewing, setPreviewing] = useState<typeof key | null>(null);
   const onPreviewChange = useCallback((on: boolean) => { if (currentKey.current === key) setPreviewing(on ? key : null); }, [key]);
   const [readiness, setReadiness] = useState<{ key: string; ready: boolean } | null>(null);
-  // The view's two panel toggles, which its frame says (`panelToggles.js`) and the navbar draws.
-  // Keyed by the file it is said for: until this file's view says its own (or none), the navbar draws the one it
-  // will have (`pendingToggles`, below).
+  // The panel's toggle, which its frame says (`panelToggles.js`: a file's view's, or the home's sidebar's) and the navbar
+  // draws. Keyed by the page it is said for: until this file's view says its own (or none), the navbar draws the one it
+  // will have (`pendingToggles`, below); the home says its own before its first paint.
   const [saidToggles, setSaidToggles] = useState<{ key: string; toggles: PanelToggles | null } | null>(null);
   const setPanelToggles = useCallback((toggles: PanelToggles | null) => setSaidToggles({ key, toggles }), [key]);
   const framed = useRef<string | null>(null);
@@ -142,7 +145,8 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // width the view will draw (the kept one within its bounds, `clampPanelWidth`; `data-panel-loading`), drawn as the
   // view's own panel is while its file loads: the head's one block (a bar where a lone title's name will be: the tabs are
   // not known yet) over its rule, and the placeholder rows (`TreeRowsLoading`) where the first rows will stand, on the
-  // same lines (`panelToggles.js`'s metrics), so nothing moves as the view takes over. A file that will not open has neither.
+  // same lines (`panelToggles.js`'s metrics), and the panel's foot at its bottom (`PanelFoot.jsx`), so nothing moves as
+  // the view takes over. A file that will not open has neither.
   const bodyBox = useRef<HTMLDivElement | null>(null);
   const [bodyWidth, setBodyWidth] = useState(0);
   const pending = Boolean(path) && (loaded.status === "loading" || (loaded.status === "ready" && saidToggles?.key !== key));
@@ -175,7 +179,7 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // The page's one peek (`panelPeek.js`), from its first frame: the stand-in's while the file loads, the view's frame's
   // once it says its toggle (`PanelPeekContext`), so a card up as the view arrives stays up. Enabled as the toggle
   // drawn now says: the view's (`peekable`), else the stand-in's, collapsed on a desktop.
-  const said = saidToggles?.key === key && loaded.status === "ready";
+  const said = saidToggles?.key === key && (loaded.status === "ready" || home);
   // A view's frame says it once it has measured its width; until then the peek stays as the stand-in had it.
   const saidPeekable = said ? (saidToggles?.toggles ? saidToggles.toggles.left?.peekable : false) : undefined;
   const peekEnabled = useRef(false);
@@ -191,7 +195,7 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     setPageOpen({ key, open });
   }, [closePeek, pendingOpen, key]);
   const pendingToggles = useMemo<PanelToggles | null>(() => (pending ? { left: { open: pendingOpen,
-    label: t(pendingOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: appearance.platform === "darwin" ? "⌘\\" : "Ctrl+\\", toggle: pageToggle,
+    label: t(pendingOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: panelShortcut(appearance.platform), toggle: pageToggle,
     hover: mobile ? null : peek.toggleHandlers, peeking: peek.peeking, peekable: !mobile && !pendingOpen } } : null),
     [pending, pendingOpen, appearance.platform, t, pageToggle, mobile, peek.toggleHandlers, peek.peeking]);
   const panelToggles = said ? saidToggles.toggles : pendingToggles;
@@ -208,7 +212,8 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   }, [loaded.status, key]);
 
   let body: ReactNode;
-  if (loaded.status === "empty") body = presentation?.home ?? null;
+  // The home says its sidebar's toggle as a view's frame says its panel's (`panelToggles.js`).
+  if (loaded.status === "empty") body = presentation?.home ? <PanelTogglesContext.Provider value={setPanelToggles}>{presentation.home}</PanelTogglesContext.Provider> : null;
   else if (loaded.status === "loading") {
     // The host's own cover where it has one (a CAD host's is on the viewport's Background), else the one indicator, in
     // the app's theme: a host that knows no viewport has none to follow.
@@ -218,7 +223,9 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
         style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: 0, height: PANEL_HEAD_ROW }} data-panel-head="">
         <span className="block h-2 w-12 rounded-full bg-muted-foreground/20 motion-safe:animate-pulse" data-panel-loading-title="" />
       </div>
-      <div className="flex flex-col px-(--panel-inset)" style={{ paddingTop: PANEL_SURFACE_PX }}><TreeRowsLoading label={t("spinner.loading")} /></div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-(--panel-inset)" style={{ paddingTop: PANEL_SURFACE_PX }}><TreeRowsLoading label={t("spinner.loading")} /></div>
+      {/* The panel's foot, where the view's panel will have it (the host's links and Settings, where it has a home). */}
+      <PanelFoot />
     </>;
     body = pendingOpen ? <div className="flex h-full min-h-0">
       <aside aria-busy="true" className="relative flex h-full shrink-0 flex-col border-r border-border bg-sidebar text-ui" style={{ ...PANEL_ROW_VARIABLES, width: pendingWidth }}
@@ -297,39 +304,47 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
       label: t(openBeside.kind === "browser" ? "project.openBrowser" : "project.openNewTab"),
       onSelect: () => { usage.used("file_open_beside"); void Promise.resolve(openBeside.open({ document: path })).catch(error => onError?.(error)); },
     } : null;
-    return path && (capabilities.size || fileMenuItems || importFolder || besideOf || neighbours) ? {
+    // Search documents, the way to any other document, with its key: every document where the host has the search.
+    const search = onSearch ? { onSelect: onSearch, shortcut: searchShortcut(appearance.platform) } : null;
+    return path && (capabilities.size || fileMenuItems || importFolder || besideOf || neighbours || search) ? {
       platform: host.fileActions?.platform ?? "linux", capabilities, sourceMissing, items: fileMenuItems, apps, onImportFolder: importFolder,
-      beside: besideOf, neighbours,
+      beside: besideOf, neighbours, search,
       onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => {
         const done = action === "app" ? (app ? openApp?.(document, app.target, app.app) : undefined)
           : perform?.[action]?.({ path: target(action) ?? "", kind: "file" });
         void Promise.resolve(done).catch(error => onError?.(error));
       },
     } : null;
-  }, [path, onDisk, sourceMissing, perform, appsOf, openApp, host.fileActions?.platform, fileMenuItems, onError, project, onImportFolder, openBeside, neighbours, usage, t]);
-  // The logo's app menu: the host's links and the person's settings (Back to home is `onHome`).
-  const menu = useMemo(() => host.links || appSettings?.length || colorScheme || language || onSearch
-    ? { links: host.links, appSettings, colorScheme, language, platform: appearance.platform, onSearch } : null,
-    [host.links, appSettings, colorScheme, language, appearance.platform, onSearch]);
+  }, [path, onDisk, sourceMissing, perform, appsOf, openApp, host.fileActions?.platform, fileMenuItems, onError, project, onImportFolder, openBeside, neighbours, usage, t, onSearch, appearance.platform]);
+  // The app's menu: the host's links and the person's settings. Where the host has a home they are the panel's foot's
+  // (`PanelFoot.jsx`, fed through `AppMenuContext`: the bottom of the sidebar, on the home and over a document), and
+  // the navbar's logo is the way home, a link where the host gives the home an address; where it has none (a view
+  // that shows one file alone), the logo opens the menu and there is no foot, so nothing is offered twice.
+  const menu = useMemo(() => host.links || appSettings?.length || colorScheme || language
+    ? { links: host.links, appSettings, colorScheme, language, platform: appearance.platform } : null,
+    [host.links, appSettings, colorScheme, language, appearance.platform]);
+  const goHome = host.navigation.home;
+  const homeHref = useMemo(() => (goHome ? host.navigation.hrefOf?.({ home: { view: "recents" } }) ?? null : null), [goHome, host.navigation.hrefOf]);
+  const homeMenu = goHome ? menu : null;
   // ⌘K (Ctrl+K) opens the search, where the host has one, from anywhere on the page but Preview.
   useSearchKey(onSearch, { platform: appearance.platform, enabled: previewing !== key });
-  // The navbar is drawn over every file and over the host's home — there only the logo's menu (no
-  // Back to home), Back and Forward where the host keeps the view's history, and the host's
+  // The navbar is drawn over every file and over the host's home — there the sidebar's toggle, the logo (the way to
+  // Recents), Back and Forward where the host keeps the view's history, and the host's
   // actions, as over a file — never over a view drawn small with no chrome
   // (`compact`: an offscreen picture), never where the host asks for the view alone (`chrome: "bare"`),
   // and not while the renderer's Preview is up, which draws its own bar in its place.
-  const home = loaded.status === "empty" && Boolean(presentation?.home);
   const navbar = (Boolean(path) || home) && !appearance.compact && chrome !== "bare" && previewing !== key;
   const homeSlotRefs = useMemo(() => ({ left: setHomeLeft, right: setHomeRight }), []);
   const homeSlots = useMemo(() => (navbar && !path && home ? { left: homeLeft, right: homeRight } : null), [navbar, path, home, homeLeft, homeRight]);
-  return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><NavbarSlotsContext.Provider value={homeSlots}><NavbarViewSlotContext.Provider value={navbar && path ? viewSlot : null}><PanelPeekContext.Provider value={peek}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={layout ? undefined : mobile ? "mobile" : "desktop"} data-viewer-pinned-layout={layout} tabIndex={-1}>
+  return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><NavbarSlotsContext.Provider value={homeSlots}><NavbarViewSlotContext.Provider value={navbar && path ? viewSlot : null}><AppMenuContext.Provider value={homeMenu}><PanelPeekContext.Provider value={peek}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={layout ? undefined : mobile ? "mobile" : "desktop"} data-viewer-pinned-layout={layout} tabIndex={-1}>
     {navbar ? (path
-      ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name || name || arrivingName} project={projectCrumb} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}
+      ? <ViewerNavbar onHome={goHome} homeHref={homeHref} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name || name || arrivingName} project={projectCrumb} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}
         panels={panelToggles} viewSlot={setViewSlot} />
-      : <ViewerNavbar menu={menu} history={history} actions={navbarActions} homeSlots={home ? homeSlotRefs : null} />) : null}
+      : <ViewerNavbar onHome={goHome} homeHref={homeHref} menu={menu} history={history} actions={navbarActions} homeSlots={home ? homeSlotRefs : null}
+        panels={home ? panelToggles : null} />) : null}
     <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div ref={bodyBox} className="min-w-0 flex-1 overflow-hidden"><ProjectKeysContext.Provider value={projectKeys}>{body}</ProjectKeysContext.Provider></div>
       {overlay}
     </div>
-  </div></PanelPeekContext.Provider></NavbarViewSlotContext.Provider></NavbarSlotsContext.Provider></ViewerElementContext.Provider></ViewerHostContext.Provider></ViewerMobileContext.Provider></I18nProvider>;
+  </div></PanelPeekContext.Provider></AppMenuContext.Provider></NavbarViewSlotContext.Provider></NavbarSlotsContext.Provider></ViewerElementContext.Provider></ViewerHostContext.Provider></ViewerMobileContext.Provider></I18nProvider>;
 }

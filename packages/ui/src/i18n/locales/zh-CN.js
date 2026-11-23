@@ -224,12 +224,12 @@ export default {
   "file.kicadSchematicTooNew": "{app} 无法打开此原理图：它由更新版本的 KiCad 保存。",
   "file.defaultApp": "默认应用",
 
-  "menu.backToHome": "返回主页",
   "menu.theme": "主题",
   "menu.language": "语言",
   "menu.languageAutomatic": "自动（{language}）",
   "menu.feedback": "发送反馈",
   "menu.madeBy": "由 @{handle} 制作",
+  "menu.settings": "设置",
 
   "consent.shareUsage": "遥测",
   "consent.shareUsageEnvironment": "遥测（由你的环境设置）",
@@ -335,6 +335,7 @@ export default {
 
 
   "home.placesAria": "位置",
+  "home.sidebar": "侧边栏",
 
 
   "home.addProject": "将文件夹作为项目打开",

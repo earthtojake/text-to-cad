@@ -1,16 +1,19 @@
 import { useRef, useState } from "react";
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { cn } from "@cad/ui/utils";
-import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
-// The surface's metrics, shared with the file viewer's stand-in drawn before the view is up (`file-viewer/FileViewer.tsx`).
-import { PANEL_HEAD_ROW, PANEL_HEAD_ROW_PX, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX } from "../../../file-viewer/panelToggles.js";
+import { capturePointer, releasePointer } from "../lib/pointerCapture.js";
+// The surface's metrics, shared with the file viewer's stand-in drawn before the view is up (`FileViewer.tsx`).
+import { PANEL_HEAD_ROW, PANEL_HEAD_ROW_PX, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX } from "./panelToggles.js";
 import { PANEL_PEEK_ASIDE_CLASS, PANEL_PEEK_CARD_CLASS, PANEL_PEEK_CARD_STYLE, PANEL_PEEK_CONTENT_STYLE, PANEL_PEEK_ELEVATION_CLASS, PANEL_PEEK_GAP_PX,
-  PANEL_PEEK_IN_LEFT_CLASS, PANEL_PEEK_OUT_LEFT_CLASS, panelPeekMotionClass } from "../../../file-viewer/panelPeek.js";
+  PANEL_PEEK_IN_LEFT_CLASS, PANEL_PEEK_OUT_LEFT_CLASS, panelPeekMotionClass } from "./panelPeek.js";
 
-// The surface the view's one panel is (`FlatPanel.jsx`, at the view's left): the chrome's colour, the navbar's (a step
+// The surface a panel is: the view's one panel (`renderers/kit/shell/FlatPanel.jsx`, at the view's left) and the home's
+// sidebar (`library/LibrarySidebar.jsx`). The chrome's colour, the navbar's (a step
 // off the canvas, so the frame reads apart from the picture), its 1px rule on its right side, its type scope
 // (`data-panel-surface`: every step of the type scale is the panel's 12/16 inside it, `styles/globals.css`, and a
-// phone's page its finger sizes), the head's row, ONE scroller for its body, and the grip on its right edge.
+// phone's page its finger sizes), the head's row, ONE scroller for its body, what is pinned under it (`foot`: the
+// panel's foot, `PanelFoot.jsx`), and the
+// grip on its right edge. Here, with the file viewer's other panel modules, so the view's frame and the home both use it.
 //
 // Its lines: ONE horizontal line, `--panel-inset` (16px, `styles/globals.css`), where everything read in it starts
 // and ends: a tab's name, the search icon, a row's one glyph (a branch's chevron or a leaf's icon, 10px further a
@@ -22,8 +25,8 @@ import { PANEL_PEEK_ASIDE_CLASS, PANEL_PEEK_CARD_CLASS, PANEL_PEEK_CARD_STYLE, P
 // Vertically the panel is on one 8px step: 8px over the head's row (`PANEL_HEAD_ROW_PX`, 32px: the tabs, a lone title
 // or the search box, and the 28px buttons), 8px under it to its rule, whatever the row holds.
 export { PANEL_HEAD_ROW_PX, PANEL_SURFACE_PX };
-// A peek's card, its gap, its look and its slide: the file viewer's (`file-viewer/panelPeek.js`), the ONE source, shared
-// with the stand-in it draws before the view is up and with any card that mirrors the peek.
+// A peek's card, its gap, its look and its slide: `panelPeek.js`'s, the ONE source, shared
+// with the stand-in the file viewer draws before the view is up and with any card that mirrors the peek.
 export { PANEL_PEEK_ELEVATION_CLASS, PANEL_PEEK_GAP_PX, PANEL_PEEK_IN_LEFT_CLASS as PEEK_IN_CLASS, PANEL_PEEK_OUT_LEFT_CLASS as PEEK_OUT_CLASS };
 const NO_HEAD_INSETS = Object.freeze({ start: 0, end: 0 });
 // A head inset, in px or as a CSS length (one the scale sizes).
@@ -34,7 +37,7 @@ const KEY_NUDGE_PX = 16;
  * The panel's width from its grip: the person's, dragged on its right edge (rightward, wider) or nudged by the arrow
  * keys, written once as the drag lets go. The width drawn is `width` as it is (the
  * default, or what the person last chose): nothing else, the view's width included, changes it. `minWidth` and
- * `maxWidth` bound the grip alone, as it moves (fixed bounds, `sidebars.js`).
+ * `maxWidth` bound the grip alone, as it moves (fixed bounds, `panelToggles.js`).
  * @param {{ width: number, minWidth: number, maxWidth: number, onWidthChange(width: number): void }} options
  */
 export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
@@ -79,13 +82,14 @@ export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
 
 /**
  * The panel itself: `<aside>` on the panel surface, its head (`head`, the row's contents, pinned, the one block; its rule
- * under it unless `headRule` is false; `null`, no pinned row), ONE scroller round `children`, and its grip (none on a
- * phone's page or a peek).
+ * under it unless `headRule` is false; `null`, no pinned row), ONE scroller round `children`, its foot (`foot`: what stays
+ * at its bottom while the body scrolls: `PanelFoot.jsx`, the host's links and Settings; none, nothing), and its grip (none on a phone's page
+ * or a peek).
  * @param {{ mode: "push" | "page", label: string, open: boolean, hidden?: boolean,
  *   width: number, grip: ReturnType<typeof usePanelWidth>["grip"] | null, gripLabel: string, head: import("react").ReactNode, headRule?: boolean,
  *   headRef?: import("react").Ref<HTMLDivElement>, headProps?: object, headInsets?: { start: number | string, end: number | string },
  *   scrollerRef?: import("react").Ref<HTMLElement>, scrollerProps?: object, onKeyDown?: (event: KeyboardEvent) => void,
- *   children?: import("react").ReactNode, peek?: boolean, asideRef?: import("react").Ref<HTMLElement> }} props
+ *   children?: import("react").ReactNode, foot?: import("react").ReactNode, peek?: boolean, asideRef?: import("react").Ref<HTMLElement> }} props
  *   `headInsets`: how far the head's first and last boxes hang out past the inset (their own padding: a tab's pill's,
  *   an icon button's), so what they hold stands on it. `peek`: a collapsed panel shown over the view, at its docked
  *   place and width, taking no room (`data-panel-peek`): a card inside that box (`PANEL_PEEK_GAP_PX`), its content where
@@ -93,7 +97,7 @@ export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
  *   stand-in); `peekLeaving`, that peek sliding out (`data-panel-peek-leaving`), and `onPeekExited` once it is out. Other props (`data-*`, handlers) go on the `<aside>`.
  */
 export function PanelSurface({ mode, label, open, hidden = false, width, grip, gripLabel, head, headRule = true, headRef, headProps = {},
-  headInsets = NO_HEAD_INSETS, scrollerRef, scrollerProps = {}, onKeyDown, peek = false, peekLeaving = false, peekEntered = false, onPeekExited, asideRef, children, ...props }) {
+  headInsets = NO_HEAD_INSETS, scrollerRef, scrollerProps = {}, onKeyDown, peek = false, peekLeaving = false, peekEntered = false, onPeekExited, asideRef, children, foot = null, ...props }) {
   const page = mode === "page";
   const peeking = mode === "push" && peek;
   // With its rule (tabs), the head is its row and 8px either side, the rule under; with none (a lone tab's title, and
@@ -116,8 +120,8 @@ export function PanelSurface({ mode, label, open, hidden = false, width, grip, g
     {peeking ? <>
       <div aria-hidden="true" className={PANEL_PEEK_CARD_CLASS} style={PANEL_PEEK_CARD_STYLE}
         data-panel-peek-card="" />
-      <div className="relative flex min-h-0 flex-1 flex-col" style={PANEL_PEEK_CONTENT_STYLE}>{headNode}{scroll}</div>
-    </> : <>{headNode}{scroll}</>}
+      <div className="relative flex min-h-0 flex-1 flex-col" style={PANEL_PEEK_CONTENT_STYLE}>{headNode}{scroll}{foot}</div>
+    </> : <>{headNode}{scroll}{foot}</>}
     {/* No grip on a phone's page, nor on a peek: a peek is passing, so its width is not the person's to set there. */}
     {page || peeking || !grip ? null : <div role="separator" aria-orientation="vertical" aria-label={gripLabel} tabIndex={0}
       aria-valuenow={grip["aria-valuenow"]} aria-valuemin={grip["aria-valuemin"]} aria-valuemax={grip["aria-valuemax"]}

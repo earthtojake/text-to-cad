@@ -448,3 +448,74 @@ test('a file whose tabs arrive after its title: the head gains the tabs\' rule a
   // The first row stands at the body's top and its 8px.
   assert.equal(loaded.row, loaded.body + 8);
 });
+
+// The panel's foot (`file-viewer/PanelFoot.jsx`: the host's links and Settings), where the host has a home: the one the
+// home's sidebar ends in, pinned at the panel's bottom under a rule its full width, on the panel's own lines. A tab's
+// sticky actions row (Params' Reset and Save) stays in the scroller, flush against it wherever the tab is scrolled.
+test('a document\'s panel ends in the panel\'s foot: under a full-width rule, on the inset, a tab\'s own actions flush against it; in the peek and a phone\'s sheet too', async t => {
+  const rect = locator => locator.evaluate(node => { const { x, y, right, bottom, width, height } = node.getBoundingClientRect(); return { x, y, right, bottom, width, height }; });
+  const tilesOf = foot => foot.locator('a, button').evaluateAll(nodes => nodes.map(node => { const { x, y, right, bottom, width, height } = node.getBoundingClientRect();
+    return { name: node.getAttribute('aria-label'), x, y, right, bottom, width, height }; }));
+  // A short window, so the Params tab has more than fits and its actions row is stuck at the scroller's bottom.
+  const { page, pane, errors } = await open(t, 'hinge.step&home=1&links=1', { width: 1280, height: 220 });
+  const panel = pane.locator('[data-flat-panel]');
+  const foot = panel.locator('[data-app-foot]');
+  await foot.waitFor();
+  const side = await rect(panel), at = await rect(foot);
+  // Pinned at the panel's bottom, its rule a hairline from the panel's left edge to its own right rule.
+  assert.deepEqual([at.x - side.x, at.right - side.x, at.bottom], [0, 231, side.bottom]);
+  assert.equal(await foot.evaluate(node => getComputedStyle(node).borderTopWidth), '1px');
+  // The links and the cog: the control's 28px, 8px under the rule and over the panel's bottom, the first glyph and the
+  // cog's on the panel's two lines (16px in), as in the home's sidebar.
+  const tiles = await tilesOf(foot);
+  assert.deepEqual(tiles.map(({ name, width, height, y, bottom }) => [name, width, height, y, bottom]),
+    ['GitHub', 'Discord', 'X', 'Send feedback', 'Settings'].map(name => [name, 28, 28, at.y + 9, side.bottom - 8]));
+  const glyphs = await foot.locator('svg').evaluateAll(nodes => nodes.map(node => { const { x, right } = node.getBoundingClientRect(); return { x, right }; }));
+  assert.deepEqual([glyphs[0].x - side.x, glyphs.at(-1).right - side.x], [INSET, 231 - INSET]);
+  // Params: its Reset and Save stay over the foot, in the scroller, flush against the foot's rule at the top of the
+  // scroll, on the way and at its end.
+  await chooseTab(page, pane, 'parameters');
+  await settle(page);
+  const scroller = panel.locator('[data-flat-panel-scroller]');
+  const actions = panel.locator('[data-parameters-foot]');
+  assert.ok(await scroller.evaluate(node => node.scrollHeight > node.clientHeight + 8), 'the tab has more than fits');
+  assert.equal(await actions.evaluate((node, scroller) => scroller.contains(node), await scroller.elementHandle()), true);
+  const flush = async () => [Math.round((await rect(actions)).bottom), Math.round((await rect(foot)).y)];
+  assert.deepEqual(await flush(), [at.y, at.y], 'flush at the top of the scroll');
+  await scroller.evaluate(node => { node.scrollTop = 12; });
+  assert.deepEqual(await flush(), [at.y, at.y], 'flush on the way');
+  await scroller.evaluate(node => { node.scrollTop = node.scrollHeight; });
+  await settle(page);
+  assert.deepEqual(await flush(), [at.y, at.y], 'flush at the end, with no jump');
+  // The cog's menu opens upward: the settings left of the app's menu, no links.
+  await foot.getByRole('button', { name: 'Settings' }).click();
+  const menu = page.getByRole('menu', { name: 'Settings' });
+  await menu.waitFor();
+  assert.deepEqual([await menu.getAttribute('data-side'), await menu.locator('[data-link]:not([data-link="made-by"])').count()], ['top', 0]);
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'detached' });
+  // Collapsed, the peek has the same foot, inside its card.
+  const toggle = pane.locator('[data-navbar-panel="left"]');
+  await toggle.click();
+  await panel.waitFor({ state: 'hidden' });
+  await page.mouse.move(900, 200);
+  await toggle.hover();
+  await pane.locator('aside[data-flat-panel][data-panel-peek]').waitFor();
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] aside[data-panel-peek]').getAnimations().every(animation => animation.playState === 'finished'));
+  const card = await rect(pane.locator('[data-panel-peek-card]'));
+  const peeked = await tilesOf(foot);
+  assert.deepEqual(peeked.map(({ name }) => name), ['GitHub', 'Discord', 'X', 'Send feedback', 'Settings']);
+  assert.ok(peeked.every(tile => tile.x >= card.x && tile.right <= card.right && tile.bottom <= card.bottom && tile.y === tiles[0].y), `the foot's tiles in the card, where the pinned panel's stand: ${JSON.stringify(peeked)}`);
+  assert.deepEqual(errors, []);
+  // A phone's sheet: the foot at its bottom, its tiles a finger's 36px.
+  const phone = await open(t, 'hinge.step&home=1&links=1', { width: 390, height: 700 });
+  const sheet = phone.page.locator('[data-panel-sheet]');
+  const sheetFoot = sheet.locator('[data-app-foot]');
+  await sheetFoot.waitFor();
+  await phone.page.waitForFunction(() => document.querySelector('[data-panel-sheet]').getAnimations().every(animation => animation.playState === 'finished'));
+  const place = await rect(sheet), low = await rect(sheetFoot);
+  assert.deepEqual([low.x, Math.round(low.bottom), Math.round(place.bottom)], [0, 700, 700]);
+  assert.deepEqual((await tilesOf(sheetFoot)).map(({ name, height, bottom }) => [name, height, Math.round(bottom)]),
+    ['GitHub', 'Discord', 'X', 'Send feedback', 'Settings'].map(name => [name, 36, 700 - 8]));
+  assert.deepEqual(phone.errors, []);
+});
