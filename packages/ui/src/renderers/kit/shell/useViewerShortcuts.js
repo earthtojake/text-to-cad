@@ -45,7 +45,10 @@ export function useViewerShortcuts({
   const zooming = useRef(zoom);
   zooming.current = zoom;
   useEffect(() => {
-    const onPointerDown = event => { pointerInside.current = Boolean(viewerElement?.current?.contains(event.target)); };
+    const onPointerDown = event => {
+      const target = event.target;
+      pointerInside.current = target instanceof Node && Boolean(viewerElement?.current?.contains(target));
+    };
     window.addEventListener("pointerdown", onPointerDown, true);
     return () => window.removeEventListener("pointerdown", onPointerDown, true);
   }, [viewerElement]);

@@ -48,3 +48,17 @@ it('the zoom keys reach the view zoom, held keys repeating and ⌘= kept from th
   expect(fireEvent.keyDown(canvas, {key:'=', code:'Equal', metaKey:true})).toBe(true);
   expect(zoom.zoomBy).toHaveBeenCalledTimes(4);
 });
+
+it('a pointer press whose target is the window, not a node, counts as outside the viewer', () => {
+  const copy = vi.fn(() => true);
+  render(<Viewer copy={copy}/>);
+  fireEvent.pointerDown(screen.getByText('Canvas'));
+  const errors: unknown[] = [];
+  const record = (event: ErrorEvent) => { errors.push(event.error); event.preventDefault(); };
+  window.addEventListener('error', record);
+  try { window.dispatchEvent(new Event('pointerdown')); } finally { window.removeEventListener('error', record); }
+  expect(errors).toEqual([]);
+  // The press was outside the viewer: a key on the page background is not the viewer's.
+  fireEvent.keyDown(document.body, {key:'c', metaKey:true});
+  expect(copy).not.toHaveBeenCalled();
+});
