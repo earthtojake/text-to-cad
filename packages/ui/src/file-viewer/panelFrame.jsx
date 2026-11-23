@@ -80,7 +80,7 @@ export function usePanelFrame({ has, mobile, hidden = false, frameWidth, choice,
   // A phone's: under the navbar, with no scrim (`usePhoneSheetPlace`).
   const closeSheet = useCallback(() => setSheetOpen(false), []);
   const sheetPlace = usePhoneSheetPlace(viewerElement, has && mobile && sheetOpen && !hidden);
-  // The toggle, the navbar's (`panelToggles.js`), its first control. A collapsed panel leaves nothing over the page.
+  // The toggle, the navbar's (`panelToggles.js`), after its logo. A collapsed panel leaves nothing over the page.
   const platform = useContext(ViewerHostContext)?.environment?.platform;
   const panelOpen = mobile ? sheetOpen : mode === "push";
   const showToggle = has && !hidden;

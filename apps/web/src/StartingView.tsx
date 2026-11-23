@@ -23,10 +23,10 @@ const FILE_ACTIONS = { perform: { 'copy-link': NOTHING } };
 /**
  * What the page shows while it asks the server what it is, and if the server does not answer. Asking, it is the app's
  * own frame as the app's first frame draws it — the real file viewer (`FileViewer`), in its opening phase: the navbar
- * at its height with its border, the panel's toggle where it will be, the logo (the link home it will be), the name's
+ * at its height with its border, the logo first (the link home it will be), the panel's toggle where it will be, the name's
  * place empty and the ⋯ beside it; for a document's page the panel's stand-in, open where the file's kept choice and the page's
  * width say, and the loading indicator centred under the navbar on the tab's viewport Background — so nothing appears
- * or moves as the app takes over. The home's address gets the home's navbar (the sidebar's toggle and the logo where
+ * or moves as the app takes over. The home's address gets the home's navbar (the logo and the sidebar's toggle where
  * the home's are) over the home's own frame (`LibraryFrame`): its sidebar open or shut and as wide as the tab's kept
  * choice and the page's width say, placeholder rows where its places will be and the panel's foot (the links, Settings), beside the page's
  * background with the one indicator. It is inert (nothing in it can be pressed yet) and asks nothing: what it

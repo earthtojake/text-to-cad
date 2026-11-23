@@ -556,7 +556,7 @@ viewport's top-right (`notice`); no host hands it today, since the navbar holds 
 panel's toggle is the navbar's** (`file-viewer/panelToggles.js`): the panel's frame says it (`usePanelToggles`,
 through `file-viewer/panelFrame.jsx`: a view's frame for a file's panel, and the home for its sidebar, which is the
 same panel), and the
-navbar draws it first, before the logo, the same neutral button open or shut (`aria-expanded` says which, pinned or
+navbar draws it right after the logo (the logo leads on every page, the way home in one place), the same neutral button open or shut (`aria-expanded` says which, pinned or
 not). Before the view is up (its file being read, its chunk loading, or its frame mounted but its toggle not said yet)
 `FileViewer` draws the toggle the view will have, from a document page's first frame, by the view's own rule
 (`panelToggles.js`'s `sidebarLayout`, which `sidebars.js` re-exports): the file's choice kept for this session (its view
@@ -575,8 +575,8 @@ one block (a bar where a lone title's name will stand) over its rule, then the p
 the model as a floating card, pushing nothing, until the pointer leaves both (only the toggle's click, or ⌘\, pins it);
 otherwise a collapsed panel leaves nothing over the model.
 In Preview, in
-every host, the navbar steps aside for Preview's own bar. Over the home the navbar has the sidebar's toggle (said by
-the home before its first paint, so nothing after it moves), the logo (which goes to Recents), Back and Forward where
+every host, the navbar steps aside for Preview's own bar. Over the home the navbar has the logo (which goes to
+Recents), the sidebar's toggle (said by the home before its first paint, so nothing after it moves), Back and Forward where
 the host hands a `history`, then the home's own controls —
 **Home** where a file shows its name, the search and
 Import at the right (`ModelLibrary` portals them into the navbar's slots, `file-viewer/navbarSlots.js`) — and the
@@ -584,8 +584,8 @@ host's actions, outermost. The home's Sort and layout control stand in its place
 and its links are the app menu's. Left: the text-to-cad
 logo (the "C" mark, 16px, over the home and over a document alike),
 the way home where the host has a home (a link where the home has an address, a button otherwise, its hint "Home")
-and the app menu's button where it has none (`AppMenu`, `file-viewer/navigation/AppMenu.jsx`), then Back and
-Forward where the host hands a `history`, then, for a document in a project, the project's name and a slash (a
+and the app menu's button where it has none (`AppMenu`, `file-viewer/navigation/AppMenu.jsx`), then the panel's
+toggle where the page has a panel, then Back and Forward where the host hands a `history`, then, for a document in a project, the project's name and a slash (a
 press shows that project's page on the home, with the document just left remembered; a link where the host gives
 places an address: `FileProject.href`), then the open file's name, with no
 glyph and no menu of its own, and its ⋯ menu. The

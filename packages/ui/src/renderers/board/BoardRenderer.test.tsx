@@ -317,7 +317,7 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
   }
   // The panel, docked at the left: one head row, the tabs, then the search's icon at its right end; its toggle is the
-  // navbar's, its first control, the same neutral button open or shut (aria-expanded says which).
+  // navbar's, after the logo, the same neutral button open or shut (aria-expanded says which).
   const aside = panel(pane);
   expect([aside.getAttribute('data-flat-panel'), aside.hidden]).toEqual(['docked', false]);
   const head = aside.querySelector<HTMLElement>('[data-flat-panel-head]')!;

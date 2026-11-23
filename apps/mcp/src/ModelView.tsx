@@ -30,8 +30,8 @@ export interface ViewReporter {
 
 /**
  * One view: the shared viewer over this host — the model a launch names, by its absolute path,
- * or with none, the home (the library, and Open) — under the navbar (`chrome: "page"`): the panel's toggle, its logo
- * (the way home: a button, as a page in an app's frame has no address), Back and Forward, the file's name and menus
+ * or with none, the home (the library, and Open) — under the navbar (`chrome: "page"`): its logo (the way home: a
+ * button, as a page in an app's frame has no address), the panel's toggle, Back and Forward, the file's name and menus
  * (its ⋯: Copy path, and Open in › Browser and the file manager), and at the right the host's Full size. The links
  * (GitHub, Discord, X, Send feedback) and Settings (Language, Telemetry, Theme) are the foot of the sidebar, on the home
  * and over a document. A view shows what is opened in place, and adds what it
@@ -42,8 +42,8 @@ export interface ViewReporter {
  *
  * Codex's file handler (`surface: file`, `alone`) shows its file alone, under the same navbar: the host's own file
  * tree is its navigation, so it has no home, no explorer and no Back or Forward, and no Open in › Browser; its navbar
- * holds the panel's toggle, the logo, which opens the app's menu there (a view with no home has no foot in its panel), the
- * file's name, its ⋯ and Full size where the host offers it.
+ * holds the logo, which opens the app's menu there (a view with no home has no foot in its panel), the panel's toggle,
+ * the file's name, its ⋯ and Full size where the host offers it.
  */
 export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, fullSize, whatsNew, openInBrowser, engineOrigin }: {
   launch: Launch; sequence: number; bridge: Bridge; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;

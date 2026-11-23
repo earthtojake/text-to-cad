@@ -11,8 +11,8 @@ import { chromium } from 'playwright';
 // The view's panel's one horizontal line (`--panel-inset`, `styles/globals.css`): in a real layout, every tab of a STEP
 // assembly with Parameters, Position and its Motion, a board, a DXF and a GLB, every piece of content's left edge (a
 // text's first glyph, an icon, a control's box, a slider's track) stands on the inset, or a tree level's step past it,
-// and every right-hand value, switch and slider ends the inset from the panel's right; the navbar's panel toggle's
-// icon stands on the same column.
+// and every right-hand value, switch and slider ends the inset from the panel's right; the navbar's first glyph, the
+// logo's drawn mark, stands on the same column (the panel's toggle comes after it).
 const require = createRequire(import.meta.url);
 const XBF = join(dirname(require.resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
 const GLB = join(dirname(require.resolve('@cad/core/lib/render/glbMeshData.js')), 'fixtures');
@@ -258,12 +258,6 @@ for (const file of Object.keys(FILES)) {
       assert.equal(clientWidth, 231, `${file}, ${tab}: the 232px panel, inside its 1px rule`);
       assert.deepEqual(offInset({ clientWidth, items }), [], `${file}, ${tab}: every piece on the inset`);
     }
-    // The navbar's panel toggle's icon, over the panel, on the same line.
-    const toggle = await page.evaluate(() => {
-      const icon = document.querySelector('[data-testid="one"] [data-navbar-panel="left"] svg').getBoundingClientRect();
-      return icon.left - document.querySelector('[data-testid="one"] [data-flat-panel]').getBoundingClientRect().left;
-    });
-    assert.ok(Math.abs(toggle - INSET) <= 0.5, `${file}: the navbar's toggle's icon at ${toggle}px`);
     // Opening the search (its icon, or /) and closing it move nothing under the head: the body's top, the open tab's
     // first row and the scroll stay at their pixel, in a single title's row (the drawing) and the tabs' (the model, its
     // last tab open: not one the search covers).
@@ -472,6 +466,11 @@ test('a document\'s panel ends in the panel\'s foot: under a full-width rule, on
     ['GitHub', 'Discord', 'X', 'Send feedback', 'Settings'].map(name => [name, 28, 28, at.y + 9, side.bottom - 8]));
   const glyphs = await foot.locator('svg').evaluateAll(nodes => nodes.map(node => { const { x, right } = node.getBoundingClientRect(); return { x, right }; }));
   assert.deepEqual([glyphs[0].x - side.x, glyphs.at(-1).right - side.x], [INSET, 231 - INSET]);
+  // The navbar's first glyph over the panel, the logo's drawn mark (its artwork 2px inside its image), on the same line;
+  // the panel's toggle after it.
+  const mark = await rect(pane.locator('[data-viewer-navbar] [data-navbar-logo] img'));
+  assert.equal(mark.x + 2 - side.x, INSET);
+  assert.ok((await rect(pane.locator('[data-viewer-navbar] [data-navbar-panel="left"]'))).x >= mark.right, 'the toggle after the logo');
   // Params: its Reset and Save stay over the foot, in the scroller, flush against the foot's rule at the top of the
   // scroll, on the way and at its end.
   await chooseTab(page, pane, 'parameters');

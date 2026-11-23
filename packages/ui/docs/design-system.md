@@ -85,7 +85,8 @@ vertical step.
 
 - **The panel inset**, `--panel-inset` (16px), is one line on each side, on a desktop and a phone. Every text, glyph
   and control starts on the left line; values, switches, sliders and a row's last action end on the right one. The
-  navbar's panel toggle puts its icon on the same column. Why: one edge the eye can follow, as in Figma's panels.
+  navbar's first glyph, the logo's drawn mark, stands on the same column; the panel toggle after it does not
+  ([The navbar](viewer-ux.md#the-navbar)). Why: one edge the eye can follow, as in Figma's panels.
 - **Only the body pads**, by the inset; no section, list or row sets its own side padding. A box hangs past the line
   by its own padding, so what it holds stays on it: a row's fill by 8px, a tab's pill by 6px, the head's icon buttons
   by 7px (11 on a phone), a value field by 7px.
@@ -574,7 +575,8 @@ transitions and drawn sizes, not class names, and a test of a layout that is gon
 | `kit/look/sceneColors.test.js` | no view hard-codes a selection, hover or box blue |
 | `file-viewer/panelPeek.test.js` | the slide's classes carry its duration constants; the fallback outlasts the slide |
 | `kit/inspector/FieldLabels.test.tsx` | every control's label is `FieldLabel`, its value the foreground |
-| `kit/shell/PanelInset.browser.test.mjs` | every piece of the panel's content on the 16px inset, in every tab of several files, placeholder rows too; a document's panel's foot under its rule, a tab's actions flush against it, in the peek and the phone's sheet |
+| `kit/shell/PanelInset.browser.test.mjs` | every piece of the panel's content on the 16px inset, in every tab of several files, placeholder rows too; a document's panel's foot under its rule, a tab's actions flush against it, in the peek and the phone's sheet; the navbar's logo mark on the same line |
+| `RendererShell.browser.test.mjs`: "the logo stands in one place on every page" | the logo first and its mark 16px in over the home, over a document with a panel and over a page with no toggle; the toggle after it |
 | `RendererShell.browser.test.mjs`: "a phone's scale", "every control and every text on the walk is its scale's" | 36px controls and each text 2px up on a phone, and no fill or ring left by a tap; on a phone and a desktop, every control and text on the view, the Display card, each tab, a menu, Quick Edit and Preview's Settings is its scale's |
 | … "every popup trigger opens on one tap and shuts on a second tap on it" | the touch rule in the navbar, the strip, the Display card, the sheet and Preview's Settings |
 | … "the type scale and the strip's proportions, as drawn" | the 40px strip of 28px tiles, the 32px head with its rule under the strip, panel and menu text 12/16, the navbar 13/20, a tooltip 11/16 |

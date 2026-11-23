@@ -1106,7 +1106,7 @@ it('puts the place on the narrow gutters in a home narrower than 720px, measured
 });
 
 // The home under the viewer's navbar, as a host shows it (`FileViewer`): the sidebar is the viewer's panel over this
-// page (`LibrarySidebar.jsx`, on `file-viewer/panelFrame.jsx`), so its toggle is the navbar's first control. The page
+// page (`LibrarySidebar.jsx`, on `file-viewer/panelFrame.jsx`), so its toggle is the navbar's, after the logo. The page
 // is `width` wide: the home's frame, the home and the viewer all measure it.
 function page({ width = 1200, panel, onPanelChange, onPlaceChange, links = true, projects = [] as LibraryProject[], platform = 'darwin', home: homeProps = {}, report }:
   { width?: number; panel?: object | null; onPanelChange?: (panel: object) => void; onPlaceChange?: (place: unknown) => void; links?: boolean | object; projects?: LibraryProject[];
@@ -1152,7 +1152,7 @@ const where = (home: ReturnType<typeof page>) => {
 };
 const mouse = { pointerType: 'mouse' };
 
-it("its sidebar is the viewer's panel: pinned it pushes the place, its toggle the navbar's first control; collapsed it leaves nothing; the person's choice is kept and stands at any width", async () => {
+it("its sidebar is the viewer's panel: pinned it pushes the place, its toggle in the navbar after the logo; collapsed it leaves nothing; the person's choice is kept and stands at any width", async () => {
   const kept: object[] = [];
   const home = page({ width: 1200, onPanelChange: next => kept.push(next) });
   try {
@@ -1162,9 +1162,9 @@ it("its sidebar is the viewer's panel: pinned it pushes the place, its toggle th
     const side = home.sidebar()!;
     expect([side.parentElement === home.frame(), side.nextElementSibling === screen.getByRole('main'), side.style.width, side.className.split(' ').includes('shrink-0'),
       side.className.split(' ').includes('absolute'), home.frame().getAttribute('data-sidebar')]).toEqual([true, true, '232px', true, false, 'push']);
-    // The same toggle as over a document: first in the row, before the logo, the sidebar's glyph, its key in its hint.
+    // The same toggle as over a document: in the row after the logo, the sidebar's glyph, its key in its hint.
     const row = [...document.querySelectorAll('[data-viewer-navbar] nav > *')].map(node => node.querySelector('[data-navbar-panel]') ? 'toggle' : node.getAttribute('data-navbar-logo') ? 'logo' : '?');
-    expect(row).toEqual(['toggle', 'logo']);
+    expect(row).toEqual(['logo', 'toggle']);
     expect([Boolean(home.toggle().querySelector('svg[data-sidebar-icon]')), home.toggle().getAttribute('aria-keyshortcuts')]).toEqual([true, '⌘\\']);
     // Collapsed: nothing of it left, and that is their choice, written once.
     fireEvent.click(home.toggle());

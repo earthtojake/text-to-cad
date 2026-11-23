@@ -145,8 +145,9 @@ test("a menu stands 6px from its trigger, padded 6px, from the primitives alone"
   }
 });
 
-// The logo stands on the page's gutter (`docs/viewer-ux.md`, "The navbar"): the navbar's 8px, the logo centred in its 28px tile (6px)
-// and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page. The Home itself is full width:
+// The logo stands on the page's gutter (`docs/viewer-ux.md`, "The navbar"): the row's first control on every page, the navbar's 8px,
+// the logo centred in its 28px tile (6px) and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page,
+// with a panel's toggle after it or none. The Home itself is full width:
 // its sidebar the viewer's panel (its surface, its 232px default width) with its content on the panel's 16px inset and
 // Settings pinned at its foot, and the place on screen on 24px gutters, 20px under the navbar (12px by 16px in a narrow
 // home), its tiles 232px at least.
@@ -175,6 +176,8 @@ test("the navbar's logo's drawn mark stands 16px in, and the Home is the panel's
   assert.match(navbar, /cn\(NAVBAR_ROW_CLASS, "relative border-border /);
   assert.match(navbar, /"cad-navbar-logo w-control justify-start px-\[calc\(\(var\(--cad-control\)-16px\)\/2\)\]"/);
   assert.match(navbar, /const NAV_ITEM_CLASS = "flex h-control /);
+  // The logo first, then the toggle edge to edge with it, no offset of its own.
+  assert.match(navbar, /\{onHome \|\| menu \? <Logo [^\n]*\n\s*\{panels\?\.left \? <span className="flex shrink-0 items-center"><PanelToggleButton /);
 });
 
 // The panel's rows have ONE owner of their horizontal geometry (`docs/design-system.md`, "Spacing and the panel inset"): the row

@@ -98,7 +98,7 @@ export const ViewerNavbar: ComponentType<{
   actions?: ReactNode;
   /**
    * The panel's toggle (`../panelToggles.js`, said by its frame: a file's view's, or the home's sidebar's): the row's
-   * first control, before the logo, the same neutral button open or shut (`aria-expanded` says which).
+   * control right after the logo, the same neutral button open or shut (`aria-expanded` says which).
    */
   panels?: import("../panelToggles.js").PanelToggles | null;
   /** Over the home: the two places its controls go (its heading; the search and Import), on the grid's column (`../navbarSlots.js`). */

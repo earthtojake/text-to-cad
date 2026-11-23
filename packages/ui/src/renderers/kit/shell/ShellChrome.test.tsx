@@ -553,7 +553,7 @@ it("a dismissed alert's own icon, at the navbar's right, brings its card back; i
   const right = () => [...document.querySelector('[data-viewer-navbar] > div')!.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'));
   const card = () => screen.queryByRole('alert');
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
-  // View then Preview at the row's right (its panel's toggle is the row's first control, at its left); the strip holds
+  // View then Preview at the row's right (its panel's toggle at its left, after the logo); the strip holds
   // neither.
   const view = ['Display', 'Preview'];
   expect([right(), barButtons(), document.querySelector('[role=group][aria-label="Interaction tools"] [data-view-controls]')])

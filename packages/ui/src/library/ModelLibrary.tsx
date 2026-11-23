@@ -347,7 +347,7 @@ export interface LibraryOrigin {
 
 /**
  * The host's home: every document the viewer knows, one place at a time, to open again. The viewer's navbar is over it
- * (the sidebar's toggle, the logo, the host's update and Full size, as over a file), holding "Home", the search and, where the
+ * (the logo, the sidebar's toggle, the host's update and Full size, as over a file), holding "Home", the search and, where the
  * host has a chooser, Import (its File and its Folder); with no navbar they stand in a bar of the page's own. The page
  * is on the page's colour (`--background`), full width.
  *

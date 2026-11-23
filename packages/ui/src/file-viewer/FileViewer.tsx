@@ -328,8 +328,8 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const homeMenu = goHome ? menu : null;
   // ⌘K (Ctrl+K) opens the search, where the host has one, from anywhere on the page but Preview.
   useSearchKey(onSearch, { platform: appearance.platform, enabled: previewing !== key });
-  // The navbar is drawn over every file and over the host's home — there the sidebar's toggle, the logo (the way to
-  // Recents), Back and Forward where the host keeps the view's history, and the host's
+  // The navbar is drawn over every file and over the host's home — there the logo (the way to Recents), the sidebar's
+  // toggle, Back and Forward where the host keeps the view's history, and the host's
   // actions, as over a file — never over a view drawn small with no chrome
   // (`compact`: an offscreen picture), never where the host asks for the view alone (`chrome: "bare"`),
   // and not while the renderer's Preview is up, which draws its own bar in its place.

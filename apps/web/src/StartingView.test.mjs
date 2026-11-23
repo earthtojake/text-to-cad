@@ -57,16 +57,19 @@ test('the starting view is the app\'s frame before the server answers', async ()
     assert.ok(view.querySelector('header[data-viewer-navbar]'));
     assert.ok(view.querySelector('aside[data-panel-loading]'));
     assert.ok(view.querySelector('[data-loading-step]'));
+    // The logo first, the link home it will be, then the panel's toggle, as the app's row has them.
+    const row = [...view.querySelectorAll('header[data-viewer-navbar] nav > *')].slice(0, 2);
+    assert.deepEqual(row.map(node => node.getAttribute('data-navbar-logo') ?? node.querySelector('[data-navbar-panel="left"]')?.getAttribute('data-navbar-panel')), ['home', 'left']);
     assert.deepEqual(page.fetched, []);
   } finally { await page.unmount(); }
-  // The home's address: the home's navbar with its sidebar's toggle before its logo, the link home it will be; the
+  // The home's address: the home's navbar with its logo first, the link home it will be, then its sidebar's toggle; the
   // sidebar's stand-in (the panel's surface, placeholder rows where its places will be, Settings at its foot), and
   // the indicator on the page's background beside it.
   const home = await starting('http://cad.local/');
   try {
     const lead = [...home.document.querySelectorAll('[data-starting-view] header[data-viewer-navbar] nav > *')];
-    assert.deepEqual(lead.map(node => node.querySelector('[data-navbar-panel="left"]')?.getAttribute('aria-expanded') ?? node.getAttribute('data-navbar-logo')), ['true', 'home']);
-    assert.deepEqual([lead[1].tagName, lead[1].getAttribute('href'), lead[1].classList.contains('cad-navbar-logo')], ['A', '/', true]);
+    assert.deepEqual(lead.map(node => node.querySelector('[data-navbar-panel="left"]')?.getAttribute('aria-expanded') ?? node.getAttribute('data-navbar-logo')), ['home', 'true']);
+    assert.deepEqual([lead[0].tagName, lead[0].getAttribute('href'), lead[0].classList.contains('cad-navbar-logo')], ['A', '/', true]);
     const sidebar = home.document.querySelector('[data-starting-home] aside[data-library-sidebar]');
     assert.deepEqual([sidebar.hidden, sidebar.style.width, Boolean(sidebar.querySelector('[data-tree-rows-loading]')), sidebar.querySelectorAll('[data-place]').length,
       Boolean(sidebar.querySelector('[data-app-foot] [data-app-settings]'))], [false, '232px', true, 0, true]);

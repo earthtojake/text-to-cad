@@ -174,7 +174,7 @@ it('draws the navbar over every file, named by its name, and over the home with 
   expect([home.mock.calls.length, screen.queryByRole('menu')]).toEqual([1, null]);
 });
 
-it('draws the view\'s panel toggle first in the navbar, before the logo: the same neutral button open or shut, its state aria-expanded, its icon the sidebar\'s; none over a home that has no sidebar', async () => {
+it('draws the view\'s panel toggle in the navbar right after the logo: the same neutral button open or shut, its state aria-expanded, its icon the sidebar\'s; none over a home that has no sidebar', async () => {
   const user = userEvent.setup();
   const left = vi.fn();
   // A view whose frame says its toggle, as `ViewFrame.jsx` does.
@@ -192,10 +192,10 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   await screen.findByText('shown');
   const toggle = () => navbar()!.querySelector<HTMLElement>('[data-navbar-panel="left"]')!;
   await waitFor(() => expect(toggle()).not.toBeNull());
-  // The toggle, then the logo, then the name and its ⋯; nothing of it at the row's right.
+  // The logo, then the toggle, then the name and its ⋯; nothing of it at the row's right.
   const order = [...navbar()!.querySelectorAll('[data-navbar-logo], [data-file-name], [data-testid="file-actions"], [data-navbar-panel], [aria-label="Full size"]')]
     .map(node => node.getAttribute('data-navbar-panel') ?? (node.hasAttribute('data-navbar-logo') ? 'logo' : null) ?? node.getAttribute('aria-label') ?? (node.hasAttribute('data-file-name') ? 'name' : '?'));
-  expect(order).toEqual(['left', 'logo', 'name', 'File actions', 'Full size']);
+  expect(order).toEqual(['logo', 'left', 'name', 'File actions', 'Full size']);
   const look = () => [toggle().getAttribute('aria-label'), toggle().getAttribute('aria-expanded'), toggle().getAttribute('aria-pressed'), toggle().getAttribute('data-variant')];
   expect(look()).toEqual(['Show panel', 'false', null, 'ghost']);
   // Its icon: the sidebar's own (a rounded rectangle and a short line), not lucide's panel.
@@ -218,8 +218,8 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   await screen.findByText('home');
   expect(navbar()!.querySelector('[data-navbar-panel]')).toBeNull();
   cleanup();
-  // A home that says its sidebar's toggle, as a view's frame says its panel's, has it from its first frame, first in the
-  // row; a document shown after it has its own, and the home's is gone with the home.
+  // A home that says its sidebar's toggle, as a view's frame says its panel's, has it from its first frame, after the
+  // logo; a document shown after it has its own, and the home's is gone with the home.
   function Sided() {
     const [shown, setShown] = React.useState(true);
     usePanelToggles(React.useMemo(() => ({ left: { open: shown, label: shown ? 'Hide panel' : 'Show panel', shortcut: '⌘\\', toggle: () => setShown(value => !value) } }), [shown]), { early: true });
@@ -228,8 +228,8 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   const homed = { ...host, navigation: { openFile() {}, home() {} } };
   const page = (file: string | null) => <FileViewer file={file} host={homed as any} renderers={[renderer]} state={{}} onStateChange={() => {}} presentation={{ home: <Sided /> } as any} />;
   const view = render(page(null));
-  expect([look(), navbar()!.querySelector('nav')!.firstElementChild!.contains(toggle()), toggle().compareDocumentPosition(screen.getByRole('button', { name: 'Home' })) & Node.DOCUMENT_POSITION_FOLLOWING])
-    .toEqual([['Hide panel', 'true', null, 'ghost'], true, Node.DOCUMENT_POSITION_FOLLOWING]);
+  expect([look(), navbar()!.querySelector('nav')!.firstElementChild!.getAttribute('data-navbar-logo'), toggle().compareDocumentPosition(screen.getByRole('button', { name: 'Home' })) & Node.DOCUMENT_POSITION_PRECEDING])
+    .toEqual([['Hide panel', 'true', null, 'ghost'], 'home', Node.DOCUMENT_POSITION_PRECEDING]);
   await user.click(toggle());
   expect(look()).toEqual(['Show panel', 'false', null, 'ghost']);
   view.rerender(page(FILE));
@@ -259,8 +259,8 @@ it('draws the home\'s own controls in its navbar on the grid\'s column: the logo
   expect([navbar()!.style.paddingLeft, navbar()!.style.paddingRight]).toEqual(['', '']);
   const lead = navbar()!.querySelector('nav')!;
   expect([lead.nextElementSibling === home, home.firstElementChild === left]).toEqual([true, true]);
-  // The sidebar's toggle first, before the logo, and no ⋯ on the home; the app menu is the sidebar's Settings.
-  expect([lead.firstElementChild!.querySelector('[data-navbar-panel="left"]')?.getAttribute('aria-expanded'), lead.lastElementChild!.getAttribute('data-navbar-logo'),
+  // The logo first, then the sidebar's toggle, and no ⋯ on the home; the app menu is the sidebar's Settings.
+  expect([lead.lastElementChild!.querySelector('[data-navbar-panel="left"]')?.getAttribute('aria-expanded'), lead.firstElementChild!.getAttribute('data-navbar-logo'),
     navbar()!.querySelector('[data-testid="file-actions"]'), navbar()!.querySelector('[data-navbar-menu]')]).toEqual(['true', 'home', null, null]);
   // The page's own row: Sort and the layout control at its right, no heading, no search; one kind of document, so no chips.
   const row = document.querySelector<HTMLElement>('.cad-library-toolbar')!;

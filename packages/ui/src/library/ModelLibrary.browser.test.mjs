@@ -54,12 +54,14 @@ test("a wide home has its places in a 232px sidebar on the panel's surface, full
     assert.deepEqual([side.x, side.width, side.y, side.bottom], [0, 232, navbar.bottom, 900], "232px at the window's edge, from the navbar to the bottom");
     assert.deepEqual(await style(surface, "backgroundColor", "borderRightWidth"), [await token(page, "--sidebar"), "1px"]);
     assert.equal(await sidebar.evaluate((node) => Boolean(node.closest("aside[data-library-sidebar]"))), true);
-    // Its toggle is the navbar's first control, its icon on the panel's 16px inset; then the logo, then Home.
+    // The logo first, its drawn mark on the panel's 16px inset (its 16px image 14px in, the artwork 2px inside it); then
+    // its toggle, the next 28px tile edge to edge with it; then Home.
     const toggle = page.locator('[data-viewer-navbar] [data-navbar-panel="left"]');
-    assert.deepEqual([await toggle.getAttribute("aria-expanded"), (await box(toggle.locator("svg"))).x, (await box(toggle)).height], ["true", 16, 28]);
+    assert.equal((await box(page.locator("[data-viewer-navbar] [data-navbar-logo] img"))).x + 2, 16);
+    assert.deepEqual([await toggle.getAttribute("aria-expanded"), (await box(toggle)).x, (await box(toggle.locator("svg"))).x, (await box(toggle)).height], ["true", 36, 42, 28]);
     const lead = await page.locator("[data-viewer-navbar]").evaluate((bar) => [...bar.querySelectorAll('[data-navbar-panel="left"], [data-navbar-logo], h1')]
       .map((node) => node.getAttribute("data-navbar-panel") ?? node.getAttribute("data-navbar-logo") ?? node.textContent));
-    assert.deepEqual(lead, ["left", "home", "Home"]);
+    assert.deepEqual(lead, ["home", "left", "Home"]);
     // The navbar's row over it is the row over a file: its own 8px a side, on no centred column.
     assert.deepEqual(await style(page.locator("[data-viewer-navbar]"), "paddingLeft", "paddingRight"), ["8px", "8px"]);
     // Its rows are the panel's: 28px, the panel's one type size, their glyph on the 16px inset and their count ending on it.

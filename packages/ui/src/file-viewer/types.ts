@@ -276,8 +276,8 @@ export interface FileViewerProps {
   onError?: (error: Error) => void;
   presentation?: {
     /**
-     * The host's home, shown with no file: a page of its own under the navbar, which has there its sidebar's toggle
-     * (which the home says, `panelToggles.js`), the logo, Back and Forward and the host's actions. The host's links
+     * The host's home, shown with no file: a page of its own under the navbar, which has there the logo, its sidebar's
+     * toggle (which the home says, `panelToggles.js`), Back and Forward and the host's actions. The host's links
      * and the app's menu are the panel's foot's (`PanelFoot.jsx`), which the home's sidebar ends in.
      */
     home?: ReactNode;

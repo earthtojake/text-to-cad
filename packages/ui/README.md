@@ -2,8 +2,8 @@
 
 The shared React interface for text-to-cad. `FileViewer` is the complete file view:
 one file by its absolute path (`/a/b.step`, `C:/a/b.step`, `/`-separated in every
-app), or the host's home with none, under a navbar — the panel's toggle, the logo that
-leads home, the project the file is in and the file's name, the file menu — with the file's
+app), or the host's home with none, under a navbar — the logo that leads home, the
+panel's toggle, the project the file is in and the file's name, the file menu — with the file's
 content and the loading and error states ([FileViewer](docs/file-viewer.md)).
 `CadViewer` (`@cad/ui/cad-viewer`) is the viewer every app shows:
 FileViewer over a CAD client, with the six CAD renderers, the home (the projects and the
@@ -303,7 +303,7 @@ resting on its toggle peeks it over the model, a floating card 4px in from the e
 panel's is, pushing nothing, kept nowhere and pinned only by the toggle (`kit/shell/usePanelPeek.js`); until the
 person opens or closes it on a file, it follows the view, collapsed where it would leave the model under 640px, never
 written, and after that their choice holds on that file at any width (`kit/shell/sidebars.js`); it is 232px wide
-(budgeted for three tabs) until its grip sets another width, from 200 to 480px at any window width, its toggle the navbar's first control, before the logo (`file-viewer/panelToggles.js`; ⌘\); on a
+(budgeted for three tabs) until its grip sets another width, from 200 to 480px at any window width, its toggle the navbar's, right after the logo (`file-viewer/panelToggles.js`; ⌘\); on a
 phone the toggle opens it as a sheet from the left (`primitives/sheet.jsx`). How it shares the page is one frame
 (`file-viewer/panelFrame.jsx`, on `file-viewer/PanelSurface.jsx`), which the home's sidebar mounts too: the same
 panel over the home, holding its places (`library/LibrarySidebar.jsx`). Both end in one foot
@@ -348,9 +348,9 @@ Authored material color, finish and opacity are read-only in every style. There
 is no Materials editor or persisted material override. See [View styles](docs/render-mode.md) and
 [loading](docs/loading.md).
 
-The navbar leads, over a file with a panel and over the home, with the panel's toggle, then the logo (the C mark,
-over the home and over a document alike), which is the way home wherever the host has a home: a link to it where the
-host gives it an address, a button otherwise, with a hint saying so. The app's links — GitHub, Discord, X and Send
+The navbar leads, on every page, with the logo (the C mark, over the home and over a document alike), which is the
+way home wherever the host has a home: a link to it where the host gives it an address, a button otherwise, with a
+hint saying so. The panel's toggle follows it, over a file with a panel and over the home, so the logo never moves. The app's links — GitHub, Discord, X and Send
 feedback (a new issue titled "Feedback: " where the host has a tracker) — are icons in the panel's foot, the row at
 the bottom of the sidebar on the home and over a document, beside Settings, a cog whose menu holds the person's
 settings (Language, Telemetry, Theme) and, in gray, the version and who made it. A host with no home (a view
@@ -367,7 +367,7 @@ or a file adds: a dismissed alert's icon, the host's actions (the
 CAD app's Full size), after the view's own, which it portals into the navbar's view slot (Display, then a 3D view's
 or a board's Preview). A host whose own frame is its navigation shows
 the view alone (`chrome: "bare"`, the CAD app's file handler), with no navbar at all. With no
-file a view shows the host's home under the same navbar (its sidebar's toggle, the logo, which goes to Recents,
+file a view shows the host's home under the same navbar (the logo, which goes to Recents, its sidebar's toggle,
 Back and Forward where the host keeps the view's history, and the host's
 actions, and the home's own Home, search and Import: a file, or a folder opened as a project): a
 sidebar of places (Recents, Pinned, each project, Standalone, over the panel's foot), which is the viewer's panel

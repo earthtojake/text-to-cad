@@ -116,7 +116,7 @@ it("puts Open in new tab with the places it opens in, and Previous and Next in p
   expect(beside.onSelect).toHaveBeenCalledTimes(1);
 });
 
-it("draws the logo as the way home where it is handed one (a link with an address, a button without), and as the app menu's button where it is handed only a menu; over the home too, after the panel's toggle", async () => {
+it("draws the logo as the way home where it is handed one (a link with an address, a button without), and as the app menu's button where it is handed only a menu; over the home too, first, the panel's toggle after it", async () => {
   const onHome = vi.fn();
   const menu = { colorScheme: { preference: 'system' as const, onPreferenceChange() {} } };
   const logo = () => document.querySelector<HTMLElement>('[data-navbar-logo]');
@@ -132,11 +132,11 @@ it("draws the logo as the way home where it is handed one (a link with an addres
   expect([logo()!.tagName, logo()!.getAttribute('type'), logo()!.getAttribute('aria-haspopup')]).toEqual(['BUTTON', 'button', null]);
   fireEvent.click(logo()!);
   expect([onHome.mock.calls.length, screen.queryByRole('menu')]).toEqual([2, null]);
-  // The panel's toggle is the row's first control over the home as over a file.
-  const first = document.querySelector('nav')!.firstElementChild!.querySelector<HTMLElement>('[data-navbar-panel="left"]')!;
-  expect([first.getAttribute('aria-expanded'), first.getAttribute('aria-label'), first.compareDocumentPosition(logo()!) & Node.DOCUMENT_POSITION_FOLLOWING])
-    .toEqual(['true', 'Hide panel', Node.DOCUMENT_POSITION_FOLLOWING]);
-  fireEvent.click(first);
+  // The logo is the row's first control over the home as over a file, the panel's toggle after it.
+  const lead = document.querySelector('nav')!;
+  const second = lead.children[1]!.querySelector<HTMLElement>('[data-navbar-panel="left"]')!;
+  expect([lead.firstElementChild === logo(), second.getAttribute('aria-expanded'), second.getAttribute('aria-label')]).toEqual([true, 'true', 'Hide panel']);
+  fireEvent.click(second);
   expect(toggle.toggle).toHaveBeenCalledTimes(1);
   // With no home: the app menu's button, as it was.
   rerender(<ViewerNavbar file={FILE} menu={menu} />);

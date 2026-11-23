@@ -27,7 +27,7 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   file's, `filePanel.js`): the file's structure, then the file's own settings (Parameters, Joints, Animation), as
  *   its tabs. How it shares the view is the panel's frame (`file-viewer/panelFrame.jsx`, the home's sidebar's too). Open, it always pushes the model aside (a view that would leave the model under 640px beside it starts it collapsed, unwritten:
  *   `sidebars.js`); ⌘\ (Ctrl+\) toggles it (`panelControl`). Its toggle is the
- *   navbar's (`file-viewer/panelToggles.js`), its first control: a collapsed panel leaves nothing over the model but
+ *   navbar's (`file-viewer/panelToggles.js`), after its logo: a collapsed panel leaves nothing over the model but
  *   while a mouse rests on that toggle, when it peeks over the view, pushing nothing (`usePanelPeek.js`), until the
  *   pointer has left both, Escape, a press on the model, or a click on the toggle (or ⌘\) pins it. On a
  *   phone the same toggle opens it as a sheet from the left (shadcn's Sheet) under the navbar, over the model with no scrim,

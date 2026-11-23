@@ -28,7 +28,7 @@ const isPanelKey = event => (event.code === "Backslash" || event.key === "\\") &
  * The home's frame under its navbar: the sidebar at the left, and the place on screen (`children`) in the room it
  * leaves. The sidebar behaves as a document's panel does:
  *
- * - Pinned, it pushes the page; collapsed, it leaves nothing. Its toggle is the navbar's first control, said from the
+ * - Pinned, it pushes the page; collapsed, it leaves nothing. Its toggle is the navbar's, after the logo, said from the
  *   home's first paint; ⌘\ (Ctrl+\) does what the toggle does, outside a text field.
  * - Until the person opens or closes it, the home's width decides (open where the page keeps 640px beside the
  *   default 232px), again at every resize; after, their choice holds at any width.

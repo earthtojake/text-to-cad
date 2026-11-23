@@ -25,16 +25,17 @@ const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", "cop
 /**
  * The row above a file and above the host's home in a page's chrome (`FileViewer`'s `chrome: "page"`,
  * the web viewer's): the same row whatever is open, so a person finds each control in the same place.
- * Over the home it has only the panel's toggle, the logo, Back and Forward and the host's
+ * Over the home it has only the logo, the panel's toggle, Back and Forward and the host's
  * actions. A host that shows the view alone (`chrome: "bare"`: the CAD app's file
  * handler) has no navbar, and Preview hides it in every host, drawing its own bar in its place.
  *
- * Left, in this order: the panel's toggle, over a file with a panel and over the home, whose sidebar is the same panel
- * (below); the text-to-cad logo (the C mark, over the home and over a document alike), the way home: where the host
- * has a home (`onHome`) a link to it (Recents; a real link where the host gives it an address, `homeHref`), a button
- * otherwise, with a hint saying so; where it has none (a view that shows one file alone), the button that opens the
- * app's menu (`AppMenu`: the person's settings, feedback and links, which a host with a home keeps in the panel's
- * foot, `../PanelFoot.jsx`, at the bottom of the sidebar on the home and over a document); Back and Forward,
+ * Left, in this order: the text-to-cad logo (the C mark, over the home and over a document alike), always first, so the
+ * way home stands in one place on every page: where the host has a home (`onHome`) a link to it (Recents; a real link
+ * where the host gives it an address, `homeHref`), a button otherwise, with a hint saying so; where it has none (a view
+ * that shows one file alone), the button that opens the app's menu (`AppMenu`: the person's settings, feedback and
+ * links, which a host with a home keeps in the panel's foot, `../PanelFoot.jsx`, at the bottom of the sidebar on the
+ * home and over a document); the panel's toggle, over a file with a panel and over the home, whose sidebar is the same
+ * panel (below); Back and Forward,
  * where the host keeps the view's own history (`history`), on a desktop's row alone (a phone's has
  * no room for them); where the document is in a project, the project's name and a slash, muted, which goes to the
  * home at that project (`project`: Figma's location before a file's name; a folder tile in a narrow row and on a
@@ -44,10 +45,10 @@ const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", "cop
  * project, Import its folder as a project — a model's Copy path and file manager acting on its script. The menu and
  * its submenus are shadcn's own width.
  *
- * The panel's toggle (`panels.left`, which the panel's frame says: `../panelToggles.js`), the row's first control,
- * before the logo, over a file that has a panel and over the home; the strip's 28px tile, the same neutral button
- * open or shut, its tooltip naming its key, its icon on the panel's inset (`--panel-inset`, 16px), the line every
- * text and control in the panel beside it stands on.
+ * The panel's toggle (`panels.left`, which the panel's frame says: `../panelToggles.js`), right after the logo, over a
+ * file that has a panel and over the home; the strip's 28px tile, the same neutral button open or shut, its tooltip
+ * naming its key. It comes second because it is there only where the page has a panel: first, it would move the logo
+ * on every page that has none.
  *
  * Right, only what a host or a file adds, in this order: the file's own actions (the viewer's
  * one: a dismissed alert's icon, which brings its card back); the view's own controls, Display (the plain cube) then,
@@ -318,7 +319,7 @@ export function SidebarIcon(props) {
 }
 
 /**
- * The panel's toggle, the row's first control: the strip's 28px tile, the same neutral button whether its panel is
+ * The panel's toggle, right after the logo: the strip's 28px tile, the same neutral button whether its panel is
  * open or shut (no pressed fill: the panel beside the model says which), its state said to assistive technology
  * (`aria-expanded`, the panel pinned open or not; a peek is not said), its tooltip its name ("Hide panel", "Show panel")
  * and its key, at its right, on the navbar's row, so it never stands over the panel peeking under it. A mouse resting
@@ -372,13 +373,13 @@ export function ViewerNavbar({ onHome: goHome, homeHref = null, menu = null, his
   const mobile = useViewerMobile();
   const header = useRef(null), lead = useRef(null), trail = useRef(null);
   const homing = Boolean(homeSlots && !file);
-  // The row's controls at THE scale (`globals.css`), one rule on a desktop and a phone: the toggle, the logo, the name
+  // The row's controls at THE scale (`globals.css`), one rule on a desktop and a phone: the logo, the toggle, the name
   // and its ⋯, edge to edge, each the control tall, every icon centred in its tile.
   const leadNav = <nav ref={lead} aria-label={t("navbar.viewer")} className={cn("flex min-w-0 items-center overflow-hidden text-sm", homing ? "shrink-0" : "flex-1")}>
-    {/* The panel's toggle first, where the page has a panel (a file's, the home's sidebar), then the logo, edge to edge. Its icon
-        stands on the panel's inset, 16px in: the row's 8px, 2px here and its 28px tile's own 6px round its 16px icon. */}
-    {panels?.left ? <span className="ml-0.5 flex shrink-0 items-center"><PanelToggleButton toggle={panels.left} /></span> : null}
+    {/* The logo first, on every page, so the way home never moves; then the panel's toggle where the page has a panel
+        (a file's, the home's sidebar), edge to edge with it as the row's other controls are. */}
     {onHome || menu ? <Logo onHome={onHome} href={homeHref} menu={menu} /> : null}
+    {panels?.left ? <span className="flex shrink-0 items-center"><PanelToggleButton toggle={panels.left} /></span> : null}
     {/* A phone's row has no room for them: Back and Forward are a desktop's alone. */}
     {history && !mobile ? <HistoryButtons viewHistory={history} /> : null}
     {file ? <span className="flex min-w-0 items-center">
@@ -388,15 +389,15 @@ export function ViewerNavbar({ onHome: goHome, homeHref = null, menu = null, his
     </span> : null}
   </nav>;
   return (
-    // The logo's drawn mark stands on the page's 16px gutter, the Home's grid's left edge
-    // (`.cad-library-content`) and the view's panel's 16px line: the row's 8px, its button's 6px, and
-    // the 2px the mark's artwork sits in from its 16px image's edge.
+    // The logo's drawn mark, the row's first glyph on every page, stands on the page's 16px gutter, the
+    // Home's grid's left edge (`.cad-library-content`) and the view's panel's 16px line: the row's 8px,
+    // its button's 6px, and the 2px the mark's artwork sits in from its 16px image's edge.
     // On the chrome's colour, a step off the canvas's (`--sidebar`: lighter than white's off-white, a
     // step above the dark canvas), as the panel beside a board or a model is: the frame reads as frame.
     <header ref={header} className={cn(NAVBAR_ROW_CLASS, "relative border-border bg-sidebar text-foreground", className)} data-viewer-navbar=""
       style={homing ? HOME_ROW_STYLE : undefined}>
       {leadNav}
-      {/* Over the home: its heading after the logo, the search and Import at the column's right. */}
+      {/* Over the home: its heading after the logo and the toggle, the search and Import at the column's right. */}
       {homing ? <div className="flex min-w-0 flex-1 items-center justify-between gap-2" data-navbar-home="">
         <div ref={homeSlots.left} className="flex min-w-0 items-center" data-navbar-home-left="" />
         <div ref={homeSlots.right} className="flex shrink-0 items-center gap-2" data-navbar-home-right="" />

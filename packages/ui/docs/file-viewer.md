@@ -81,7 +81,7 @@ cleanup, while it still belongs to the same source.
 ## The navbar and the project
 
 The navbar is drawn over every file from the moment one is asked for, and over the
-host's home — there the home's sidebar's toggle, the logo, Back and Forward where the
+host's home — there the logo, the home's sidebar's toggle, Back and Forward where the
 host keeps the view's history, and the host's actions, where they stand over
 a file — never for a `compact` view (a
 picture: the home's thumbnails), never where the host asks for the view alone
@@ -90,10 +90,6 @@ picture: the home's thumbnails), never where the host asks for the view alone
 Preview is up (`RendererViewProps.onPreviewChange`): the viewer's Preview draws its own
 bar in its place and gives it back as it closes. Over a file, left to right:
 
-- the panel's toggle, where the page has a panel (`panelToggles.js`, said by the panel's frame, `panelFrame.jsx`: a
-  file's view's, and over the home its sidebar's): the strip's
-  28px tile, the same neutral button open or shut, which shows and hides the panel (`⌘\` or `Ctrl+\`), a mouse
-  resting on it peeking the collapsed panel over the view;
 - the text-to-cad "C" logo (the same 16px mark over the home). Where the host has a home (`navigation.home`) it is
   the way home (Recents), named Home with a hint saying so: a real link where the host gives the home an address
   (`navigation.hrefOf({ home: { view: "recents" } })`: a plain click goes home in this view, a modified or middle
@@ -103,6 +99,11 @@ bar in its place and gives it back as it closes. Over a file, left to right:
   `host.links`, `appSettings` and `environment.platform`; where the host has a home it hands it down instead
   (`navbarSlots.js`'s `AppMenuContext`) to the panel's foot (`PanelFoot.jsx`), the row at the bottom of the sidebar on
   the home and over a document: the links as icons, and Settings, a cog whose menu holds the settings;
+- the panel's toggle, after the logo, where the page has a panel (`panelToggles.js`, said by the panel's frame,
+  `panelFrame.jsx`: a file's view's, and over the home its sidebar's): the strip's
+  28px tile, the same neutral button open or shut, which shows and hides the panel (`⌘\` or `Ctrl+\`), a mouse
+  resting on it peeking the collapsed panel over the view. The logo leads because it is the way home and keeps one
+  place on every page; the toggle is only where there is a panel;
 - Back and Forward, where the host keeps the view's own history (`history`, a
   `ViewerHistory`: the CAD app's views; a browser's page has its own and hands none): two
   arrows, each there always and disabled where it has nowhere to go;

@@ -195,10 +195,10 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
   the stylesheet's tokens, `--sidebar` and `--border`, in the tab's theme its inline script set; `src/shell.test.mjs`
   holds it to the navbar's own). While the page asks the server what it is (`main.tsx`), it draws the app's own frame
   as the app's first frame does (`StartingView.tsx`): the real file viewer, inert and asking nothing, its file a
-  source whose every question never answers — the navbar with the panel's toggle, the logo (the link home), the name's
+  source whose every question never answers — the navbar with the logo (the link home), the panel's toggle, the name's
   empty place and the ⋯; for a document's URL the panel's stand-in (the file's kept choice in this tab's record) and the
-  loading indicator under the navbar on the viewport's Background; for the home's, the home's navbar (its sidebar's
-  toggle, the logo) over the home's own frame: its sidebar's stand-in, open or shut and as wide as this tab's record
+  loading indicator under the navbar on the viewport's Background; for the home's, the home's navbar (the logo, its
+  sidebar's toggle) over the home's own frame: its sidebar's stand-in, open or shut and as wide as this tab's record
   keeps it, with placeholder rows and the panel's foot (the links, Settings), beside the page's background and the indicator. Its words are labels and the loading line the page has always shown in the browser's
   language: the person's own comes with the server's description, so nothing else is said before it.
 - **Vite's transform cache can outlive HMR and hard reloads.** If a source
@@ -413,7 +413,7 @@ shown with a line saying what came of it ("heart-tag is now a project. Nothing w
 the folder is inside a project already, which is the one opened).
 
 The home's sidebar is the viewer's panel over the home ([the panel](../../packages/ui/docs/viewer-ux.md#the-panel)):
-the navbar's first control toggles it (⌘\ or Ctrl+\ too), pinned it pushes the place and collapsed it leaves nothing,
+the navbar's toggle, after the logo, shows and hides it (⌘\ or Ctrl+\ too), pinned it pushes the place and collapsed it leaves nothing,
 a mouse resting on the toggle peeks it, its grip sets its width (232px at first, 200 to 480), and on a phone it is a
 sheet. Until the person opens or closes it, the home's width decides. Their choice and their width are kept with this
 tab's settings (`settings.library.panel` in the tab's record, in sessionStorage), so a reload brings them back and a
@@ -553,7 +553,7 @@ project, the project's name and a slash (to that project's page on the home), th
 with its ⋯ (Export, over a file that writes formats; Search documents, ⌘K; Import its folder as a project, for a document in no project). The foot of the sidebar, on the home and over a file, holds GitHub, Discord, X and Send feedback (a new issue titled "Feedback: ") as icons, and Settings, a cog whose menu (the app menu) holds the
 person's settings (Language — Automatic or a named language —, Telemetry, Theme)
 and, in gray, the version (a link to its release notes), as in the CAD app.
-Its first control, before the logo, is the panel's toggle, over a file and over the home; at its right end the view portals its own Display (the
+Its first control is the logo, the way home in one place on every page, then the panel's toggle, over a file and over the home; at its right end the view portals its own Display (the
 plain cube) and a 3D file's or a board's Preview;
 in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,

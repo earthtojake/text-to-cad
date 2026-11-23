@@ -15,7 +15,7 @@ around it are few, and each stands in the same place for every file.
 
 | Region | Holds | Never holds | Why |
 |---|---|---|---|
-| **Navbar**, across the top | Left: the panel toggle, the logo (the way home), Back and Forward (the CAD app), the project's name, the file's name and its ⋯. Right: a put-away alert, Display, Preview, the host's actions | Tools, a switch for one file type, the camera, a list of documents, the person's settings | One bar, the same over every file and the home, so each control is where the person last found it |
+| **Navbar**, across the top | Left: the logo (the way home), the panel toggle, Back and Forward (the CAD app), the project's name, the file's name and its ⋯. Right: a put-away alert, Display, Preview, the host's actions | Tools, a switch for one file type, the camera, a list of documents, the person's settings | One bar, the same over every file and the home, so each control is where the person last found it |
 | **Panel**, at the left | Over a file: its structure (Model, Links, Parts, Nets, Layers), then what the file declares (Params, Joints, Animation), and one search over its trees. Over the home: its places. At its foot on both: the app's links (GitHub, Discord, X, Send feedback) and Settings | Tools, how the picture is drawn, what is selected; over a file, other documents | It is where the page on screen is read: a file's structure and its own settings, the home's places. One panel, behaving one way on both pages, leaves the rest of the view to the model or the place. The app's own links and settings have one place, its foot, the same on the home and over a document |
 | **Tool strip**, top centre of the view | The file's own tools, and under it the row of the tool in hand | View controls (Display, Preview, projection, zoom), a tool the file cannot use | Tools are used most, so they stay in reach, in the same place and order in every file |
 | **The corner**, top right of the view | Camera navigation only: the cube on a 3D view, one "100%" zoom menu on a flat view | Display settings, tools, +/− buttons, a Home button | The corner is where the picture is looked at from. A setting or a tool there would mix moving the camera with changing the picture |
@@ -73,14 +73,16 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - One row, the control's height plus 12px (40px; 48px on a phone), the strip's height, on `bg-sidebar` with a rule
   under it, the same over every file and the home (`ViewerNavbar.jsx`, `navbarRow.js`).
 - It is there from the first paint: the web page draws a static bar before its script runs, then `StartingView.tsx`
-  draws the real frame, toggle, logo and name included; for the home, its sidebar too, open or shut and as wide as the
+  draws the real frame, logo, toggle and name included; for the home, its sidebar too, open or shut and as wide as the
   tab kept it, with placeholder rows. Why: nothing appears or moves as the app takes over.
-- **Left**, edge to edge: the panel toggle (over a file that has a panel, and over the home); the logo; Back and
+- **Left**, edge to edge: the logo; the panel toggle (over a file that has a panel, and over the home); Back and
   Forward where the host keeps the view's history (the CAD app; desktop only, disabled with nowhere to go); for a
   document in a project, the project's name and a slash, muted, which goes to that project's page on the home (Figma's
-  location before a file's name); the file's name (no glyph, no menu of its own); its ⋯. Past the toggle they have no
-  fill at rest, the accent fill on hover and while their menu is open; the name and the ⋯ have no tooltip, since each
-  says what it is.
+  location before a file's name); the file's name (no glyph, no menu of its own); its ⋯. Apart from the toggle (the
+  strip's tile), they have no fill at rest, the accent fill on hover and while their menu is open; the name and the ⋯
+  have no tooltip, since each says what it is. The Tab key moves through them in that order.
+- **The logo comes first.** Why: it is the way home, and a way somewhere stands in the same place on every page. The
+  toggle is there only where the page has a panel, so first it would move the logo on every page that has none.
 - **The logo is the way home**, wherever the host has a home: over a document, over one still loading or that failed
   to open, and over the home itself, where it goes to Recents. It is a real link where the host gives the home an
   address (the web page): a plain click goes home in this view, and ⌘ or Ctrl and a click, a middle click or the
@@ -96,8 +98,10 @@ chrome that floats over the picture. The home is the navbar over the library: it
   by the project (its name in a hint), so the way to the project is never lost, and the file's name keeps its width.
 - **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning), Display, Preview,
   then the host's actions (the CAD app's Full size).
-- The first glyph stands 16px in, on the page's gutter: the panel toggle's icon, on the panel's 16px line; else the
-  logo's drawn mark (the row's 8px, the tile's 6px and the artwork's 2px).
+- The first glyph is always the logo's drawn mark, 16px in, on the page's gutter and the panel's 16px line (the row's
+  8px, the tile's 6px and the artwork's 2px). The toggle follows edge to edge, its icon 42px in, off the panel's line.
+  Why: the line is held by the mark, the one glyph on every page; an offset to bring the toggle onto it would move the
+  logo.
 - The panel toggle is a 28px tile with the sidebar glyph, the same neutral button open or shut (`aria-expanded` says
   which; the panel beside the model already shows it). Its tooltip, "Show panel" or "Hide panel" with ⌘\, opens to its
   right and hides while the panel peeks. Over the home it is the same tile, for the home's sidebar.
@@ -158,7 +162,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
 
 #### The home
 
-- The same navbar: the sidebar's toggle, the logo (which goes to Recents), then "Home", and at the right the search
+- The same navbar: the logo (which goes to Recents), the sidebar's toggle, then "Home", and at the right the search
   and Import (where the host has a chooser: File…, Folder…). No ⋯. The search narrows the place on screen.
 - **One place at a time** (`library/ModelLibrary.tsx`, the `.cad-library` rules): Recents (the default: every document
   opened lately, across projects), Pinned, one project's page, or Standalone (the documents in no project). Why: each

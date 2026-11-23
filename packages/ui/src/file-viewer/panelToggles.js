@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useLayoutEffect } from "react";
 
-// The panel's toggle lives in the navbar (`navigation/ViewerNavbar.jsx`), its first control, before the logo. The
+// The panel's toggle lives in the navbar (`navigation/ViewerNavbar.jsx`), right after the logo. The
 // panel is the renderer's (`renderers/kit/shell/ViewFrame.jsx`) or, over the home, the home's sidebar
 // (`library/LibrarySidebar.jsx`); the navbar is the file viewer's, so the panel's frame (`panelFrame.jsx`) says what its
 // toggle is through this context and `FileViewer` hands it to the navbar. A frame drawn outside a file viewer (no
