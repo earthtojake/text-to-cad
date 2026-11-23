@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import math
 import tempfile
+import types
 import unittest
 from pathlib import Path
 
@@ -657,6 +658,87 @@ class EqualWebsTest(unittest.TestCase):
                                                     lambda point: ("", [0.0, 0.0, 0.0]))["webs"]
                     self.assertEqual(sorted((round(w["width_mm"], 3), w["cutouts"]) for w in found),
                                      [(1.0, 2), (3.0, 3)])
+
+
+class EqualNotchesAndHolesTest(unittest.TestCase):
+    E = 1e-9  # as EqualWebsTest's: rounding, made a known amount and tried either way
+    flat_of = EqualWebsTest.flat_of
+
+    def test_of_points_as_deep_the_first_is_a_notchs_and_notches_come_along_the_outline(self) -> None:
+        def pockets(e: float) -> list[tuple]:
+            points = [(0, -25 - e),  # on a straight side: the hull's vertex one way, not the other
+                      (15, -25), (15, -10 + e), (25, -10 - e), (25, -25),
+                      (45, -25), (45, 25), (-45, 25), (-45, -25),
+                      (-25, -25), (-25, -10 - e), (-15, -10 + e), (-15, -25)]
+            return [tuple(round(v, 3) for v in pocket.deepest)
+                    for pocket in plane.pockets(plane.Loop(points, [True] * len(points)))]
+
+        self.assertEqual(pockets(self.E), [(15.0, -10.0), (-25.0, -10.0)])
+        self.assertEqual(pockets(-self.E), [(15.0, -10.0), (-25.0, -10.0)])
+
+    def test_a_notchs_corner_is_one_faces(self) -> None:
+        analysis = self.flat_of(bd.Box(90, 50, 2) - bd.Pos(0, 25, 0) * bd.Box(10, 30, 4))
+        (outer,) = analysis.flat_loops
+        (pocket,) = plane.pockets(outer)
+        k = int(np.argmin(np.linalg.norm(outer.points - np.array(pocket.deepest), axis=1)))
+        named = set()
+        for other in (outer.points[k - 1], outer.points[(k + 1) % len(outer.points)]):  # a hair along either side
+            points = outer.points.copy()
+            points[k] += self.E * (other - points[k]) / np.linalg.norm(other - points[k])
+            loop = plane.Loop(points, outer.straight, label="outer")
+            named.add(sheet._outline_features(analysis, [loop], 2.0, analysis.locate)["notches"][0]["location"])
+        self.assertEqual(len(named), 1, named)
+
+    def test_notches_at_a_skins_corners_are_each_their_own_faces(self) -> None:
+        from cad import step
+
+        # a plate rounded whole, read back from a STEP: each corner's notch is as near (to 1e-11 mm) the skin
+        # as its own faces, and named by the skin all four would be one finding
+        part = (bd.Box(80, 40, 2) + tube(bd.Wire.make_rect(80, 40), 2.0)).solids()[0]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "rounded.step"
+            bd.export_step(part, str(path))
+            result = step.dfm(path, process="sheet")
+        notches = [f.location for f in result.findings if f.code == "sheet.notch_width"]
+        self.assertEqual(len(set(notches)), 4, notches)
+
+    def test_holes_as_near_are_each_a_pair(self) -> None:
+        def spacing(e: float) -> list[tuple]:
+            part = bd.Box(80, 80, 2)
+            for x in (-10, 10):
+                for y in (-10, 10):  # each hole has two neighbours as near
+                    off = e if x * y > 0 else -e
+                    part -= bd.Pos(x + off, y - off, 0) * bd.Cylinder(4, 4)
+            part.label = "part"
+            return [(item["location"], item["other"], [round(v, 3) + 0.0 for v in item["xyz"]])
+                    for item in items(measured(part), "hole_spacing")]
+
+        found = spacing(self.E)
+        self.assertEqual(len(found), 4)
+        self.assertEqual(sorted(found), sorted(spacing(-self.E)))
+
+    def test_a_pair_is_its_lesser_measure_and_a_holes_first_comes_before_any_rest(self) -> None:
+        def hole(x: float, y: float, r: float) -> plane.Loop:
+            return plane.Loop([(x - r, y), (x, y - r), (x + r, y), (x, y + r)], [False] * 4, circle=(x, y, r))
+
+        first, second = hole(0.0, 0.0, 2.2), hole(3.0, 0.0, 0.1)
+        there, back = plane.distance(first, second)[0], plane.distance(second, first)[0]
+        self.assertNotEqual(there, back)  # one length measured from either end
+        for loops in ([first, second], [second, first]):
+            self.assertEqual([d for d, _, _ in plane.nearest_pairs(loops, plane.TIE_MM)], [min(there, back)])
+        grid = [hole(x, y, 3.0) for y in (0.0, 10.0) for x in (0.0, 10.0, 20.0)]
+        pairs = [(k, other) for _, k, other in plane.nearest_pairs(grid, plane.TIE_MM)]
+        self.assertEqual(pairs, [(0, 1), (2, 1), (3, 0), (4, 1), (5, 2), (3, 4), (4, 5)])
+
+    def test_the_cap_holds_as_many_holes_as_it_can(self) -> None:
+        holes = []
+        for k in range(18 * 18):  # 612 pairs as near, at 323 holes
+            x, y = 8.0 * (k % 18), 8.0 * (k // 18)
+            loop = plane.Loop([(x - 3, y), (x, y - 3), (x + 3, y), (x, y + 3)], [False] * 4, circle=(x, y, 3.0))
+            holes.append(sheet._HoleLoop(loop, [k + 1], np.zeros(3), False, None))
+        analysis = types.SimpleNamespace(holes=holes, bends=[], ref=lambda face: f"face {face}")
+        shown = sheet._capped(sheet._holes(analysis, [])[1], "distance_mm")
+        self.assertEqual(len({item["location"] for item in shown}), sheet.ITEM_CAP)
 
 
 class TypeSideTest(unittest.TestCase):

@@ -43,7 +43,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Any, Callable
 
 import numpy as np
@@ -2402,9 +2401,10 @@ class _Analysis:
 
     # -- back onto the part -------------------------------------------------------------------------------
 
-    def locate(self, point: Any, within: float = 0.0) -> tuple[str, list[float]]:
+    def locate(self, point: Any, within: float = 0.0, last: Callable[[int], Any] = lambda face: False
+               ) -> tuple[str, list[float]]:
         """The ref of the part's face nearest a point of the flat pattern, and the point on the part: at a corner,
-        as near (``within``) two regions or two faces, the first's."""
+        as near (``within``) two regions or two faces, the first's (of faces, those ``last`` puts first)."""
         import build123d as bd
 
         p = np.asarray(point, dtype=float).reshape(1, 2)
@@ -2439,7 +2439,7 @@ class _Analysis:
             measured.append((a in self.edge_set and d <= reach, d, a))
         kept = [(d, a) for edge, d, a in measured if edge] or [(d, a) for _, d, a in measured]
         closest, first = min(kept, key=lambda found: found[0])
-        nearest = min((a for d, a in kept if d < closest + within), default=first)
+        nearest = min((a for d, a in kept if d < closest + within), key=lambda a: (last(a), a), default=first)
         return self.ref(nearest), _xyz(at)
 
 
@@ -2745,15 +2745,21 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
                 "inside_radius_mm": _r(bend.inside_radius), "bend_angle_deg": _r(bend.angle),
                 "location": item["location"], "xyz": item["xyz"]})
     pairs: dict[tuple[int, int], dict] = {}
-    for i, nearest in enumerate(plane.nearest([hole.loop for hole in analysis.holes])):
-        if nearest is not None:
-            key = (min(i, nearest[1]), max(i, nearest[1]))
-            if holes[key[0]]["kind"] != "round" and holes[key[1]]["kind"] != "round":
-                continue  # the bar between two cutouts is a web (``_outline_features``), not two holes' spacing
-            pairs.setdefault(key, {"distance_mm": _r(nearest[0]), "location": holes[key[0]]["location"],
-                                   "other": holes[key[1]]["location"], "xyz": holes[key[0]]["xyz"]})
-    spacing = sorted(pairs.values(), key=lambda item: item["distance_mm"])
-    return holes, spacing, to_bend
+    for d, i, j in plane.nearest_pairs([hole.loop for hole in analysis.holes], plane.TIE_MM):
+        key = (min(i, j), max(i, j))
+        if holes[key[0]]["kind"] != "round" and holes[key[1]]["kind"] != "round":
+            continue  # the bar between two cutouts is a web (``_outline_features``), not two holes' spacing
+        pairs[key] = {"distance_mm": _r(d), "location": holes[key[0]]["location"],
+                      "other": holes[key[1]]["location"], "xyz": holes[key[0]]["xyz"]}
+    return holes, _one_a_place_first(list(pairs.values())), to_bend
+
+
+def _one_a_place_first(items: list[dict]) -> list[dict]:
+    """``hole_spacing``'s items nearest first, and of those as near one at each place before a second at any: a
+    finding is a place's, and the list is cut at ``ITEM_CAP`` where holes as near have several pairs each."""
+    items = sorted(items, key=lambda item: item["distance_mm"])
+    first = {item["location"]: item for item in reversed(items)}
+    return sorted(items, key=lambda item: (item["distance_mm"], first[item["location"]] is not item))
 
 
 def _span_within(points: np.ndarray, lo: float, hi: float) -> tuple[float, float] | None:
@@ -2784,11 +2790,21 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
     they lie between (``cutouts``) -- one feature, where ``hole_spacing`` would say each pair of slots."""
     least = max(1e-3, 0.01 * (thickness or 0.1))
     notches, tabs, webs, gaps = [], [], [], []
-    web_at = partial(analysis.locate, within=plane.TIE_MM) if analysis is not None else locate
+    notch_at = web_at = locate
+    if analysis is not None:  # of faces as near, one no other of the family names, then no skin or bend
+        shared = analysis.skins | analysis.bend_faces  # (which all share): a finding is a location's
+
+        def own_at(named: set[str]) -> Callable[[Any], tuple[str, list[float]]]:
+            def at(point: Any) -> tuple[str, list[float]]:
+                ref, xyz = analysis.locate(point, plane.TIE_MM, last=lambda a: (analysis.ref(a) in named, a in shared))
+                named.add(ref)
+                return ref, xyz
+            return at
+        notch_at, web_at = own_at(set()), own_at(set())
     outer = [loop for loop in loops if loop.label == "outer"]
     for loop in outer:
         for pocket in plane.pockets(loop, least=least):
-            ref, xyz = locate(pocket.deepest)
+            ref, xyz = notch_at(pocket.deepest)
             notches.append({"width_mm": _r(pocket.width), "length_mm": _r(pocket.depth),
                             "length_to_width": _r(pocket.depth / pocket.width), "area_mm2": _r(pocket.area, 3),
                             "location": ref, "xyz": xyz})

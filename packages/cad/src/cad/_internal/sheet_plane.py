@@ -21,10 +21,10 @@ the loop's box, a loop against the loops whose boxes are nearest. So a panel of 
 measured in seconds and megabytes, where every ray against every segment was hours and gigabytes.
 
 **Ties.** Equal lengths of a part come out of the kernel some 1e-14 mm apart, and apart another way each time
-the part is built or moved. So where a web is placed, lengths ``within`` ``TIE_MM`` of each other are one, and
-of equal places it is the first in the loops' order and along each, which neither changes. A tie chooses a
+the part is built or moved. So where a web or a notch is placed, lengths ``within`` ``TIE_MM`` of each other are
+one, and of equal places it is the first in the loops' order and along each, which neither changes. A tie chooses a
 place and never a figure: the width said is the least found, with every station rounding could have given,
-and what is counted is every one as near (``as_near``).
+and what is counted or paired is every one as near (``as_near``, ``nearest_pairs``).
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ import numpy as np
 
 __all__ = ["CHORD_MM", "PAIRS", "SELF_CROSSING_PAIRS", "TIE_MM", "Loop", "Pocket", "Tab", "Width", "arc_points",
            "area", "as_near", "cast", "crossings", "distance", "feret", "holds", "hull", "inside", "min_rectangle",
-           "nearest", "nest", "pockets", "self_crossings", "tabs", "widths"]
+           "nearest", "nearest_pairs", "nest", "pockets", "self_crossings", "tabs", "widths"]
 
 #: The most a sampled curve's chord strays from its arc (mm): a tenth of what a laser holds, and five times
 #: fewer segments than a micron's worth would take. A whole circle is not read through its chords at all.
@@ -410,6 +410,21 @@ def nearest(loops: Sequence[Loop]) -> list[tuple[float, int] | None]:
     return [found[0] if found else None for found in as_near(loops)]
 
 
+def nearest_pairs(loops: Sequence[Loop], within: float = 0.0) -> list[tuple[float, int, int]]:
+    """Each loop with every other as near as its nearest (``within``), a pair once: (the lesser of the two
+    measures of it, the loop that found it, the other). A pick among equals would leave out a pair, and with
+    it a figure, that rounding picks elsewhere. Each loop's first comes before any loop's rest."""
+    every = as_near(loops, within)
+    ties = [(k, found) for k, near in enumerate(every) for found in near[:1]]
+    ties += [(k, found) for k, near in enumerate(every) for found in near[1:]]
+    pairs: dict[tuple[int, int], tuple[float, int, int]] = {}
+    for k, (d, other) in ties:
+        key = (min(k, other), max(k, other))
+        least, at, to = pairs.get(key, (d, k, other))
+        pairs[key] = (min(least, d), at, to)
+    return list(pairs.values())
+
+
 def as_near(loops: Sequence[Loop], within: float = 0.0) -> list[list[tuple[float, int]]]:
     """Each loop's others less than ``within`` further than its nearest, in the loops' order: (the distance, the
     other's index); none where it is alone. The others are tried nearest box first, and none whose box is
@@ -530,13 +545,15 @@ class Pocket:
 
 
 def pockets(loop: Loop, least: float = 1e-4) -> list[Pocket]:
-    """The loop's pockets off its convex hull deeper than ``least``."""
+    """The loop's pockets off its convex hull deeper than ``least``, in the order they come along it: which
+    points of a straight side the hull keeps follows their rounding, so its vertices do not order them. A
+    pocket's ``deepest`` is, of points as deep, the first along the loop."""
     points = loop.points
     n = len(points)
     on_hull = sorted(int(i) for i in hull(points))
     if len(on_hull) < 3:
         return []
-    found: list[Pocket] = []
+    found: list[tuple[int, Pocket]] = []
     for k, start in enumerate(on_hull):
         end = on_hull[(k + 1) % len(on_hull)]
         run = [(start + step) % n for step in range((end - start) % n + 1)]
@@ -562,11 +579,12 @@ def pockets(loop: Loop, least: float = 1e-4) -> list[Pocket]:
             ring = np.vstack([p, points[inner], q])
             x, y = ring[:, 0], ring[:, 1]
             enclosed = 0.5 * abs(float((x * np.roll(y, -1) - np.roll(x, -1) * y).sum()))
-            deepest = points[inner][int(depths[left + 1:right].argmax())]
-            found.append(Pocket(float(np.linalg.norm(q - p)), depth, enclosed,
-                                ((float(p[0]), float(p[1])), (float(q[0]), float(q[1]))),
-                                (float(deepest[0]), float(deepest[1])), tuple(sorted({run[left], *inner}))))
-    return found
+            deepest = points[inner][int(np.argmax(depths[left + 1:right] >= depth - TIE_MM))]
+            found.append((run[left], Pocket(float(np.linalg.norm(q - p)), depth, enclosed,
+                                            ((float(p[0]), float(p[1])), (float(q[0]), float(q[1]))),
+                                            (float(deepest[0]), float(deepest[1])),
+                                            tuple(sorted({run[left], *inner})))))
+    return [pocket for _, pocket in sorted(found, key=lambda at: at[0])]
 
 
 @dataclass(frozen=True)
