@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createHttpPromptFiles, libraryRow, projectOf, type CadClient } from '@cad/core/client';
 import { unavailablePromptContext } from '@cad/core/prompt';
-import { CadViewer, createCadFileActions, createCadFileSource, normalizePath } from '@cad/ui/cad-viewer';
+import { CadViewer, createCadFileActions, createCadFileSource, normalizePath, type CadViewerProps } from '@cad/ui/cad-viewer';
 import type { AppSetting, ColorSchemeSetting, LanguageSetting } from '@cad/ui/file-viewer';
-import type { ViewerHost, ViewerLinks } from '@cad/ui/host';
+import type { HomeLocation, NavigationTarget, ViewerLinks } from '@cad/ui/host';
 import type { ModelLibrarySource } from '@cad/ui/library';
 import type { TabStore } from '@cad/ui/tab-store';
 import type { Bridge } from './host/bridge';
@@ -17,6 +17,11 @@ import { TUNNEL_ORIGIN } from './host/tunnel';
 
 // The most steps a view's history keeps: the oldest go first.
 const HISTORY_LIMIT = 100;
+// A step of a view's history: a file, by its absolute path, or the home ('') at a place on it.
+interface Step { file: string; place: HomeLocation }
+const RECENTS: HomeLocation = { view: 'recents' };
+const samePlace = (a: HomeLocation, b: HomeLocation) => a.view === b.view && (a.view !== 'project' || (b.view === 'project' && a.project === b.project));
+const sameStep = (a: Step | undefined, b: Step) => Boolean(a) && a!.file === b.file && (b.file !== '' || samePlace(a!.place, b.place));
 
 export interface ViewReporter {
   /** This view now shows `model` (absolute), or nothing. */
@@ -27,8 +32,10 @@ export interface ViewReporter {
  * One view: the shared viewer over this host — the model a launch names, by its absolute path,
  * or with none, the home (the library, and Open) — under the navbar (`chrome: "page"`): its logo and
  * app menu, Back and Forward, the file's name and menus (its ⋯: Copy path, and Open in › Browser and
- * the file manager), and at the right the host's Full size. A view browses from its model's folder, shows what is opened in place, and adds what it
- * shows to the library. Everything differs by data — what a Quick Edit can do in the chat, whether
+ * the file manager), and at the right the host's Full size. A view shows what is opened in place, and adds what it
+ * shows to the library. A page in an app's frame has no address of its own: a place on the home (Recents, Pinned, a
+ * project's page, Standalone) is a step of the view's history, and a document's Open in browser is its page in the web
+ * viewer. Everything differs by data — what a Quick Edit can do in the chat, whether
  * the view has a home — never by where the view is.
  *
  * Codex's file handler (`surface: file`, `alone`) shows its file alone, under the same navbar: the host's own file
@@ -75,19 +82,20 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   engineOrigin?: string;
 }) {
   // Codex's file handler shows its file alone: the host's own file tree is its navigation, so it
-  // has neither the home nor a project's list (a view with no library has neither).
+  // has neither the home nor a project's name (a view with no library has neither).
   const homed = !alone;
   const source = useMemo(() => createCadFileSource(client), [client]);
   // The view's own history, as a browser keeps a tab's: what it showed — files, by absolute path,
-  // and the home ('') — the agent's shows and the person's own moves alike. Back and Forward walk
-  // them; a move after a Back drops what was ahead, and showing what is already on screen adds
+  // and the home ('') at each place the person went to on it — the agent's shows and the person's own moves alike.
+  // Back and Forward walk them; a move after a Back drops what was ahead, and showing what is already on screen adds
   // nothing.
   const launched = () => normalizePath(launch.model || '');
-  const [history, setHistory] = useState(() => ({ entries: [launched()], index: 0 }));
-  const file = history.entries[history.index] ?? '';
-  const navigate = useCallback((next: string) => setHistory(current => {
-    if (current.entries[current.index] === next) return current;
-    const entries = [...current.entries.slice(0, current.index + 1), next].slice(-HISTORY_LIMIT);
+  const [history, setHistory] = useState<{ entries: Step[]; index: number }>(() => ({ entries: [{ file: launched(), place: RECENTS }], index: 0 }));
+  const { file, place } = history.entries[history.index] ?? { file: '', place: RECENTS };
+  const navigate = useCallback((next: string, where: HomeLocation = RECENTS) => setHistory(current => {
+    const step = { file: next, place: next ? RECENTS : where };
+    if (sameStep(current.entries[current.index], step)) return current;
+    const entries = [...current.entries.slice(0, current.index + 1), step].slice(-HISTORY_LIMIT);
     return { entries, index: entries.length - 1 };
   }), []);
   const back = useCallback(() => setHistory(current => current.index > 0 ? { ...current, index: current.index - 1 } : current), []);
@@ -158,18 +166,24 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   const viewerHistory = useMemo(() => homed ? {
     canGoBack: history.index > 0, canGoForward: history.index < history.entries.length - 1, back, forward,
   } : undefined, [homed, history, back, forward]);
-  const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
-    files: source, fileActions, clipboard: frameClipboard, promptContext, promptFiles, links,
+  // A page in an app's frame has no address: no link to a document or a place (`hrefOf`). Where a launch carried a
+  // page, a document opens beside the view in the person's browser, its page in the web viewer (Open in browser); the
+  // server opens that page by the document's name and nothing else, so a place on the home is not offered.
+  const navigation = useMemo(() => (homed && openInBrowser ? { openBeside: { kind: 'browser' as const, places: false,
+    open: (target: NavigationTarget) => { if ('document' in target) openInBrowser(normalizePath(target.document)); } } } : undefined),
+    [homed, openInBrowser]);
+  const host = useMemo<CadViewerProps['host']>(() => ({
+    files: source, fileActions, clipboard: frameClipboard, promptContext, promptFiles, links, ...(navigation ? { navigation } : {}),
     // A Quick Edit copied, queued or sent, counted by the CAD app's server for its telemetry.
     usage: { used: feature => { if (feature === 'quickEdit') client.reportActivity({ quickEdit: true }); },
       // The controls a person used, and how long a tool was up, counted by the shared viewer.
       controls: counts => client.reportActivity({ controls: counts }) },
     environment: { colorScheme, locale, platform },
-  }), [client, source, fileActions, promptContext, promptFiles, links, colorScheme, locale, platform]);
+  }), [client, source, fileActions, promptContext, promptFiles, links, navigation, colorScheme, locale, platform]);
 
   // Every view is under the navbar, the file handler's too: it carries the host's controls and the panels' toggles.
   // The file on screen joins the library every CAD view shares, with its picture.
-  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} chrome="page"
+  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} place={place} chrome="page"
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
     library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory} whatsNew={whatsNew}
     fullSize={fullSize}

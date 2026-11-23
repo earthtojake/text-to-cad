@@ -98,7 +98,10 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     await viewer().host.fileActions.perform.reveal({ path: '/m/one.step', kind: 'file' });
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/reveal'), [['/api/v1/local/reveal', { path: '/m/one.step' }]]);
     assert.equal(viewer().host.links.version, '0.7.4');
-    assert.equal('navigation' in viewer().host, false, 'navigation is the shared viewer\'s: the host only shows what it is asked to');
+    // Navigation is the shared viewer's: the host only shows what it is asked to. What it adds is what only a page
+    // knows: each target's own address, and Open in new tab.
+    assert.deepEqual(Object.keys(viewer().host.navigation).sort(), ['hrefOf', 'openBeside']);
+    assert.equal(viewer().host.navigation.openBeside.kind, 'tab');
     // The page asks its server who it is, fresh, to tell another process on its port.
     assert.deepEqual(await autoReloadOptions().fetchServerInfo(), { ok: true, identityToken: 'restarted' });
     assert.deepEqual(serverCalls[0], { fresh: true });
@@ -192,10 +195,81 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.equal(new URL(window.location.href).search, '');
     assert.equal(window.history.length, beforeHome + 1);
     assert.equal(viewer().history, undefined);
+    assert.deepEqual(viewer().place, { view: 'recents' });
   } finally {
     globalThis.fetch = fetchBefore;
     await act(() => root.unmount());
     assert.equal(appearanceListeners.size, 0);
+    dom.window.close();
+  }
+});
+
+test('each place of the home has its own address: a step in the history, kept by a reload, named in the title, and linked for a new tab', async () => {
+  // A link to a project's page, carrying the page's link as every address of the page does.
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://cad.local/?project=p1&token=1800000000.mac' });
+  const { window } = dom;
+  const matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, localStorage: window.localStorage, sessionStorage: window.sessionStorage, matchMedia, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  window.matchMedia = matchMedia;
+  const fetchBefore = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => new Response(JSON.stringify(isCatalog(url, init) ? catalogOf(url)
+    : url === '/api/v1/settings' ? { language: { locale: null } } : { documents: [] }), { headers: { 'content-type': 'application/json' } });
+  const opened = [];
+  window.open = (address, name, features) => { opened.push([address, name, features]); return null; };
+  const client = { ...createWebCadClient({ document: window.document }), serverInfo: async () => ({ start: '/m' }) };
+  const root = createRoot(window.document.getElementById('root'));
+  const address = () => `${window.location.pathname}${window.location.search}`;
+  const tick = () => new Promise(resolve => setTimeout(resolve, 10));
+  try {
+    await act(() => root.render(createElement(App, { client, server: { start: '/m' }, tabStore: createTabStore(sessionTabRecord(window.sessionStorage)) })));
+    // The address names the place, as a reload of it does: nothing is rewritten, and nothing is pushed.
+    assert.deepEqual([snapshot().file, snapshot().place, address()], ['', { view: 'project', project: 'p1' }, '/?project=p1&token=1800000000.mac']);
+    // The page's title names the place, as the home says it; before it has, the page's own name.
+    assert.equal(window.document.title, 'text-to-cad');
+    await act(() => snapshot().onHomeShown({ view: 'project', project: 'p1' }, 'gearbox'));
+    assert.equal(window.document.title, 'gearbox · text-to-cad');
+    // Another place is a new step, at its own address beside what the page's carries.
+    const length = window.history.length;
+    await act(async () => { snapshot().onShow('', { view: 'pinned' }); await tick(); });
+    assert.deepEqual([snapshot().place, address(), window.history.length], [{ view: 'pinned' }, '/?view=pinned&token=1800000000.mac', length + 1]);
+    await act(async () => { snapshot().onShow('', { view: 'pinned' }); await tick(); });
+    assert.equal(window.history.length, length + 1, 'the place on screen is no navigation at all');
+    await act(async () => { snapshot().onShow('', { view: 'standalone' }); await tick(); });
+    assert.equal(address(), '/?view=standalone&token=1800000000.mac');
+    // The home with no place named is Recents, at the bare address.
+    await act(async () => { snapshot().onShow(''); await tick(); });
+    assert.deepEqual([snapshot().place, address(), window.history.length], [{ view: 'recents' }, '/?token=1800000000.mac', length + 3]);
+    // A document's page names no place; Back from it is the place the person left.
+    await act(async () => { snapshot().onShow('', { view: 'project', project: 'p 2' }); await tick(); });
+    await act(async () => { snapshot().onShow('/m/one.step'); await tick(); });
+    assert.deepEqual([snapshot().file, address()], [ONE, `/${ONE}?token=1800000000.mac`]);
+    await act(async () => { window.history.replaceState({}, '', '/?project=p+2&token=1800000000.mac'); window.dispatchEvent(new window.PopStateEvent('popstate')); await tick(); });
+    assert.deepEqual([snapshot().file, snapshot().place], ['', { view: 'project', project: 'p 2' }]);
+    await act(async () => { window.history.replaceState({}, '', '/?view=pinned&token=1800000000.mac'); window.dispatchEvent(new window.PopStateEvent('popstate')); await tick(); });
+    assert.deepEqual(snapshot().place, { view: 'pinned' });
+
+    // Every target's address is this origin's: a document's page by its id, a place's on the home. A file named by
+    // its path has no address: its page is by its id.
+    const { hrefOf, openBeside } = snapshot().host.navigation;
+    assert.equal(hrefOf({ document: TWO }), `/${TWO}?token=1800000000.mac`);
+    assert.equal(hrefOf({ document: '/m/folder/two.step' }), null);
+    assert.deepEqual(['recents', 'pinned', 'standalone'].map(view => hrefOf({ home: { view } })),
+      ['/?token=1800000000.mac', '/?view=pinned&token=1800000000.mac', '/?view=standalone&token=1800000000.mac']);
+    assert.equal(hrefOf({ home: { view: 'project', project: 'p1' } }), '/?project=p1&token=1800000000.mac');
+    // Open in new tab: that address, in a tab of this browser cut off from this page.
+    await openBeside.open({ home: { view: 'project', project: 'p1' } });
+    await openBeside.open({ document: TWO });
+    // A file by its path is asked for its id first, as a show of it is: its tab is asked for at once, inside the
+    // press, and where the browser gives none back (here), opened once the id is known.
+    await openBeside.open({ document: '/m/picked.step' });
+    assert.deepEqual(opened, [['http://cad.local/?project=p1&token=1800000000.mac', '_blank', 'noopener'], [`http://cad.local/${TWO}?token=1800000000.mac`, '_blank', 'noopener'],
+      ['', '_blank', undefined], [`http://cad.local/${PICKED}?token=1800000000.mac`, '_blank', 'noopener']]);
+    // This page stays where it was.
+    assert.deepEqual([snapshot().file, snapshot().place], ['', { view: 'pinned' }]);
+  } finally {
+    globalThis.fetch = fetchBefore;
+    await act(() => root.unmount());
+    client.dispose?.();
     dom.window.close();
   }
 });

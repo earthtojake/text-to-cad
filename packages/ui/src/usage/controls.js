@@ -97,10 +97,14 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'export_step', 'export_stl', 'export_threemf', 'export_glb', 'export_dxf', 'export_xbf', 'export_original',
   'export_gerbers', 'export_drill', 'export_pos', 'export_bom', 'export_odb', 'export_ipc', 'export_pdf',
   // The home: `home_pick` is Import's File (its Open, before), `home_import_folder` its Folder; and a project's menu
-  // and its Show all.
+  // and a long place's Show more (`home_project_more`).
   'home_search', 'home_filter_all', 'home_filter_models', 'home_filter_files', 'home_layout_grid', 'home_layout_list',
   'home_open', 'home_pick', 'home_copy_path', 'home_copy_link', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',
   'home_import_folder', 'home_project_copy_path', 'home_project_reveal', 'home_project_remove', 'home_project_more',
+  // The home's places (a row of its sidebar, an item of its heading's menu), its Sort, a document's and a project's Open
+  // in new tab (or Open in browser), and the way back to the document just left (its button, or Escape).
+  'home_place_recents', 'home_place_pinned', 'home_place_standalone', 'home_place_project',
+  'home_sort_activity', 'home_sort_name', 'home_sort_kind', 'home_open_new_tab', 'home_project_open_new_tab', 'home_back',
 ]));
 
 /**

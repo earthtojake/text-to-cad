@@ -321,10 +321,76 @@ export default {
   "home.projectTruncated": "일부 파일만 표시됩니다. 이 폴더에는 한 번에 표시할 수 있는 것보다 많은 파일이 있습니다.",
 
 
-  "home.showAll": "{count}개 모두 보기",
+  "home.place.recents": "최근 항목",
 
 
-  "home.showFewer": "간단히 보기",
+  "home.place.pinned": "고정됨",
+
+
+  "home.project": "프로젝트",
+
+
+  "home.projects": "프로젝트",
+
+
+  "home.placesAria": "위치",
+
+
+  "home.addProject": "폴더를 프로젝트로 열기",
+
+
+  "home.loadingProjects": "프로젝트 불러오는 중",
+
+
+  "home.projectsEmpty": "아직 프로젝트가 없습니다.",
+
+
+  "home.projectsFailed": "프로젝트를 읽을 수 없습니다.",
+
+
+  "home.projectGone": "이 프로젝트는 더 이상 CAD에 없습니다. 되돌리려면 폴더를 다시 여세요.",
+
+
+  "home.recentsEmpty": "최근에 연 항목이 없습니다.",
+
+
+  "home.pinnedEmpty": "아직 고정한 항목이 없습니다. 문서를 고정하면 여기에 표시됩니다.",
+
+
+  "home.standaloneEmpty": "독립 문서가 없습니다. 모든 문서가 프로젝트에 속해 있습니다.",
+
+
+  "home.showMore": "{count}개 더 보기",
+
+
+  "home.sortAria": "정렬",
+
+
+  "home.sortByAria": "정렬: {sort}",
+
+
+  "home.sort.activity": "최근 활동",
+
+
+  "home.sort.name": "이름",
+
+
+  "home.sort.kind": "종류",
+
+
+  "home.openNewTab": "새 탭에서 열기",
+
+
+  "home.openBrowser": "브라우저에서 열기",
+
+
+  "home.backTo": "{name}(으)로 돌아가기",
+
+
+  "home.columnWhere": "위치",
+
+
+  "home.columnProject": "프로젝트",
 
 
   "home.emptyTitle": "아직 아무것도 없습니다",

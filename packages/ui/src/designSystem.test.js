@@ -31,13 +31,14 @@ test("viewer chrome uses the type scale and the viewer breakpoint, never window 
 
 // Every scroll region of the chrome is the one ScrollArea primitive (`primitives/scroll-area.jsx`):
 // thin overlay bars in the theme's colours, never the platform's scrollbar. The home (the model
-// library) is a page, not chrome: it scrolls as a page does, with the platform's own scrollbar. A
+// library) is a page, not chrome: the place on screen scrolls as a page does, with the platform's own scrollbar, and
+// its sidebar, which is chrome, in a ScrollArea. A
 // strip that scrolls with no bar at all (the panel's tabs, `FlatPanel.jsx`: its scrollbar hidden,
 // `[scrollbar-width:none]`, its clipped edge faded instead) shows no scrollbar to style.
 const NATIVE_SCROLLER = /\boverflow(?:-[xy])?-(?:auto|scroll)\b/;
 const PAGES = ["library/ModelLibrary.tsx"];
 const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "primitives/dropdown-menu.jsx", "renderers/kit/status/ViewerAlertCard.jsx",
-  "search/DocumentSearch.tsx"];
+  "search/DocumentSearch.tsx", "library/LibraryPlaces.jsx"];
 
 test("every scroll region in the viewer's chrome is the ScrollArea primitive, never a native scroller", () => {
   const found = [];
@@ -51,10 +52,11 @@ test("every scroll region in the viewer's chrome is the ScrollArea primitive, ne
   for (const file of SCROLL_REGIONS) assert.match(readFileSync(join(root, file), "utf8"), /<ScrollArea\b/, `${file} scrolls in a ScrollArea`);
 });
 
-// The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"): the controls and a
-// section's title text-ui (13/20), the heading, Home, the one larger text (15/20 semibold), a name 12/16 (text-xs) and
-// its facts, a project's folder, a format's badge and the table's header 11/16 (text-tiny); a tile's glyph 16px.
-test("the Home is the chrome's type scale: the heading 15/20, names 12/16, facts 11/16, and 16px glyphs", () => {
+// The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"): the controls and Home
+// text-ui (13/20), the place's name the one larger text (15/20 semibold), a name, a project's folder and the way back
+// 12/16 (text-xs), a card's facts, a format's badge, a key and the table's header 11/16 (text-tiny); a tile's glyph
+// 16px. Its sidebar is the panel's surface: the panel's one size, from the same token.
+test("the Home is the chrome's type scale: the place's name 15/20, names 12/16, facts 11/16, and 16px glyphs", () => {
   // Its rules, without the comments that stand before them.
   const css = readFileSync(join(root, "styles/globals.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   const sizes = [...css.matchAll(/([^{}]*\.cad-library[^{}]*)\{([^}]*)\}/g)].flatMap(([, selector, body]) => {
@@ -62,23 +64,31 @@ test("the Home is the chrome's type scale: the heading 15/20, names 12/16, facts
     return size ? [[selector.trim().replace(/\s+/g, " "), size]] : [];
   });
   assert.deepEqual(sizes, [
-    [".cad-library-heading", "var(--cad-text-heading)"],
-    // In the navbar (a host's home under it), Home is the navbar's 13/20.
-    ["[data-navbar-home] .cad-library-heading", "var(--cad-text-ui)"],
+    // The sidebar: the panel's surface (`data-panel-surface`), where text-ui is the panel's one size.
+    [".cad-library-sidebar", "var(--cad-text-ui)"],
+    [".cad-library-title", "var(--cad-text-heading)"],
+    [".cad-library-path", "var(--cad-text-xs)"],
+    [".cad-library-back", "var(--cad-text-xs)"],
+    [".cad-library-key", "var(--cad-text-tiny)"],
+    // Home, in the navbar and in the page's own bar, is the navbar's 13/20.
+    [".cad-library-heading", "var(--cad-text-ui)"],
     [".cad-library-format", "var(--cad-text-tiny)"],
     [".cad-library-card .cad-library-label", "var(--cad-text-xs)"],
     [".cad-library-status", "var(--cad-text-tiny)"],
     [".cad-library-columns", "var(--cad-text-tiny)"],
     [".cad-library-row .cad-library-label", "var(--cad-text-xs)"],
-    [".cad-library-section-title", "var(--cad-text-ui)"],
-    [".cad-library-section-path", "var(--cad-text-tiny)"],
     [".cad-library-welcome-title", "var(--cad-text-heading)"],
     [".cad-library-welcome-formats", "var(--cad-text-tiny)"],
   ]);
   assert.match(css, /\.cad-library-glyph \{[^}]*width: 16px; height: 16px;/);
+  for (const file of ["library/ModelLibrary.tsx", "library/LibraryPlaces.jsx"]) {
+    assert.deepEqual([...readFileSync(join(root, file), "utf8").matchAll(/\btext-(tiny|xs)\b/g)].map(([name]) => name), [], `${file} takes its type from the stylesheet`);
+  }
   const page = readFileSync(join(root, "library/ModelLibrary.tsx"), "utf8");
-  assert.deepEqual([...page.matchAll(/\btext-(tiny|xs)\b/g)].map(([name]) => name), []);
-  assert.match(page, /className="cad-library h-full overflow-y-auto text-ui"/);
+  assert.match(page, /className="cad-library h-full text-ui"/);
+  // The place on screen is the page: it alone scrolls with the platform's scrollbar.
+  assert.match(page, /<main className="cad-library-content overflow-y-auto"/);
+  assert.equal(page.match(/\boverflow(?:-[xy])?-(?:auto|scroll)\b/g).length, 1);
 });
 
 // THE type scale (`docs/design-system.md`, "The type scale"): three interface sizes and one heading, each on a fixed
@@ -119,11 +129,16 @@ test("menus are the xs step on the row and tooltips the tiny step, from the prim
 });
 
 // The logo stands on the page's gutter (`docs/viewer-ux.md`, "The navbar"): the navbar's 8px, the logo centred in its 28px tile (6px)
-// and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page. The Home itself is a centred
-// column of its own, 1128px at most on 24px gutters, 20px under the navbar, its tiles 232px at least.
-test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1128px column on its own gutters", () => {
+// and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page. The Home itself is full width:
+// a 232px sidebar on the panel's surface with its content on the panel's 16px inset, and the place on screen on 24px
+// gutters, 20px under the navbar (12px by 16px with no sidebar), its tiles 232px at least.
+test("the navbar's logo's drawn mark stands 16px in, and the Home is a 232px sidebar beside the place on its own gutters", () => {
   const css = readFileSync(join(root, "styles/globals.css"), "utf8");
-  assert.match(css, /\.cad-library-content \{[^}]*max-width: 1128px; margin: 0 auto; padding: 20px 24px /);
+  assert.match(css, /\.cad-library-sidebar \{[^}]*width: 232px;[^}]*border-right: 1px solid var\(--border\); background: var\(--sidebar\);/);
+  assert.match(css, /\.cad-library-places \{[^}]*padding: 8px var\(--panel-inset\) /);
+  assert.match(css, /\.cad-library-content \{[^}]*flex: 1 1 0; min-width: 0; padding: 20px 24px /);
+  assert.doesNotMatch(css, /\.cad-library-content \{[^}]*max-width/);
+  assert.match(css, /\[data-library-narrow\] \.cad-library-content \{ padding: 12px 16px /);
   assert.match(css, /\.cad-library-grid \{[^}]*minmax\(232px, 1fr\)/);
   const navbar = readFileSync(join(root, "file-viewer/navigation/ViewerNavbar.jsx"), "utf8");
   // The row the control and 12px (40px), the tool strip's height, its icon buttons the strip's tile (the control, 28px):

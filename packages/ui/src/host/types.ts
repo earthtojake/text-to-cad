@@ -76,7 +76,7 @@ export interface DownloadPort {
  * documents in no project (`standalone`), or one project's page, by the project's id.
  */
 export type HomeLocation = { view: 'recents' | 'pinned' | 'standalone' } | { view: 'project'; project: string };
-/** What a link or Open in new tab names: a document, by its id (a file no page has opened yet: its path), or a place on the home. */
+/** What a link or Open in new tab names: a document, by its id (one whose row carries none: its path), or a place on the home. */
 export type NavigationTarget = { document: string } | { home: HomeLocation };
 export interface ViewerHost {
   downloads?: DownloadPort;
@@ -108,8 +108,10 @@ export interface ViewerHost {
      * Open a target beside this view, which stays as it is: the item every document's and project's menu offers.
      * `kind` says where, which is the item's words: `"tab"`, a new tab of this browser (the web page: "Open in new
      * tab"), or `"browser"`, the person's browser (a page in an app's frame: "Open in browser"). Absent: no item.
+     * `places: false`: the host opens a document beside the view but not a place on the home (the CAD app, whose
+     * server opens a document's page by its name and nothing else): a project's menu then has no such item.
      */
-    openBeside?: { kind: 'tab' | 'browser'; open(target: NavigationTarget): void | Promise<void> };
+    openBeside?: { kind: 'tab' | 'browser'; places?: boolean; open(target: NavigationTarget): void | Promise<void> };
   };
   /** The navbar's links: the version, X, Discord, GitHub and new issues. A host with none gets none. */
   links?: ViewerLinks;

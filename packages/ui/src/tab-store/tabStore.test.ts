@@ -11,7 +11,7 @@ test('the record normalizes: every setting to its bounds, the files to well-keye
   expect(TAB_RECORD_VERSION).toBe(2);
   expect(readTabRecord(undefined)).toEqual(defaultTabRecord());
   expect(defaultTabRecord()).toEqual({ version: 2, settings: {
-    toolStack: { panels: {}, collapsed: {} }, appearance: 'system', viewportBackground: 'light', library: { layout: 'grid' },
+    toolStack: { panels: {}, collapsed: {} }, appearance: 'system', viewportBackground: 'light', library: { layout: 'grid', sort: 'activity' },
   }, files: {} });
   // A record of the version before (a file tree's width, views under a root) is the defaults.
   for (const raw of [null, 'x', [], { version: 1, settings: { appearance: 'dark', fileTree: { width: 300 } } }, { version: 3, settings: { appearance: 'dark' } }]) {
@@ -23,9 +23,12 @@ test('the record normalizes: every setting to its bounds, the files to well-keye
     orbit: { speed: 99 }, playback: { autoplay: true }, appearance: 'cinematic', library: { layout: 'shelf' }, explorer: { folder: 3 },
   }, files: { [tabFileKey('/models/a.step', 'step')]: view(1), '["root","b.step","step"]': view(2), 'junk': view(3), [tabFileKey('/models/c.step', 'step')]: 'not a view' } });
   expect(record.settings).toEqual({
-    toolStack: { panels: { tree: { width: 164 } }, collapsed: { tree: true } }, appearance: 'system', viewportBackground: 'light', library: { layout: 'grid' },
+    toolStack: { panels: { tree: { width: 164 } }, collapsed: { tree: true } }, appearance: 'system', viewportBackground: 'light', library: { layout: 'grid', sort: 'activity' },
   });
-  expect(readTabRecord({ version: 2, settings: { library: { layout: 'list' } }, files: {} }).settings.library).toEqual({ layout: 'list' });
+  expect(readTabRecord({ version: 2, settings: { library: { layout: 'list' } }, files: {} }).settings.library).toEqual({ layout: 'list', sort: 'activity' });
+  // The home's order is kept with its layout; one that is not an order is the default.
+  expect(readTabRecord({ version: 2, settings: { library: { sort: 'kind' } }, files: {} }).settings.library).toEqual({ layout: 'grid', sort: 'kind' });
+  expect(readTabRecord({ version: 2, settings: { library: { layout: 'list', sort: 'size' } }, files: {} }).settings.library).toEqual({ layout: 'list', sort: 'activity' });
   // The viewport's Background, the person's: Light or Dark; anything else Light, the old Follow theme ("theme") too.
   for (const value of ['light', 'dark'] as const) expect(readTabRecord({ version: 2, settings: { viewportBackground: value }, files: {} }).settings.viewportBackground).toBe(value);
   for (const value of ['theme', 'cinematic']) expect(readTabRecord({ version: 2, settings: { viewportBackground: value }, files: {} }).settings.viewportBackground).toBe('light');

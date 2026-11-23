@@ -52,7 +52,8 @@ These reasons decide the cases the table does not:
 ## The page
 
 The viewer has two pages. A file's page is the navbar over the view: the panel at the view's left, the picture, and the
-chrome that floats over the picture. The home is the navbar over the library.
+chrome that floats over the picture. The home is the navbar over the library: its places at the left, and the place on
+screen.
 
 - `FileViewer.tsx` owns the navbar and its menus. `ViewFrame.jsx`, the one frame every renderer mounts (2D or 3D), owns
   everything in the view: the panel, the strip and the row under it, the update line, the corner, the Display card,
@@ -126,30 +127,69 @@ chrome that floats over the picture. The home is the navbar over the library.
 
 #### Projects
 
-- A folder becomes a project only when a person or an agent opens it as one: Import's Folder on the home, a standalone
-  document's Import its folder as a project, or `cad viewer <folder>`. Nothing else makes one: a run never does, and
-  nothing is written to the folder. Removing one forgets it, and nothing on disk changes.
+- A folder becomes a project only when a person or an agent opens it as one: Import's Folder on the home (the navbar's
+  Import, or the "+" by Projects in the sidebar), a standalone document's Import its folder as a project, or
+  `cad viewer <folder>`. Nothing else makes one: a run never does, and nothing is written to the folder. Removing one
+  forgets it, and nothing on disk changes.
 - A document is in the nearest project above it: a file by its path, a model by its script. A folder opened inside a
   project is that project (they do not nest by accident). Every other document is standalone.
 - Nothing browses the disk outside a project: a document is picked up by a `cad` command or by Import.
+- **A project has a page of its own on the home**, and a row in its sidebar. Why: a project is a place a person goes
+  to, as a folder is; sections of one long page had to be scrolled past, and showed eight of each.
+- **No document tabs in the viewer.** The browser already has tabs, so every document and every project opens in one:
+  its card or row is a real link, and its ⋯ has Open in new tab ([The home](#the-home)). Why: a second strip of tabs
+  inside a tab is two places to look for the same document.
 
 #### The home
 
 - The same navbar, with "Home" after the logo (whose menu has no Back to home), and at the right the search and
-  Import (where the host has a chooser: File…, Folder…), lined up with the library's column. No toggle and no ⋯.
-- A centred column at most 1128px wide on 24px gutters, 20px under the navbar, with no hero (`library/ModelLibrary.tsx`,
-  the `.cad-library` rules). A filter row: the type filter (All, Models, Files, only when both kinds are listed) at the
-  left, the grid/list switch at the right.
-- Each project is a section, the latest activity first: its folder glyph and name, its folder from `~`, and its ⋯
-  (Copy path, Reveal, Remove from CAD, which says nothing on disk changed); then its documents, pinned first, its
-  models, then its files, eight until Show all. Then the standalone documents, under "Standalone" where there are
-  projects. The project the navbar's name named, or the one Import's Folder just opened, is scrolled to and its name
-  drawn in the brand's colour, with a line saying what came of the import.
-- Cards in columns at least 232px wide (the picture on the light gradient, then the name, size and age), or 44px rows.
-  Each has a pin and a ⋯ (Open, Copy path, Copy link, Reveal, Pin, Delete, which asks first), shown on hover or focus
-  and always on touch; a project's file, listed for being in its folder, has no Delete, and a Pin once a page opened
-  it. Pinned cards come first, then by last activity. With nothing yet the page shows the C mark, "Nothing here yet",
-  one line, Import file and Import folder, and the formats the viewer opens.
+  Import (where the host has a chooser: File…, Folder…). No toggle and no ⋯. The search narrows the place on screen.
+- **One place at a time** (`library/ModelLibrary.tsx`, the `.cad-library` rules): Recents (the default: every document
+  opened lately, across projects), Pinned, one project's page, or Standalone (the documents in no project). Why: each
+  is a question a person asks ("what was I on?", "what is in this project?"), and one list answers one question.
+- **The sidebar** (`library/LibraryPlaces.jsx`) lists the places: 232px, the panel's width, on the panel's surface
+  (`bg-sidebar`, a rule on its right), the home's full height, its rows the panel's rows on the panel's 16px inset.
+  - Recents; Pinned with its count; "Projects", with a "+" that is Import's Folder (where the host has a chooser), over
+    one row a project (its folder glyph, name and count, the latest activity first; one whose folder is gone muted);
+    then Standalone with its count.
+  - The place on screen is marked as an open tab is (the accent fill, medium weight) and said (`aria-current`). Up and
+    Down move between the rows, Home and End to the first and the last.
+  - Every row is always there, so the list keeps its shape: Pinned with nothing pinned has no count, and its page says
+    how a document gets there. A count of none is not written.
+- **The place** fills the rest, on the page's colour, on 24px gutters, 20px under the navbar. Its heading row: the
+  place's name, the page's one larger text (a project's after its folder glyph, with its folder from `~` and its ⋯:
+  Open in new tab, Copy path, Reveal, Remove from CAD, which says nothing on disk changed and goes to Recents); at the
+  right Show (All, Models, Files, only when both kinds are listed), Sort (Last activity, the default; Name; Kind) and
+  the grid/list switch. Sort and the layout are the tab's ([Settings memory](#settings-memory)).
+- **Its documents**, all of them: the first 120, then "Show N more". Cards in columns at least 232px wide (the picture
+  on the light gradient, then the name and one line), or 44px rows.
+  - A card's line says where the document is, where that is not plain: in Recents and Pinned its project's name
+    ("Standalone" for one in none); in a project's page a model's script under the project's folder. Then a file's
+    size, and its last activity. A list has the same as a column: Project, or in a project's page Where (a model's
+    script, a file's folder).
+  - Each has a pin and a ⋯ (Open, Open in new tab, Copy path, Copy link, Reveal, Pin, Delete, which asks first), shown
+    on hover or focus and always on touch; a project's file, listed for being in its folder, has no Delete, and a Pin
+    once a page opened it. A pinned document is not listed first: Pinned is its own place.
+- **Links.** Where the host gives a target an address (the web page), a card's or a row's main press and every row of
+  the sidebar is a real link: a plain click shows it in this view, and ⌘ or Ctrl and a click, a middle click and the
+  browser's own link menu open it in a new tab. Where the host can open a target beside the view, every document's ⋯
+  has Open in new tab directly after Open, and a project's ⋯ has it first; in an app's frame (the CAD app) the words
+  are Open in browser, on a document's ⋯ alone. A project's file no page has opened yet is a link as the rest are.
+- **Coming from a document.** The navbar's project name, pressed over a document, shows that project's page with the
+  document remembered: its card or row ringed in the brand's colour and brought into view, and "Back to <name>", with
+  an Esc hint, in the heading row. Escape returns to the document while no menu, dialog or field has the keyboard. It
+  lasts until another document is opened or the person goes to another place. Why: the project's page is where its
+  other documents are, and the way back should cost nothing.
+- **After Import's Folder** the home goes to that project's page, with a line saying what came of it (made, already a
+  project, or inside another). **After Remove from CAD** it goes to Recents and says so.
+- **Every state stands where its content will**: placeholder cards or rows while the list is read, placeholder rows
+  where the projects will be; "No projects yet." under Projects; a line in a place with nothing to list (an empty
+  project, nothing pinned, a project whose folder is gone, one no longer in CAD), and under a project's last document
+  when the host's walk of its folder stopped early. With nothing at all yet, Recents shows the C mark, "Nothing here
+  yet", one line, Import file and Import folder, and the formats the viewer opens.
+- **Narrower than 720px, and on a phone**, there is no sidebar: the navbar's "Home" becomes a menu button naming the
+  place on screen, its menu the same places with the same counts (and the "+"'s words last). The place is on 16px
+  gutters, 12px under the navbar, one card across; Import is its icon. The width is the home's, never the window's.
 
 ### The panel
 
@@ -671,14 +711,15 @@ store) and forgotten with it. Nothing is in localStorage, and nothing is shared 
 in a session, and settings that outlived it would surprise the next one.
 
 - **Tab-wide**: the appearance (System, Light or Dark; a new tab follows the system), the viewport's Background (Light
-  unless picked), the home's layout, and the tool stack's layout.
+  unless picked), the home's layout and its Sort, and the tool stack's layout. The home's place is the host's: the
+  page's address in the web page, a step of the view's history in the CAD app.
 - **Per file**, by its path and its view: the panel's open state, width and tab; the Display card's values; the
   camera; Explode and Clip; the pose; hidden and isolated parts and the tree's folds; a board's layers, side, mode and
   3D projection; Preview's settings; Speed and Loop.
 - A reload brings back the file on screen. The page keeps the views of up to 32 files it has left, in memory, and
   gives one back when its file is shown again. A file not yet shown opens fitted, at the defaults.
 - **Never kept**: the tool in hand (every open starts in Select), the selection, measurements, ink, an open card, menu
-  or peek, the phone's sheet, Orbit, and where a routine was.
+  or peek, the phone's sheet, Orbit, where a routine was, and the home's search and Show.
 - **The person's own settings** (the language, the telemetry switch, the What's new already seen) are the host's,
   kept in `settings.json` in the state folder and the same everywhere. The app menu changes them; a file's view
   settings are never there.
@@ -705,6 +746,9 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   text is selected or a field has the focus. **⌘Z, ⇧⌘Z** (Ctrl+Z, Ctrl+Y) undo and redo ink and measurements.
   **Delete** or Backspace deletes picked ink and measurements.
 - **A board**, while it has the keyboard: ⌘H (Ctrl+H) cycles Others, 3 switches 2D and 3D, ⇧F flips the board.
+- **The home**: Up and Down move between the sidebar's places, Home and End to its ends, and Enter goes to one. Escape
+  goes back to the document just left, where there is one ([The home](#the-home)), after any open menu or dialog has
+  spent it, and never from the search field.
 - **Escape** undoes the innermost thing first: the search, an open menu or dropdown, the Display card, the panel's
   search or its peek; then Preview; then the view's own steps, one a press and in the same order in every view: picked
   ink, a box being drawn or a measurement under way, the tool in hand going back to Select (its effect kept), the
@@ -759,3 +803,6 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 - **A scrim behind the phone's panel sheet.** The view stays readable beside the sheet, and a tap on it closes it.
 - **A Motion tab beside Joints, and a Reset on the transport.** One subject is one tab, with one Reset.
 - **Pencil and Shapes as two tools.** Draw is the one drawing tool, and its row holds them all.
+- **The home as one long page of sections, a project each.** A project deep in the page was a scroll away, and each
+  showed eight documents until asked. A place at a time, from a sidebar, puts each one click away, whole.
+- **Document tabs inside the viewer.** The browser has tabs; every document and project opens in one.

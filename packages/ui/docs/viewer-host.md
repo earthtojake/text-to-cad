@@ -97,7 +97,7 @@ are for reading and maintaining the contracts.
 | `RobotRendererOptions` (URDF, SRDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@cad/ui/renderers/workspace` |
 | `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@cad/ui/host` |
-| `ModelLibrary`, `ModelLibrarySource`, `LibraryProject`, `ImportedProject`, `useModelThumbnail`, `ageLabel`, `lastActivity` (a host's home, under the navbar: Home, the search and, where `pick` or `importFolder` is given (a computer with a chooser), Import (its File and its Folder) in the navbar on the grid's column; a light 28px row over the grid, the type filter ("All ▾": All, Models, Files, where both are listed) at its left and the grid/list switch at its right — then each project (`projects()`), the latest activity first, a section headed by its name, its folder from `~` (`home`) and its ⋯ (Copy path, Reveal, Remove from CAD: `removeProject`), its documents pinned first, its models, then its files, eight until its Show all (a file of its folder has no Delete, and a Pin once a page opened it) — and the documents of no project under Standalone, pinned first, then by last activity (the later of a row's `opened` and `updated`); `focus` brings a project's section into view, as Import's Folder does the one it opened, with a line saying what came of it; the documents as framed cards (the picture, the light viewport's on the model area's gradient, with its format's badge; its kind's glyph, its name, a file's `size` and its age with its verb) or as a table's rows (Name, Kind, Size, then `updated` and `created` as ages); every model a card and a row of its own, never tied to its script (the library's `script` is not read); on each a pin toggle and one ⋯ menu: Open, a file's Copy path and Reveal where `fileActions` can (a model has neither), Pin or Unpin, then Delete, which asks first (`change("delete")` for a model, `change("remove")` for a file) and takes the card off at once; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), and a spinner over the model being opened, which takes no second press until `open` settles) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@cad/ui/library` |
+| `ModelLibrary`, `ModelLibrarySource`, `LibraryProject`, `ImportedProject`, `LibraryNavigation`, `LibraryOrigin`, `sortDocuments`, `useModelThumbnail`, `ageLabel`, `lastActivity` (a host's home, under the navbar: Home, the search and, where `pick` or `importFolder` is given (a computer with a chooser), Import (its File and its Folder) in the navbar's slots; under it one place at a time (`place`, a `HomeLocation`: the host's where it keeps one, else the home's own from Recents; `onPlaceChange` as the person goes to one; `onPlaceShown`, its name as the person reads it) — Recents (`list()`: every document opened lately, across projects), Pinned, one project's page (`projects()`: all its documents) or Standalone (the documents of no project) — chosen in a 232px sidebar on the panel's surface (Recents, Pinned with its count, Projects with a "+" that is `importFolder` over one row a project with its count, the latest activity first, then Standalone), or, in a home under 720px wide or at the phone's scale, in a menu on the heading; the place's heading row with its name (a project's with its folder from `~`, `home`, and its ⋯: Open in new tab, Copy path, Reveal, Remove from CAD: `removeProject`, which goes to Recents), Show (All, Models, Files, where both are listed), Sort (`sort`, `onSortChange`: Last activity, Name, Kind) and the grid/list switch (`layout`, `onLayoutChange`); the documents as framed cards (the picture, the light viewport's on the model area's gradient, with its format's badge; its kind's glyph, its name, and a line: its project's name in Recents and Pinned, a model's `script` under the project's folder in a project's page, a file's `size`, its age with its verb) or as a table's rows (Name, Project or Where, Kind, Size, then `updated` and `created` as ages), 120 until Show more; on each a pin toggle and one ⋯ menu: Open, Open in new tab, a file's Copy path and Reveal where `fileActions` can (a model has neither), Pin or Unpin, then Delete, which asks first (`change("delete")` for a model, `change("remove")` for a file) and takes the card off at once (a file of a project's folder has no Delete, and a Pin once a page opened it); `navigation` (the host's `hrefOf` and `openBeside`): with `hrefOf` a card's or a row's main press and each sidebar row is an `<a href>` (a plain click opens in this view), and with `openBeside` the menus have Open in new tab (`kind: "tab"`) or Open in browser (`"browser"`), a project's unless `places: false`; a document is named by its `id`, and a row with none by its `path`; `from` (a `LibraryOrigin`: the document just left) rings its card, brought into view, with "Back to <name>" and Escape calling `onBack`; after `importFolder` the home goes to that project's page with a line saying what came of it; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), placeholder rows where the projects will be, and a spinner over the model being opened, which takes no second press until `open` settles) | [Model library](../src/library/ModelLibrary.tsx), [its places](../src/library/LibraryPlaces.jsx), [thumbnails](../src/library/thumbnails.ts) | `@cad/ui/library` |
 | `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the six CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [viewer](../src/cad-viewer/CadViewer.tsx) | `@cad/ui/cad-viewer` |
 | `createCadFileSource` (a CAD client as a read-only `FileSource`: `stat` through the client's `resolveEntry`), `createCadFileActions` (the file menu's Copy path, the absolute path, and Reveal, Open in's file manager), `normalizePath`, `baseName`, `joinPath`, `contentRevision` | [Catalog](../src/cad-viewer/catalog.ts) | `@cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the version, X, GitHub, Discord, where a new issue opens, and how a link is followed), `issueUrl` (a new issue filled in — its title, labels and body — its address kept under `ISSUE_URL_MAX`) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@cad/ui/links` |
@@ -214,21 +214,41 @@ command is the same capture: to a composer destination it delivers the view and
 the selection through `promptContext.deliver`. Neither route detects the platform.
 
 `navigation.openFile(path)` shows a file, by its absolute path (or a document by its id), in this view: the
-project's previous or next (`[`, `]` and the file menu), a renderer's link. `navigation.home()`, where the host has a home,
-shows it in this view: from a file, the app menu's Back to home (the menu the navbar's
-logo opens) leads to it; over the home the same navbar has the logo and its menu, with no
-Back to home. `CadViewer` implements both
-over the host's `onShow(path)` (`''` is the home), and gives a host a home only with a
+project's previous or next (`[`, `]` and the file menu), a renderer's link. `navigation.home(location?)`, where the host has a home,
+shows it in this view, at a place on it where one is named (a `HomeLocation`: `{ view: "recents" | "pinned" |
+"standalone" }`, or `{ view: "project", project }`, a project's page; Recents with none): from a file, the app menu's
+Back to home (the menu the navbar's logo opens) leads to it; over the home the same navbar has the logo and its menu,
+with no Back to home. `CadViewer` implements both
+over the host's `onShow(path, place?)` (`''` is the home, at `place`), and gives a host a home only with a
 `library`: a host whose own navigation shows one file (Codex's file handler) passes none,
 and its view shows that file and nothing else — no home, its menu no Back to home, no
 project, and no `openFile`, so a renderer's link to another file (a robot's mesh) is plain
-text there. A host that keeps a view's own history,
+text there.
+
+The home's place is the host's to keep where it can name one: `CadViewerProps.place` (the web's from its address, the
+CAD app's from its view's history); a host that passes none leaves it to `CadViewer`, which starts at Recents.
+`onHomeShown(place, name)` says the place on screen by its name as the person reads it ("Recents", a project's), for
+a host that titles its page with it. The navbar's project name, pressed over a document, shows that project's page
+(`home({ view: "project", project })`) with the document remembered: the home rings its card and offers the way back
+(`ModelLibrary`'s `from` and `onBack`), until another document is shown or the home is at another place.
+
+Two things only a host knows, it hands in its ports (`CadViewerProps.host.navigation`, both optional), and `CadViewer`
+passes them on in the viewer's `navigation` and to the home:
+
+- `hrefOf(target)`: a target's own address, for a real link. A `NavigationTarget` is `{ document }` (its id; one
+  whose row carries none, its path) or `{ home: HomeLocation }`. Null for a target with no address. With it, the home's
+  cards, rows and sidebar rows are `<a href>` and the navbar's project name is a link (`FileProject.href`): a plain
+  click shows the target in this view, and the browser's own ways open it in a new tab. A host whose pages have no
+  address (a page in an app's frame) leaves it out, and every one of them is a button.
+- `openBeside`: `{ kind, open(target), places? }`, a target opened beside this view, which stays as it is. `kind` is
+  the item's words: `"tab"` (Open in new tab) or `"browser"` (Open in browser). `places: false`: documents alone, and
+  a project's menu has no such item. A host that keeps a view's own history,
 where no browser does (the CAD app's views), hands it as `history` (`ViewerHistory`:
 `canGoBack`, `canGoForward`, `back()`, `forward()`; `CadViewerProps.history`): the navbar
 draws Back and Forward over it, over a file and over the home alike. What the history holds is
-the host's (the CAD app's: every file the view showed and the home, a step like a file, the
-agent's shows and the person's moves alike); the web hands none, its page having the
-browser's, where the home is a step too. `onShown(path | null, id | null)` says which file the
+the host's (the CAD app's: every file the view showed and each place of the home the person went to, a step like a
+file, the agent's shows and the person's moves alike); the web hands none, its page having the
+browser's, where each place of the home is a step too. `onShown(path | null, id | null)` says which file the
 catalog has on screen, by its own path (a model by its id), and its document's id (null for the
 home, or a file still resolving or missing), for a host that names its page after it or records
 it. The navbar names a file by its catalog row's name (`CadViewerProps.name`, `FileViewerProps.name`: the host's
@@ -477,7 +497,8 @@ lives through one adapter, `TabRecordStorage` — a synchronous read and write o
 whole record: the web over `sessionStorage`, the CAD app over memory
 (`memoryTabRecord`) — and the package owns the record's shape, version and normalization. `settings` is
 `{ toolStack, appearance, viewportBackground, library }`: tab-wide (the tool stack's layout, the
-appearance, the viewport's background, the home's layout), and what every renderer reads as its preferences;
+appearance, the viewport's background, the home's layout and its Sort: `library: { layout, sort }`), and what every
+renderer reads as its preferences;
 `files` holds the view of the file on screen, under `[absolute path, renderer id]`, and no
 other: a write keeps the newest alone (`TAB_FILE_LIMIT`), and `CadViewer` sets the view
 of a file it leaves — for another file or for the home — aside for the page once the
@@ -552,14 +573,16 @@ the model as a floating card, pushing nothing, until the pointer leaves both (on
 otherwise a collapsed panel leaves nothing over the model.
 In Preview, in
 every host, the navbar steps aside for Preview's own bar. Over the home the navbar has the logo and its menu (no Back
-to home), Back and Forward where the host hands a `history`, then the home's own controls on the grid's column —
-**Home** where a file shows its name, the search and Import at the right (`ModelLibrary` portals them
-into the navbar's slots, `file-viewer/navbarSlots.js`) — and the host's actions, outermost; no panel toggles. The
-home's type filter and layout switch stand in a light row over its grid, and its links are the app menu's. Left: the text-to-cad
+to home), Back and Forward where the host hands a `history`, then the home's own controls —
+**Home** where a file shows its name (in a home too narrow for its sidebar, the places' menu button), the search and
+Import at the right (`ModelLibrary` portals them into the navbar's slots, `file-viewer/navbarSlots.js`) — and the
+host's actions, outermost; no panel toggles. The home's Show, Sort and layout switch stand in its place's heading row,
+and its links are the app menu's. Left: the text-to-cad
 logo (the "C" mark, 16px, over the home and over a document alike),
 which opens the app menu (`AppMenu`, `file-viewer/navigation/AppMenu.jsx`), then Back and
 Forward where the host hands a `history`, then, for a document in a project, the project's name and a slash (a
-press shows the home at that project: `CadViewer` hands the home its `focus`), then the open file's name, with no
+press shows that project's page on the home, with the document just left remembered; a link where the host gives
+places an address: `FileProject.href`), then the open file's name, with no
 glyph and no menu of its own, and its ⋯ menu. The
 logo, Back and Forward, the project's name and the ⋯ share one style (`NAV_ITEM_CLASS`):
 transparent at rest, the same accent background while the pointer is on them or their menu

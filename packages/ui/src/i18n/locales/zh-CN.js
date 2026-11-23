@@ -322,10 +322,76 @@ export default {
   "home.projectTruncated": "未列出全部文件：此文件夹中的文件超出了一次可列出的数量。",
 
 
-  "home.showAll": "显示全部 {count} 个",
+  "home.place.recents": "最近",
 
 
-  "home.showFewer": "收起",
+  "home.place.pinned": "已置顶",
+
+
+  "home.project": "项目",
+
+
+  "home.projects": "项目",
+
+
+  "home.placesAria": "位置",
+
+
+  "home.addProject": "将文件夹作为项目打开",
+
+
+  "home.loadingProjects": "正在加载项目",
+
+
+  "home.projectsEmpty": "还没有项目。",
+
+
+  "home.projectsFailed": "无法读取项目。",
+
+
+  "home.projectGone": "此项目已不在 CAD 中。重新打开它的文件夹即可恢复。",
+
+
+  "home.recentsEmpty": "最近没有打开过任何内容。",
+
+
+  "home.pinnedEmpty": "还没有置顶的内容。置顶一个文档，它就会留在这里。",
+
+
+  "home.standaloneEmpty": "没有独立文档。所有文档都在项目中。",
+
+
+  "home.showMore": "再显示 {count} 个",
+
+
+  "home.sortAria": "排序",
+
+
+  "home.sortByAria": "排序：{sort}",
+
+
+  "home.sort.activity": "最近活动",
+
+
+  "home.sort.name": "名称",
+
+
+  "home.sort.kind": "类型",
+
+
+  "home.openNewTab": "在新标签页中打开",
+
+
+  "home.openBrowser": "在浏览器中打开",
+
+
+  "home.backTo": "返回 {name}",
+
+
+  "home.columnWhere": "位置",
+
+
+  "home.columnProject": "项目",
 
 
   "home.emptyTitle": "这里还没有内容",

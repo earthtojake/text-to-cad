@@ -62,7 +62,7 @@ it("opens as a dialog with the keyboard in its input, reads the library as it op
     .toEqual([3, 'Reading the documents…', 'false']);
   await act(async () => answer([GEAR, LOOSE]));
   expect(source.projects).toHaveBeenCalledTimes(1);
-  // Nothing typed: the project on screen, in its page's order (its model, then its files by last activity).
+  // Nothing typed: the project on screen, by kind (its model, then its files by format and name).
   expect(groups()).toEqual([['In drive', [['actuator', 'On screen'], ['gear.step', 'STEP'], ['shaft.stl', 'STL']]]]);
   const own = options()[0];
   expect([own.getAttribute('aria-current'), own.getAttribute('aria-disabled'), own.hasAttribute('href')]).toEqual(['page', 'true', false]);

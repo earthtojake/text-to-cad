@@ -276,42 +276,8 @@ function ProjectCrumb({ project }) {
   </span>;
 }
 
-/** Home's column, the grid's (`styles/globals.css`'s `.cad-library-content`): 1128px at most, 24px gutters. */
-const HOME_COLUMN_PX = 1128, HOME_GUTTER_PX = 24, HOME_CLEAR_PX = 8, HOME_MARK_PX = 16, HOME_ROW_PAD_PX = 8;
 // The home's row is a size container (`cad-navbar`), so its search folds to its icon on the row's width, not the window's.
 const HOME_ROW_STYLE = Object.freeze({ containerType: "inline-size", containerName: "cad-navbar" });
-
-/**
- * Where Home's controls stand on the row: on the grid's column, so the logo's mark (and Back and Forward after it), then
- * the home's heading, start over the grid's first tile, as the logo precedes the file's name on a file's page, and
- * the search and Import end over its last tile; never over the host's actions at the row's right end. The row's
- * background stays full width: these are its padding (the logo stays the row's first child, the one button over the
- * home and every file). In a pane narrower than the column they meet the
- * row's own padding, as on a file's page. Measured whenever the row changes size.
- */
-function useHomeColumn(header, trail, on) {
-  const [insets, setInsets] = useState(null);
-  useLayoutEffect(() => {
-    const row = header.current;
-    if (!on || !row) return undefined;
-    const measure = () => {
-      const width = row.getBoundingClientRect().width;
-      const margin = (width - HOME_COLUMN_PX) / 2;
-      const actions = trail.current?.getBoundingClientRect().width || 0;
-      // What the row adds to its own 8px a side. The mark stands HOME_MARK_PX in from the row's edge (its 8px, its
-      // button's 6px, the artwork's 2px); the host's actions keep the row's right end, Import ending before them.
-      const next = { left: Math.round(Math.max(0, margin + HOME_GUTTER_PX - HOME_MARK_PX)),
-        right: Math.round(Math.max(0, Math.max(0, margin) + HOME_GUTTER_PX - HOME_ROW_PAD_PX - (actions ? actions + HOME_CLEAR_PX : 0))) };
-      setInsets(now => (now?.left === next.left && now?.right === next.right ? now : next));
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(measure);
-    for (const element of [row, trail.current]) if (element) observer.observe(element);
-    return () => observer.disconnect();
-  }, [header, trail, on]);
-  return insets;
-}
 
 /**
  * The sidebar's glyph, as Claude Code's: a rounded rectangle (14 × 12 in the 16px box, its corners 3px) and a short
@@ -363,7 +329,7 @@ function PanelToggleButton({ toggle }) {
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
  * @param {{ left(element: HTMLElement | null): void, right(element: HTMLElement | null): void } | null} [props.homeSlots]
- *   Over the home: where its controls go (`../navbarSlots.js`), two slots on the grid's column.
+ *   Over the home: where its controls go (`../navbarSlots.js`), two slots on the row.
  * @param {{ left?: { open: boolean, label: string, shortcut?: string, toggle(): void, hover?: object | null } | null } | null} [props.panels]
  *   The view's panel toggle, where it has a panel (`../panelToggles.js`).
  * @param {((element: HTMLElement | null) => void) | null} [props.viewSlot] Over a file: where its view puts its view settings
@@ -377,7 +343,6 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
   const mobile = useViewerMobile();
   const header = useRef(null), lead = useRef(null), trail = useRef(null);
   const homing = Boolean(homeSlots && !file);
-  const homeInsets = useHomeColumn(header, trail, homing);
   // The row's controls at THE scale (`globals.css`), one rule on a desktop and a phone: the toggle, the logo, the name
   // and its ⋯, edge to edge, each the control tall, every icon centred in its tile.
   const leadNav = <nav ref={lead} aria-label={t("navbar.viewer")} className={cn("flex min-w-0 items-center overflow-hidden text-sm", homing ? "shrink-0" : "flex-1")}>
@@ -400,7 +365,7 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
     // On the chrome's colour, a step off the canvas's (`--sidebar`: lighter than white's off-white, a
     // step above the dark canvas), as the panel beside a board or a model is: the frame reads as frame.
     <header ref={header} className={cn(NAVBAR_ROW_CLASS, "relative border-border bg-sidebar text-foreground", className)} data-viewer-navbar=""
-      style={homing ? { ...HOME_ROW_STYLE, ...(homeInsets ? { paddingLeft: HOME_ROW_PAD_PX + homeInsets.left, paddingRight: HOME_ROW_PAD_PX + homeInsets.right } : null) } : undefined}>
+      style={homing ? HOME_ROW_STYLE : undefined}>
       {leadNav}
       {/* Over the home: its heading after the logo, the search and Import at the column's right. */}
       {homing ? <div className="flex min-w-0 flex-1 items-center justify-between gap-2" data-navbar-home="">

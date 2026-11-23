@@ -8,7 +8,7 @@ import { normalizeViewportBackground } from '@cad/core/lib/viewportTheme.js';
  *   { version, settings, files }
  *
  * `settings` is tab-wide — the tool stack's layout, the appearance, the viewport's background and how
- * the home lays out its library — and replaces every global preference. (The folder the name menu's Files was last
+ * the home lays out and sorts its library — and replaces every global preference. (The folder the name menu's Files was last
  * in, `explorer`, an earlier release's, is read as nothing: projects replaced the explorer.)
  * `files` is the view of the file on screen (`kit/shell/fileView.js`: its camera, its Display
  * settings, its playback, its renderer's own slices) under `[absolute file path, renderer id]`,
@@ -32,6 +32,8 @@ export type Appearance = 'system' | 'light' | 'dark';
 export type ViewportBackground = 'light' | 'dark';
 /** How the home lays out its models: a grid of cards, or a list of rows. */
 export type LibraryLayout = 'grid' | 'list';
+/** How the home orders the documents of the place on screen: by last activity (the default), by name, or by kind. */
+export type LibrarySort = 'activity' | 'name' | 'kind';
 export interface ToolStackLayout { panels: Record<string, { width?: number; height?: number }>; collapsed: Record<string, boolean> }
 export interface TabSettings {
   /** The tool stack's layout (`kit/tools/toolStackLayout.js`): the resizable panels' sizes and the folded panels (the view's panel is each file's). */
@@ -40,8 +42,8 @@ export interface TabSettings {
   appearance: Appearance;
   /** The viewport's background in every file and view (`@cad/core/lib/viewportTheme.js`): Light unless the person picks. */
   viewportBackground: ViewportBackground;
-  /** The home's library: its models as a grid of cards (the default) or a list. */
-  library: { layout: LibraryLayout };
+  /** The home's library: its models as a grid of cards (the default) or a list, and how they are ordered. */
+  library: { layout: LibraryLayout; sort: LibrarySort };
 }
 export interface TabRecord {
   version: typeof TAB_RECORD_VERSION;
@@ -53,13 +55,15 @@ export interface TabRecord {
 const plainObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const APPEARANCES: readonly Appearance[] = ['system', 'light', 'dark'];
 const LIBRARY_LAYOUTS: readonly LibraryLayout[] = ['grid', 'list'];
+const LIBRARY_SORTS: readonly LibrarySort[] = ['activity', 'name', 'kind'];
 export function normalizeAppearance(value: unknown): Appearance {
   return APPEARANCES.includes(value as Appearance) ? (value as Appearance) : 'system';
 }
 
 function normalizeLibrary(value: unknown): TabSettings['library'] {
-  const layout = plainObject(value) ? value.layout : undefined;
-  return { layout: LIBRARY_LAYOUTS.includes(layout as LibraryLayout) ? (layout as LibraryLayout) : 'grid' };
+  const { layout, sort } = plainObject(value) ? value : {} as Record<string, unknown>;
+  return { layout: LIBRARY_LAYOUTS.includes(layout as LibraryLayout) ? (layout as LibraryLayout) : 'grid',
+    sort: LIBRARY_SORTS.includes(sort as LibrarySort) ? (sort as LibrarySort) : 'activity' };
 }
 
 /** The settings as the tab keeps them, from anything a store handed back. */

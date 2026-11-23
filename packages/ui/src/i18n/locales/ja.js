@@ -321,10 +321,76 @@ export default {
   "home.projectTruncated": "一部のファイルだけを表示しています。このフォルダーには一度に表示できる数より多くのファイルがあります。",
 
 
-  "home.showAll": "すべて表示 ({count})",
+  "home.place.recents": "最近",
 
 
-  "home.showFewer": "表示を減らす",
+  "home.place.pinned": "ピン留め",
+
+
+  "home.project": "プロジェクト",
+
+
+  "home.projects": "プロジェクト",
+
+
+  "home.placesAria": "場所",
+
+
+  "home.addProject": "フォルダーをプロジェクトとして開く",
+
+
+  "home.loadingProjects": "プロジェクトを読み込み中",
+
+
+  "home.projectsEmpty": "プロジェクトはまだありません。",
+
+
+  "home.projectsFailed": "プロジェクトを読み込めませんでした。",
+
+
+  "home.projectGone": "このプロジェクトはもう CAD にありません。戻すには、そのフォルダーをもう一度開いてください。",
+
+
+  "home.recentsEmpty": "最近開いたものはありません。",
+
+
+  "home.pinnedEmpty": "ピン留めしたものはまだありません。ドキュメントをピン留めすると、ここに表示されます。",
+
+
+  "home.standaloneEmpty": "単独のドキュメントはありません。すべてのドキュメントがプロジェクトに入っています。",
+
+
+  "home.showMore": "さらに {count} 件を表示",
+
+
+  "home.sortAria": "並べ替え",
+
+
+  "home.sortByAria": "並べ替え: {sort}",
+
+
+  "home.sort.activity": "最終アクティビティ",
+
+
+  "home.sort.name": "名前",
+
+
+  "home.sort.kind": "種類",
+
+
+  "home.openNewTab": "新しいタブで開く",
+
+
+  "home.openBrowser": "ブラウザーで開く",
+
+
+  "home.backTo": "{name} に戻る",
+
+
+  "home.columnWhere": "場所",
+
+
+  "home.columnProject": "プロジェクト",
 
 
   "home.emptyTitle": "まだ何もありません",

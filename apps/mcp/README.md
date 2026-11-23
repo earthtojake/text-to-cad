@@ -237,15 +237,22 @@ the launch's `_meta` first (`host/capability.ts`).
   before, in any view or the web viewer). Back to home, first in the menu the navbar's logo
   opens, goes to it. The sidebar (`cad_home`) and a tab with nothing to show open on it; a
   model opened from it is shown in place. The home has the same navbar (the logo's menu, Back
-  and Forward and Full size; no file, so no ⋯); it starts with its control
-  row, its links the app menu's.
+  and Forward and Full size; no file, so no ⋯), its links the app menu's. It shows one place at a time, from its
+  sidebar (Recents, Pinned, each project, Standalone; in a card or a narrow tab, a menu on its heading), as the
+  web viewer's does ([the home](../../packages/ui/docs/viewer-ux.md#the-home)). A page in an app's frame has no
+  address of its own, so nothing on it is a link (every card and row is a button); where a launch carried a page, a
+  document's ⋯ has **Open in browser**, its page in the web viewer (`navigation.openBeside`, `kind: "browser"`,
+  over the same route as the file menu's Open in › Browser, below). The server opens a document's page by its name
+  and nothing else, so a project's page is not offered there (`places: false`).
 - **A view moves within its project.** A document in a project (a folder a person opened as one: the home's
   Import › Folder, a standalone document's Import its folder as a project, `cad viewer <folder>`) has the project's
-  name before its own in the navbar, which goes to the home at it, and the project's models and files as the Project
+  name before its own in the navbar, which goes to that project's page on the home (the document just left ringed
+  there, Escape the way back), and the project's models and files as the Project
   tab its panel leads with; a press shows the document in place. A tab, a card and the web viewer do the same, and
   nothing browses the disk outside a project.
 - **A view keeps its own history.** As a browser keeps a tab's: every file a
-  view showed, and the home, in order, the agent's shows and the person's own
+  view showed, and each place of the home the person went to (Recents, Pinned, a project's page, Standalone: the
+  view has no address to keep one in), in order, the agent's shows and the person's own
   moves alike (`ModelView.tsx`), handed to the viewer as `history`. The navbar's Back
   and Forward, after its logo, over a file and on the home, walk it, each disabled where it
   has nowhere to go. A move after a Back drops what was ahead, and a show of what is already

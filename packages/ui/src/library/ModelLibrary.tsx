@@ -1,21 +1,27 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ComponentType, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Box, ChevronDown, Ellipsis, Folder, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
+import { Box, ChevronDown, Clock, Ellipsis, Files, Folder, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
 import { Button } from "../primitives/button.jsx";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../primitives/alert-dialog.jsx";
 import { ValueDropdown } from "../primitives/value-dropdown.jsx";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../primitives/dropdown-menu.jsx";
+import { FieldLabel } from "../primitives/field-label.jsx";
 import { Input } from "../primitives/input.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
+import { TooltipHint } from "../primitives/tooltip.jsx";
 import { useI18n } from "../i18n/index.js";
-import type { LibraryLayout } from "../tab-store/tabRecord.js";
+import type { LibraryLayout, LibrarySort } from "../tab-store/tabRecord.js";
 import { DocumentGlyph } from "../file-viewer/navigation/DocumentGlyph.jsx";
 import { entryMenu } from "../file-viewer/navigation/entry-menu.js";
 import type { EntryAction } from "../file-viewer/navigation/index.js";
 import type { FileActions } from "../file-viewer/types.js";
+import { useViewerMobile } from "../file-viewer/responsive.js";
+import type { HomeLocation, NavigationTarget, ViewerHost } from "../host/types.js";
 import { useControlUsage } from "../usage/controls.js";
 import { useNavbarSlots } from "../file-viewer/navbarSlots.js";
 import { activityLabel, ageLabel, lastActivity } from "../lib/age.js";
+import { hasOpenPopup, ownsEscape } from "../lib/popups.js";
+import { PlacesMenu, PlacesSidebar, plainClick } from "./LibraryPlaces.jsx";
 import logo from "../assets/logo-c.svg";
 
 /** A model someone opened: kept by the host, which also says where it is shown from. */
@@ -48,7 +54,9 @@ export interface LibraryModel {
    * not say), which a row removes from the list, the file untouched.
    */
   kind?: "file" | "model" | "shape";
-  /** The id of the project it is in (`LibraryProject`): its section's; none, a standalone document's. */
+  /** A model's or a shape's: the script it was built from, where the host says it. A project's page says where it is in the project. */
+  script?: string;
+  /** The id of the project it is in (`LibraryProject`): its page lists it; none, a standalone document's. */
   project?: string | null;
 }
 
@@ -131,17 +139,33 @@ export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
   removeProject?(project: LibraryProject<Model>): Promise<readonly LibraryProject<Model>[]>;
 }
 
-/** How many of a project's documents its section shows before its Show all. */
-export const PROJECT_TILES = 8;
+/** How many documents a place shows before its Show more: a project of a thousand files is not a thousand cards at once. */
+export const PLACE_ROWS = 120;
+
+/** The home with no place named: every document opened lately. */
+export const RECENTS: HomeLocation = Object.freeze({ view: "recents" });
+/** A place as one word: what marks its row, and what a setting kept for it is kept by. */
+export const placeKey = (place: HomeLocation) => (place.view === "project" ? `project:${place.project}` : place.view);
 
 /**
- * A project's documents as its section lists them: pinned first, then its models before its files, each by last
- * activity (when it was last opened or changed), newest first; the host's order where two tie.
+ * A place's documents in the order the person chose: by last activity (when each was last opened or changed), newest
+ * first; by name; or by kind, the models before the files, the files by their format (`format`), each by name. The
+ * host's order where two tie. A pinned document is not first: Pinned is a place of its own.
  */
-export function projectOrder<Model extends LibraryModel>(documents: readonly Model[]): Model[] {
-  return documents.map((item, index) => ({ item, index })).sort((a, b) => Number(b.item.pinned) - Number(a.item.pinned)
-    || Number(deletes(b.item)) - Number(deletes(a.item)) || (lastActivity(b.item) ?? 0) - (lastActivity(a.item) ?? 0) || a.index - b.index)
-    .map(({ item }) => item);
+export function sortDocuments<Model extends LibraryModel>(documents: readonly Model[], sort: LibrarySort,
+  format: (item: Model) => string = item => formatLabel(item, ""), locale?: string): Model[] {
+  const names = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
+  const by = (a: Model, b: Model) => sort === "name" ? names.compare(a.name, b.name)
+    : sort === "kind" ? Number(deletes(b)) - Number(deletes(a)) || names.compare(format(a), format(b)) || names.compare(a.name, b.name)
+      : (lastActivity(b) ?? 0) - (lastActivity(a) ?? 0);
+  return documents.map((item, index) => ({ item, index })).sort((a, b) => by(a.item, b.item) || a.index - b.index).map(({ item }) => item);
+}
+
+const slashed = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "");
+/** `path` under `root`, `/`-separated: "" for the folder itself, and the path as it is where it is not under it. */
+export function below(path: string, root: string): string {
+  const shown = slashed(path), base = slashed(root);
+  return shown === base ? "" : base && shown.startsWith(`${base}/`) ? shown.slice(base.length + 1) : shown;
 }
 
 /** `path` as the home says it: from `~` where it is in the person's home folder (`home`). */
@@ -218,11 +242,15 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = fal
   </span>;
 }
 
-/** The list's header row: Name, Kind, Size, Updated, Created, over the columns its rows draw (a label each, for the eye: a row names itself). */
-function Columns() {
+/**
+ * The list's header row: Name, then where each is (a project's page: Where; Recents and Pinned: Project; `where`), Kind,
+ * Size, Updated, Created, over the columns its rows draw (a label each, for the eye: a row names itself).
+ */
+function Columns({ where = null }: { where?: string | null }) {
   const { t } = useI18n();
   return <div className="cad-library-columns" aria-hidden="true">
-    <span>{t("home.columnName")}</span><span data-column="kind">{t("home.columnKind")}</span><span data-column="size">{t("home.columnSize")}</span>
+    <span>{t("home.columnName")}</span>{where ? <span data-column="where">{where}</span> : null}
+    <span data-column="kind">{t("home.columnKind")}</span><span data-column="size">{t("home.columnSize")}</span>
     <span data-column="updated">{t("home.columnUpdated")}</span><span data-column="created">{t("home.columnCreated")}</span>
   </div>;
 }
@@ -243,68 +271,127 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
     </li>)}</ul>;
 }
 
+/**
+ * A card's, a row's or a place's press target: a real link where it has an address (`href`), so the browser's own ways
+ * of opening one in a new tab work on it (⌘ or Ctrl and a click, a middle click, the link's menu) and a plain click is
+ * `onPress`, in this view; a button where it has none, or cannot be opened (`disabled`).
+ */
+function PressTarget({ href = null, disabled = false, onPress, children, ...props }: {
+  href?: string | null; disabled?: boolean; onPress(): void; children: ReactNode; className?: string;
+  "aria-label"?: string; "aria-busy"?: boolean;
+}) {
+  if (href && !disabled) return <a href={href} onClick={event => { if (!plainClick(event)) return; event.preventDefault(); onPress(); }} {...props}>{children}</a>;
+  return <button type="button" disabled={disabled} onClick={onPress} {...props}>{children}</button>;
+}
+
+/** Escape's key, as a keyboard prints it: a key's name, the same in every language. */
+const ESCAPE_KEY = "Esc";
+/** The home narrower than this has no sidebar: its places are a menu on its heading. */
+const NARROW_PX = 720;
+/** One place of the home as its row and its menu item draw it. */
+interface PlaceRow { place: HomeLocation; key: string; label: string; count: number; Icon: ComponentType<any>; missing?: boolean }
+/** What the home asks of the host's navigation: a target's address, and a target opened beside this view. */
+export type LibraryNavigation = Pick<ViewerHost["navigation"], "hrefOf" | "openBeside">;
+/** The document the person just left for a project's page: its card is ringed, and Back and Escape return to it. */
+export interface LibraryOrigin {
+  /** A file's absolute path, a model's id: the row's `path`. */
+  path: string;
+  /** Its document's id, where the host knows it: the row's `id`. */
+  id?: string | null;
+  name: string;
+}
 
 /**
- * The host's home: the projects, each with its documents, then the standalone documents opened before, from every
- * view, to open again. The viewer's navbar is over it (its logo's app menu, the host's update and Full size, as over a
- * file); the host's links are that menu's. The page is a centred column (1128px at most, on its own 24px gutters). It
- * starts with its control row, one line of 24px controls: at the left "Home", the page's heading (the Home's one larger
- * text); at the right the type filter ("All ▾": All, Models, Files), there where models and files are both listed, the
- * search, the grid/list switch and, where the host has a chooser, Import (its File and its Folder), all there with
- * nothing yet too.
+ * The host's home: every document the viewer knows, one place at a time, to open again. The viewer's navbar is over it
+ * (its logo's app menu, the host's update and Full size, as over a file), holding "Home", the search and, where the
+ * host has a chooser, Import (its File and its Folder); with no navbar they stand in a bar of the page's own. The page
+ * is on the page's colour (`--background`), full width.
  *
- * Then each project (`projects`: a folder a person opened as one), the latest activity first: a section headed by its
- * name, its folder (from `~`) and its ⋯ (Copy path, Reveal, Remove from CAD, which forgets the project and nothing on
- * disk), then its documents -- pinned first, its models, then its files, each by last activity -- `PROJECT_TILES` of
- * them until its Show all. Then the standalone documents, those in no project, pinned first, under "Standalone" where
- * there are projects. Each document is a card (a picture over the kind's glyph, the name and its last activity with its
- * verb: "Edited 2m ago", "Viewed 16m ago") or a row (Name, Updated, Created): its name, its glyph and its age, never
- * where it was built from. Each has one ⋯ menu: Open, a file's Copy path and Reveal where the host can (a model has
- * neither), Pin or Unpin, then Delete, which asks first (an AlertDialog saying what goes and what stays on disk) and
- * takes the card off the list at once; a pinned card shows its pin. A project's file is listed for being in its folder:
- * it has no Delete, and a Pin once a page has opened it. A search and the type filter narrow every section, a section
- * with nothing left gone. It is drawn on the navbar's colour.
+ * At its left, a sidebar of places on the panel's surface (232px, `bg-sidebar`, a rule on its right): Recents (`place`'s
+ * default: every document opened lately, across projects, as `library.list()` gives them), Pinned with its count, then
+ * "Projects" with a "+" (Import's Folder, where the host has a chooser) over one row a project (`projects()`: its folder
+ * glyph, name and count, the latest activity first; one whose folder is gone muted), then Standalone, the documents
+ * in no project. Its rows are the panel's (`primitives/tree-row.jsx`), the one on screen marked (`aria-current`), Up and
+ * Down moving between them; each is a link where the host gives places an address (`navigation.hrefOf`).
  *
- * `focus` (a project's id: the navbar's project name, pressed) brings that project's section into view, marked, as
- * Import's Folder does the project it opened, with a line saying what came of it.
+ * The main area shows the place on screen. Its heading row: the place's name (a project's with its folder glyph, its
+ * folder from `~` and its ⋯: Open in new tab, Copy path, Reveal, Remove from CAD, which forgets the project and nothing
+ * on disk), then Show (the type filter: All, Models, Files, there where both are listed), Sort (Last activity, Name,
+ * Kind) and the grid/list switch. Then the place's documents, every one of them (`PLACE_ROWS` until Show more), each a
+ * card (a picture over the kind's glyph, the name, and a line: its project's name in Recents and Pinned, a model's script
+ * in its project's page, a file's size, then its last activity with its verb) or a row (Name, Where or Project, Kind,
+ * Size, Updated, Created). A card's or a row's main press is a link where the host gives the document an address
+ * (it is named by its `id`; a row with none by its `path`), a button otherwise. Each has a pin and one ⋯ menu: Open, Open in new tab (or Open in browser: `navigation.openBeside`),
+ * a file's Copy path and Reveal where the host can (a model has neither), Pin or Unpin, then Delete, which asks first
+ * (an AlertDialog saying what goes and what stays on disk) and takes the card off the list at once. A project's file is
+ * listed for being in its folder: it has no Delete, and a Pin once a page has opened it. A search narrows the place on
+ * screen.
  *
- * Nothing waits unseen. While the list is read, placeholder cards (or rows) stand where the documents will be. A
- * document being opened shows a spinner over its picture, and the library takes no other open until the host has
- * opened it or failed to. A card on screen that wants a picture (`wantsPicture`) is handed to `picture`, where the
- * viewer draws one out of sight — one card at a time, each once while the page is up — and the list is read again
- * once one is kept.
+ * Narrower than `NARROW_PX`, and at the phone's scale, there is no sidebar: the heading ("Home" in the navbar) is a
+ * menu button listing the same places with the same counts.
+ *
+ * `from` (the document the navbar's project name was pressed over) rings that document's card in the brand's colour,
+ * brought into view, and puts "Back to <name>" in the heading row; Escape, while no menu, dialog or field has the
+ * keyboard, goes back too (`onBack`).
+ *
+ * Nothing waits unseen. While the list is read, placeholder cards (or rows) stand where the documents will be, and
+ * placeholder rows where the projects will be. A document being opened shows a spinner over its picture, and the
+ * library takes no other open until the host has opened it or failed to. A card on screen that wants a picture
+ * (`wantsPicture`) is handed to `picture`, where the viewer draws one out of sight — one card at a time, each once
+ * while the page is up — and the list is read again once one is kept.
  */
-export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, picture, fileActions, focus = null, home = null }: {
+export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, sort = "activity", onSortChange, picture, fileActions,
+  place: placed, onPlaceChange, onPlaceShown, from = null, onBack, navigation, home = null }: {
   library: ModelLibrarySource<Model>;
   /** What the host can do with a file on disk (Copy path, Reveal): each file's menu offers it, and each project's. */
   fileActions?: FileActions;
   /** Grid or list; the host keeps the choice (the tab's settings). */
   layout?: LibraryLayout;
   onLayoutChange?(layout: LibraryLayout): void;
+  /** The order of the place's documents; the host keeps the choice with the layout. Without `onSortChange` there is no Sort. */
+  sort?: LibrarySort;
+  onSortChange?(sort: LibrarySort): void;
   /** Draw and keep a model's picture; true once it is kept. */
   picture?(model: Model): Promise<boolean>;
-  /** The project to bring into view: the navbar's project name was pressed over one of its documents. */
-  focus?: string | null;
+  /** The place on screen, where the host keeps it (its address, its history); without it the home keeps its own, from Recents. */
+  place?: HomeLocation;
+  /** The person chose a place: a row of the sidebar, Import's Folder (the project it opened), Remove from CAD (Recents). */
+  onPlaceChange?(place: HomeLocation): void;
+  /** The place on screen by its name, as the person reads it ("Recents", a project's name): what a host titles its page with. */
+  onPlaceShown?(name: string): void;
+  /** The document the person just left for this place: ringed, with the way back to it. */
+  from?: LibraryOrigin | null;
+  onBack?(): void;
+  /** The host's addresses and its Open in new tab (`ViewerHost.navigation`): links for buttons, and the menus' item. */
+  navigation?: LibraryNavigation;
   /** The person's home folder, where the host knows it: a project's folder is said from `~` in it. */
   home?: string | null;
 }) {
   const [items, setItems] = useState<readonly Model[] | null>(null);
   const [projects, setProjects] = useState<readonly LibraryProject<Model>[] | null>(null);
+  // The projects could not be read, and none are shown: said where they would be.
+  const [projectsFailed, setProjectsFailed] = useState(false);
   const [query, setQueryState] = useState("");
   // What a person does on the home, counted (`usage/controls.js`): a search begun, never what it looks for.
   const usage = useControlUsage();
   const setQuery = (next: string) => { if (!query.trim() && next.trim()) usage.used("home_search"); setQueryState(next); };
   const [error, setError] = useState("");
-  // What came of the last Import's Folder or Remove from CAD, in a line under the controls.
-  const [note, setNote] = useState("");
   const { t, locale } = useI18n();
+  // The place on screen: the host's (`placed`), else the home's own.
+  const [ownPlace, setOwnPlace] = useState<HomeLocation>(RECENTS);
+  const place = placed ?? ownPlace;
+  const here = placeKey(place);
+  // What came of the last Import's Folder or Remove from CAD, in a line over the place it led to; gone with the place.
+  const [note, setNote] = useState<{ text: string; at: string } | null>(null);
+  const show = (next: HomeLocation) => { setOwnPlace(next); onPlaceChange?.(next); };
   // The host's library as it is now: a host may hand a new one each render.
   const current = useRef(library);
   current.current = library;
   const images = useRef(new Map<string, Promise<string | null>>());
   // The same list again is not news: the cards keep their state and are not drawn again. The projects are read with
   // it (`readProjects`); a read of them that fails keeps the ones shown.
-  const readProjects = useCallback(() => (current.current.projects ? current.current.projects().then(found => found, () => undefined)
+  const readProjects = useCallback(() => (current.current.projects
+    ? current.current.projects().then(found => { setProjectsFailed(false); return found; }, () => { setProjectsFailed(true); return undefined; })
     : Promise.resolve([])).then(found => {
     if (found !== undefined) setProjects(previous => previous && JSON.stringify(previous) === JSON.stringify(found) ? previous : found);
   }), []);
@@ -364,29 +451,32 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     setOpening(item.path);
     void current.current.open(item).catch(fail).finally(() => setOpening(null));
   };
-  // The project brought into view and marked: the one the host names (`focus`), or the one Import's Folder opened.
-  const [focused, setFocused] = useState<string | null>(focus);
-  useEffect(() => { if (focus) setFocused(focus); }, [focus]);
-  const sections = useRef(new Map<string, HTMLElement>());
-  // Once its section is drawn: a project Import's Folder just opened is listed a moment after it is named.
-  const focusListed = Boolean(focused && projects?.some(project => project.id === focused));
-  useEffect(() => {
-    if (focused && focusListed) sections.current.get(focused)?.scrollIntoView?.({ block: "start" });
-  }, [focused, focusListed]);
-  // Import, at the control row's right end: the host's chooser of a file (shown as it is chosen) or of a folder (opened
-  // as a project, brought into view and said), where its computer has one.
-  const importFile = library.pick ? () => { usage.used("home_pick"); setError(""); setNote(""); void current.current.pick?.().catch(fail); } : null;
+  // The person's own move to a place: a row of the sidebar, an item of the heading's menu.
+  const PLACE_CONTROLS = { recents: "home_place_recents", pinned: "home_place_pinned", standalone: "home_place_standalone", project: "home_place_project" } as const;
+  const visit = (next: HomeLocation) => {
+    if (placeKey(next) === here) return;
+    usage.used(PLACE_CONTROLS[next.view]);
+    setError("");
+    show(next);
+  };
+  // The project Import's Folder just opened, until the projects read again list it: its page waits for it.
+  const [arriving, setArriving] = useState<string | null>(null);
+  // Import, at the navbar's right end: the host's chooser of a file (shown as it is chosen) or of a folder (opened as a
+  // project, whose page is shown, with a line saying what came of it), where its computer has one.
+  const importFile = library.pick ? () => { usage.used("home_pick"); setError(""); setNote(null); void current.current.pick?.().catch(fail); } : null;
   const importFolder = library.importFolder ? () => {
     usage.used("home_import_folder");
     setError("");
-    setNote("");
+    setNote(null);
     void current.current.importFolder?.().then(imported => {
       if (!imported) return;
       const { project, made, folder } = imported;
-      setFocused(project.id);
-      setNote(made ? t("home.projectMade", { name: project.name })
+      const next: HomeLocation = { view: "project", project: project.id };
+      setArriving(project.id);
+      setNote({ at: placeKey(next), text: made ? t("home.projectMade", { name: project.name })
         : folder.replace(/\/+$/, "") === project.root.replace(/\/+$/, "") ? t("home.projectAgain", { name: project.name })
-          : t("home.projectInside", { name: folder.split("/").filter(Boolean).pop() ?? folder, project: project.name }));
+          : t("home.projectInside", { name: folder.split("/").filter(Boolean).pop() ?? folder, project: project.name }) });
+      show(next);
       return refresh();
     }).catch(fail);
   } : null;
@@ -404,26 +494,80 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   };
   const all = (items ?? []).filter(item => !gone.has(item.path));
   const [kind, setKind] = useState<LibraryKind>("all");
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
-  // Home's navbar (`file-viewer/navbarSlots.js`): its heading, the search and Import go there, on the grid's
-  // column; where there is no navbar they stand in the page's own first row.
+  // The places shown whole: past `PLACE_ROWS`, a place lists the rest once its Show more is pressed.
+  const [whole, setWhole] = useState<ReadonlySet<string>>(() => new Set());
+  // Home's navbar (`file-viewer/navbarSlots.js`): its heading, the search and Import go there; where there is no
+  // navbar they stand in a bar of the page's own.
   const slots = useNavbarSlots();
   // A narrow navbar (under 700px: `styles/globals.css`) shows the search as its icon until it is pressed.
   const [searchOpen, setSearchOpen] = useState(false);
+  // No sidebar at the phone's scale, nor in a home narrower than `NARROW_PX` (measured on the home, never the window;
+  // a home not laid out yet has its sidebar).
+  const mobile = useViewerMobile();
+  const [element, setElement] = useState<HTMLDivElement | null>(null);
+  const [tight, setTight] = useState(false);
+  useLayoutEffect(() => {
+    if (!element) return undefined;
+    const measure = () => { const width = element.getBoundingClientRect().width; setTight(width > 0 && width < NARROW_PX); };
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [element]);
+  const narrow = mobile || tight;
   const filtering = Boolean(query.trim()) || kind !== "all";
-  // Each project's documents, and the standalone ones: those of no project the home lists.
-  const known = new Set((projects ?? []).map(project => project.id));
-  const projectSections = (projects ?? []).map(project => {
-    const documents = projectOrder(project.documents.filter(item => !gone.has(item.path)));
-    return { project, documents, matching: shownModels(documents, query, kind) };
-  });
-  const standalone = all.filter(item => !item.project || !known.has(item.project));
-  // The host lists pinned documents first; a search and the type filter keep that order.
-  const shown = shownModels(standalone, query, kind);
+  // The places. Each project's documents; Pinned, from every document listed; Standalone, those of no project.
+  const listed = (projects ?? []).map(project => ({ project, documents: project.documents.filter(item => !gone.has(item.path)) }));
+  const known = new Map(listed.map(({ project }) => [project.id, project]));
+  const inProject = (item: Model) => Boolean(item.project && known.has(item.project));
+  const standalone = all.filter(item => !inProject(item));
+  const everything = [...all, ...listed.flatMap(entry => entry.documents.filter(item => !all.some(other => other.path === item.path)))];
+  const pinned = everything.filter(item => item.pinned);
+  const shownProject = place.view === "project" ? known.get(place.project) ?? null : null;
+  useEffect(() => { if (arriving && projects?.some(project => project.id === arriving)) setArriving(null); }, [arriving, projects]);
+  // A project's page before its project is listed: one Import's Folder just opened, or the first read of the projects.
+  const awaited = place.view === "project" && !shownProject && (projects === null ? !projectsFailed : arriving === place.project);
+  const placeName = place.view === "project" ? shownProject?.name ?? t("home.project")
+    : place.view === "standalone" ? t("home.standalone") : t(`home.place.${place.view}`);
+  const shownName = useRef(onPlaceShown);
+  shownName.current = onPlaceShown;
+  useEffect(() => { shownName.current?.(placeName); }, [placeName]);
+  const format = (item: Model) => formatLabel(item, t("home.formatModel"));
+  const inPlace = place.view === "project" ? listed.find(entry => entry.project.id === place.project)?.documents ?? []
+    : place.view === "pinned" ? pinned : place.view === "standalone" ? standalone : all;
+  const ordered = sortDocuments(inPlace, sort, format, locale);
+  const matching = shownModels(ordered, query, kind);
   // The type filter is there only where there is something to tell apart: models and files both listed.
-  const everything = [...all, ...projectSections.flatMap(section => section.documents)];
   const kinds = everything.some(deletes) && everything.some(item => !deletes(item));
   const now = Date.now();
+  // The document just left, among the place's: its card is ringed and brought into view, past the Show more if need be.
+  const left = (item: Model) => Boolean(from && (slashed(item.path) === slashed(from.path) || (from.id && item.id === from.id)));
+  const leftAt = from ? matching.findIndex(left) : -1;
+  const capped = !whole.has(here) && leftAt < PLACE_ROWS && matching.length > PLACE_ROWS;
+  const drawn = capped ? matching.slice(0, PLACE_ROWS) : matching;
+  const ringed = useRef<HTMLLIElement | null>(null);
+  const leftKey = from && leftAt >= 0 ? `${here}\n${from.path}` : "";
+  useEffect(() => { if (leftKey) ringed.current?.scrollIntoView?.({ block: "nearest" }); }, [leftKey]);
+  // Escape goes back to the document just left, while nothing else has the key: a menu or a dialog that is up, a
+  // field being typed in, or something that spends its own Escape.
+  const back = from && onBack ? () => { usage.used("home_back"); onBack(); } : null;
+  const goBack = useRef(back);
+  goBack.current = back;
+  const returning = Boolean(back);
+  useEffect(() => {
+    if (!returning) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("input, textarea, select, [contenteditable]") || ownsEscape(target)) return;
+      if (hasOpenPopup(document.body) || document.querySelector("[role=dialog], [role=alertdialog], [role=menu]")) return;
+      event.preventDefault();
+      goBack.current?.();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [returning]);
   // What the host can do with a card's document: Copy path, Copy link and Reveal for a file on disk;
   // a model is no file, and takes Copy link alone (its page needs no file). A project's folder: Copy path and Reveal.
   const fileItems = entryMenu(fileActions?.platform ?? "linux", new Set(Object.keys(fileActions?.perform ?? {}) as EntryAction[]), t);
@@ -435,15 +579,27 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     if (action in HOME_CONTROLS) usage.used(HOME_CONTROLS[action as keyof typeof HOME_CONTROLS]);
     void Promise.resolve(fileActions?.perform?.[action]?.({ path: item.path, kind: "file", ...(item.id ? { id: item.id } : {}) })).catch(fail);
   };
-  // A card's pin and its one menu (Open, what the host can do with a file on disk, Pin or Unpin, then
+  // The host's addresses and its way to open a target beside this view. A document is named by its id, a project's
+  // file no page has opened too (a CAD host knows each file it lists by its id); a row with no id, by its path, which
+  // the host resolves as it opens it.
+  const hrefOf = navigation?.hrefOf, beside = navigation?.openBeside;
+  const targetOf = (item: Model): NavigationTarget => ({ document: item.id ?? item.path });
+  const besideLabel = beside ? t(beside.kind === "browser" ? "home.openBrowser" : "home.openNewTab") : "";
+  const openBeside = (target: NavigationTarget, control: "home_open_new_tab" | "home_project_open_new_tab") => {
+    usage.used(control);
+    setError("");
+    void Promise.resolve().then(() => beside?.open(target)).catch(fail);
+  };
+  // A card's pin and its one menu (Open, Open in new tab, what the host can do with a file on disk, Pin or Unpin, then
   // Delete), there while the pointer is on the card (Figma's star): the pin toggles, and a pinned
   // card shows it, filled, whatever the pointer does. A project's file has no Delete (its folder lists it), and a Pin
   // once a page has opened it (its record).
   // Pin or Unpin, from the card's pin or its menu: counted alike.
   const pin = (item: Model) => { usage.used(item.pinned ? "home_unpin" : "home_pin"); void change(item.pinned ? "unpin" : "pin", item); };
-  const actions = (item: Model, inProject: boolean) => {
-    const pinnable = !inProject || deletes(item) || item.pinned || item.opened !== null;
-    const deletable = !inProject || deletes(item);
+  const actions = (item: Model) => {
+    const owned = inProject(item);
+    const pinnable = !owned || deletes(item) || item.pinned || item.opened !== null;
+    const deletable = !owned || deletes(item);
     return <div className="cad-library-actions" data-pinned={item.pinned || undefined}>
       {pinnable ? <Button variant="ghost" size="icon-xs" className="cad-library-pin" aria-label={t(item.pinned ? "home.unpin" : "home.pin")} aria-pressed={item.pinned}
         onClick={() => pin(item)}><Pin aria-hidden="true" fill={item.pinned ? "currentColor" : "none"} /></Button> : null}
@@ -453,6 +609,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-40">
           <DropdownMenuItem disabled={item.missing} onSelect={() => open(item)}>{t("home.menuOpen")}</DropdownMenuItem>
+          {beside ? <DropdownMenuItem disabled={item.missing} onSelect={() => openBeside(targetOf(item), "home_open_new_tab")}>{besideLabel}</DropdownMenuItem> : null}
           {(deletes(item) ? modelItems : fileItems).map(entry => <DropdownMenuItem key={entry.action} onSelect={() => perform(entry.action, item)}>{entry.label}</DropdownMenuItem>)}
           {pinnable ? <DropdownMenuItem onSelect={() => pin(item)}>{t(item.pinned ? "home.unpin" : "home.pin")}</DropdownMenuItem> : null}
           {deletable ? <>
@@ -463,29 +620,33 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       </DropdownMenu>
     </div>;
   };
-  // A project's ⋯: its folder's Copy path and Reveal where the host can, then Remove from CAD, which forgets the project
-  // alone (no question: nothing on disk changes, and opening the folder again brings it back).
+  // A project's ⋯: Open in new tab first, where the host opens a place beside this view; its folder's Copy path and
+  // Reveal where the host can; then Remove from CAD, which forgets the project alone (no question: nothing on disk
+  // changes, and opening the folder again brings it back) and goes to Recents, saying so.
   const removeProject = library.removeProject ? (project: LibraryProject<Model>) => {
     usage.used("home_project_remove");
     setError("");
     void current.current.removeProject?.(project).then(next => {
       setProjects(next);
-      setNote(t("home.projectRemoved", { name: project.name }));
+      setNote({ at: placeKey(RECENTS), text: t("home.projectRemoved", { name: project.name }) });
+      show(RECENTS);
       return refresh();
     }).catch(fail);
   } : null;
-  const projectMenu = (project: LibraryProject<Model>) => folderItems.length || removeProject ? <div className="cad-library-section-actions">
+  const besidePlaces = beside && beside.places !== false;
+  const projectMenu = (project: LibraryProject<Model>) => besidePlaces || folderItems.length || removeProject ? <div className="cad-library-place-actions">
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon-xs" aria-label={t("home.projectActionsAria", { name: project.name })}><Ellipsis aria-hidden="true" /></Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-40">
+      <DropdownMenuContent align="start" className="min-w-40">
+        {besidePlaces ? <DropdownMenuItem onSelect={() => openBeside({ home: { view: "project", project: project.id } }, "home_project_open_new_tab")}>{besideLabel}</DropdownMenuItem> : null}
         {folderItems.map(entry => <DropdownMenuItem key={entry.action} disabled={entry.action === "reveal" && project.missing} onSelect={() => {
           usage.used(PROJECT_CONTROLS[entry.action as keyof typeof PROJECT_CONTROLS]);
           void Promise.resolve(fileActions?.perform?.[entry.action]?.({ path: project.root, kind: "directory" })).catch(fail);
         }}>{entry.label}</DropdownMenuItem>)}
         {removeProject ? <>
-          {folderItems.length ? <DropdownMenuSeparator /> : null}
+          {besidePlaces || folderItems.length ? <DropdownMenuSeparator /> : null}
           <DropdownMenuItem variant="destructive" onSelect={() => removeProject(project)}>{t("home.projectRemove")}</DropdownMenuItem>
         </> : null}
       </DropdownMenuContent>
@@ -511,92 +672,96 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     </AlertDialogContent>
   </AlertDialog>;
   const age = (seconds: number | null) => ageLabel(seconds, now, t, locale);
-  const format = (item: Model) => formatLabel(item, t("home.formatModel"));
-  // A tile's line: a file's size, then its last activity with its verb, Edited or Viewed, whichever came last.
-  const status = (item: Model) => item.missing ? t("home.fileUnavailable")
-    : [sizeLabel(item.size, locale), activityLabel(item, now, t, locale)].filter(Boolean).join(" · ");
+  // Where a document is, said where it is not plain: in a project's page, a model's script and a file's folder under
+  // the project's; in Recents and Pinned, where projects are listed, its project's name (Standalone for one in none).
+  const across = (place.view === "recents" || place.view === "pinned") && listed.length > 0;
+  const where = (item: Model) => shownProject ? below(deletes(item) ? item.script ?? "" : item.folder ?? "", shownProject.root)
+    : across ? known.get(item.project ?? "")?.name ?? t("home.standalone") : "";
+  const whereColumn = shownProject ? t("home.columnWhere") : across ? t("home.columnProject") : null;
+  // A tile's line: where it is (a project's page says a model's script, its files' folders being the list's), a file's
+  // size, then its last activity with its verb, Edited or Viewed, whichever came last.
+  const status = (item: Model) => [shownProject && !deletes(item) ? "" : where(item), ...(item.missing ? [t("home.fileUnavailable")]
+    : [sizeLabel(item.size, locale), activityLabel(item, now, t, locale)])].filter(Boolean).join(" · ");
   // A row's picture is small, 40 by 28, its spinner over it while it is being opened.
   const name = (item: Model) => <span className="cad-library-name">
     <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} />
     <span className="cad-library-label">{item.name}</span>
   </span>;
-  // A row's columns: its kind and size, then its two times with no verb: when it last changed, and when its record was first made.
+  // A row's columns: where it is, its kind and size, then its two times with no verb: when it last changed, and when its record was first made.
   const columns = (item: Model) => <>
+    {whereColumn ? <span className="cad-library-status" data-column="where">{where(item)}</span> : null}
     <span className="cad-library-status" data-column="kind">{format(item)}</span>
     <span className="cad-library-status" data-column="size">{sizeLabel(item.size, locale) || "—"}</span>
     <span className="cad-library-status" data-column="updated">{item.missing ? t("home.fileUnavailable") : age(item.updated)}</span>
     <span className="cad-library-status" data-column="created">{age(item.created)}</span>
   </>;
-  // One section's documents, as cards or as rows under their header.
-  const documents = (list: readonly Model[], inProject: boolean) => layout === "list"
-    ? <div className="cad-library-table"><Columns /><ul className="cad-library-list" aria-label={t("home.filesAria")}>{list.map(item => <li key={item.path} className="cad-library-row" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
-      <div className="cad-library-main">
-        <button type="button" className="cad-library-open" disabled={item.missing} aria-label={t("home.openAria", { name: item.name })} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
-          {name(item)}
-          {columns(item)}
-        </button>
-        {actions(item, inProject)}
-      </div>
-    </li>)}</ul></div>
-    : <ul className="cad-library-grid" aria-label={t("home.filesAria")}>{list.map(item => <li key={item.path} className="cad-library-card" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
-      <div className="cad-library-main">
-        <button type="button" className="cad-library-open" disabled={item.missing} aria-label={t("home.openAria", { name: item.name })} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
-          <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} badge={format(item)} />
-          {/* The caption: the kind's glyph at the left of the name over its size and age. */}
-          <span className="cad-library-body">
-            <DocumentGlyph model={deletes(item)} path={item.path} className="cad-library-glyph" />
-            <span className="cad-library-text">
-              <span className="cad-library-label">{item.name}</span>
-              <span className="cad-library-status">{status(item)}</span>
-            </span>
-          </span>
-        </button>
-        {actions(item, inProject)}
-      </div>
-    </li>)}</ul>;
-  // Each project, headed by its name, its folder and its ⋯, then its documents up to its Show all; with a search or the
-  // type filter, those that match, every one, and a project with none is left out.
-  const projectNodes = projectSections.map(({ project, documents: listedDocuments, matching }) => {
-    if (filtering && !matching.length) return null;
-    const whole = filtering || expanded.has(project.id);
-    const toggle = () => {
-      if (!expanded.has(project.id)) usage.used("home_project_more");
-      setExpanded(previous => { const next = new Set(previous); if (!next.delete(project.id)) next.add(project.id); return next; });
-    };
-    return <section key={project.id} className="cad-library-section" aria-label={project.name} data-project={project.id}
-      data-focus={focused === project.id || undefined} ref={element => { if (element) sections.current.set(project.id, element); else sections.current.delete(project.id); }}>
-      <div className="cad-library-section-head">
-        <h2 className="cad-library-section-title"><Folder className="cad-library-glyph" aria-hidden="true" /><span className="cad-library-label">{project.name}</span></h2>
-        <span className="cad-library-section-path" title={project.root}>{tildePath(project.root, home)}</span>
-        {projectMenu(project)}
-      </div>
-      {project.missing ? <p className="cad-library-section-empty">{t("home.projectMissing")}</p>
-        : !listedDocuments.length ? <p className="cad-library-section-empty">{t("home.projectEmpty")}</p>
-          : documents(whole ? matching : matching.slice(0, PROJECT_TILES), true)}
-      {!filtering && listedDocuments.length > PROJECT_TILES ? <button type="button" className="cad-library-more" aria-expanded={whole} onClick={toggle}>
-        {whole ? t("home.showFewer") : t("home.showAll", { count: listedDocuments.length })}</button> : null}
-      {project.truncated && whole ? <p className="cad-library-section-empty">{t("home.projectTruncated")}</p> : null}
-    </section>;
-  });
-  const anyProjectShown = projectNodes.some(Boolean);
+  // A document's entry: its main press, a link where the host gives it an address, then its pin and ⋯.
+  const entry = (item: Model, className: string, body: ReactNode) => <li key={item.path} className={className} data-missing={item.missing || undefined}
+    data-opening={opening === item.path || undefined} data-from={left(item) || undefined} ref={left(item) ? ringed : undefined}>
+    <div className="cad-library-main">
+      <PressTarget className="cad-library-open" href={item.missing ? null : hrefOf?.(targetOf(item)) ?? null} disabled={item.missing}
+        aria-label={t("home.openAria", { name: item.name })} aria-busy={opening === item.path || undefined} onPress={() => open(item)}>{body}</PressTarget>
+      {actions(item)}
+    </div>
+  </li>;
+  // The place's documents, as cards or as rows under their header.
+  const documents = (list: readonly Model[]) => layout === "list"
+    ? <div className="cad-library-table" data-where={whereColumn ? "" : undefined}><Columns where={whereColumn} /><ul className="cad-library-list" aria-label={t("home.filesAria")}>
+      {list.map(item => entry(item, "cad-library-row", <>{name(item)}{columns(item)}</>))}</ul></div>
+    : <ul className="cad-library-grid" aria-label={t("home.filesAria")}>{list.map(item => entry(item, "cad-library-card", <>
+      <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} badge={format(item)} />
+      {/* The caption: the kind's glyph at the left of the name over where it is, its size and its age. */}
+      <span className="cad-library-body">
+        <DocumentGlyph model={deletes(item)} path={item.path} className="cad-library-glyph" />
+        <span className="cad-library-text">
+          <span className="cad-library-label">{item.name}</span>
+          <span className="cad-library-status">{status(item)}</span>
+        </span>
+      </span>
+    </>))}</ul>;
   // Import, the host's chooser of a file or a folder: neutral, as every control of the row is (never a filled primary).
   const importMenu = importFile || importFolder ? <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild>
-      <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui">
-        <FolderOpen className="size-4" aria-hidden="true" />{t("home.import")}<ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" /></Button>
+      <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" aria-label={t("home.import")}>
+        <FolderOpen className="size-4" aria-hidden="true" /><span className="cad-library-pick-label">{t("home.import")}</span><ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" /></Button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" className="min-w-40">
       {importFile ? <DropdownMenuItem onSelect={importFile}>{t("home.importFile")}</DropdownMenuItem> : null}
       {importFolder ? <DropdownMenuItem onSelect={importFolder}>{t("home.importFolder")}</DropdownMenuItem> : null}
     </DropdownMenuContent>
   </DropdownMenu> : null;
-  const heading = <h1 className="cad-library-heading" data-library-heading={slots ? "navbar" : "page"}>{t("home.title")}</h1>;
-  // The type filter: the one value dropdown (`primitives/value-dropdown.jsx`), drawn as the row's ghost control.
-  const kindMenu: ReactNode = kinds ? <ValueDropdown value={kind} label={t("home.kindsAria")} align={slots ? "start" : "end"}
-    options={(["all", "models", "files"] as const).map(value => ({ value, label: t(`home.kind.${value}`) }))}
-    onChange={value => { if (kind !== value) usage.used(`home_filter_${value as LibraryKind}`); setKind(value as LibraryKind); }}
-    className="cad-library-kind min-w-0 w-auto gap-1 border-0 bg-transparent px-2 shadow-none hover:bg-accent dark:bg-transparent"
-    triggerProps={{ "aria-label": t("home.kindAria", { kind: t(`home.kind.${kind}`) }) }} /> : null;
+  // The places, as the sidebar's rows and the heading's menu list them (`LibraryPlaces.jsx`): Recents, Pinned, each
+  // project, Standalone. A wide home has the sidebar; a narrow one the same places in a menu on its heading.
+  const fixed = (view: "recents" | "pinned" | "standalone", count: number, Icon: PlaceRow["Icon"]): PlaceRow =>
+    ({ place: { view }, key: view, label: view === "standalone" ? t("home.standalone") : t(`home.place.${view}`), count, Icon });
+  const places = {
+    lead: [fixed("recents", 0, Clock), fixed("pinned", pinned.length, Pin)],
+    projects: listed.map(({ project, documents: own }): PlaceRow => ({ place: { view: "project", project: project.id },
+      key: placeKey({ view: "project", project: project.id }), label: project.name, count: own.length, Icon: Folder, missing: project.missing })),
+    standalone: fixed("standalone", standalone.length, Files),
+    current: here, onVisit: visit, onAddProject: importFolder,
+    loading: projects === null && !projectsFailed,
+    note: projects === null ? (projectsFailed ? t("home.projectsFailed") : null) : projects.length ? null : t("home.projectsEmpty"),
+  };
+  const sidebar = <PlacesSidebar {...places} hrefOf={hrefOf ? (target: HomeLocation) => hrefOf({ home: target }) : null} />;
+  const placeMenu = <PlacesMenu {...places} name={placeName} />;
+  // The page's heading: "Home", in the navbar where there is one; with no sidebar, the places' menu.
+  const heading = <h1 className="cad-library-heading" data-library-heading={slots ? "navbar" : "page"}>{narrow ? placeMenu : t("home.title")}</h1>;
+  // Show and Sort: each a muted label and the one value dropdown (`primitives/value-dropdown.jsx`), drawn as the row's
+  // ghost control.
+  const CHOICE_CLASS = "cad-library-choice min-w-0 w-auto gap-1 border-0 bg-transparent px-2 shadow-none hover:bg-accent dark:bg-transparent";
+  const kindMenu: ReactNode = kinds ? <span className="cad-library-field"><FieldLabel className="cad-library-field-label">{t("home.kindsAria")}</FieldLabel>
+    <ValueDropdown value={kind} label={t("home.kindsAria")} align="end"
+      options={(["all", "models", "files"] as const).map(value => ({ value, label: t(`home.kind.${value}`) }))}
+      onChange={value => { if (kind !== value) usage.used(`home_filter_${value as LibraryKind}`); setKind(value as LibraryKind); }}
+      className={`cad-library-kind ${CHOICE_CLASS}`}
+      triggerProps={{ "aria-label": t("home.kindAria", { kind: t(`home.kind.${kind}`) }) }} /></span> : null;
+  const sortMenu: ReactNode = onSortChange ? <span className="cad-library-field"><FieldLabel className="cad-library-field-label">{t("home.sortAria")}</FieldLabel>
+    <ValueDropdown value={sort} label={t("home.sortAria")} align="end"
+      options={(["activity", "name", "kind"] as const).map(value => ({ value, label: t(`home.sort.${value}`) }))}
+      onChange={value => { usage.used(`home_sort_${value as LibrarySort}`); onSortChange(value as LibrarySort); }}
+      className={`cad-library-sort ${CHOICE_CLASS}`}
+      triggerProps={{ "aria-label": t("home.sortByAria", { sort: t(`home.sort.${sort}`) }) }} /></span> : null;
   // The search: in a narrow navbar its icon alone until it is pressed (it opens with the keyboard in it), and it goes
   // back to its icon when it is left empty.
   const search = <div className="cad-home-search" data-open={searchOpen || query ? "" : undefined}>
@@ -612,52 +777,67 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     <Button variant="ghost" size="icon-xs" className="size-control" aria-label={t("home.grid")} aria-pressed={layout === "grid"} onClick={() => { usage.used("home_layout_grid"); onLayoutChange("grid"); }}><LayoutGrid className="size-4" aria-hidden="true" /></Button>
     <Button variant="ghost" size="icon-xs" className="size-control" aria-label={t("home.list")} aria-pressed={layout === "list"} onClick={() => { usage.used("home_layout_list"); onLayoutChange("list"); }}><List className="size-4" aria-hidden="true" /></Button>
   </div> : null;
+  // The way back to the document just left: its name, and the key that does the same (left out where nothing hovers).
+  const backControl = back && from ? <Button variant="outline" size="xs" className="cad-library-back" aria-keyshortcuts="Escape" onClick={back}>
+    <span className="cad-library-label">{t("home.backTo", { name: from.name })}</span><kbd className="cad-library-key" aria-hidden="true">{ESCAPE_KEY}</kbd></Button> : null;
   // Nothing at all yet: no project, no document.
-  const empty = !all.length && !projectSections.length;
-  // A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits.
-  return <div className="cad-library h-full overflow-y-auto text-ui" data-library-layout={layout}>
-    <main className="cad-library-content" aria-label={t("home.modelsAria")}>
-      {/* Home's controls: in the navbar where there is one (`slots`), else in this row, which keeps the filter and the
-          layout either way, 28px, on the grid's column: the row keeps its shape from the first open to the hundredth. */}
-      {slots ? <>
-        {slots.left ? createPortal(heading, slots.left) : null}
-        {slots.right ? createPortal(<>{search}{importMenu}</>, slots.right) : null}
-      </> : null}
-      <div className="cad-library-toolbar" data-library-toolbar={slots ? "filters" : "page"}>
-        {slots ? (kindMenu ?? <span />) : heading}
-        <div className="cad-library-controls">
-          {slots ? null : kindMenu}
-          {slots ? null : search}
-          {layoutSwitch}
-          {slots ? null : importMenu}
-        </div>
-      </div>
-      {error ? <div className="cad-library-error" role="alert"><p>{error}</p></div> : null}
-      {note ? <p className="cad-library-note" role="status">{note}</p> : null}
-      {items === null ? <Placeholders layout={layout} />
-        : filtering && !empty && !shown.length && !anyProjectShown ? <p className="cad-library-empty" role="status">{t("home.noMatchingModels")}</p>
-          : empty ? <div className="cad-library-welcome" data-library-empty="">
-            <span className="cad-library-welcome-stage"><img src={logo} alt="" draggable={false} /></span>
-            <h2 className="cad-library-welcome-title">{t("home.emptyTitle")}</h2>
-            <p className="cad-library-welcome-body">{t("home.emptyBody")}</p>
-            {importFile || importFolder ? <div className="cad-library-welcome-actions">
-              {importFile ? <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" onClick={importFile}>
-                <FolderOpen className="size-4" aria-hidden="true" />{t("home.importFileButton")}</Button> : null}
-              {importFolder ? <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" onClick={importFolder}>
-                <Folder className="size-4" aria-hidden="true" />{t("home.importFolderButton")}</Button> : null}
-            </div> : null}
-            <p className="cad-library-welcome-formats" aria-hidden="true">{WELCOME_FORMATS}</p>
-          </div>
-            : <>
-              {projectNodes}
-              {shown.length ? <section className="cad-library-section" aria-label={t("home.standalone")} data-standalone="">
-                {projectSections.length ? <div className="cad-library-section-head">
-                  <h2 className="cad-library-section-title"><span className="cad-library-label">{t("home.standalone")}</span></h2>
-                </div> : null}
-                {documents(shown, false)}
-              </section> : null}
+  const empty = !all.length && !listed.length;
+  // The place with nothing to list says why, in a line.
+  const nothing = place.view === "project" ? t("home.projectEmpty") : place.view === "pinned" ? t("home.pinnedEmpty")
+    : place.view === "standalone" ? t("home.standaloneEmpty") : t("home.recentsEmpty");
+  const welcome = <div className="cad-library-welcome" data-library-empty="">
+    <span className="cad-library-welcome-stage"><img src={logo} alt="" draggable={false} /></span>
+    <h2 className="cad-library-welcome-title">{t("home.emptyTitle")}</h2>
+    <p className="cad-library-welcome-body">{t("home.emptyBody")}</p>
+    {importFile || importFolder ? <div className="cad-library-welcome-actions">
+      {importFile ? <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" onClick={importFile}>
+        <FolderOpen className="size-4" aria-hidden="true" />{t("home.importFileButton")}</Button> : null}
+      {importFolder ? <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" onClick={importFolder}>
+        <Folder className="size-4" aria-hidden="true" />{t("home.importFolderButton")}</Button> : null}
+    </div> : null}
+    <p className="cad-library-welcome-formats" aria-hidden="true">{WELCOME_FORMATS}</p>
+  </div>;
+  const body = items === null || awaited ? <Placeholders layout={layout} />
+    : place.view === "project" && !shownProject ? <p className="cad-library-empty" data-library-state="gone">{projectsFailed ? t("home.projectsFailed") : t("home.projectGone")}</p>
+      : shownProject?.missing ? <p className="cad-library-empty" data-library-state="missing">{t("home.projectMissing")}</p>
+        : empty && place.view === "recents" ? welcome
+          : !inPlace.length ? <p className="cad-library-empty" data-library-state="empty">{nothing}</p>
+            : !matching.length ? <p className="cad-library-empty" role="status">{t("home.noMatchingModels")}</p>
+              : <>
+                {documents(drawn)}
+                {capped ? <button type="button" className="cad-library-more" onClick={() => { usage.used("home_project_more"); setWhole(previous => new Set([...previous, here])); }}>
+                  {t("home.showMore", { count: matching.length - drawn.length })}</button> : null}
+                {shownProject?.truncated && !capped ? <p className="cad-library-truncated">{t("home.projectTruncated")}</p> : null}
+              </>;
+  return <div className="cad-library h-full text-ui" data-library-layout={layout} data-library-narrow={narrow ? "" : undefined} data-library-place={here} ref={setElement}>
+    {/* Home's own controls: in the navbar where there is one (`slots`), else in a bar of the page's own. */}
+    {slots ? <>
+      {slots.left ? createPortal(heading, slots.left) : null}
+      {slots.right ? createPortal(<>{search}{importMenu}</>, slots.right) : null}
+    </> : <div className="cad-library-bar">{heading}<div className="cad-library-controls">{search}{importMenu}</div></div>}
+    <div className="cad-library-frame">
+      {narrow ? null : sidebar}
+      {/* A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits. */}
+      <main className="cad-library-content overflow-y-auto" aria-label={t("home.modelsAria")}>
+        {/* The place's heading row, every control the scale's: its name (a project's with its folder and its ⋯) and the
+            way back at the left; Show, Sort and the layout at the right. It keeps its shape from place to place. */}
+        <div className="cad-library-toolbar" data-library-toolbar="filters">
+          <div className="cad-library-place">
+            {narrow ? null : <>
+              {shownProject ? <Folder className="cad-library-glyph" aria-hidden="true" /> : null}
+              <h2 className="cad-library-title">{placeName}</h2>
+              {shownProject ? <TooltipHint content={shownProject.root} overflowOnly><span className="cad-library-path truncate">{tildePath(shownProject.root, home)}</span></TooltipHint> : null}
             </>}
-      {confirm}
-    </main>
+            {shownProject ? projectMenu(shownProject) : null}
+            {backControl}
+          </div>
+          <div className="cad-library-controls">{kindMenu}{sortMenu}{layoutSwitch}</div>
+        </div>
+        {error ? <div className="cad-library-error" role="alert"><p>{error}</p></div> : null}
+        {note && note.at === here ? <p className="cad-library-note" role="status">{note.text}</p> : null}
+        {body}
+        {confirm}
+      </main>
+    </div>
   </div>;
 }

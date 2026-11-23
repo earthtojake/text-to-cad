@@ -205,7 +205,7 @@ it('draws the home\'s own controls in its navbar on the grid\'s column: the logo
   const models = [{ path: '/work/a.step', name: 'a.step', folder: '/work', opened: 1, updated: 1, created: null, pinned: false, missing: false, thumbnail: null, pictured: null },
     { path: 'model-1', name: 'bracket', folder: null, opened: 1, updated: 1, created: null, pinned: false, missing: false, thumbnail: null, pictured: null, kind: 'model' }];
   const library = { list: async () => models, change: async () => models, thumbnail: async () => null, open: async () => {}, pick: async () => {} };
-  // A 1440px row: the grid's column is 1128px, centred, on 24px gutters.
+  // A 1440px row.
   const boxes = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     const width = this.hasAttribute('data-viewer-navbar') ? 1440 : this.matches('nav') ? 36 : 0;
     return { x: 0, y: 0, left: 0, top: 0, right: width, bottom: 40, width, height: 40, toJSON() {} } as DOMRect;
@@ -217,9 +217,9 @@ it('draws the home\'s own controls in its navbar on the grid\'s column: the logo
   const left = home.querySelector('[data-navbar-home-left]')!, right = home.querySelector('[data-navbar-home-right]')!;
   expect([left.querySelector('h1')!.textContent, right.querySelector('input')!.getAttribute('aria-label'), within(right as HTMLElement).getByRole('button', { name: 'Import' }) !== null])
     .toEqual(['Home', 'Search models', true]);
-  // On the grid's column at 1440, (1440 − 1128) / 2 + 24 = 180px from either edge, the background full width: the
-  // logo's mark (16px into its row) at 180, "Home" after it, and Import ending at 180 from the right: the row's padding.
-  await waitFor(() => expect([navbar()!.style.paddingLeft, navbar()!.style.paddingRight]).toEqual(['172px', '180px']));
+  // The row over the home is the row over a file: its own padding, the logo first, never padded onto a centred column
+  // (the home under it is full width, its sidebar at the window's edge).
+  expect([navbar()!.style.paddingLeft, navbar()!.style.paddingRight]).toEqual(['', '']);
   const lead = navbar()!.querySelector('nav')!;
   expect([lead.nextElementSibling === home, home.firstElementChild === left]).toEqual([true, true]);
   // No panel toggles and no ⋯ on the home; the app menu is the logo's.

@@ -6,12 +6,12 @@ import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
 import { EmptyState, StatusAction } from '../file-viewer/navigation/index.js';
 import type { AppSetting, ColorSchemeSetting, FileProject, LanguageSetting, ViewerHistory } from '../file-viewer/types.js';
 import { I18nProvider, translator } from '../i18n/index.js';
-import type { ViewerHost } from '../host/types.js';
+import type { HomeLocation, ViewerHost } from '../host/types.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
-import { ModelLibrary, type LibraryModel, type ModelLibrarySource } from '../library/ModelLibrary.js';
+import { ModelLibrary, RECENTS, type LibraryModel, type LibraryOrigin, type ModelLibrarySource } from '../library/ModelLibrary.js';
 import { useModelThumbnail } from '../library/thumbnails.js';
 import { OffscreenPicture, cadRenderers, type ModelPictureSource } from './OffscreenPicture.js';
-import type { LibraryLayout } from '../tab-store/tabRecord.js';
+import type { LibraryLayout, LibrarySort } from '../tab-store/tabRecord.js';
 import type { TabStore } from '../tab-store/tabStore.js';
 import { useTabViewerState } from '../tab-store/useTabViewerState.js';
 import { normalizePath } from './catalog.js';
@@ -67,9 +67,11 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   client: CadWorkspaceService;
   /**
    * The host's ports: its files (`createCadFileSource`), clipboard, prompt destination, file
-   * actions, links and environment. Navigation is this component's: it shows a file through `onShow`.
+   * actions, links and environment. Navigation is this component's: it shows a file through `onShow`. Of a host's
+   * navigation it takes only what it cannot know: a target's own address (`hrefOf`) and how to open one beside this
+   * view (`openBeside`), where the host has them, for the home's links and its menus' Open in new tab.
    */
-  host: Omit<ViewerHost, 'navigation'>;
+  host: Omit<ViewerHost, 'navigation'> & { navigation?: Pick<ViewerHost['navigation'], 'hrefOf' | 'openBeside'> };
   /**
    * The tab's one store: the renderers' preferences, the viewer's state, the home's layout, and the
    * view of the file on screen, the only file view the tab keeps: leaving a file sets its view aside
@@ -86,8 +88,15 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
    * catalog's row names it. Without either, a document named by its id has its name's place empty.
    */
   name?: string;
-  /** Show another file (absolute), or the home (`''`). */
-  onShow(file: string): void;
+  /** Show another file (absolute), or the home (`''`) at a place on it (`place`; Recents with none). */
+  onShow(file: string, place?: HomeLocation): void;
+  /**
+   * The place of the home on screen, where the host keeps it (the web's address, the CAD app's history): Recents,
+   * Pinned, Standalone or a project's page. Without it this component keeps its own, from Recents.
+   */
+  place?: HomeLocation;
+  /** The home is on screen at `place`, named as the person reads it ("Recents", a project's name): a host titles its page with it. */
+  onHomeShown?(place: HomeLocation, name: string): void;
   /**
    * The file on screen once the catalog has it, or null (the home, or a file still resolving or
    * missing), and its document's id: what the host names it by (`/<id>`).
@@ -142,6 +151,11 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
 }
 
 const reportError = (error: Error) => console.error(error);
+const isPlace = (value: unknown): value is HomeLocation => {
+  const view = (value as { view?: unknown } | null | undefined)?.view;
+  return view === 'recents' || view === 'pinned' || view === 'standalone'
+    || (view === 'project' && typeof (value as { project?: unknown }).project === 'string');
+};
 
 /**
  * The viewer every app shows: the shared FileViewer over one file at a time, by absolute path,
@@ -155,7 +169,7 @@ const reportError = (error: Error) => console.error(error);
  * navigates: showing a file, or the home, is the host's `onShow`.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, name, onShow, onShown,
-  library, onThumbnail, colorScheme, language, appSettings, notice, fullSize, history, chrome, whatsNew, onError = reportError }: CadViewerProps<Model>) {
+  place: placed, onHomeShown, library, onThumbnail, colorScheme, language, appSettings, notice, fullSize, history, chrome, whatsNew, onError = reportError }: CadViewerProps<Model>) {
   // The language the host names: the pages drawn here (the home, a file that will not open) read in it.
   const locale = host.environment.locale;
   const t = translator(locale);
@@ -167,8 +181,8 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const settings = useSyncExternalStore(preferences.subscribe, preferences.getSnapshot, preferences.getSnapshot);
   const { state, onStateChange } = useTabViewerState(tabStore);
   const path = normalizePath(file);
-  const latest = useRef({ onShow, onShown, onThumbnail, path, shown: null as string | null });
-  latest.current = { onShow, onShown, onThumbnail, path, shown: latest.current.shown };
+  const latest = useRef({ onShow, onShown, onHomeShown, onThumbnail, path, shown: null as string | null });
+  latest.current = { onShow, onShown, onHomeShown, onThumbnail, path, shown: latest.current.shown };
 
   // The file on screen once the catalog has it: its row joined by the document's id, so a symlink and
   // its target, or two spellings of one path, are one row (`client.entryOf`).
@@ -225,7 +239,15 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     if (wanted && wanted !== latest.current.path && wanted !== latest.current.shown) latest.current.onShow(wanted);
   }, []);
   const homed = Boolean(library);
-  const home = useCallback(() => latest.current.onShow(''), []);
+  // The home, at a place on it: the host's where it keeps the place (`place`), else this view's own.
+  const [ownPlace, setOwnPlace] = useState<HomeLocation>(RECENTS);
+  const place = placed ?? ownPlace;
+  const home = useCallback((location?: HomeLocation) => {
+    // Anything but a place (a press's event, handed on by a button) is the home's first place.
+    const next = isPlace(location) ? location : RECENTS;
+    setOwnPlace(next);
+    latest.current.onShow('', next);
+  }, []);
   // The person's home folder (the server's): the home says a project's folder from `~` in it.
   const [homeFolder, setHomeFolder] = useState<string | null>(null);
   useEffect(() => {
@@ -234,21 +256,35 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     void Promise.resolve().then(() => client.serverInfo({ signal: controller.signal })).then(info => { if (typeof info.home === 'string' && info.home) setHomeFolder(info.home); }, () => {});
     return () => controller.abort();
   }, [client, homed]);
-  const viewerHost = useMemo<ViewerHost>(() => ({ ...host, navigation: homed ? { openFile, home } : {} }), [host, openFile, home, homed]);
+  // What only the host knows of navigation: a target's address and how to open one beside this view. A view with no
+  // home has neither.
+  const hrefOf = host.navigation?.hrefOf, openBeside = host.navigation?.openBeside;
+  const links = useMemo(() => ({ ...(hrefOf ? { hrefOf } : {}), ...(openBeside ? { openBeside } : {}) }), [hrefOf, openBeside]);
+  const viewerHost = useMemo<ViewerHost>(() => ({ ...host, navigation: homed ? { openFile, home, ...links } : {} }), [host, openFile, home, homed, links]);
 
   // The project the document on screen is in (its row's, the nearest project above its file or its script): its name
-  // before the document's, which shows the home at that project (`focus`), and its documents, which [ and ] move
-  // through. A host with no home has neither.
-  const [focus, setFocus] = useState<string | null>(null);
-  useEffect(() => { if (path) setFocus(null); }, [path]);
+  // before the document's, which shows that project's page on the home with the document just left remembered (`left`:
+  // its card is ringed there, and Back and Escape return to it), and its documents, which [ and ] move through. A host
+  // with no home has neither. The document is remembered until another is shown, or the home is at another place.
+  const [left, setLeft] = useState<(LibraryOrigin & { file: string; project: string }) | null>(null);
+  const origin = left && !path && place.view === 'project' && place.project === left.project ? left : null;
+  const forgotten = Boolean(left) && (path ? path !== left?.file : !origin);
+  useEffect(() => { if (forgotten) setLeft(null); }, [forgotten]);
+  const back = useCallback(() => { if (left) latest.current.onShow(left.file); }, [left]);
+  const shownName = String(entry?.name || '') || name || '';
   const projectRef = homed ? (entry?.project as CadProjectRef | null | undefined) ?? null : null;
   const projectRead = useProject(client, projectRef);
   const project = useMemo<FileProject | null>(() => (projectRef ? {
     id: projectRef.id, name: projectRef.name, root: projectRef.root,
     documents: projectRead?.project?.documents ?? null, truncated: Boolean(projectRead?.project?.truncated),
     missing: Boolean(projectRead?.project?.missing), error: projectRead?.project ? null : projectRead?.error ?? null,
-    onShow: () => { setFocus(projectRef.id); latest.current.onShow(''); },
-  } : null), [projectRef?.id, projectRef?.name, projectRef?.root, projectRead]);
+    href: hrefOf?.({ home: { view: 'project', project: projectRef.id } }) ?? null,
+    onShow: () => {
+      const { path: file, shown: own } = latest.current;
+      setLeft({ file, path: own ?? file, id: shownId, name: shownName, project: projectRef.id });
+      home({ view: 'project', project: projectRef.id });
+    },
+  } : null), [projectRef?.id, projectRef?.name, projectRef?.root, projectRead, hrefOf, home, shownId, shownName]);
   // A document in no project: its ⋯'s Import its folder as a project, the host's chooser starting at its folder (a
   // model's script's), so the person picks the level. Its row says the project it is in once the catalog is read again.
   const importFolder = library?.importFolder;
@@ -285,13 +321,17 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // A file opened meanwhile has the screen, and the GPU, to itself.
   useEffect(() => { if (path) drawn(false); }, [path, drawn]);
 
-  const layout = settings.library.layout;
-  const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
+  // The home's layout and its order, the tab's (`tab-store`): kept as the person leaves the home and comes back.
+  const { layout, sort } = settings.library;
+  const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { ...preferences.getSnapshot().library, layout: next } }), [preferences]);
+  const changeSort = useCallback((next: LibrarySort) => preferences.update({ library: { ...preferences.getSnapshot().library, sort: next } }), [preferences]);
+  const placeShown = useCallback((shownAs: string) => { if (!latest.current.path) latest.current.onHomeShown?.(place, shownAs); }, [place]);
   // A file that will not open says why, with the way home where the host has one.
-  const goHome = useMemo(() => homed ? <StatusAction onClick={home}>{t("file.goHome")}</StatusAction> : null, [homed, home, t]);
+  const goHome = useMemo(() => homed ? <StatusAction onClick={() => home()}>{t("file.goHome")}</StatusAction> : null, [homed, home, t]);
   const presentation = useMemo(() => ({
-    home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture}
-      fileActions={host.fileActions} focus={focus} home={homeFolder} /> : undefined,
+    home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} sort={sort} onSortChange={changeSort} picture={picture}
+      fileActions={host.fileActions} place={place} onPlaceChange={home} onPlaceShown={placeShown} from={origin} onBack={back} navigation={links}
+      home={homeFolder} /> : undefined,
     // On the viewport's Background as the tab has it, as the view's own cover and its picture are: no flash between them.
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading background={settings.viewportBackground} /></div>,
     // A document named by its id that the engine does not hold says why, and the command that
@@ -302,7 +342,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
         title={isDocumentId(path) ? t(NOT_HELD_TITLES[String((error as { state?: unknown } | null)?.state)] ?? "file.notHeld") : t("file.missing")}
         description={isDocumentId(path) ? message : undefined} />
       : <EmptyState title={t("file.openFailed")} description={message} action={goHome} />,
-  }), [library, layout, changeLayout, path, picture, host.fileActions, focus, homeFolder, entry, goHome, t, settings.viewportBackground]);
+  }), [library, layout, changeLayout, sort, changeSort, path, picture, host.fileActions, place, home, placeShown, origin, back, links, homeFolder, entry, goHome, t, settings.viewportBackground]);
   // The search of every document (⌘K, the app menu's Search documents), over a document and the home alike, where
   // the host has a library (`search/`).
   const search = useDocumentSearch();

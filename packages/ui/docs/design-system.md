@@ -61,12 +61,12 @@ holds.
 | `text-tiny` | 11/16 | 13/18 | tooltips, key hints, small metadata (the zoom's percentage, the app menu's version, the Home's ages) |
 | `text-xs` | 12/16 | 14/20 | Quick Edit's bar and chips, sub-toolbars, the update status, every menu, list and context menu, toasts |
 | `text-ui` | 13/20 | 15/20 | the navbar and file name, dialogs and the search, the Home, Quick Edit's note, the loading line, status screens; `text-sm` and `text-base` are aliases |
-| `text-heading` | 15/20, 600 | 17/22, 600 | the one heading: the Home's without a navbar, its welcome title, the CAD app's notice |
+| `text-heading` | 15/20, 600 | 17/22, 600 | the one heading: the name of the Home's place on screen, its welcome title, the CAD app's notice |
 | `--cad-text-panel` | 12/16 | 14/20 | every step inside the panel and the settings cards |
 
 - **No other size**: no 10px step, no `text-[Npx]`, no font size in a stylesheet but the scale's variables.
-- **One size per surface.** Inside the panel and the settings cards (`[data-panel-surface]`) and a pick's card
-  (`[data-detail-card]`), every step is the panel's size and text is told apart by colour and weight. A menu portalled
+- **One size per surface.** Inside the panel, the settings cards and the Home's sidebar (`[data-panel-surface]`) and a
+  pick's card (`[data-detail-card]`), every step is the panel's size and text is told apart by colour and weight. A menu portalled
   out of them keeps the chrome's scale. Why: nothing there jumps in size, and a pick reads alike in panel and card.
 - **A menu item** is its `text-xs` line in 6px of vertical padding, at least the row tall, set by the primitives alone.
 - **Weight.** Text is regular. Medium (500) marks a title: the open tab, a card's title and section headings, a chip,
@@ -145,8 +145,8 @@ The tokens are shadcn's neutral set (`styles/tokens.css`), greys with no hue, as
 | `--warning`, `--destructive` | amber, red | amber, red | a warning's icon, edge and tint (its words `--warning-foreground`); an error |
 
 - **The brand marks focus and state, never an action**: focus rings and a focused field's edge, a text selection, a
-  selected row, the tool in hand's glyph, a search's match, the changed dot, the Home's chosen layout and its focused
-  card, and the logo. It is never a button's fill or a link in the chrome, and the panel toggle stays neutral. Why:
+  selected row, the tool in hand's glyph, a search's match, the changed dot, the Home's chosen layout, its focused
+  card and the ring round the document just left, and the logo. It is never a button's fill or a link in the chrome, and the panel toggle stays neutral. Why:
   blue says "on" only while nothing else is blue. `--brand-icon` is at least 3:1 on the pressed fill and on white;
   `--brand-text` is darker, for text, as that blue reads dark and odd on a glyph.
 - **A link in the chrome** (the app menu's version, "Made by") is muted `text-tiny` that turns the foreground and
@@ -180,7 +180,7 @@ layout, never a surface. Why: chrome reads as chrome over any canvas, light or d
 
 | Surface | How | Look | Used by |
 | --- | --- | --- | --- |
-| Docked chrome | `bg-sidebar` | opaque, a 1px rule on its inner edge | the navbar, the docked panel, a tab's actions row |
+| Docked chrome | `bg-sidebar` | opaque, a 1px rule on its inner edge | the navbar, the docked panel, a tab's actions row, the Home's sidebar |
 | Floating chrome | `FLOATING_CHROME_SURFACE_CLASS` | the popover colour at 90%, a border, `shadow-md`, `backdrop-blur-sm` | the strip, sub-toolbars, the tool stack, Quick Edit's bar, the bar over picked ink |
 | Popups | `FLOATING_SURFACE_CLASS` | the popover colour at 95%, a border, `shadow-sm`, `backdrop-blur-md` | dropdown lists, tool menus, the app menu, the view's menu, chip lists, the search card (a card's 10px corners) |
 | Cards | `PANEL_PEEK_CARD_CLASS`, `SettingsCard` | opaque `bg-sidebar`, a border, `shadow-md`, 10px corners | the panel's peek, the Display card, Preview's Settings |
@@ -263,7 +263,8 @@ One component for each job. A renderer brings its tools, rows, tabs and state, b
 - **Label and value.** A control's label is `FieldLabel`: muted, regular, the size of where it stands, truncating.
   Its value is the foreground. No control styles its own label. Why: Figma's rule; the eye finds values by colour.
 - **Scrolling.** Every chrome scroll region is a `ScrollArea`, with thin overlay bars in the theme's colours; chrome
-  has no native `overflow-auto` or `overflow-scroll`. The Home is a page and scrolls with the platform's scrollbar.
+  has no native `overflow-auto` or `overflow-scroll`. The Home's place is a page and scrolls with the platform's
+  scrollbar; its sidebar is chrome, a `ScrollArea`.
 
 ### Buttons
 
@@ -280,6 +281,7 @@ quiet button reads as a button and nothing more, and the one filled button is th
 | Navbar items (logo, Back, Forward, the name, ⋯); Display and Preview | `NAV_ITEM_CLASS`; `NAVBAR_VIEW_BUTTON_CLASS` | the control tall, transparent at rest, `bg-accent` under the pointer and while open; Display and Preview a 16px muted glyph |
 | A tab's actions | `PANEL_ACTION_CLASS` | the control tall, 8px in, regular weight; Reset ghost, Save `default` while it can save |
 | A status screen's action; the Home's Open | `StatusAction`; `Button variant="outline"` | outline, the control tall, `text-ui` at regular weight (Open with a 16px FolderOpen), never a filled primary |
+| The Home's way back to the document just left | `Button variant="outline" size="xs"` | the small icon button tall, `text-xs` at regular weight, its name the first to truncate; its key ("Esc") a muted `text-tiny` hint in a hairline box after it, left out where nothing hovers |
 | Quick Edit's actions | `Button`, `size-control` | square and icon only, 4px apart; the rightmost `default`, the others `secondary` |
 | A small icon button (a card's X) | `size-icon-button` | a 12px muted glyph; the foreground and `bg-accent` under the pointer |
 
@@ -293,7 +295,7 @@ quiet button reads as a button and nothing more, and the one filled button is th
 ### Dropdowns
 
 `ValueDropdown` is the one way to pick one value from a list: panel rows, the settings cards, a board's Layer display,
-the Home's type filter. It is built on `DropdownMenu`; there is no Radix Select and no native `<select>`. Why: one
+the Home's Show and Sort. It is built on `DropdownMenu`; there is no Radix Select and no native `<select>`. Why: one
 popup, one keyboard and one touch rule, so a fix lands in every picker.
 
 - **The trigger** shows the chosen option's icon (where the options have icons), its label in the foreground and a
@@ -303,8 +305,8 @@ popup, one keyboard and one touch rule, so a fix lands in every picker.
   ("Custom") on the trigger where no option matches. It is at least the trigger's width, end-aligned, 4px under it.
 - **Half the row.** A dropdown takes half its row and its label the rest
   (`grid-cols-[minmax(max-content,1fr)_minmax(50%,max-content)]`), growing past half only where its value needs it. A
-  colour field, and a dropdown set to fit (the Home's ghost filter, a picker on a toolbar tile), are as wide as their
-  content. Why: one as wide as its value reads ragged, and one wider than half for no reason crowds its label.
+  colour field, and a dropdown set to fit (the Home's Show and Sort, each a muted `FieldLabel` and a ghost trigger; a
+  picker on a toolbar tile), are as wide as their content. Why: one as wide as its value reads ragged, and one wider than half for no reason crowds its label.
 - **In a settings card every dropdown is one width**: half the content (132px in a desktop's 288px card, 148px in a
   phone's 320px one) or the card's widest
   option (`fixedWidth`, so the width never changes with the choice), 24px tall (36 on a phone), 6px in, 14px icons.
@@ -312,7 +314,8 @@ popup, one keyboard and one touch rule, so a fix lands in every picker.
 ### Menus
 
 - **A menu of actions is a `DropdownMenu`**: the file's ⋯, the app menu, the view's menu, a tab's overflow, a tool's
-  chevron, the zoom. A tree row's right-click menu is `ContextMenu`, with the same items. A picker drawn as a toolbar
+  chevron, the zoom, and the places of a Home too narrow for its sidebar (radio items, the place on screen ticked,
+  each with its 16px glyph and its count muted at the right). A tree row's right-click menu is `ContextMenu`, with the same items. A picker drawn as a toolbar
   tile (Draw's colour and stroke, Clip's axis, Preview's routines) keeps its tile and opens a `DropdownMenu`.
 - **The menu** is `rounded-md` with 4px of padding, at least 8rem wide, 4px to 6px from its trigger and 8px from the
   window's edges. A menu taller than its room scrolls in a `ScrollArea`.
@@ -345,12 +348,8 @@ Why: a fix to the row lands in every list. What a row does: [Trees](viewer-ux.md
   name fades out under them.
 - **A heading** (`TreeRowHeading`) is a muted line the control tall, on the inset, at regular weight. **Placeholder
   rows** (`TreeRowsLoading`) stand on the rows' lines while a tab loads, in the muted colour at 20%.
-- **A search result** is no tree's row: a document is found by its picture, which a tree row has no room for. It is
-  the control + 16 tall (44px; 52 on a phone), 8px in, `rounded-md`: a 3:2 picture the control + 4 tall on the light
-  model area (the kind's glyph until it loads), 12px on its name (`text-ui`, regular), then a muted `text-xs` detail at
-  its right end. Under the pointer or the keys it takes `bg-accent`; the document on screen's is `bg-brand-subtle`;
-  its Open in new tab is a small icon button over its right end, as a tree row's actions are. Its group's heading is a
-  muted `text-tiny` line.
+| `text-ui` | 13/20 | 15/20 | the navbar and file name, dialogs and the search, the Home, Quick Edit's note, the loading line, status screens; `text-sm` and `text-base` are aliases |
+| `text-heading` | 15/20, 600 | 17/22, 600 | the one heading: the name of the Home's place on screen, its welcome title, the CAD app's notice |
 - **Settings rows.** `PanelSelectRow` is a `FieldLabel` and a `ValueDropdown`, the control tall, the dropdown at least
   half the row and 6rem. `PanelSwitchRow` is an optional 16px icon, the label and the switch at the right end; the
   whole row is the switch's label. A parameter with no range is `FileSheetSettingRow`, its field in a 5.5rem column.
@@ -510,7 +509,8 @@ with one).
   phone's sheet to the panel toggle), and a hint does not open on focus handed back.
 - **Tabs and trees.** A tab list is one Tab stop; ← and → move between tabs and wrap. Tree rows follow the WAI-ARIA
   tree pattern (`primitives/tree-keys.js`): ↓ and ↑ the next and previous row, Home and End, → opens or enters a
-  branch, ← shuts it or goes to its parent, Enter and Space press the row.
+  branch, ← shuts it or goes to its parent, Enter and Space press the row. The Home's sidebar walks its rows with the
+  same keys; each of its rows is its own Tab stop, as a list of links is.
 - **The panel's grip** is a separator in the Tab order: ← and → by 16px, Home and End to its bounds.
 - **Escape closes the innermost thing first**: a popup opened inside a card or the panel closes before the card or
   peek (`hasOpenPopup`), and an element marked `data-escape-owner` spends its own Escape. The rest of the order:
@@ -536,6 +536,7 @@ transitions and drawn sizes, not class names, and a test of a layout that is gon
 | … "the type scale and the strip's proportions, as drawn" | the 40px strip of 28px tiles, the 32px head with its rule under the strip, panel and menu text 12/16, the navbar 13/20, a tooltip 11/16 |
 | … "a toolbar button under the pointer is seen…", "Preview's bar takes the backdrop's ink…" | hover fills and ink read on their surface |
 | … "three tabs and the search fit the 232px panel…", "Display's card is the peek card's mirror…" | the tab budget; the card's top, gaps and 12px inset, its 288px width, its dropdowns one width, nothing cut |
+| `library/ModelLibrary.browser.test.mjs` | the Home's 232px sidebar on the panel's surface and inset, its 28px rows and the marked place; the place's heading and gutters; a card and a place as real links; the ring round the document just left, in view; no sidebar under 720px, and a phone's 36px controls |
 | `scripts/test/check-ui-strings.mjs`, `i18n/i18n.test.mjs` | no English literal in the chrome; the locales mirror `en.js` |
 | `tests/python/global/test_document_links.py` | every relative link and `#anchor` in these docs lands on a heading |
 

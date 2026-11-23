@@ -56,7 +56,7 @@ test('the viewer shows one file by its absolute path, the home with none, and wh
   await act(async () => client.publish([{ file: 'C:/models/a.step' }]));
   expect(shown).toEqual([null, 'C:/models/a.step']);
 
-  // A file the viewer asks for (a row of the Project list, a renderer's link) is the host's to show;
+  // A file the viewer asks for (the project's previous or next, a renderer's link) is the host's to show;
   // the file on screen is shown already.
   act(() => props().host.navigation.openFile!('C:\\models\\b.step'));
   act(() => props().host.navigation.openFile!('C:/models/a.step'));
@@ -68,14 +68,21 @@ test('the viewer shows one file by its absolute path, the home with none, and wh
   rerender(view('C:/models/a.step', false));
   expect([props().host.navigation.home, props().host.navigation.openFile]).toEqual([undefined, undefined]);
 
-  // No file is the home: the library, laid out as the tab keeps it.
+  // No file is the home: the library, laid out and ordered as the tab keeps it, each choice kept beside the other.
   rerender(view(''));
   expect(props().file).toBeNull();
-  const home = props().presentation!.home as { props: { layout: string; onLayoutChange(layout: string): void } };
-  expect(home.props.layout).toBe('grid');
-  act(() => home.props.onLayoutChange('list'));
-  expect(tabStore.settings.getSnapshot().library.layout).toBe('list');
-  expect((props().presentation!.home as { props: { layout: string } }).props.layout).toBe('list');
+  const home = () => props().presentation!.home as { props: { layout: string; sort: string; onLayoutChange(layout: string): void; onSortChange(sort: string): void } };
+  expect([home().props.layout, home().props.sort]).toEqual(['grid', 'activity']);
+  act(() => home().props.onLayoutChange('list'));
+  act(() => home().props.onSortChange('kind'));
+  expect(tabStore.settings.getSnapshot().library).toEqual({ layout: 'list', sort: 'kind' });
+  expect([home().props.layout, home().props.sort]).toEqual(['list', 'kind']);
+  // Neither is reset by leaving the home for a file and coming back.
+  rerender(view('C:/models/a.step'));
+  rerender(view(''));
+  expect([home().props.layout, home().props.sort]).toEqual(['list', 'kind']);
+  act(() => home().props.onLayoutChange('grid'));
+  expect(tabStore.settings.getSnapshot().library).toEqual({ layout: 'grid', sort: 'kind' });
 
   // The catalog is read again when the person comes back to the page.
   client.refresh.mockClear();
@@ -268,30 +275,108 @@ test("What's new is said over the home, and over a file once its view is up: nev
   act(() => release());
 });
 
-test("a document in a project has its project's name before its own and its list, read again while it is shown; the name shows the home at the project", async () => {
+type HomeProps = { place: unknown; from: { path: string; id: string | null; name: string } | null; home: string; onBack(): void; onPlaceChange(place: unknown): void;
+  onPlaceShown(name: string): void; navigation: { hrefOf?: unknown; openBeside?: unknown } };
+const homeProps = () => (props().presentation!.home as { props: HomeProps }).props;
+
+test("a document in a project has its project's name before its own and its list, read again while it is shown; the name shows its project's page with the document just left remembered", async () => {
   const listed = { id: 'p1', name: 'parts', root: '/models/parts', created: 1, opened: 1, missing: false, truncated: false,
     documents: [{ path: '/models/parts/a.step', name: 'a.step', kind: 'file', folder: '/models/parts' }] };
   const base = cadClient();
   const client = Object.assign(base, { serverInfo: vi.fn(async () => ({ home: '/Users/me' })), project: vi.fn(async () => listed),
     entryOf: (path: string) => (base.getSnapshot() as unknown as { entries: Record<string, unknown>[] }).entries.find(entry => entry.file === path) ?? null });
-  const shows: string[] = [];
-  const view = (file: string, extra: object = {}) => <CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())}
-    live={createLiveRegistry()} file={file} library={library} onShow={next => shows.push(next)} {...extra} />;
+  // A host that keeps the file and the place itself, as an app does: what it is asked to show is what it shows next.
+  const shows: [string, unknown][] = [];
+  const tabStore = createTabStore(memoryTabRecord());
+  const host = ports(client);
+  const view = (file: string, extra: object = {}) => <CadViewer client={client as never} host={host} tabStore={tabStore}
+    live={createLiveRegistry()} file={file} name="a.step" library={library} onShow={(next, place) => shows.push([next, place])} {...extra} />;
   const { rerender } = render(view('/models/parts/a.step'));
   expect(props().project).toBeNull();
-  await act(async () => client.publish([{ id: 'f1', file: '/models/parts/a.step', project: { id: 'p1', name: 'parts', root: '/models/parts' } }]));
+  await act(async () => client.publish([{ id: 'f1', file: '/models/parts/a.step', name: 'a.step', project: { id: 'p1', name: 'parts', root: '/models/parts' } }]));
   // Its name from its row, its documents as the client reads them.
   expect(props().project?.name).toBe('parts');
   await vi.waitFor(() => expect(props().project?.documents).toEqual(listed.documents));
   expect(client.project).toHaveBeenCalledWith('p1', expect.objectContaining({ signal: expect.any(AbortSignal) }));
-  // Its name shows the home, at that project; the person's home folder says its folder from `~`.
+  // A host with no addresses: the name is no link.
+  expect(props().project?.href).toBeNull();
+  // Its name shows the home at that project's page; the person's home folder says its folder from `~`.
   act(() => props().project!.onShow());
-  expect(shows.at(-1)).toBe('');
-  rerender(view(''));
-  await vi.waitFor(() => expect((props().presentation!.home as { props: { focus: string; home: string } }).props).toMatchObject({ focus: 'p1', home: '/Users/me' }));
+  expect(shows.at(-1)).toEqual(['', { view: 'project', project: 'p1' }]);
+  rerender(view('', { place: { view: 'project', project: 'p1' } }));
+  await vi.waitFor(() => expect(homeProps()).toMatchObject({ place: { view: 'project', project: 'p1' }, home: '/Users/me' }));
+  // The document just left is the home's to ring, by its path and its id, with the way back to it.
+  expect(homeProps().from).toMatchObject({ path: '/models/parts/a.step', id: 'f1', name: 'a.step' });
+  act(() => homeProps().onBack());
+  expect(shows.at(-1)).toEqual(['/models/parts/a.step', undefined]);
+  // Back on it and at its project's page again (the browser's Back): still the one just left.
+  rerender(view('/models/parts/a.step'));
+  rerender(view('', { place: { view: 'project', project: 'p1' } }));
+  expect(homeProps().from).toMatchObject({ path: '/models/parts/a.step' });
+  // Another place forgets it, for good: its project's page again has no ring.
+  rerender(view('', { place: { view: 'recents' } }));
+  expect(homeProps().from).toBeNull();
+  rerender(view('', { place: { view: 'project', project: 'p1' } }));
+  expect(homeProps().from).toBeNull();
+  // So does another document opened from the project's page.
+  rerender(view('/models/parts/a.step'));
+  act(() => props().project!.onShow());
+  rerender(view('', { place: { view: 'project', project: 'p1' } }));
+  expect(homeProps().from).not.toBeNull();
+  rerender(view('/models/parts/b.step', { place: { view: 'project', project: 'p1' } }));
+  rerender(view('', { place: { view: 'project', project: 'p1' } }));
+  expect(homeProps().from).toBeNull();
   // A host with no home has no project to show.
   rerender(view('/models/parts/a.step', { library: undefined }));
   expect(props().project).toBeNull();
+});
+
+test("the home's place is the host's where it keeps one, the view's own otherwise, and the host hears each place's name", async () => {
+  const client = cadClient();
+  const shows: [string, unknown][] = [], named: [unknown, string][] = [];
+  const host = ports(client);
+  const tabStore = createTabStore(memoryTabRecord());
+  const view = (extra: object = {}) => <CadViewer client={client as never} host={host} tabStore={tabStore} live={createLiveRegistry()} file=""
+    library={library} onShow={(next, place) => shows.push([next, place])} onHomeShown={(place, name) => named.push([place, name])} {...extra} />;
+  const { rerender } = render(view());
+  // A host that keeps no place: the view starts at Recents and keeps where the person goes, telling the host too.
+  expect(homeProps().place).toEqual({ view: 'recents' });
+  act(() => homeProps().onPlaceChange({ view: 'pinned' }));
+  expect([homeProps().place, shows.at(-1)]).toEqual([{ view: 'pinned' }, ['', { view: 'pinned' }]]);
+  // The navbar's logo, and the app menu's Back to home, lead to the home's first place; a press's event is no place.
+  act(() => (props().host.navigation.home as (event?: unknown) => void)({ view: window, type: 'click' }));
+  expect([homeProps().place, shows.at(-1)]).toEqual([{ view: 'recents' }, ['', { view: 'recents' }]]);
+  act(() => props().host.navigation.home!({ view: 'project', project: 'p1' }));
+  expect(homeProps().place).toEqual({ view: 'project', project: 'p1' });
+  // A host that keeps the place (its address, its history) is the one that says it.
+  rerender(view({ place: { view: 'standalone' } }));
+  expect(homeProps().place).toEqual({ view: 'standalone' });
+  // The home says its place's name, as the person reads it, for the host's page title.
+  act(() => homeProps().onPlaceShown('Standalone'));
+  expect(named).toEqual([[{ view: 'standalone' }, 'Standalone']]);
+});
+
+test("the host's addresses and its Open in new tab reach the home, the navbar's project name and the viewer's navigation; a view with no home has neither", async () => {
+  const base = cadClient();
+  const client = Object.assign(base, { project: vi.fn(async () => ({ id: 'p1', name: 'parts', root: '/models/parts', documents: [] })),
+    entryOf: (path: string) => (base.getSnapshot() as unknown as { entries: Record<string, unknown>[] }).entries.find(entry => entry.file === path) ?? null });
+  const hrefOf = (target: { document?: string; home?: { view: string; project?: string } }) => target.home ? `/?project=${target.home.project}` : `/${target.document}`;
+  const openBeside = { kind: 'tab' as const, open() {} };
+  const host = ports(client, { navigation: { hrefOf, openBeside } });
+  const tabStore = createTabStore(memoryTabRecord());
+  const view = (file: string, homed = true) => <CadViewer client={client as never} host={host as never} tabStore={tabStore} live={createLiveRegistry()} file={file}
+    library={homed ? library : undefined} onShow={() => {}} />;
+  const { rerender } = render(view('/models/parts/a.step'));
+  await act(async () => client.publish([{ id: 'f1', file: '/models/parts/a.step', project: { id: 'p1', name: 'parts', root: '/models/parts' } }]));
+  // The viewer's own navigation carries them beside its own openFile and home.
+  expect([props().host.navigation.hrefOf, props().host.navigation.openBeside, typeof props().host.navigation.home]).toEqual([hrefOf, openBeside, 'function']);
+  // The project's name is a link to its page.
+  expect(props().project?.href).toBe('/?project=p1');
+  rerender(view(''));
+  expect(homeProps().navigation).toEqual({ hrefOf, openBeside });
+  // A view that shows one file alone links nowhere.
+  rerender(view('/models/parts/a.step', false));
+  expect(props().host.navigation).toEqual({});
 });
 
 test("a document in no project offers to import its folder as a project, the chooser starting at its folder (a model's: its script's), and is read again once it is one", async () => {

@@ -322,10 +322,76 @@ export default {
   "home.projectTruncated": "未列出全部檔案：此資料夾中的檔案超出一次可列出的數量。",
 
 
-  "home.showAll": "顯示全部 {count} 個",
+  "home.place.recents": "最近",
 
 
-  "home.showFewer": "收合",
+  "home.place.pinned": "已釘選",
+
+
+  "home.project": "專案",
+
+
+  "home.projects": "專案",
+
+
+  "home.placesAria": "位置",
+
+
+  "home.addProject": "將資料夾開啟為專案",
+
+
+  "home.loadingProjects": "正在載入專案",
+
+
+  "home.projectsEmpty": "還沒有專案。",
+
+
+  "home.projectsFailed": "無法讀取專案。",
+
+
+  "home.projectGone": "此專案已不在 CAD 中。重新開啟它的資料夾即可恢復。",
+
+
+  "home.recentsEmpty": "最近沒有開啟過任何內容。",
+
+
+  "home.pinnedEmpty": "還沒有釘選的內容。釘選一份文件，它就會留在這裡。",
+
+
+  "home.standaloneEmpty": "沒有獨立文件。所有文件都在專案中。",
+
+
+  "home.showMore": "再顯示 {count} 個",
+
+
+  "home.sortAria": "排序",
+
+
+  "home.sortByAria": "排序：{sort}",
+
+
+  "home.sort.activity": "最近活動",
+
+
+  "home.sort.name": "名稱",
+
+
+  "home.sort.kind": "類型",
+
+
+  "home.openNewTab": "在新分頁中開啟",
+
+
+  "home.openBrowser": "在瀏覽器中開啟",
+
+
+  "home.backTo": "返回 {name}",
+
+
+  "home.columnWhere": "位置",
+
+
+  "home.columnProject": "專案",
 
 
   "home.emptyTitle": "這裡還沒有內容",

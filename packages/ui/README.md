@@ -112,7 +112,7 @@ src/
   cad-viewer/        CadViewer (FileViewer + the six CAD renderers + the home), and a CAD client as a FileSource
   file-viewer/       FileViewer, typed source/renderer contracts, the document lifecycle hook
     navigation/     the navbar, the app menu and its links, the file menu
-  library/           a host's home: the projects and the documents opened before, to open again, and their pictures
+  library/           a host's home: its places (Recents, Pinned, each project, Standalone) and their documents, to open again, and their pictures
   search/            the search of every document (⌘K), over a document and the home
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
@@ -362,10 +362,12 @@ or a board's Preview). A host whose own frame is its navigation shows
 the view alone (`chrome: "bare"`, the CAD app's file handler), with no navbar at all. With no
 file a view shows the host's home under the same navbar (its logo and menu,
 without Back to home, Back and Forward where the host keeps the view's history, and the host's
-actions): one control row (Home; the type filter, the search, grid or list, Import: a file, or a
-folder opened as a project), then each project with its documents and the standalone documents
-opened or built before, pinned first, as Figma-style tiles with their pictures or as a table of
-rows, each with its pin and a ⋯ menu ending in Delete, which asks first. A file that
+actions, and the home's own Home, search and Import: a file, or a folder opened as a project): a
+sidebar of places (Recents, Pinned, each project, Standalone) and the place on screen, its
+documents as Figma-style tiles with their pictures or as a table of rows, shown, sorted and laid
+out from its heading row, each with its pin and a ⋯ menu (Open, Open in new tab, ending in
+Delete, which asks first); a card is a real link where the host gives documents an address
+([the home](docs/viewer-ux.md#the-home)). A file that
 does not exist shows "File does not exist" and its path, and any other failure to open
 "Could not open that file" and why, each with Go home where the host has a home. A
 renderer's loading and update status is its own, in its viewport. An error appears as a
