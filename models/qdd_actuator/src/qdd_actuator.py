@@ -17,9 +17,8 @@ Coordinate convention:
 - +Z is the output direction; the gear stage and output flange are at +Z,
   the driver electronics and sealed connectors are at -Z.
 
-The same parameterized builder produces the assembled model (explode=0) and an
-exploded technical layout (explode=1) used by qdd_actuator_exploded.py. The
-exploded translations are documented per-part static Locations along +/-Z.
+Gears are involute (20 deg, module 1.0) with a little backlash; the machined rims are
+chamfered; the output flange's bolt count is a parameter (`bolt_count`, the Params tab).
 
 The assembled model carries the mechanism: every mount a rigid fastening, every
 turning member a revolute joint geared by the `drive` coupling, its two
@@ -61,6 +60,9 @@ PLANET_ANGLES_DEG = (90.0, 210.0, 330.0)
 
 ADDENDUM = 1.0 * GEAR_MODULE
 DEDENDUM = 1.25 * GEAR_MODULE
+PRESSURE_ANGLE = math.radians(20.0)  # involute teeth
+GEAR_BACKLASH = 0.12  # mm of arc thickness taken off each mesh
+FLANK_SAMPLES = 8  # points along each involute flank's spline
 GEAR_WIDTH = 12.0
 GEAR_Z = (8.5, 20.5)
 
@@ -153,6 +155,8 @@ PHASE_WIRE_HOLE_R = 2.5  # 3x stator phase-wire passages through the rear wall
 PHASE_WIRE_CIRCLE_R = 34.0
 PHASE_WIRE_ANGLES = (15.0, 135.0, 255.0)
 
+EDGE_BREAK = 0.8  # chamfer on the machined outer rims (housing, cover, retainer, flange)
+
 ENC_STANDOFF_R = 2.5
 ENC_STANDOFF_CIRCLE_R = 17.5
 ENC_STANDOFF_Z = (-24.4, -22.0)
@@ -239,12 +243,13 @@ FLANGE_BOSS_R = (14.0, 20.0)
 FLANGE_BOSS_Z = (33.0, 34.5)
 FLANGE_BOLT_CIRCLE_R = 28.0  # 6x M5 output bolt circle
 FLANGE_BOLT_R = 2.75
-FLANGE_BOLT_COUNT = 6
+FLANGE_BOLT_SINK = 0.6  # 45-degree countersink on each bolt hole
+FLANGE_BOLT_COUNT = model.param("bolt_count", 6, min=3, max=12)  # M5 on the output face
 FLANGE_PILOT_HOLE_R = 1.7  # 4x M3 on the pilot boss
 FLANGE_PILOT_CIRCLE_R = 17.0
 
 # ---------------------------------------------------------------------------
-# Exploded-view static translations (mm at explode=1.0), documented per part.
+# The explode animations' stations (mm along Z), documented per part.
 # Pure +/-Z technical explosion with two-tier spacing rhythm: ~10-17 mm air
 # gaps between parts inside a subsystem and ~20-25 mm gaps at subsystem
 # boundaries (electronics | housing | motor | gear stage | output stage), so
@@ -434,51 +439,86 @@ def _cyl_z(r: float, z: tuple[float, float]) -> bd.Part:
     return bd.Pos(0, 0, z[0]) * bd.extrude(bd.Circle(r), amount=z[1] - z[0])
 
 
+def _chamfer_rims(part: bd.Part, radius: float, size: float, at_z: float | None = None) -> bd.Part:
+    """A machined edge break: chamfer every circular edge of ``radius`` on the Z axis (only the
+    one at ``at_z``, where given)."""
+    rims = [e for e in part.edges().filter_by(bd.GeomType.CIRCLE)
+            if abs(e.radius - radius) < 1e-6 and abs(e.arc_center.X) < 1e-6 and abs(e.arc_center.Y) < 1e-6
+            and (at_z is None or abs(e.arc_center.Z - at_z) < 1e-6)]
+    return bd.chamfer(rims, size) if rims else part
+
+
+def _inv(alpha: float) -> float:
+    """The involute function, tan(a) - a."""
+    return math.tan(alpha) - alpha
+
+
+def _involute_outline(teeth: int, root_r: float, tip_r: float, thickness: float, phase: float = 0.0) -> bd.Face:
+    """A spur gear's outline in XY: involute flanks (PRESSURE_ANGLE) from the base circle to
+    ``tip_r``, radial below it down to ``root_r``, tip and root arcs between. ``thickness`` is
+    the tooth's arc thickness on the pitch circle; tooth 0 is centred on ``phase`` (radians)."""
+    pitch_r = GEAR_MODULE * teeth / 2
+    base_r = pitch_r * math.cos(PRESSURE_ANGLE)
+    half = thickness / (2 * pitch_r) + _inv(PRESSURE_ANGLE)  # flank angle at the base circle
+
+    def theta(r: float) -> float:  # a flank's polar half-angle at radius r
+        return half - _inv(math.acos(min(1.0, base_r / r))) if r > base_r else half
+
+    def point(r: float, a: float) -> bd.Vector:
+        return bd.Vector(r * math.cos(a), r * math.sin(a))
+
+    start_r = max(root_r, base_r)
+    flank_r = [start_r + (tip_r - start_r) * (i / FLANK_SAMPLES) ** 1.5 for i in range(FLANK_SAMPLES + 1)]
+    pitch = 2 * math.pi / teeth
+    edges = []
+    for i in range(teeth):
+        c = phase + i * pitch
+        lower = [point(r, c - theta(r)) for r in flank_r]
+        upper = [point(r, c + theta(r)) for r in reversed(flank_r)]
+        if root_r < start_r:
+            edges.append(bd.Edge.make_line(point(root_r, c - half), lower[0]))
+        edges.append(bd.Edge.make_spline(lower))
+        edges.append(bd.Edge.make_three_point_arc(lower[-1], point(tip_r, c), upper[0]))
+        edges.append(bd.Edge.make_spline(upper))
+        if root_r < start_r:
+            edges.append(bd.Edge.make_line(upper[-1], point(root_r, c + half)))
+        a0, a1 = c + theta(root_r), c + pitch - theta(root_r)
+        edges.append(bd.Edge.make_three_point_arc(point(root_r, a0), point(root_r, (a0 + a1) / 2), point(root_r, a1)))
+    return bd.Face(bd.Wire(edges))
+
+
 def _external_gear(teeth: int, root_r: float, tip_r: float, bore_r: float) -> bd.Part:
-    """Concept gear: root cylinder + trapezoidal teeth with visible backlash."""
-    half_arc = math.pi * GEAR_MODULE / 2
-    wt = half_arc * 0.34  # half-width at tip (thinned for visible backlash)
-    wr = half_arc * 0.55  # half-width at root
-    h = tip_r - root_r
-    rm = (tip_r + root_r) / 2
-    tooth = bd.Polygon(
-        (-h / 2 - 0.4, -wr), (h / 2, -wt), (h / 2, wt), (-h / 2 - 0.4, wr), align=None
-    )
-    teeth_sk = [loc * tooth for loc in bd.PolarLocations(rm, teeth)]
-    sketch = bd.Circle(root_r) + teeth_sk - bd.Circle(bore_r)
-    return bd.extrude(sketch, amount=GEAR_WIDTH)
+    """A spur gear, GEAR_WIDTH thick: involute teeth thinned by GEAR_BACKLASH, a bore."""
+    tooth = math.pi * GEAR_MODULE / 2 - GEAR_BACKLASH / 2
+    outline = _involute_outline(teeth, root_r, tip_r, tooth)
+    return bd.extrude(outline - bd.Circle(bore_r), amount=GEAR_WIDTH)
 
 
 def _internal_ring_gear() -> bd.Part:
-    """Internal ring gear with inward trapezoidal teeth and press-in rim."""
-    half_arc = math.pi * GEAR_MODULE / 2
-    wt = half_arc * 0.34
-    wr = half_arc * 0.55
-    h = RING_ROOT_R - RING_TIP_R
-    rm = (RING_ROOT_R + RING_TIP_R) / 2
-    # counter-clockwise point order so the face normal is +Z and the teeth
-    # extrude in the same direction as the rim
-    tooth = bd.Polygon(
-        (h / 2 + 0.4, -wr), (h / 2 + 0.4, wr), (-h / 2, wt), (-h / 2, -wt), align=None
-    )
-    teeth_sk = [loc * tooth for loc in bd.PolarLocations(rm, RING_TEETH)]
-    sketch = bd.Circle(RING_RIM_R) - bd.Circle(RING_ROOT_R) + teeth_sk
-    return bd.extrude(sketch, amount=GEAR_WIDTH)
+    """The internal ring gear: its rim less a gear-shaped cut whose teeth are the ring's
+    tooth spaces (an internal gear's space is an external tooth), so the ring's own teeth
+    point inward, centred on azimuth 0 as the sun's are."""
+    space = math.pi * GEAR_MODULE / 2 + GEAR_BACKLASH / 2
+    cut = _involute_outline(RING_TEETH, RING_TIP_R, RING_ROOT_R, space, phase=math.pi / RING_TEETH)
+    return bd.extrude(bd.Circle(RING_RIM_R) - cut, amount=GEAR_WIDTH)
 
 
 def make_housing() -> bd.Part:
     """Finned aluminum housing: barrel, rear wall, stator sleeve, standoffs."""
-    barrel = _tube_z(BARREL_R[1], BARREL_R[0], BARREL_Z)
+    barrel = _chamfer_rims(_tube_z(BARREL_R[1], BARREL_R[0], BARREL_Z), BARREL_R[1], EDGE_BREAK)
     rear_wall = _tube_z(REAR_WALL_R[1], REAR_WALL_R[0], REAR_WALL_Z)
     sleeve = _tube_z(SLEEVE_R[1], SLEEVE_R[0], SLEEVE_Z)
 
-    fin = bd.Box(
-        FIN_RADIAL[1] - FIN_RADIAL[0] + 0.5,  # overlap into the barrel for fusing
-        FIN_W,
-        FIN_Z[1] - FIN_Z[0],
+    # Each fin's side profile (radius against Z), its ends ramped at 45 degrees into the
+    # barrel, extruded FIN_W thick about its plane: a machined fin, not a stacked box.
+    rise = FIN_RADIAL[1] - FIN_RADIAL[0]
+    base_r = FIN_RADIAL[0] - 0.5  # overlap into the barrel for fusing
+    profile = bd.Polygon(
+        (base_r, FIN_Z[0]), (FIN_RADIAL[1], FIN_Z[0] + rise), (FIN_RADIAL[1], FIN_Z[1] - rise),
+        (base_r, FIN_Z[1]), align=None,
     )
-    fin_loc = bd.Pos((FIN_RADIAL[0] - 0.5 + FIN_RADIAL[1]) / 2, 0, (FIN_Z[0] + FIN_Z[1]) / 2)
-    fins = [rot * (fin_loc * fin) for rot in bd.PolarLocations(0, FIN_COUNT)]
+    fin = bd.extrude(bd.Plane.XZ * profile, amount=FIN_W / 2, both=True)
+    fins = [rot * fin for rot in bd.PolarLocations(0, FIN_COUNT)]
 
     standoffs = []
     for az in ENC_STANDOFF_ANGLES:
@@ -515,7 +555,7 @@ def make_housing() -> bd.Part:
 
 def make_front_retainer() -> bd.Part:
     """Bolted bearing retainer ring (makes the front stack assemblable)."""
-    ring = _tube_z(RETAINER_R[1], RETAINER_R[0], RETAINER_Z)
+    ring = _chamfer_rims(_tube_z(RETAINER_R[1], RETAINER_R[0], RETAINER_Z), RETAINER_R[1], EDGE_BREAK)
     holes = [
         loc * _cyl_z(1.7, (RETAINER_Z[0] - 0.1, RETAINER_Z[1] + 0.1))
         for loc in bd.PolarLocations(FRONT_SCREW_CIRCLE_R, FRONT_SCREW_COUNT, start_angle=22.5)
@@ -528,9 +568,9 @@ def make_retainer_screws() -> list[bd.Part]:
     screws = []
     socket = bd.extrude(bd.RegularPolygon(RETAINER_SCREW_SOCKET_R, 6), amount=1.2)
     for loc in bd.PolarLocations(FRONT_SCREW_CIRCLE_R, FRONT_SCREW_COUNT, start_angle=22.5):
-        head = _cyl_z(
+        head = _chamfer_rims(_cyl_z(
             RETAINER_SCREW_HEAD_R, (RETAINER_Z[1], RETAINER_Z[1] + RETAINER_SCREW_HEAD_H)
-        )
+        ), RETAINER_SCREW_HEAD_R, 0.3)
         shank = _cyl_z(1.55, (RETAINER_Z[0] + 0.5, RETAINER_Z[1]))
         screw = (head + shank) - bd.Pos(
             0, 0, RETAINER_Z[1] + RETAINER_SCREW_HEAD_H - 1.1
@@ -541,7 +581,7 @@ def make_retainer_screws() -> list[bd.Part]:
 
 def make_rear_cover() -> bd.Part:
     """Sealed rear cover: plate, locating lip, tube boss, o-ring glands."""
-    plate = _cyl_z(COVER_R, COVER_PLATE_Z)
+    plate = _chamfer_rims(_cyl_z(COVER_R, COVER_PLATE_Z), COVER_R, EDGE_BREAK)
     lip = _tube_z(COVER_LIP_R[1], COVER_LIP_R[0], COVER_LIP_Z)
     boss = _tube_z(COVER_BOSS_R[1], COVER_BOSS_R[0], COVER_BOSS_Z)
     cover = plate + [lip, boss]
@@ -669,14 +709,18 @@ def make_rotor() -> dict[str, object]:
         cuts.append(loc * _cyl_z(1.6, (ROTOR_FLANGE_Z[0] - 0.1, ROTOR_FLANGE_Z[1] + 0.1)))
     body = body - cuts
 
-    z_mid = (MAGNET_Z[0] + MAGNET_Z[1]) / 2
 
     # Two independent prototypes so the alternating pole groups keep distinct
     # exported materials (copies of one shape share a single STEP style).
+    # Each magnet an arc segment of the ring (MAGNET_W wide at its mid radius), curved to
+    # the back iron and to the airgap as a bonded outrunner's are.
+    half = math.degrees(MAGNET_W / (MAGNET_IR + MAGNET_OR))
+
     def magnet_proto() -> bd.Part:
-        return bd.Pos((MAGNET_IR + MAGNET_OR) / 2, 0, z_mid) * bd.Box(
-            MAGNET_OR - MAGNET_IR, MAGNET_W, MAGNET_Z[1] - MAGNET_Z[0]
-        )
+        segment = (bd.Circle(MAGNET_OR) - bd.Circle(MAGNET_IR)) & (
+            bd.Polygon((0, 0), (2 * MAGNET_OR * math.cos(math.radians(half)), -2 * MAGNET_OR * math.sin(math.radians(half))),
+                       (2 * MAGNET_OR * math.cos(math.radians(half)), 2 * MAGNET_OR * math.sin(math.radians(half))), align=None))
+        return bd.Pos(0, 0, MAGNET_Z[0]) * bd.extrude(segment, amount=MAGNET_Z[1] - MAGNET_Z[0])
 
     north_proto, south_proto = magnet_proto(), magnet_proto()
     locs = list(bd.PolarLocations(0, MAGNET_COUNT))
@@ -733,7 +777,7 @@ def planet_location(psi_deg: float) -> bd.Location:
 
 def make_carrier() -> bd.Part:
     """Single-sided planet carrier: pins, plate, and torque-sensor hub."""
-    plate = _tube_z(CARRIER_PLATE_R[1], CARRIER_PLATE_R[0], CARRIER_PLATE_Z)
+    plate = _chamfer_rims(_tube_z(CARRIER_PLATE_R[1], CARRIER_PLATE_R[0], CARRIER_PLATE_Z), CARRIER_PLATE_R[1], 0.5)
     hub = _tube_z(CARRIER_HUB_R[1], CARRIER_HUB_R[0], CARRIER_HUB_Z)
     pins = [
         loc * _cyl_z(CARRIER_PIN_R, CARRIER_PIN_Z)
@@ -790,14 +834,17 @@ def make_torque_sensor() -> dict[str, object]:
 
 
 def make_output_flange() -> bd.Part:
-    """Output flange: bolt circle, pilot boss, hollow bore."""
-    plate = _tube_z(FLANGE_PLATE_R[1], FLANGE_PLATE_R[0], FLANGE_PLATE_Z)
-    boss = _tube_z(FLANGE_BOSS_R[1], FLANGE_BOSS_R[0], FLANGE_BOSS_Z)
+    """Output flange: the bolt circle (FLANGE_BOLT_COUNT x M5, countersunk), pilot boss, hollow
+    bore; its outer rim and the boss's face chamfered."""
+    plate = _chamfer_rims(_tube_z(FLANGE_PLATE_R[1], FLANGE_PLATE_R[0], FLANGE_PLATE_Z), FLANGE_PLATE_R[1], EDGE_BREAK)
+    boss = _chamfer_rims(_tube_z(FLANGE_BOSS_R[1], FLANGE_BOSS_R[0], FLANGE_BOSS_Z), FLANGE_BOSS_R[1], 0.5,
+                         at_z=FLANGE_BOSS_Z[1])
     flange = plate + boss
-    cuts = [
-        loc * _cyl_z(FLANGE_BOLT_R, (FLANGE_PLATE_Z[0] - 0.1, FLANGE_PLATE_Z[1] + 0.1))
-        for loc in bd.PolarLocations(FLANGE_BOLT_CIRCLE_R, FLANGE_BOLT_COUNT)
-    ]
+    sink = bd.Pos(0, 0, FLANGE_PLATE_Z[1] - FLANGE_BOLT_SINK) * bd.Cone(
+        FLANGE_BOLT_R, FLANGE_BOLT_R + FLANGE_BOLT_SINK + 0.1, FLANGE_BOLT_SINK + 0.1,
+        align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    bolt_hole = _cyl_z(FLANGE_BOLT_R, (FLANGE_PLATE_Z[0] - 0.1, FLANGE_PLATE_Z[1] + 0.1)) + sink
+    cuts = [loc * bolt_hole for loc in bd.PolarLocations(FLANGE_BOLT_CIRCLE_R, FLANGE_BOLT_COUNT)]
     cuts += [
         loc * _cyl_z(FLANGE_PILOT_HOLE_R, (FLANGE_PLATE_Z[0] + 0.5, FLANGE_BOSS_Z[1] + 0.1))
         for loc in bd.PolarLocations(FLANGE_PILOT_CIRCLE_R, 4, start_angle=45.0)
@@ -966,14 +1013,8 @@ def _spin(name: str, parent, child, origin, limits: tuple[float, float]) -> None
     parent.joints[name].connect_to(child.joints[name], angle=0.0)
 
 
-def build_actuator(explode: float = 0.0) -> bd.Compound:
-    """Build the labeled actuator assembly.
-
-    explode=0 returns the assembled model with its joints, coupling,
-    configurations and motions.
-    explode>0 translates each part along Z by EXPLODE_OFFSETS * explode as a
-    documented static exploded layout (joints are omitted in that mode).
-    """
+def build_actuator() -> bd.Compound:
+    """The labelled actuator assembly, with its joints, coupling, configurations and motions."""
     children = []
 
     housing = _label(make_housing(), "housing", color=AL_BODY, material=ANODIZED_AL)
@@ -1076,47 +1117,13 @@ def build_actuator(explode: float = 0.0) -> bd.Compound:
     tube = _label(make_cable_tube(), "cable_tube", color=TUBE_BLACK, material=TUBE_AL)
     children += [flange, tube]
 
-    by_name = {
-        "housing": housing,
-        "front_retainer": retainer,
-        "retainer_screws": retainer_screws,
-        "rear_cover": cover,
-        "connector_power": connectors["power"],
-        "connector_signal": connectors["signal"],
-        "driver_pcb": driver_pcb,
-        "encoder_pcb": encoder_pcb,
-        "encoder_magnet_ring": enc_magnet,
-        "stator": stator,
-        "rotor": rotor,
-        "rotor_bearing_rear": bearings["rear"],
-        "rotor_bearing_front": bearings["front"],
-        "sun_gear": sun,
-        "ring_gear": ring,
-        "planet_carrier": carrier,
-        "cross_roller_bearing": xroller,
-        "torque_sensor": torque_sensor,
-        "output_flange": flange,
-        "cable_tube": tube,
-    }
-
-    if explode:
-        for name, part in by_name.items():
-            offset = EXPLODE_OFFSETS.get(name, 0.0) * explode
-            if offset:
-                part.move(bd.Location((0, 0, offset)))
-        for psi, planet in zip(PLANET_ANGLES_DEG, planets):
-            dx = PLANET_EXPLODE_RADIAL * explode * math.cos(math.radians(psi))
-            dy = PLANET_EXPLODE_RADIAL * explode * math.sin(math.radians(psi))
-            planet.move(bd.Location((dx, dy, EXPLODE_OFFSETS["planet_gear"] * explode)))
-    else:
-        _connect(housing, retainer, cover, retainer_screws, connectors, driver_pcb, encoder_pcb,
-                 stator, rotor, sun, ring, enc_magnet, carrier, torque_sensor, flange, xroller,
-                 tube, races, bearings, balls_by_side, rollers, inner_ring, planets)
+    _connect(housing, retainer, cover, retainer_screws, connectors, driver_pcb, encoder_pcb,
+             stator, rotor, sun, ring, enc_magnet, carrier, torque_sensor, flange, xroller,
+             tube, races, bearings, balls_by_side, rollers, inner_ring, planets)
 
     actuator = bd.Compound(children=children, label="qdd_actuator")
-    if not explode:
-        _drive(actuator)
-        _clips(actuator)
+    _drive(actuator)
+    _clips(actuator)
     return actuator
 
 
@@ -1210,7 +1217,7 @@ def _clips(actuator: bd.Compound) -> None:
 
 @model
 def qdd_actuator():
-    return build_actuator(explode=0.0)
+    return build_actuator()
 
 
 if __name__ == "__main__":

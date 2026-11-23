@@ -31,7 +31,7 @@ import sys
 import uuid
 from typing import Any
 
-__all__ = ["NAMESPACE", "canonical", "check_name", "derived_id", "file_id", "is_id", "model_id"]
+__all__ = ["NAMESPACE", "canonical", "check_name", "derived_id", "file_id", "is_id", "is_preview_id", "model_id"]
 
 # cadgen's namespace for derived ids: written once, never changed.
 NAMESPACE = uuid.UUID("ad198b15-841c-4d1f-81be-6aa78d2737c0")
@@ -39,6 +39,8 @@ NAMESPACE = uuid.UUID("ad198b15-841c-4d1f-81be-6aa78d2737c0")
 WINDOWS = sys.platform == "win32"
 
 _ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
+# A page's preview of a model at unsaved parameter values (``cad_server.engine.parameters.Previewing``).
+_PREVIEW_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}~preview-[0-9a-f]{16}\Z")
 
 
 _GETATTRLIST: Any = None
@@ -137,3 +139,10 @@ def check_name(name: object, what: str = "name") -> str:
 def is_id(text: object) -> bool:
     """Whether ``text`` is a document id: a lower-case canonical UUID string."""
     return isinstance(text, str) and _ID.fullmatch(text) is not None
+
+
+def is_preview_id(text: object) -> bool:
+    """Whether ``text`` is a preview's id, ``<model id>~preview-<token>``: the model a page draws at parameter
+    values it has not saved, which a Quick Edit's references name and ``inspect`` reads while the page holds it.
+    No document id: nothing else takes one."""
+    return isinstance(text, str) and _PREVIEW_ID.fullmatch(text) is not None

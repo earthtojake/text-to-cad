@@ -17,10 +17,10 @@ import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
 import type { Launch, Server } from './host/server';
-import { createViewSync } from './host/sync';
+import { createViewSync, type Lost } from './host/sync';
 import { createTunnelClient, createTunnelFetch, TUNNEL_ORIGIN } from './host/tunnel';
 import ModelView, { type ViewReporter } from './ModelView';
-import { Banner } from './Notice';
+import { Banner, EngineStopped } from './Notice';
 
 interface Showing { launch: Launch; sequence: number }
 
@@ -65,11 +65,9 @@ export function inlineHeight(width: number, maxHeight?: number): number {
  */
 function Frame({ bridge, context, insets, inline = false, floatingComposer = false, overlay = null, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; floatingComposer?: boolean; overlay?: ReactNode; children: ReactNode }) {
   // Where the host's composer floats over the page instead of taking room from it: the room it
-  // covers, which lists scroll clear of. Keep the cube on the opposite side (its top-left) so a tab's
-  // composer or sidebar chat button never covers it.
+  // covers, which lists scroll clear of and Quick Edit stands above. The cube keeps its top-right.
   const floating = {
-    ...(floatingComposer ? { '--cad-host-bottom-inset': `${context.safeAreaInsets?.bottom || 0}px`,
-      '--cad-viewport-corner-left': '2px', '--cad-viewport-corner-right': 'auto' } : {}),
+    ...(floatingComposer ? { '--cad-host-bottom-inset': `${context.safeAreaInsets?.bottom || 0}px` } : {}),
   } as CSSProperties;
   const [width, setWidth] = useState(() => window.innerWidth);
   useEffect(() => {
@@ -203,15 +201,19 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // viewer sits at the bottom centre under it. A host that mounts views inline draws its composer
   // across the bottom of a full-size view, so that view keeps clear of it.
   const insets = presentation === 'inline' ? context.safeAreaInsets || {} : { ...context.safeAreaInsets, bottom: 0 };
-  const chat = useMemo(() => chatReach(bridge.hostCapabilities, presentation), [bridge, presentation]);
+  const chat = useMemo(() => chatReach(bridge.hostCapabilities, presentation, surface), [bridge, presentation, surface]);
   const floatingComposer = presentation === 'tabs';
   // Once a newer view of this chat is up: this one's last frame (or null), and nothing else.
   const [still, setStill] = useState<string | null | undefined>(undefined);
   const superseded = still !== undefined;
   const [showing, setShowing] = useState<Showing>({ launch: initial, sequence: 0 });
-  // The server stopped answering (its process has gone), or answers refusing this view (what it said):
-  // the view keeps its model, and says so.
-  const [lost, setLost] = useState<boolean | string>(false);
+  // Why the server stopped answering (`Lost`): its process has gone, or it answers refusing this view
+  // (what it said), and the view keeps its model and says so; or CAD's server behind it stopped, and
+  // the view is covered, as the browser viewer's is, until a sync answers again. Each time one does
+  // after that, the viewer is drawn afresh (`generation`), as the browser viewer reloads: what failed
+  // to load meanwhile is read again, and the tab's record gives the view back as it was.
+  const [lost, setLost] = useState<Lost | null>(null);
+  const [generation, setGeneration] = useState(0);
   const shown = useRef<string | null>(null);
   // The pages the launches carried: the first one's, then each the agent's shows bring.
   const [pages, setPages] = useState<Pages>(() => withPage(new Map(), initial));
@@ -229,7 +231,10 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     },
     capture: async () => fitCapture(await captureSettled(live, () => asked.current ?? shown.current)),
     state: () => describeView(live.current(), shown.current),
-    connection: (connected, refused) => setLost(connected ? false : refused || true),
+    connection: (connected, why) => {
+      setLost(connected ? null : why ?? { kind: 'plugin' });
+      if (connected) setGeneration(current => current + 1);
+    },
   }), [server, view, surface, alone, live]);
   const reporter = useMemo<ViewReporter>(() => ({
     showing(model) {
@@ -307,13 +312,17 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   if (superseded) {
     return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}><Superseded still={still} label={translator(locale)('cad.superseded')} /></Frame>;
   }
+  const stopped = lost?.kind === 'engine';
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}
-    overlay={lost ? <Banner message={typeof lost === 'string' ? lost : lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
-    <ModelView launch={launch} sequence={showing.sequence} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
+    overlay={stopped ? <EngineStopped locale={locale} />
+      : lost ? <Banner message={lost.kind === 'refused' ? lost.said : lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
+    <div className="contents" inert={stopped || undefined} aria-hidden={stopped || undefined}>
+    <ModelView launch={launch} sequence={showing.sequence} generation={generation} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings}
       whatsNew={presentation === 'tabs' && !lost ? { entry: whatsNew.entry, onDismiss: whatsNew.dismiss } : undefined}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
       openInBrowser={openInBrowser} engineOrigin={engineOrigin ?? undefined}
       colorScheme={colorScheme} theme={theme} locale={locale} language={language} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat} />
+    </div>
   </Frame>;
 }

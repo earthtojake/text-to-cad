@@ -5,9 +5,10 @@ import { translateIn } from '@cad/ui/i18n';
  * What the page says when the engine that served it is gone (`isEngineGone`): CAD is not running
  * (it stopped, or the machine restarted), or the one answering now does not know this page's token
  * (`refused`: its link was replaced, by `cad server --rotate-token`). Said in a person's terms, with
- * the one thing they can do: a person never starts the engine by hand -- an agent showing a model or
- * the CAD app opening does -- so the page names that, reconnects on its own meanwhile
- * (`useEngineReconnect`), and offers a reload for whoever would rather press something. A replaced
+ * the one thing they can do: only `cad server start` starts a stopped server (`cad mcp` starts one
+ * once, as its agent app starts it, never later), so the page names that command, or asking the
+ * agent, who runs it; reconnects on its own meanwhile (`useEngineReconnect`); and offers a reload
+ * for whoever would rather press something. A replaced
  * link has no reload worth offering: the new link is the way back.
  */
 export function EngineStopped({ locale, refused = false }: { locale: string; refused?: boolean }) {

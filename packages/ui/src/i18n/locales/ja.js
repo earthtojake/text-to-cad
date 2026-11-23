@@ -188,7 +188,7 @@ export default {
 
   "app.start.notAnswering": "CAD が応答しません",
   "app.engine.notRunning": "CAD が動いていません。",
-  "app.engine.startIt": "次にエージェントが CAD を使うか、CAD アプリを開くと再び起動します。このページは自動的に再接続します。",
+  "app.engine.startIt": "cad server start を実行するか、エージェントに起動を頼んでください。このページは自動的に再接続します。",
   "app.engine.linkReplaced": "このリンクは使えなくなりました。",
   "app.engine.openNewLink": "エージェントにもう一度モデルを開いてもらい、新しいリンクを使ってください。",
   "app.engine.reload": "再読み込み",
@@ -701,7 +701,6 @@ export default {
   "parameters.save": "保存",
   "parameters.saving": "保存中…",
   "parameters.reset": "リセット",
-  "parameters.saved": "保存しました",
   "parameters.error.failed": "保存できませんでした。",
   "parameters.error.no_worker": "編集するにはスクリプトを再実行してください。",
   "parameters.error.unknown_parameter": "パラメータがありません。スクリプトを再実行してください。",

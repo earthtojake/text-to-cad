@@ -375,7 +375,8 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
               loads, as a note being written outlives a reload. */}
           {compact || !quickEdit ? null : <div ref={quickEditRow} className="pointer-events-none absolute z-30 flex flex-col justify-end" data-quick-edit-row=""
             style={{ left: `var(--cad-quick-edit-left, ${INSET})`, width: `var(--cad-quick-edit-width, calc(100% - 2 * ${INSET}))`,
-              bottom: mobile ? `calc(${INSET} + env(safe-area-inset-bottom, 0px))` : 2 * VIEWPORT_INSET_PX }}>{quickEdit}</div>}
+              bottom: mobile ? `calc(${INSET} + env(safe-area-inset-bottom, 0px) + var(--cad-host-bottom-inset, 0px))`
+                : `calc(${2 * VIEWPORT_INSET_PX}px + var(--cad-host-bottom-inset, 0px))` }}>{quickEdit}</div>}
         </ToolbarTooltipScope>
       </div>
       {card && !toolsHidden && !previewing ? <SettingsCardDock open={card.open} className={SETTINGS_CARD_LAYER_CLASS} style={{ top: SETTINGS_CARD_GAP_PX }}

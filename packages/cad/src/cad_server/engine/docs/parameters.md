@@ -201,7 +201,11 @@ A preview is read at the document's read routes under its id, and at those alone
 so a part the values did not change is never meshed again and the page fetches only the parts whose keys it has
 not held: `xbfDocument.js`), a part's groups, an element's facts, the parts' facts. It has no envelope, no
 version to wait on, no pose, no kinematics, no mesh run, no export, no thumbnail and no Recents row
-(`http_app.PREVIEW_MARK`); only the page that asked is told its id. It is never the document: the document's
+(`http_app.PREVIEW_MARK`); only the page that asked is told its id, and the page names it in what it sends an
+agent: a face or an edge picked on the preview is `<id>~preview-<token>#REF` in a Quick Edit's references, since
+it may be none of the saved model's. `inspect` (`cad model inspect`) reads such a ref, and nothing else of a
+preview, through the engine's door at those same read routes (`api._preview_inspected`): the element's facts, with
+no `made_by` (a preview keeps no provenance); one let go is not found. It is never the document: the document's
 structure, version, record, cache file and every verb of it are as they were. A page holds two at most (the one
 drawn and the next), the server those of eight pages; a page's are let go by its next preview, by values equal to
 the document's, by a new version of the document (`Models.register`), and once nobody has read them for

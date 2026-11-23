@@ -137,6 +137,24 @@ class PreviewTest(PreviewCase):
         self.assertEqual(self.script.read_bytes(), before.replace(b'"wall", 2.0', b'"wall", 2.5'))
         self.assertEqual(self.call("GET", f"model/{shown['id']}/structure")[0], 404, "a new version lets it go")
 
+    def test_a_ref_into_a_preview_is_inspected_as_shown_until_it_is_let_go(self) -> None:
+        """A face picked on a preview is named by the preview's id (the page's Quick Edit), and ``inspect`` reads it in
+        the geometry on screen: the model at the unsaved values, not the saved one; once let go, it says so."""
+        def largest(ident: str) -> float:
+            return max(api.inspect(f"{ident}#face {at}", progress=False)["area"] for at in range(1, 7))
+
+        self.assertAlmostEqual(largest(self.ident), 30 * 16)
+        shown = self.shown({"holes": 8})
+        self.assertAlmostEqual(largest(shown["id"]), 30 * 18)
+        facts = api.inspect(shown["id"], "face 1", progress=False)
+        self.assertEqual((facts["kind"], facts["ordinal"]), ("face", 1))
+        self.assertNotIn("made_by", facts)  # a preview keeps no provenance
+        with self.assertRaisesRegex(api.EngineError, "a page's preview of unsaved parameter values"):
+            api.inspect(shown["id"], query="summary", progress=False)
+        self.assertIsNone(self.preview({})[1]["preview"])  # Reset: the page's previews let go
+        with self.assertRaisesRegex(ValueError, "no such preview"):
+            api.inspect(shown["id"], "face 1", progress=False)
+
     def test_a_value_tried_before_is_the_memo_s(self) -> None:
         first = self.shown({"wall": 3.0})
         self.shown({"wall": 3.5})

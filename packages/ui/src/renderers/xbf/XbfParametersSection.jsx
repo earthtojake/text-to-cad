@@ -26,10 +26,10 @@ import { FlatPanelChanged } from "../kit/shell/FlatPanel.jsx";
 // document's place until Save lands or Reset lets it go. A parameter the engine cannot write is its control,
 // off, its hint saying why; Save off for a reason says why in its hint, but where nothing in the tab can work
 // (a file's document, a script no worker holds, a script changed since it ran): the foot's status says that,
-// once, in place of "Saved".
+// once. A save that lands says nothing: Save and Reset go back to rest, and nothing above them comes or goes.
 
 const NO_DRAFTS = Object.freeze({});
-const IDLE = Object.freeze({ drafts: NO_DRAFTS, sent: null, saving: false, saved: false, error: null, locked: null });
+const IDLE = Object.freeze({ drafts: NO_DRAFTS, sent: null, saving: false, error: null, locked: null });
 // The refusal that says no worker holds the model's run, so nothing can be previewed or saved from here until its
 // script runs again: the tab's controls go off, and the foot says why, until the document's next version.
 const LOCKING = new Set(["no_worker"]);
@@ -273,7 +273,7 @@ export function useXbfParameters({ client, document, onPreview = null, onEdit = 
   const lock = useCallback(failure => {
     letGo();
     draw(null);
-    setState(now => ({ ...now, drafts: NO_DRAFTS, sent: null, saving: false, saved: false, error: null, locked: failure }));
+    setState(now => ({ ...now, drafts: NO_DRAFTS, sent: null, saving: false, error: null, locked: failure }));
   }, [letGo, draw]);
   const lockRef = useRef(lock);
   lockRef.current = lock;
@@ -315,7 +315,7 @@ export function useXbfParameters({ client, document, onPreview = null, onEdit = 
       const drafts = { ...now.drafts };
       if (sameParameterValue(parameter, value, parameter.value)) delete drafts[name]; else drafts[name] = value;
       // A changed script is not cleared by an edit: only its next run tells the tab it can work again.
-      return { ...now, drafts, saved: false, error: now.error?.code === CHANGED ? now.error : null };
+      return { ...now, drafts, error: now.error?.code === CHANGED ? now.error : null };
     });
   }, []);
   // A value the person means (a slider let go or stepped by the keyboard, a value typed): set as a draft, and its
@@ -338,7 +338,7 @@ export function useXbfParameters({ client, document, onPreview = null, onEdit = 
     letGo();
     if (!live.current.state.sent) draw(null);
     setState(now => (now.saving ? now : {
-      ...now, saved: false, error: now.error?.code === CHANGED ? now.error : null,
+      ...now, error: now.error?.code === CHANGED ? now.error : null,
       drafts: Object.fromEntries(Object.entries(now.drafts).filter(([name]) => now.sent && Object.hasOwn(now.sent, name) && now.sent[name] === now.drafts[name]))
     }));
   }, [letGo, draw]);
@@ -352,7 +352,7 @@ export function useXbfParameters({ client, document, onPreview = null, onEdit = 
     if (!able || now.saving || now.locked || now.error || inFlight.current || !Object.keys(values).length) return;
     inFlight.current = true;
     letGo();  // a preview answered from now on is of values before the save: the save's version is drawn next
-    setState(current => ({ ...current, saving: true, saved: false, error: null }));
+    setState(current => ({ ...current, saving: true, error: null }));
     try {
       const answer = await service.setModelParameters(id, values);
       const written = Array.isArray(answer?.written) ? answer.written.filter(entry => typeof entry?.name === "string" && entry.name) : null;
@@ -366,13 +366,13 @@ export function useXbfParameters({ client, document, onPreview = null, onEdit = 
           .filter(([name, value]) => wrote.has(name) || !Object.hasOwn(values, name) || values[name] !== value));
         // Written, still on its control and not yet the document's: awaited, not sent again.
         const sent = Object.fromEntries(Object.entries(values).filter(([name, value]) => drafts[name] === value));
-        return { ...current, drafts, saving: false, saved: true, error: null, sent: Object.keys(sent).length ? { ...current.sent, ...sent } : current.sent };
+        return { ...current, drafts, saving: false, error: null, sent: Object.keys(sent).length ? { ...current.sent, ...sent } : current.sent };
       });
     } catch (error) {
       const failure = failureOf(error);
       if (!mounted.current) return;
       if (LOCKING.has(failure.code)) lock(failure);
-      else setState(current => ({ ...current, saving: false, saved: false, error: { ...failure, during: "save" } }));
+      else setState(current => ({ ...current, saving: false, error: { ...failure, during: "save" } }));
     } finally {
       inFlight.current = false;
     }
@@ -418,9 +418,9 @@ export function useXbfParameters({ client, document, onPreview = null, onEdit = 
     }
   }), []);
 
-  return useMemo(() => ({ parameters, drafts: state.drafts, changed, dirty: Object.keys(changed).length > 0, saving: state.saving, saved: state.saved,
+  return useMemo(() => ({ parameters, drafts: state.drafts, changed, dirty: Object.keys(changed).length > 0, saving: state.saving,
     error: state.error, locked: state.locked, ofModel: Boolean(model), savable, setDraft, commit, reset, save, notes }),
-  [parameters, state.drafts, state.saving, state.saved, state.error, state.locked, changed, model, savable, setDraft, commit, reset, save, notes]);
+  [parameters, state.drafts, state.saving, state.error, state.locked, changed, model, savable, setDraft, commit, reset, save, notes]);
 }
 
 /**
@@ -459,15 +459,13 @@ export default function XbfParametersSection({ parameters: model }) {
   const editable = reasons.some(reason => !reason);
   const error = model.error;
   // Why nothing in the tab can work, where that is so: a file's document, a script no worker holds (its reason,
-  // or a refusal that found it), a script changed since it ran. Said once, as the foot's status, in place of
-  // "Saved"; Save is simply off then, with no hint of its own.
+  // or a refusal that found it), a script changed since it ran. Said once, as the foot's status; Save is simply
+  // off then, with no hint of its own.
   const blockedBy = saving ? ""
     : documentReason === "file" || documentReason === "no_worker" ? documentReason
     : locked?.code === "no_worker" || error?.code === "script_changed" ? (locked || error).code
     : "";
   const blocked = blockedBy ? t(blockedBy === "script_changed" ? "parameters.error.script_changed" : `parameters.reason.${blockedBy}`) : "";
-  // No count of what is unsaved: Save on is the sign. "Saved" once a save is answered and nothing differs.
-  const status = blocked || (!saving && !model.dirty && model.saved ? t("parameters.saved") : "");
   // Why Save is off, where it is for another reason: a view that cannot save, then the last refusal (until an
   // edit). One short line, the tab's own: the engine's message is never in it (a build's can run to many lines).
   // Nothing to save is no reason: Save is simply off.
@@ -510,13 +508,14 @@ export default function XbfParametersSection({ parameters: model }) {
     return own ? <Explained key={name} reason={own} className="pb-2" {...marks}>{control}</Explained> : <div key={name} className="pb-2" {...marks}>{control}</div>;
   };
 
-  // Save and Reset, the section's foot, under the list; what they say (the status: why they are off, or "Saved")
+  // Save and Reset, the section's foot, under the list; what they say (the status: why they are off, else nothing:
+  // no count of what is unsaved, Save on is the sign, and nothing once a save is answered, the buttons at rest say it)
   // directly over them, right-aligned on their right edge, one line or two (a narrow panel), read whole, never cut
   // off — and the hint of a button it holds off. Save off for another reason says why in its own hint, on the wrapper
   // that takes the pointer for it.
   const actions = (editable || documentReason) && shown.length ? <PanelActions footProps={FOOT_MARKS} className="flex-col items-end gap-1" data-parameters-actions="">
-    <span role="status" className={cn("max-w-full text-right leading-(--cad-leading-xs) text-muted-foreground empty:hidden", blocked ? "line-clamp-2" : "truncate")} data-parameters-status=""
-      data-parameters-status-reason={blockedBy || undefined}>{status}</span>
+    <span role="status" className={cn("max-w-full text-right leading-(--cad-leading-xs) text-muted-foreground empty:hidden line-clamp-2")} data-parameters-status=""
+      data-parameters-status-reason={blockedBy || undefined}>{blocked}</span>
     <div className="flex items-center justify-end gap-2" data-parameters-buttons="">
     <Explained reason={blocked && !(saving || !model.dirty) ? "" : blocked} className="shrink-0">
       <Button type="button" variant="ghost" size="xs" className={PANEL_ACTION_CLASS} disabled={saving || !model.dirty} onClick={model.reset}

@@ -56,7 +56,7 @@ class PromptFilesRouteTest(unittest.TestCase):
             connection.close()
 
     def request(self, **overrides) -> dict:
-        return {"acceptInline": True, "name": "part.stl", "input": str(self.model), "annotation": ANNOTATION, "views": [
+        return {"name": "part.stl", "input": str(self.model), "annotation": ANNOTATION, "views": [
             {"label": "view 1", "camera": CAMERA, "display": {"mode": "xray", "grid": True}, "width": 640, "height": 480},
             {"label": "view 2", "camera": "iso"},
         ], **overrides}
@@ -93,8 +93,7 @@ class PromptFilesRouteTest(unittest.TestCase):
             views = [{"label": f"view {at + 1}", "camera": CAMERA, "display": display} for at, display in enumerate(displays)]
             status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=annotation, views=views))
             self.assertEqual(status, 200, body)
-            answer = json.loads(body)
-            return json.loads(answer["inline"] if "inline" in answer else Path(answer["snapshot"]).read_text(encoding="utf-8"))
+            return json.loads(Path(json.loads(body)["snapshot"]).read_text(encoding="utf-8"))
 
         drawn = packet(ink, plain, hid)
         self.assertEqual([job["display"] for job in drawn["jobs"]], [plain, hid])
@@ -185,50 +184,23 @@ class PromptFilesRouteTest(unittest.TestCase):
     def test_a_prompt_without_an_annotation_names_none_and_the_next_prompt_is_numbered_on(self) -> None:
         _, first, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=None))
         _, second, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=None))
-        self.assertNotIn("annotation", json.loads(first))
-        packet = json.loads(json.loads(second)["inline"])
-        self.assertIn("part-2-view-1.png", packet["jobs"][0]["outputs"][0]["path"])
-        self.assertNotIn("annotation", json.loads(json.loads(first)["inline"]))
-        self.assertEqual(list(self.files.glob("*.json")), [])
+        saved = [json.loads(Path(json.loads(body)["snapshot"]).read_text(encoding="utf-8")) for body in (first, second)]
+        self.assertIn("part-2-view-1.png", saved[1]["jobs"][0]["outputs"][0]["path"])
+        self.assertNotIn("annotation", saved[0])
 
-    def test_already_open_clients_get_a_real_file_unless_they_accept_inline(self) -> None:
+    def test_every_packet_is_a_saved_file_however_small_and_whatever_the_page_asks(self) -> None:
+        """One shape for a message's snapshot: a path. A page of 0.11.16 and earlier asks for its small packet
+        inline (``acceptInline``) and gets a path too, which it reads as it always did."""
         request = self.request(annotation=None, views=[{"label": "current view", "camera": CAMERA}])
-        request.pop("acceptInline")
         for acceptance in (None, False, True):
             body_request = request if acceptance is None else {**request, "acceptInline": acceptance}
             status, body, _ = self.call("POST", "/api/v1/local/prompt-files", body_request)
             self.assertEqual(status, 200, body)
             answer = json.loads(body)
-            if acceptance is True:
-                self.assertIn("inline", answer)
-                self.assertNotIn("snapshot", answer)
-                packet = json.loads(answer["inline"])
-            else:
-                self.assertNotIn("inline", answer)
-                self.assertTrue(Path(answer["snapshot"]).is_file())
-                packet = json.loads(Path(answer["snapshot"]).read_text(encoding="utf-8"))
+            self.assertEqual(sorted(answer), ["ok", "snapshot"])
+            packet = json.loads(Path(answer["snapshot"]).read_text(encoding="utf-8"))
             self.assertEqual(_view_of(packet, "current view").camera, CAMERA)
-        self.assertEqual(len(list(self.files.glob("*.snapshot.json"))), 2)
-
-    def test_inline_cutoff_counts_utf8_bytes_and_both_forms_are_replayable(self) -> None:
-        # The view's label is said once in the packet whatever its length past the 48 characters
-        # its file name takes, so it pads the packet a byte at a time; its last, `é`, is two.
-        def post(label: str) -> dict:
-            status, body, _ = self.call("POST", "/api/v1/local/prompt-files",
-                                        self.request(annotation=None, views=[{"label": label, "camera": CAMERA}]))
-            self.assertEqual(status, 200, body)
-            return json.loads(body)
-
-        base = post("a" * 60)["inline"]
-        label = "a" * (60 + 1024 - len(base.encode("utf-8")) - 2) + "é"
-        inline = post(label)["inline"]
-        self.assertEqual(len(inline.encode("utf-8")), 1024)
-        self.assertEqual(list(self.files.glob("*.json")), [])
-        self.assertEqual(_view_of(json.loads(inline), label).camera, CAMERA)
-        answer = post(label + "a")
-        self.assertNotIn("inline", answer)
-        saved = json.loads(Path(answer["snapshot"]).read_text(encoding="utf-8"))
-        self.assertEqual(_view_of(saved, label + "a").camera, CAMERA)
+        self.assertEqual(len(list(self.files.glob("*.snapshot.json"))), 3)
 
     def test_a_packets_input_is_a_files_path_or_a_documents_id_and_never_a_script(self) -> None:
         ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"

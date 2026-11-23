@@ -144,8 +144,10 @@ cad model export "$ID" STL/bracket.stl 3MF/bracket.3mf --tolerance 0.02
 A reference such as `0dc50a92-...#bracket/face 7` is what the viewer copies when the person picks
 something: a document, a part by its labels, then an element. Resolve it with `inspect`, then edit the
 code `made_by` names. A Quick Edit prompt carries its document under `File:`, its picks under
-`References:` and a snapshot packet, inline JSON (save it to a file) or a `.snapshot.json` path. Where
-the person drew on the view, look at what they drew before editing:
+`References:` and the path of a snapshot packet, a `.snapshot.json`. A reference into
+`<id>~preview-<token>` names the model at parameter values shown in the viewer and not saved, as the
+prompt's note says: `inspect` reads it as shown. Where the person drew on the view, look at what
+they drew before editing:
 `cad model snapshot "$ID" out.png --annotation packet.snapshot.json --camera authored`
 ([annotations](references/snapshot-review.md#annotations-and-quick-edit-views)).
 

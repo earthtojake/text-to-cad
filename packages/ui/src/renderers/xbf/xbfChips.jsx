@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { isPreviewId } from "@cad/core/lib/cadRefs.js";
 import { fetchXbfElementFacts } from "@cad/core/lib/xbf/xbfDocument.js";
 import { parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 import { formatPromptReference } from "@cad/core/prompt";
@@ -199,6 +200,21 @@ export function useXbfSelectionChips({ scene, tree, resource, selectedIds, facts
   const { t } = useI18n();
   return useMemo(() => xbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove, onHover, describe, t }),
     [scene, tree, resource, selectedIds, facts, onRemove, onHover, describe, t]);
+}
+
+/**
+ * The resource a pick names: `resource`, the document on screen; or, while the scene draws a preview of a model at
+ * parameter values the page has not saved (`previewing`: its URL, `client.previewModelParameters`'s, ending
+ * `/documents/model/<preview id>`), that preview, by its id (`<model id>~preview-<token>`), which `cad model
+ * inspect` reads while the page holds it. A face of the preview is named where it is, never as the saved model's,
+ * whose faces may be others.
+ */
+export function xbfPickResource(resource, previewing) {
+  if (!previewing || resource?.kind !== "cad-model") return resource;
+  let id = "";
+  try { id = decodeURIComponent(new URL(previewing, "http://view.invalid").pathname.split("/").pop() || ""); }
+  catch { return resource; }
+  return isPreviewId(id) ? { ...resource, path: id } : resource;
 }
 
 /** What `ids` copy, as their chips do: their references, each with the file's path, a line each. */

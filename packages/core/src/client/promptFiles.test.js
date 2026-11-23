@@ -16,7 +16,7 @@ test("a prompt saves JSON in one request without polling; a JSON file is read by
   assert.deepEqual(calls.map(call => `${call.method} ${call.url}`), [
     'POST http://cad.invalid/api/v1/local/prompt-files',
   ]);
-  assert.deepEqual(JSON.parse(calls[0].body), { ...request, acceptInline: true });
+  assert.deepEqual(JSON.parse(calls[0].body), request);
   assert.ok(calls.every(call => call.headers['x-cad-viewer'] === '1'));
   const json = await files.read('/tmp/p/a-1.snapshot.json');
   assert.equal(json.type, 'application/json');
@@ -28,9 +28,3 @@ test("a refused packet says why", async () => {
   await assert.rejects(files.create({ name: 'a.step', input: '/m/a.step', views: [], annotation: {} }), /marks must be an array/);
 });
 
-
-test('a small snapshot is returned inline without a file read', async () => {
-  const inline = '{"input":"/m/a.step","jobs":[]}';
-  const files = createHttpPromptFiles({ fetch: async () => Response.json({ ok: true, inline }) });
-  assert.deepEqual(await files.create({}), { inline });
-});

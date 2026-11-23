@@ -315,12 +315,15 @@ the launch's `_meta` first (`host/capability.ts`).
   `updateModelContext`; a tab host is not asked: Codex forwards the method
   whether or not its frame declares it. **Send** (the person's message now,
   `ui/message`) needs `message`. Both actions capture the current view and distinct drawn views at the
-  press. Up to 1024 bytes of compact UTF-8 snapshot JSON goes into the text; larger
-  packets are written as `.snapshot.json` and named by saved path. Views share the annotation. No images or file bytes are attached,
+  press. The snapshot packet is written as `.snapshot.json` and named by its saved path, whatever
+  its size. Views share the annotation. No images or file bytes are attached,
   even where the host accepts images. A host that takes neither gets Copy Prompt alone
   (`unavailablePromptContext`): Queue and Send are left out, not disabled. In
-  Codex, Send from a thread's CAD tab posts into that thread; from the
-  sidebar page it goes to the page's own chat tab.
+  Codex, Send from a thread's CAD tab posts into that thread. The sidebar page (`surface:
+  sidebar`) has a chat box of its own, so it shows no Quick Edit bar: the view follows that
+  chat (`ChatReach.follows`), and once a pick or a stroke settles the composer's context is
+  replaced with what the view carries then (its references and snapshot, no note), and emptied
+  when nothing is picked or drawn; the person's own message goes with it.
 - **Host-neutral shared code.** Host specifics live here and in `cad_server/mcp`,
   never in `packages/core` or `packages/ui`, which choose by capability (the
   prompt destination's `kind`, a port's presence, `environment.compact`). A policy
@@ -392,7 +395,7 @@ the launch's `_meta` first (`host/capability.ts`).
   rows) stand where the models will be; a model being opened shows a spinner over
   its picture, and takes no second press, until the launch switches to the
   viewer, whose own progress takes over.
-- **A card says why it cannot work, in words a person can act on.** Three states, never
+- **A card says why it cannot work, in words a person can act on.** Four states, never
   confused, and never a host's or a transport's own error string (`host/channel.ts`,
   `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`), and names the browser, never the viewer
   ([Naming the page](../../packages/ui/docs/viewer-ux.md#naming-the-page)):
@@ -423,6 +426,14 @@ the launch's `_meta` first (`host/capability.ts`).
     thread. Quit and reopen Codex to restart it." in a tab, "The CAD plugin stopped
     responding. Quit and reopen Codex to restart it, then ask your agent to show the model
     again." inline.
+  - **CAD's server stopped.** `cad server stop` under a live plugin: `cad mcp` outlives the server
+    and answers every call with cad's one line, an error that refuses nothing
+    (`packages/cad/src/cad_mcp/shim.py`, "Answered here"), so four such syncs in a row mean the
+    server, not the plugin (`host/sync.ts`'s `Lost`). The view is covered by the viewer's own status
+    screen, "CAD is not running.", as the browser viewer's is, the view under it inert, with no
+    action; once a sync answers again the screen goes and the viewer is drawn afresh, as the
+    browser viewer reloads: what failed to load meanwhile is read again, and the view's record
+    gives it back as it was.
   - **The engine refused or failed.** Its own one-line reason, where the viewer shows a
     request's failure. A call that got no reply fails in words of ours ("This chat cannot
     connect to CAD's engine.", "The CAD plugin did not answer in time.", "The
@@ -532,12 +543,9 @@ browser (503: no display, a remote shell), or the card reaches the engine direct
 card open the launch's page through `ui/open-link` where the host offers it, else as a plain
 link. A view whose launches carried no page (the engine gave none) has no Browser item; the home,
 which has no file, has no file menu. In a tab, Codex's composer floats over the page, and the
-home's list scrolls clear of it (`--cad-host-bottom-inset`). The view's corner (the cube, or a
-flat view's zoom) stands at the top in every host,
-the bottom row Quick Edit's; in this tab presentation, across sidebar, thread and file views, it
-sits at the top-left, mirrored, clear of the sidebar chat button's side. `App.tsx` supplies
-`--cad-viewport-corner-left: 2px` and `--cad-viewport-corner-right: auto`;
-inline hosts (including full-size cards) retain the default top-right placement.
+home's list scrolls clear of it and Quick Edit stands above it (`--cad-host-bottom-inset`). The
+view's corner (the cube, or a flat view's zoom) stands at the top-right in every host and presentation,
+the bottom row Quick Edit's.
 
 ## Engine transport
 

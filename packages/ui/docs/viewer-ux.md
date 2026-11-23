@@ -215,13 +215,15 @@ chrome that floats over the picture. The home is the navbar over the library.
 
 The bar where a person writes a note to their agent about what is on screen (`QuickEdit.jsx`).
 
-- **Always there**, with no X and no setting, wherever a note can carry the view's picks or ink: STEP, .xbf, GLB, STL,
+- **Always there**, with no X and no setting, wherever a note can carry the view's picks or ink (but where the
+  host's own chat box takes the person's message, a destination that `follows`: there the view keeps that chat's
+  context to what is picked and drawn, and shows no bar): STEP, .xbf, GLB, STL,
   3MF, a robot, a drawing, and a board or schematic once indexed. It is hidden (its note kept) while the file loads and
   in Preview, and absent in a compact view. Why: a bar that came and went was not there when wanted.
 - **One row at rest**: the note ("Describe a change…") with its buttons at the right of its last line. A row of
   attachments appears above it only while something is attached; the bar grows upward, its bottom and note in place.
   One solid surface, the strip's, at rest and in use: no dimmed rest state.
-- **Placement**: 16px off the bottom, centred on the whole view, at most 400px wide (else the view less 16px a side).
+- **Placement**: 16px off the bottom (above a host's floating composer, `--cad-host-bottom-inset`), centred on the whole view, at most 400px wide (else the view less 16px a side).
   Where a pinned panel would reach under it, it centres on the model's area; a peek moves nothing. On a phone it spans
   the view less 8px a side, above the safe area. The bottom of the view is Quick Edit's alone.
 - **The note** grows upward as it is written (never on focus) to four lines, then scrolls, its scrollbar at the bar's
@@ -357,8 +359,9 @@ engine; everything else in the viewer only looks.
   model's own, each file under a muted heading.
 - **The foot** is the tab's actions row: a status right-aligned above Reset (it drops the drafts) and Save (filled only
   while it can save; it sends the changed values in one request). Both are off while nothing differs.
-- **The status** says why the buttons are off, or "Saved" once a save is answered, else nothing; never a count of
-  unsaved values. Why: why the buttons are off is read where they are.
+- **The status** says why the buttons are off, else nothing: never "Saved" (a save answered returns the buttons to
+  rest, and nothing above them comes or goes) and never a count of unsaved values. Why: why the buttons are off is
+  read where they are.
   - "Edit these in the script." (an .xbf opened as a file), "Run the script again to edit." (the script's process has
     gone), "Script changed. Run it again." (the file was edited by hand since it ran).
   - Any other reason Save is off is its hint: one short line, never the engine's message, which can run to many lines.
@@ -369,7 +372,9 @@ engine; everything else in the viewer only looks.
   spent on a value already passed.
 - **Saving** turns the controls off and Save says "Saving…". The rebuilt model arrives as a new version.
 - **The agent learns of a save**: the next Quick Edit message says once what was saved, so the agent keeps the values.
-  Unsaved drafts add a line to every message saying they are shown, not saved. How the tab works:
+  Unsaved drafts add a line to every message saying they are shown, not saved, and what is picked on their preview
+  is named by the preview's id (`<model id>~preview-<token>`), which `cad model inspect` reads as shown. Why: a face
+  of the preview may not be one of the saved model's, and a reference that resolves elsewhere misleads. How the tab works:
   [cad-renderer.md](cad-renderer.md#engine-document-panels).
 
 ### Joints

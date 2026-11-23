@@ -1,8 +1,8 @@
 """Quick Edit's JSON handoff files, written synchronously without rendering.
 
-POST /api/v1/local/prompt-files validates a snapshot packet in memory, then returns 200
-with compact inline JSON up to 1024 UTF-8 bytes, or writes one .snapshot.json and
-returns its path, in a scratch directory of this process's under ``/tmp`` (``_directory``): a path
+POST /api/v1/local/prompt-files validates a snapshot packet in memory, then writes one
+.snapshot.json and returns its path with 200, whatever its size (a message names its snapshot one
+way), in a scratch directory of this process's under ``/tmp`` (``_directory``): a path
 a message names without the person's home or the per-user temporary folder in it. Shared input and inline annotation are stored once (Measure's
 measurements are the person's alone: a prompt carries none);
 jobs reserve output names for an agent to render later (``cad <type> snapshot --job`` draws
@@ -34,8 +34,8 @@ PROMPT_FILES_ROUTE = "/api/v1/local/prompt-files"
 # How long a request carries: an annotation is points, and a long session of annotating is megabytes.
 MAX_BODY_BYTES = 32 * 1024 * 1024
 MAX_VIEWS = 16
-# Compact UTF-8 JSON, not whitespace or a model-specific tokenizer.
-INLINE_SNAPSHOT_BYTES = 1024
+# ``acceptInline``: what a page of 0.11.16 and earlier asked for, its packet inline up to 1 KiB; still taken
+# from a page open across an update, and answered with a path as every request is.
 _REQUEST_KEYS = frozenset({"name", "input", "views", "annotation", "acceptInline", "references"})
 _VIEW_KEYS = frozenset({"label", "camera", "display", "kinematics", "jointValues", "animation", "selection", "width", "height"})
 _ANNOTATION_KEYS = frozenset({"units", "parts", "marks"})
@@ -98,7 +98,7 @@ class PromptFiles:
     # --- POST ----------------------------------------------------------------
 
     def create(self, body: bytes) -> tuple[int, dict]:
-        """Validate one snapshot packet, then return inline JSON or its saved path with ``200``."""
+        """Validate one snapshot packet, then save it and return its path with ``200``."""
         try:
             request = json.loads(body or b"null")
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -142,10 +142,6 @@ class PromptFiles:
             # What ``cad <type> snapshot --annotation`` leaves out of the stills it draws the ink on.
             packet.update(_drawn_in(annotation, views))
         _accepted(packet)
-        compact = json.dumps(packet, ensure_ascii=False, separators=(",", ":"))
-        # Already-open clients expect a path. Only clients advertising inline support get JSON.
-        if request.get("acceptInline", False) and len(compact.encode("utf-8")) <= INLINE_SNAPSHOT_BYTES:
-            return 200, {"ok": True, "inline": compact}
         snapshot_path = directory / f"{prefix}.snapshot.json"
         write_bytes_atomic(snapshot_path, (json.dumps(packet, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
         return 200, {"ok": True, "snapshot": str(snapshot_path)}

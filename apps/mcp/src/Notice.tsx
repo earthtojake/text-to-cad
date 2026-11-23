@@ -1,4 +1,5 @@
 import { english, resolveLocale, translator } from '@cad/ui/i18n';
+import { EmptyState } from '@cad/ui/navigation';
 import type { Ref } from 'react';
 import { OPEN_IN_VIEWER, unreachableKey } from './host/unreachable.js';
 import type { Refusal } from './host/server';
@@ -19,6 +20,19 @@ export function Banner({ message }: { message: string }) {
   // Below the tool strip's row at the top centre, so it never sits over its tools.
   return <div className="pointer-events-none absolute inset-x-0 top-12 z-50 flex justify-center px-3">
     <div className="pointer-events-auto max-w-md rounded-md border bg-background/95 px-3 py-2 text-ui text-xs text-foreground shadow-sm" role="alert">{message}</div>
+  </div>;
+}
+
+/**
+ * CAD's server stopped under a view whose plugin still answers (`cad server stop`: `host/sync.ts`'s
+ * `engine`): the viewer's status screen over the whole view, the view under it inert, as the browser
+ * viewer says it (`packages/ui/docs/viewer-ux.md`, "Status screens"). No action: the view comes back
+ * by itself once a server answers its sync again.
+ */
+export function EngineStopped({ locale }: { locale: string }) {
+  const say = translator(locale);
+  return <div role="alert" className="absolute inset-0 z-50 bg-background" data-cad-engine-stopped="">
+    <EmptyState title={say('app.engine.notRunning')} description={say('app.engine.startIt')} />
   </div>;
 }
 

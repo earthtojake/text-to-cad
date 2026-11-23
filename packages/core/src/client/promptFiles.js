@@ -1,11 +1,11 @@
 import { cadApiUrl } from './client.js';
 
 /**
- * Prepare a Quick Edit snapshot: small packets inline, larger packets by path, without rendering.
+ * Prepare a Quick Edit snapshot: the packet saved as a `.snapshot.json` and named by its path, without rendering.
  * `read` fetches a JSON file.
  * @typedef {{ name: string, input: string, views: object[], annotation: object | null, references?: string[] }} PromptFilesRequest
  *   `references`: what the prompt names in the file, a board's selectors, which the packet carries for its snapshot to light.
- * @typedef {{ snapshot: string, inline?: never } | { inline: string, snapshot?: never }} PromptFiles
+ * @typedef {{ snapshot: string }} PromptFiles
  * @param {{ origin?: string, fetch?: typeof globalThis.fetch }} [options]
  * `folders` asks the viewer server for the folders a message names files by: the workspace it was started
  * in (`start`: an agent app's, for a CAD app card) and the person's home.
@@ -22,11 +22,10 @@ export function createHttpPromptFiles({ origin = '', fetch: fetchImpl = globalTh
   return {
     async create(request) {
       const body = await answer(await fetchImpl(cadApiUrl('/api/v1/local/prompt-files', { origin }), {
-        method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ ...request, acceptInline: true }),
+        method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(request),
       }));
-      if (typeof body.inline === "string") return { inline: body.inline };
       if (typeof body.snapshot === "string") return { snapshot: body.snapshot };
-      throw new Error("The prompt response has neither inline JSON nor a snapshot path.");
+      throw new Error("The prompt response has no snapshot path.");
     },
     async folders() {
       const response = await fetchImpl(cadApiUrl('/api/v1/server', { origin }), { headers });

@@ -5,7 +5,7 @@ import { createBridge, HostError, type ToolResult } from './bridge';
 import { frameClipboard } from './clipboard';
 import { chatReach, createChatPromptContext } from './prompt';
 import { createServer, ServerError, type SyncReply, type SyncRequest, type ViewEvent } from './server';
-import { createViewSync, LOST_AFTER, SYNC_MS } from './sync';
+import { createViewSync, LOST_AFTER, SYNC_MS, type Lost } from './sync';
 import { createTunnelFetch, decodeBase64, TUNNEL_ORIGIN, TUNNEL_REPLY_MAX_BYTES } from './tunnel';
 
 /** A host frame: records what the page posts and answers with `respond`. */
@@ -198,15 +198,43 @@ describe('a view\'s one call each second', () => {
     vi.useFakeTimers();
     try {
       const refusal = 'This CAD view was opened before CAD restarted: close it and open CAD again.';
-      const server = { sync: vi.fn(async (): Promise<SyncReply> => { throw new ServerError(refusal); }), reply: async () => {} };
-      const said: [boolean, string | undefined][] = [];
+      const server = { sync: vi.fn(async (): Promise<SyncReply> => { throw new ServerError(refusal, 'stale'); }), reply: async () => {} };
+      const said: [boolean, Lost | undefined][] = [];
       const stop = new AbortController();
       createViewSync(server, { id: 'v1', surface: 'tab', model: () => null }, {
         show: () => {}, capture: async () => new Blob(), state: () => ({}),
-        connection: (connected, refused) => said.push([connected, refused]),
+        connection: (connected, lost) => said.push([connected, lost]),
       }).run(stop.signal);
       await vi.advanceTimersByTimeAsync(7_000);
-      expect(said).toEqual([[false, refusal]]);
+      expect(said).toEqual([[false, { kind: 'refused', said: refusal }]]);
+      stop.abort();
+    } finally { vi.useRealTimers(); }
+  });
+
+  // `cad server stop`: `cad mcp` outlives the server and answers each call with cad's line, an error that refuses
+  // nothing. The plugin is not gone, the engine is: the view says CAD is not running, and is back when one runs.
+  it('says the engine stopped when the plugin answers every sync with an error that refuses nothing', async () => {
+    vi.useFakeTimers();
+    try {
+      let down = true;
+      const server = {
+        sync: vi.fn(async (): Promise<SyncReply> => {
+          if (down) throw new ServerError('the cad server is not running: run `cad server start`');
+          return { events: [] };
+        }),
+        reply: async () => {},
+      };
+      const said: [boolean, Lost | undefined][] = [];
+      const stop = new AbortController();
+      createViewSync(server, { id: 'v1', surface: 'tab', model: () => null }, {
+        show: () => {}, capture: async () => new Blob(), state: () => ({}),
+        connection: (connected, lost) => said.push([connected, lost]),
+      }).run(stop.signal);
+      await vi.advanceTimersByTimeAsync(7_000);
+      expect(said).toEqual([[false, { kind: 'engine' }]]);
+      down = false;
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(said).toEqual([[false, { kind: 'engine' }], [true, undefined]]);
       stop.abort();
     } finally { vi.useRealTimers(); }
   });
@@ -383,6 +411,10 @@ describe('a Quick Edit in the chat', () => {
     expect(chatReach({}, 'tabs')).toEqual({ queue: true, send: false });
     expect(chatReach({ message: { text: {} } }, 'inline')).toEqual({ queue: false, send: true });
     expect(chatReach({ updateModelContext: {}, message: { text: {}, image: {} } }, 'inline')).toEqual({ queue: true, send: true });
+    // Codex's sidebar page has its own chat box: the view follows it; a thread's tab keeps its note.
+    expect(chatReach({}, 'tabs', 'sidebar')).toEqual({ queue: true, send: false, follows: true });
+    expect(chatReach({}, 'tabs', 'tab')).toEqual({ queue: true, send: false });
+    expect(chatReach({ message: { text: {} } }, 'inline', 'sidebar')).toEqual({ queue: false, send: true });
   });
 
   it('queues into the composer as one titled message and its annotation, keeping what it queued until the host clears it', async () => {
@@ -407,6 +439,23 @@ describe('a Quick Edit in the chat', () => {
     expect(updates[2].params.content).toHaveLength(1);
   });
 
+  it('a following port replaces the composer\'s context with what the view carries now, and clears it', async () => {
+    const sent: any[] = [];
+    const port = createChatPromptContext({ hostContext: {}, onHostContext: () => () => {},
+      request: async (method: string, params: any) => { sent.push({ method, params }); return {}; },
+    } as any, { reach: { queue: true, send: false, follows: true }, follows: true });
+    expect(port.getSnapshot()).toMatchObject({ kind: 'composer', available: true, follows: true });
+    await port.deliver(edit());
+    await port.deliver(edit());
+    expect(sent.map(call => call.params.content.length)).toEqual([1, 1]);
+    await port.clear!();
+    expect(sent.at(-1)).toEqual({ method: 'ui/update-model-context', params: { content: [] } });
+    // Nothing queued since: a second clear asks the host nothing.
+    await port.clear!();
+    expect(sent).toHaveLength(3);
+    port.dispose();
+  });
+
   it('says to copy the prompt where a tab host does not take context, instead of the bare JSON-RPC error', async () => {
     const port = createChatPromptContext({
       hostContext: {}, onHostContext: () => () => {},
@@ -417,16 +466,15 @@ describe('a Quick Edit in the chat', () => {
     expect((result as { message: string }).message).toMatch(/Copy Prompt/);
   });
 
-  it.each(['queue', 'send'])('delivers inline snapshot JSON through the real %s host port', async action => {
+  it.each(['queue', 'send'])('names the snapshot by its path through the real %s host port', async action => {
     const sent: any[] = [];
     const port = createChatPromptContext({ hostContext: {}, onHostContext: () => () => {},
       request: async (method: string, params: any) => { sent.push({ method, params }); return {}; },
     } as any, { reach: { queue: true, send: true } });
-    const context = edit({ ...snapshot(), path: Promise.resolve(''),
-      inlineText: Promise.resolve('Snapshot JSON:\n{"jobs":[]}') });
+    const context = edit(snapshot());
     await (action === 'queue' ? port.deliver(context) : port.send!(context));
     expect(sent[0].method).toBe(action === 'queue' ? 'ui/update-model-context' : 'ui/message');
-    expect(sent[0].params.content[0].text).toBe('Round it.\n\nFile: /project/parts/a.step\nSnapshot JSON:\n{"jobs":[]}');
+    expect(sent[0].params.content[0].text).toBe('Round it.\n\nFile: /project/parts/a.step\nSnapshot: /tmp/p/a-1.snapshot.json');
     port.dispose();
   });
 

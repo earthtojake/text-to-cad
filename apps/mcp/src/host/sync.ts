@@ -14,12 +14,26 @@ export interface ViewSyncHandlers {
   /** What the view shows and has selected, for the agent (`cad_view`): sent whenever it changes. */
   state(): Record<string, unknown>;
   /**
-   * Whether the server still answers: false once `LOST_AFTER` syncs in a row have failed (its process
-   * has gone, and the host does not start it again on its own), true when one succeeds again. Where
-   * the server did answer, refusing the view (one from before the host restarted it), `refused` is
-   * what it said.
+   * Whether the server still answers: false once `LOST_AFTER` syncs in a row have failed, with why
+   * (`Lost`), true when one succeeds again.
    */
-  connection?(connected: boolean, refused?: string): void;
+  connection?(connected: boolean, lost?: Lost): void;
+}
+
+/**
+ * Why a view's syncs keep failing. `plugin`: the host's calls fail (the plugin's process has gone, and
+ * the host does not start it again on its own). `engine`: the plugin answers, but CAD's server behind
+ * it does not (`cad server stop`): `cad mcp` outlives it and answers each call with an error that
+ * refuses nothing, cad's one line (`cad_mcp/shim.py`, "Answered here"), and a sync succeeds again once
+ * a server runs. `refused`: the server answered, refusing the view (one from before the host
+ * restarted it), and `said` is what it said.
+ */
+export type Lost = { kind: 'plugin' } | { kind: 'engine' } | { kind: 'refused'; said: string };
+
+/** Why a sync failed, as `Lost` says it. */
+export function lostBy(error: unknown): Lost {
+  if (!(error instanceof ServerError)) return { kind: 'plugin' };
+  return error.refused ? { kind: 'refused', said: error.message } : { kind: 'engine' };
 }
 
 /** What the mounted model view watches, through its client: its file's catalog entry. */
@@ -130,7 +144,7 @@ export function createViewSync(server: Pick<Server, 'sync' | 'reply'>,
             if (touched) focused = true;
             if (signal.aborted) return;
             failures += 1;
-            if (failures === LOST_AFTER) handlers.connection?.(false, error instanceof ServerError ? error.message : undefined);
+            if (failures === LOST_AFTER) handlers.connection?.(false, lostBy(error));
             await pause(Math.min(30_000, 500 * 2 ** Math.min(failures, 6)), signal);
           }
         }

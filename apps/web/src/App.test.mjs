@@ -276,7 +276,7 @@ test('a page whose engine is gone says so in its language, over the page, until 
     catalog = 'stopped';
     await act(() => client.refresh({ file: ONE }).catch(() => {}));
     assert.match(alert()?.textContent ?? '', /CAD が動いていません。/);
-    assert.match(alert()?.textContent ?? '', /次にエージェントが CAD を使うか、CAD アプリを開くと再び起動します。/);
+    assert.match(alert()?.textContent ?? '', /cad server start を実行するか、エージェントに起動を頼んでください。このページは自動的に再接続します。/);
     // The one notice: the page under it, a view's own card among it, is out of reach and unheard.
     assert.equal(window.document.querySelectorAll('[role="alert"]').length, 1);
     const under = alert()?.nextElementSibling;
@@ -311,7 +311,7 @@ test('the notice says the page reconnects, and how to start the engine', async (
   try {
     await act(() => root.render(createElement(EngineStopped, { locale: 'en' })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
-      'CAD is not running.It starts again when your agent next uses CAD or you open the CAD app; this page reconnects on its own.Reload');
+      'CAD is not running.Run cad server start, or ask your agent to start it; this page reconnects on its own.Reload');
     // The one quiet status screen: words and a small quiet button (the control's height), no icon.
     const screen = dom.window.document.querySelector('[data-status-screen]');
     assert.deepEqual([screen?.querySelector('svg'), screen?.querySelector('button')?.classList.contains('h-control')], [null, true]);

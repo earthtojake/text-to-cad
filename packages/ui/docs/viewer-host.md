@@ -343,12 +343,11 @@ picture on screen. The packet, when available, includes the current view plus di
 with remaining ink; an equivalent drawn entry uses the exact current framing.
 Shared input and inline annotation ([annotation](annotation.md)) appear once; measurements
 are the person's and never go. Each job may override shared fields. Projection and lens are preserved.
-Packets up to 1024 bytes of compact UTF-8 JSON are inlined; larger packets are
-written as one temporary `.snapshot.json` and named by path. Hosts use
-`resolvePromptMessage` to resolve an attachment's optional `inlineText` before its
-path, keeping destination binding inside the gesture. Drawing, selecting and typing
-keep data in memory. Nothing renders at the press. The agent saves inline JSON to
-a temporary file, then draws a view the ink was drawn in with
+Every packet, however small (one with no ink, only a parameter draft's view, too), is
+written as one temporary `.snapshot.json` and named by path: a message carries its
+snapshot one way. Hosts use `resolvePromptMessage` to resolve an attachment's path,
+keeping destination binding inside the gesture. Drawing, selecting and typing
+keep data in memory. Nothing renders at the press. The agent draws a view the ink was drawn in with
 `cad <type> snapshot <document> <out.png> --annotation <file> --camera authored`.
 **Copy Prompt** is always there: the message goes through
 `ClipboardPort.writeText`, which takes a `Promise<string>` so the write starts
@@ -378,10 +377,9 @@ is outside the provider). Both apps hand it to their server (`reportActivity({ c
 sends it with the rest of its telemetry, only with the person's yes.
 
 `ViewerHost.promptFiles` is a `PromptFiles`: `create({ name, input, views, annotation })`
-answers `{ inline: compactJson }` or `{ snapshot: absolutePath }`, and `read(path)` fetches JSON. `createHttpPromptFiles({ origin, fetch })` from
-`@cad/core/client` posts to `POST /api/v1/local/prompt-files`, which validates the packet in memory and returns inline JSON or writes the larger
-snapshot and returns its path with HTTP 200. The client advertises `acceptInline: true`;
-requests without it always receive a saved path, so already-open clients remain compatible. There is no render worker
+answers `{ snapshot: absolutePath }`, and `read(path)` fetches JSON. `createHttpPromptFiles({ origin, fetch })` from
+`@cad/core/client` posts to `POST /api/v1/local/prompt-files`, which validates the packet in memory, writes the
+snapshot and returns its path with HTTP 200. There is no render worker
 or polling endpoint. Guarded `GET /api/v1/local/prompt-files/<name>` serves JSON only.
 The files
 are scratch in the system's temporary directory and outlive the viewer until the
@@ -694,7 +692,7 @@ into a chat or a tool says exactly which file it means.
 Nothing of the tools view sits at the bottom centre: the bottom row is Quick Edit's, and Preview's playbar stands
 there in Preview alone, for a file with routines. A host whose own control floats over
 that edge (a chat's composer) sets `--cad-host-bottom-inset` on an ancestor to the height it
-covers: the model library scrolls its last rows clear of it. A host whose own control
+covers: the model library scrolls its last rows clear of it, and Quick Edit stands that much higher. A host whose own control
 floats over the view's top-right corner sets `--cad-viewport-corner-top` to the room
 it takes from the top edge, and the view's whole corner sits that much lower. To choose the
 opposite corner instead, set `--cad-viewport-corner-left: 2px` and
@@ -702,7 +700,6 @@ opposite corner instead, set `--cad-viewport-corner-left: 2px` and
 the corner follows, mirrored at the top-left: the cube, or a flat view's zoom (placed from the same variable, the
 corner's inset from the edge), its menu opening away from the corner
 (`viewportLayout.js`'s `viewCornerLayout`).
-Codex's tab presentation uses the left corner across sidebar, thread and file views (clear of its chat button).
 The shared viewer consumes these layout values without identifying the host.
 
 The update status is the view's own: every renderer's frame (`ViewFrame.jsx`) shows it centred under
