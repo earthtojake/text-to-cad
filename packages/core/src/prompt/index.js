@@ -61,7 +61,6 @@ export function validatePromptContext(context) {
       requireValue(part.content && (typeof part.content.arrayBuffer === 'function' || typeof part.content.then === 'function'), 'attachment must provide binary content');
       requireValue(part.about === undefined || (Array.isArray(part.about) && part.about.every(id => typeof id === 'string')), 'attachment relationships must name reference parts');
       requireValue(part.label === undefined || typeof part.label === 'string', 'attachment label must be text');
-      requireValue(part.inlineText === undefined || typeof part.inlineText === 'string' || typeof part.inlineText?.then === 'function', 'inline attachment text must be text or its promise');
       requireValue(part.path === undefined || typeof part.path === 'string' || typeof part.path?.then === 'function', 'attachment path must be a path or the promise of one');
     }
   }
@@ -209,15 +208,13 @@ export async function resolveAttachmentPaths(context) {
  * line — then each attachment that travels as a file, by its label and path (`attachmentPath`;
  * one sent beside the text is left out). One spelling, whether the message is sent, queued or copied.
  */
-export function formatPromptMessage(context, { attachmentPath, attachmentText, folders = null } = {}) {
+export function formatPromptMessage(context, { attachmentPath, folders = null } = {}) {
   validatePromptContext(context);
   const said = context.parts.filter(part => part.kind === 'text').map(part => part.text.trim()).filter(Boolean);
   const files = [], references = [], attachments = [];
   for (const part of context.parts) {
     if (part.kind === 'reference') (part.reference.target.kind === 'whole-resource' ? files : references).push(formatPromptReference(part.reference, folders));
     else if (part.kind === 'attachment') {
-      const inline = attachmentText?.(part);
-      if (inline) { attachments.push(inline); continue; }
       const path = attachmentPath?.(part);
       if (path) attachments.push(`${part.label || 'Attachment'}: ${displayPath(path, folders)}`);
     }
@@ -227,19 +224,16 @@ export function formatPromptMessage(context, { attachmentPath, attachmentText, f
 }
 
 /**
- * Resolve a prompt's inline text or file paths after the host has bound its destination, and its
- * `folders` (a file the host could not say them for is named by its absolute path).
+ * Resolve a prompt's file paths after the host has bound its destination, and its `folders` (a file
+ * the host could not say them for is named by its absolute path).
  */
 export async function resolvePromptMessage(context) {
   validatePromptContext(context);
   const folders = await Promise.resolve(context.folders).catch(() => null);
-  const inline = new Map(), paths = new Map();
-  await Promise.all(context.parts.filter(part => part.kind === 'attachment').map(async part => {
-    const text = await part.inlineText;
-    if (text) inline.set(part.id, text);
-    else if (part.path !== undefined) paths.set(part.id, String(await part.path));
-  }));
-  return formatPromptMessage(context, { attachmentText: part => inline.get(part.id), attachmentPath: part => paths.get(part.id),
+  const paths = new Map();
+  await Promise.all(context.parts.filter(part => part.kind === 'attachment' && part.path !== undefined)
+    .map(async part => { paths.set(part.id, String(await part.path)); }));
+  return formatPromptMessage(context, { attachmentPath: part => paths.get(part.id),
     folders: folders && typeof folders === 'object' ? folders : null });
 }
 

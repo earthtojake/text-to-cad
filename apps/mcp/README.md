@@ -315,8 +315,8 @@ the launch's `_meta` first (`host/capability.ts`).
   `updateModelContext`; a tab host is not asked: Codex forwards the method
   whether or not its frame declares it. **Send** (the person's message now,
   `ui/message`) needs `message`. Both actions capture the current view and distinct drawn views at the
-  press. Up to 1024 bytes of compact UTF-8 snapshot JSON goes into the text; larger
-  packets are written as `.snapshot.json` and named by saved path. Views share the annotation. No images or file bytes are attached,
+  press. The snapshot packet is written as `.snapshot.json` and named by its saved path, whatever
+  its size. Views share the annotation. No images or file bytes are attached,
   even where the host accepts images. A host that takes neither gets Copy Prompt alone
   (`unavailablePromptContext`): Queue and Send are left out, not disabled. In
   Codex, Send from a thread's CAD tab posts into that thread. The sidebar page (`surface:

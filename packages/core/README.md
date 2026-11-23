@@ -231,11 +231,8 @@ source or starts a source build.
 
 `createHttpPromptFiles({ origin, fetch })` is the viewer server's maker of a Quick
 Edit's files: `create(request)` posts its views and annotation to `POST /api/v1/local/prompt-files`,
-validates the packet without rendering and answers `{ inline: compactJson }` up to
-1024 UTF-8 bytes, otherwise writes one `.snapshot.json` and answers `{ snapshot: absolutePath }`.
-The client sends `acceptInline: true`; without this capability the server always saves
-and returns a path for compatibility with already-open viewers;
-`read(path)` fetches a JSON file. The annotation format, and
+validates the packet without rendering, writes one `.snapshot.json`, whatever its size, and answers
+`{ snapshot: absolutePath }`; `read(path)` fetches a JSON file. The annotation format, and
 the code that draws an annotation in a scene for the viewer and for a snapshot alike, is
 `common/annotation.js`.
 

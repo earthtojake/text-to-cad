@@ -15,7 +15,7 @@ export type PromptPart =
   | { id: string; kind: 'text'; text: string }
   | { id: string; kind: 'reference'; reference: PromptReference }
   /** `label` says what it is in a word or two ("Annotation"), for a message that names it by path; `path`, where it is already saved. */
-  | { id: string; kind: 'attachment'; name: string; mimeType: string; content: Blob | PromiseLike<Blob>; about?: readonly string[]; label?: string; path?: string | PromiseLike<string>; inlineText?: string | PromiseLike<string | null> };
+  | { id: string; kind: 'attachment'; name: string; mimeType: string; content: Blob | PromiseLike<Blob>; about?: readonly string[]; label?: string; path?: string | PromiseLike<string> };
 /** The workspace the agent reading a message works in and the person's home, `/`-separated: how a message names each file (`displayPath`). */
 export interface PromptFolders { start?: string; home?: string }
 /** `folders`, where the host knows them: a message names its files by them; the parts keep the absolute paths. */
@@ -56,8 +56,6 @@ export interface PromptContextPort {
   clear?(): Promise<void>;
 }
 export interface PromptMessageOptions {
-  /** Complete inline representation, used instead of the attachment path when present. */
-  attachmentText?: (part: Extract<PromptPart, { kind: 'attachment' }>) => string | null | undefined;
   /** Where an attachment was saved, for one that travels as a file; nothing for one sent beside the text. */
   attachmentPath?: (part: Extract<PromptPart, { kind: 'attachment' }>) => string | null | undefined;
   /** The folders the message names files by (`displayPath`); none, each by its absolute path. */

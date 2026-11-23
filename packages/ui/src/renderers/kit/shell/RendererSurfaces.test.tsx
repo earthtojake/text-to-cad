@@ -512,7 +512,7 @@ it.each([['a GPU', false, 1], ['a software renderer', true, 0]])('on %s, Preview
 
 
 it('text-only Quick Edit captures the current view at Copy without any annotations', async () => {
-  const promptFiles = { create: vi.fn(async (_request: any) => ({ inline: '{"jobs":[]}' })), read: vi.fn() };
+  const promptFiles = { create: vi.fn(async (_request: any) => ({ snapshot: '/tmp/p/view-1.snapshot.json' })), read: vi.fn() };
   let copied = '';
   const { canvas } = mount(testHost({ promptFiles, clipboard: {
     writeText: async text => { copied = await text; }, readText: async () => '', writeImage: async () => {} } }));
@@ -525,7 +525,7 @@ it('text-only Quick Edit captures the current view at Copy without any annotatio
   fireEvent.click(screen.getByRole('menuitem', { name: 'Clear the note' }));
   expect(promptFiles.create).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(copied).toContain('Snapshot JSON (cad model snapshot --annotation):'));
+  await waitFor(() => expect(copied).toContain('Snapshot (cad model snapshot --annotation): /tmp/p/view-1.snapshot.json'));
   expect(promptFiles.create.mock.calls[0][0]).toMatchObject({ annotation: null,
     views: [{ label: 'current view', camera: { position: [0, -100, 0] } }] });
 });

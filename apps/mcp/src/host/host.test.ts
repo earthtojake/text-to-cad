@@ -466,16 +466,15 @@ describe('a Quick Edit in the chat', () => {
     expect((result as { message: string }).message).toMatch(/Copy Prompt/);
   });
 
-  it.each(['queue', 'send'])('delivers inline snapshot JSON through the real %s host port', async action => {
+  it.each(['queue', 'send'])('names the snapshot by its path through the real %s host port', async action => {
     const sent: any[] = [];
     const port = createChatPromptContext({ hostContext: {}, onHostContext: () => () => {},
       request: async (method: string, params: any) => { sent.push({ method, params }); return {}; },
     } as any, { reach: { queue: true, send: true } });
-    const context = edit({ ...snapshot(), path: Promise.resolve(''),
-      inlineText: Promise.resolve('Snapshot JSON:\n{"jobs":[]}') });
+    const context = edit(snapshot());
     await (action === 'queue' ? port.deliver(context) : port.send!(context));
     expect(sent[0].method).toBe(action === 'queue' ? 'ui/update-model-context' : 'ui/message');
-    expect(sent[0].params.content[0].text).toBe('Round it.\n\nFile: /project/parts/a.step\nSnapshot JSON:\n{"jobs":[]}');
+    expect(sent[0].params.content[0].text).toBe('Round it.\n\nFile: /project/parts/a.step\nSnapshot: /tmp/p/a-1.snapshot.json');
     port.dispose();
   });
 

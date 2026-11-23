@@ -178,11 +178,9 @@ it('the annotation chip keeps its removal without copying or saving individual f
   const clearInk = vi.fn();
   const host = testHost({ clipboard: { writeText, readText: async () => '', writeImage: async () => {} },
     promptFiles: { create: files, read: vi.fn(), save } });
-  const ink = { units: 'mm', marks: [] };
   render(<ViewerHostContext.Provider value={host}>
     <QuickEdit resource={resource} annotation={{ present: true, clear: clearInk }}
-      prompt={{ views: () => [{ label: 'current view' }], save, files: async () => ({
-        inline: JSON.stringify({ input: resource.path, jobs: [], annotation: ink }) }) } as any} />
+      prompt={{ views: () => [{ label: 'current view' }], save, files: async () => ({ snapshot: '/tmp/p/bracket-1.snapshot.json' }) } as any} />
   </ViewerHostContext.Provider>);
   fireEvent.click(screen.getByRole('button', { name: 'Annotation' }));
   expect(writeText).not.toHaveBeenCalled();
@@ -191,7 +189,7 @@ it('the annotation chip keeps its removal without copying or saving individual f
   fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' }));
   await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
   const copied = await writeText.mock.calls[0][0];
-  expect(copied).toContain('"annotation":');
+  expect(copied).toContain('Snapshot (cad step snapshot --annotation): /tmp/p/bracket-1.snapshot.json');
   expect(copied).not.toContain('measurements');
   expect(save).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Remove Annotation' }));
@@ -343,26 +341,25 @@ it('Copy needs no note: with nothing written it copies what is picked, while Que
   expect(await copied).toBe('File: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2');
 });
 
-it.each(['Copy Prompt', 'Queue', 'Send'])('%s includes a small snapshot as JSON with no file read', async action => {
+it.each(['Copy Prompt', 'Queue', 'Send'])('%s names a small snapshot, one with no ink, by its saved path too, with no file read', async action => {
   const { resolvePromptMessage } = await import('@cad/core/prompt');
   let message = '';
   const take = async (context: any) => { message = await resolvePromptMessage(context); return { status: 'added' as const, partIds: [] }; };
   const host = testHost({ clipboard: { writeText: async text => { message = await text; }, readText: async () => '', writeImage: async () => {} },
     promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver: take, send: take } });
-  const packet = JSON.stringify({ input: resource.path, jobs: [{ camera: 'front' }] });
-  const prompt = { views: () => [{ label: 'current view' }], files: vi.fn(async () => ({ inline: packet })), read: vi.fn() };
+  const prompt = { views: () => [{ label: 'current view' }], files: vi.fn(async () => ({ snapshot: '/tmp/p/bracket-1.snapshot.json' })), read: vi.fn() };
   mount(host, { references: [face], prompt });
   write('Keep it.');
   expect(prompt.files).not.toHaveBeenCalled();
   fireEvent.click(within(box()!).getByRole('button', { name: action }));
-  await waitFor(() => expect(message).toContain('Snapshot JSON (cad step snapshot --annotation):'));
-  expect(message).toContain(packet);
+  await waitFor(() => expect(message).toContain('Snapshot (cad step snapshot --annotation): /tmp/p/bracket-1.snapshot.json'));
+  expect(message).not.toContain('{');
   expect(message).toContain('/models/parts/bracket.step#base/f:base.extrude1.2');
   expect(prompt.read).not.toHaveBeenCalled();
 });
 
 
-it.each(['Copy Prompt', 'Send'])('%s names every file from the workspace the host says, the inline packet\'s input too, never by the home', async action => {
+it.each(['Copy Prompt', 'Send'])('%s names every file from the workspace the host says, never by the home', async action => {
   const { resolvePromptMessage } = await import('@cad/core/prompt');
   let message = '';
   const take = async (context: any) => { message = await resolvePromptMessage(context); return { status: 'sent' as const, partIds: [] }; };
@@ -372,15 +369,13 @@ it.each(['Copy Prompt', 'Send'])('%s names every file from the workspace the hos
   const host = testHost({ clipboard: { writeText: async text => { message = await text; }, readText: async () => '', writeImage: async () => {} },
     promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver: take, send: take },
     promptFiles: { create: vi.fn(), read: vi.fn(), folders } });
-  const packet = JSON.stringify({ input: board.path, jobs: [{ camera: 'front', outputs: [{ path: '/tmp/cad-quick-edit-a/twin_orbit-1-current.png' }] }] });
-  const prompt = { views: () => [{ label: 'current view' }], files: vi.fn(async () => ({ inline: packet })), read: vi.fn() };
+  const prompt = { views: () => [{ label: 'current view' }], files: vi.fn(async () => ({ snapshot: '/tmp/cad-quick-edit-a/twin_orbit-1.snapshot.json' })), read: vi.fn() };
   mount(host, { resource: board, references: [part], prompt });
   write('Add a logo here.');
   fireEvent.click(within(box()!).getByRole('button', { name: action }));
-  await waitFor(() => expect(message).toContain('Snapshot JSON'));
+  await waitFor(() => expect(message).toContain('snapshot --annotation): /tmp/cad-quick-edit-a/twin_orbit-1.snapshot.json'));
   expect(folders).toHaveBeenCalledTimes(1);
   expect(message).toContain('File: twin_orbit.kicad_pcb\nReferences:\ntwin_orbit.kicad_pcb#R1\n');
-  expect(message).toContain('{"input":"twin_orbit.kicad_pcb","jobs":[{"camera":"front","outputs":[{"path":"/tmp/cad-quick-edit-a/twin_orbit-1-current.png"}]}]}');
   expect(message).not.toContain('/Users/jake');
 });
 
@@ -398,7 +393,7 @@ it.each(['unsaved build preview', 'previous revision'])('keeps the note and hone
   expect(copied[0]).toContain('View replay unavailable:');
   expect(copied[0]).toContain('The saved file may differ');
   expect(copied[0]).toContain(face.target.selectors[0]);
-  expect(copied[0]).not.toContain('Snapshot JSON');
+  expect(copied[0]).not.toContain('Snapshot (');
   expect(files).not.toHaveBeenCalled();
   expect(note()).toBe('Round this edge.');
 });

@@ -17,7 +17,7 @@ export interface ClipboardPort {
  * A Quick Edit's .snapshot.json, made at Copy/Queue/Send: shared input, inline annotation
  * and measurements, with one job per drawn view (`cad <type> snapshot --annotation PACKET --camera authored` draws each),
  * and, from a board, the references the prompt names in it (`references`: its selectors, which `--job` lights).
- * `create` returns compact inline JSON up to 1024 UTF-8 bytes, otherwise writes it and answers its path; `read` fetches it. `createHttpPromptFiles` (`@cad/core/client`) is the
+ * `create` writes it and answers its path, whatever its size; `read` fetches it. `createHttpPromptFiles` (`@cad/core/client`) is the
  * viewer server's.
  */
 export interface PromptFiles {
@@ -26,7 +26,7 @@ export interface PromptFiles {
     views: Array<Record<string, unknown> & { label: string }>;
     annotation: Record<string, unknown> | null;
     references?: string[];
-  }): Promise<{ snapshot: string; inline?: never } | { inline: string; snapshot?: never }>;
+  }): Promise<{ snapshot: string }>;
   read(path: string): Promise<Blob>;
   /** The folders a Quick Edit's message names its files by (`displayPath`): the workspace and the home. */
   folders?(): Promise<{ start?: string; home?: string }>;

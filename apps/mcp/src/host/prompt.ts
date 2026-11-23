@@ -84,7 +84,6 @@ export function createChatPromptContext(bridge: Pick<Bridge, 'request' | 'onHost
     if (context && typeof context === 'object' && Array.isArray((context as PromptContext).parts)) {
       for (const part of (context as PromptContext).parts) if (part?.kind === 'attachment') {
         if (part.path) void Promise.resolve(part.path).catch(() => {});
-        if (part.inlineText) void Promise.resolve(part.inlineText).catch(() => {});
       }
     }
     try { validatePromptContext(context); return null; }
