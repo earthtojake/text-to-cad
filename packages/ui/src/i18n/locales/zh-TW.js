@@ -702,7 +702,6 @@ export default {
   "parameters.save": "儲存",
   "parameters.saving": "正在儲存…",
   "parameters.reset": "重設",
-  "parameters.saved": "已儲存",
   "parameters.error.failed": "未能儲存。",
   "parameters.error.no_worker": "請重新執行腳本後再編輯。",
   "parameters.error.unknown_parameter": "有參數已不存在。請重新執行腳本。",

@@ -701,7 +701,6 @@ export default {
   "parameters.save": "저장",
   "parameters.saving": "저장 중…",
   "parameters.reset": "초기화",
-  "parameters.saved": "저장됨",
   "parameters.error.failed": "저장하지 못했습니다.",
   "parameters.error.no_worker": "편집하려면 스크립트를 다시 실행하세요.",
   "parameters.error.unknown_parameter": "없는 매개변수가 있습니다. 스크립트를 다시 실행하세요.",

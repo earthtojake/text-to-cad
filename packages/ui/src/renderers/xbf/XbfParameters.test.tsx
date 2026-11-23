@@ -62,6 +62,8 @@ const valueField = (name: string) => within(tab()).getByLabelText(`${name} value
 const save = () => within(tab()).getByRole('button', { name: /^(Save|Saving…)$/ }) as HTMLButtonElement;
 const reset = () => within(tab()).getByRole('button', { name: 'Reset' }) as HTMLButtonElement;
 const status = () => tab().querySelector('[data-parameters-status]')!.textContent;
+// A save answered: Save back at rest (off, not busy), and nothing said over it ("Saved" is never said: nothing jumps).
+const answered = () => expect([save().textContent, save().getAttribute('aria-busy'), save().disabled, status()]).toEqual(['Save', null, true, '']);
 async function type(user: ReturnType<typeof userEvent.setup>, name: string, text: string) {
   await user.clear(valueField(name));
   await user.type(valueField(name), `${text}{Enter}`);
@@ -215,14 +217,14 @@ it('a save answered changes nothing on screen until the rebuilt document holds t
   await type(user, 'wall', '3');
   await type(user, 'holes', '8');
   await user.click(save());
-  await waitFor(() => expect(status()).toBe('Saved'));
+  await waitFor(answered);
   // Answered: the values stay on their controls, awaited, and are not sent again.
   expect([valueField('wall').value, valueField('holes').value, save().disabled]).toEqual(['3.0', '8', true]);
   // A new version that holds one of them: that draft goes, the other is still awaited.
   rerender(<Tab client={client} document={modelDocument(structureOf({ wall: 3 }))} />);
   expect([valueField('wall').value, valueField('holes').value, status()]).toEqual(['3.0', '8', '']);
   rerender(<Tab client={client} document={modelDocument(structureOf({ wall: 3, holes: 8 }))} />);
-  expect([valueField('wall').value, valueField('holes').value, status(), save().disabled]).toEqual(['3.0', '8', 'Saved', true]);
+  expect([valueField('wall').value, valueField('holes').value, status(), save().disabled]).toEqual(['3.0', '8', '', true]);
   expect(setModelParameters).toHaveBeenCalledTimes(1);
 });
 
@@ -234,7 +236,7 @@ it('the next Quick Edit carries what was saved, once, by the script\'s name; a l
   render(<Tab client={{ setModelParameters }} document={modelDocument(structureOf())} copied={copied} />);
   await type(user, 'wall', '2.5');
   await user.click(save());
-  await waitFor(() => expect(status()).toBe('Saved'));
+  await waitFor(answered);
   const copy = async (count: number) => {
     fireEvent.click(document.querySelector<HTMLElement>('[data-quick-edit-action="copy"]')!);
     await waitFor(() => expect(copied).toHaveLength(count));
@@ -263,7 +265,7 @@ it('what was saved is handed to one message at a time: a second taken before the
   render(<Held client={{ setModelParameters }} document={modelDocument(structureOf())} />);
   await type(user, 'wall', '2.5');
   await user.click(save());
-  await waitFor(() => expect(status()).toBe('Saved'));
+  await waitFor(answered);
   const first = notes.take();
   expect(first?.text).toContain('wall 2 -> 2.5');
   expect(notes.take()).toBeNull(); // pressed again before the first has gone
@@ -353,13 +355,13 @@ it('Reset draws the document again at once and lets the preview go; Save sends t
   await answer();
   expect(drawn.at(-1)).toBe('/preview/{"wall":3}');
   await user.click(save());
-  await waitFor(() => expect(status()).toBe('Saved'));
+  await waitFor(answered);
   expect(setModelParameters.mock.calls).toEqual([[ID, { wall: 3 }]]);
   expect([drawn.at(-1), pending.length]).toEqual(['/preview/{"wall":3}', 0]);
   // The version that holds them arrives: the document is drawn, the preview let go.
   rerender(<Tab client={client} document={modelDocument(structureOf({ wall: 3 }))} drawn={drawn} />);
   await waitFor(() => expect(drawn.at(-1)).toBeNull());
-  expect([valueField('wall').value, status()]).toEqual(['3.0', 'Saved']);
+  expect([valueField('wall').value, status()]).toEqual(['3.0', '']);
 });
 
 it('a preview refused turns Save off and keeps the last one that built; a busy model is asked again; a changed script says so and takes nothing back', async () => {

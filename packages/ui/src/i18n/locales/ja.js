@@ -701,7 +701,6 @@ export default {
   "parameters.save": "保存",
   "parameters.saving": "保存中…",
   "parameters.reset": "リセット",
-  "parameters.saved": "保存しました",
   "parameters.error.failed": "保存できませんでした。",
   "parameters.error.no_worker": "編集するにはスクリプトを再実行してください。",
   "parameters.error.unknown_parameter": "パラメータがありません。スクリプトを再実行してください。",

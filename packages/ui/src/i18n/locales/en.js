@@ -731,7 +731,6 @@ export default {
   "parameters.save": "Save",
   "parameters.saving": "Saving…",
   "parameters.reset": "Reset",
-  "parameters.saved": "Saved",
   "parameters.error.failed": "Couldn’t save.",
   "parameters.error.no_worker": "Run the script again to edit.",
   "parameters.error.unknown_parameter": "A parameter is gone. Rerun the script.",
