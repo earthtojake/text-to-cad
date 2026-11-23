@@ -49,8 +49,11 @@ export function measureSeriesColor(index) {
 // active dimension now comes mostly from line weight and its label.
 export const MEASURE_DIMENSION_FADED_ALPHA = 0.7;
 export const MEASURE_DIMENSION_LABEL_BACKGROUND = "rgba(15, 23, 42, 0.92)";
+// A dimension's label and the snap chip: text drawn into the viewport keeps its own size, never under 10px
+// (`docs/design-system.md`, "The type scale"), on a 14px line in its chip.
 export const MEASURE_DIMENSION_LABEL_FONT =
-  "600 8px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
+  "600 10px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
+const LABEL_LINE_PX = 14;
 
 const LABEL_PADDING_X = 6;
 const LABEL_PADDING_Y = 3;
@@ -353,7 +356,7 @@ export function drawMeasureDimension(context, layout, {
     const paddingX = LABEL_PADDING_X;
     const paddingY = LABEL_PADDING_Y;
     const chipWidth = textWidth + (paddingX * 2);
-    const chipHeight = 11 + (paddingY * 2);
+    const chipHeight = LABEL_LINE_PX + (paddingY * 2);
     let chipX = layout.label.x - (chipWidth / 2);
     let chipY = layout.label.y - (chipHeight / 2);
     if (bounds && Number(bounds.width) > 0 && Number(bounds.height) > 0) {

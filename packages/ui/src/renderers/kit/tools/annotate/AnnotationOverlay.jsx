@@ -15,6 +15,17 @@ export const CAD_ANNOTATION_DEFAULTS = Object.freeze({
 const SHAPES = new Set(["line", "arrow", "rectangle", "ellipse"]);
 const ERASER_RADIUS = 8;
 // A finger's eraser is a fingertip across (`TOUCH_HIT_PX`).
+/**
+ * The press a right or middle button makes on the drawing surface, handed on to the view's canvas unchanged: the
+ * same button, buttons and modifier keys the canvas would have had under Select, so the view's one camera mapping
+ * decides what the drag does in both tools.
+ */
+export function viewPressInit(event) {
+  return { pointerId: event.pointerId, pointerType: event.pointerType, isPrimary: event.isPrimary, clientX: event.clientX, clientY: event.clientY,
+    screenX: event.screenX, screenY: event.screenY, button: event.button, buttons: event.buttons, ctrlKey: event.ctrlKey, metaKey: event.metaKey,
+    shiftKey: event.shiftKey, altKey: event.altKey, bubbles: true, cancelable: true };
+}
+
 const eraserRadius = pointerType => pointerType === "touch" ? TOUCH_HIT_PX : ERASER_RADIUS;
 const FONT_PX = Object.freeze({ 1: 16, 2: 20, 4: 28 });
 const fontOf = px => `500 ${px}px ui-sans-serif, system-ui, sans-serif`;
@@ -24,15 +35,9 @@ function paintMark(context, mark) {
   context.save();
   context.globalAlpha = mark.opacity ?? 1;
   context.strokeStyle = mark.color;
-  context.fillStyle = mark.color;
   context.lineCap = "round";
   context.lineJoin = "round";
-  if (mark.kind === "area") {
-    context.beginPath();
-    mark.outline.forEach((point, index) => (index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y)));
-    context.closePath();
-    context.fill();
-  } else if (mark.widths) {
+  if (mark.widths) {
     for (let index = 1; index < mark.points.length; index += 1) {
       context.lineWidth = mark.width * (mark.widths[index - 1] + mark.widths[index]) / 2;
       context.beginPath();
@@ -64,7 +69,7 @@ function paintOutline(context, ink, { color }) {
 }
 
 /**
- * The drawing tools' surface over the viewport (Pencil and Shapes): every tool's gesture, its ink previewed as it is made (on a
+ * The drawing tools' surface over the viewport (Draw's, in its `pencil` or `shapes` mode): every tool's gesture, its ink previewed as it is made (on a
  * canvas of its own, in screen space) and put into the model as it ends (`annotation3d.js`): the pen, the highlighter, the
  * line, the arrow, the rectangle and the ellipse drawn; text written in place; the eraser dragged
  * over ink. Every mark lies on the surface it starts on (`annotation3d.js`'s `levelOf`: that
@@ -206,14 +211,14 @@ export default function AnnotationOverlay({ annotation, runtimeRef = null, viewO
     if (mark) put([mark]);
   };
 
-  // A right or middle press is the view's: it goes on to the canvas as the press that orbits, and the
-  // canvas takes the pointer from there.
+  // A right or middle press is the view's: it goes on to the canvas AS IT WAS (its button, buttons and keys), so the
+  // canvas maps it as it maps the same press under Select — a 3D view's OrbitControls' `mouseButtons` (the right
+  // button pans, `useViewerRuntime.js`), a flat view's own (`useFlatCanvasView.js`) — and takes the pointer from there.
   const handToView = event => {
     const target = viewElement();
     if (!target) return;
     event.preventDefault();
-    target.dispatchEvent(new PointerEvent("pointerdown", { pointerId: event.pointerId, pointerType: event.pointerType, isPrimary: event.isPrimary,
-      clientX: event.clientX, clientY: event.clientY, screenX: event.screenX, screenY: event.screenY, button: 0, buttons: 1, bubbles: true, cancelable: true }));
+    target.dispatchEvent(new PointerEvent("pointerdown", viewPressInit(event)));
   };
   const onPointerDown = event => {
     if (event.button === 1 || event.button === 2) { handToView(event); return; }

@@ -44,11 +44,6 @@ test("a robot's signature is its description's, and an SRDF's its URDF's too", (
       urdf: { url: "/robot.urdf", hash: "urdf-hash" }
     }
   }), "urdf-hash:srdf-hash");
-  assert.equal(entryUrdfAssetHash({
-    kind: "sdf",
-    url: "/robot.sdf",
-    hash: "sdf-hash"
-  }), "sdf-hash");
 });
 
 test("a DXF entry's render asset is its own file", () => {

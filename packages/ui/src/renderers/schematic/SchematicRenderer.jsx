@@ -1,4 +1,5 @@
 import { useI18n } from "@cad/ui/i18n";
+import { useViewportTheme } from "../kit/look/useViewportTheme.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@cad/ui/utils";
 import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
@@ -12,6 +13,8 @@ import { useViewerHost } from "../../host/context.js";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
 import { annotationAt, withGroups } from "../../annotation/geometry.js";
 import { promptView } from "../../annotation/views.js";
+import { backgroundGroup } from "../kit/shell/DisplaySettings.jsx";
+import { useControlUsage } from "../../usage/controls.js";
 import FlatViewFrame, { flatViewTools } from "../kit/shell/FlatViewFrame.jsx";
 import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
@@ -43,16 +46,16 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  * board is: the board's flat view (`kit/viewport/usePlotView.js`, `kit/shell/FlatViewFrame.jsx`), its
  * pan, zoom and fit, Select (a click the most specific thing under the pointer its filter ticks —
  * `SchematicSelectFilter.jsx` — a pin, a junction or a no-connect, a label, a wire, a symbol or a sheet
- * symbol; Shift adds; a plain drag the box between its ends, every viewer's, taking what it touches),
+ * symbol; Shift adds, a finger's tap too; a plain drag the box between its ends, every viewer's, taking what it touches),
  * Annotate and Measure (to
  * pins' and wires' ends, junctions and labels, in millimetres), Quick Edit's references (`#R1`, `#R1.2`,
  * `#net:/MID`, `#wire:<uuid>`, `#sheet:/Load/`) and its Export (KiCad's PDF, SVGs, netlist and BOM). The
  * payload comes from the BACKEND, a sheet at a time (`useSchematicDocument.js`); nothing here parses
  * KiCad's files.
  *
- * It follows the viewer's theme, live: KiCad's light paper and dark ink in light, a dark sheet and light
- * ink of the same hues in dark (`plot2d/theme.js`'s `schematicColors`: a switch redraws, it reads nothing
- * again), on the app's neutral grey round the sheet. No drawing sheet (KiCad's frame and title block) is
+ * It follows the viewport's Background (not the app's theme), live: KiCad's light paper and dark ink on Light, a dark
+ * sheet and light ink of the same hues on Dark (`plot2d/theme.js`'s `schematicColors`: a switch redraws, it reads nothing
+ * again), on the canvas's neutral grey of the same scheme round the sheet. No drawing sheet (KiCad's frame and title block) is
  * drawn, as a board draws none. Its panel (`kit/shell/FlatPanel.jsx`) is the Parts and the Nets
  * (`SchematicSection.jsx`, a board's list rules, the picked part's or net's pins under them) and, for a
  * schematic of more than one sheet, the Hierarchy (`SheetsSection.jsx`, KiCad's Hierarchy
@@ -60,7 +63,7 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  * symbol enters its sheet, and a right-click opens the view's menu (every view's, `kit/shell/viewMenu.js`:
  * the reference, Select, Isolate and a pin's net, Show sheet on a sheet symbol, Up one sheet over bare
  * paper, and the framing). Each sheet keeps its view with the file: going back to one, or reopening the file, finds it where it was left.
- * Ink and measurements are the sheet's they were made on: showing another sheet lets them go. A schematic has no view controls: it has no layers, and its colours are the theme's.
+ * Ink and measurements are the sheet's they were made on: showing another sheet lets them go. A schematic's one view setting is its Background (its Display card's one row): it has no layers, and its colours are the Background's.
  * A selected net is lit across the sheet shown, the rest stepped back, as KiCad's net highlight.
  */
 
@@ -88,7 +91,13 @@ function SchematicSurface({ view, data }) {
   const host = useViewerHost();
   const mobile = useViewerMobile();
   const workspace = useWorkspaceDocument({ view, data });
-  const colorScheme = view.appearance?.colorScheme === "dark" ? "dark" : "light";
+  // The viewport's theme (`kit/look/useViewportTheme.js`): the person's Background, whatever the app's light or dark.
+  // The picture — its paper, its strokes, the marks over it — is drawn in its scheme; the chrome keeps the app's.
+  const viewport = useViewportTheme(workspace.services.preferences, workspace.services.onPreferenceChange);
+  // Its view settings, Display's card (`kit/shell/DisplaySettings.jsx`): a drawing's one, the viewport's Background.
+  const usage = useControlUsage();
+  const viewGroups = [backgroundGroup({ value: viewport.background, onChange: viewport.setBackground }, t, usage.used)];
+  const colorScheme = viewport.scheme;
 
   // ---- the file's view: the sheet shown, its transform, what is isolated ----
   const [stored] = useState(() => readFileView(view.state, SLICES));
@@ -283,6 +292,15 @@ function SchematicSurface({ view, data }) {
       ? annotationAt(point, annotationSurface.onScreen(annotationRef.current.items), pickPx(pointerType))[0]?.id || null : null);
     const measured = clear => measureSelectHandlers(measureRef.current, () => measureRuntimeRef.current, clear);
     const pointer = event => ({ clientX: event.clientX, clientY: event.clientY, pointerType: event.pointerType, shiftKey: event.shiftKey });
+    // What a press under Select lands on, front to back as every view picks: a measurement, then the ink, then the
+    // sheet's own. `adds`: the press adds it, or takes it out where it is picked: with Shift, or a finger's on something
+    // (a finger has no Shift; its tap on nothing is a plain one, and clears).
+    const pressed = (point, event) => {
+      const measurement = measured(() => {}).under(pointer(event));
+      const ink = measurement ? null : inkUnder(point, event.pointerType);
+      const hit = measurement || ink ? null : pickAt(point, event.pointerType);
+      return { measurement, ink, hit, adds: event.shiftKey || (event.pointerType === "touch" && Boolean(measurement || ink || hit)) };
+    };
     const tap = (point, event) => {
       if (!pageRef.current) return;
       const tool = toolRef.current;
@@ -296,23 +314,31 @@ function SchematicSurface({ view, data }) {
         return;
       }
       if (tool !== SCHEMATIC_TOOL.SELECT) return;
-      const shift = event.shiftKey;
+      const { ink, hit, adds } = pressed(point, event);
       const session = annotationRef.current;
-      if (measured(() => selectionRef.current.clear()).press(pointer(event))) {
-        if (!shift && session.selected.length) session.select([]);
+      if (measured(() => selectionRef.current.clear()).press({ ...pointer(event), shiftKey: adds })) {
+        if (!adds && session.selected.length) session.select([]);
         return;
       }
-      const ink = inkUnder(point, event.pointerType);
       if (ink) {
-        const picked = shift ? (session.selected.includes(ink) ? session.selected.filter(id => id !== ink) : [...session.selected, ink]) : [ink];
-        if (!shift) selectionRef.current.clear();
+        const picked = adds ? (session.selected.includes(ink) ? session.selected.filter(id => id !== ink) : [...session.selected, ink]) : [ink];
+        if (!adds) selectionRef.current.clear();
         session.select(withGroups(picked, session.items));
         return;
       }
-      if (!shift && session.selected.length) session.select([]);
-      const hit = pickAt(point, event.pointerType);
-      selectionRef.current.pick(hit ? { id: hit.selector } : null, { multiSelect: shift });
-      if (hit && !shift) measureRef.current.select([]);
+      if (!adds && session.selected.length) session.select([]);
+      selectionRef.current.pick(hit ? { id: hit.selector } : null, { multiSelect: adds });
+      if (hit && !adds) measureRef.current.select([]);
+    };
+    // What a tap under Select would take out of the selection, by name (null: nothing): what it lands on, where the
+    // press lets it go (the one thing picked pressed again, or a picked one with Shift or a finger). The flat canvas
+    // holds such a tap for the double-click window (`useFlatCanvasView`'s `takesAway`).
+    const takesAway = (point, event) => {
+      if (toolRef.current !== SCHEMATIC_TOOL.SELECT || !pageRef.current) return null;
+      const { measurement, ink, hit, adds } = pressed(point, event);
+      if (measurement) return adds && measureRef.current.selected.includes(measurement) ? `measurement:${measurement}` : null;
+      if (ink) return adds && annotationRef.current.selected.includes(ink) ? `ink:${ink}` : null;
+      return hit && selectionRef.current.takesAway({ id: hit.selector }, { multiSelect: adds }) ? `pick:${hit.selector}` : null;
     };
     // A double-click on a sheet symbol, under Select, enters its sheet; anywhere else it fits.
     const doubleTap = (point, event) => {
@@ -362,12 +388,12 @@ function SchematicSurface({ view, data }) {
       const at = atPoint(point, pointerType);
       return at ? pageRef.current?.sheetAt(at.page, at.reach) || null : null;
     };
-    return { tap, hover, box, doubleTap, pickAt, sheetUnder };
+    return { tap, takesAway, hover, box, doubleTap, pickAt, sheetUnder };
   }, [annotationSurface, requestPaint, showSheet]);
 
   const plotView = usePlotView({
     plot, restored, colorScheme, surround: surroundOf, noun: "schematic", onViewMoved: rememberView, drawView, overlay,
-    onTap: handlers.tap, onHover: handlers.hover, onDoubleTap: handlers.doubleTap
+    onTap: handlers.tap, takesAway: handlers.takesAway, onHover: handlers.hover, onDoubleTap: handlers.doubleTap
   });
   viewRef.current = plotView;
   useFlatBoxSelect(plotView, { enabled: toolMode === SCHEMATIC_TOOL.SELECT && Boolean(page), onBox: handlers.box });
@@ -517,11 +543,11 @@ function SchematicSurface({ view, data }) {
   const takeSelect = useCallback(() => selectTool(SCHEMATIC_TOOL.SELECT), [selectTool]);
   const list = id => <SchematicSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onShow={showSelectors} onFrame={frameSelectors} onSelect={takeSelect} />;
-  const copySelectors = useCallback(ids => (path ? buildSchematicRefToken({ path, selectors: ids }) : ""), [path]);
   const tip = useSchematicTip(index);
-  const inspect = useSchematicInspect({ index, describe, tip, selection, hovered, onSelect: takeSelect, show: showSelectors, frame: frameSelectors, copyText: copySelectors });
-  const panel = index ? { kind: "schematic", label: t("schematic.text.schematic_panel"), searchLabel: t("schematic.text.search_schematic"),
-    tabs: [
+  const inspect = useSchematicInspect({ index, describe, tip, hovered });
+  // Parts from the first frame, the schematic still loading (its rows arrive with it); Nets and Hierarchy after it.
+  const panel = index || document.loading ? { kind: "schematic", label: t("schematic.text.schematic_panel"), searchLabel: t("schematic.text.search_schematic"),
+    tabs: !index ? [{ id: "parts", label: t("board.text.parts"), searchLast: true, content: null }] : [
       { id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
       { id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") },
       ...(index.order.length > 1 ? [{ id: "hierarchy", label: t("schematic.text.hierarchy"), content: <SheetsSection index={index} shown={shownSheet}
@@ -533,10 +559,10 @@ function SchematicSurface({ view, data }) {
   const zoom = { ...plotView.zoom, zoomToSelection: () => frameSelectors(selectionRef.current.selected), selectionAvailable: selection.selected.length > 0 };
   handover.zoomKeys.current = zoom;
   return (
-    <FlatViewFrame surface={SCHEMATIC_SURFACE} containerRef={containerRef} busy={document.loading || document.updating}
-      file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={document.loading} loadingLabel={t("schematic.text.reading_schematic")}
+    <FlatViewFrame surface={SCHEMATIC_SURFACE} viewport={viewport} containerRef={containerRef} busy={document.loading || document.updating}
+      file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} loading={document.loading} loadingLabel={t("schematic.text.reading_schematic")}
       updating={document.updating} updateStatus={{ pending: true, label: t("schematic.text.updating_schematic") }} tools={index ? strip : []}
-      toolRow={index ? toolRow : null} views={[]} panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
+      toolRow={index ? toolRow : null} viewGroups={viewGroups} panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems}
       zoom={zoom} inspect={inspect}>
@@ -548,6 +574,8 @@ function SchematicSurface({ view, data }) {
     </FlatViewFrame>
   );
 }
+
+// How many a collection holds, a Map's or an array's.
 
 export default function SchematicRenderer(props) {
   const { data, ...view } = props;

@@ -22,17 +22,24 @@ const rules = tools => {
   return row;
 };
 
-test('one thin rule parts the strip\'s two sections: the tools that pick, then the model\'s effects with the view\'s controls after them, no rule between', () => {
-  assert.deepEqual(rules([tool('select'), tool('pencil'), tool('shapes'), tool('measure'), tool('explode', { group: 'model' }), tool('clip', { group: 'model' })]),
-    ['SELECT', 'PENCIL', 'SHAPES', 'MEASURE', '|', 'EXPLODE', 'CLIP', 'VIEW']);
+test('no rule parts the strip: the tools, the model\'s effects and the view\'s controls are one row', () => {
+  assert.deepEqual(rules([tool('select'), tool('draw'), tool('measure'), tool('explode', { group: 'model' }), tool('clip', { group: 'model' })]),
+    ['SELECT', 'DRAW', 'MEASURE', 'EXPLODE', 'CLIP', 'VIEW']);
+  assert.deepEqual(rules([tool('select'), tool('draw'), tool('measure')]), ['SELECT', 'DRAW', 'MEASURE', 'VIEW']);
 });
 
-test('with one group of tools only, the view\'s controls are the second section, after a rule', () => {
-  assert.deepEqual(rules([tool('select'), tool('pencil'), tool('shapes'), tool('measure')]), ['SELECT', 'PENCIL', 'SHAPES', 'MEASURE', '|', 'VIEW']);
+test('the strip is at Figma\'s toolbar\'s proportions at a 28px tile: a 40px bar 5px in, 10px corners, tiles with 4px corners', () => {
+  const view = render(FloatingToolBar, { tools: [tool('select')] });
+  const [group] = elements(view.tree).filter(node => node.props.role === 'group');
+  // At THE scale's tokens (`globals.css`): the control (28px) with its corners (4px), the bar's corners those and 6 (10px).
+  assert.match(group.props.className, /rounded-\[calc\(var\(--cad-radius-control\)\+6px\)\]/);
+  assert.match(group.props.className, /p-\[5px\]/);
+  assert.match(buttons(view.tree)[0].props.className, /size-control rounded-control \[&>svg\]:size-glyph!/);
+  view.unmount();
 });
 
 test('a tool with a menu is one control: its button and chevron under one fill, lit while the tool is in hand', () => {
-  const view = render(FloatingToolBar, { tools: [tool('select', { active: true, menu: 'MENU' }), tool('measure', { menu: 'MENU' }), tool('pencil')] });
+  const view = render(FloatingToolBar, { tools: [tool('select', { active: true, menu: 'MENU' }), tool('measure', { menu: 'MENU' }), tool('draw')] });
   const splits = elements(view.tree).filter(node => node.props['data-tool-split'] === '');
   assert.deepEqual(splits.map(node => node.props['data-active']), ['', undefined], 'the pair, lit with the tool in hand');
   assert.ok(splits.every(node => /group\/split/.test(node.props.className)), 'one hover for the pair');
@@ -65,3 +72,4 @@ test('a phone\'s strip keeps its 36px tiles in one row and hands what does not f
   // Narrower still: fewer tools before More.
   assert.equal(touchStripFit(entries, 200), 3);
 });
+

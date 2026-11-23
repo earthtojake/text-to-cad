@@ -23,13 +23,13 @@ export function alertDismissible(alert, hasContent) {
 const alertKey = alert => JSON.stringify([alert.severity, alert.title, alert.message, alert.reason, alert.details]);
 /** What the card is headed, and what its icon in the navbar is called, in `t`'s language where the alert names none. */
 const alertTitle = (alert, t = english) => alert.title || alert.summary || t("alert.undisplayable");
-/** The card's icon colour: amber for a warning, the destructive red for an error. */
-const alertTone = alert => alert.severity === "warning" ? "text-amber-500" : "text-destructive";
+/** The card's icon colour: the warning's amber (`--warning`) for a warning, the destructive red for an error. */
+const alertTone = alert => alert.severity === "warning" ? "text-warning" : "text-destructive";
 
 // The card's own icon, in its colour, as the navbar draws a renderer's action (`FileViewer.tsx`
 // hands an action's `icon` its size).
 const NavbarErrorIcon = ({ className, ...props }) => <CircleAlert {...props} className={cn(className, "text-destructive")} />;
-const NavbarWarningIcon = ({ className, ...props }) => <CircleAlert {...props} className={cn(className, "text-amber-500")} />;
+const NavbarWarningIcon = ({ className, ...props }) => <CircleAlert {...props} className={cn(className, "text-warning")} />;
 const NO_ACTIONS = Object.freeze([]);
 
 /**
@@ -39,7 +39,7 @@ const NO_ACTIONS = Object.freeze([]);
  * that fails the same way is raised again), or another file opens (`scope`), the dismissal is
  * forgotten and the card shows. While an alert is put away, the navbar has the way back to it:
  * the card's own icon, in its colour, named after the alert, leftmost of the navbar's right-hand
- * controls — the renderer's navbar action (`onNavigationActionsChange`), before the host's update,
+ * controls — the renderer's navbar action (`onNavigationActionsChange`), before the host's actions,
  * Settings and the view's controls. Pressing it brings the card back and takes the icon away. Where
  * there is no navbar (preview, a view shown small) there is no icon either.
  *
@@ -117,7 +117,7 @@ function AlertDetails({ details, clipboard }) {
       {canCopy ? (
         <TooltipHint content={copied ? t("alert.copied") : t("alert.copy")} side="bottom">
           <Button type="button" variant="ghost" size="icon-xs" aria-label={copied ? t("alert.detailsCopied") : t("alert.copyDetails")}
-            className="absolute right-1 top-1 size-6 text-muted-foreground hover:bg-background hover:text-foreground"
+            className="absolute right-1 top-1 size-icon-button text-muted-foreground hover:bg-background hover:text-foreground"
             onClick={write} data-alert-details-copy="">
             {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
           </Button>

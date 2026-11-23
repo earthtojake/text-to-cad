@@ -1,3 +1,4 @@
+import { SCENE_COLORS } from "../viewportTheme.js";
 // The selection/hover highlight every scene lights a part with (`sceneHighlight.js`, a robot's
 // scene), in the viewer and on the parity page alike.
 
@@ -54,7 +55,7 @@ export function createPartOcclusionGhostMaterial(THREE, {
   // encoding than every other material in the scene, which breaks the
   // GreaterDepth occlusion test outright.
   const material = new THREE.MeshBasicMaterial({
-    color: color?.isColor ? color.clone() : new THREE.Color("#4f9dff"),
+    color: color?.isColor ? color.clone() : new THREE.Color(SCENE_COLORS.selectedFill),
     transparent: true,
     opacity,
     depthTest: true,

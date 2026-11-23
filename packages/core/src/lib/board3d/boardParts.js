@@ -22,6 +22,9 @@
  * while something is isolated the bodies that are not it fade. A block is the theme's muted ink, a
  * millimetre tall on the part's outline (its courtyard), see-through and edged: plainly no model.
  *
+ * A presentation render (the viewer's Preview) shows the board as it is made: its bodies cast shadows
+ * (`shadows`) and a part whose model is missing stands nothing (`blocks: false`).
+ *
  * three.js is passed in. Importing this module has no environmental effects.
  */
 import { boardOverlayColors } from "../board2d/boardOverlay.js";
@@ -117,9 +120,10 @@ export function bakeModel(THREE, document) {
 
 /**
  * @param {typeof import("three")} THREE
- * @param {{ thickness?: number, theme?: "light" | "dark" }} [options]
+ * @param {{ thickness?: number, theme?: "light" | "dark", shadows?: boolean, blocks?: boolean }} [options]
+ *   `shadows`: the bodies cast shadows; `blocks`: a missing model's block stands (false: nothing does).
  */
-export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme = "dark" } = {}) {
+export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme = "dark", shadows = false, blocks = true } = {}) {
   const group = new THREE.Group();
   group.name = "board parts";
   // Each model held, by key: its baked geometry, its materials in each state, the parts that use it.
@@ -215,7 +219,7 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
       const entry = table?.[model.name];
       const key = entry?.document ? `${entry.document}@${entry.stamp || ""}` : "";
       if (key && !failed.has(key)) bodies.push({ key, entry, matrix: modelMatrix(part, model, thickness), opacity: opacityOf(model) });
-      else if (table) missing = true;
+      else if (table && blocks) missing = true;
     }
     return { bodies, missing };
   };
@@ -239,6 +243,7 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
       if (mesh) {
         mesh.matrixAutoUpdate = false;
         mesh.matrix.fromArray(body.matrix);
+        mesh.castShadow = shadows;
         mesh.userData.boardPart = part.ref;
         holder.add(mesh);
         model.users.add(part.ref);

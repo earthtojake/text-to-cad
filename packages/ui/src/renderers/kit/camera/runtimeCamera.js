@@ -43,6 +43,7 @@ import {
   annotatePerspectiveSnapshot
 } from "@cad/core/lib/perspective.js";
 import { requestSceneFrame } from "../viewport/sceneFrames.js";
+import { levelCamera } from "./turntable.js";
 
 export const DEFAULT_DAMPING_FACTOR = 0.14;
 
@@ -494,10 +495,9 @@ export function cancelCameraTransition(runtime, { scheduleIdle = true } = {}) {
   if (!runtime?.cameraTransition) {
     return;
   }
-  // A turn cut short leaves the camera where it is, with the up the move was going to (the world's, which
-  // the orbit controls turn about), not the turn's own of the moment.
-  const { endUp } = runtime.cameraTransition;
-  if (endUp && runtime.camera?.up) runtime.camera.up.copy(endUp);
+  // A turn cut short leaves the camera where it is, its up levelled (`turntable.js`): the turn's own of the
+  // moment may lean, and the orbit never rolls. Upright or upside down, as it was nearest to.
+  if (runtime.camera && runtime.controls?.target) levelCamera(runtime.camera, runtime.controls.target);
   runtime.cameraTransition = null;
   if (runtime.controls) {
     runtime.controls.enableDamping = true;
@@ -855,9 +855,8 @@ export function transitionCameraToViewPreset(runtime, preset) {
     runtime.controls.minDistance || 0.01,
     runtime.controls.maxDistance || Infinity
   );
-  // The basis maths lives in viewportCameraKit so the "up is always world up" invariant is
-  // testable without mounting a viewer. It returns world up for EVERY preset, so the orbit
-  // axis is the same from any view.
+  // The basis maths lives in viewportCameraKit, testable without mounting a viewer: every preset
+  // lands upright, a pole exactly on it.
   const basis = viewPlaneCameraBasis(preset, WORLD_UP);
   if (!basis) {
     return false;

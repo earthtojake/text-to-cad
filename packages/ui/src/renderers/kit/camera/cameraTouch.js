@@ -1,4 +1,4 @@
-// Whose camera is on screen, as a rebuild reads it (`settings-ui.md`, "Camera, animation and
+// Whose camera is on screen, as a rebuild reads it (`docs/viewer-ux.md`, "Camera, animation and
 // Preview"). A document page opens on the viewer's own fit and is UNTOUCHED; while it stays so, a
 // rebuild whose box changed is fitted again, as the open fitted it. The first touch makes the
 // camera the person's for the page's life, and a rebuild then keeps it exactly, as CAD programs

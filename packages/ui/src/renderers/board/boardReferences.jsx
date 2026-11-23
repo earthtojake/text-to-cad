@@ -14,26 +14,23 @@ const EMPTY = Object.freeze([]);
 const KIND_ICONS = Object.freeze({ solid: PartKindIcon, face: PadKindIcon, edge: NetKindIcon, track: TrackKindIcon, via: ViaKindIcon,
   zone: ZoneKindIcon, ruleArea: RuleAreaKindIcon, text: TextKindIcon, dimension: DimensionKindIcon, shape: GraphicKindIcon, area: AreaKindIcon });
 const CHIP_ICON_CLASS = "size-2.5 shrink-0 text-muted-foreground";
+// What Quick Edit groups a board's picks as (`ReferenceChips.jsx`'s `CHIP_GROUPS`), by what the board says each is.
+const BOARD_GROUPS = new Map([["solid", "component"], ["face", "pad"], ["edge", "net"], ["track", "track"], ["via", "via"], ["zone", "zone"],
+  ["ruleArea", "area"], ["text", "text"]]);
 const chipIcon = (glyph) => {
   const Icon = KIND_ICONS[glyph];
   return Icon ? { icon: <Icon className={CHIP_ICON_CLASS} /> } : { glyph };
 };
 
-// The board's glyphs in the Selected pane and a chip's card: a chip's kinds, and the lists' (a part, a pad, a net).
-const BOARD_GLYPHS = Object.freeze({ ...KIND_ICONS, part: PartKindIcon, pad: PadKindIcon, net: NetKindIcon });
-
 /**
  * What is picked on the board, as its frame reads it (`kit/inspector/inspect.js`): each pick described
- * (`describeBoardPick`: the Selected pane, a chip's card, the hover tip's name), what the pointer is on
- * (`hovered`), and what a row of the pane does (`select`, `hover`, `frame`, `onSelect`, `copyText`).
+ * (`describeBoardPick`: a chip's card, the hover tip's name) and what the pointer is on (`hovered`).
  */
-export function useBoardInspect({ index, describe, tip = null, selection, hovered, onSelect, frame, copyText }) {
-  const { selected, select, hover } = selection;
-  return useMemo(() => (index ? { selected, describe, tip, hovered, glyphs: BOARD_GLYPHS, data: "board", select, hover, frame, onSelect, copyText } : null),
-    [index, selected, describe, tip, hovered, select, hover, frame, onSelect, copyText]);
+export function useBoardInspect({ index, describe, tip = null, hovered }) {
+  return useMemo(() => (index ? { describe, tip, hovered, data: "board" } : null), [index, describe, tip, hovered]);
 }
 
-/** A board's picks described (`describeBoardPick`, a part's 3D model from the models table), in the view's language: what the pane and the cards read. */
+/** A board's picks described (`describeBoardPick`, a part's 3D model from the models table), in the view's language: what the chips' cards read. */
 export function useBoardDescribe(index, models = null) {
   const { t } = useI18n();
   return useCallback(id => (index ? describeBoardPick(index, id, t, models) : null), [index, t, models]);
@@ -50,7 +47,7 @@ export function useBoardTip(index) {
  * as a reference into the file on screen, by its board reference, and as a chip named as the board
  * names it (`R1`, `R1.2`, `net VBUS`, `VBUS · track`, `“blinky”`, an area), led by its kind's glyph —
  * the kinds Select's filter shows (a net's copper is its net's), a point an agent wrote the pick's vertex — its card
- * what the board says of it (`describe`, the Selected pane's), its ID the reference.
+ * what the board says of it (`describe`).
  * A click on a chip copies its reference (`<file>#R1.2`); its X drops it; resting on it lights it.
  *
  * @param {{ scene: ReturnType<typeof import("./boardScene.js").createBoardScene> | null,
@@ -67,7 +64,8 @@ export function useBoardReferences({ scene, selection, resource, describe = null
     const chips = selected.map((id) => {
       const described = scene.describePart(id);
       const value = reference(id);
-      return { key: `pick:${id}`, label: described?.name || boardReferenceId(id), ...chipIcon(described?.icon || described?.glyph || "solid"), id: boardReferenceId(id),
+      return { key: `pick:${id}`, label: described?.name || boardReferenceId(id), ...chipIcon(described?.icon || described?.glyph || "solid"),
+        group: BOARD_GROUPS.get(described?.icon) || BOARD_GROUPS.get(described?.glyph) || "item",
         ...(value ? { copy: formatPromptReference(value) } : {}),
         detail: describe?.(id) || null,
         onRemove: () => select(id, { multiSelect: true }), onHover: on => hover(on ? id : "") };

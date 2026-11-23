@@ -1,10 +1,10 @@
-"""What the ``urdf``/``srdf``/``sdf`` ``validate`` operations share.
+"""What the ``urdf`` and ``srdf`` ``validate`` operations share.
 
 The checkers all answer with :class:`cad._internal.findings.FindingsReport` — an
 accumulator of Findings split by severity — and the public verbs all answer with
 :class:`cad.results.CheckResult`, the typed line protocol every door
 returns. That conversion, and the one rule that decides ``ok``, live here so the
-three verbs cannot come to disagree about what "valid" means.
+two verbs cannot come to disagree about what "valid" means.
 
 The two used to share the name ``ValidationResult``, which made every grep for
 either one return both and every ``from ... import ValidationResult`` a question

@@ -259,6 +259,11 @@ class HandleTest(unittest.TestCase):
     def cli(cls, *args: str):
         return engine_daemon.run([sys.executable, "-m", "cad_server.engine", *args], cwd=cls.folder, env=cls.env)
 
+    def restart(self) -> None:
+        """The class's engine stopped, and started again (``cad server start``'s): its documents from its cache."""
+        self.assertEqual(self.cli("stop").returncode, 0)
+        engine_daemon.start(self.env)
+
     def project(self, name: str, files: dict[str, str]) -> Path:
         folder = self.folder / name
         folder.mkdir()
@@ -311,7 +316,7 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(first["m0.step"], first["handle.step"], "the function form writes the handle form's bytes")
         self.run_python("exporter.py", *draw, cwd=project)
         self.assertEqual(len(runs.read_text(encoding="utf-8").split()), 8, "a second program's run replays")
-        self.assertEqual(self.cli("stop").returncode, 0)
+        self.restart()
         self.run_python("exporter.py", *draw, cwd=project)
         self.assertEqual(len(runs.read_text(encoding="utf-8").split()), 8, "after a restart: taken from the cache")
         self.assertEqual((project / "out/m0.step").read_bytes(), (project / "out/handle.step").read_bytes(),
@@ -341,11 +346,12 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(repl, derived_id(project, "scratch"))
         # Exported by its id, as any document the engine holds; after a restart, from the cache.
         self.assertEqual(self.cli("export", ident, str(project / "again.stl")).returncode, 0)
-        self.assertEqual(self.cli("stop").returncode, 0)
+        self.restart()
         self.assertEqual(self.cli("export", ident, str(project / "restarted.stl")).returncode, 0)
         # With its cache file gone, nothing builds it again, and the words say so.
         self.assertEqual(self.cli("stop").returncode, 0)
         shutil.rmtree(self.cache / "documents" / ident)
+        engine_daemon.start(self.env)
         refused = self.cli("export", ident, str(project / "gone.stl"))
         self.assertEqual(refused.returncode, 2, refused.stderr)
         self.assertIn("a program the engine did not run: no script to rerun", refused.stderr)
@@ -379,7 +385,7 @@ class HandleTest(unittest.TestCase):
         self.maxDiff = None
         self.assertEqual(found["caller"], found["inside"])
         # After a restart the document comes from the engine's cache, read as its xbf: the same tree.
-        self.assertEqual(self.cli("stop").returncode, 0)
+        self.restart()
         self.assertEqual(self.run_python("nested.py", cwd=project)["caller"], found["inside"])
 
     def test_a_relative_pythonpath_names_a_folder_of_the_caller_s_working_folder(self) -> None:
@@ -452,23 +458,22 @@ if __name__ == "__main__":
 
 class UnreachedEngineTest(unittest.TestCase):
     def test_a_model_call_no_engine_serves_ends_in_one_line_on_stderr(self) -> None:
-        """``python model.py`` and ``cad run model.py`` in a sandboxed shell with no engine: the
-        client's line on stderr, as a ``cadgen`` verb says it, status 1, no traceback; a program
-        that catches the error hears nothing."""
+        """``python model.py`` and ``cad run model.py`` with no server running, a sandboxed shell's among them:
+        the client's one line on stderr, as a ``cad`` verb says it, status 1, no traceback; a program that
+        catches the error hears nothing."""
         folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="unreached-")))
         self.addCleanup(shutil.rmtree, folder, True)
         engine = folder / "engine"
         engine.mkdir(mode=0o700)
         (folder / "peg.py").write_text(UNREACHED, encoding="utf-8")
-        from cad.engine.client import SANDBOXES
-        from cad.engine.client import SANDBOXED
+        from cad.engine.client import NOT_RUNNING
 
         env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(engine),
                "CAD_STATE_DIR": str(folder / "state"), "CAD_CACHE_DIR": str(folder / "cache"),
-               **dict(SANDBOXES)}
+               "CODEX_SANDBOX": "seatbelt", "CODEX_SANDBOX_NETWORK_DISABLED": "1"}
         for command in ([sys.executable, "peg.py"], [sys.executable, "-m", "cad_server.cli", "run", "peg.py"]):
             done = engine_daemon.run(command, cwd=folder, env=env)
-            self.assertEqual((done.returncode, done.stdout, done.stderr), (1, "", f"cad: {SANDBOXED}\n"), command)
+            self.assertEqual((done.returncode, done.stdout, done.stderr), (1, "", f"cad: {NOT_RUNNING}\n"), command)
         caught = engine_daemon.run([sys.executable, "peg.py", "catch"], cwd=folder, env=env)
         self.assertEqual((caught.returncode, caught.stdout, caught.stderr), (0, "caught\n", ""))
         self.assertEqual(sorted(path.name for path in engine.iterdir()), [], "no engine started")

@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { ToolbarTooltipScope } from "@cad/ui/primitives/toolbar-button";
 import { cn } from "@cad/ui/utils";
-import { VIEWPORT_INSET_PX } from "../shell/viewportLayout.js";
+import { SETTINGS_CARD_GAP_PX, SettingsCardDock } from "../view-settings/SettingsCard.jsx";
 
 /** How long Preview's chrome stays up after the pointer last moved, as a video player's controls do:
  * counted from the frame that shows it, so a long frame (a slow GPU drawing Render) is not idle time. */
 export const PREVIEW_IDLE_MS = 2000;
-// How Preview's settings panel slides in and out from the view's right edge: its translate and
-// opacity, 200ms, easing out; at once where motion is reduced.
-export const SIDEBAR_SLIDE_CLASS = "transition-[translate,opacity] duration-200 ease-out motion-reduce:transition-none";
 // How what fades goes and comes back.
 export const PREVIEW_FADE_CLASS = "transition-opacity duration-300 motion-reduce:transition-none";
 
@@ -34,6 +31,9 @@ const cancelFrame = handle => (typeof cancelAnimationFrame === "function" ? canc
 // Focus the keyboard gave (`:focus-visible`), or any where the browser cannot say.
 const keyboardFocus = element => { try { return element.matches(":focus-visible"); } catch { return true; } };
 
+// How long after a finger's press the browser's mouse events for it (iOS's emulated `mouseleave`) are the finger's.
+const TOUCH_MOUSE_MS = 1000;
+
 export function createPreviewIdle() {
   let shown = true, active = false, held = false, root = null, timer, leaving, counting;
   const holders = new Set();
@@ -55,7 +55,12 @@ export function createPreviewIdle() {
   // The pointer gone from the view or the window: down at once, unless something holds it (its
   // settings, the keyboard's focus, or the pointer on a menu of theirs, whose portal is outside the
   // view: the pointer reaches it after leaving, so the check waits for the events of the one move).
-  const leave = () => {
+  // A finger's lift is no leaving: after a touch the browser sends the pointer's (and, on iOS, the mouse's) leave as
+  // the finger goes up, which hid the chrome a tap had just brought up. A finger leaves nothing: its chrome stays its
+  // `PREVIEW_IDLE_MS`, a tap shows it and a tap while it shows starts the count again.
+  let touched = -Infinity;
+  const leave = event => {
+    if (event?.pointerType === "touch" || (event?.type === "mouseleave" && event.timeStamp - touched < TOUCH_MOUSE_MS)) return;
     clearTimeout(leaving);
     leaving = setTimeout(() => { if (active && !holding()) { still(); set(false); } });
   };
@@ -63,11 +68,12 @@ export function createPreviewIdle() {
     if (!element) return;
     const method = on ? "addEventListener" : "removeEventListener";
     element[method]("pointermove", wake);
-    element[method]("pointerdown", wake);
+    element[method]("pointerdown", press);
     element[method]("pointerleave", leave);
     element[method]("mouseleave", leave);
     if (typeof window !== "undefined") window[method]("blur", leave);
   };
+  function press(event) { if (event.pointerType === "touch") touched = event.timeStamp; wake(); }
   const hold = (key, on) => {
     if (holders.has(key) === on) return;
     if (on) holders.add(key); else holders.delete(key);
@@ -99,6 +105,31 @@ export function createPreviewIdle() {
   };
 }
 
+/** A `#rrggbb` colour's relative luminance (WCAG), or null for anything else. */
+export function relativeLuminance(color) {
+  const match = /^#([0-9a-f]{6})$/i.exec(String(color ?? ""));
+  if (!match) return null;
+  const channel = at => {
+    const value = parseInt(match[1].slice(at, at + 2), 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
+
+/**
+ * The ink Preview's chrome over the model is drawn in: the backdrop's, never the app's — `"light"` (dark ink) over a
+ * light backdrop, `"dark"` (light ink) over a dark one, as the corner and the cube follow the viewport. The backdrop is
+ * Preview's Background (`background`, the scene's: `{ enabled, color, opacity }`); one mostly see-through, or none,
+ * shows the viewport's canvas, whose scheme is `fallback`. Light where black ink has the better contrast on it.
+ * @param {{ enabled?: boolean, color?: string, opacity?: number } | null | undefined} background
+ * @param {"light" | "dark"} fallback
+ */
+export function backdropScheme(background, fallback) {
+  const luminance = background?.enabled !== false && Number(background?.opacity ?? 1) >= 0.5 ? relativeLuminance(background?.color) : null;
+  if (luminance === null) return fallback === "dark" ? "dark" : "light";
+  return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? "light" : "dark";
+}
+
 /** Whether Preview's chrome is up, from its store (`createPreviewIdle`); up where there is none. */
 export function usePreviewShown(idle) {
   const subscribe = useCallback(listener => (idle ? idle.subscribe(listener) : () => {}), [idle]);
@@ -121,39 +152,43 @@ export function usePreviewIdle(root, active, held) {
  * the view's top edge, Preview's own bar: the file's name at the left, as words, and `controls` at
  * the right (its settings and the way out), nothing else, on no surface: the model shows through.
  * It comes and goes with the playbar (`idle`, `usePreviewIdle`). Under its right end `panel`,
- * Preview's settings, docked at the view's right edge, sliding in from it while `panelOpen` and out
- * again as it closes (`SIDEBAR_SLIDE_CLASS`).
+ * Preview's settings, a settings card docked at the view's right edge (`SettingsCard.jsx`'s dock, the Display
+ * card's place under the navbar, here under the bar), sliding in from it while `panelOpen` and out again as it closes.
+ *
+ * The bar is drawn in the backdrop's ink (`scheme`, `backdropScheme`), its token scope `.light` or `.dark`; the panel,
+ * on a surface of its own, keeps the app's.
  *
  * @param {{ active: boolean, name?: string, controls?: import("react").ReactNode, panel?: import("react").ReactNode,
- *   panelOpen?: boolean, idle?: ReturnType<typeof createPreviewIdle> | null, children?: import("react").ReactNode }} props
+ *   panelOpen?: boolean, idle?: ReturnType<typeof createPreviewIdle> | null, scheme?: "light" | "dark" | null, children?: import("react").ReactNode }} props
  */
-export default function PreviewChrome({ active, name = "", controls = null, panel = null, panelOpen = false, idle = null, children }) {
+export default function PreviewChrome({ active, name = "", controls = null, panel = null, panelOpen = false, idle = null, scheme = null, children }) {
   return <>
     <div data-preview-chrome="" hidden={active} inert={active}
       className="pointer-events-none absolute inset-0 z-20">
       <ToolbarTooltipScope enabled={!active}>{children}</ToolbarTooltipScope>
     </div>
     {active ? <ToolbarTooltipScope enabled>
-      <PreviewBar name={name} controls={controls} idle={idle} />
-      {/* `panel`, under the bar (`top-9`), as tall as its content up to the room under it. Closed, it
-          is off the view's right edge, out of reach and out of the accessibility tree. */}
-      {panel ? <div data-preview-panel="" data-open={panelOpen ? "" : undefined} inert={!panelOpen} aria-hidden={panelOpen ? undefined : true}
-        className={cn("pointer-events-none absolute top-9 z-30 flex min-h-0 max-w-[calc(100%-1rem)] flex-col items-end", SIDEBAR_SLIDE_CLASS,
-          panelOpen ? null : "translate-x-[calc(100%+1rem)] opacity-0")}
-        style={{ right: VIEWPORT_INSET_PX, bottom: VIEWPORT_INSET_PX }}>{panel}</div> : null}
+      <PreviewBar name={name} controls={controls} idle={idle} scheme={scheme} />
+      {/* `panel`, the bar's height and the card's gap under the view's top edge, as tall as its content up to the room
+          under it. */}
+      {panel ? <SettingsCardDock open={panelOpen} className="z-30" style={{ top: `calc(var(--preview-bar-height, calc(var(--cad-control) + 12px)) + ${SETTINGS_CARD_GAP_PX}px)` }}
+        data-preview-panel="">{panel}</SettingsCardDock> : null}
     </ToolbarTooltipScope> : null}
   </>;
 }
 
-// The navbar's row (`h-9`, a phone's 48px in `globals.css`) with no surface under it: the only part of
+// The navbar's row (the control and 12px: 40px, a phone's 48px, THE scale in `globals.css`) with no surface under it: the only part of
 // the frame that redraws as it comes and goes. The name is muted, as its controls are.
-function PreviewBar({ name, controls, idle }) {
+function PreviewBar({ name, controls, idle, scheme }) {
   const shown = usePreviewShown(idle);
   const reach = shown ? "pointer-events-auto" : "pointer-events-none";
   return <div data-preview-bar="" data-state={shown ? "visible" : "hidden"} {...idle?.hold("bar")}
-    className={cn("pointer-events-none absolute inset-x-0 top-0 z-30 flex h-9 items-center justify-between gap-2 px-2", PREVIEW_FADE_CLASS,
+    data-scheme={scheme ?? undefined}
+    className={cn("pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(var(--cad-control)+12px)] items-center justify-between gap-2 px-2", scheme, PREVIEW_FADE_CLASS,
       shown ? "opacity-100" : "opacity-0")}>
     <span data-preview-name="" className={cn("min-w-0 truncate px-1 text-sm text-muted-foreground [text-shadow:0_0_6px_var(--background)]", reach)}>{name}</span>
-    {controls ? <div data-preview-controls="" className={cn("flex shrink-0 items-center gap-1", reach)}>{controls}</div> : null}
+    {/* Its controls stand where the navbar's view buttons stood (`NavbarViewControls.jsx`): 2px apart, so Preview
+        settings' cube is where Display's was. */}
+    {controls ? <div data-preview-controls="" className={cn("flex shrink-0 items-center gap-0.5", reach)}>{controls}</div> : null}
   </div>;
 }

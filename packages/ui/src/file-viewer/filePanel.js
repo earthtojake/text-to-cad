@@ -5,17 +5,19 @@ import { createContext } from "react";
 // the panel itself rather than by any renderer. The file viewer (`FileViewer.tsx`) holds it for the file on
 // screen and merges it into every record the renderer writes, so a renderer that writes its
 // view wholesale never drops it; `useFlatPanelState` reads it and writes it through
-// `FilePanelContext`. Four things, each absent until the person sets it:
+// `FilePanelContext` — the tab's settings for this browser session, the file's entry. Each absent until the
+// person sets it:
 //
-//   open          the person opened (`true`) or closed (`false`) the panel; absent, it follows the
-//                 view's width (open at 1024px or more);
-//   width         the width they dragged it to;
-//   tab           the tab it shows;
-//   detailHeight  the height they dragged the Selected pane to.
+//   open          the person opened (`true`) or closed (`false`) the left panel, which then holds at any width;
+//                 absent, no choice yet: the view's width opens or collapses it (`renderers/kit/shell/sidebars.js`);
+//   width         the width they dragged it to (drawn within the panel's bounds: `panelToggles.js`'s `clampPanelWidth`);
+//   tab           the tab it shows.
+// Only a choice is written: what the view's width does to the panel is not, and a peek is no choice.
+// (A record from before the panel lost its Selected pane may hold `detailHeight`, one from when the view had a right
+// panel `right`, `rightWidth` and `sections`, and one from when \ alone hid everything `hidden`: each is read as nothing.)
 //
 // The tab once kept these for every file alike (`settings.toolStack`: `collapsed.flat`,
-// `panels.flat.width` and `tabs` by the kind of file; the Selected pane's height it never kept, as
-// the tool stack's panel ids are lower case): that form is read once, as the starting value of a
+// `panels.flat.width` and `tabs` by the kind of file): that form is read once, as the starting value of a
 // file that has none (`legacyFilePanel`), then dropped from the tab's record
 // (`withoutLegacyFilePanel`) and never written again.
 
@@ -29,10 +31,9 @@ export function readFilePanel(value) {
   if (!plainObject(value)) return {};
   const panel = {};
   if (typeof value.open === "boolean") panel.open = value.open;
-  const width = size(value.width), detailHeight = size(value.detailHeight);
+  const width = size(value.width);
   if (width !== undefined) panel.width = width;
   if (typeof value.tab === "string" && TAB_ID.test(value.tab)) panel.tab = value.tab;
-  if (detailHeight !== undefined) panel.detailHeight = detailHeight;
   return panel;
 }
 

@@ -12,19 +12,14 @@ from __future__ import annotations
 import json
 import os
 import sys
-from typing import Any, Callable
+from typing import Any
 
 __all__ = ["COMMAND", "SERVER", "describe", "files", "given", "log", "number", "reported", "robot", "shown", "size",
            "weighed", "written"]
 
-# The server's distribution and its command, as every line of the library names them: one place to
-# rename either (the server names them in its own, ``cad_server._internal.launch``).
-SERVER, COMMAND = "cad-server", "cad"
-# What a client says, starting nothing, where no installation is registered and it runs in no base an
-# installation made (``client._start``), in a process of cad-server's own: the server's words, which it
-# sets as it is imported (``cad_server``) -- this cad-server is not registered, and how to register it --
-# where a model's process, the library alone, says ``client.NOT_INSTALLED``.
-UNREGISTERED: Callable[[], str] | None = None
+# The server and the command, as every line of the library names them: one place to rename either. Both are cad's,
+# one package (the server names its command in its own, ``cad_server._internal.launch``).
+SERVER, COMMAND = "the cad server", "cad"
 
 
 def log(text: str) -> None:

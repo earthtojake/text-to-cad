@@ -7,6 +7,7 @@
     serve(source, port=0) -> Served
     inspect(source, ref=None) -> Facts (the build closure without a ref)
     check(source, check) -> dict (a manufacturing check, measured in the engine's checks processes)
+    params(source, **values) -> dict (a model's parameters written into its script, the model built again)
     status() / stop()
 
 Every one goes through the daemon (``client``), so the warm worker of the script or of the
@@ -23,8 +24,9 @@ The engine counts nothing. After each build, ``export`` and ``snapshot`` it call
 function in ``observers``, in the verb's thread, with one plain dict of what the verb did
 (``_facts``): kinds, counts, times, the warm worker's part, and an error's type and frames --
 never a name, a path or a message of the person's but the frames' files as Python has them. An
-observer that raises is passed over, and the verb returns or raises as it would have. cadgen's
-telemetry is one, appended by cadgen's own ``__init__`` (law 3: nothing here imports it).
+observer that raises is passed over, and the verb returns or raises as it would have. The server's
+telemetry is one, appended by the server's own package in the processes that import it (law 3:
+nothing here imports it); a model's own process, where only the library is, has none.
 """
 
 from __future__ import annotations
@@ -43,18 +45,36 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
-__all__ = ["Document", "Drawn", "EngineError", "Facts", "IN_CALLER", "IN_ENGINE", "Report", "Served", "Stopped",
-           "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers", "serve", "snapshot",
-           "status", "stop", "inspect"]
+__all__ = ["Document", "Drawn", "EngineError", "Facts", "IN_CALLER", "IN_ENGINE", "NoDaemon", "Outdated", "Report",
+           "Served", "Stopped", "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers",
+           "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
     """A request the engine refused or could not run: its words; ``raised``: the type the engine failed with
     (``module.Name``), where its answer said (``type``: a failure, never a refusal), which the verb's facts
     tell its observers (``_error``); ``reason``: why a manufacturing check did not complete, one short word
-    (``check``), None for any other failure."""
+    (``check``), None for any other failure; ``refusal``: whether one of no ``raised`` type is the request
+    refused (its words say why), False for one its class says is the system's state, not the request's
+    (``NoDaemon``, ``Outdated``, ``Stopped``, ``Unanswered``): what the facts' ``refused`` says (``_error``)."""
 
     raised: str | None = None
     reason: str | None = None
+    refusal: bool = True
+
+
+class NoDaemon(EngineError):
+    """No engine daemon answered the request: none runs, and none was started for it. The system's state,
+    no refusal."""
+
+    refusal = False
+
+
+class Outdated(EngineError):
+    """The CAD server running is of a release before an option this library asked of it (an export's
+    ``tolerance``, ``angle`` or ``zero``), and did the work without it: updating it is the remedy. The
+    system's state, no refusal."""
+
+    refusal = False
 
 
 def _files(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -309,7 +329,7 @@ def _ask(message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] | Non
     else:
         answer = request({**message, "env": environment()}, on_log or (lambda _message: None), on_progress=on_progress)
     if answer is None:
-        raise EngineError("no engine daemon")
+        raise NoDaemon("no engine daemon")
     _heard("worker", answer.get("worker"))
     if "failed" in answer:
         raise _failed(answer)
@@ -346,8 +366,9 @@ def _failed(answer: dict[str, Any]) -> Exception:
         error = kind(text)
     except TypeError:  # a refusal whose type takes more than its words
         error = ValueError(text)
-    # A document not held: what it is, and what builds it again; a snapshot's refusal: the part it refused.
-    for key in ("state", "rebuild", "part"):
+    # A document not held: what it is, and what builds it again; a snapshot's refusal: the part it refused; a
+    # change of parameters refused: why, by one word, what to do, and a parameter's own reason.
+    for key in ("state", "rebuild", "part", "code", "hint", "reason"):
         if key in answer and hasattr(error, key):
             setattr(error, key, answer[key])
     error._engine_refusal = True  # type: ignore[attr-defined]  # the worker's, not this process's (``_error``)
@@ -612,13 +633,13 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
              if asked is not None and any(row.get(option) != asked for row in done["files"])]
     if unmet:
         # A server of a release before the option writes the files at its own, and says none.
-        raise EngineError(f"the CAD server running meshed {', '.join(Path(p).name for p in destinations)} at its "
-                          f"own {' and '.join(unmet)}: it is older than this library. Update it (cad update) and "
-                          "export again")
+        raise Outdated(f"the CAD server running meshed {', '.join(Path(p).name for p in destinations)} at its "
+                          f"own {' and '.join(unmet)}: it is older than this library. Update cad "
+                          "and export again")
     if zero is not None and any(row.get("zero") != zero for row in done["files"]):
         # A server of a release before the zero describes the robot as built, and says no zero.
-        raise EngineError(f"the CAD server running wrote {', '.join(Path(p).name for p in destinations)} as built, "
-                          "not at the zero state: it is older than this library. Update it (cad update) and export again")
+        raise Outdated(f"the CAD server running wrote {', '.join(Path(p).name for p in destinations)} as built, "
+                          "not at the zero state: it is older than this library. Update cad and export again")
     return [Written(Path(row["path"]), row["kind"], row["bytes"], row["seconds"], row.get("written", True),
                     row.get("robot")) for row in done["files"]]
 
@@ -643,6 +664,7 @@ def _exported(order: dict[str, Any], spec: dict[str, Any], shown: Callable[[str]
     else:
         from cad.engine import progress as progressing
         from cad.engine.build import BuildError
+        from cad.engine.export import ExportIncomplete
         from cad.engine.worker import _export, job_progress
 
         said = job_progress(progress or (lambda _frame: None), order)
@@ -651,6 +673,10 @@ def _exported(order: dict[str, Any], spec: dict[str, Any], shown: Callable[[str]
                 done = _export(order, shown)
         except BuildError as error:
             raise EngineError(str(error)) from None
+        except ExportIncomplete as error:  # some files written: a failure, as the worker answers it
+            failed = EngineError(str(error))
+            failed.raised = error.failed_type()["type"]
+            raise failed from error
     _heard("reports", done.get("reports"))
     failed = [report for report in done.get("reports") or [] if not report.get("ok")]
     if failed:
@@ -671,6 +697,7 @@ class Unanswered(EngineError):
     measured nothing: its answer carried no ``checked``."""
 
     reason = "unanswered"
+    refusal = False
 
 
 class Stopped(EngineError):
@@ -678,6 +705,7 @@ class Stopped(EngineError):
     release, or ``cad stop``. Nothing is measured here instead: the check is the engine's to run again."""
 
     reason = "stopped"
+    refusal = False
 
 
 STOPPED = ("the CAD server stopped while it measured the manufacturing check (an update or `cad stop` stops it): "
@@ -1179,7 +1207,8 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     materials and their masses, where any part has one, and what the model declares a part or an assembly to weigh
     and its point masses (``declared``: the masses then as the robot description weighs them, ``weights``); the
     parts whose texture maps are not drawn (``untextured``); its joints,
-    mechanism states, configuration sequences and animations; and a model's declared files.
+    mechanism states, configuration sequences and animations; the parameters its script declares
+    (``parameters``); and a model's declared files.
     Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume, inside-out parts or
     masses, and nothing measured for them -- the lists alone."""
     from cad.engine.refs import placed_facts
@@ -1276,6 +1305,9 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
         "sequences": [{"name": name, "duration": motion.get("duration")}
                       for name, motion in (kinematics.get("motions") or {}).items()],
         "animations": structure.get("animations") or [],
+        # What its script declares (``parameters.served``): each its value, kind, range and unit, and whether
+        # the viewer's Save can write it (``writable``, else ``reason``) and where (``source``).
+        "parameters": list(structure.get("parameters") or []),
         "files": list((model or {}).get("files") or []),
     }
     if not measured:
@@ -1323,7 +1355,7 @@ def stop() -> bool:
 #               here (raised in this process, as against told by the daemon or a report), part (a snapshot's
 #               refusal: the part of the request it named, ``SnapshotRefused.part``; where it named one)}
 #     source    export, snapshot: what it read -- "xbf", "step", "glb", "stl", "threemf", "dxf", "urdf",
-#               "sdf", "srdf", "model" (a script's model) or "other"
+#               "srdf", "model" (a script's model) or "other"
 #     found     snapshot: the source file is there (a model's always is)
 #     outputs   export: each destination, {kind, seconds (None for one not written)}
 #     pose      snapshot: a pose was asked for
@@ -1335,7 +1367,7 @@ observers: list[Callable[[dict[str, Any]], None]] = []
 _HEARD = threading.local()  # what the daemon's answers said while a verb ran in this thread (``_heard``)
 _ENGINE = os.path.dirname(os.path.abspath(__file__)) + os.sep
 _SUFFIXES = {".xbf": "xbf", ".step": "step", ".stp": "step", ".glb": "glb", ".stl": "stl", ".3mf": "threemf",
-             ".dxf": "dxf", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".kicad_pcb": "kicad_pcb",
+             ".dxf": "dxf", ".urdf": "urdf", ".srdf": "srdf", ".kicad_pcb": "kicad_pcb",
              ".kicad_sch": "kicad_sch"}
 _FRAME = re.compile(r'  File "(?P<file>[^"]+)", line (?P<line>\d+), in (?P<function>\S.*)')
 _TYPE = re.compile(r"(?P<type>[A-Za-z_][A-Za-z0-9_.]*)(?::|$)")
@@ -1450,8 +1482,9 @@ def _model(report: dict[str, Any]) -> dict[str, Any]:
 def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: dict[str, Any]) -> dict[str, Any] | None:
     """Why a verb failed: the first failed report's error -- a body's (the model's frames, ``build``), or
     a file the engine could not write (``trace``, the engine's) -- else what the verb raised: the worker's
-    own error as it answered it, a worker that died under the work (``worker["died"]``), a refusal, or an
-    error raised here."""
+    own error as it answered it, a worker that died under the work (``worker["died"]``) -- not one the engine
+    stopped itself, which its answer names by a type (past the ceiling on one process, ``MemoryError``) --, a
+    refusal, or an error raised here."""
     told = {"engine": True, "refused": False, "here": False}
     failed = next((report for report in reports if not report.get("ok")), None)
     if failed is not None:
@@ -1463,7 +1496,7 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
 
         text = str(error).partition(WORKER_STDERR)[0]
         died = _DIED.search(text)
-        if died:
+        if died and not error.raised:
             worker["died"] = int(died["status"])
             return {"type": None, "frames": [], **told}
         if _TRACEBACK in text:
@@ -1471,7 +1504,10 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
         if error.raised:  # a failure the engine named by its type: what it is, a refusal only where that says so
             refused = any(error.raised == f"{module}.{name}" for module, name in _REFUSALS)
             return {"type": error.raised, "frames": [], **told, "refused": refused}
-        return {"type": None, "frames": [], **told, "refused": text != "no engine daemon"}
+        # By its class, never its words: a subclass names itself (``Outdated``: the server older than this library).
+        kind = type(error)
+        named = None if kind is EngineError else f"{kind.__module__}.{kind.__qualname__}"
+        return {"type": named, "frames": [], **told, "refused": error.refusal}
     if getattr(error, "_engine_refusal", False):  # the worker's refusal, raised here as its type (``_failed``)
         kind = type(error)
         return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",

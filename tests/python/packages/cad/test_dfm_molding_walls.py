@@ -121,7 +121,7 @@ class DraftTest(unittest.TestCase):
 
     def test_too_little_draft_for_its_depth_fails_a_shell_wall_and_says_whose_floor_it_is(self) -> None:
         # An open box with square walls, 2 mm thick and 30 mm deep: it cannot be sent to a shop as drawn (a
-        # shallow one is warned: the guides' recommendation). The floor is text-to-cad's own: no guide is cited.
+        # shallow one is warned: the guides' recommendation). The floor is cad's own: no guide is cited.
         def box(depth: float) -> Any:
             return bd.Box(60, 40, depth, align=BOTTOM) - bd.Pos(0, 0, 2) * bd.Box(56, 36, depth, align=BOTTOM)
 
@@ -132,7 +132,7 @@ class DraftTest(unittest.TestCase):
         self.assertFalse(deep.ok)
         floors = floors_of(deep)
         self.assertEqual(({f.severity for f in floors}, len(floors)), ({"error"}, 8))   # four outside, four inside
-        self.assertTrue(all(f.source.startswith("text-to-cad, ") for f in floors))
+        self.assertTrue(all(f.source.startswith("cad, ") for f in floors))
         self.assertNotRegex(floors[0].message + floors[0].source, "Protolabs|Hubs|Xometry")
         # Depth is a mold half's: the core's walls run their 28 mm in one half; the outside's, which the parting
         # line may run anywhere up, 15 either side of it.
@@ -141,7 +141,7 @@ class DraftTest(unittest.TestCase):
         # the recommendation is left to the record where the floor says it: one finding a face
         self.assertFalse({f.location for f in floors} & {f.location for f in deep.findings if f.code == "molding.draft_min"})
         (rule,) = {rule.note for rule in type_side.RULES.rules if rule.id == "molding.draft_zero"}
-        self.assertTrue(rule.startswith("text-to-cad's own floor"))
+        self.assertTrue(rule.startswith("cad's own floor"))
         # No step at --zero-tol, and no turn with a tilt under the same pull: a tenth of a degree about (1, 1, 0)
         # its walls lean 0.07 deg, as stuck as with none, and it fails as it did; half a degree, their 0.35 deg
         # clears the floor and is the recommendation's warning -- beside the wall that now leans against the

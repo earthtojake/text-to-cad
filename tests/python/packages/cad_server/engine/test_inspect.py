@@ -122,7 +122,7 @@ class SummaryTest(unittest.TestCase):
         lines = shown.stdout.splitlines()
         self.assertEqual(lines[0], f"hinge  {ident}")
         self.assertTrue(lines[1].startswith("state       live, "), lines[1])
-        self.assertEqual(lines[2:18], [
+        self.assertEqual(lines[2:19], [
             "parts       2 in hinge",
             "bounds      210 x 60 x 30 mm, from (-50, -30, 0)",
             "volume      144,000 mm^3",
@@ -137,10 +137,11 @@ class SummaryTest(unittest.TestCase):
             "sequences",
             "  cycle  2.5 s",
             "animations  none",
+            "parameters  none",
             "declared files none",
             "closure",
         ])
-        self.assertEqual(json.loads("\n".join(lines[18:]))["source"]["function"], "hinge")
+        self.assertEqual(json.loads("\n".join(lines[19:]))["source"]["function"], "hinge")
 
         data = self.run_("-m", "cad_server.engine", "inspect", ident, "--json")
         self.assertEqual(data.returncode, 0, data.stderr)
@@ -318,6 +319,24 @@ class SummaryTextTest(unittest.TestCase):
                          ["  roll  revolute  -90 to 90 deg, as built 0", "  pitch  revolute  -90 to 90 deg, as built 30",
                           "  lead  cylindrical  free; free, as built 0 12.3"])
         self.assertEqual(lines[lines.index("states") + 1], "  rest  roll 0, pitch 0.5, lead 180 0")
+
+    def test_a_joint_with_no_limits_or_one_side_open_is_said_not_refused(self) -> None:
+        # A continuous revolute (build123d's angular_range=(-inf, inf)) reaches inspect as [[null, null]]: it
+        # raised a TypeError in said.number. Each side nothing bounds is said open.
+        from cad_server.engine.cli import summary_text
+
+        joints = [{"name": "axle", "type": "revolute", "range": [[None, None]], "units": ["deg"], "asBuilt": 0.0},
+                  {"name": "stop", "type": "prismatic", "range": [[0.0, None]], "units": ["mm"], "asBuilt": 0.0},
+                  {"name": "screw", "type": "cylindrical", "range": [[None, None], [None, 40.0]],
+                   "units": ["deg", "mm"], "asBuilt": [0.0, 0.0]}]
+        summary = {"name": "spin", "id": "x", "state": {"state": "file", "path": "/m/a.xbf"},
+                   "parts": {"occurrences": 2, "distinct": 2, "root": "spin"}, "bounds": None, "volume": 0.0,
+                   "materials": [], "unweighed": [], "joints": joints,
+                   "states": [], "sequences": [], "animations": [], "files": []}
+        lines = summary_text(summary).splitlines()
+        self.assertEqual(lines[lines.index("joints") + 1:lines.index("joints") + 4],
+                         ["  axle  revolute  free, as built 0", "  stop  prismatic  0 to inf mm, as built 0",
+                          "  screw  cylindrical  free; -inf to 40 mm, as built 0 0"])
 
 
 # A base bolted to an arm assembly declared to weigh 120 g, its servo case (no material) carrying a 30 g motor, and

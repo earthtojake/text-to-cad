@@ -8,7 +8,7 @@ import { loadRobotMeshes, peekRobotMeshes, robotMeshUrls, robotModel } from "@ca
 // cap only bounds sockets and the worker's queue; it is tied to cores because the
 // worker still parses serially.
 const MESH_LOAD_CONCURRENCY = 8;
-const KINDS = new Set(["urdf", "srdf", "sdf"]);
+const KINDS = new Set(["urdf", "srdf"]);
 const kindOf = entry => String(entry?.kind || "").trim().toLowerCase();
 
 function meshConcurrency() {
@@ -56,10 +56,10 @@ function peekRobot(entry, resources) {
 }
 
 /**
- * A robot as cadgen resolved it (`GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure`: the articulation to play, the visuals
+ * A robot as cadgen resolved it (`GET /api/v1/documents/<urdf|srdf>/<id>/structure`: the articulation to play, the visuals
  * to draw and the facts a person reads back) and every mesh its visuals name, as the
- * once-built part list a scene is made from. URDF, SRDF (its paired URDF, with the SRDF's
- * semantics on it) and SDF are one payload: nothing here asks which it was. The robot is
+ * once-built part list a scene is made from. A URDF and an SRDF (its paired URDF, with the SRDF's
+ * semantics on it) are one payload: nothing here asks which it was. The robot is
  * published ONCE, complete: a half-drawn robot with the loading card gone reads as a broken
  * model, so the counted stage is the progress signal instead. A missing mesh fails the
  * load. A warm file is there on the first render; a new revision loads behind the robot

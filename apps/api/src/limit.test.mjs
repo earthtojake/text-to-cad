@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { clientOf, FORGET_LIMIT, rateLimiter } from './limit.mjs';
+import { clientOf, FORGET_LIMIT, INSTALL_LIMIT, rateLimiter } from './limit.mjs';
 
 const clock = (at = 0) => { const now = () => at; now.advance = ms => { at += ms; }; return now; };
 
@@ -15,6 +15,16 @@ test('a key may ask five times in ten minutes; the sixth is refused with the sec
   now.advance(595_000);
   assert.deepEqual(limiter.take('a'), { ok: true });
   assert.equal(limiter.take('a').ok, false);
+});
+
+test('a failed install has a looser limit of its own: thirty in ten minutes', () => {
+  assert.deepEqual(INSTALL_LIMIT, { limit: 30, windowMs: 600_000, size: 1000 });
+  const now = clock();
+  const limiter = rateLimiter({ ...INSTALL_LIMIT, now });
+  for (let i = 0; i < 30; i += 1) assert.deepEqual(limiter.take('a'), { ok: true });
+  assert.deepEqual(limiter.take('a'), { ok: false, retryAfter: 600 });
+  now.advance(600_000);
+  assert.deepEqual(limiter.take('a'), { ok: true });
 });
 
 test('the map keeps at most its size, the oldest key evicted first', () => {

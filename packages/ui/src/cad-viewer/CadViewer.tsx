@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ExportControls } from '../export/ExportControls.js';
-import { FileWarning } from 'lucide-react';
 import type { CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
-import { EmptyState } from '../file-viewer/navigation/index.js';
-import { Button } from '../primitives/button.jsx';
+import { EmptyState, StatusAction } from '../file-viewer/navigation/index.js';
 import type { AppSetting, ColorSchemeSetting, LanguageSetting, ViewerHistory } from '../file-viewer/types.js';
 import { I18nProvider, translator } from '../i18n/index.js';
 import type { ViewerHost } from '../host/types.js';
@@ -46,6 +44,12 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   live: LiveRegistry;
   /** The file on screen, by its absolute path, or a document the engine holds by its id alone (a model's); `''` is none: the home. */
   file: string;
+  /**
+   * The name of the document `file` names, where the host knows it before the catalog has it (the
+   * library's card it was opened from, a document shown before): the navbar's name until the
+   * catalog's row names it. Without either, a document named by its id has its name's place empty.
+   */
+  name?: string;
   /** Show another file (absolute), or the home (`''`). */
   onShow(file: string): void;
   /**
@@ -62,9 +66,9 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   library?: ModelLibrarySource<Model>;
   /**
    * Keep the library's picture of a model: the file on screen once it has settled, and on the home a
-   * card's; `png.dark`, where the view drew one, is its dark theme's, kept beside it.
+   * card's.
    */
-  onThumbnail?(png: Blob & { dark?: Blob }, file: string): Promise<unknown>;
+  onThumbnail?(png: Blob, file: string): Promise<unknown>;
   /** The person's colour scheme, its rows in the app menu over every file and on the home. */
   colorScheme?: ColorSchemeSetting;
   /**
@@ -77,18 +81,13 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   /** The host's notice: a file's viewport, top-right, once the file is on screen; never the home. */
   notice?: ReactNode;
   /**
-   * The host's update button (`@cad/ui/update`'s `UpdateButton`), while its install is behind:
-   * last among the navbar's controls (outermost, after Full size), over every file and on the home.
-   */
-  update?: ReactNode;
-  /**
    * The view's own history, where the host keeps one rather than a browser (the CAD app's views):
    * Back and Forward in the navbar after its logo, over every file and on the home.
    */
   history?: ViewerHistory;
   /**
    * The host's Full size button, where it shows the view small (inline in a conversation) and can
-   * show it full size: the navbar's host action, at its right end just before the update, over every file
+   * show it full size: the navbar's host action, at its right end, over every file
    * and on the home. Nothing where there is no navbar (`chrome: "bare"`). (A host's way to open what
    * is shown in a page of its own, the CAD app's browser page, is a file action, `fileActions.perform.browser`:
    * the file menu's Open in › Browser.)
@@ -108,8 +107,9 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
 const reportError = (error: Error) => console.error(error);
 
 /**
- * The CAD viewer every app shows: the shared FileViewer over one file at a time, by absolute path,
- * with its five renderers (an engine document, which a STEP opens as; DXF; GLB; STL/3MF; URDF/SRDF/SDF), the host's home (the model
+ * The viewer every app shows: the shared FileViewer over one file at a time, by absolute path,
+ * with its seven renderers (an engine document, which a STEP opens as; DXF; a KiCad board; a KiCad schematic; GLB; STL/3MF;
+ * URDF/SRDF), the host's home (the model
  * library) wherever no file is open, and the standard loading and "File does not exist" pages. It
  * follows the catalog of the file on screen and refreshes it when the page is focused or shown
  * again. It keeps a picture of each model it shows for the library (`onThumbnail`), and on the home
@@ -117,8 +117,8 @@ const reportError = (error: Error) => console.error(error);
  * time, and only a model whose display is already built — the home never starts a build. It never
  * navigates: showing a file, or the home, is the host's `onShow`.
  */
-export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, onShown,
-  library, onThumbnail, colorScheme, language, appSettings, notice, update, fullSize, history, chrome, whatsNew, onError = reportError }: CadViewerProps<Model>) {
+export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, name, onShow, onShown,
+  library, onThumbnail, colorScheme, language, appSettings, notice, fullSize, history, chrome, whatsNew, onError = reportError }: CadViewerProps<Model>) {
   // The language the host names: the pages drawn here (the home, a file that will not open) read in it.
   const locale = host.environment.locale;
   const t = translator(locale);
@@ -237,11 +237,12 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const layout = settings.library.layout;
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
   // A file that will not open says why, with the way home where the host has one.
-  const goHome = useMemo(() => homed ? <Button size="sm" variant="outline" onClick={home}>{t("file.goHome")}</Button> : null, [homed, home, t]);
+  const goHome = useMemo(() => homed ? <StatusAction onClick={home}>{t("file.goHome")}</StatusAction> : null, [homed, home, t]);
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture}
       fileActions={host.fileActions} /> : undefined,
-    loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
+    // On the viewport's Background as the tab has it, as the view's own cover and its picture are: no flash between them.
+    loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading background={settings.viewportBackground} /></div>,
     // A document named by its id that the engine does not hold says why, and the command that
     // builds it again (the engine's words), under a title of the state the engine names; a file
     // that is not there, its path.
@@ -249,14 +250,14 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
       ? <MissingCadFile file={path} entry={entry} reload={reload} action={goHome}
         title={isDocumentId(path) ? t(NOT_HELD_TITLES[String((error as { state?: unknown } | null)?.state)] ?? "file.notHeld") : t("file.missing")}
         description={isDocumentId(path) ? message : undefined} />
-      : <EmptyState icon={FileWarning} title={t("file.openFailed")} description={message} tone="warn" action={goHome} />,
-  }), [library, layout, changeLayout, path, picture, host.fileActions, entry, goHome, t]);
+      : <EmptyState title={t("file.openFailed")} description={message} action={goHome} />,
+  }), [library, layout, changeLayout, path, picture, host.fileActions, entry, goHome, t, settings.viewportBackground]);
   // What a person does on the screen is counted for the host (`usage/controls.js`); never what a picture drawn
   // out of sight does, which is outside it.
   return <I18nProvider locale={locale}>
     <ControlUsageProvider report={host.usage?.controls}>
-    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
-      colorScheme={colorScheme} language={language} appSettings={appSettings} update={update} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
+    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
+      colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
     {whatsNew && onScreen ? <WhatsNewDialog entry={whatsNew.entry} onDismiss={whatsNew.onDismiss} /> : null}
     {drawing && !path ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}

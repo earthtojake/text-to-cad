@@ -43,13 +43,25 @@ const pause = (ms, signal) => new Promise((resolve, reject) => {
  * wait hears the document's build: a build writing it answers with each stage it reaches
  * (`building`), and one that fails with its error (`failed`), until another begins or one succeeds.
  *
- * @param {{ client: { engineDocument?: Function }, file: string }} options
+ *
+ * A model's preview (`preview`: the URL the engine answered a page's look at other values of its parameters
+ * with, `client.previewModelParameters`) is drawn in the document's place as it lands: read as a version is,
+ * with the document and the preview before it as `previous`, so only the parts the values changed are fetched,
+ * and swapped in when it is ready, the camera where it is and nothing said of a build (none is the
+ * document's). It is never the document: `document` and `revision` stay the document's (its exports, its
+ * slices, its tab's values), and the document's next version is read as ever, under the preview. `preview`
+ * null puts the document's own scene back. One that cannot be read (the engine let it go) leaves the scene
+ * as it is (`previewError`).
+ *
+ * @param {{ client: { engineDocument?: Function }, file: string, preview?: string | null }} options
  * @returns {{ scene: object | null, document: object | null, revision: string, busy: boolean, progress: object | null,
  *   error: unknown, empty: boolean, update: { version: string, fetched: number, kept: number, ms: number } | null,
- *   building: object | null, failed: { model?: string, error?: string, reportable?: boolean, progress?: object | null } | null }}
+ *   building: object | null, failed: { model?: string, error?: string, reportable?: boolean, progress?: object | null } | null,
+ *   previewing: string | null, sceneRevision: string, previewError: unknown }}
  *   `update`: the last version that arrived after the first, how many parts it fetched and kept, and the
  *   milliseconds from the engine's answer to its scene. `building`: the progress frame of the build
- *   writing the document now; `failed`: the last build of it that failed.
+ *   writing the document now; `failed`: the last build of it that failed. `previewing`: the preview drawn
+ *   now, else null; `sceneRevision`: the version of what is drawn (the preview's, else the document's).
  */
 /**
  * Whether a document's read failed because the engine no longer holds it (`cad delete` while it is
@@ -58,18 +70,26 @@ const pause = (ms, signal) => new Promise((resolve, reject) => {
  */
 export const goneFromEngine = error => Number(error?.status) === 404;
 
-export function useXbfScene({ client, file }) {
+export function useXbfScene({ client, file, preview = null }) {
   const [state, setState] = useState({ scene: null, document: null, revision: "", busy: true, progress: openingProgress(file), error: null, empty: false, update: null,
-    building: null, failed: null });
+    building: null, failed: null, previewing: null, sceneRevision: "", previewError: null });
   const held = useRef({ scene: null, document: null });
+  // The preview drawn in the document's place, while there is one: its URL, scene and document.
+  const shown = useRef({ url: null, scene: null, document: null });
   const adopt = (scene, document) => {
     const previous = held.current;
-    held.current = { scene, document };
+    held.current = { ...held.current, scene, document };
     // The old scene first, then its document: parts the new version kept stay held by it.
     previous.scene?.dispose();
     previous.document?.release();
   };
-  useEffect(() => () => adopt(null, null), []);
+  const show = (url, scene, document) => {
+    const previous = shown.current;
+    shown.current = { url, scene, document };
+    previous.scene?.dispose();
+    previous.document?.release();
+  };
+  useEffect(() => () => { show(null, null, null); adopt(null, null); }, []);
   useEffect(() => {
     if (!file) return undefined;
     const controller = new AbortController();
@@ -103,8 +123,12 @@ export function useXbfScene({ client, file }) {
           ms: Math.round(performance.now() - noticed)
         };
         adopt(scene, document);
-        setState({ scene, document, revision: document.version, busy: false, progress: null, error: null,
-          empty: document.structure.instances.length === 0, update: update || held.current.update || null, ...build });
+        // A preview on screen stays there: the document's new version is drawn once it is let go.
+        const drawn = shown.current.scene;
+        setState(current => ({ scene: drawn || scene, document, revision: document.version, busy: false, progress: null, error: null,
+          empty: document.structure.instances.length === 0, update: update || held.current.update || null, ...build,
+          previewing: drawn ? shown.current.url : null, sceneRevision: drawn ? current.sceneRevision : document.version,
+          previewError: current.previewError }));
         held.current.update = update || held.current.update || null;
         previous = document;
         // The next version: the engine answers when a build lands or moves, else after its wait with this one.
@@ -141,5 +165,38 @@ export function useXbfScene({ client, file }) {
     });
     return () => controller.abort();
   }, [client, file]);
+
+  // ---- a preview of other values of the model's parameters, drawn in the document's place ----------------
+  const ready = state.document !== null;
+  useEffect(() => {
+    if (!preview) {
+      if (!shown.current.url) return undefined;
+      // Let go: the document's own scene again, as it is now.
+      show(null, null, null);
+      setState(current => ({ ...current, scene: held.current.scene, previewing: null,
+        sceneRevision: held.current.document?.version || current.revision, previewError: null }));
+      return undefined;
+    }
+    const base = held.current.document;
+    if (!base || shown.current.url === preview) return undefined;
+    const controller = new AbortController();
+    const { signal } = controller;
+    (async () => {
+      // Every part the document or the preview on screen holds is kept: a value moved back finds its parts.
+      const parts = new Map(base.parts);
+      for (const [key, part] of shown.current.document?.parts || []) if (!parts.has(key)) parts.set(key, part);
+      const document = await loadXbfDocument(preview, {
+        previous: { source: base.source, structure: base.structure, look: base.look, parts }, signal, fetch: base.fetch });
+      if (signal.aborted) { document.release(); return; }
+      const scene = createXbfScene(THREE, document);
+      // The preview it replaces goes, as an old version does; the document's own stays held for Reset.
+      show(preview, scene, document);
+      setState(current => ({ ...current, scene, previewing: preview, sceneRevision: document.version, previewError: null }));
+    })().catch((error) => {
+      if (signal.aborted || isAbortError(error)) return;
+      setState(current => ({ ...current, previewError: error }));
+    });
+    return () => controller.abort();
+  }, [preview, ready]);
   return state;
 }

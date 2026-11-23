@@ -24,11 +24,13 @@ import { selects } from "../kit/tools/select/selectFilter.js";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
 import { usePointerPick } from "../kit/tools/select/usePointerPick.js";
 import { prefersCoarsePointer } from "../kit/viewport/dom.js";
+import { DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX } from "../kit/viewport/touchGestures.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { createClickActivation } from "./clickActivation.js";
 import XbfMeasureOverlay from "./XbfMeasure.jsx";
 import XbfModelTree from "./XbfModelTree.jsx";
 import XbfPositionSection, { useXbfPose, writeXbfPosition, xbfPoseGiven, xbfPositionRows } from "./XbfPositionSection.jsx";
+import XbfParametersSection, { useXbfParameters } from "./XbfParametersSection.jsx";
 import { MeasureIcon, SelectIcon, SelectMenu, XBF_SELECT_DEFAULT, xbfSelectBadge } from "./XbfSelectionModes.jsx";
 import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfDescriber, xbfNodeRefs, xbfTipper } from "./xbfChips.jsx";
 import { xbfJointHandles } from "./xbfJointHandles.js";
@@ -55,13 +57,15 @@ const MENU_CONTROLS = Object.freeze({
 });
 
 // An engine document in the viewer, exactly as a STEP is: the same tools in the same order
-// (Select with its filter, Pencil, Shapes, Measure, Explode, Clip), the same selection (Parts, Faces and
+// (Select with its filter, Draw, Measure, Explode, Clip), the same selection (Parts, Faces and
 // Edges as the filter ticks them, a collapsed assembly picked as a unit, a part's faces and edges
-// once it is open, a face's or an edge's tangent chain from the view's menu), the same view's panel (Model tree, Position), the
-// same menus, the same Quick Edit chips; and, for a document with motions, the playbar under the
-// model, the shell's routine transport playing them (`useXbfMotion.js`). What differs is
+// once it is open, a face's or an edge's tangent chain from the view's menu), the same view's panel (Model tree, Joints), the
+// same menus, the same Quick Edit chips; and, for a document with motions, the shell's routine transport playing
+// them (`useXbfMotion.js`) at the top of its Joints tab (its own Motion tab where it has no Joints; Preview's
+// playbar in Preview). What differs is
 // underneath: the document is read from the engine that serves it, and every face and edge is to
-// hand from the start, so nothing waits on topology.
+// hand from the start, so nothing waits on topology. One tab a STEP never had: a model's Parameters
+// (`XbfParametersSection.jsx`), the named numbers its script declares, saved back into the script.
 
 const NO_REFERENCES = Object.freeze([]);
 const EMPTY = Object.freeze([]);
@@ -91,6 +95,17 @@ function pickElements(current, ids, multiSelect) {
   return multiSelect ? [...nodes, ...next] : next;
 }
 
+/**
+ * The view's panel's tabs, in their order: the Model tree for any document with a part (a part file's
+ * is its one row, an assembly's every part), Params (`parameters`) for a document that records any, Joints
+ * (`position`) for a mechanism. None: no panel.
+ * @param {{ parts: number, posable: boolean, parameters: number }} document  `parts`: the tree's rows.
+ * @returns {("model" | "parameters" | "position")[]}
+ */
+export function xbfPanelSections({ parts, posable, parameters }) {
+  return [parts > 0 && "model", parameters > 0 && "parameters", posable && "position"].filter(Boolean);
+}
+
 /** Every selection id at and under `ids` in the tree: what an isolation keeps in reach. */
 function subtreeIds(tree, ids) {
   const found = new Set();
@@ -103,7 +118,10 @@ function XbfSurface({ view, data }) {
   const { t } = useI18n();
   const host = useViewerHost();
   const document = useWorkspaceDocument({ view, data });
-  const loaded = useXbfScene({ client: document.client, file: view.file.path });
+  // A preview of other values of the model's parameters, drawn in the document's place while the
+  // Parameters tab holds drafts (`useXbfParameters`'s `onPreview`): its URL, else null.
+  const [parameterPreview, setParameterPreview] = useState(null);
+  const loaded = useXbfScene({ client: document.client, file: view.file.path, preview: parameterPreview });
   // A document the engine no longer holds is opened again, once, the catalog asked again first (it
   // still has the row it had): the file viewer then says what became of it, in the document's words.
   const reopened = useRef(false);
@@ -141,7 +159,8 @@ function XbfSurface({ view, data }) {
   const [toolMode, setToolMode] = useState(XBF_TOOL_MODES.defaultMode);
   const tool = useMemo(() => ({ mode: toolMode, set: setToolMode }), [toolMode]);
   const measuring = !previewing && toolMode === XBF_TOOL.MEASURE;
-  const measure = useMeasureSession({ fileKey: document.modelKey, revision: loaded.revision, picking: measuring });
+  // What is measured is what is drawn: a preview's geometry is its own revision.
+  const measure = useMeasureSession({ fileKey: document.modelKey, revision: loaded.sceneRevision || loaded.revision, picking: measuring });
   const requestFrame = useCallback(() => shellRef.current?.requestFrame?.(), []);
   const requestRender = useCallback(() => shellRef.current?.requestRender?.(), []);
 
@@ -200,9 +219,10 @@ function XbfSurface({ view, data }) {
   const { values: poseValues, applied: poseApplied, preset: posePreset, couplings: poseCouplings,
     setValues: setPoseValues, choosePreset, reset: resetPose } = pose;
   // ---- Motion: the document's motions played (`useXbfMotion.js`) ------------------------------
-  // While a motion owns the pose (playing, or paused off its start, until Reset lets go of it) its
-  // frames pose the scene and Position shows them, read-only. It is a motion as Explode and the
-  // pose are (below): playing it puts both at rest, and Explode used puts it at rest.
+  // While a motion owns the pose (playing, or paused off its start, until it is scrubbed back to its start or
+  // something else takes over) its frames pose the scene and Position shows them, editable: a Position edit lets
+  // the motion go and takes over from the frame. It is a motion as Explode and the pose are (below): playing it puts
+  // both at rest, and Explode or Position used puts it at rest.
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
   const positionRef = useRef(null);
@@ -216,9 +236,16 @@ function XbfSurface({ view, data }) {
     shellRef.current?.requestRender?.();
   }, []);
   const motion = useXbfMotion(kinematics, poseFrame);
-  const motionOwns = Boolean(motion?.enabled);
+  // ---- Parameters: the named numbers the model's script declares (`XbfParametersSection.jsx`) ---
+  // Kept here, for as long as the file is on screen: the drafts, the preview of them the scene draws, and
+  // what was saved, which the next Quick Edit tells the agent (`promptNotes`).
   const motionRef = useRef(motion);
   motionRef.current = motion;
+  // A parameter edited lets go of a motion holding the model, explicitly: a preview the engine refuses must not
+  // leave the clip in charge (and Joints showing its frame). Joints and Explode never reset the parameters.
+  const releaseMotion = useCallback(() => { if (motionRef.current?.enabled) motionRef.current.onRelease(); }, []);
+  const parameters = useXbfParameters({ client: document.client, document: loaded.document, onPreview: setParameterPreview, onEdit: releaseMotion });
+  const motionOwns = Boolean(motion?.enabled);
   useEffect(() => {
     if (!scene || !poseValues || motionRef.current?.enabled) return;
     scene.setPose(poseApplied ? poseValues : null);
@@ -326,17 +353,8 @@ function XbfSurface({ view, data }) {
   // A measurement taken, deleted or cleared is a step of the view's one history, with the ink's.
   measure.history.current = shell.frame.history;
   shellRef.current = shell;
-  // Ink drawn over the version before does not describe this one: a new version of the file takes
-  // it, and its history with it, so Undo cannot put it back over the new model, as a STEP's did.
-  // Annotate stays the tool in hand.
-  const inkVersion = useRef({ file: document.modelKey, revision: loaded.revision });
-  useEffect(() => {
-    const before = inkVersion.current;
-    inkVersion.current = { file: document.modelKey, revision: loaded.revision };
-    if (before.file === document.modelKey && before.revision && loaded.revision && before.revision !== loaded.revision) {
-      shellRef.current?.frame.annotation.discard();
-    }
-  }, [document.modelKey, loaded.revision]);
+  // Ink stays across a new version of the model, as in every view: its marks are in the scene's own coordinates, so they
+  // stand where they were drawn whatever the rebuild moved, and the person's unsent marks are never thrown away.
   useDeclinedSelectReference(document);
   const ensureSelect = useCallback(() => { if (shellRef.current?.toolMode !== XBF_TOOL.SELECT) shellRef.current?.selectTool(XBF_TOOL.SELECT); }, []);
 
@@ -390,12 +408,13 @@ function XbfSurface({ view, data }) {
     setChosen(now => pickNode(now, id, multiSelect));
   }, [ensureSelect]);
   // Isolate: what it names alone in reach, everything else dimmed; its parts shown, opened.
-  const isolate = useCallback((ids) => {
+  // `keepSelection`: a double-click's isolate, which leaves the selection as the gesture's first click left it.
+  const isolate = useCallback((ids, { keepSelection = false } = {}) => {
     if (!assembly) return;
     const targets = [ids].flat().filter(id => tree.nodes.has(id));
     if (!targets.length) { setIsolatedIds(EMPTY); return; }
     const leaves = new Set(leavesOf(targets));
-    setChosen(EMPTY);
+    if (!keepSelection) setChosen(EMPTY);
     setIsolatedIds(targets);
     setExpansion(now => openRows(now, targets, "isolation"));
     setHiddenIds(now => (now.some(id => leaves.has(id)) ? now.filter(id => !leaves.has(id)) : now));
@@ -537,12 +556,9 @@ function XbfSurface({ view, data }) {
     if (chains.length) setChosen(now => withTangentChains(now, chains));
   }, [scene, groupsOf]);
 
-  // The selection as the last activation found it: what a double-click whose first click picked puts back.
-  const lastPick = useRef(null);
   const handlePick = useCallback((found, modifiers) => {
     const hit = found?.press || null;
     const multiSelect = Boolean(modifiers?.multiSelect);
-    lastPick.current = { before: selectedRef.current };
     if (shellRef.current?.toolMode !== XBF_TOOL.SELECT) ensureSelect();
     if (!hit) { if (!multiSelect) { setChosen(EMPTY); measureRef.current.select([]); } return; }
     if (!multiSelect) measureRef.current.select([]);
@@ -550,6 +566,20 @@ function XbfSurface({ view, data }) {
     const node = nodeOf(hit);
     if (node && (!selectableIds || selectableIds.has(node))) setChosen(now => pickNode(now, node, multiSelect));
   }, [ensureSelect, nodeOf, selectableIds]);
+  // Whether a pick would let go of what was pressed: the thing selected pressed again. Such a pick waits the
+  // double-click window (`clickActivation.js`), so a double-click on a selected part never shows it going before it
+  // acts. A press on empty space clears at once: what a double-click there does (fit, leave isolation) needs no
+  // selection, so nothing is lost by not waiting.
+  const pickTakesAway = useCallback((found, modifiers) => {
+    const hit = found?.press || null;
+    const multiSelect = Boolean(modifiers?.multiSelect);
+    const now = selectedRef.current;
+    if (!hit) return false;
+    const pressed = hit.kind ? [hit.id] : [nodeOf(hit)].flat().filter(Boolean);
+    if (!pressed.length) return false;
+    const next = hit.kind ? pickElements(now, pressed, multiSelect) : pickNode(now, pressed, multiSelect);
+    return !pressed.every(id => next.includes(id));
+  }, [nodeOf]);
   // Box select: what the box takes of the model, by a click's rules (`pickBox`, `pickOptions`): what
   // shows in it, touching it even in part. Under
   // All the faces and edges of the parts that are open and every other part as the node a click
@@ -594,7 +624,7 @@ function XbfSurface({ view, data }) {
     setHover(elements.length ? { parts: EMPTY, element: elements[0] } : { parts: ids, element: null });
   }, []);
   const resource = shell.frame.resource;
-  // What a pick is, as the Selected pane, its chip's card and the hover tip read it (`xbfDescriber`).
+  // What a pick is, as its chip's card and the hover tip read it (`xbfDescriber`).
   const describe = useMemo(() => xbfDescriber({ scene, tree, facts, t }), [scene, tree, facts, t]);
   const { references, chips } = useXbfSelectionChips({ scene, tree, resource, selectedIds: selected, facts,
     onRemove: removeFromSelection, onHover: hoverChip, describe });
@@ -612,29 +642,29 @@ function XbfSurface({ view, data }) {
 
   // ---- double-click: a face or edge looked at, a part isolated, empty space leaves isolation or fits ----
   // A face or an edge: the view turns square to it (CAD's Normal To, `kit/camera/lookAt.js`) and
-  // nothing is picked; navigation only.
+  // the gesture changes no selection itself (its first click's pick stands, below).
   const lookAt = useCallback((id) => {
     const subject = xbfLookSubject(scene, id);
     if (subject) shellRef.current?.frame.viewerRef.current?.lookAt?.(subject);
   }, [scene]);
-  // `activated`: the gesture's first click picked (`clickActivation.js`), so the selection it found
-  // comes back first, through the one setter every pick goes through; then the double-click acts
-  // as if that click had never happened. Under Select, Explode or Clip alike: under the two a pick
-  // would leave, the click waited, so the tool is still the one in hand.
-  const handleDoublePick = useCallback((clientX, clientY, { activated = false } = {}) => {
-    if (activated && lastPick.current) setChosen(lastPick.current.before);
-    lastPick.current = null;
+  // The gesture's first click stands: what it selected stays selected, and a click that would have taken the
+  // selection away waited and was dropped (`pickTakesAway`), so nothing is put back and nothing flickers. Under
+  // Select, Explode or Clip alike: Explode and Clip stand over Select, whose mode stays underneath them, so a pick
+  // under either is Select's and the tool stays in hand.
+  const handleDoublePick = useCallback((clientX, clientY) => {
     const hit = pickAtClient(clientX, clientY);
     // Empty space: out of isolation, or, with nothing isolated, the model fitted (as F, and every view's double-click).
     if (!hit) { if (isolatedIdsRef.current.length) exitIsolate(); else shellRef.current?.frame.viewerRef.current?.resetZoom?.(); return; }
     if (hit.kind) { usage.used("look_at"); lookAt(hit.id); return; }
     const node = nodeOf(hit);
-    if (node && assembly) { usage.used("isolate"); isolate([node]); }
+    if (node && assembly) { usage.used("isolate"); isolate([node], { keepSelection: true }); }
   }, [pickAtClient, exitIsolate, lookAt, nodeOf, assembly, isolate, usage]);
   // Under Measure, as a STEP's: the face or edge Measure takes there is looked at, empty space
   // leaves isolation (the presses of the gesture were Measure's own).
   const handleMeasureDoublePick = useCallback((id) => { if (id) { usage.used("look_at"); lookAt(id); } else exitIsolate(); }, [lookAt, exitIsolate, usage]);
-  // A pick under Explode or Clip takes Select up: it waits the double-click window first.
+  // Whether a pick waits the double-click window because the tool mode is not Select's. The picker runs only under
+  // Select (`picking`), and Explode and Clip keep Select's mode underneath them, so no pick waits for this now: only
+  // one that would take the selection away does (`pickTakesAway`).
   const deferPickRef = useRef(false);
   deferPickRef.current = toolMode !== XBF_TOOL.SELECT;
   // What Measure lights under the resting pointer: the face or edge it would take.
@@ -701,7 +731,7 @@ function XbfSurface({ view, data }) {
 
   // ---- the strip --------------------------------------------------------------------------------
   const bounds = scene ? boundsInUnits(sceneFramingBounds(scene), scene.units) : null;
-  const effects = useModelTools({ view: viewSettings, features, store, mesh: bounds ? { bounds } : null, disabled: shell.idle });
+  const effects = useModelTools({ view: viewSettings, features, store, mesh: bounds ? { bounds } : null, disabled: shell.idle, shell });
   const selectModeMenu = useMemo(() => <SelectMenu value={selectFilter} assembly={assembly} posable={posable} disabled={shell.idle}
     onChange={value => { setSelectFilter(value); shellRef.current?.selectTool(XBF_TOOL.SELECT); }}
     tool={selectTool} onToolChange={value => { setSelectTool(value); shellRef.current?.selectTool(XBF_TOOL.SELECT); }} />,
@@ -725,14 +755,24 @@ function XbfSurface({ view, data }) {
   const measureSelect = measureSelectHandlers(measure, runtimeOf, clearSelection, { picks: selects(selectFilter, "measurement") });
   measureSelectRef.current = measureSelect;
 
-  // Position's knobs: Select's, while its filter ticks Position, with nothing exploded and no motion owning the pose.
-  const knobsShown = selectActive && posable && selects(selectFilter, "position") && !explodeApplied && !motionOwns;
-  const handles = useMemo(() => (knobsShown && poseValues ? xbfJointHandles({ kinematics, rows: positionRows, values: poseValues, scene,
-    onChange: (row, value) => { const written = writeXbfPosition(poseValues, row, value); if (written) setPoseValues(written); } }) : null),
-  [knobsShown, kinematics, positionRows, poseValues, scene, setPoseValues]);
+  // Position's knobs: Select's, while its filter ticks Position, with nothing exploded. A motion paused holds the
+  // model at its frame: the knobs stand there, and a drag lets the motion go and takes over from that frame. While it
+  // plays the knobs step aside (they would stand where the model was): pausing brings them back.
+  const motionPlaying = motionOwns && motion?.playing === true;
+  const knobsShown = selectActive && posable && selects(selectFilter, "position") && !explodeApplied && !motionPlaying;
+  const knobValues = useMemo(() => (motionOwns && motion ? motion.valuesAt(motion.elapsedSec) : poseValues),
+    [motionOwns, motion?.elapsedSec, motion?.activeClipId, poseValues]);
+  const handles = useMemo(() => (knobsShown && knobValues ? xbfJointHandles({ kinematics, rows: positionRows, values: knobValues, scene,
+    onChange: (row, value) => {
+      const written = writeXbfPosition(knobValues, row, value);
+      if (!written) return;
+      if (motionRef.current?.enabled) motionRef.current.onRelease();
+      setPoseValues(written);
+    } }) : null),
+  [knobsShown, kinematics, positionRows, knobValues, scene, setPoseValues]);
   const handleLayoutRef = useRef(null);
 
-  // ---- the view's panel: the Model tree (an assembly's), then Position -------------------------
+  // ---- the view's panel: the Model tree (a part file's one row too), then Parameters, then Position
   const partControls = useMemo(() => ({
     isAssemblyView: assembly, hiddenPartIds: hiddenIds, focusedNodeIds: isolatedIds, selectableNodeIds: selectableIds ? [...selectableIds] : null,
     expandedTreeNodeIds: expandedIds, onToggleTreeNode: toggleExpanded, onRevealTreeNodes: revealExpanded, onSelectTreeNode: selectTreeNode,
@@ -742,31 +782,25 @@ function XbfSurface({ view, data }) {
     menuForNode, partMenuActions
   }), [assembly, hiddenIds, isolatedIds, selectableIds, expandedIds, toggleExpanded, revealExpanded, selectTreeNode, ensureSelect, isolate, exitSingleIsolate,
     exitIsolate, toggleVisibility, showAll, tree, menuForNode, partMenuActions]);
-  const sidebar = scene && (assembly || kinematics) ? <>
-    {assembly ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
-      selectedIds={selected} onClearSelection={clearSelection} partControls={partControls} /> : null}
-    {kinematics ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
+  const sections = xbfPanelSections({ parts: tree.roots.length, posable: Boolean(kinematics), parameters: parameters.parameters.length });
+  // The panel's tabs: the structure (the Model tree, there from the first frame, its rows arriving with the model), then
+  // Parameters and Joints once the model says it has them.
+  const sidebar = !scene || sections.includes("model") ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
+    selectedIds={selected} onClearSelection={clearSelection} partControls={partControls} /> : null;
+  const fileSections = scene && (sections.includes("parameters") || sections.includes("position")) ? <>
+    {sections.includes("parameters") ? <XbfParametersSection parameters={parameters} /> : null}
+    {sections.includes("position") ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
       onValues={setPoseValues} onPreset={choosePreset} onReset={resetPose} /> : null}
   </> : null;
 
-  // What is picked, as the frame reads it: the Selected pane under the Model tree, the hover tip, the rows of
-  // both, which pick, light and frame as the tree's rows do.
-  const inspectSelect = useCallback((id, { multiSelect = false } = {}) => {
-    ensureSelect();
-    setChosen(now => (isElementId(id) ? pickElements(now, [id], multiSelect) : pickNode(now, id, multiSelect)));
-  }, [ensureSelect]);
-  const inspectHover = useCallback(id => hoverChip(id ? [id] : null), [hoverChip]);
-  const inspectFrame = useCallback((ids) => {
-    const bounds = scene?.selectionBounds([...leavesOf(ids.filter(id => !isElementId(id))), ...ids.filter(isElementId)]);
-    if (bounds) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(bounds);
-  }, [scene, leavesOf]);
+  // What is picked, as the frame reads it: a chip's card and the hover tip.
   // The hover tip's own short path: names from the tree, nothing measured (`xbfTipper`).
   const tip = useMemo(() => xbfTipper({ scene, tree }), [scene, tree]);
-  const inspect = useMemo(() => (scene && !previewing ? { selected, describe, tip, hovered: pointed, select: inspectSelect, hover: inspectHover,
-    frame: inspectFrame, copyText: singleChip, data: "model" } : null), [scene, previewing, selected, describe, tip, pointed, inspectSelect, inspectHover, inspectFrame, singleChip]);
+  const inspect = useMemo(() => (scene && !previewing ? { describe, tip, hovered: pointed, data: "model" } : null), [scene, previewing, describe, tip, pointed]);
 
-  return <RendererShell shell={shell} tools={strip} subToolbar={measuring ? <MeasurementsBar measure={measure} /> : null} sidebar={sidebar} previewView={previewView}
-    inspect={inspect}
+  return <RendererShell shell={shell} tools={strip} subToolbar={effects.subToolbar ?? (measuring ? <MeasurementsBar measure={measure} /> : null)} sidebar={sidebar} previewView={previewView}
+    fileSections={fileSections} jointsHoldMotion={Boolean(fileSections) && sections.includes("position")}
+    inspect={inspect} promptNotes={parameters.notes}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameReference}
     onClearReferences={() => { setChosen(EMPTY); measure.select([]); }} copySelection={copySelection}
     onSelectPress={measureSelect.press} onSelectHover={measureSelect.hover} selectsAnnotations={selects(selectFilter, "annotation")}
@@ -782,7 +816,7 @@ function XbfSurface({ view, data }) {
         <XbfMeasureOverlay viewport={viewport} scene={scene} measure={measure} picking={measuring} preview={shell.previewing}
           filter={measureFilter} source={source} fetch={engineFetch} onHoverElement={hoverElement} onDoublePick={handleMeasureDoublePick} />
         {handles ? <JointHandleOverlay handles={handles} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
-        <XbfPick viewport={viewport} scene={picker} enabled={picking} onPick={handlePick} onHover={handleHover} onDoublePick={handleDoublePick}
+        <XbfPick viewport={viewport} scene={picker} enabled={picking} onPick={handlePick} takesAway={pickTakesAway} onHover={handleHover} onDoublePick={handleDoublePick}
           deferRef={deferPickRef} pointerTypeRef={pointerTypeRef} />
       </>;
     }} />;
@@ -797,18 +831,19 @@ const COARSE_TAP_SLOP_PX = 12;
  * each press is made with (`pointerTypeRef`), heard before the pick's own listener hears it. A tap
  * activates as a STEP's did (`clickActivation.js`): at once, but for the second click of a
  * double-click, which the `dblclick` owns (`onDoublePick`, told whether the first click picked),
- * and a tap under a tool a pick would leave (`deferRef`: Explode, Clip), which waits the
- * double-click window. A coarse pointer has no double-click: every tap picks at once.
+ * and a tap that would take the selection away (`takesAway`), which waits the double-click window
+ * (`deferRef` would hold one under a tool mode other than Select's, but the picker runs only under
+ * Select). A finger double-clicks too: its double tap arrives as a `dblclick`
+ * (`kit/viewport/touchGestures.js`), and as a finger's press carries no count from the browser, the
+ * second tap of one is counted here by the same window.
  */
-function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, deferRef, pointerTypeRef }) {
+function XbfPick({ viewport, scene, enabled, onPick, takesAway, onHover, onDoublePick, deferRef, pointerTypeRef }) {
   const { hostRef, runtimeRef, viewerReadyTick } = viewport;
   const callbacks = useRef(null);
-  callbacks.current = { onPick, onDoublePick };
+  callbacks.current = { onPick, onDoublePick, takesAway };
   // The browser's count of the press just released in its click sequence (`detail`: 2 for a double-click's second).
   const countRef = useRef(0);
-  const doubleClick = useMemo(() => !prefersCoarsePointer(), []);
-  const activation = useMemo(() => createClickActivation({ commit: (found, options) => callbacks.current.onPick(found, options), doubleClick }),
-    [doubleClick]);
+  const activation = useMemo(() => createClickActivation({ commit: (found, options) => callbacks.current.onPick(found, options) }), []);
   useEffect(() => {
     const host = hostRef.current;
     if (!enabled || !host) return undefined;
@@ -817,6 +852,8 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
     const onCanvas = event => event.target === runtimeRef.current?.renderer?.domElement;
     const touches = new Set();
     let press = null;
+    // The last finger's tap, by which the next is counted as a double tap's second.
+    let lastTap = null;
     // Heard before the pick's own listeners: the press's count is known when it is taken.
     const down = (event) => {
       pointerTypeRef.current = event.pointerType || "";
@@ -827,8 +864,10 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
       }
       // A right press is the viewport's menu: no click waits through it either.
       if (event.button !== 0) { if (event.button === 2) activation.cancel(); return; }
+      const second = event.pointerType === "touch" && lastTap && event.timeStamp - lastTap.at <= DOUBLE_TAP_MS
+        && Math.hypot(event.clientX - lastTap.x, event.clientY - lastTap.y) <= DOUBLE_TAP_SLOP_PX;
       press = onCanvas(event) ? { x: event.clientX, y: event.clientY, pointerId: event.pointerId, pointerType: event.pointerType || "",
-        count: Number(event.detail) || 0, moved: false } : null;
+        count: event.pointerType === "touch" ? (second ? 2 : 1) : Number(event.detail) || 0, moved: false } : null;
     };
     // The mouse event behind the press carries the browser's count.
     const mouseDown = (event) => { if (press && event.button === 0) press.count = Math.max(press.count, Number(event.detail) || 0); };
@@ -842,7 +881,9 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
       if (!started || event.button !== 0 || event.pointerId !== started.pointerId) return;
       countRef.current = started.count;
       // A press that was no tap (a drag of the camera): a fresh gesture's forgets an earlier click.
-      if (started.moved || Math.hypot(event.clientX - started.x, event.clientY - started.y) > slop(started.pointerType)) activation.miss(started.count);
+      const missed = started.moved || Math.hypot(event.clientX - started.x, event.clientY - started.y) > slop(started.pointerType);
+      if (missed) activation.miss(started.count);
+      if (started.pointerType === "touch") lastTap = missed || started.count >= 2 ? null : { x: event.clientX, y: event.clientY, at: event.timeStamp };
     };
     const cancel = (event) => {
       touches.delete(event.pointerId);
@@ -851,16 +892,16 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
     };
     const dblclick = (event) => {
       if (!onCanvas(event)) return;
-      // Whether the first click of this gesture picked: what the double-click puts back first.
-      const activated = activation.double();
-      callbacks.current.onDoublePick?.(event.clientX, event.clientY, { activated });
+      // A click still waiting (the gesture's second, or one that would take the selection away) is dropped.
+      activation.double();
+      callbacks.current.onDoublePick?.(event.clientX, event.clientY);
     };
     host.addEventListener("pointerdown", down, true);
     host.addEventListener("mousedown", mouseDown, true);
     host.addEventListener("pointermove", move, true);
     host.addEventListener("pointerup", up, true);
     host.addEventListener("pointercancel", cancel, true);
-    if (doubleClick) host.addEventListener("dblclick", dblclick);
+    host.addEventListener("dblclick", dblclick);
     return () => {
       host.removeEventListener("pointerdown", down, true);
       host.removeEventListener("mousedown", mouseDown, true);
@@ -871,10 +912,13 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
       // A click still waiting belongs to the tool it was made under.
       activation.cancel();
     };
-  }, [enabled, hostRef, runtimeRef, viewerReadyTick, pointerTypeRef, activation, doubleClick]);
+  }, [enabled, hostRef, runtimeRef, viewerReadyTick, pointerTypeRef, activation]);
   usePointerPick({
-    viewport, scene, enabled, onHover,
-    onPick: (found, modifiers) => activation.tap(countRef.current, found, modifiers, { wait: Boolean(deferRef.current) }),
+    viewport, scene, enabled, onHover, touchAdds: true,
+    onPick: (found, modifiers) => activation.tap(countRef.current, found, modifiers, {
+      wait: Boolean(deferRef.current) || Boolean(callbacks.current.takesAway?.(found, modifiers)),
+      // A finger's double-click window is its double tap's.
+      waitMs: pointerTypeRef.current === "touch" ? DOUBLE_TAP_MS : undefined }),
     sameHit: (left, right) => (left?.rest?.id || "") === (right?.rest?.id || "")
   });
   return null;

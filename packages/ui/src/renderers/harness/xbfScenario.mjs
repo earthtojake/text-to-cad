@@ -45,8 +45,13 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
   const structure = JSON.parse(STRUCTURE);
   if (transmission) structure.prototypes[0].material = { pbr: { values: { transmission: 0.9, roughness: 0.1, ior: 1.5 }, textures: {} } };
   const initial = Buffer.from(JSON.stringify(structure));
+  // The bracket's plate alone, as a part file's structure is: one prototype, one instance, one node.
+  const plate = Buffer.from(JSON.stringify({ ...structure, prototypes: structure.prototypes.slice(0, 1), instances: structure.instances.slice(0, 1),
+    tree: { ...structure.tree, children: structure.tree.children.slice(0, 1) } }));
   let served = { version: VERSION, structure: initial };
   let updates = 0;
+  // The structure's answers held back while a page opened with `hold` waits (its `release()` lets them go).
+  let held = null;
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));
   const json = (response, body) => { response.setHeader('Content-Type', 'application/json'); response.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
   const binary = (response, bytes) => { response.setHeader('Content-Type', 'application/octet-stream'); response.end(bytes); };
@@ -82,7 +87,11 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
       if (rest === '/api/v1/server') { json(response, { app: 'cad-viewer' }); return; }
       if (rest === '/api/v1/look') { json(response, LOOK); return; }
       if (rest === '/api/v1/look/environment') { binary(response, ENVIRONMENT); return; }
-      if (rest === `${DOC}/structure`) { json(response, served.structure); return; }
+      if (rest === `${DOC}/structure`) {
+        const answer = () => json(response, served.structure);
+        if (held) held.push(answer); else answer();
+        return;
+      }
       // The engine answers a version wait at once with the version it holds: the page paces its next ask.
       if (rest === '/api/v1/documents/bracket/version') { json(response, { version: served.version, patch: null }); return; }
       const part = /^\/parts\/([0-9a-f]+)$/.exec(rest.slice(DOC.length));
@@ -110,10 +119,13 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
   /**
    * One page over the bracket. `deviceScaleFactor: 1` keeps a screenshot's pixels the viewport's.
    * Its `update()` serves a new version of the document, as a build that changed none of its parts
-   * writes one, and settles once the page shows it.
+   * writes one, and settles once the page shows it. `part`: the plate alone, a part file. `hold`: the
+   * structure held back until its `release()`, the view as it is before the file arrives. `width`: the page's.
    */
-  const open = async ({ timeout = 30000 } = {}) => {
-    const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1 });
+  const open = async ({ timeout = 30000, part = false, hold = false, width = VIEWPORT.width } = {}) => {
+    if (part || served.structure === plate) served = { version: VERSION, structure: part ? plate : initial };
+    if (hold) held = [];
+    const page = await browser.newPage({ viewport: { ...VIEWPORT, width }, deviceScaleFactor: 1 });
     t.after(() => page.close().catch(() => {}));
     page.setDefaultTimeout(timeout);
     const errors = [];
@@ -128,7 +140,8 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
       // The page hears it on its next wait (about a second), reads it and puts it on screen.
       await page.waitForFunction(version => window.__cadViewerLoad?.complete && window.__cadViewerLoad.modelKey.endsWith(`:${version}`), next.version);
     };
-    return { page, errors, pane: page.getByTestId('one'), update };
+    const release = () => { const waiting = held || []; held = null; for (const answer of waiting) answer(); };
+    return { page, errors, pane: page.getByTestId('one'), update, release };
   };
   return { open };
 }

@@ -1,9 +1,10 @@
 import { createToolModes } from "../kit/tools/toolModes.js";
 
 // A GLB's tools: Select picks its nodes — what Quick Edit names (`model.glb#n12`, the file's
-// `nodes[12]`) — Pencil, Shapes, Measure (approximate, in glTF's metres); then Explode where it has several
-// rigid nodes that draw, and Clip, popovers from their tiles, never a tool in hand. Its clips play from
-// the playbar under the model.
+// `nodes[12]`) — Draw (the strip's one drawing tool, over the `pencil` and `shapes` modes), Measure (approximate, in
+// glTF's metres); then Explode where it has several rigid nodes that draw, and Clip, each a tool of the strip as Draw
+// is, its row under the strip (`kit/tools/model-effects/ModelTools.jsx`). Its clips play in the panel's Animation tab
+// (`AnimationSection.jsx`), and in Preview on its playbar.
 export const GLB_TOOL = Object.freeze({ SELECT: "select", PENCIL: "pencil", SHAPES: "shapes", MEASURE: "measure" });
 
 export const GLB_TOOL_MODES = createToolModes({

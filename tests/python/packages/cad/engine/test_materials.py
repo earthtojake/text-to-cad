@@ -162,6 +162,37 @@ class MaterialsTest(unittest.TestCase):
         self.assertEqual([product["material"]["material"]["density"] for product in header["products"]
                           if product.get("material")], [2700.0])
 
+    def test_a_step_states_each_density_in_grams_per_cubic_centimetre(self):
+        """OCCT's writer leaves a density's value untyped and names its unit gram³·cm², its gram a
+        bare SI unit: the export types it and states the unit as the number is, g/cm³, the gram as
+        0.001 kg (``export.step._density_units``), and the file reads back the same density."""
+        import re
+
+        shape = bd.Box(10, 10, 10)
+        shape.material = metals.aluminum()  # 2.7 g/cm^3
+        self.roundtrip(shape)
+        path = self.folder / "grams.step"
+        export.translate(export.Source.read(self.folder / "test.xbf"), "step", path)
+        data = path.read_text(encoding="latin-1")
+        records = dict(re.findall(r"^#(\d+) = (.*?);$", data, re.M | re.S))
+        units = re.findall(r"MEASURE_REPRESENTATION_ITEM\('density',POSITIVE_RATIO_MEASURE\([^,]+\),#(\d+)\)", data)
+        self.assertEqual(len(units), 1, "the density is typed")
+        stated = []
+        for element in re.findall(r"#(\d+)", records[units[0]]):
+            named, exponent = re.fullmatch(r"DERIVED_UNIT_ELEMENT\(#(\d+),(.*)\)", records[element]).groups()
+            stated.append((records[named], float(exponent)))
+        (gram, one), (centimetre, minus_three) = stated
+        self.assertEqual((one, minus_three), (1.0, -3.0))
+        self.assertIn("SI_UNIT(.CENTI.,.METRE.)", centimetre)
+        # The gram is 0.001 of SI's unit of mass, the kilogram, as NIST's analyzer wants it.
+        measure, exponents = re.fullmatch(r"\( CONVERSION_BASED_UNIT\('gram',#(\d+)\) MASS_UNIT\(\) "
+                                          r"NAMED_UNIT\(#(\d+)\) \)", gram).groups()
+        kilogram = re.fullmatch(r"MASS_MEASURE_WITH_UNIT\(MASS_MEASURE\(0\.001\),#(\d+)\)", records[measure]).group(1)
+        self.assertEqual(records[kilogram], "( MASS_UNIT() NAMED_UNIT(*) SI_UNIT(.KILO.,.GRAM.) )")
+        self.assertEqual(records[exponents], "DIMENSIONAL_EXPONENTS(0.,1.,0.,0.,0.,0.,0.)")
+        density = [prototype["material"]["material"]["density"] for prototype in export.Source.read(path).structure["prototypes"]]
+        self.assertEqual(density, [2700.0])
+
     def test_a_step_s_user_defined_attributes_are_no_materials(self):
         """A CAD tool writes a part's parameters as user-defined attributes, which OCCT's reader takes for materials
         named for the parameter: no material is read of one, by the document loader or the reader process's parse;

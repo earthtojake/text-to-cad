@@ -55,7 +55,7 @@ export const PROBE_MS = 5_000;
 
 /**
  * Whether this page can reach the engine directly: one cheap authenticated read (`/api/v1/server`,
- * what the engine is), answered by the CAD Viewer itself. A sandbox's CSP, a host's network rules,
+ * what the engine is), answered by the viewer itself. A sandbox's CSP, a host's network rules,
  * an engine gone or a link refused all come out as false.
  */
 export async function probeEngine(reach: Pick<EngineReach, 'origin' | 'link'>, fetchImpl: typeof fetch = globalThis.fetch,

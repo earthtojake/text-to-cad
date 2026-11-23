@@ -11,15 +11,13 @@ import { buildRobotTree, robotLinkFacts, robotLinkNodeId } from "./robotTree.js"
 const EMPTY = Object.freeze([]);
 
 /**
- * A robot's picks described, as the Selected pane, their chips' cards and the hover tip read them
+ * A robot's picks described, as their chips' cards and the hover tip read them
  * (`kit/inspector/inspect.js`): a link by its name (`robotLinkItem`), a named mesh object by its id
  * (`robotComponentItem`). Null for neither.
  *
- * @param {{ robot: object | null, components?: object[], selectLink?: ((name: string) => void) | null,
- *   onOpenFile?: ((path: string) => void) | null, groupNamesByLink?: Map<string, string[]> | null,
- *   resource?: import("@cad/core/prompt").ResourceRef | null }} options
+ * @param {{ robot: object | null, components?: object[], selectLink?: ((name: string) => void) | null }} options
  */
-export function useRobotDescribe({ robot, components = EMPTY, selectLink = null, onOpenFile = null, groupNamesByLink = null, resource = null }) {
+export function useRobotDescribe({ robot, components = EMPTY, selectLink = null }) {
   const { t } = useI18n();
   // A link named in a card can be followed when the Links tree has its row: a frame-only root has none.
   const tree = useMemo(() => (robot ? buildRobotTree(robot, { components }) : null), [robot, components]);
@@ -27,12 +25,11 @@ export function useRobotDescribe({ robot, components = EMPTY, selectLink = null,
     const component = components.find(item => item.id === id);
     if (component) return robotComponentItem(component, t);
     if (!robot || !tree) return null;
-    const facts = robotLinkFacts(robot, id, { groupNamesByLink });
+    const facts = robotLinkFacts(robot, id);
     if (!facts || !(robot.links || []).some(link => String(link?.name || "") === id)) return null;
     const hasLinkRow = name => tree.nodesById.has(robotLinkNodeId(name));
-    const reference = resource?.kind === "workspace-file" && isLabelSelector(String(id || "")) ? id : "";
-    return robotLinkItem(facts, { reference, onOpenFile, onSelectLink: selectLink, hasLinkRow, t });
-  }, [robot, tree, components, selectLink, onOpenFile, groupNamesByLink, resource, t]);
+    return robotLinkItem(facts, { onSelectLink: selectLink, hasLinkRow, t });
+  }, [robot, tree, components, selectLink, t]);
 }
 
 /**
@@ -56,24 +53,18 @@ export function useRobotTip({ robot, components = EMPTY }) {
  * mesh objects, each described (`describe`), what the pointer is on in the view (`pointed`), and what a
  * row does — a link's selects that link, an object's that object.
  */
-export function useRobotInspect({ selection, components = EMPTY, describe, tip = null, frame = null, copyText = null, enabled = true }) {
-  const { selectedLinkNames, selectedComponentIds, selectLink, select, hoverLink, hover, pointed } = selection;
-  const selected = useMemo(() => [...selectedLinkNames, ...selectedComponentIds], [selectedLinkNames, selectedComponentIds]);
-  const isComponent = useCallback(id => components.some(component => component.id === id), [components]);
-  const pick = useCallback((id, options) => (isComponent(id) ? select(id, options) : selectLink(id, options)), [isComponent, select, selectLink]);
-  const light = useCallback(id => (isComponent(id) ? hover(id) : hoverLink(id)), [isComponent, hover, hoverLink]);
-  return useMemo(() => (enabled ? { selected, describe, tip, hovered: pointed || "", select: pick, hover: light, frame, copyText, data: "links" } : null),
-    [enabled, selected, describe, tip, pointed, pick, light, frame, copyText]);
+export function useRobotInspect({ selection, describe, tip = null, enabled = true }) {
+  const { pointed } = selection;
+  return useMemo(() => (enabled ? { describe, tip, hovered: pointed || "", data: "links" } : null), [enabled, describe, tip, pointed]);
 }
 
 /**
  * What is selected in a robot, for Quick Edit: its references — each selected link by name, and a
  * selected mesh object by the link it belongs to, in the file on screen (`resource`) — and its
  * chips (`kit/tools/quick-edit/ReferenceChips.jsx`): a link or an object each, its card what the
- * description says of it (`describe`, the Selected pane's: a link's inertial, geometry and joints;
+ * description says of it (`describe`: a link's inertial, geometry and joints;
  * an object's link, triangles and size), lit in the view while the pointer rests on it, dropped from
- * the selection by its X. A click on a chip copies its link's reference (`/path/robot.urdf#upper_arm`);
- * a link's card shows its name as its ID.
+ * the selection by its X. A click on a chip copies its link's reference (`/path/robot.urdf#upper_arm`).
  *
  * @param {{ robot: object | null, components?: object[], selection: ReturnType<typeof import("./useLinkSelection.js").useLinkSelection>,
  *   resource: import("@cad/core/prompt").ResourceRef | null, describe: (id: string) => object | null }} options
@@ -88,11 +79,11 @@ export function useRobotReferences({ robot, components = EMPTY, selection, resou
     const references = names.map(reference).filter(Boolean);
     const copy = name => { const value = reference(name); return value ? { copy: formatPromptReference(value) } : {}; };
     const chips = [
-      ...selectedLinkNames.map(name => ({ key: `link:${name}`, label: name, glyph: "solid", ...copy(name), ...(reference(name) ? { id: name } : {}),
+      ...selectedLinkNames.map(name => ({ key: `link:${name}`, label: name, glyph: "solid", group: "link", ...copy(name),
         detail: robot ? describe(name) : null,
         onRemove: () => selectLink(name, { multiSelect: true }),
         onHover: on => hoverLink(on ? name : "") })),
-      ...objects.map(component => ({ key: `object:${component.id}`, label: component.name || component.link, glyph: "solid", ...copy(component.link),
+      ...objects.map(component => ({ key: `object:${component.id}`, label: component.name || component.link, glyph: "solid", group: "object", ...copy(component.link),
         detail: describe(component.id),
         onRemove: () => select(component.id, { multiSelect: true }),
         onHover: on => hover(on ? component.id : "") })),

@@ -61,10 +61,8 @@ class SkillDocs(unittest.TestCase):
             self.assertIn(f"`{name}`", text)
 
     def test_the_nodal_peak_is_the_one_documented_as_usually_higher(self):
-        for path in (SKILL / "SKILL.md", SKILL / "references" / "linear-static.md"):
-            text = " ".join(path.read_text(encoding="utf-8").split())
-            with self.subTest(page=path.name):
-                self.assertIn("usually the higher of the two", text)
+        text = " ".join((SKILL / "SKILL.md").read_text(encoding="utf-8").split())
+        self.assertIn("usually the higher of the two", text)
 
     def test_the_description_is_short_and_every_reference_page_is_linked(self):
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8")

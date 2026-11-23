@@ -13,7 +13,9 @@ the machine frame's. The families, and how each is measured:
 - ``holes`` (``_dfm_cnc_holes``): concave cylinders and their coaxial neighbours; diameter, depth (the drilled
   length below any counterbore; ``overall_depth_mm`` the whole), blind or through by an exact ray along the
   axis, the floor (drill point and its angle, or flat), counterbores (each with its own depth to diameter),
-  countersinks, the standard drill each diameter is.
+  countersinks, the standard drill each diameter is; and its mouth (``mouths``, once the threads are known):
+  whole, or cut by a wall that rises along the hole's axis -- a cavity's, a step's, the part's side --, with
+  how far the hole reaches past it (a partial hole).
 - ``pockets``: one cavity model (``_pockets``). Every planar face that meets, by a concave edge (or through
   a concave root fillet), a face that rises from it is a pocket's floor; a face rises where it lies along the
   floor's normal or is drafted back from it (``Model.rises``, ``DRAFT_MAX_DEG``), so a drafted, lofted or
@@ -127,6 +129,7 @@ from cad._internal.dfm import cnc as rules_side
 from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG
 from cad.build123d import _dfm_brep as brep
 from cad.build123d._dfm_cnc_holes import holes as find_holes
+from cad.build123d._dfm_cnc_holes import mouths as find_mouths
 from cad.build123d._dfm_cnc_holes import threads as find_threads
 from cad.build123d._dfm_cnc_model import (LIFT, RUNS_UP, SAME, WORLD, Model, Stations, about, directions_for,
                                           edge_normals, framed, machine_frame, nearest_world, stations, stations_at,
@@ -139,7 +142,7 @@ CAP = 200
 #: A part of more faces than this is not measured, and said (``model``: not measured, never passed): the rays a
 #: check casts grow with the faces, and each costs with the edges of the face it crosses -- a plate of 144 holes
 #: (150 faces) takes 9 seconds and one of 576 (582 faces) a minute, about the faces' count to the power 1.4, so
-#: a part at this bound takes about a quarter of an hour and one of 20000 faces over two hours. text-to-cad's
+#: a part at this bound takes about a quarter of an hour and one of 20000 faces over two hours. cad's
 #: own bound: it keeps a check of a large part inside a check's time limit, past which the check is stopped.
 FACE_BUDGET = 4000
 WALL_CAP_MM = 5.0
@@ -267,7 +270,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         copy = copies.get(index)
         if len(part.faces()) > FACE_BUDGET:
             failed.setdefault("model", f"{part.name}: {len(part.faces())} faces, over the {FACE_BUDGET} a check "
-                              "measures in one part (text-to-cad's own bound: a check's time grows with the "
+                              "measures in one part (cad's own bound: a check's time grows with the "
                               "square of a part's faces, a part of that many taking a quarter of an hour): not "
                               "measured (check its features in smaller pieces, or without its pattern of fine "
                               "detail)")
@@ -637,6 +640,7 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
     threads, thread_faces = found_threads if found_threads else ([], set())
     families.setdefault("threads", []).extend(threads)
     state["thread_faces"] = thread_faces
+    run("holes", lambda: find_mouths(model, holes, thread_faces))
     voids = run("voids", lambda: _voids(model)) or []
     # a modelled thread's flanks are a tap's or a thread mill's, not the end mill's: no rule of reach, walls
     # or gaps reads them (the threads family does)
@@ -1673,7 +1677,7 @@ def _sharp_edges(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             special.append((edge, way, note.get("angle")))
         if way is not None and (note.get("narrow") or note.get("obtuse_root")):
             # made, and said: a slot cutter's opening narrower than its recess is tall, or a profile's obtuse
-            # root side-milling leaves the tool's radius in (warnings, text-to-cad's own judgements)
+            # root side-milling leaves the tool's radius in (warnings, cad's own judgements)
             extra = {"reason": "narrow_opening", "opening_mm": round(note["narrow"][0], 4),
                      "recess_mm": round(note["narrow"][1], 4)} if note.get("narrow") else \
                 {"reason": "obtuse_root", "more_setups": "two more setups", "_normals": (n1, n2)}
@@ -1841,7 +1845,7 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
     cutter's disc no wider than the bore it comes down, its shank inside it; a slot or dovetail cutter's
     plunged through an opening at least as wide as the disc somewhere along the edge, or fed in at the
     recess's own level from a side it opens to (else the edge is unmade, ``no_way_in``). A slot cutter's
-    opening narrower than the recess is tall (the disc's thickness: text-to-cad's own figure) is said
+    opening narrower than the recess is tall (the disc's thickness: cad's own figure) is said
     (``narrow_opening``). A chamfer mill of 60, 90 or 120 degrees makes a V along its bisector; a V of another
     angle is a special V cutter's (the angle said), or on five axes a standard mill tilted to each flank in
     turn (each flank a setup). A square end mill also makes it along any direction a setup presents (the
@@ -2004,7 +2008,7 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
                             continue
                     reached[k] = True
                     # can the disc get here? The least disc reaching the station from the opening (its shank of
-                    # no breadth, at the opening's near side): geometry alone, no figure of text-to-cad's
+                    # no breadth, at the opening's near side): geometry alone, no figure of cad's
                     first = int(np.argmax(out))
                     shut = np.flatnonzero(~out[first:])
                     last = first + (int(shut[0]) - 1 if len(shut) else len(out) - 1 - first)
@@ -3009,7 +3013,7 @@ _RAN = {"holes": ("holes", "counterbores"), "access": ("access", "setups"),
 _FAMILIES = ("holes", "counterbores", "threads", "pockets", "internal_corners", "sharp_edges", "knife_edges", "walls", "gaps",
              "access", "setups", "voids", "stock", "small_features")
 _ORDER: dict[str, Callable[[dict[str, Any]], Any]] = {
-    "holes": lambda item: -(item["depth_to_diameter"] or 0),
+    "holes": lambda item: (-item["past_wall_mm"], -(item["depth_to_diameter"] or 0)),
     "counterbores": lambda item: -(item["depth_to_diameter"] or 0),
     "pockets": lambda item: -(item["depth_to_width"] or 0),
     "internal_corners": lambda item: item["radius_mm"],

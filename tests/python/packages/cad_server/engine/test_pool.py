@@ -591,6 +591,8 @@ class DaemonPoolTest(unittest.TestCase):
         # The runners' standby is off; and the host's memory pressure, which keeps a standby from
         # starting, is no part of this test (``CAD_ENGINE_PRESSURE``).
         env = {**self.env, "CAD_ENGINE_WORKERS": "", "CAD_ENGINE_STANDBY": "1", "CAD_ENGINE_PRESSURE": "0"}
+        self.cli("stop")
+        engine_daemon.start(env)  # what the server reads of its environment, it reads as it starts
 
         def standby(besides: int | None = None) -> dict:
             found: dict = {}

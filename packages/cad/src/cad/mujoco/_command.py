@@ -84,4 +84,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from cad._internal.streams import utf8
+
+    utf8()  # this runner's own lines are the command's: on Windows, UTF-8 to a pipe or a file
     raise SystemExit(main())

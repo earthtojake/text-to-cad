@@ -12,11 +12,13 @@ Usage:
   scripts/release/check-version.sh [--incremented-from REF]
 
 Checks that VERSION contains a valid canonical release version, that the four
-distributions (the library, the server, the shim and the alias) are that
-version and pin each other at it (`cad==<version>`), that it is not one PyPI will never take
-(scripts/release/unavailable-versions.txt), and that the one-line installer's
-scripts fall back to it. main is the source branch AND what installers clone,
-so a stale pin ships.
+projects (cad and its three aliases) are that version and require cad at it
+(`cad==<version>`), that it is not one PyPI will never take
+(scripts/release/unavailable-versions.txt), that every plugin manifest names it,
+that Codex's server
+line runs it (`cad@<version> mcp`) and that each skill names it as the cad it was
+written for (`cad==<version>`), with no command pinned to a version. main is the
+source branch AND what installers clone, so a stale version ships.
 With --incremented-from, also checks that the current version is greater than
 the version at REF (a commit, branch, or release tag -- `v0.5.0` or the bare
 `0.4.28` spelling releases before 0.5.0 used; the VERSION file at that commit
@@ -69,37 +71,66 @@ if [ -n "$BASE_REF" ]; then
   "$SCRIPT_DIR/bump-version.sh" --check-incremented-from "$BASE_REF"
 fi
 
-# The four distributions' versions and their pins of the library must name THIS version. The release
-# PR stamps them (sync-version.mjs) alongside VERSION; another version means the two moved separately.
+# The four projects' versions (cad and its aliases) and every release a file names (`cad==X`, `cad@X`) must be THIS
+# version. The release PR stamps them (sync-version.mjs) alongside VERSION; another version means the two moved
+# separately.
 stale=0
-# A pin names the library (`cad`, with an extra or not), the server or the shim, standing alone: `cad` at
-# the end of another name (`my-cad==`) is none of them. grep -o keeps the character before the name,
-# which `pins` takes off.
-PIN='(^|[^[:alnum:]_.-])cad(-server|-mcp)?(\[[a-z0-9_,.-]+\])?==[^[:space:]`"'"'"']+'
-pins() { grep -oE -- "$PIN" "$1" | sed -E 's/^[^c]//' || true; }
-for project in packages/cad packages/cad-server packages/cad-mcp packages/aliases/cadgen; do
+# cad as a requirement (`cad==X`, with an extra or not) or as uvx runs it (`cad@X`), standing alone (`my-cad==` and
+# `text-to-cad@earthtojake` are other names), at a version. grep -o keeps the character before the name, which `pins`
+# takes off.
+PIN='(^|[^[:alnum:]_.-])cad(\[[a-z0-9_,.-]+\])?(==|@)[0-9][^[:space:]`"'"'"')]*'
+pins() { grep -rhoE --include='*.md' --include='*.toml' --include='*.json' -- "$PIN" "$@" | sed -E 's/^[^c]//' || true; }
+check_pins() {  # where, then the pins found there: each must name $version
+  local where="$1" pin
+  while IFS= read -r pin; do
+    [ -n "$pin" ] || continue
+    if [ "$(printf '%s' "$pin" | sed -E 's/^[^=@]*(==|@)//')" != "$version" ]; then
+      echo "$where names $pin; expected $version" >&2
+      stale=1
+    fi
+  done <<< "$2"
+}
+for project in packages/cad packages/aliases/*; do
   declared="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' "$project/pyproject.toml")"
   if [ "$declared" != "$version" ]; then
     echo "$project/pyproject.toml is ${declared:-unversioned}; expected $version" >&2
     stale=1
   fi
-  while IFS= read -r pin; do
-    if [ "${pin##*==}" != "$version" ]; then
-      echo "$project/pyproject.toml pins $pin; expected ${pin%%==*}==$version" >&2
-      stale=1
-    fi
-  done < <(pins "$project/pyproject.toml")
+  check_pins "$project/pyproject.toml" "$(pins "$project/pyproject.toml")"
 done
-# The one-line installer falls back to the release it was published with.
-for script in scripts/install/install.sh scripts/install/install.ps1; do
-  fallback="$(sed -n -e 's/^CAD_VERSION="\([^"]*\)"$/\1/p' -e 's/^[[:space:]]*\$CadVersion = "\([^"]*\)"$/\1/p' "$script")"
-  if [ "$fallback" != "$version" ]; then
-    echo "$script falls back to ${fallback:-(no stamped version)}; expected $version" >&2
+# Every plugin manifest says the release it is (each `"version"` field, a catalog's plugin entries
+# too), and the one server config, Codex's, starts that release's server (`cad@<version> mcp`).
+for manifest in .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json \
+    .cursor-plugin/plugin.json .grok-plugin/plugin.json .antigravity-plugin/plugin.json \
+    .kimi-plugin/plugin.json .devin-plugin/plugin.json .muse-plugin/plugin.json .muse-plugin/marketplace.json \
+    gemini-extension.json; do
+  declared="$(grep -oE '"version": *"[^"]*"' "$manifest" | sed -E 's/.*"([^"]*)"$/\1/' | sort -u)"
+  if [ "$declared" != "$version" ]; then
+    echo "$manifest names version ${declared:-(none)}; expected $version" >&2
     stale=1
   fi
 done
+configured="$(pins codex.mcp.json)"
+if ! printf '%s\n' "$configured" | grep -q '^cad@'; then
+  echo "codex.mcp.json starts no server of a release (cad@$version mcp)" >&2
+  stale=1
+fi
+check_pins codex.mcp.json "$configured"
+# Each skill's setup block names the cad it was written for (`cad==<version>`); no command names a version.
+if [ -d skills ]; then
+  written_for="$(pins skills)"
+  if ! printf '%s\n' "$written_for" | grep -q '^cad=='; then
+    echo "no skill names the cad it was written for (cad==$version)" >&2
+    stale=1
+  fi
+  check_pins skills/ "$(printf '%s\n' "$written_for" | sort -u)"
+  if grep -rlE --include='*.md' -- '(^|[^[:alnum:]_.-])cad(\.exe)? \+' skills >&2; then
+    echo "the files above run a command pinned to a version (cad +<version>); commands are plain cad" >&2
+    stale=1
+  fi
+fi
 if [ "$stale" -ne 0 ]; then
   echo "Run node scripts/release/sync-version.mjs to stamp the pins from VERSION." >&2
   exit 1
 fi
-echo "The four distributions, their pins and the installer's fallback match VERSION ($version)."
+echo "The four projects, the plugin manifests, Codex's server line and the skills match VERSION ($version)."

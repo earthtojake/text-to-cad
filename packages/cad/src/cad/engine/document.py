@@ -81,6 +81,10 @@ ANIMATIONS_GUID = "196117b9-7763-467d-8c37-7f838602e8a5"
 # What a part declares for a robot description (``declarations``), on its label: its named frames and
 # the rest (``DECLARED``), as ``declarations_key`` writes them; none on a part that declares nothing.
 DECLARATIONS_GUID = "8d3b6f2a-4c71-4e9b-a5d8-1f0c7e2b9a64"
+# The parameters the model's script declares, on its main label after the animations (``parameters.record``):
+# what each is and holds (name, value, kind, min, max, step, unit), never where the code keeps it; none on
+# a document whose script declares none, so such a document's bytes are what they were before the record.
+PARAMETERS_GUID = "5b0e7c93-2f4d-4a68-9d31-c6a8e04f7b25"
 _XCAF_LOCK = threading.RLock()
 # The last document ``to_xcaf`` made and its tree; per path, the tree last saved there.
 _MADE: list = []
@@ -149,6 +153,9 @@ class Tree:
     # The model's build closure (``previous.manifest``, as text), written on the main label;
     # None for none.
     closure: str | None = None
+    # The parameters its script declares (``parameters.record``, as text), written on the main label;
+    # None for none.
+    parameters: str | None = None
     # What ``collect`` made of the result's joints, sequences and animations (``Harvest``), and
     # whether it was handed back rather than made (``collect``'s ``harvested``).
     harvest: "Harvest | None" = None
@@ -741,9 +748,11 @@ class Kept:
         # The last conversion: how many prototypes it converted, and whether it patched.
         self.converted = 0
         self.patched = False
-        # The build closure the document holds (``Tree.closure``), and its animations' record.
+        # The build closure the document holds (``Tree.closure``), its animations' record and its
+        # parameters' (``Tree.parameters``).
         self.closure: str | None = None
         self.animations: str | None = None
+        self.parameters: str | None = None
 
 
 def to_xcaf(tree: Tree, kept: Kept | None = None) -> Any:
@@ -925,6 +934,9 @@ def _convert(tree: Tree, records: list[_Record], kept: Kept) -> Any:
     if animated is not None:
         TDataStd_AsciiString.Set_s(doc.Main(), Standard_GUID(ANIMATIONS_GUID), TCollection_AsciiString(animated))
     kept.animations = animated
+    if tree.parameters is not None:
+        TDataStd_AsciiString.Set_s(doc.Main(), Standard_GUID(PARAMETERS_GUID), TCollection_AsciiString(tree.parameters))
+    kept.parameters = tree.parameters
     labels: list = []
     for at, (prototype, record) in enumerate(zip(tree.order, records)):
         if isinstance(prototype, Part):
@@ -975,9 +987,10 @@ def _patch(kept: Kept, tree: Tree, records: list[_Record]) -> Any:
     labels = [converter.label(at) for at in range(min(len(records), len(old)))] + [None] * (len(records) - len(old))
     kept.converted, kept.patched = len(dirty), True
     animated = _animations_record(tree)
-    if (tree.closure is None) != (kept.closure is None) or (animated is None) != (kept.animations is None):
+    if (tree.closure is None) != (kept.closure is None) or (animated is None) != (kept.animations is None) \
+            or (tree.parameters is None) != (kept.parameters is None):
         return None  # the main label's attributes in a cold conversion's order: made whole
-    if tree.closure != kept.closure or animated != kept.animations:
+    if tree.closure != kept.closure or animated != kept.animations or tree.parameters != kept.parameters:
         from OCP.Standard import Standard_GUID
         from OCP.TCollection import TCollection_AsciiString
         from OCP.TDataStd import TDataStd_AsciiString
@@ -988,6 +1001,10 @@ def _patch(kept: Kept, tree: Tree, records: list[_Record]) -> Any:
         if animated != kept.animations:
             TDataStd_AsciiString.Set_s(doc.Main(), Standard_GUID(ANIMATIONS_GUID), TCollection_AsciiString(animated))
             kept.animations = animated
+        if tree.parameters != kept.parameters:
+            TDataStd_AsciiString.Set_s(doc.Main(), Standard_GUID(PARAMETERS_GUID),
+                                       TCollection_AsciiString(tree.parameters))
+            kept.parameters = tree.parameters
     if not dirty and not gone and tables == kept.tables and converter.mechanism(tree, labels) == kept.mechanism:
         return doc
     # The references a label makes, ordered by their labels' places: each colour's,
@@ -1529,6 +1546,14 @@ class Loaded:
 
         return from_record(_label_text(self.doc.Main(), ANIMATIONS_GUID))
 
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        """The parameters the document records (``parameters.record``): each its name, value, kind, min,
+        max, step and unit, as the script that built it declared them; ``[]`` for a document with none."""
+        from cad.engine.parameters import recorded
+
+        return recorded(_label_text(self.doc.Main(), PARAMETERS_GUID))
+
     def structure(self) -> dict[str, Any]:
         """The document as the page reads it (``serve``): its prototypes, its instances
         and its tree, with every name and colour, and its mechanism (``kinematics``,
@@ -1561,6 +1586,9 @@ class Loaded:
         animated = _animations_listed(self.animations)
         if animated:
             found["animations"] = animated
+        declared = self.parameters
+        if declared:
+            found["parameters"] = declared
         return found
 
 
@@ -1676,6 +1704,10 @@ def tree_structure(tree: Tree, path: Path) -> dict[str, Any]:
     animated = _animations_listed(tree.animations)
     if animated:
         found["animations"] = animated
+    if tree.parameters:
+        from cad.engine.parameters import recorded
+
+        found["parameters"] = recorded(tree.parameters)
     return found
 
 

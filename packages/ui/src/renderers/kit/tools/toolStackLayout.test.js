@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   DEFAULT_TOOL_STACK, TOOL_PANEL_MIN_HEIGHT, TOOL_PANEL_WIDTH,
-  clampToolPanelHeight, clampToolPanelWidth, flatDetailHeight, normalizeToolStack, toolPanelDefaultHeight
+  clampToolPanelHeight, clampToolPanelWidth, normalizeToolStack, toolPanelDefaultHeight
 } from "./toolStackLayout.js";
 
 test("the layout is the sizes a person set, by panel, and the folded panels — nothing else, whatever a store hands back", () => {
@@ -29,7 +29,7 @@ test("the view's panel's old shared width reads as a panel's until the panel dro
     { flat: { width: 260 } });
 });
 
-test("every panel is a six-tool strip wide; a resizable one is only ever wider, up to half the viewer", () => {
+test("every panel is 164px wide (six of the strip's old 24px buttons); a resizable one is only ever wider, up to half the viewer", () => {
   assert.equal(TOOL_PANEL_WIDTH, 6 * 24 + 5 * 2 + 2 * 4 + 2 * 1);
   assert.equal(TOOL_PANEL_WIDTH, 164);
   assert.equal(clampToolPanelWidth(300, 1280), 300);
@@ -52,14 +52,3 @@ test("every resizable panel opens capped at the whole stack, on desktop and phon
   assert.equal(toolPanelDefaultHeight(0), null, "an unmeasured stack sets no cap yet");
 });
 
-test("the Selected pane is 40% of the panel whatever is picked, with no ceiling, and a person's height wins within the bounds", () => {
-  assert.equal(flatDetailHeight({ panelHeight: 800 }).height, 320);
-  assert.equal(flatDetailHeight({ panelHeight: 1164 }).height, 466, "a tall panel, a tall pane: no 320px ceiling");
-  assert.equal(flatDetailHeight({ panelHeight: 684 }).height, 274);
-  assert.equal(flatDetailHeight({ panelHeight: 900, content: 50 }).height, 360, "what it holds does not size it");
-  assert.equal(flatDetailHeight({ panelHeight: 200 }).height, 96, "never under the minimum");
-  assert.equal(flatDetailHeight({ panelHeight: 900, kept: 200 }).height, 200);
-  assert.deepEqual(flatDetailHeight({ panelHeight: 400, kept: 300 }), { height: 240, max: 240 }, "the lists keep 160px");
-  assert.equal(flatDetailHeight({ panelHeight: 0 }).height, 96, "unmeasured: the minimum");
-  assert.equal(flatDetailHeight({ panelHeight: 900, kept: 200, draft: 400 }).height, 400, "a drag wins over the kept height");
-});

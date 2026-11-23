@@ -172,8 +172,8 @@ const origin = value => (value && numbers(value.xyz) && numbers(value.rpy) ? val
  * What the description says about one link, for the details pane: the payload's link facts
  * (inertial, visuals and collisions as written, with the host path of a mesh file), its
  * parent joint with limits, origin and mimic, its child joints, and the SRDF's groups and
- * end effectors on it. Only facts the payload carries are returned: an SDF model, for one,
- * records no mass.
+ * end effectors on it. Only facts the payload carries are returned: a link with no inertial, for
+ * one, has no mass.
  */
 export function robotLinkFacts(robot, linkName) {
   const name = text(linkName);

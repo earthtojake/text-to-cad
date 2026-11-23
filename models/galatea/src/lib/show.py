@@ -2,7 +2,7 @@
 
 It is no part of the mechanism: the document's joints, states and motions know nothing of
 it, and a STEP shows none of it. Every GLB exported from the model carries it as the clip
-`explode`, which the CAD Viewer's playbar plays and `film.py` renders.
+`explode`, which the viewer's playbar plays and `film.py` renders.
 
 It comes apart in two stages, with a hold after each, and comes back:
 

@@ -2,12 +2,13 @@ import {
   DropdownMenuCheckboxItem, DropdownMenuInlineSub, DropdownMenuInlineSubContent, DropdownMenuInlineSubTrigger, DropdownMenuLabel,
   DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger
 } from "@cad/ui/primitives/dropdown-menu";
+import { FieldLabel } from "@cad/ui/primitives/field-label";
 import { cn } from "@cad/ui/utils";
 import { useI18n } from "@cad/ui/i18n";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { useStripTouch } from "../stripTouch.js";
 
-// The rows of a picking tool's chevron menu (settings-ui.md, "Select's menu"), one anatomy for every
+// The rows of a picking tool's chevron menu (`docs/viewer-ux.md`, "Select's menu"), one anatomy for every
 // file: an optional "Selection tool" section (`SelectionToolSection`), then ONE row, "Filter"
 // (`FilterRow`), a stock submenu whose row names it and shows what is ticked, muted, at its right. No
 // renderer builds a row of its own.
@@ -23,8 +24,8 @@ import { useStripTouch } from "../stripTouch.js";
 function SettingSubmenu({ label, value, rowProps = null, children }) {
   const inline = useStripTouch();
   const head = <>
-    <span className="min-w-0 flex-1 truncate">{label}</span>
-    <span className="shrink-0 text-muted-foreground">{value}</span>
+    <FieldLabel className="flex-1">{label}</FieldLabel>
+    <span className="shrink-0 text-foreground">{value}</span>
   </>;
   if (inline) {
     return <DropdownMenuInlineSub>
@@ -41,7 +42,7 @@ function SettingSubmenu({ label, value, rowProps = null, children }) {
   </DropdownMenuSub>;
 }
 
-const HEADING_CLASS = "text-tiny font-normal text-muted-foreground";
+const HEADING_CLASS = "font-normal text-muted-foreground";
 
 /**
  * The "Selection tool" section a menu may open with: how a pick is made, apart from what it takes — one

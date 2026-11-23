@@ -8,6 +8,15 @@ name: Deploy Docs
 # of main is. Releases pass the release commit itself, which carries the bumped
 # VERSION and the stamped apps/docs/package.json the site header reads. To
 # redeploy a past release, pass its tag (`v0.5.0`; bare `0.4.28` before 0.5.0).
+#
+# `preview` deploys the ref as a Vercel preview instead (a branch, to look at before it
+# merges): a URL of its own behind Vercel Authentication, production untouched. Dispatch it
+# from the branch itself, so the run uses that branch's workflow and scripts.
+#
+# The site serves the install command too (scripts/install/, copied in as it builds), which
+# hands the agent apps to PyPI's newest cad. A production deploy asks that cad first whether
+# it has the command they are handed to, and deploys nothing where it has not: main, after a
+# change to the hand-over merged and before the release that carries it.
 
 on:
   workflow_dispatch:
@@ -17,6 +26,11 @@ on:
         required: true
         default: main
         type: string
+      preview:
+        description: Deploy a preview (not production) of the ref.
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       ref:
@@ -28,7 +42,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-docs
+  # A preview never waits behind, or holds up, a production deploy.
+  group: deploy-docs${{ inputs.preview && '-preview' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -58,6 +73,28 @@ jobs:
             exit 1
           fi
 
+      # A production deploy serves this ref's install command, which gets PyPI's newest cad and
+      # hands the agent apps to its `cad plugin install` (on a computer whose cad has none, by
+      # `uv tool run ... cad@latest plugin install`). Served while the newest cad has no such
+      # command, every install from the site fails; so that cad is asked first, by uv, for the
+      # command's help (scripts/release/newest_cad.py: nothing of an install runs), and a no
+      # stops the job here, before anything is built. A release's own deploy passes: Publish
+      # Release calls this once PyPI lists the release.
+      # Not asked: a preview, which serves no install command a person is given (its URL is
+      # behind Vercel Authentication, and install.sh fetches install.py from production), and
+      # is how a branch is looked at before its release; and a ref from before the hand-over
+      # (a past release's tag), which carries no check and needs none.
+      - name: Set up uv
+        if: ${{ !inputs.preview && hashFiles('scripts/release/newest_cad.py') != '' }}
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          # One question, asked of PyPI as it is now: nothing of it is worth keeping for a later run.
+          enable-cache: false
+
+      - name: Check PyPI's newest cad has the command the install command hands over to
+        if: ${{ !inputs.preview && hashFiles('scripts/release/newest_cad.py') != '' }}
+        run: python3 scripts/release/newest_cad.py
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -66,8 +103,9 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@50.28.0
 
-      - name: Deploy docs app to Vercel production
+      - name: Deploy docs app to Vercel
         env:
+          PREVIEW: ${{ inputs.preview && 'true' || 'false' }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_DOCS_PROJECT_ID: ${{ secrets.VERCEL_DOCS_PROJECT_ID }}
@@ -78,6 +116,13 @@ jobs:
               exit 1
             fi
           done
+          if [ "$PREVIEW" = "true" ]; then
+            scripts/github-workflows/deploy-vercel-app.sh \
+              --label "Docs app preview" \
+              --project-id "$VERCEL_DOCS_PROJECT_ID" \
+              --preview
+            exit 0
+          fi
           scripts/github-workflows/deploy-vercel-app.sh \
             --label "Docs app" \
             --project-id "$VERCEL_DOCS_PROJECT_ID" \

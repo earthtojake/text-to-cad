@@ -27,7 +27,10 @@ import { createContext, createElement, useContext, useEffect, useRef, useState }
 export const CONTROLS = Object.freeze(/** @type {const} */ ([
   // The tools on the strip, each one a mode that stays on (its seconds counted), and Preview; Explode
   // and Clip are popovers from their tiles, no mode, counted as used each time one opens (no seconds).
-  'select', 'pencil', 'shapes', 'measure', 'explode', 'clip', 'preview',
+  // Draw is the one drawing tool since Pencil and Shapes became it: `draw` counts it, whichever of its
+  // tools is in hand (each counted as chosen, `pencil_pen` ... `shapes_text`, unchanged); `pencil` and
+  // `shapes`, the two tools it was, no view sends now, but older releases do.
+  'select', 'pencil', 'shapes', 'measure', 'explode', 'clip', 'preview', 'draw',
   // Select's and Measure's filters, a press on each box of their Filter (`selectFilter.js`'s `filterControl`:
   // All, then each kind and extra of every file's); Group faces and Group edges, settings of Select's menu until
   // the view's menu's Select tangent faces and edges replaced them: no view sends them now, but older releases do.
@@ -39,7 +42,8 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'select_filter_sheets', 'select_filter_other',
   'measure_filter_all', 'measure_filter_vertices', 'measure_filter_edges', 'measure_filter_faces',
   'measure_taken', 'measure_delete', 'measure_clear',
-  // Pencil's and Shapes' tools, and what is done to their ink.
+  // Pencil's and Shapes' tools, and what is done to their ink. Fill (`annotate_fill`), gone from the picked ink's bar:
+  // no view sends it now, but older releases do.
   'pencil_pen', 'pencil_highlighter', 'pencil_eraser',
   'shapes_rectangle', 'shapes_line', 'shapes_arrow', 'shapes_ellipse', 'shapes_text',
   'annotate_mark', 'annotate_color', 'annotate_stroke_width', 'annotate_on_surface', 'annotate_on_plane',
@@ -50,6 +54,9 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   // Display and Projection.
   'display_solid', 'display_shaded', 'display_parts', 'display_xray', 'display_hidden_line', 'display_wireframe',
   'display_grid', 'projection_orthographic', 'projection_perspective',
+  // The viewport's Background (Display's), and Home, the View menu's Reset view until Display's card replaced the menu:
+  // no view sends it now, but older releases do.
+  'viewport_background_light', 'viewport_background_dark', 'viewport_background_theme', 'view_home',
   // Preview's settings.
   'preview_settings', 'preview_orbit', 'preview_orbit_speed', 'preview_parts_color_mode', 'preview_parts_colors',
   'preview_parts_color', 'preview_lighting_quality', 'preview_lighting_exposure', 'preview_lighting_rotation',
@@ -57,7 +64,9 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'preview_floor_enabled', 'preview_floor_color', 'preview_floor_opacity', 'preview_floor_placement',
   'preview_floor_finish', 'preview_reset',
   // A model's routines (the playbar, in the tools view and Preview), and its Position.
-  'animation_play', 'animation_clip', 'animation_speed', 'animation_loop', 'animation_autoplay', 'animation_release',
+  'animation_play', 'animation_clip', 'animation_speed', 'animation_loop',
+  // Autoplay, gone: kept so the page, cadgen and the receiver stay one list (released clients still send it).
+  'animation_autoplay', 'animation_release',
   'position_joint', 'position_preset', 'position_reset', 'position_knob',
   // The floating sidebar's sections: no view sends them now, but older releases do, and the three
   // lists are one vocabulary. Then the trees.
@@ -72,6 +81,8 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'look_at', 'isolate', 'view_cube', 'view_cube_drag', 'fit',
   // Quick Edit's Copy, Queue and Send.
   'quick_edit_copy', 'quick_edit_queue', 'quick_edit_send',
+  // Quick Edit's bar coming, and put away by its X: whether it is in the way.
+  'quick_edit_shown', 'quick_edit_dismissed', 'board_side', 'board_dimension',
   // The navbar, its file menu and its name menu's Models and Files (the explorer), and the app menu.
   'navbar_back', 'navbar_forward', 'models', 'models_open', 'models_filter',
   'explorer', 'explorer_filter', 'file_copy_path', 'file_copy_link', 'file_reveal', 'file_open_app', 'home',

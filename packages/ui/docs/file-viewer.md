@@ -54,13 +54,19 @@ file is shown, and again only on `reload`: a renderer follows its file's changes
 itself (every CAD renderer loads the next revision behind what is on screen). A CAD
 file's controls are its own, over the viewport: its tool strip and the tool in hand's
 sub-toolbar, with its panel docked beside it
-([the design system](settings-ui.md#the-views-panel-and-the-tool-stack)); the view's
-controls (Projection, Display, Preview) end its strip, and in Preview its own bar holds
-Preview's, the navbar hidden: nothing of the view is the navbar's.
+([the panel](viewer-ux.md#the-panel)); the view's
+controls (Display, whose card holds a 3D view's Projection, and Preview) stand at the navbar's right end, portalled
+into its view slot (with no navbar they end its strip), and in Preview its own bar holds
+Preview's, the navbar hidden.
 
 Below 600px of its own width FileViewer is mobile (`useViewerMobile`). The width is a
 breakpoint boolean, never a pixel value, so a resize within one layout does not
-re-render the renderer.
+re-render the renderer. Its root says which (`data-viewer-layout`), and the page's stylesheet reads it: a phone's
+type and touch targets a step up, page-wide, so a menu portalled out of the view matches it. Only the page's own
+viewer says so. A viewer that is not the page's (a library card's picture, drawn out of sight at 480px:
+`OffscreenPicture.tsx`) pins its layout (`layout="mobile"` or `"desktop"`), measures nothing and carries no
+`data-viewer-layout`, and the page-wide rules ignore anything inside `[data-offscreen-picture]`, so Home's type never
+changes while its cards get their pictures.
 
 A renderer is handed, besides its document: `onNavigationActionsChange`, for its
 nav-row actions (`FileNavigationAction`, with an optional shorter `hint`), hidden
@@ -77,14 +83,17 @@ cleanup, while it still belongs to the same source.
 
 The navbar is drawn over every file from the moment one is asked for, and over the
 host's home — only its logo and menu, without Back to home, Back and Forward where the
-host keeps the view's history, and the host's update and actions, where they stand over
+host keeps the view's history, and the host's actions, where they stand over
 a file — never for a `compact` view (a
 picture: the home's thumbnails), never where the host asks for the view alone
 (`chrome: "bare"`, `FileViewerProps.chrome`; the default is `"page"`: the CAD app hands
 `"bare"` to its file handler alone, whose host's file tree is its navigation), and not while a renderer says its
-Preview is up (`RendererViewProps.onPreviewChange`): the CAD viewer's Preview draws its own
+Preview is up (`RendererViewProps.onPreviewChange`): the viewer's Preview draws its own
 bar in its place and gives it back as it closes. Over a file, left to right:
 
+- the view's panel toggle, where the file has a panel (`panelToggles.js`, said by the view's frame): the strip's
+  28px tile, the same neutral button open or shut, which shows and hides the panel (`⌘\` or `Ctrl+\`), a mouse
+  resting on it peeking the collapsed panel over the view;
 - the text-to-cad "C" logo (named Menu, with no chevron; the same 16px mark over the home),
   which opens the app menu
   (`navigation/AppMenu.jsx`): Back to home where the host has a home
@@ -100,7 +109,7 @@ bar in its place and gives it back as it closes. Over a file, left to right:
   otherwise;
 - the ⋯ file menu: Copy path; Open in, a submenu of Browser (`fileActions.perform.browser`)
   and the file manager by its name (Finder, File Explorer, File manager: `reveal`); then the
-  host's own items (`fileMenuItems`: the CAD viewer's Export submenu). Each only where the
+  host's own items (`fileMenuItems`: the viewer's Export submenu). Each only where the
   host's `fileActions` can do it (Copy path and the file manager need a file on disk: a
   model's act on its script, `sourceFile`, and it has neither where none is named; a source moved
   or deleted, `sourceMissing`, draws what opens it disabled with its reason), and no ⋯
@@ -110,11 +119,11 @@ The logo, Back and Forward, the name (where it opens the name menu) and the ⋯ 
 at rest, the same accent background while the pointer is on it and while its menu is open, a
 pointer cursor, and no tooltip.
 
-At the right, only what a host or a file adds: a renderer's actions, the host's own
-(`navbarActions`: the CAD app's Full size, inline), and last, outermost, the host's update
-button. Back and Forward are a desktop row's alone: a phone's has no room for them. A renderer's own
-view controls are never here: a 3D view's Projection, Display and Preview end its tool strip,
-and Preview's settings and Exit preview are Preview's bar's.
+At the right, only what a host or a file adds: a renderer's actions; the view's own controls, Display (the plain
+cube, whose card holds how the picture is drawn, a 3D view's Projection among it) and a 3D view's or a board's Preview,
+which the view portals into the navbar's view slot (`navbarSlots.js`); and last, outermost, the host's own
+(`navbarActions`: the CAD app's Full size, inline). Back and Forward are a desktop row's alone: a phone's has no room
+for them. Preview's settings and Exit preview are Preview's bar's.
 
 The name menu is a popover under the file's name, a fixed 17.5rem wide and never resized. It
 floats over the view, so opening it resizes nothing, and it is built anew on each opening. Two

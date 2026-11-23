@@ -9,7 +9,7 @@ import { createToolModes } from "../kit/tools/toolModes.js";
 // its ends (every viewer's), taking everything it touches, Shift at its release adding; a double-click on a sheet symbol enters
 // its sheet. The view moves as every flat view's: a right or middle drag, or a drag with Ctrl, Cmd or
 // Shift, or a trackpad's two-finger scroll, pans, a mouse's wheel or a pinch zooms, a double-click elsewhere fits;
-// Pencil and Shapes draw on the sheet; Measure takes distances between points snapped to its pins' ends,
+// Draw, the strip's one drawing tool (its `pencil` and `shapes` modes), draws on the sheet; Measure takes distances between points snapped to its pins' ends,
 // its wires' ends, its junctions and its labels, in millimetres.
 export const SCHEMATIC_TOOL = FLAT_TOOL;
 
@@ -29,5 +29,6 @@ export function readSchematicFilter(raw) {
 /** What a host command a schematic cannot carry out is told. */
 export const SCHEMATIC_NO_CAMERA = "A schematic's sheet is drawn flat and head on: it has no camera to pose. "
   + "Zoom and pan it in the view, or call resetCamera to fit the sheet again.";
-export const SCHEMATIC_NO_DISPLAY = "A schematic is drawn as KiCad draws it, in the viewer's light or dark theme: "
-  + "it has no surfaces, lighting or render mode. Select a sheet's reference (#sheet:/Power/) to show that sheet.";
+export const SCHEMATIC_NO_DISPLAY = "A schematic is drawn as KiCad draws it, on its Background, light or dark, its one Display "
+  + "setting, which is the person's, set in the view's Display card: it has no surfaces, lighting or render mode. "
+  + "Select a sheet's reference (#sheet:/Power/) to show that sheet.";

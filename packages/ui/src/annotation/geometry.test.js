@@ -14,3 +14,13 @@ test("a box takes the ink it touches, a stroke by its drawn width and an area an
   assert.deepEqual(ids({ left: 20, top: 0, right: 30, bottom: 15 }), []);
 });
 
+// Every stroke a tool puts down is solid: no mark carries a line style.
+test("the pen, the highlighter and the shapes put down solid strokes", async () => {
+  const { highlighterMark, penMark, shapeMarks } = await import("./geometry.js");
+  const from = { x: 0, y: 0 }, to = { x: 100, y: 0 };
+  const style = { color: "#ff2d55", width: 2 };
+  const marks = [penMark([from, to], style), highlighterMark([from, to], style), ...shapeMarks("rectangle", from, { x: 50, y: 40 }, style),
+    ...shapeMarks("arrow", from, to, style)];
+  assert.equal(marks.length, 6);
+  assert.deepEqual(marks.map(mark => "dash" in mark), [false, false, false, false, false, false]);
+});

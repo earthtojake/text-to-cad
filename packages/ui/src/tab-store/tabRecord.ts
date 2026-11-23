@@ -1,13 +1,14 @@
 import type { JsonValue } from '../file-viewer/types.js';
 import { normalizeToolStack } from '../renderers/kit/tools/toolStackLayout.js';
+import { normalizeViewportBackground } from '@cad/core/lib/viewportTheme.js';
 
 /**
  * The tab record: everything the viewer keeps, kept for one tab and thrown out with it.
  *
  *   { version, settings, files }
  *
- * `settings` is tab-wide — the tool stack's layout, the appearance, how the home lays out its
- * library and the folder the explorer was last in — and replaces every global preference.
+ * `settings` is tab-wide — the tool stack's layout, the appearance, the viewport's background, how
+ * the home lays out its library and the folder the explorer was last in — and replaces every global preference.
  * `files` is the view of the file on screen (`kit/shell/fileView.js`: its camera, its Display
  * settings, its playback, its renderer's own slices) under `[absolute file path, renderer id]`,
  * and nothing else: a write puts a file last and drops any other (`TAB_FILE_LIMIT`), and a host
@@ -26,6 +27,8 @@ export const TAB_RECORD_VERSION = 2;
 export const TAB_FILE_LIMIT = 1;
 
 export type Appearance = 'system' | 'light' | 'dark';
+/** The model area's background, the person's (Display's Background): Light (the default) or Dark; a stored "theme" (the old Follow theme) reads as Light. */
+export type ViewportBackground = 'light' | 'dark';
 /** How the home lays out its models: a grid of cards, or a list of rows. */
 export type LibraryLayout = 'grid' | 'list';
 export interface ToolStackLayout { panels: Record<string, { width?: number; height?: number }>; collapsed: Record<string, boolean> }
@@ -34,6 +37,8 @@ export interface TabSettings {
   toolStack: ToolStackLayout;
   /** System, Light or Dark; a new tab follows the OS until the person picks. */
   appearance: Appearance;
+  /** The viewport's background in every file and view (`@cad/core/lib/viewportTheme.js`): Light unless the person picks. */
+  viewportBackground: ViewportBackground;
   /** The home's library: its models as a grid of cards (the default) or a list. */
   library: { layout: LibraryLayout };
   /** The folder the name menu's Files was last in, this tab: where a model's Files starts; null, none yet. */
@@ -69,6 +74,7 @@ export function normalizeTabSettings(value: unknown): TabSettings {
   return {
     toolStack: normalizeToolStack(record.toolStack) as ToolStackLayout,
     appearance: normalizeAppearance(record.appearance),
+    viewportBackground: normalizeViewportBackground(record.viewportBackground) as ViewportBackground,
     library: normalizeLibrary(record.library),
     explorer: normalizeExplorer(record.explorer),
   };

@@ -1,7 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no" class="notranslate">
   <head>
     <meta charset="UTF-8" />
+    <!-- The app is translated into its locales by its own strings. A browser's page translation rewrites the
+         text nodes React owns, and React then fails removing or moving them (NotFoundError): ask it not to. -->
+    <meta name="google" content="notranslate" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <meta name="description" content="Browse cached CAD parts, assemblies, and prompt-ready references" />
     <title>text-to-cad</title>
@@ -26,9 +29,17 @@
         root.style.colorScheme = mode;
       })();
     </script>
+    <style>
+      /* Before the app's script runs, the navbar's bar: the frame the app draws from its first frame (`src/StartingView.tsx`),
+         at its height (40px; a phone's 48px, under the viewer's 600px), its colour and its border, read from the same
+         tokens as the app's stylesheet, which this page loads before it paints. Nothing in it can be pressed; React
+         replaces it as it mounts. `src/shell.test.mjs` holds these to the navbar's own. */
+      [data-boot-navbar] { box-sizing: border-box; height: 40px; border-bottom: 1px solid var(--border); background: var(--sidebar); }
+      @media (max-width: 599.98px) { [data-boot-navbar] { height: 48px; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div aria-hidden="true" data-boot-navbar=""></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -89,6 +89,9 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(check.is_alive(), "neither waited for the check nor stopped it")
         hold.write_text("", encoding="utf-8")
         self.assertEqual(check.result(self).measurements["process"], "cnc")
+        # The runner answers a check's caller and then lets the check go: asked again before it has, the same
+        # check is joined, not read from what was kept. So it is awaited gone before it is asked again.
+        _until(self, lambda: _counts()["asked"] == 0, "the check is let go")
         cad.model.dfm(plate, process="cnc", tools="3")
         self.assertEqual((_counts()["measured"], _counts()["reused"]), (before["measured"] + 1, before["reused"] + 1))
 

@@ -176,21 +176,6 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "decorator": false
     },
     {
-      "id": "sdf",
-      "title": "SDF",
-      "wire": "sdf",
-      "extensions": [
-        ".sdf"
-      ],
-      "mime": "application/xml; charset=utf-8",
-      "view": "robot",
-      "operations": [
-        "snapshot",
-        "validate"
-      ],
-      "decorator": false
-    },
-    {
       "id": "kicad_pcb",
       "title": "KiCad PCB",
       "wire": "kicad_pcb",

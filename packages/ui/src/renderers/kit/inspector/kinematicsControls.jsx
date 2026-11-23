@@ -1,13 +1,9 @@
-import { ChevronDown, RotateCcw } from "lucide-react";
-import { TooltipHint } from "@cad/ui/primitives/tooltip";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger
-} from "@cad/ui/primitives/dropdown-menu";
-import { cn } from "@cad/ui/utils";
-import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
-import { TOOL_PANEL_BUTTON_CLASS } from "../tools/ToolPanel.jsx";
+import { Button } from "@cad/ui/primitives/button";
+import { PanelSelectRow } from "./panelRows.jsx";
+import { PANEL_ACTION_CLASS, PanelActions } from "./PanelActions.jsx";
 import { useControlUsage } from "../../../usage/controls.js";
 import { useI18n } from "@cad/ui/i18n";
+import { FlatPanelChanged } from "../shell/FlatPanel.jsx";
 
 export const NO_PRESET_VALUE = "__none__";
 export const DEFAULT_POSE_VALUE = "__default__";
@@ -21,15 +17,15 @@ export function positionValuesAreDefault(values, defaults) {
 }
 
 /**
- * Position's Pose, the first row of its body, full width over the joints: the pose in hand as a
- * dropdown ("Custom" while the joints are set by hand) — Default first where the section
- * can reset, then the named poses. Reset, the way back to the default pose, is the same row's
- * 20px icon button at its right end, idle while the model is there. The row is laid out as the view's
- * panel's head is: the dropdown a box on the panel's 8px line, its text on the 16px one, and Reset in
- * the head's collapse button's column, 6px after it, its glyph ending on the right 16px line. Nothing
- * where there is neither to choose. `disabled`: shown, not chosen from (while a motion owns the pose).
+ * Joints' Pose, the first row of its body, over the joints (under the motion and its hairline, where the tab holds
+ * one): a panel settings row (`PanelSelectRow`, `panelRows.jsx`, the panel's 28px) — its label, **Position**, on the
+ * panel's 16px line, and the pose in hand as a dropdown half the row wide (wider only where its value needs it), ending
+ * on the right 16px line, as every settings row's control does ("Custom" while the joints are set by hand):
+ * Default first where the section can reset, then the named poses. Reset, the way back to the default
+ * pose, is the tab's ONE Reset, at its bottom right in its actions row (`KinematicsResetRow`). Nothing where there
+ * is neither to choose. Never disabled: a motion holding the model is let go of by a choice here (one motion at a time).
  */
-export function KinematicsPoseRow({ poses = [], activeValue, onSelect, onReset, disabled = false }) {
+export function KinematicsPoseRow({ poses = [], activeValue, onSelect, onReset }) {
   const usage = useControlUsage();
   const { t } = useI18n();
   if (!poses.length && !onReset) return null;
@@ -37,28 +33,35 @@ export function KinematicsPoseRow({ poses = [], activeValue, onSelect, onReset, 
   const options = [...(onReset ? [{ value: DEFAULT_POSE_VALUE, label: t("pose.default") }] : []), ...poses];
   const active = options.find(pose => pose.value === activeValue);
   const label = active?.label || t("pose.custom");
-  return <div className="flex h-8 items-center gap-1.5" data-pose-row="">
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <button type="button" aria-label={t("pose.current", { pose: label })} data-pose-menu="" disabled={disabled}
-          className="flex h-6 min-w-0 flex-1 items-center justify-between gap-1 rounded-md border border-input bg-transparent px-[7px] text-left text-tiny shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/45 aria-expanded:bg-accent disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50">
-          <span className="min-w-0 truncate">{label}</span>
-          <ChevronDown className="size-3 shrink-0 opacity-60" aria-hidden="true" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={4} collisionPadding={8} aria-label={t("pose.label")}
-        className={cn(FLOATING_SURFACE_CLASS, "min-w-(--radix-dropdown-menu-trigger-width) data-[state=closed]:animate-none!")}>
-        <DropdownMenuRadioGroup value={active?.value || NO_PRESET_VALUE}
-          onValueChange={value => { if (value === DEFAULT_POSE_VALUE) { reset(); return; } usage.used("position_preset"); onSelect?.(value); }}>
-          {options.map(option => <DropdownMenuRadioItem key={option.value} value={option.value}>
-            <span className="min-w-0 truncate">{option.label}</span>
-          </DropdownMenuRadioItem>)}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-    {onReset ? <TooltipHint content={t("pose.reset")} side="bottom">
-      <button type="button" aria-label={t("pose.reset")} data-pose-reset="" disabled={disabled || activeValue === DEFAULT_POSE_VALUE} onClick={reset}
-        className={cn(TOOL_PANEL_BUTTON_CLASS, "mr-1 disabled:pointer-events-none disabled:opacity-40")}><RotateCcw className="size-3" aria-hidden="true" /></button>
-    </TooltipHint> : null}
-  </div>;
+  return <PanelSelectRow label={t("pose.label")} value={active?.value || NO_PRESET_VALUE} options={options} fallback={t("pose.custom")}
+    triggerLabel={t("pose.current", { pose: label })} className="mb-2" rowProps={{ "data-pose-row": "" }} labelProps={{ "data-pose-label": "" }}
+    triggerProps={{ "data-pose-menu": "" }}
+    onChange={value => { if (value === DEFAULT_POSE_VALUE) { reset(); return; } usage.used("position_preset"); onSelect?.(value); }} />;
+}
+
+/**
+ * Joints' actions row, last in the tab, where Params has its Reset and Save (`PanelActions`): Reset alone,
+ * the way back to the default pose, off while the model is there. Where the tab holds its mechanism's motion too
+ * (`routine`: `{ away, reset }`), the ONE Reset puts back both — the motion to its start, the joints to their default —
+ * and is on while either is off it.
+ */
+export function KinematicsResetRow({ activeValue, onReset, routine = null }) {
+  const usage = useControlUsage();
+  const { t } = useI18n();
+  if (!onReset) return null;
+  const posed = activeValue !== DEFAULT_POSE_VALUE;
+  const changed = posed || Boolean(routine?.away);
+  const reset = () => {
+    if (routine?.away) routine.reset();
+    if (posed || !routine) { usage.used("position_reset"); onReset(); }
+  };
+  return <PanelActions data-pose-actions="">
+    {/* Its word Params' Reset's, its name the joints' ("Reset joints"). */}
+    <Button type="button" variant="ghost" size="xs" className={PANEL_ACTION_CLASS} data-pose-reset="" aria-label={t("pose.reset")}
+      disabled={!changed} onClick={reset}>
+      {t("parameters.reset")}
+    </Button>
+    {/* The tab's dot: on exactly while Reset is. */}
+    <FlatPanelChanged on={changed} />
+  </PanelActions>;
 }

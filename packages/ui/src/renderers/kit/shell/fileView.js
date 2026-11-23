@@ -13,13 +13,13 @@ import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
 //   display   the Display settings: the mode, the grid, and what every mode shares (the model tools, the lens).
 //   preview   Preview's own settings: Render's lighting, background, floor and part colours.
 //   playback  the playback settings (`tools/playbar/playbackPreferences.js`): Preview's orbit speed,
-//             Autoplay, and the speed and loop chosen for the routine.
+//             and the speed and loop chosen for the routine.
 //   renderer  the renderer's own slices of view state, each `{ signature, value }`: what the
 //             slice was written against. A slice comes back only while its signature still
 //             matches the one the renderer declares for the file on screen — a rebuilt model
 //             has different parts, so ids from the old one are not ids at all — while the
 //             camera and the display are always kept.
-//   panel     the view's panel, open or closed, its width, its tab, its Selected pane's height
+//   panel     the view's panel, open or closed, its width and its tab
 //             (`filePanel.js`): written by the panel itself and merged into whatever a renderer
 //             writes by the file viewer, so no renderer reads or writes it here.
 //

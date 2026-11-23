@@ -1,6 +1,8 @@
-# URDF: CAD Viewer nonlinear four-bar coupling
+# URDF: a nonlinear four-bar coupling in the viewer
 
-Standard URDF `<mimic>` is affine and cannot close a nonlinear four-bar linkage. When exact CAD Viewer motion is required, keep the URDF link graph as a tree, expose the physical output joint as the only independent coordinate, and place this namespaced extension on the derived input joint:
+Read this when a hand-written URDF holds a four-bar whose motion the viewer must show exactly.
+`<mimic>` is affine and cannot close one. Keep the links a tree, leave the output joint the one
+independent coordinate, and put this namespaced element on the input joint, which it derives:
 
 ```xml
 <robot name="example" xmlns:tcad="https://text-to-cad.dev/urdf">
@@ -23,10 +25,27 @@ Standard URDF `<mimic>` is affine and cannot close a nonlinear four-bar linkage.
 </robot>
 ```
 
-Lengths use metres. `input_zero` and `output_zero` are the two moving-link angles, in radians from the ground link direction, when both URDF joint values are zero. The input and driver joints must share one ground link, use coplanar pivots separated by `ground_length`, and use parallel, same-direction axes. The server selects that assembly branch and derives the input angle from `driver` over the driver's whole operating range — its `<limit>`, or one full turn for a continuous driver — when it resolves the description for the CAD Viewer or `cad urdf snapshot`; the Viewer shows no slider or handle for the dependent joint (its driver's moves it) and a snapshot's `--pose` refuses it by name. The complete driver range must remain reachable on that branch, and the dependent joint limits must contain the entire derived input range (a continuous dependent joint has none). A joint cannot declare both `<mimic>` and `<tcad:four_bar>`.
-
-`urdf check` checks the element itself: one per joint, every length positive, both zero angles, a revolute or continuous joint, and a `driver` that is a revolute or continuous joint on the same ground link, with no mimic cycle through it. It treats the derived joint as a mimic joint, so an SRDF group state cannot set it. The linkage's geometry (coplanar pivots `ground_length` apart, parallel axes, closure at the zero pose on the branch `input_zero` names and over the driver's range, the derived range within the joint's limits) is checked when the server resolves the robot: the Viewer and `cad urdf snapshot` refuse it then, naming the file, the joint, the driver angle and what to change.
-
-A URDF generated from a CAD model never writes it: the extension derives one rocker's angle and places no coupler link, and a generated loop's coupler is a link of its own. The generated URDF leaves the loop's closing joint out (the export says so) and the MJCF closes the loop; write `<tcad:four_bar>` by hand only on a hand-written URDF whose CAD Viewer motion must be exact.
-
-This is a Text-to-CAD vendor extension, not standard URDF behavior. Other consumers ignore the namespaced element; a robot state publisher or hardware driver must publish the same derived joint value to preserve loop closure outside the Viewer.
+- **The numbers.** Lengths are metres. `input_zero` and `output_zero` are the directions of the
+  input and the output link when both joints are at zero: angles in radians about the joints' axis,
+  from the line that runs from this joint's pivot to the driver's. A four-bar closes two ways for
+  one driver angle, and `input_zero` says which: it must be an angle the lengths close at.
+- **The joints.** Both are revolute or continuous, on one parent link (the ground), with parallel
+  axes that point the same way and pivots in one plane across the axis, `ground_length` apart. The
+  input joint carries no `<mimic>`. Its limits must hold everything the driver's range derives (a
+  continuous one has none), and the linkage must close over the driver's whole range: its `<limit>`,
+  or one turn for a continuous driver.
+- **What moves it.** The viewer and `cad urdf snapshot` place the input joint from the driver's
+  value. The person cannot pose it in the viewer, a snapshot's `--pose` refuses it by name, and an SRDF group
+  state cannot set it, as with a mimic joint.
+- **What checks it.** `cad urdf validate` checks the element alone: at most one on a joint, every
+  length positive, both zero angles numbers, the joint and its driver revolute or continuous on one
+  parent, no cycle of drivers and mimics. The linkage's geometry (the two points above) is checked
+  when the viewer opens the file: its page refuses the robot, naming the joint, what it found
+  and what to change. `cad urdf snapshot` checks none of it: it draws what the numbers give, and
+  refuses only a pose the coupler cannot reach. So a clean validation and a picture do not show that
+  the linkage closes.
+- **Not in a generated URDF.** The extension derives one joint's angle and places no coupler link,
+  and a loop generated from a CAD model has its coupler as a link. The generated URDF leaves the
+  loop's closing joint out and says so, and the MJCF closes it ([from-cad.md](from-cad.md)).
+- **Only `cad` reads it.** Any other consumer ignores the namespaced element: a robot state
+  publisher or a hardware driver must publish the same derived value to keep the loop closed.

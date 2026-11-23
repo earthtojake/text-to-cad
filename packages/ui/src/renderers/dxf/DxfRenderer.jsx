@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box } from "lucide-react";
+import { useViewportTheme } from "../kit/look/useViewportTheme.js";
 import { cn } from "@cad/ui/utils";
 import { entitiesInBox, entityAt, drawEntityHighlights, snapAt } from "@cad/core/lib/drawing2d/entities.js";
 import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
@@ -10,6 +10,8 @@ import { useViewerMobile } from "../../file-viewer/responsive.js";
 import { annotationAt, withGroups } from "../../annotation/geometry.js";
 import { promptView } from "../../annotation/views.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
+import { backgroundGroup } from "../kit/shell/DisplaySettings.jsx";
+import { useControlUsage } from "../../usage/controls.js";
 import FlatViewFrame, { flatViewTools } from "../kit/shell/FlatViewFrame.jsx";
 import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
 import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
@@ -25,7 +27,7 @@ import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
 import { menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import { readFlatView } from "../kit/viewport/flatView.js";
-import { createDrawingScene, describeDrawingPick, drawingPickTip, drawingHandleOf, drawingReferenceId, drawingUnits, layersSectionShown } from "./drawingReferences.js";
+import { createDrawingScene, describeDrawingPick, drawingPickTip, drawingHandleOf, drawingReferenceId, drawingUnits } from "./drawingReferences.js";
 import { drawingAnnotationDocument, drawingAnnotationSurface } from "./drawingAnnotation.js";
 import LayersSection from "./LayersSection.jsx";
 import { DXF_DECLINED_LIVE_COMMANDS, DXF_NO_CAMERA, DXF_NO_DISPLAY, DXF_TOOL, DXF_TOOL_MODES } from "./tools.js";
@@ -33,7 +35,7 @@ import { useI18n } from "@cad/ui/i18n";
 
 /**
  * A `.dxf` is drawn as a drawing: on a canvas, head on, in the pens it declares. No 3D, no fold
- * preview, no thickness or material, no Display settings and no Preview — a DXF is a finished 2D
+ * preview, no thickness or material, no Display setting but the Background and no Preview — a DXF is a finished 2D
  * document, and the questions those answered were about a sheet-metal part the viewer would be
  * inventing from it.
  *
@@ -46,7 +48,7 @@ import { useI18n } from "@cad/ui/i18n";
  * it declares none). What is picked and drawn is Quick Edit's (what is measured, Measure's row's), whose views are the window
  * on screen as a plan-view camera, which `cad <type> snapshot --annotation PACKET --camera authored` draws again. A drawing with
  * layers and blocks to read has the view's panel docked at the left (`kit/shell/FlatPanel.jsx`, a
- * board's and a 3D view's): its search, then its Layers tab (`layersSectionShown`), kept open or
+ * board's and a 3D view's): its search, then its Layers tab (from the first frame), kept open or
  * collapsed as the other views' panel is, ⌘\ to show or hide it and / to search it. The chrome and
  * the hands are every flat view's, a board's and a schematic's (`kit/shell/FlatViewFrame.jsx`,
  * `kit/shell/useFlatView.js`): this renderer brings its canvas, its picks and its Layers.
@@ -64,8 +66,6 @@ const DXF_LIVE = Object.freeze({ commands: ["clearSelection"], declined: DXF_DEC
 // How near a pick must be, in CSS pixels: a cursor's, or a fingertip's (`TOUCH_HIT_PX`).
 const PICK_PX = 6;
 const pickPx = pointerType => (pointerType === "touch" ? TOUCH_HIT_PX : PICK_PX);
-// A block reference's glyph in the Selected pane and its chip's card, the Layers' own for it.
-const DRAWING_GLYPHS = Object.freeze({ block: Box });
 
 function DxfSurface({ view, data }) {
   const { t } = useI18n();
@@ -77,12 +77,18 @@ function DxfSurface({ view, data }) {
   const drawing = payload.drawing;
   const units = useMemo(() => drawingUnits(drawing?.units), [drawing]);
   const { onStateChange } = view;
-  const colorScheme = view.appearance?.colorScheme === "dark" ? "dark" : "light";
+  // The viewport's theme (`kit/look/useViewportTheme.js`): the person's Background, whatever the app's light or dark.
+  // The picture — its paper, its strokes, the marks over it — is drawn in its scheme; the chrome keeps the app's.
+  const viewport = useViewportTheme(workspace.services.preferences, workspace.services.onPreferenceChange);
+  // Its view settings, Display's card (`kit/shell/DisplaySettings.jsx`): a drawing's one, the viewport's Background.
+  const usage = useControlUsage();
+  const viewGroups = [backgroundGroup({ value: viewport.background, onChange: viewport.setBackground }, t, usage.used)];
+  const colorScheme = viewport.scheme;
 
   // ---- the view this file was left at ---------------------------------------
   // The file's view (`kit/shell/fileView.js`) with the drawing's view as its camera (`kit/viewport/flatView.js`:
-  // the transform and the pane it was framed in) and nothing else: a drawing has no Display settings and
-  // no slices of its own.
+  // the transform and the pane it was framed in) and nothing else: a drawing's one Display setting, the Background, is
+  // the tab's, and it has no slices of its own.
   const [restored] = useState(() => readFlatView(readFileView(view.state).camera));
   const storedRef = useRef(JSON.stringify(writeFileView({ camera: restored })));
   const saveTimer = useRef(0);
@@ -136,9 +142,9 @@ function DxfSurface({ view, data }) {
   const selection = useSceneSelection({ scene, requestRender: requestPaint });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
-  // What a pick is, as the Selected pane, its chip's card and the hover tip read it (`describeDrawingPick`).
+  // What a pick is, as its chip's card and the hover tip read it (`describeDrawingPick`).
   const describe = useCallback(id => (drawing ? describeDrawingPick(drawing, id, units.unit, t) : null), [drawing, units, t]);
-  const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource, describe });
+  const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource, describe, group: "entity" });
   const overlay = useCallback((ctx, { transform, pixelRatio }) => {
     const drawable = drawingRef.current;
     if (!drawable) return;
@@ -185,8 +191,23 @@ function DxfSurface({ view, data }) {
     };
     const inkUnder = (point, pointerType) => (annotationRef.current.items.length
       ? annotationAt(point, annotationSurface.onScreen(annotationRef.current.items), pickPx(pointerType))[0]?.id || null : null);
+    // The entity under a pane point, as Select would take it ("" for none).
+    const entityUnder = (point, pointerType) => {
+      const at = atPoint(point, pointerType);
+      return at && drawingRef.current ? entityAt(drawingRef.current, at.model, at.reach, { hiddenLayers: hiddenRef.current }) : "";
+    };
     const measured = clear => measureSelectHandlers(measureRef.current, () => measureRuntimeRef.current, clear);
     const pointer = event => ({ clientX: event.clientX, clientY: event.clientY, pointerType: event.pointerType, shiftKey: event.shiftKey });
+    // What a press under Select lands on, front to back as every view picks: a measurement, then the ink, then the
+    // drawing's entities (`id`, its reference). `adds`: the press adds it, or takes it out where it is picked: with
+    // Shift, or a finger's on something (a finger has no Shift; its tap on nothing is a plain one, and clears).
+    const pressed = (point, event) => {
+      const measurement = measured(() => {}).under(pointer(event));
+      const ink = measurement ? null : inkUnder(point, event.pointerType);
+      const handle = measurement || ink ? "" : entityUnder(point, event.pointerType);
+      return { measurement, ink, id: handle ? drawingReferenceId(handle) : "",
+        adds: event.shiftKey || (event.pointerType === "touch" && Boolean(measurement || ink || handle)) };
+    };
     const tap = (point, event) => {
       if (!drawingRef.current) return;
       const tool = toolRef.current;
@@ -201,25 +222,31 @@ function DxfSurface({ view, data }) {
         return;
       }
       if (tool !== DXF_TOOL.SELECT) return;
-      const shift = event.shiftKey;
+      const { ink, id, adds } = pressed(point, event);
       const session = annotationRef.current;
-      // Front to back, as every view picks: a measurement, then the ink, then the drawing's entities.
-      if (measured(() => selectionRef.current.clear()).press(pointer(event))) {
-        if (!shift && session.selected.length) session.select([]);
+      if (measured(() => selectionRef.current.clear()).press({ ...pointer(event), shiftKey: adds })) {
+        if (!adds && session.selected.length) session.select([]);
         return;
       }
-      const ink = inkUnder(point, event.pointerType);
       if (ink) {
-        const picked = shift ? (session.selected.includes(ink) ? session.selected.filter(id => id !== ink) : [...session.selected, ink]) : [ink];
-        if (!shift) selectionRef.current.clear();
+        const picked = adds ? (session.selected.includes(ink) ? session.selected.filter(other => other !== ink) : [...session.selected, ink]) : [ink];
+        if (!adds) selectionRef.current.clear();
         session.select(withGroups(picked, session.items));
         return;
       }
-      if (!shift && session.selected.length) session.select([]);
-      const at = atPoint(point, event.pointerType);
-      const handle = at ? entityAt(drawingRef.current, at.model, at.reach, { hiddenLayers: hiddenRef.current }) : "";
-      selectionRef.current.pick(handle ? { id: drawingReferenceId(handle) } : null, { multiSelect: shift });
-      if (handle && !shift) measureRef.current.select([]);
+      if (!adds && session.selected.length) session.select([]);
+      selectionRef.current.pick(id ? { id } : null, { multiSelect: adds });
+      if (id && !adds) measureRef.current.select([]);
+    };
+    // What a tap under Select would take out of the selection, by name (null: nothing): what it lands on, where the
+    // press lets it go (the one thing picked pressed again, or a picked one with Shift or a finger). The flat canvas
+    // holds such a tap for the double-click window (`useFlatCanvasView`'s `takesAway`).
+    const takesAway = (point, event) => {
+      if (toolRef.current !== DXF_TOOL.SELECT || !drawingRef.current) return null;
+      const { measurement, ink, id, adds } = pressed(point, event);
+      if (measurement) return adds && measureRef.current.selected.includes(measurement) ? `measurement:${measurement}` : null;
+      if (ink) return adds && annotationRef.current.selected.includes(ink) ? `ink:${ink}` : null;
+      return id && selectionRef.current.takesAway({ id }, { multiSelect: adds }) ? `pick:${id}` : null;
     };
     const hover = (point, event) => {
       const tool = toolRef.current;
@@ -242,11 +269,6 @@ function DxfSurface({ view, data }) {
       selectionRef.current.hoverHit(handle ? { id: drawingReferenceId(handle) } : null);
       setPointing(current => (current === over ? current : over));
     };
-    // The entity under a pane point, as Select would take it ("" for none).
-    const entityUnder = (point, pointerType) => {
-      const at = atPoint(point, pointerType);
-      return at && drawingRef.current ? entityAt(drawingRef.current, at.model, at.reach, { hiddenLayers: hiddenRef.current }) : "";
-    };
     // Select's box: the entities not on a hidden layer that it touches, even in part, with the ink and the
     // measurements it takes (`takeFlatBox`; Shift at its release adds).
     const box = (drawnBox) => {
@@ -260,11 +282,12 @@ function DxfSurface({ view, data }) {
         measure: measured(() => {}), selection: selectionRef.current,
         picked: entitiesInBox(drawable, bounds, { hiddenLayers: hiddenRef.current }).map(drawingReferenceId) });
     };
-    return { tap, hover, entityUnder, box };
+    return { tap, takesAway, hover, entityUnder, box };
   }, [annotationSurface, requestPaint]);
 
   const drawingView = useDrawingView({
-    drawing, restored, colorScheme, onViewMoved: rememberView, hiddenLayers, overlay, onTap: handlers.tap, onHover: handlers.hover
+    drawing, restored, colorScheme, onViewMoved: rememberView, hiddenLayers, overlay, onTap: handlers.tap, takesAway: handlers.takesAway,
+    onHover: handlers.hover
   });
   viewRef.current = drawingView;
   useFlatBoxSelect(drawingView, { enabled: toolMode === DXF_TOOL.SELECT && Boolean(drawing), onBox: handlers.box });
@@ -374,11 +397,11 @@ function DxfSurface({ view, data }) {
       zoom);
   } : null;
 
-  // What is picked, as the frame reads it: the Selected pane under the Layers, the hover tip, the cards' rows.
+  // What is picked, as the frame reads it: Quick Edit's chips and their cards' rows, and the hover tip.
   const resource = workspace.resource;
   const copyText = useCallback(ids => sceneCopyText(resource, ids), [resource]);
   const tip = useCallback(id => (drawing ? drawingPickTip(drawing, id, units.unit, t) : ""), [drawing, units, t]);
-  const inspect = useSceneInspect({ scene, selection, describe, tip, frame: frameEntities, copyText, glyphs: DRAWING_GLYPHS, data: "drawing" });
+  const inspect = useSceneInspect({ scene, selection, describe, tip, data: "drawing" });
 
   // ---- the frame: every flat view's (`kit/shell/FlatViewFrame.jsx`) around the drawing's canvas ----
   // While the drawing loads, or once it has failed to, none of the viewer's own chrome. A compact host
@@ -390,20 +413,20 @@ function DxfSurface({ view, data }) {
   // The strip's zoom, and the zoom's keys (`useFlatHandover`'s `zoomKeys`).
   const zoom = { ...drawingView.zoom, zoomToSelection: () => frameEntities(selectionRef.current.selected), selectionAvailable: selection.selected.length > 0 };
   handover.zoomKeys.current = zoom;
-  // The panel: the drawing's Layers, where it has layers and blocks to read (`layersSectionShown`).
-  const panel = layersSectionShown(drawing) ? { kind: "drawing", label: t("drawing.panel"), searchLabel: t("drawing.search"), tabs: [{
+  // The panel: the drawing's Layers, from the first frame (its rows arrive with the drawing).
+  const panel = { kind: "drawing", label: t("drawing.panel"), searchLabel: t("drawing.search"), tabs: [{
     id: "layers", label: t("layers.title"),
     content: <LayersSection drawing={drawing} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} selection={selection} />
-  }] } : null;
+  }] };
 
   // The 3D views' cursors under Select: the arrow, pressed or dragging too, and the pointing hand
   // over what a press would pick. Measure keeps its crosshair (Annotate's layer has its own).
   const cursor = measuring ? "cursor-crosshair" : pointing && !dragging ? "cursor-pointer" : "cursor-default";
 
   return (
-    <FlatViewFrame surface={DRAWING_SURFACE} containerRef={containerRef} busy={payload.loading || payload.updating}
-      file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={payload.loading} loadingLabel={t("drawing.reading")}
-      updating={payload.updating} updateStatus={{ pending: true, label: t("drawing.updating") }} tools={strip} toolRow={row} views={[]}
+    <FlatViewFrame surface={DRAWING_SURFACE} viewport={viewport} containerRef={containerRef} busy={payload.loading || payload.updating}
+      file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} loading={payload.loading} loadingLabel={t("drawing.reading")}
+      updating={payload.updating} updateStatus={{ pending: true, label: t("drawing.updating") }} tools={strip} toolRow={row} viewGroups={viewGroups}
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={handover.quickEdit} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems} zoom={zoom} inspect={inspect}>

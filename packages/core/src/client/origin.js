@@ -1,4 +1,4 @@
-// THE origin of the CAD Viewer backend this surface talks to.
+// THE origin of the viewer backend this surface talks to.
 //
 // The standalone app is served BY that backend, so every call it makes is a
 // root-relative `/api/v1/...` URL and the origin is the

@@ -155,7 +155,7 @@ class StoreTest(unittest.TestCase):
         for nowhere in ("<stdin>", str(folder / "ipykernel_1" / "2.py")):  # a REPL's, a notebook cell's
             with self.subTest(file=nowhere), self.assertRaisesRegex(ValueError, r"model\(shape, name='cell'\)"):
                 self.define(source, nowhere)
-        # store= is gone: an unexpected keyword argument, as any name that never was (law 15).
+        # store= is gone: an unexpected keyword argument, as any name that never was (law 14).
         for given in ("@model(store='memory')", "@xbf('XBF/cell.xbf', store='memory')"):
             with self.subTest(given=given), self.assertRaisesRegex(
                     TypeError, r"^(model|xbf)\(\) got an unexpected keyword argument 'store'$"):
@@ -272,6 +272,7 @@ class RegistryDaemonTest(unittest.TestCase):
                          "an unchanged build rewrites nothing")
         # A restart: the id is known, not held, with the command that builds it again; nothing runs it.
         self.assertEqual(self.cli("stop").returncode, 0)
+        engine_daemon.start(self.env)
         inspected = self.cli("inspect", cube)
         self.assertEqual(inspected.returncode, 2, inspected.stderr)
         self.assertIn(f"run `cad run {project / 'parts.py'}`", inspected.stderr)

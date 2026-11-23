@@ -11,7 +11,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 // A hint measures its trigger.
 const measured = () => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 
-const chip = (n: number, extra = {}) => ({ key: `run:${n}`, label: `base · face ${n}`, id: `f:base.make_box1.${n}`, copy: `/models/base.step#f:base.make_box1.${n}`,
+const chip = (n: number, extra = {}) => ({ key: `run:${n}`, label: `base · face ${n}`, copy: `/models/base.step#f:base.make_box1.${n}`,
   detail: { facts: [{ label: 'Area', title: 'Face area', value: `${n * 10} mm²` }] }, ...extra });
 function mount(chips: any[], mobile = false) {
   const copied: string[] = [];
@@ -21,7 +21,7 @@ function mount(chips: any[], mobile = false) {
 }
 const settle = () => act(async () => { await Promise.resolve(); });
 
-it('a click on a chip copies its reference and says so in its place; a touch opens its card, its ID first, and a click on a value copies the value', async () => {
+it('a click on a chip copies its reference and says so in its place; a touch opens its card, then the renderer\'s rows, and a click on a value copies the value', async () => {
   const onHover = vi.fn();
   const copied = mount([chip(3, { onHover })]);
   const label = screen.getByRole('button', { name: 'base · face 3' });
@@ -32,13 +32,13 @@ it('a click on a chip copies its reference and says so in its place; a touch ope
   expect(copied).toEqual(['/models/base.step#f:base.make_box1.3']);
   expect(label.textContent).toBe('Copied');
   expect(document.querySelector('[data-quick-edit-ref-card]')).toBeNull();
-  // A touch's press opens the card too: its name, its id, then the renderer's rows.
+  // A touch's press opens the card too: its name, then the renderer's rows, and no ID row.
   fireEvent.pointerDown(label, { pointerType: 'touch' });
   fireEvent.click(label);
   await settle();
   const card = document.querySelector<HTMLElement>('[data-quick-edit-ref-card="run:3"]')!;
-  expect([...card.querySelectorAll('[data-info-row]')].map(row => row.textContent)).toEqual(['IDf:base.make_box1.3', 'Area30 mm²']);
-  const value = card.querySelectorAll<HTMLElement>('[data-info-row] > div')[1];
+  expect([...card.querySelectorAll('[data-info-row]')].map(row => row.textContent)).toEqual(['Area30 mm²']);
+  const value = card.querySelector<HTMLElement>('[data-info-row] > dd')!;
   expect(value.className).toContain('cursor-pointer');
   fireEvent.click(value);
   await settle();
@@ -92,37 +92,19 @@ it('on a phone a tap on a chip opens its card above it and copies nothing; the c
   expect([copied, card.getAttribute('data-side')]).toEqual([[], 'top']);
 });
 
-it("a card's ID is one monospace line, its middle cut where it is long, the whole of it its hint; a click on it copies the chip's whole reference", async () => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  measured();
-  const id = 'L bracket 80 x 60 x 6 mm/f:bracket_body.body_efhphp2~7f355a89aedf';
-  const reference = `/work/bracket.step#${id}`;
-  const copied = mount([chip(1, { label: 'L bracket 80 x 60 x 6 mm · face 1', id, copy: reference })]);
-  const label = screen.getByRole('button', { name: 'L bracket 80 x 60 x 6 mm · face 1' });
+it("a card has no ID row; its title's copy icon copies the chip's whole reference, <docid>#<selector>", async () => {
+  const reference = '402dfaf1-cbe2-56db-9e00-a27eda6cc2ca#bracket/f:bracket_body.part_nnaobd5~7e1b5400e6f0';
+  const copied = mount([chip(1, { label: 'bracket · face 2', copy: reference })]);
+  const label = screen.getByRole('button', { name: 'bracket · face 2' });
   fireEvent.pointerDown(label, { pointerType: 'touch' });
   fireEvent.click(label);
   await settle();
-  const value = document.querySelector<HTMLElement>('[data-chip-id]')!;
-  expect(value.textContent).toBe('L bracket 80 x…~7f355a89aedf');
-  expect(value.className).toMatch(/\bwhitespace-nowrap\b/);
-  expect(value.className).toMatch(/\bfont-mono\b/);
-  expect(value.hasAttribute('title')).toBe(false);
-  fireEvent.pointerMove(value, { pointerType: 'mouse' });
-  act(() => { vi.advanceTimersByTime(450); });
-  expect(screen.getByRole('tooltip').textContent).toBe(id);
-  fireEvent.click(value);
+  const card = document.querySelector<HTMLElement>('[data-quick-edit-ref-card]')!;
+  expect(card.textContent).not.toContain('f:bracket_body');
+  fireEvent.click(within(card).getByRole('button', { name: 'Copy reference bracket · face 2' }));
   await settle();
-  // The same text the chip's press (first) and its title's copy icon (last) copy.
-  fireEvent.click(screen.getByRole('button', { name: 'Copy reference L bracket 80 x 60 x 6 mm · face 1' }));
-  await settle();
-  expect(copied).toEqual([reference, reference, reference]);
-  // A short id is shown whole, with no hint.
-  cleanup();
-  mount([chip(2)]);
-  fireEvent.pointerDown(screen.getByRole('button', { name: 'base · face 2' }), { pointerType: 'touch' });
-  fireEvent.click(screen.getByRole('button', { name: 'base · face 2' }));
-  await settle();
-  expect(document.querySelector('[data-chip-id]')!.textContent).toBe('f:base.make_box1.2');
+  // The chip's press (first) and its title's copy icon (last) copy the same whole reference.
+  expect(copied).toEqual([reference, reference]);
 });
 
 it("a chip's part name is cut at sixteen characters, the number after it whole; a document of one part shows the kind and number alone", async () => {

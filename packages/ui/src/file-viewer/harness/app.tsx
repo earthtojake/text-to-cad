@@ -81,8 +81,12 @@ export function App() {
   const [second, setSecond] = useState(false);
   const [state, setState] = useState<FileViewerState>({});
   const [otherState, setOtherState] = useState<FileViewerState>({});
+  // A viewer drawn out of sight at a library picture's size, as `OffscreenPicture.tsx` draws one: its layout pinned
+  // (`"pinned"`, as it is), or measured (`"measured"`, a viewer that forgot to pin it), or none.
+  const [picture, setPicture] = useState<"none" | "pinned" | "measured">("none");
+  const [pictureState, setPictureState] = useState<FileViewerState>({});
   Object.assign(window, { harness: { a, b, events, opened, rendererCallbacks, renders, cleanupWrites, state, open: setFile,
-    setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond } });
+    setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, picture: setPicture } });
   // A host is made once for its source, as an app makes it (FileViewer's props are compared by identity).
   const primaryHost = useMemo(() => host(root, (path) => { opened.push(path); setFile(path); }), [root]);
   return <div style={{ width: "1000px", height: "650px" }}>
@@ -91,5 +95,10 @@ export function App() {
       <FileViewer file={file} host={primaryHost} renderers={renderers} state={state} onStateChange={setState} />
     </section>
     {second ? <section data-testid="secondary" style={{ height: "240px" }}><FileViewer file={`${FOLDER}/notes.txt`} host={host(b, () => {})} renderers={renderers} state={otherState} onStateChange={setOtherState} /></section> : null}
+    {picture === "none" ? null : <div aria-hidden="true" data-offscreen-picture="" data-testid="picture"
+      style={{ position: "fixed", left: 0, top: 0, width: 480, height: 360, opacity: 0, pointerEvents: "none", zIndex: -1, overflow: "hidden" }}>
+      <FileViewer file={`${FOLDER}/notes.txt`} host={host(b, () => {})} renderers={renderers} state={pictureState} onStateChange={setPictureState}
+        layout={picture === "pinned" ? "mobile" : undefined} />
+    </div>}
   </div>;
 }

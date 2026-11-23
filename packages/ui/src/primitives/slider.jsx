@@ -5,9 +5,13 @@ import { cn } from "@cad/ui/utils"
 
 // shadcn's slider: every slider in the viewer is this one (a row may size and place it). A slider
 // with an `origin` (Position's joints: a joint's rest is mostly mid-range) fills from that value to
-// the thumb, a tick at the origin, where shadcn's fills from its left end. Two changes from shadcn's, for the viewer's denser, see-through
-// panels (11px text, 24px rows): a 12px thumb, not 16px, and a track a shade darker than muted,
-// which all but vanishes on a translucent panel. It adds only the rounding below.
+// the thumb, a tick at the origin, where shadcn's fills from its left end. Its shape is shadcn's at the
+// viewer's denser scale (a 6px track, a 12px thumb, not 16px); its colours are quiet, as Figma's sliders
+// are, from the `--slider-*` tokens (`styles/tokens.css`, light and dark): a faint neutral track, a fill
+// a few steps darker (never the primary's near-black bar or the accent), a light thumb held off the panel
+// by a thin ring and a small shadow. Hover strengthens the fill a step and the ring; the keyboard's focus
+// rings the thumb; disabled, the whole slider is at half strength, its thumb flat. It adds only the
+// rounding below.
 
 // The decimals a step is written with ("0.25" → 2): what a reported value is rounded to.
 function stepDecimals(step) {
@@ -56,7 +60,7 @@ function Slider({
       max={max}
       step={step}
       className={cn(
-        "relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
+        "cad-hit group/slider relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
         className
       )}
       {...props}
@@ -64,13 +68,13 @@ function Slider({
       <SliderPrimitive.Track
         data-slot="slider-track"
         className={cn(
-          "relative grow overflow-hidden rounded-full bg-foreground/15 data-[orientation=horizontal]:h-1.5 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5"
+          "relative grow overflow-hidden rounded-full bg-(--slider-track) data-[orientation=horizontal]:h-1.5 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5"
         )}
       >
         {Number.isFinite(origin) && max > min ? <OriginFill origin={origin} value={values[0]} min={min} max={max} /> : <SliderPrimitive.Range
           data-slot="slider-range"
           className={cn(
-            "absolute bg-primary data-[orientation=horizontal]:h-full data-[orientation=vertical]:w-full"
+            "absolute bg-(--slider-fill) transition-colors group-hover/slider:bg-(--slider-fill-hover) group-data-[disabled]/slider:bg-(--slider-fill) data-[orientation=horizontal]:h-full data-[orientation=vertical]:w-full"
           )}
         />}
       </SliderPrimitive.Track>
@@ -79,7 +83,7 @@ function Slider({
           {...thumbProps}
           data-slot="slider-thumb"
           key={index}
-          className="block size-3 shrink-0 rounded-full border border-primary bg-white shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+          className="block size-thumb shrink-0 rounded-full border border-(--slider-thumb-border) bg-(--slider-thumb) shadow-(--slider-thumb-shadow) ring-ring/40 transition-[border-color,box-shadow] group-hover/slider:border-foreground/60 focus-visible:ring-[3px] focus-visible:outline-hidden group-data-[disabled]/slider:shadow-none data-[disabled]:pointer-events-none"
         />
       ))}
     </SliderPrimitive.Root>
@@ -91,8 +95,8 @@ function OriginFill({ origin, value, min, max }) {
   const at = number => Math.min(100, Math.max(0, ((Number(number) - min) / (max - min)) * 100))
   const from = at(origin), to = at(value)
   return <>
-    <span data-slot="slider-fill" className="absolute h-full bg-primary" style={{ left: `${Math.min(from, to)}%`, width: `${Math.abs(to - from)}%` }} />
-    {from > 0 && from < 100 ? <span data-slot="slider-origin" className="absolute inset-y-0 w-px bg-foreground/45" style={{ left: `calc(${from}% - 0.5px)` }} /> : null}
+    <span data-slot="slider-fill" className="absolute h-full bg-(--slider-fill) transition-colors group-hover/slider:bg-(--slider-fill-hover) group-data-[disabled]/slider:bg-(--slider-fill)" style={{ left: `${Math.min(from, to)}%`, width: `${Math.abs(to - from)}%` }} />
+    {from > 0 && from < 100 ? <span data-slot="slider-origin" className="absolute inset-y-0 w-px bg-foreground/40" style={{ left: `calc(${from}% - 0.5px)` }} /> : null}
   </>
 }
 

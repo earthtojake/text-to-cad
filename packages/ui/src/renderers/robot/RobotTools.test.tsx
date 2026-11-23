@@ -129,8 +129,8 @@ async function openRobot({ phone = false } = {}) {
   }
   render(<Pane />);
   const pane = screen.getByTestId('one');
-  // Its Links are in the view's panel once the robot has loaded; on a phone the panel's pill
-  // leads the strip, which comes with the robot.
+  // Its Links are in the view's panel once the robot has loaded (on a phone the panel is a sheet, shut until its
+  // toggle opens it, so the strip, which comes with the robot, is what is waited for).
   await waitFor(() => expect(phone ? within(pane).queryByRole('group', { name: 'Interaction tools' }) : pane.querySelector('[aria-label="Robot links"] li')).not.toBeNull());
   const tools = () => within(pane).getByRole('group', { name: 'Interaction tools' });
   const robot = {
@@ -183,10 +183,14 @@ async function openRobot({ phone = false } = {}) {
     stack: () => [...pane.querySelectorAll('[data-cad-tool-stack] [data-tool-panel]')]
       .filter(panel => !panel.closest('[hidden]')).map(panel => panel.getAttribute('aria-label')),
     sidebar: () => [...pane.querySelectorAll('[data-flat-panel] [data-tool-panel]')]
-      .filter(panel => pane.querySelector(`[data-flat-panel-tab="${panel.getAttribute('data-flat-panel-section')}"]`)).map(panel => panel.getAttribute('aria-label')),
+      // A section with its tab, or the panel's one tab's title (both its id).
+      .filter(panel => pane.querySelector(`#flat-panel-tab-${CSS.escape(panel.getAttribute('data-flat-panel-section') || '')}`)).map(panel => panel.getAttribute('aria-label')),
+    // The panel's tabs' names, in order: Links, then Joints.
+    tabs: () => [...pane.querySelectorAll('[data-flat-panel] [data-flat-panel-tab-name]')].map(name => name.textContent),
     knobs: () => pane.querySelectorAll('[data-cad-joint-handles]').length,
     jointField: (name: string) => within(pane).getByLabelText(`${name} value in deg`) as HTMLInputElement,
-    position: () => within(pane.querySelector('[data-tool-panel][aria-label="Position controls"]') as HTMLElement),
+    // Joints: the panel's tab after Links (its ToolPanel drawn as one).
+    position: () => within(pane.querySelector('[data-flat-panel] [data-flat-panel-section="position"]') as HTMLElement),
     open: (name: string) => fireEvent.click(robot.tool(name)),
     type(name: string, value: string) {
       // On Position's tab, as a person reaches the joints.
@@ -215,13 +219,13 @@ async function openRobot({ phone = false } = {}) {
 }
 
 // The strip with Select in hand: a robot's four tools (`robot/tools.js`).
-// The tools that can be in hand; Clip, a popover from its tile, is never one.
-const SELECT_IN_HAND = ['Select:true', 'Pencil:false', 'Shapes:false', 'Measure:false'];
+// The tools that can be in hand, Clip among them (a model effect, as Draw is a tool).
+const SELECT_IN_HAND = ['Select:true', 'Draw:false', 'Measure:false', 'Clip:false'];
 
-it('robot Select opens in hand, before Pencil, Shapes, Measure and Clip: it picks links and drags the knobs, and its filter picks either alone', async () => {
+it('robot Select opens in hand, before Draw, Measure and Clip: it picks links and drags the knobs, and its filter picks either alone', async () => {
   const robot = await openRobot();
   expect([robot.toolNames(), robot.filter()]).toEqual([SELECT_IN_HAND, 'Filter: everything']);
-  expect([robot.sidebar(), robot.stack()]).toEqual([['Links', 'Position controls'], []]);
+  expect([robot.sidebar(), robot.tabs(), robot.stack()]).toEqual([['Links', 'Joint controls'], ['Links', 'Joints'], []]);
   // Select's button is the pointer, badged with what its Filter ticks: none while Links is.
   const badge = () => robot.tool('Select').querySelector('svg[data-tool-icon-base="select"] [data-tool-icon-badge]')?.getAttribute('data-tool-icon-badge') ?? '';
   expect([robot.tool('Select').querySelectorAll('svg[data-tool-icon-base="select"]').length, badge()]).toEqual([1, '']);
@@ -245,86 +249,82 @@ it('robot Select opens in hand, before Pencil, Shapes, Measure and Clip: it pick
   robot.client.dispose();
 });
 
-it('a robot\'s Display menu leaves Select the tool, and a pose set by hand stays when Select\'s filter puts the knobs away', async () => {
+it('a robot\'s Display leaves Select the tool, and a pose set by hand stays when Select\'s filter puts the knobs away', async () => {
   const robot = await openRobot();
   const user = userEvent.setup();
-  // Display is not a tool: its menu (the modes and Grid), from its tile at the strip's end, opens over
-  // Select and leaves it the tool, with its knobs; Escape puts it away.
-  await user.click(within(robot.pane.querySelector<HTMLElement>('[data-cad-toolbar] [data-view-controls]')!).getByRole('button', { name: /^Display mode: / }));
-  await waitFor(() => expect(document.querySelector('[role=menu][aria-label="Display"]')).not.toBeNull());
-  expect([robot.toolNames(), robot.knobs()]).toEqual([SELECT_IN_HAND, 1]);
-  await user.keyboard('{Escape}');
-  await waitFor(() => expect(document.querySelector('[role=menu][aria-label="Display"]')).toBeNull());
-  expect(robot.toolNames()).toEqual(SELECT_IN_HAND);
+  // Display is no tool: its card's rows (here Show grid), opened by the navbar's button, leave Select the tool, with its knobs.
+  await user.click(within(robot.pane.querySelector<HTMLElement>('[data-navbar-view-controls]')!).getByRole('button', { name: 'Display' }));
+  const card = document.querySelector<HTMLElement>('[data-display-settings-card]')!;
+  await user.click(within(card).getByRole('switch', { name: 'Show grid' }));
+  expect([within(card).getByRole('switch', { name: 'Show grid' }).getAttribute('aria-checked'), robot.toolNames(), robot.knobs()]).toEqual(['true', SELECT_IN_HAND, 1]);
+  await user.click(within(card).getByRole('button', { name: 'Close display settings' }));
 
   // A pose off its default stays in the section when the filter puts the knobs away; its Pose row
   // says the joints were set by hand.
   robot.type('shoulder', '25');
   await robot.choose('links');
   expect([robot.filter(), robot.knobs()]).toEqual(['Filter: Links', 0]);
-  expect(robot.jointField('shoulder').value).toBe('25°');
-  expect(robot.position().getByRole('button', { name: /^Pose: / }).getAttribute('aria-label')).toBe('Pose: Custom');
+  expect(robot.jointField('shoulder').value).toBe('25');
+  expect(robot.position().getByRole('button', { name: /^Position: / }).getAttribute('aria-label')).toBe('Position: Custom');
   // Select is the only tool: pressing it again leaves it the tool, and its filter as it was.
   robot.open('Select');
   expect([robot.toolNames(), robot.filter(), robot.knobs()]).toEqual([SELECT_IN_HAND, 'Filter: Links', 0]);
   robot.client.dispose();
 });
 
-it("a robot is a 3D view: Projection, Display and Preview end the strip, in the section of Clip's, one rule in all; the corner is the cube's alone; the navbar holds none of them", async () => {
+it("a robot is a 3D view: Display and Preview the navbar's, the corner the cube alone, the strip ending at Clip, no rule", async () => {
   const robot = await openRobot();
   const strip = within(robot.pane).getByRole('group', { name: 'Interaction tools' });
-  const actions = strip.querySelector<HTMLElement>('[data-view-controls]')!;
-  // Two sections: the tools that pick, a rule, then Clip and the view's controls, nothing between them.
-  expect(strip.querySelectorAll('[data-strip-rule]')).toHaveLength(1);
-  expect(actions.previousElementSibling?.getAttribute('aria-label')).toBe('Clip');
-  expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Projection: Orthographic', 'Display mode: Solid', 'Preview']);
-  expect(within(robot.pane).queryByRole('button', { name: 'Home' })).toBeNull();
-  expect(robot.pane.querySelectorAll('[data-viewer-navbar] [data-view-controls] button')).toHaveLength(0);
+  // One row, no rule: the tools, Clip last; nothing of the view on it.
+  expect([strip.querySelectorAll('[data-strip-rule]').length, strip.querySelector('[data-view-controls]'), [...strip.querySelectorAll('button')].at(-1)?.getAttribute('aria-label')]).toEqual([0, null, 'Clip']);
+  // The view's settings are the navbar's, Display then Preview; the corner holds nothing beside the cube.
+  expect([...robot.pane.querySelectorAll('[data-viewer-navbar] [data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display', 'Preview']);
+  expect(robot.pane.querySelector('[data-view-corner]')!.childElementCount).toBe(0);
   robot.client.dispose();
 });
 
-it('robot Links and Position are the view\'s panel\'s whatever Select picks, a Position control leaves the tool and its filter, and no pick opens or turns the host\'s column', async () => {
+it('robot Links and Joints are the view\'s panel\'s whatever Select picks, a Position control leaves the tool and its filter, and no pick opens or turns the host\'s column', async () => {
   const robot = await openRobot();
   // With the knobs put away, Position's section is on screen and drives the joints all the same.
   await robot.choose('links');
-  expect(robot.sidebar()).toEqual(['Links', 'Position controls']);
+  expect(robot.tabs()).toEqual(['Links', 'Joints']);
   robot.type('shoulder', '30');
   expect(robot.jointField('shoulder').closest('[hidden]')).toBeNull();
-  expect(robot.jointField('shoulder').value).toBe('30°');
+  expect(robot.jointField('shoulder').value).toBe('30');
 
   // A visual picked in the viewport is Quick Edit's chip, not a panel; the sidebar is as it was.
   robot.tapUpperArm();
   await waitFor(() => expect(robot.pressedRows()).toHaveLength(1));
   expect(robot.pane.querySelectorAll('[data-quick-edit-ref]')).toHaveLength(1);
-  expect([robot.sidebar(), robot.stack()]).toEqual([['Links', 'Position controls'], []]);
+  expect([robot.tabs(), robot.stack()]).toEqual([['Links', 'Joints'], []]);
   // Reaching for a Position control changes neither the tool nor what it picks.
   fireEvent.pointerDown(robot.jointField('shoulder'));
   expect([robot.toolNames(), robot.filter(), robot.knobs()]).toEqual([SELECT_IN_HAND, 'Filter: Links', 0]);
   robot.client.dispose();
 });
 
-it('robot Links and Position are the view\'s panel\'s tabs whatever Select picks: a tab shows its section alone, and it never folds', async () => {
+it('robot Links and Joints are the panel\'s two tabs, whatever Select picks: Links first and never folds, Joints its controls on its tab', async () => {
   const robot = await openRobot();
-  const tabs = () => [...robot.pane.querySelectorAll('[data-flat-panel] [role=tab]')];
-  const names = () => tabs().map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')]);
-  const links = () => robot.pane.querySelector<HTMLElement>('[data-tool-panel][aria-label="Links"]')!;
-  expect([names(), robot.toolNames()]).toEqual([[['Links', 'true'], ['Position', 'false']], SELECT_IN_HAND]);
+  const links = () => robot.pane.querySelector<HTMLElement>('[data-flat-panel] [data-tool-panel][aria-label="Links"]')!;
+  const joints = () => robot.pane.querySelector<HTMLElement>('[data-flat-panel] [data-flat-panel-section="position"]')!;
+  expect([robot.tabs(), robot.toolNames()]).toEqual([['Links', 'Joints'], SELECT_IN_HAND]);
   await robot.choose('position');
-  expect([robot.filter(), robot.sidebar()]).toEqual(['Filter: Position', ['Links', 'Position controls']]);
-  expect([links().hidden, within(links()).queryByRole('button', { name: /^(?:Collapse|Expand) links$/ })]).toEqual([false, null]);
-  // One section at a time: Position's tab takes Links' place.
-  fireEvent.click(tabs()[1]);
-  expect([names(), links().hidden]).toEqual([[['Links', 'false'], ['Position', 'true']], true]);
+  expect([robot.filter(), robot.tabs()]).toEqual(['Filter: Position', ['Links', 'Joints']]);
+  expect([links().hidden, joints().hidden, within(links()).queryByRole('button', { name: /^(?:Collapse|Expand) links$/ })]).toEqual([false, true, null]);
+  // The Joints tab shows its controls, Links' page put away (kept mounted); nothing folds.
+  fireEvent.click(within(robot.pane.querySelector<HTMLElement>('[data-flat-panel]')!).getByRole('tab', { name: 'Joints' }));
+  expect([links().hidden, joints().hidden, robot.jointField('shoulder').closest('[hidden]'), joints().querySelector('[data-tool-panel-collapse], [data-inspector-section-head]')]).toEqual([true, false, null, null]);
   robot.client.dispose();
 });
 
-it('on a phone a robot has no panel: no pill, no Links or Position tab, the strip alone', async () => {
+it('on a phone a robot\'s panel is a sheet behind the navbar\'s toggle, closed at the start: no pill, the strip, Display and Preview', async () => {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
     { x: 0, y: 0, left: 0, top: 0, right: 390, bottom: 844, width: 390, height: 844, toJSON: noop } as DOMRect);
   const robot = await openRobot({ phone: true });
   expect(robot.pane.querySelector('[data-viewer-layout]')!.getAttribute('data-viewer-layout')).toBe('mobile');
   expect(within(robot.pane).getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect([within(robot.pane).queryByRole('button', { name: 'Show panel' }), robot.pane.querySelector('[data-flat-panel]')]).toEqual([null, null]);
+  expect([within(robot.pane).getByRole('button', { name: 'Show panel' }).getAttribute('aria-expanded'), robot.pane.querySelector('[data-flat-panel]')]).toEqual(['false', null]);
+  expect([...robot.pane.querySelectorAll('[data-viewer-navbar] [data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display', 'Preview']);
   robot.client.dispose();
 });
 
@@ -332,7 +332,7 @@ it('a new revision of the robot keeps its pose while its controls and named pose
   const robot = await openRobot();
   await robot.choose('position');
   robot.type('shoulder', '25');
-  await waitFor(() => expect(robot.jointField('shoulder').value).toBe('25°'));
+  await waitFor(() => expect(robot.jointField('shoulder').value).toBe('25'));
   // The robot on screen is the scene the viewport's pick is handed: a new revision is a new one.
   const scene = () => picks.latest!.scene;
   const before = scene();
@@ -344,7 +344,7 @@ it('a new revision of the robot keeps its pose while its controls and named pose
   shifted.visuals.find((visual: any) => visual.link === 'upper_arm').placement[3] += 0.2;
   await robot.publish(shifted);
   await waitFor(() => expect(scene()).not.toBe(before));
-  expect(robot.jointField('shoulder').value).toBe('25°');
+  expect(robot.jointField('shoulder').value).toBe('25');
   expect([robot.toolNames(), robot.filter(), robot.knobs()]).toEqual([SELECT_IN_HAND, 'Filter: Position', 1]);
 
   // The shoulder's range changed: the robot opens at its opening pose, though 25° would still fit.
@@ -357,7 +357,7 @@ it('a new revision of the robot keeps its pose while its controls and named pose
   }
   await robot.publish(narrower);
   await waitFor(() => expect(scene()).not.toBe(kept));
-  expect(robot.jointField('shoulder').value).toBe('0°');
+  expect(robot.jointField('shoulder').value).toBe('0');
   robot.client.dispose();
 });
 
@@ -378,21 +378,21 @@ it("Preview draws a robot of its own at the opening pose; the tools view's robot
   expect(matrix()).toEqual(posed);
   await userEvent.setup().click(screen.getByRole('button', { name: 'Exit preview', exact: true }));
   expect(matrix()).toEqual(posed);
-  expect(robot.jointField('shoulder').value).toBe('30°');
+  expect(robot.jointField('shoulder').value).toBe('30');
   robot.client.dispose();
 });
 
 it('one motion at a time on a robot: Clip turned on puts the joints back, and a joint moved takes Clip off', async () => {
   const robot = await openRobot();
   robot.type('shoulder', '25');
-  await waitFor(() => expect(robot.jointField('shoulder').value).toBe('25°'));
+  await waitFor(() => expect(robot.jointField('shoulder').value).toBe('25'));
   robot.open('Clip');
   // Its row is a popover from its tile, out of the pane.
   const clip = () => screen.getByRole('slider', { name: 'Clip amount' });
   const cut = () => clip().getAttribute('aria-valuenow');
   fireEvent.keyDown(clip(), { key: 'End' });
-  await waitFor(() => expect([cut(), robot.jointField('shoulder').value]).toEqual(['100', '0°']));
+  await waitFor(() => expect([cut(), robot.jointField('shoulder').value]).toEqual(['100', '0']));
   robot.type('shoulder', '10');
-  await waitFor(() => expect([cut(), robot.jointField('shoulder').value]).toEqual(['0', '10°']));
+  await waitFor(() => expect([cut(), robot.jointField('shoulder').value]).toEqual(['0', '10']));
   robot.client.dispose();
 });

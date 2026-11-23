@@ -7,7 +7,6 @@ import { ToolbarButton, TOOLBAR_ICON_BUTTON_CLASS } from "@cad/ui/primitives/too
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
-import { VIEWPORT_INSET_PX } from "../../shell/viewportLayout.js";
 import { PREVIEW_FADE_CLASS, usePreviewShown } from "../PreviewChrome.jsx";
 import PlaybackMenu from "../PlaybackMenu.jsx";
 import { AnimationTimeControl, animationControlsHaveContent, formatSeconds, playbarWords } from "./AnimationTimeControl.js";
@@ -44,33 +43,27 @@ function RoutineMenu({ runtime, disabled }) {
 /**
  * Preview's playbar, for a file with routines: one transparent row under the model, centred, as it
  * was before Preview had a sidebar — the Routines list at its left end where there are several,
- * Play or Pause, the scrubber, and the Playback settings (Speed, Loop, Autoplay) at its right end,
+ * Play or Pause, the scrubber, and the Playback settings (Speed, Loop) at its right end,
  * their menus opening up. Its buttons sit 4px apart, the scrubber as far from the button either
  * side of it. It plays Preview's own routine (`runtime`), never the tools view's. It comes and goes
- * with Preview's bar (`idle`, `createPreviewIdle`), its playing untouched by either.
+ * with Preview's bar (`idle`, `createPreviewIdle`), its playing untouched by either. Preview has no
+ * tool strip, so this row is always there for a file with routines, its own way to play them.
  *
- * The tools view has the same playbar (`toolsView`: a file's routines are its playbar's in both views,
- * never a section of the panel), the same row on no surface, and on a phone (`phone`) over Quick
- * Edit's peek, which keeps the bottom. Its Reset is the last item of its Playback settings: the
- * routine let go of, the model back at rest. The model is at rest while the routine neither plays
- * nor owns the pose (`enabled`): paused at its start, after a scrub or a choice of routine, the
- * routine still holds the model at its first frame, and only Reset (`onRelease`) lets go.
+ * The tools view has no playbar: its routines are the panel's Animation tab (`AnimationSection.jsx`).
  *
- * @param {{ runtime: object, autoplay: boolean, onAutoplayChange(value: boolean): void, disabled?: boolean,
- *   idle?: ReturnType<typeof import("../PreviewChrome.jsx").createPreviewIdle> | null, toolsView?: boolean, phone?: boolean }} props
+ * @param {{ runtime: object, disabled?: boolean,
+ *   idle?: ReturnType<typeof import("../PreviewChrome.jsx").createPreviewIdle> | null, scheme?: "light" | "dark" | null }} props
+ *   `scheme`: the backdrop's ink (`backdropScheme`), its token scope, as Preview's bar is.
  */
-export default function PreviewPlaybar({ runtime, autoplay, onAutoplayChange, disabled = false, idle = null, toolsView = false, phone = false }) {
+export default function PreviewPlaybar({ runtime, disabled = false, idle = null, scheme = null }) {
   const shown = usePreviewShown(idle);
   const { t } = useI18n();
   if (!animationControlsHaveContent(runtime)) return null;
   const playing = runtime.playing === true;
   const words = playbarWords(runtime, t);
-  const atRest = !playing && runtime.enabled !== true && !(Number(runtime?.elapsedSec) > 0);
-  return <div role="toolbar" aria-label={words.playback} data-preview-playbar={toolsView ? undefined : ""} data-playbar={toolsView ? "tools" : "preview"}
-    data-state={shown ? "visible" : "hidden"} {...idle?.hold("playbar")}
-    style={toolsView ? { bottom: phone ? `calc(var(--cad-quick-edit-peek, 0px) + ${VIEWPORT_INSET_PX}px)` : VIEWPORT_INSET_PX * 2 } : undefined}
-    className={cn("absolute left-1/2 z-30 flex w-96 max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-1 px-2 py-1",
-      !toolsView && "bottom-4", PREVIEW_FADE_CLASS,
+  return <div role="toolbar" aria-label={words.playback} data-preview-playbar="" data-playbar="preview"
+    data-state={shown ? "visible" : "hidden"} data-scheme={scheme ?? undefined} {...idle?.hold("playbar")}
+    className={cn(scheme, "text-foreground absolute bottom-4 left-1/2 z-30 flex w-96 max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-1 px-2 py-1", PREVIEW_FADE_CLASS,
       shown ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0")}>
     <RoutineMenu runtime={runtime} disabled={disabled} />
     <ToolbarButton tooltip={false} disabled={disabled} label={playing ? words.pause : words.play} onClick={() => runtime.onPlayToggle?.()}>
@@ -79,7 +72,6 @@ export default function PreviewPlaybar({ runtime, autoplay, onAutoplayChange, di
     <div className="min-w-0 flex-1 px-1">
       <AnimationTimeControl runtime={runtime} disabled={disabled} />
     </div>
-    <PlaybackMenu animation={runtime} side="top" disabled={disabled} autoplay={autoplay} onAutoplayChange={onAutoplayChange}
-      reset={toolsView ? { label: words.reset, disabled: atRest, onSelect: () => runtime.onRelease?.() } : null} />
+    <PlaybackMenu animation={runtime} side="top" disabled={disabled} />
   </div>;
 }

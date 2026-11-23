@@ -24,7 +24,7 @@ import unittest
 
 from tests.python.support.paths import REPO_ROOT
 
-SCRIPT = REPO_ROOT / "packages" / "cad-server" / "src" / "cad_server" / "_internal" / "open_in_blender.py"
+SCRIPT = REPO_ROOT / "packages" / "cad" / "src" / "cad_server" / "_internal" / "open_in_blender.py"
 FLOOR = (3, 7)  # Blender 2.80's Python, the oldest the script's docstring claims
 
 

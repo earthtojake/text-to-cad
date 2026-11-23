@@ -4,8 +4,8 @@ import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-// The viewer's chrome follows docs/settings-ui.md: type from the token scale (text-micro,
-// text-tiny, text-xs, text-ui), and layout from the ONE viewer breakpoint (useViewerMobile)
+// The viewer's chrome follows `docs/design-system.md`, "Two scales": type from the token scale (text-tiny,
+// text-xs, text-ui, text-heading), and layout from the ONE viewer breakpoint (useViewerMobile)
 // or a container query — never the window's `sm:`/`md:` breakpoints. Document content
 // (markdown, code) keeps its own content styles and is not chrome.
 const root = fileURLToPath(new URL(".", import.meta.url));
@@ -31,7 +31,9 @@ test("viewer chrome uses the type scale and the viewer breakpoint, never window 
 
 // Every scroll region of the chrome is the one ScrollArea primitive (`primitives/scroll-area.jsx`):
 // thin overlay bars in the theme's colours, never the platform's scrollbar. The home (the model
-// library) is a page, not chrome: it scrolls as a page does, with the platform's own scrollbar.
+// library) is a page, not chrome: it scrolls as a page does, with the platform's own scrollbar. A
+// strip that scrolls with no bar at all (the panel's tabs, `FlatPanel.jsx`: its scrollbar hidden,
+// `[scrollbar-width:none]`, its clipped edge faded instead) shows no scrollbar to style.
 const NATIVE_SCROLLER = /\boverflow(?:-[xy])?-(?:auto|scroll)\b/;
 const PAGES = ["library/ModelLibrary.tsx"];
 const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "file-viewer/navigation/FolderExplorer.jsx", "primitives/dropdown-menu.jsx",
@@ -42,49 +44,98 @@ test("every scroll region in the viewer's chrome is the ScrollArea primitive, ne
   for (const dir of [...CHROME, "renderers/xbf", "renderers/robot"]) for (const file of sources(join(root, dir))) {
     if (PAGES.includes(relative(root, file))) continue;
     readFileSync(file, "utf8").split("\n").forEach((line, index) => {
-      if (NATIVE_SCROLLER.test(line)) found.push(`${relative(root, file)}:${index + 1}: ${line.trim().slice(0, 120)}`);
+      if (NATIVE_SCROLLER.test(line) && !line.includes("[scrollbar-width:none]")) found.push(`${relative(root, file)}:${index + 1}: ${line.trim().slice(0, 120)}`);
     });
   }
   assert.deepEqual(found, []);
   for (const file of SCROLL_REGIONS) assert.match(readFileSync(join(root, file), "utf8"), /<ScrollArea\b/, `${file} scrolls in a ScrollArea`);
 });
 
-// The Home (`library/`) is one type scale (docs/settings-ui.md): every text text-ui, 13px -- the
-// type filter, the search, the names, the table, its header included -- but the heading, Recent, the
-// one larger text (17px, the owner's exception), and a tile's age, text-tiny and muted; a tile's and
-// a row's glyph 16px.
-test("the Home is one type scale: text-ui throughout but the heading and a tile's age, and 16px glyphs", () => {
-  const css = readFileSync(join(root, "styles/globals.css"), "utf8");
+// The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"): the controls text-ui (13/20), the
+// heading, Recent, the one larger text (15/20 semibold), a name 12/16 (text-xs) and its facts, the count, a
+// format's badge and the table's header 11/16 (text-tiny); a tile's glyph 16px.
+test("the Home is the chrome's type scale: the heading 15/20, names 12/16, facts 11/16, and 16px glyphs", () => {
+  // Its rules, without the comments that stand before them.
+  const css = readFileSync(join(root, "styles/globals.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   const sizes = [...css.matchAll(/([^{}]*\.cad-library[^{}]*)\{([^}]*)\}/g)].flatMap(([, selector, body]) => {
     const size = body.match(/font-size:\s*([^;]+);/)?.[1].trim();
     return size ? [[selector.trim().replace(/\s+/g, " "), size]] : [];
   });
   assert.deepEqual(sizes, [
-    [".cad-library-heading", "1.0625rem"],
-    [".cad-library-status", "var(--text-tiny, 0.6875rem)"],
-    [".cad-library-columns", "var(--text-ui)"],
-    [".cad-library-row .cad-library-status", "var(--text-ui)"],
+    [".cad-library-heading", "var(--cad-text-heading)"],
+    [".cad-library-count", "var(--cad-text-tiny)"],
+    // In the navbar (a host's home under it), Recent is the navbar's 13/20.
+    ["[data-navbar-home] .cad-library-heading", "var(--cad-text-ui)"],
+    [".cad-library-format", "var(--cad-text-tiny)"],
+    [".cad-library-card .cad-library-label", "var(--cad-text-xs)"],
+    [".cad-library-status", "var(--cad-text-tiny)"],
+    [".cad-library-columns", "var(--cad-text-tiny)"],
+    [".cad-library-row .cad-library-label", "var(--cad-text-xs)"],
+    [".cad-library-welcome-title", "var(--cad-text-heading)"],
+    [".cad-library-welcome-formats", "var(--cad-text-tiny)"],
   ]);
   assert.match(css, /\.cad-library-glyph \{[^}]*width: 16px; height: 16px;/);
   const page = readFileSync(join(root, "library/ModelLibrary.tsx"), "utf8");
-  assert.deepEqual([...page.matchAll(/\btext-(micro|tiny|xs)\b/g)].map(([name]) => name), []);
+  assert.deepEqual([...page.matchAll(/\btext-(tiny|xs)\b/g)].map(([name]) => name), []);
   assert.match(page, /className="cad-library h-full overflow-y-auto text-ui"/);
 });
 
-// The logo stands on the page's gutter (docs/settings-ui.md): the navbar's 10px start, the logo
-// button's 4px padding and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page. The Home itself is a centred
-// column of its own, 1128px at most on 24px gutters, 44px under the navbar, its tiles 280px at least.
-test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1128px column on its own gutters", () => {
-  const css = readFileSync(join(root, "styles/globals.css"), "utf8");
-  assert.match(css, /\.cad-library-content \{[^}]*max-width: 1128px; margin: 0 auto; padding: 44px 24px /);
-  assert.match(css, /\.cad-library-grid \{[^}]*minmax\(280px, 1fr\)/);
-  const navbar = readFileSync(join(root, "file-viewer/navigation/ViewerNavbar.jsx"), "utf8");
-  // 10px, the button's 4px, and the 2px the mark's artwork sits in from its image's edge.
-  assert.match(navbar, /cn\(NAVBAR_ROW_CLASS, "pl-\[10px\] /);
-  assert.match(navbar, /"cad-navbar-logo justify-start px-1"/);
+// THE type scale (`docs/design-system.md`, "The type scale"): three interface sizes and one heading, each on a fixed
+// line height -- tiny 11/16, xs 12/16, ui 13/20, heading 15/20 semibold -- and a phone's each step 2px up ("Two scales":
+// tiny 13/18, xs 14/20, ui 15/20, heading 17/22), the view's panel at xs (12/16; a phone's 14/20). No 10px step (text-micro is gone),
+// and no stylesheet sets a font size in pixels: every size is the scale's.
+test("the type scale is three sizes and a heading on fixed line heights, a phone's each 2px up, with no 10px step", () => {
+  const css = readFileSync(join(root, "styles/globals.css"), "utf8"), tokens = readFileSync(join(root, "styles/tokens.css"), "utf8");
+  const block = selector => css.slice(css.indexOf(`${selector} {`)).split("}")[0];
+  const vars = text => Object.fromEntries([...text.matchAll(/--cad-(text|leading)-(\w+):\s*([^;]+);/g)].map(([, kind, name, value]) => [`${kind}-${name}`, value.trim()]));
+  assert.deepEqual(vars(block(":root")), { "text-tiny": "0.6875rem", "text-xs": "0.75rem", "text-ui": "0.8125rem", "text-heading": "0.9375rem",
+    "text-panel": "0.75rem", "leading-tiny": "1rem", "leading-xs": "1rem", "leading-ui": "1.25rem", "leading-heading": "1.25rem", "leading-panel": "1rem" });
+  assert.deepEqual(vars(block(':root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *))')), { "text-tiny": "13px", "text-xs": "14px", "text-ui": "15px", "text-heading": "17px",
+    "text-panel": "14px", "leading-tiny": "18px", "leading-xs": "20px", "leading-ui": "20px", "leading-heading": "22px", "leading-panel": "20px" });
+  for (const name of ["tiny", "xs", "ui", "heading"]) assert.match(tokens, new RegExp(`--text-${name}--line-height: var\\(--cad-leading-${name}\\);`));
+  assert.match(tokens, /--text-heading--font-weight: 600;/);
+  assert.doesNotMatch(css + tokens, /micro/);
+  assert.deepEqual([...css.matchAll(/font-size:\s*\d[^;]*;/g)].map(([match]) => match), [], "no pixel or rem font size but the scale's variables");
+  const found = [];
+  for (const dir of [...CHROME, "renderers/xbf", "renderers/robot"]) for (const file of sources(join(root, dir))) {
+    if (/\btext-micro\b/.test(readFileSync(file, "utf8"))) found.push(relative(root, file));
+  }
+  assert.deepEqual(found, []);
 });
 
-// The panel's rows have ONE owner of their horizontal geometry (docs/settings-ui.md): the row
+// Every menu, dropdown, select and context menu is the scale's xs step (12/16; a phone's 14/20), each item at least the
+// row (28; a phone's 36), its shortcut hints 11px, and a tooltip the tiny step: the primitives set it, so no menu or item
+// brings a size of its own.
+test("menus are the xs step on the row and tooltips the tiny step, from the primitives alone", () => {
+  for (const file of ["primitives/dropdown-menu.jsx", "primitives/context-menu.jsx"]) {
+    const text = readFileSync(join(root, file), "utf8");
+    assert.match(text, /bg-popover (p-1 )?text-xs text-popover-foreground/, `${file} draws its menu at text-xs`);
+    for (const item of text.matchAll(/"[^"]*\bpy-1\.5\b[^"]*"/g)) assert.match(item[0], /min-h-row .*text-xs/, `${file}: ${item[0].slice(0, 60)}`);
+    assert.doesNotMatch(text, /leading-4/, `${file}: no fixed line height`);
+  }
+  assert.match(readFileSync(join(root, "primitives/tooltip.jsx"), "utf8"), /text-tiny leading-\(--cad-leading-tiny\)/);
+  assert.doesNotMatch(readFileSync(join(root, "renderers/kit/shell/ViewportContextMenu.jsx"), "utf8"), /DropdownMenuItem className="text-/);
+});
+
+// The logo stands on the page's gutter (`docs/viewer-ux.md`, "The navbar"): the navbar's 8px, the logo centred in its 28px tile (6px)
+// and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page. The Home itself is a centred
+// column of its own, 1128px at most on 24px gutters, 20px under the navbar, its tiles 232px at least.
+test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1128px column on its own gutters", () => {
+  const css = readFileSync(join(root, "styles/globals.css"), "utf8");
+  assert.match(css, /\.cad-library-content \{[^}]*max-width: 1128px; margin: 0 auto; padding: 20px 24px /);
+  assert.match(css, /\.cad-library-grid \{[^}]*minmax\(232px, 1fr\)/);
+  const navbar = readFileSync(join(root, "file-viewer/navigation/ViewerNavbar.jsx"), "utf8");
+  // The row the control and 12px (40px), the tool strip's height, its icon buttons the strip's tile (the control, 28px):
+  // THE scale's (a phone's from the same tokens).
+  const row = readFileSync(join(root, "lib/navbarRow.js"), "utf8");
+  assert.match(row, /NAVBAR_ROW_CLASS = "flex h-\[calc\(var\(--cad-control\)\+12px\)\] shrink-0 items-center gap-2 border-b px-2"/);
+  assert.match(row, /NAVBAR_CONTROL_CLASS = "size-control /);
+  assert.match(navbar, /cn\(NAVBAR_ROW_CLASS, "relative border-border /);
+  assert.match(navbar, /"cad-navbar-logo w-control justify-start px-\[calc\(\(var\(--cad-control\)-16px\)\/2\)\]"/);
+  assert.match(navbar, /const NAV_ITEM_CLASS = "flex h-control /);
+});
+
+// The panel's rows have ONE owner of their horizontal geometry (`docs/design-system.md`, "Spacing and the panel inset"): the row
 // primitive pads a row by its `depth` and draws its guides, and the view's panel sets the lines. No
 // list pads a row, nor brings its own glyph column or chevron: only the primitive and the explorer
 // (which pads its own rows) read the old constants.
@@ -121,8 +172,8 @@ test("a panel row is padded by the row primitive alone: no list pads one, reads 
   assert.deepEqual(found, []);
 });
 
-// A number a slider sets is the ONE slider control (docs/settings-ui.md, "The slider control"): its
-// label, its quiet value and its slider. Only it and the playbar's scrubber, a timeline, draw the
+// A number a slider sets is the ONE slider control (`docs/design-system.md`, "The slider control"): its
+// label, its number field and its slider. Only it and the playback scrubber (the tools view's playbar's and Preview's), a timeline, draw the
 // slider primitive; no site brings its own slider and number.
 const SLIDER_OWNERS = ["renderers/kit/inspector/SliderField.jsx", "renderers/kit/tools/playbar/AnimationTimeControl.js"];
 // The primitive's module by any spelling (`@cad/ui/primitives/slider`, `../primitives/slider.jsx`), or
@@ -141,4 +192,5 @@ test("cn() merges the scale's sizes as font sizes", async () => {
   assert.equal(cn("h-6 text-xs", "text-ui"), "h-6 text-ui");
   assert.equal(cn("text-tiny", "text-muted-foreground"), "text-tiny text-muted-foreground");
   assert.equal(cn("text-ui", "text-foreground"), "text-ui text-foreground");
+  assert.equal(cn("text-xs", "text-heading"), "text-heading");
 });

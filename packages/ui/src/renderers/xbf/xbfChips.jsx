@@ -9,8 +9,9 @@ import { useI18n } from "@cad/ui/i18n";
 // What is selected in an engine document, as Quick Edit's chips -- as the STEP renderer's were:
 // a part or subassembly a chip of its own, its card its part count (a
 // subassembly's), size, volume and mass; faces and edges a chip for each kind on each part -- "base ·
-// face 3" alone, "base · 6 faces" for several -- its card the key measurements, which the engine
-// measures on the exact shape when the element is picked (`fetchXbfElementFacts`).
+// face 3" alone, "base · 6 faces" for several -- its card its part and its key measure (a face's area,
+// an edge's length), which the engine measures on the exact shape when the element is picked
+// (`fetchXbfElementFacts`).
 //
 // Each selected thing is also a reference into the document: the engine's canonical refs
 // (`xbfTree.js`: `refOf`, `elementRefOf`), the ones `cad <type> inspect` and `select` read, for an .xbf,
@@ -51,26 +52,53 @@ export function xbfMeasurementRows(kind, facts, t = english) {
 }
 
 
+// A card's numbers, read at a glance: three significant figures (`8.14`, `0.378`, `30`), a number of four
+// figures or more whole (`1,037`), so no value runs to seven digits, in the unit its size reads best in.
+// Display alone: what the engine reports and an agent reads (`cad inspect`, the references) is never
+// rounded here.
+const significant = value => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "—";
+  return numeric.toLocaleString(undefined, Math.abs(numeric) >= 1000 ? { maximumFractionDigits: 0 } : { maximumSignificantDigits: 3 });
+};
+// A unit a step up once the number would pass four figures in the smaller one.
+const scaled = (value, steps) => {
+  const numeric = Math.abs(Number(value));
+  const [unit, size] = steps.find(([, size], at) => at === steps.length - 1 || numeric < size * 1e4) || steps.at(-1);
+  return `${significant(Number(value) / size)} ${unit}`;
+};
+/** A length in mm, as a card shows it. */
+export const xbfLengthText = mm => `${significant(mm)} mm`;
+/** An area in mm², as a card shows it: mm², then cm² past 10,000 mm². */
+export const xbfAreaText = mm2 => scaled(mm2, [["mm²", 1], ["cm²", 100], ["m²", 1e6]]);
+/** A volume in mm³, as a card shows it: mm³, then cm³ past 10,000 mm³, then m³. */
+export const xbfVolumeText = mm3 => scaled(mm3, [["mm³", 1], ["cm³", 1e3], ["m³", 1e9]]);
+
 /**
  * What a part or subassembly weighs, as its card says it: its parts' volumes by their materials'
- * densities in kg (`measureParts`), "no material" where none has one, and how many have none
- * where only some do, in `t`'s language (English unless one is given).
+ * densities, in kg, or in g under 10 g (8.14 g, not 0.008138 kg) and mg under 10 mg, three significant
+ * figures; "no material" where none has one, and how many have none where only some do, in `t`'s
+ * language (English unless one is given).
  */
 export function xbfMassText(measured, t = english) {
   if (!measured) return "";
   if (measured.mass === null || measured.mass === undefined) return t("part.noMaterial");
   const kg = Number(measured.mass);
-  const text = `${formatNumber(kg, kg >= 10 ? 2 : kg >= 0.01 ? 3 : 6)} kg`;
+  const text = Math.abs(kg) >= 0.01 ? `${significant(kg)} kg` : Math.abs(kg) >= 1e-5 ? `${significant(kg * 1e3)} g` : `${significant(kg * 1e6)} mg`;
   return measured.unweighed > 0 ? t("part.massUnweighed", { mass: text, count: measured.unweighed }) : text;
 }
 
-/** A part's or subassembly's facts: how many parts (a subassembly's), its size, its volume, its mass. */
+/**
+ * A part's or subassembly's few key facts: how many parts (a subassembly's, every part under it), its size, its volume, its
+ * mass — only what is known: no Mass row where no part under it has a material ("no material" is not a fact of it).
+ */
 export function xbfPartFacts({ assembly, parts, measured }, t = english) {
+  const weighed = measured?.mass !== null && measured?.mass !== undefined;
   return [
     ...(assembly && parts > 0 ? [{ label: t("part.parts"), value: formatNumber(parts, 0) }] : []),
-    ...(measured?.size ? [{ label: t("part.size"), title: t("part.sizeHint"), value: `${measured.size.map(value => formatNumber(value)).join(" × ")} mm` }] : []),
-    ...(measured?.volume ? [{ label: t("part.volume"), title: t("part.volumeHint"), value: `${formatNumber(measured.volume, measured.volume >= 100 ? 0 : 2)} mm³` },
-      { label: t("part.mass"), title: t("part.massHint"), value: xbfMassText(measured, t) }] : [])
+    ...(measured?.size ? [{ label: t("part.size"), title: t("part.sizeHint"), value: `${measured.size.map(significant).join(" × ")} mm` }] : []),
+    ...(measured?.volume ? [{ label: t("part.volume"), title: t("part.volumeHint"), value: xbfVolumeText(measured.volume) }] : []),
+    ...(measured?.volume && weighed ? [{ label: t("part.mass"), title: t("part.massHint"), value: xbfMassText(measured, t) }] : [])
   ];
 }
 
@@ -95,55 +123,39 @@ export function xbfTipper({ scene, tree }) {
 }
 
 /**
- * A pick in an engine document, as the Selected pane, its chip's card and the hover tip read it
- * (`kit/inspector/inspect.js`'s `DetailItem`):
- * - a part or subassembly (`i3`, `n0.2`): its name; where it sits, its owners outermost first
- *   ("arm / hand"), the line under it and its tip; its canonical ref as its ID; its part count, size,
- *   volume and mass (`xbfPartFacts`); and a subassembly's children, a row each, as what it is made of — its
- *   children, not its siblings: the Model tree above it already lists those round its row, and what a
- *   subassembly holds is what a person picks it to read (a part has none, as a board's text has none);
- * - a face or an edge (`i3/face/12`): "base · face 3", its part, and its key measurements, which the
- *   engine measures on the exact shape once it is picked (`facts`, `useXbfElementFacts`).
+ * A pick in an engine document, as its chip's card and the hover tip read it (`kit/inspector/inspect.js`'s
+ * `DetailItem`): the thing in focus alone, never what it holds (the Model tree is the hierarchy), with a few
+ * key facts:
+ * - a part or subassembly (`i3`, `n0.2`): its name; a subassembly's part count, then size, volume and mass
+ *   (`xbfPartFacts`); its tip, its owner;
+ * - a face or an edge (`i3/face/12`): "base · face 3", its part, and its one key measure, which the engine
+ *   measures on the exact shape once it is picked (`facts`, `useXbfElementFacts`): a face's area, an edge's
+ *   length (an arc's, a circle's circumference).
  * Null for an id the document does not hold.
  */
 export function xbfDescriber({ scene, tree, facts = new Map(), t = english }) {
   if (!scene) return () => null;
   const partName = id => tree.nodes.get(id)?.label || scene.describePart(id)?.name || id;
   const ownersOf = id => (tree.owners.get(id) || []).map(owner => tree.nodes.get(owner)).filter(owner => owner && owner !== tree.wrapper).map(owner => owner.label);
-  const childRows = (node) => {
-    const rows = [];
-    const visit = (children) => {
-      for (const child of children || []) {
-        if (child.kind === "group") { visit(child.children); continue; }
-        rows.push({ id: child.id, kind: "solid", pick: child.selectionId, label: child.label,
-          detail: child.kind === "assembly" ? `${formatNumber(child.leafPartIds.length, 0)} ${t("part.parts").toLowerCase()}` : "" });
-      }
-    };
-    visit(node.children);
-    return rows;
-  };
   return (id) => {
     const parsed = parseXbfElementId(id);
     if (!parsed?.kind) {
       const node = tree.nodes.get(id);
       if (!node) return null;
-      const owners = ownersOf(id);
-      const rows = node.kind === "assembly" ? childRows(node) : [];
-      return { id: `node:${id}`, pick: id, kind: "solid", title: node.label, tip: owners.at(-1) || "", what: owners.join(" / "),
-        ref: tree.refOf(id) || id,
-        facts: xbfPartFacts({ assembly: node.kind === "assembly", parts: node.leafPartIds.length, measured: scene.measureParts(node.leafPartIds) }, t),
-        related: rows.length ? { title: t("part.parts"), count: String(rows.length), rows } : null };
+      return { id: `node:${id}`, pick: id, kind: "solid", title: node.label, tip: ownersOf(id).at(-1) || "",
+        facts: xbfPartFacts({ assembly: node.kind === "assembly", parts: node.leafPartIds.length, measured: scene.measureParts(node.leafPartIds) }, t) };
     }
     const element = scene.describeElement(id);
     if (!element) return null;
     const part = `i${parsed.instance}`, name = partName(part);
     const measured = xbfMeasurementRows(parsed.kind, facts.get(id), t);
+    // Its type as the engine names it (a face's surface, an edge's curve), then every key measure it has.
+    const type = parsed.kind === "edge" ? facts.get(id)?.curve : parsed.kind === "face" ? facts.get(id)?.surface : null;
     return { id: `element:${id}`, pick: id, kind: parsed.kind, title: `${name} · ${parsed.kind} ${element.ordinal}`,
       tip: measured[0] ? `${formatNumber(measured[0][1])} ${measured[0][2]}` : "",
-      ref: tree.elementRefOf(part, element.kind, element.ordinal, element.name) || id,
       facts: [{ label: t("part.part"), value: name },
-        ...measured.map(([label, value, unit]) => ({ label, value: `${formatNumber(value)} ${unit}` }))],
-      related: null };
+        ...(typeof type === "string" && type ? [{ label: t("part.type"), value: type }] : []),
+        ...measured.map(([label, value, unit]) => ({ label, value: unit === "mm²" ? xbfAreaText(value) : unit === "mm" ? xbfLengthText(value) : `${formatNumber(value)} ${unit}` }))] };
   };
 }
 
@@ -240,7 +252,7 @@ function xbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove
         if (!node) continue;
         const reference = referenceOf(nodeSelector(id));
         if (reference) references.push(reference);
-        chips.push({ key: `node:${id}`, label: node.label, glyph: "solid", id: reference?.target.selectors[0] || nodeSelector(id),
+        chips.push({ key: `node:${id}`, label: node.label, glyph: "solid",
           selectors: reference ? reference.target.selectors : EMPTY, copy: nodeCopy(id),
           detail: describe?.(id) || null,
           onRemove: () => onRemove([id]), onHover: on => onHover(on ? node.leafPartIds : null) });
@@ -270,7 +282,6 @@ function xbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove
         const selectors = memberReferences.flatMap(reference => reference.target.selectors);
         const fallback = chip.members.map(member => `${member.element.path} ${chip.kind} ${member.element.ordinal}`).join("\n");
         const shared = { key: chip.key, glyph: chip.kind, copy: copyOf(memberReferences, fallback), selectors,
-          id: selectors.join(", "),
           onRemove: () => onRemove(ids), onHover: on => onHover(on ? ids : null) };
         if (chip.members.length === 1) {
           const [{ element }] = chip.members;
@@ -279,7 +290,7 @@ function xbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove
               : { name, kind: chip.kind, number: String(element.ordinal) },
             detail: describe?.(element.id) || null };
         }
-        return { ...shared, label: `${name} · ${chip.members.length} ${PLURAL[chip.kind]}`,
+        return { ...shared, label: `${name} · ${chip.members.length} ${PLURAL[chip.kind]}`, count: chip.members.length,
           compact: onePart ? { kind: chip.kind, count: chip.members.length, words: `${chip.members.length} ${PLURAL[chip.kind]}` }
             : { name, kind: chip.kind, count: chip.members.length },
           // A run's card: its part, then each member's headline measurement.

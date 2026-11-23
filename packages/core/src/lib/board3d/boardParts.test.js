@@ -65,6 +65,18 @@ test("every placement of a model shares its one geometry; a missing model is a b
   parts.dispose();
 });
 
+test("a presentation render's parts cast shadows, and a missing model stands no block", () => {
+  const parts = createBoardParts(THREE, { thickness: 1.6, shadows: true, blocks: false });
+  parts.setParts(PARTS, TABLE);
+  parts.addModel("d1@1-10", bakeModel(THREE, DOCUMENT));
+  const stats = parts.stats();
+  assert.deepEqual([stats.bodies, stats.blocks], [2, 0]);
+  const meshes = [];
+  parts.object3D.traverse(object => { if (object.isMesh) meshes.push(object); });
+  assert.ok(meshes.length === 2 && meshes.every(mesh => mesh.castShadow));
+  parts.dispose();
+});
+
 test("the models are asked for the largest parts' first, each once", () => {
   const parts = createBoardParts(THREE, { thickness: 1.6 });
   const table = { ...TABLE, "q.step": { file: "q.step", document: "d2", api: "/api/v1/documents/step/d2", stamp: "1-20" } };

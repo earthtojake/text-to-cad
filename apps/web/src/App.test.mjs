@@ -20,7 +20,7 @@ await build({
       path: args.kind.startsWith('require') ? require.resolve(args.path) : pathToFileURL(require.resolve(args.path)).href,
       external: true,
     }));
-    // The shared CAD viewer, reduced to what this host hands it: what it draws is its own suite's.
+    // The shared viewer, reduced to what this host hands it: what it draws is its own suite's.
     plugin.onResolve({ filter: /^@cad\/ui\/cad-viewer$|useViewerAutoReload\.js$|host\/viewerLinks\.js$/ }, args => ({ path: args.path, namespace: 'host-test' }));
     // The tab store the host really uses; nothing else of the shared UI renders here.
     plugin.onResolve({ filter: /^@cad\/ui\/tab-store$/ }, () => ({ path: fileURLToPath(new URL('../../../packages/ui/src/tab-store/index.ts', import.meta.url)) }));
@@ -61,30 +61,26 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   // The library every CAD view shares, written over this Viewer's routes.
   const libraryCalls = [];
   const guards = [];  // the header no page from another site can send, on each analytics answer
-  const notice = { latest: '0.9.0', version: '0.8.1' };
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
     if (url === '/api/v1/settings' && init.body) guards.push(init.headers?.['x-cad-viewer']);
     const telemetry = init.body ? { share: false, reason: 'choice', policy: 'p' } : { share: false, reason: 'untold', policy: 'p' };
-    const reply = isCatalog(url, init) ? catalogOf(url) : url === '/api/v1/server' ? { notice }
-      : url === '/api/v1/local/update' ? { notice, release: '0.8.1', update: { state: 'working', target: '0.9.0', progress: { stage: 'install', done: 0, total: 4 } } }
+    const reply = isCatalog(url, init) ? catalogOf(url)
       : url === '/api/v1/documents' ? { documents: [] } : url === '/api/v1/local/pick' ? { path: '/m/picked.step' }
       : url === '/api/v1/local/link' ? { link: '1767225600.abc', expires: 1767225600 }
       : url !== '/api/v1/settings' ? { ok: true }
-      : { language: { locale: null }, telemetry, whats_new: { seen: init.body ? ['0.11'] : [], release: '0.11' },
-        updates: { automatic: true, reason: 'default' } };
+      : { language: { locale: null }, telemetry, whats_new: { seen: init.body ? ['0.11'] : [], release: '0.11' } };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
   // The page's own client over this Viewer's routes, its server's description answered here.
-  const client = { ...createWebCadClient({ document: window.document }), serverInfo: async options => { serverCalls.push(options); return { identityToken: 'restarted', start: '/m/launch', release: '0.9.0' }; } };
+  const client = { ...createWebCadClient({ document: window.document }), serverInfo: async options => { serverCalls.push(options); return { identityToken: 'restarted', start: '/m/launch' }; } };
   const root = createRoot(window.document.getElementById('root'));
   const tabStore = createTabStore(sessionTabRecord(window.sessionStorage));
   const viewer = () => snapshot();
   try {
     const historyAtStart = window.history.length;
-    // The update notice comes with the server's description (`main.tsx`): the button draws with the page.
-    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, platform: 'darwin' }, tabStore, notice })));
+    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, platform: 'darwin' }, tabStore })));
     // The document the URL names, as it names it; the host's file menu and links; the tab's store
     // for everything the viewer keeps.
     assert.equal(viewer().file, ONE);
@@ -103,8 +99,8 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/reveal'), [['/api/v1/local/reveal', { path: '/m/one.step' }]]);
     assert.equal(viewer().host.links.version, '0.7.4');
     assert.equal('navigation' in viewer().host, false, 'navigation is the shared viewer\'s: the host only shows what it is asked to');
-    // An engine of another release answering is an update, which the page reloads into.
-    assert.deepEqual(await autoReloadOptions().fetchServerInfo(), { ok: true, identityToken: 'restarted', release: '0.9.0' });
+    // The page asks its server who it is, fresh, to tell another process on its port.
+    assert.deepEqual(await autoReloadOptions().fetchServerInfo(), { ok: true, identityToken: 'restarted' });
     assert.deepEqual(serverCalls[0], { fresh: true });
 
     // The appearance is the tab's, resolved against the OS; its control is the app menu's Theme row,
@@ -128,7 +124,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.equal(window.document.title, 'one.step');
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/documents'), [['/api/v1/documents', { action: 'open', path: '/m/one.step' }]]);
     // CAD's telemetry, as the CAD app's: the person's settings, read once for the consent, the language,
-    // What's new and automatic updates together, its answer in the app menu. (The model shown is counted, by
+    // What's new together, its answer in the app menu. (The model shown is counted, by
     // its format and only with consent, as it joins the library.)
     assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/api/v1/settings')), [['/api/v1/settings', null]]);
     // A Quick Edit copied is counted by this Viewer's server, as a touch is: told nothing of the edit.
@@ -142,29 +138,23 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/activity'),
       [['/api/v1/local/activity', { controls: [{ control: 'display_xray', count: 1, seconds: 0 }] }]]);
     libraryCalls.splice(libraryCalls.findIndex(([url]) => url === '/api/v1/local/activity'), 1);
-    // The app menu: Telemetry, then Automatic updates, each the person's setting on the server.
+    // The app menu: Telemetry, the person's setting on the server.
     assert.deepEqual(viewer().appSettings.map(setting => [setting.label, setting.checked]),
-      [['Telemetry', false], ['Automatic updates', true]]);
+      [['Telemetry', false]]);
     // Nothing asks (a cad command says it once): the viewer has no notice, and the app menu's toggle
     // is the person's answer.
     assert.equal(viewer().notice, undefined);
     await act(() => viewer().appSettings[0].onCheckedChange(false));
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/settings').at(-1), ['/api/v1/settings', { telemetry: { share: false } }]);
-    // An update to a release with notes: What's new, for the viewer to say over the page, and its
+    // A release with notes: What's new, for the viewer to say over the page, and its
     // dismissal kept seen in the person's settings.
     assert.equal(viewer().whatsNew.entry, '0.11');
     await act(() => viewer().whatsNew.onDismiss());
     assert.equal(viewer().whatsNew.entry, null);
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/settings').at(-1), ['/api/v1/settings', { whats_new: { seen: ['0.11'] } }]);
-    // A newer release is the update button, as in the CAD app: an icon first in the navbar while this
-    // install is behind, drawn from the notice the page started with: nothing is read for it.
-    assert.equal(viewer().update.props.notice.latest, '0.9.0');
-    assert.equal(viewer().update.props.phase.phase, 'idle');
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/server'), [], 'nothing read: the page started with the notice');
-    // A click updates: the engine is asked, and the button follows its update.
-    await act(async () => { viewer().update.props.onUpdate(); await new Promise(resolve => setTimeout(resolve, 10)); });
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/update').map(([url]) => url), ['/api/v1/local/update']);
-    assert.equal(viewer().update.props.phase.phase, 'working');
+    // Nothing on the page tells of a newer release: no update nudge, and nothing is read for one.
+    assert.equal(viewer().update, undefined);
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/server' || url.startsWith('/api/v1/local/update')), []);
     assert.deepEqual(guards, ['1', '1']);
 
     // Showing another file is a navigation, by the file's id: pushed, and undone by Back.
@@ -210,6 +200,53 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   }
 });
 
+test('a document\'s page has its name from its first frame where the boot learned it, and never its id', async () => {
+  const MODEL = '906f6bff-80e7-5331-b842-dd377b720a7b';
+  const dom = new JSDOM('<div id="root"></div>', { url: `http://cad.local/${MODEL}` });
+  const { window } = dom;
+  const matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, localStorage: window.localStorage, sessionStorage: window.sessionStorage, matchMedia, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  window.matchMedia = matchMedia;
+  const fetchBefore = globalThis.fetch;
+  // The model's envelope, answered when the test says.
+  let answer = () => {};
+  const envelope = { id: MODEL, kind: 'xbf', entry: { id: MODEL, file: MODEL, sourcePath: null, name: 'qdd_actuator' }, revision: '' };
+  globalThis.fetch = async (url, init = {}) => {
+    if (url === `/api/v1/documents/${MODEL}`) await new Promise(resolve => { answer = resolve; });
+    const reply = url === `/api/v1/documents/${MODEL}` ? envelope : url === '/api/v1/settings' ? { language: { locale: null } } : { documents: [] };
+    return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
+  };
+  const page = async (boot) => {
+    const client = { ...createWebCadClient({ document: window.document }), serverInfo: async () => ({ start: '/m' }) };
+    // The boot's ask (`main.tsx`): the document the URL names, beside the server's description.
+    const asked = client.resolveEntry(MODEL).catch(() => {});
+    await boot(asked);
+    const root = createRoot(window.document.getElementById('root'));
+    await act(() => root.render(createElement(App, { client, server: { start: '/m' }, tabStore: createTabStore(sessionTabRecord(window.sessionStorage)) })));
+    return { client, root, asked };
+  };
+  const named = () => [snapshot().name, window.document.title];
+  try {
+    // Answered before the description: the first render has the name.
+    const known = await page(async asked => { answer(); await asked; });
+    assert.equal(snapshot().file, MODEL);
+    assert.deepEqual(named(), ['qdd_actuator', 'qdd_actuator']);
+    await act(() => known.root.unmount());
+    known.client.dispose();
+    // Not answered yet: no name, never the id, and the page's own title, until the catalog answers.
+    window.document.title = 'text-to-cad';
+    const later = await page(async () => {});
+    assert.deepEqual(named(), ['', 'text-to-cad']);
+    await act(async () => { answer(); await later.asked; });
+    assert.deepEqual(named(), ['qdd_actuator', 'qdd_actuator']);
+    await act(() => later.root.unmount());
+    later.client.dispose();
+  } finally {
+    globalThis.fetch = fetchBefore;
+    dom.window.close();
+  }
+});
+
 test('a page whose engine is gone says so in its language, over the page, until the engine answers', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: `http://cad.local/${ONE}` });
   const { window } = dom;
@@ -244,6 +281,9 @@ test('a page whose engine is gone says so in its language, over the page, until 
     assert.equal(window.document.querySelectorAll('[role="alert"]').length, 1);
     const under = alert()?.nextElementSibling;
     assert.deepEqual([under?.hasAttribute('inert'), under?.getAttribute('aria-hidden')], [true, 'true']);
+    // Out of sight too: a stacking context of its own under the notice, so no layer of the view (its tool strip, at
+    // the notice's own z-50 and later in the page) is drawn over it.
+    assert.equal(under?.classList.contains('isolate'), true);
     assert.doesNotMatch(alert()?.textContent ?? '', /Failed to fetch|\{/, 'never the failure itself');
     assert.equal(snapshot() !== undefined, true, 'the page stays under it');
     catalog = 'restarted';
@@ -272,6 +312,9 @@ test('the notice says the page reconnects, and how to start the engine', async (
     await act(() => root.render(createElement(EngineStopped, { locale: 'en' })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
       'CAD is not running.It starts again when your agent next uses CAD or you open the CAD app; this page reconnects on its own.Reload');
+    // The one quiet status screen: words and a small quiet button (the control's height), no icon.
+    const screen = dom.window.document.querySelector('[data-status-screen]');
+    assert.deepEqual([screen?.querySelector('svg'), screen?.querySelector('button')?.classList.contains('h-control')], [null, true]);
     await act(() => root.render(createElement(EngineStopped, { locale: 'en', refused: true })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
       "This link no longer works.Ask your agent to open the model again and use the new link.");

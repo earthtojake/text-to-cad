@@ -34,19 +34,19 @@ const root = path.resolve(args.dir || ".");
 // documents the cadgen engine serves -- a STEP and an engine document (.xbf) -- read through
 // the viewer and drawn by one renderer.
 const fixtures = [
-  // `tools` is the file's own tool strip; unavailable tools are hidden. `threeD` has
-  // Projection, Display and Preview at the strip's end; `sections`
-  // are the view's panel's tabs it must have (what there is to read of the file, whatever the tool).
-  { format: "stl", file: "smoke.stl", parts: false, tools: ["Pencil", "Shapes", "Clip"], sections: [], threeD: true },
+  // `tools` is the file's own tool strip; unavailable tools are hidden. A `threeD` view has Preview beside the
+  // navbar's Display button, and Projection in Display's card; `sections` are the view's panel's tabs it must
+  // have (what there is to read of the file, whatever the tool: a mesh's bodies, a drawing's layers).
+  { format: "stl", file: "smoke.stl", parts: false, tools: ["Select", "Draw", "Clip"], sections: ["Model"], threeD: true },
   // A STEP: read by the engine, drawn as an engine document is.
-  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Model"], threeD: true },
+  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Draw", "Measure", "Clip"], sections: ["Model"], threeD: true },
   // A drawing is line work, not shaded surfaces: its outline covers a fraction of what a solid does.
-  { format: "dxf", file: "smoke.dxf", parts: false, tools: ["Select", "Pencil", "Shapes", "Measure"], sections: [], threeD: false, minCoverage: 0.003 },
-  { format: "urdf", file: "smoke.urdf", parts: false, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Links"], threeD: true },
+  { format: "dxf", file: "smoke.dxf", parts: false, tools: ["Select", "Draw", "Measure"], sections: ["Layers"], threeD: false, minCoverage: 0.003 },
+  { format: "urdf", file: "smoke.urdf", parts: false, tools: ["Select", "Draw", "Measure", "Clip"], sections: ["Links"], threeD: true },
   // A cadgen engine document: served by the engine, read by the page from it, and picked,
   // measured and laid out as a STEP's is, with a STEP's pick menus on Select's and Measure's chevrons.
   { format: "xbf", file: "smoke.xbf", parts: true,
-    tools: ["Select", "Filter: everything", "Pencil", "Shapes", "Measure", "Measure filter: everything", "Clip"], sections: ["Model"], threeD: true },
+    tools: ["Select", "Filter: everything", "Draw", "Measure", "Measure filter: everything", "Clip"], sections: ["Model"], threeD: true },
 ];
 // Small enough that software WebGL and the PNG encode stay cheap on CI, large enough for the
 // layout to be the desktop one.
@@ -324,13 +324,16 @@ async function formatGate() {
         sections.map((section) => section.getAttribute("aria-label")));
       for (const label of fixture.sections) if (!tabs.includes(label)) failures.push(`${fixture.format}: missing the ${label} tab (panel: ${tabs.join(", ")})`);
       if (!fixture.sections.length && tabs.length) failures.push(`${fixture.format}: a panel on a file with nothing to read (${tabs.join(", ")})`);
-      // A 3D view's own controls end the tool strip, Projection, Display then Preview, each named by what it is
-      // ("Projection: Orthographic" is Projection); a drawing's strip has none.
-      const controls = await page.locator("[data-cad-toolbar] [data-view-controls] button").evaluateAll((buttons) =>
-        buttons.map((button) => button.getAttribute("aria-label").split(":")[0]));
-      const expected = fixture.threeD ? ["Projection", "Display mode", "Preview"] : [];
-      if (JSON.stringify(controls) !== JSON.stringify(expected)) failures.push(`${fixture.format}: the view's controls are ${JSON.stringify(controls)}`);
-      if (await page.locator("[data-viewer-navbar] [data-view-controls] button").count()) failures.push(`${fixture.format}: editor view controls in the navbar`);
+      // How the view is drawn is the navbar's, never the tool strip's: every file's Display button (its card holds
+      // Projection on a 3D view), and Preview beside it on a 3D view alone.
+      if (await page.locator("[data-cad-toolbar] [data-view-controls]").count()) failures.push(`${fixture.format}: view controls on the tool strip`);
+      const display = page.locator("[data-viewer-navbar] button[data-display-settings]");
+      if (await display.count() !== 1) failures.push(`${fixture.format}: ${await display.count()} Display buttons in the navbar (one on every file)`);
+      else if ((await display.getAttribute("data-view-projection") !== null) !== fixture.threeD) {
+        failures.push(`${fixture.format}: Display's card ${fixture.threeD ? "has no" : "has a"} Projection`);
+      }
+      const preview = await page.locator("[data-viewer-navbar] button[data-view-preview]").count();
+      if (preview !== (fixture.threeD ? 1 : 0)) failures.push(`${fixture.format}: ${preview} Preview buttons in the navbar`);
       const menus = await page.getByRole("button", { name: "Menu", exact: true }).count();
       if (menus !== 1) failures.push(`${fixture.format}: ${menus} app menus (one on every file)`);
       const menu = await canvasMenuItems(page, canvas);

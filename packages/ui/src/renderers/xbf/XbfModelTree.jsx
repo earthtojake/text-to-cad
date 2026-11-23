@@ -2,8 +2,8 @@ import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Boxes, EyeOff } from 'lucide-react';
 import { Button } from '@cad/ui/primitives/button';
-import { ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowGlyph, TreeRowLabel, TreeRowSurface, TreeRowToggle, useTreeRowHeight } from '@cad/ui/primitives/tree-row';
-import { TreeFilterHighlight, TreeFilterInput } from '@cad/ui/primitives/tree-filter';
+import { ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowDetail, TreeRowGlyph, TreeRowLabel, TreeRowName, TreeRowSurface, TreeRowToggle, useTreeRowHeight } from '@cad/ui/primitives/tree-row';
+import { TreeFilterHighlight, TreeFilterInput, TreeSearchStatus } from '@cad/ui/primitives/tree-filter';
 import { treeKey } from '@cad/ui/primitives/tree-keys';
 import { cn } from '@cad/ui/utils';
 import XbfPartMenu from './XbfPartMenu.jsx';
@@ -113,8 +113,8 @@ function ModelingSearchRow({ match, index, availability, selected, joinAbove, jo
         disabled={disabled || unavailable || !node.selectionId}
         onClick={event=>{if(event.detail < 2)choose(node,event);}} onDoubleClick={event=>choose(node,event)}
         className={cn(TREE_ROW_NAME_CLASS, 'disabled:opacity-40', underActions)}>
-        <TreeRowLabel className="max-w-full shrink-0"><TreeFilterHighlight indices={indices} text={entry.label}/></TreeRowLabel>
-        {entry.prefix && <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{entry.prefix.slice(0,-1)}</TreeRowLabel>}
+        <TreeRowName><TreeFilterHighlight indices={indices} text={entry.label}/></TreeRowName>
+        {entry.prefix && <TreeRowDetail>{entry.prefix.slice(0,-1)}</TreeRowDetail>}
       </button></TooltipHint>
       {node.selectionId && <XbfPartActions node={node} controls={partControls} disabled={disabled}/>}
     </TreeRowSurface>
@@ -123,14 +123,15 @@ function ModelingSearchRow({ match, index, availability, selected, joinAbove, jo
 
 /**
  * A line at the top of the tree saying in words how many parts are hidden, and Show all, the way back
- * (a bulk action no single row has; an isolated row's way out is its own X): a box on the panel's 8px lines, its glyph on the 16px line and its
- * words where the rows' names start, its action's text ending on the right 16px line.
+ * (a bulk action no single row has; an isolated row's way out is its own X): a box hung out past the panel's inset
+ * as a row's fill is (half the inset), its glyph on the inset and its words where the rows' names start, its action's
+ * text ending on the right inset.
  */
 function TreeStatusBar({ label, icon: Icon, text, title = text, action, onAction, disabled, ...props }) {
-  return <div role="status" aria-label={label} className="mb-1 flex min-h-7 items-center gap-1 rounded-md bg-accent/60 pl-2 pr-0.5 text-tiny" {...props}>
+  return <div role="status" aria-label={label} className="-mx-[calc(var(--panel-inset)/2)] mb-1 flex min-h-control items-center gap-1 rounded-md bg-accent/60 pr-0.5 pl-[calc(var(--panel-inset)/2)] text-ui" {...props}>
     <Icon className="size-3 shrink-0 text-foreground" aria-hidden="true"/>
     <TooltipHint content={title} overflowOnly><span className="min-w-0 flex-1 truncate">{text}</span></TooltipHint>
-    <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-tiny" onClick={onAction}>{action}</Button>
+    <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-icon-button shrink-0 px-1.5 text-ui" onClick={onAction}>{action}</Button>
   </div>;
 }
 
@@ -327,18 +328,18 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
   return <ToolPanel id="tree" label={t("tree.modelTree")} fit="tree" resizable collapsible={false} hidden={!active}
     header={flatPanel ? null : <TreeFilterInput label={t("tree.filterModel")} placeholder={t("tree.filterPlaceholder")} value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown} dense
       className="px-0 shadow-none" trailing={<>
-        {hiddenCount > 0 && <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-5 shrink-0 px-1.5 text-tiny text-muted-foreground" onClick={partControls.showAllHiddenParts}>{t("tree.showAll")}</Button>}
+        {hiddenCount > 0 && <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-5 shrink-0 px-1.5 text-muted-foreground" onClick={partControls.showAllHiddenParts}>{t("tree.showAll")}</Button>}
       </>}/>}>
-    <div className="flex flex-col text-tiny" aria-label={t("tree.modelingTree")}>
-      <div ref={listRef} className={flatPanel ? "pb-1" : "py-1"} aria-label={t("tree.modelTreeArea")}
+    <div className="flex flex-col" aria-label={t("tree.modelingTree")}>
+      <div ref={listRef} className={flatPanel ? undefined : "py-1"} aria-label={t("tree.modelTreeArea")}
         onClick={event=>{if(!disabled && !event.target.closest('li,button,input,[role="menu"]'))onClearSelection?.();}}>
         {flatPanel && hiddenCount > 0 && <TreeStatusBar label={t("tree.hiddenParts")} icon={EyeOff} text={t("tree.hiddenCount", { count: hiddenCount.toLocaleString() })}
           action={t("tree.showAll")} onAction={partControls.showAllHiddenParts} disabled={disabled} data-tree-hidden-status=""/>}
-        {searching && !(flatPanel && !found.matches.length) && <p role="status" className="px-2 py-1 text-micro text-muted-foreground" data-tree-status="" data-flat-panel-hit={found.matches.length ? "" : undefined}>{found.total > found.matches.length ? t("tree.firstMatches", { shown: found.matches.length, total: found.total.toLocaleString() }) : t(found.total === 1 ? "tree.match" : "tree.matches", { count: found.total })}</p>}
+        {searching && !(flatPanel && !found.matches.length) && <TreeSearchStatus shown={found.matches.length} total={found.total} hit={found.matches.length > 0}/>}
         {searching ? found.matches.length
           ? <VirtualRows key="search" aria-label={t("tree.searchResults")} count={matches.length} rowHeight={rowHeight} pinned={searchPinned}
             rowKey={at=>matches[at].entry.node.id} rowProps={at=>({className:'min-w-0','data-search-row':matches[at].entry.node.id})} renderRow={renderSearchRow}/>
-          : deferredQuery.trim() && !flatPanel && <p className="px-3 py-6 text-center text-tiny text-muted-foreground">{t("tree.noPartMatch", { query: deferredQuery.trim() })}</p>
+          : deferredQuery.trim() && !flatPanel && <p className="px-3 py-6 text-center text-muted-foreground">{t("tree.noPartMatch", { query: deferredQuery.trim() })}</p>
         : <VirtualRows key="tree" aria-label={t("tree.model")} count={rows.length} rowHeight={rowHeight} pinned={treePinned}
           rowKey={at=>rows[at].key} rowProps={at=>({className:'min-w-0','aria-level':rows[at].depth+1,'data-tree-part':rows[at].node.kind === 'part' ? rows[at].node.id : undefined})}
           renderRow={renderTreeRow} registerRow={registerRow} onKeyDown={onRowsKeyDown}/>}

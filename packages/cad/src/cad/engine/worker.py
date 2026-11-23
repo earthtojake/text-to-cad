@@ -67,6 +67,14 @@ serialisation), and it answers no ``done``. A ``result`` request with ``document
 reads the bytes after its line (the cache's file) as ``export`` does a held document's: its
 structure and shape bytes, as a built document's.
 
+A ``{"id", "op": "preview", "script", "name", "values", "digest", "known", "cwd", "env"}`` request asks for
+one model of the script at other values of its declared parameters, which a page is trying
+(``build.preview``): built in this worker's memo and answered as ``result`` answers, the structure and the
+shape bytes of each part whose key is not in ``known``, after the line -- never kept, never written,
+never said as a build's progress (no page but the one that asked sees it). Its refusals (``ParameterRefused``:
+the script's bytes are not the ones the last run read) are answered ``{"id", "done": {"ok": false, "code",
+"error", "hint"}}``.
+
 A build runs with the cyclic collector off, and the worker collects once it is idle: the memo
 keeps every live result of the last builds, millions of objects, and a full collection walks
 all of them -- a second on a large model, paid inside whichever call allocates when it falls
@@ -201,6 +209,80 @@ def rss_cap_mb() -> float | None:
             return value or None
     physical = _physical_mb()
     return None if physical is None else max(physical / 4, 2048.0)
+
+
+def footprint_mb(pid: int) -> float | None:
+    """The memory the system charges process ``pid`` now, in MiB, its compressed and swapped pages
+    with it -- what Activity Monitor shows on macOS, resident and swapped on Linux, the private
+    commit on Windows; None where the platform will not say. Read from outside the process: a busy
+    one says its own memory only when it answers (``Supervisor.overrun``)."""
+    try:
+        if sys.platform == "darwin":
+            import ctypes
+
+            class Usage(ctypes.Structure):  # rusage_info_v0
+                _fields_ = [("uuid", ctypes.c_uint8 * 16),
+                            *((name, ctypes.c_uint64) for name in (
+                                "user_time", "system_time", "pkg_idle_wkups", "interrupt_wkups", "pageins",
+                                "wired_size", "resident_size", "phys_footprint", "proc_start_abstime",
+                                "proc_exit_abstime"))]
+
+            usage = Usage()
+            system = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+            if system.proc_pid_rusage(pid, 0, ctypes.byref(usage)) != 0:  # RUSAGE_INFO_V0
+                return None
+            return usage.phys_footprint / 2**20
+        if sys.platform.startswith("linux"):
+            with open(f"/proc/{pid}/status", encoding="ascii") as handle:
+                held = [line.split() for line in handle if line.startswith(("VmRSS:", "VmSwap:"))]
+            return sum(int(row[1]) for row in held) / 2**10 if held else None  # kB
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+
+            class Counters(ctypes.Structure):  # PROCESS_MEMORY_COUNTERS
+                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                            *((name, ctypes.c_size_t) for name in (
+                                "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
+                                "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage",
+                                "PagefileUsage", "PeakPagefileUsage"))]
+
+            kernel = ctypes.windll.kernel32
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return None
+            try:
+                counters = Counters()
+                counters.cb = ctypes.sizeof(Counters)
+                info = ctypes.windll.psapi.GetProcessMemoryInfo
+                info.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+                info.restype = wintypes.BOOL
+                return counters.PagefileUsage / 2**20 if info(handle, ctypes.byref(counters), counters.cb) else None
+            finally:
+                kernel.CloseHandle(handle)
+    except Exception:  # noqa: BLE001 - a platform that will not say has no ceiling
+        return None
+    return None
+
+
+def memory_ceiling_mb() -> float | None:
+    """The memory one busy process of the daemon may reach before the daemon stops its work
+    (``Supervisor.overrun``): a build runs in native code, which nothing of its own interrupts, and
+    left alone one that runs away takes the machine. ``CAD_ENGINE_WORKER_CEILING_MB`` (``0`` for
+    none), else half the machine's memory, at least 4 GiB. None: no ceiling."""
+    given = os.environ.get("CAD_ENGINE_WORKER_CEILING_MB", "").strip()
+    if given:
+        try:
+            value = float(given)
+        except ValueError:
+            value = -1.0
+        if value >= 0:
+            return value or None
+    physical = _physical_mb()
+    return None if physical is None else max(physical / 2, 4096.0)
 
 
 # --- a manufacturing check's limits ---------------------------------------------------------------
@@ -489,22 +571,39 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
     if request.get("expected") and "document" not in source_spec:
         from cad.engine.export.viewer import check
         check(source, request["expected"])  # a held document's revision is the daemon's to check
-    files = []
-    for index, destination in enumerate(request["destinations"]):
-        from cad.engine.progress import say
+    from cad.engine.progress import say
 
+    destinations = [Path(destination) for destination in request["destinations"]]
+    # Every destination checked, and drawn where its kind can refuse only once drawn (a DXF, a GLB, a
+    # robot description), before any is written: a refusal leaves no file of the export behind. Its
+    # time is its row's; its frames are its write's, below, so the count only goes up.
+    prepared: list[tuple[Any, float]] = []
+    for target in destinations:
         clock = time.perf_counter()
-        target = Path(destination)
+        if request.get("original"):
+            prepared.append((None, 0.0))
+            continue
+        prepared.append((export.prepare(source, None, target, tolerance, angle, zero), time.perf_counter() - clock))
+    files = []
+    for index, (target, (ready, drew)) in enumerate(zip(destinations, prepared)):
+        clock = time.perf_counter()
         # Each destination written, counted of them all (``progress.py``: an export's ``write``).
-        say("write", detail=target.name, count=[index, len(request["destinations"])])
+        say("write", detail=target.name, count=[index, len(destinations)])
         before = _stat(target)
         robot: list[dict[str, Any]] = []
-        if request.get("original"):
-            from cad.engine.export.viewer import original
-            size = original(source, target, request["expected"])
-        else:
-            size = export.translate(source, None, target, tolerance, log, angle, zero, robot.append)
-        seconds = time.perf_counter() - clock
+        try:
+            if ready is None:
+                from cad.engine.export.viewer import original
+                size = original(source, target, request["expected"])
+            else:
+                size = ready.land(log, robot.append)
+        except Exception as error:
+            if not index:
+                raise
+            # Some are written: said, never a refusal (which says nothing was).
+            raise export.ExportIncomplete([row.name for row in destinations[:index]], target.name,
+                                          [row.name for row in destinations[index + 1:]], error) from error
+        seconds = drew + time.perf_counter() - clock
         # A file that held these bytes already is left as it was (``atomic_replace.put``): unchanged.
         files.append({"path": str(target), "kind": export.kind_of(target), "bytes": size,
                       "seconds": round(seconds, 4), "written": before is None or _stat(target) != before,
@@ -592,6 +691,23 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
         answer["xbf"] = len(whole)
         data.append(whole)
     return answer, b"".join(data)
+
+
+def _preview(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
+    """A ``preview`` request: one model at other values of its parameters (``build.preview``)."""
+    from cad.engine import build as engine_build
+    from cad.engine.parameters import ParameterRefused
+
+    values = request.get("values")
+    if not isinstance(values, dict):
+        raise ValueError("a preview names its values: {name: number}")
+    cwd = request.get("cwd")
+    try:
+        return engine_build.preview(Path(request["script"]), str(request["name"]), values,
+                                    cwd=Path(cwd) if cwd else None, digest=request.get("digest"),
+                                    known=request.get("known") or ())
+    except ParameterRefused as refused:
+        return {"ok": False, "code": refused.code, "error": str(refused), "hint": refused.hint}, b""
 
 
 def _save(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
@@ -789,6 +905,7 @@ def main() -> int:
             frames.write(protocol, message, payload)
 
     from cad.engine.build import BuildError, build, made_by
+    from cad.engine.export import ExportIncomplete
     from cad.engine.profiling import quiet
     from cad.engine.progress import Progress, building
 
@@ -873,7 +990,7 @@ def main() -> int:
             send({"id": ident, "saved": header}, payload)
             owed = True
             continue
-        if op in ("export", "result"):
+        if op in ("export", "result", "preview"):
             try:
                 told_display(request.get("display"), own)
                 adopt(request.get("env"), own)
@@ -908,12 +1025,18 @@ def main() -> int:
                     retire = bool(done.get("reports")) and retirement(done["reports"], resident, cap)
                     send({"id": ident, "done": done, "rssMb": None if resident is None else round(resident),
                           **({"retire": True} if retire else {})})
+                elif op == "preview":
+                    answer, payload = _preview(request)
+                    resident = resident_mb()
+                    send({"id": ident, "done": answer, "rssMb": None if resident is None else round(resident)}, payload)
                 else:
                     answer, payload = _result(request)
                     send({"id": ident, "done": answer}, payload)
             except (BuildError, ValueError, OSError) as error:
                 # A refusal by its type and part; a failure (a file not written, a BuildError) by its type.
                 send({"id": ident, "failed": str(error), **(refusal(error) or frames.failed_type(error))})
+            except ExportIncomplete as error:  # an export that wrote some files: what failed, by its cause's type
+                send({"id": ident, "failed": str(error), **error.failed_type()})
             except BaseException as error:  # noqa: BLE001 - the worker answers every request
                 send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error,
                                                                                 error.__traceback__))})

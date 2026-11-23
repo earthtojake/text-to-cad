@@ -805,6 +805,11 @@ class BuildContext:
         self.called: dict[str, Model] = {}
         # Per script of a child model from another file: the resolution its closure is made with.
         self.others: dict[Path, Any] = {}
+        # The parameters the script's load declared (``parameters.recording``; ``build`` sets it).
+        self.declared: list = []
+        # A preview's values (``build.preview``), as text: a body whose key falls back to a module's bytes
+        # (which a preview leaves as they are) is keyed by them too, so it never replays another value's run.
+        self.preview: str | None = None
 
     def source(self, model: Model) -> str:
         """What a model's body is made of: the symbols its function reaches, a module's
@@ -823,7 +828,8 @@ class BuildContext:
             digest, reasons = self.symbols.key(model.function)
             if reasons:
                 self.fallbacks[model.identity] = reasons
-            found = self.sources[key] = digest + _engine_version()
+            found = self.sources[key] = digest + _engine_version() + (
+                f"|preview {self.preview}" if reasons and self.preview is not None else "")
             self.key_seconds += time.perf_counter() - started
         return found
 
@@ -851,6 +857,23 @@ class BuildContext:
             loaded = {name for name in self.loaded or () if imported(name)}
             symbols = self.others[model.script] = Symbols(self.resolved, loaded, model.script.parent)
         return symbols.modules(model.function)
+
+    def parameters(self, model: Model) -> list[dict[str, Any]]:
+        """A model's parameters (``parameters.rows``): those its script's load declared, each with where
+        it is in the code and whether it can be written -- its own file's alone. A child model of another
+        script lists what a build of that script would: the declarations of the files its own script
+        imports (``sources.closure_files``), so its document is the one a build of its own writes."""
+        from cad.engine import parameters
+
+        if not self.declared:
+            return []
+        files = None
+        if self.script is not None and model.script != self.script:
+            from cad.engine.sources import closure_files
+
+            module = getattr(model.function, "__module__", None) or model.script.stem
+            files = {canonical(path) for path in closure_files(model.script, module, self.resolved)}
+        return parameters.rows(self.declared, str(model.script), files)
 
     def named(self, model: Model) -> dict[str, dict[str, str]]:
         """What ``modules`` digests per file, by name (``sources.Symbols.symbols``)."""

@@ -3,16 +3,18 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
-import PreviewPlaybar from '../../../dist/renderers/kit/tools/playbar/PreviewPlaybar.js';
+import { DEFAULT_PANEL_WIDTH } from '../../../dist/renderers/kit/shell/sidebars.js';
+import AnimationSection, { JointsMotionContext } from '../../../dist/renderers/kit/tools/playbar/AnimationSection.js';
 import XbfPositionSection, { useXbfPose } from '../../../dist/renderers/xbf/XbfPositionSection.js';
 import { useXbfMotion } from '../../../dist/renderers/xbf/useXbfMotion.js';
+import { createAnimationClock } from '../../../dist/renderers/kit/tools/playbar/animationClock.js';
 import { useMotionExclusion } from '../../../dist/renderers/kit/tools/model-effects/motionExclusion.js';
 
-// An engine document's motions played from the tools view's playbar (`useXbfMotion.js`
-// through the shell's playbar, `PreviewPlaybar` `toolsView`), over Position as the renderer composes them: while a
-// motion owns the pose its frames pose the scene and Position shows them read-only. A motion and
-// the pose are one motion at a time (`motionExclusion.js`): taking the motion up puts the pose at
-// rest, nothing set aside, so Reset leaves the model as built. Frames are driven by hand: the
+// An engine document's motions played from the tools view's Animation tab (`useXbfMotion.js` through the
+// shell's `AnimationSection.jsx`), over Position as the
+// renderer composes them: while a motion owns the pose its frames pose the scene and Position shows them
+// read-only. A motion and the pose are one motion at a time (`motionExclusion.js`): taking the motion up
+// puts the pose at rest, nothing set aside, so scrubbing back to the start leaves the model as built. Frames are driven by hand: the
 // clock's animation frames are queued and run at chosen times.
 
 Object.assign(globalThis, { React });
@@ -71,127 +73,233 @@ function Harness({ mechanism = kinematics, scene }: { mechanism?: any, scene: { 
     motion: { applied: Boolean(motion?.enabled), reset: () => motion?.onRelease() }
   });
   useEffect(() => { if (!owns.current) scene.setPose(pose.applied ? pose.values : null); }, [pose.values, pose.applied]);
-  // As the shell draws them: Position a tab of the view's panel, the motions the playbar's under the model.
+  // As the shell draws them: Position a tab of the view's panel, the motions the Animation tab's (here drawn on its
+  // own, so its controls are on screen beside Position's).
   return <div style={{ position: 'relative' }}>
     <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
       sections={<XbfPositionSection kinematics={mechanism} motion={motion?.enabled ? motion : null} values={pose.values} couplings={pose.couplings}
         preset={pose.preset} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />}
-      tab="position" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
-    {motion ? <PreviewPlaybar runtime={motion} autoplay={false} onAutoplayChange={() => {}} toolsView /> : null}
+      tab="position" onTabChange={() => {}} width={DEFAULT_PANEL_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
+    <AnimationSection runtime={motion} kind="motion" />
   </div>;
 }
 
 const lastPose = (scene: { setPose: ReturnType<typeof vi.fn> }) => scene.setPose.mock.calls.at(-1)?.[0] ?? null;
 const hingeAt = (scene: { setPose: ReturnType<typeof vi.fn> }) => lastPose(scene)?.hinge?.[0] ?? null;
-const playbar = () => document.querySelector<HTMLElement>('[data-playbar="tools"]');
-// Reset is the last item of the playbar's Playback settings, after a rule; the row has no Reset.
-async function resetItem(user: ReturnType<typeof userEvent.setup>) {
-  expect(within(playbar()!).queryByRole('button', { name: 'Reset motion' })).toBeNull();
-  await user.click(within(playbar()!).getByRole('button', { name: 'Playback settings' }));
-  const menu = await screen.findByRole('menu');
-  const items = [...menu.querySelectorAll('[role^="menuitem"]')];
-  expect(items.at(-1)!.textContent).toBe('Reset motion');
-  expect(items.at(-1)!.previousElementSibling?.getAttribute('role')).toBe('separator');
-  return within(menu).getByRole('menuitem', { name: 'Reset motion' });
-}
-const resetDisabled = async (user: ReturnType<typeof userEvent.setup>) => {
-  const disabled = (await resetItem(user)).getAttribute('aria-disabled') === 'true';
+const bar = () => document.querySelector<HTMLElement>('[data-animation-section]')!;
+// The Animation tab's controls, the same set at rest, playing and paused: nothing comes or goes.
+const tab = () => bar().closest<HTMLElement>('[data-tool-panel]')!;
+const controls = () => [...tab().querySelectorAll('[data-animation-play], [data-animation-reset], [role=slider], [data-animation-speed], [data-animation-loop]')]
+  .map(control => control.getAttribute('aria-label') || control.textContent).map(name => name === 'Pause motion' ? 'Play motion' : name!.split(':')[0]);
+const CONTROLS = ['Play motion', 'Animation time', 'Animation speed', 'Loop', 'Reset'];
+const toStart = () => fireEvent.keyDown(within(bar()).getByRole('slider', { name: 'Animation time' }), { key: 'Home' });
+// The routines' dropdown (Clip), above the playbar: each routine by its name, the one in hand checked.
+async function clips(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(bar().querySelector<HTMLElement>('[data-animation-clip-menu]')!);
+  const listed = (await screen.findAllByRole('menuitemradio')).map(item => [item.textContent, item.getAttribute('aria-checked')]);
   await user.keyboard('{Escape}');
-  return disabled;
-};
+  return listed;
+}
+async function chooseClip(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(bar().querySelector<HTMLElement>('[data-animation-clip-menu]')!);
+  await user.click((await screen.findAllByRole('menuitemradio')).find(item => item.textContent!.startsWith(name))!);
+}
 
-it('a document with no motions has no motion playbar', () => {
-  const { motions: _none, ...still } = kinematics;
-  render(<Harness mechanism={still} scene={{ setPose: vi.fn() }} />);
-  expect(playbar()).toBeNull();
+// A tab and its clip row use the source format's own words: a glTF's `animations` are Animation and Animation; a mechanism's
+// motions (an ISO 10303-105 interpolated_configuration_sequence) are Motion and Sequence.
+it('a GLB shows Animation and Animation, a mechanism Motion and Sequence', () => {
+  const words = () => [document.querySelector('[data-tool-panel-heading] h3')?.textContent, bar().querySelector('[data-panel-select-row]')!.firstElementChild!.textContent];
+  const runtime = { clips: [{ id: 'a', label: 'Spin', duration: 1 }], activeClipId: 'a', clock: createAnimationClock(), enabled: true, playing: false, elapsedSec: 0, speed: 1, loopEnabled: true };
+  const { unmount } = render(<AnimationSection runtime={runtime} />);
+  expect(words()).toEqual(['Animation', 'Animation']);
+  unmount();
+  render(<AnimationSection runtime={{ ...runtime, noun: 'Motion' }} kind="motion" />);
+  expect(words()).toEqual(['Motion', 'Sequence']);
 });
 
-it("the playbar lists the document's motions with their durations, and plays, pauses, scrubs, loops and speeds them", async () => {
+it('a document with no motions has no Animation section', () => {
+  const { motions: _none, ...still } = kinematics;
+  render(<Harness mechanism={still} scene={{ setPose: vi.fn() }} />);
+  expect(document.querySelector('[data-animation-section]')).toBeNull();
+});
+
+it("the Animation section lists the document's motions by name, its time and its settings, and it plays, pauses, scrubs, loops, speeds and stops them", async () => {
   const user = userEvent.setup({ pointerEventsCheck: 0, skipHover: true });
   const scene = { setPose: vi.fn() };
   render(<Harness scene={scene} />);
-  const panel = playbar()!;
-  // The tools view's playbar is a transparent row on no surface, as Preview's is.
-  expect(panel.className).not.toMatch(/border|bg-|shadow|backdrop-blur/);
-  expect(panel.getAttribute('aria-label')).toBe('Motion playback');
-  // At rest as the file opens: nothing to reset, the scene as Position has it.
-  expect(await resetDisabled(user)).toBe(true);
-  expect(lastPose(scene)).toBeNull();
-  await user.click(within(panel).getByRole('button', { name: 'Motions' }));
-  expect(within(screen.getByRole('menu')).getAllByRole('menuitemradio').map(item => item.textContent))
-    .toEqual(['wave2.00s', 'swing1.00s']);
-  await user.keyboard('{Escape}');
+  // At rest as the file opens: the tab, the scene as Position has it.
+  expect(bar().closest('[data-tool-panel]')!.getAttribute('aria-label')).toBe('Motion playback');
+  expect([controls(), lastPose(scene)]).toEqual([CONTROLS, null]);
+  expect(await clips(user)).toEqual([['wave', 'true'], ['swing', 'false']]);
+  expect([within(bar()).getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuetext'), bar().querySelector('[data-animation-speed]')!.getAttribute('aria-label'),
+    within(bar()).getByRole('switch', { name: 'Loop' }).getAttribute('aria-checked')])
+    .toEqual(['0.00s of 2.00s', 'Animation speed: 1×', 'true']);
+  // Reset, the tab's, at its bottom right, is idle at the start; Loop is a label and a switch, no icon; the motions' row is labelled "Sequence".
+  expect([within(tab()).getByRole('button', { name: 'Reset' }).hasAttribute('disabled'), bar().querySelectorAll('[data-panel-switch-row] svg').length,
+    bar().querySelector('[data-panel-select-row]')!.firstElementChild!.textContent])
+    .toEqual([true, 0, 'Sequence']);
 
-  // Scrubbed to its end: the sweep's last key.
-  const scrubber = within(panel).getByRole('slider', { name: 'Animation time' });
-  fireEvent.keyDown(scrubber, { key: 'End' });
-  expect(hingeAt(scene)).toBe(60);
-  // Played from its end, it starts again from 0; half a second in, a quarter of the sweep.
-  await user.click(within(panel).getByRole('button', { name: 'Play motion' }));
+  // Play plays the motion in hand, its controls the same; half a second in, a quarter of the sweep.
+  await user.click(within(bar()).getByRole('button', { name: 'Play motion' }));
   expect(hingeAt(scene)).toBe(-10);
+  expect(controls()).toEqual(CONTROLS);
   frameAt(500);
   expect(hingeAt(scene)).toBeCloseTo(7.5, 9);
+  expect(within(bar()).getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuetext')).toBe('0.50s of 2.00s');
   // Looping (as every motion opens): past its end it wraps and keeps playing.
   frameAt(2250);
   expect(hingeAt(scene)).toBeCloseTo(-10 + 35 * 0.25, 9);
-  // Paused, its frame stays.
-  await user.click(within(panel).getByRole('button', { name: 'Pause motion' }));
+  // Paused mid-motion, its frame stays, the controls the same.
+  await user.click(within(bar()).getByRole('button', { name: 'Pause motion' }));
   expect(hingeAt(scene)).toBeCloseTo(-10 + 35 * 0.25, 9);
-  expect(await resetDisabled(user)).toBe(false);
+  expect(controls()).toEqual(CONTROLS);
 
-  // Speed 2x and Loop off: a second of clock is two of the motion (played from the frame it is
-  // paused at, the clock reading 0 as it starts), and it stops at its end.
-  await user.click(within(panel).getByRole('button', { name: 'Playback settings' }));
-  await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Loop' }));
-  await user.click(await screen.findByRole('menuitem', { name: 'Animation speed: 1×' }));
-  // jsdom has no geometry for the submenu's pointer grace area; the keyboard path is the same handler.
-  (await screen.findByRole('menuitemradio', { name: '2×' })).focus();
-  await user.keyboard('{Enter}');
-  if (screen.queryByRole('menu')) await user.keyboard('{Escape}');
-  await user.click(within(panel).getByRole('button', { name: 'Play motion' }));
+  // Scrubbed to its end: the sweep's last key.
+  fireEvent.keyDown(within(bar()).getByRole('slider', { name: 'Animation time' }), { key: 'End' });
+  expect(hingeAt(scene)).toBe(60);
+  expect(within(bar()).getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuetext')).toBe('2.00s of 2.00s');
+
+  // Speed 2x and Loop off: a second of clock is two of the motion, played from its end (so from 0), and it stops at its end.
+  await user.click(within(bar()).getByRole('switch', { name: 'Loop' }));
+  await user.click(bar().querySelector<HTMLElement>('[data-animation-speed]')!);
+  await user.click(await screen.findByRole('menuitemradio', { name: '2×' }));
+  await user.click(within(bar()).getByRole('button', { name: 'Play motion' }));
   frameAt(250);
-  expect(hingeAt(scene)).toBeCloseTo(-10 + 35 * 0.75, 9);
+  expect(hingeAt(scene)).toBeCloseTo(-10 + 35 * 0.5, 9);
   frameAt(2000);
   expect(hingeAt(scene)).toBe(60);
-  expect(within(panel).getByRole('button', { name: 'Play motion' })).toBeTruthy();
+  expect(within(bar()).getByRole('button', { name: 'Play motion' })).toBeTruthy();
   expect(frames).toEqual([]);
+  // Reset, the tab's, puts it back at its start and the model at rest, and then is idle.
+  await user.click(within(tab()).getByRole('button', { name: 'Reset' }));
+  expect([lastPose(scene), within(bar()).getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuetext'),
+    within(tab()).getByRole('button', { name: 'Reset' }).hasAttribute('disabled')]).toEqual([null, '0.00s of 2.00s', true]);
 
-  // Another motion is chosen at its start, paused until it plays: `swing` opens at `open`.
-  await user.click(within(panel).getByRole('button', { name: 'Motions' }));
-  await user.click(screen.getByRole('menuitemradio', { name: /^swing/ }));
+  // Another motion chosen in the dropdown plays from its start: `swing` opens at `open`, checked as the one in hand.
+  await chooseClip(user, 'swing');
   expect(hingeAt(scene)).toBe(90);
-  // Paused at its start, it still holds the pose: Reset is what lets go.
-  expect(await resetDisabled(user)).toBe(false);
+  expect(await clips(user)).toEqual([['wave', 'false'], ['swing', 'true']]);
+  expect(within(bar()).getByRole('button', { name: 'Pause motion' })).toBeTruthy();
+
+  // Paused at its start, it lets go: the model as built (swing's first frame is not the rest pose).
+  await user.click(within(bar()).getByRole('button', { name: 'Pause motion' }));
+  expect([lastPose(scene), controls()]).toEqual([null, CONTROLS]);
+  // A frame already asked for draws nothing once it has stopped.
+  frameAt(3000);
+  expect([lastPose(scene), frames]).toEqual([null, []]);
 });
 
-it("a motion replaces Position's pose, shown read-only while it owns it, and Reset leaves the model as built, nothing set aside", async () => {
+it("a paused motion's frame is Joints' to take over: every control stays live, an edit lets the motion go and starts from the frame, and scrubbed back to its start the model is as built", async () => {
   const user = userEvent.setup({ pointerEventsCheck: 0, skipHover: true });
   const scene = { setPose: vi.fn() };
   render(<Harness scene={scene} />);
-  // Position first: the `open` configuration.
-  await user.click(screen.getByRole('button', { name: 'Pose: Default' }));
+  // Position first: the `open` configuration, from the pose row labelled Position.
+  const row = document.querySelector<HTMLElement>('[data-pose-row]')!;
+  expect(row.querySelector('[data-pose-label]')!.textContent).toBe('Position');
+  await user.click(screen.getByRole('button', { name: 'Position: Default' }));
   await user.click(screen.getByRole('menuitemradio', { name: 'open' }));
   expect(hingeAt(scene)).toBe(90);
 
-  // The motion takes the pose: half a second of `wave` is 7.5 degrees, and Position says so, read-only.
-  const motionPanel = playbar()!;
-  await user.click(within(motionPanel).getByRole('button', { name: 'Play motion' }));
+  // The motion takes the pose: half a second of `wave` is 7.5 degrees, and Joints shows it, nothing disabled.
+  await user.click(within(bar()).getByRole('button', { name: 'Play motion' }));
   frameAt(500);
-  await user.click(within(motionPanel).getByRole('button', { name: 'Pause motion' }));
+  await user.click(within(bar()).getByRole('button', { name: 'Pause motion' }));
   expect(hingeAt(scene)).toBeCloseTo(7.5, 9);
-  const position = screen.getByRole('region', { name: 'Position controls' });
-  const field = within(position).getByRole('textbox', { name: 'hinge slider value' }) as HTMLInputElement;
-  expect(field.value).toBe('7.50°');
-  expect(field.disabled).toBe(true);
-  expect(within(position).getByRole('slider', { name: 'hinge' }).getAttribute('data-disabled')).not.toBeNull();
-  expect((within(position).getByRole('button', { name: 'Pose: Custom' }) as HTMLButtonElement).disabled).toBe(true);
-  expect((screen.getByRole('button', { name: 'Reset position' }) as HTMLButtonElement).disabled).toBe(true);
+  // The tab's name carries its changed mark (", changed") while its Reset is on.
+  const position = () => screen.getByRole('tabpanel', { name: /^Joints\b/ });
+  const field = () => within(position()).getByRole('textbox', { name: 'hinge slider value' }) as HTMLInputElement;
+  expect([field().value, field().disabled]).toEqual(['7.50', false]);
+  expect(within(position()).getByRole('slider', { name: 'hinge' }).getAttribute('data-disabled')).toBeNull();
+  expect((within(position()).getByRole('button', { name: 'Position: Custom' }) as HTMLButtonElement).disabled).toBe(false);
 
-  // Reset lets go: `open` was put at rest as the motion took the pose, so the model is as built.
-  await user.click(await resetItem(user));
+  // A step of the slider from the frame: the motion let go of, the pose one step on from 7.5, nothing jumping.
+  fireEvent.keyDown(within(position()).getByRole('slider', { name: 'hinge' }), { key: 'ArrowRight' });
+  expect(hingeAt(scene)).toBeGreaterThan(7.5);
+  expect(hingeAt(scene)).toBeLessThan(8);
+  expect(within(bar()).getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuenow')).toBe('0');
+  // A frame asked for before it let go draws nothing now: the pose is Joints'.
+  const held = hingeAt(scene);
+  frameAt(3000);
+  expect(hingeAt(scene)).toBe(held);
+
+  // Played again and paused: a named position chosen lets it go and sets that position outright.
+  await user.click(within(bar()).getByRole('button', { name: 'Play motion' }));
+  frameAt(3500);
+  await user.click(within(bar()).getByRole('button', { name: 'Pause motion' }));
+  await user.click(within(position()).getByRole('button', { name: 'Position: Custom' }));
+  await user.click(screen.getByRole('menuitemradio', { name: 'open' }));
+  expect(hingeAt(scene)).toBe(90);
+  expect(within(position()).getByRole('button', { name: 'Position: open' })).toBeTruthy();
+
+  // Played and paused once more, then scrubbed to its start: let go, and `open` was put at rest as it took the pose.
+  await user.click(within(bar()).getByRole('button', { name: 'Play motion' }));
+  frameAt(4000);
+  await user.click(within(bar()).getByRole('button', { name: 'Pause motion' }));
+  toStart();
   expect(lastPose(scene)).toBeNull();
-  const again = screen.getByRole('region', { name: 'Position controls' });
-  const after = within(again).getByRole('textbox', { name: 'hinge slider value' }) as HTMLInputElement;
-  expect([after.value, after.disabled]).toEqual(['0.00°', false]);
-  expect(within(again).getByRole('button', { name: 'Pose: Default' })).toBeTruthy();
+  expect([field().value, field().disabled]).toEqual(['0.00', false]);
+  expect(within(position()).getByRole('button', { name: 'Position: Default' })).toBeTruthy();
+});
+
+// A mechanism with both joints and motions has ONE tab, "Joints" (the shell hands its motion to the Joints tab,
+// `JointsMotionContext`): the motion's controls first, a hairline and the joints under their heading, and one Reset at
+// the bottom right that puts back both, on while either is off its start.
+function Merged({ scene }: { scene: { setPose: (values: any) => void } }) {
+  const pose = useXbfPose(kinematics);
+  const position = useRef(pose);
+  position.current = pose;
+  const motion = useXbfMotion(kinematics, (values: any) => scene.setPose(values || (position.current.applied ? position.current.values : null)));
+  useEffect(() => { if (!motion?.enabled) scene.setPose(pose.applied ? pose.values : null); }, [pose.values, pose.applied]);
+  return <JointsMotionContext.Provider value={{ runtime: motion, disabled: false }}>
+    <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
+      sections={<XbfPositionSection kinematics={kinematics} motion={motion?.enabled ? motion : null} values={pose.values} couplings={pose.couplings}
+        preset={pose.preset} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />}
+      tab="position" onTabChange={() => {}} width={DEFAULT_PANEL_WIDTH} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
+  </JointsMotionContext.Provider>;
+}
+
+it('a mechanism with joints and motions has ONE "Joints" tab: the motion first, the joints under a hairline, one Reset for both', async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0, skipHover: true });
+  const scene = { setPose: vi.fn() };
+  render(<Merged scene={scene} />);
+  const panel = screen.getByRole('tabpanel', { name: /^Joints\b/ });
+  // In order: the motion's controls, the hairline (no heading: the tab is "Joints"), the Position row, a joint's slider; one Reset, the tab's.
+  const order = [...panel.querySelectorAll('[data-joints-motion], [data-joints-rule], [data-pose-row], [role=slider][aria-label=hinge], [data-pose-reset], [data-animation-reset]')]
+    .map(node => node.hasAttribute('data-joints-motion') ? 'motion' : node.hasAttribute('data-joints-rule') ? `rule:${node.textContent}`
+      : node.hasAttribute('data-pose-row') ? 'position' : node.hasAttribute('data-pose-reset') ? 'reset' : node.hasAttribute('data-animation-reset') ? 'transport-reset' : 'joint');
+  expect([document.querySelectorAll('[data-tool-panel]').length, order, panel.querySelector('[data-animation-transport] [data-animation-reset]')])
+    .toEqual([1, ['motion', 'rule:', 'position', 'joint', 'reset'], null]);
+  const reset = () => within(panel).getByRole('button', { name: 'Reset joints' }) as HTMLButtonElement;
+  expect(reset().disabled).toBe(true);
+  // The motion played and paused: Reset on; pressed, the motion back at its start and the joints as built.
+  await user.click(within(panel).getByRole('button', { name: 'Play motion' }));
+  frameAt(500);
+  await user.click(within(panel).getByRole('button', { name: 'Pause motion' }));
+  expect([reset().disabled, hingeAt(scene)]).toEqual([false, 7.5]);
+  await user.click(reset());
+  expect([reset().disabled, lastPose(scene), within(panel).getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuenow')]).toEqual([true, null, '0']);
+  // A joint set by its named position: Reset on again, and it puts the joints back.
+  await user.click(within(panel).getByRole('button', { name: 'Position: Default' }));
+  await user.click(screen.getByRole('menuitemradio', { name: 'open' }));
+  expect([reset().disabled, hingeAt(scene)]).toEqual([false, 90]);
+  await user.click(reset());
+  expect([reset().disabled, within(panel).getByRole('button', { name: 'Position: Default' }) !== null]).toEqual([true, true]);
+});
+
+// A parameter edit builds the model again (a preview, then a saved version): a mechanism with the same joints keeps the
+// Joints pose, one whose joints changed starts at Default. The pose is keyed by the mechanism, never by its object.
+it('the Joints pose stays across a rebuild with the same joints, and goes back to Default when the joints changed', () => {
+  let pose: ReturnType<typeof useXbfPose>;
+  function Pose({ mechanism }: { mechanism: any }) { pose = useXbfPose(mechanism); return null; }
+  const { rerender } = render(<Pose mechanism={kinematics} />);
+  act(() => pose.choosePreset('open'));
+  expect([pose.applied, pose.preset, pose.values?.hinge?.[0]]).toEqual([true, 'open', 90]);
+  // The same joints in a new document (a parameter changed elsewhere): the pose is kept.
+  rerender(<Pose mechanism={JSON.parse(JSON.stringify(kinematics))} />);
+  expect([pose.preset, pose.values?.hinge?.[0]]).toEqual(['open', 90]);
+  // A joint's limits changed: Default.
+  const changed = JSON.parse(JSON.stringify(kinematics));
+  changed.pairs[0].limits = [[-90, 90]];
+  rerender(<Pose mechanism={changed} />);
+  expect([pose.applied, pose.preset, pose.values?.hinge?.[0]]).toEqual([false, '__default__', 0]);
 });

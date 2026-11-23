@@ -1,6 +1,6 @@
 // The unit a family's file measures in, against the coordinates its scene is drawn in. A STEP
 // is drawn in its millimetres. A GLB is drawn in millimetres too, from glTF's metres (its root
-// scales by 1000: `glbMeshData.js`); a robot in its own metres (URDF and SDF, REP 103); a 3MF
+// scales by 1000: `glbMeshData.js`); a robot in its own metres (URDF, REP 103); a 3MF
 // in the unit its model declares, unscaled; an STL in its bare numbers, which name no unit.
 //
 // Every number a person reads or writes about such a scene is in the FILE's unit: a measured
