@@ -23,7 +23,7 @@ vi.mock('@cad/ui/cad-viewer', async original => {
 });
 
 // Each view's sync, as the page made it: its handlers, through which a test says the server answered refusing.
-const syncs = vi.hoisted(() => ({ handlers: [] as { connection?: (connected: boolean, refused?: string) => void }[] }));
+const syncs = vi.hoisted(() => ({ handlers: [] as Parameters<typeof import('./host/sync').createViewSync>[2][] }));
 vi.mock('./host/sync', async original => {
   const real = await original<typeof import('./host/sync')>();
   return { ...real, createViewSync: ((...args: Parameters<typeof real.createViewSync>) => {
@@ -130,6 +130,28 @@ it.each(['inline', 'fullscreen'] as const)('an inline host in %s mode keeps the 
   const frame = container.firstElementChild as HTMLElement;
   expect(frame.style.getPropertyValue('--cad-viewport-corner-left')).toBe('');
   expect(frame.style.getPropertyValue('--cad-viewport-corner-right')).toBe('');
+});
+
+// `cad server stop` under a tab: `cad mcp` stays and answers each sync with cad's line, refusing nothing. The view is
+// covered by the viewer's own status screen, as the browser viewer's is, its tools inert under it; once a sync
+// answers again the screen goes and the viewer is drawn afresh, so what failed to load meanwhile is read again.
+it('a view whose server stopped says CAD is not running over an inert view, and comes back by itself when it runs again', () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const { container } = render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'tab' }} />);
+  const sync = syncs.handlers.at(-1)!;
+  expect(viewer.mounts).toBe(1);
+  act(() => sync.connection!(false, { kind: 'engine' }));
+  expect(screen.getByRole('alert').textContent).toContain('CAD is not running.');
+  expect(container.querySelector('[data-cad-engine-stopped] [data-status-screen]')).not.toBeNull();
+  expect(container.querySelector('[inert]')).not.toBeNull();
+  act(() => sync.connection!(true));
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(container.querySelector('[inert]')).toBeNull();
+  expect([viewer.mounts, viewer.props!.file]).toEqual([2, '/work/part.step']);
+  // A refusal is the server's own words over the model, never the status screen.
+  act(() => sync.connection!(false, { kind: 'refused', said: 'This CAD view was opened before CAD restarted: close it and open CAD again.' }));
+  expect([screen.getByRole('alert').textContent, container.querySelector('[inert]')])
+    .toEqual(['This CAD view was opened before CAD restarted: close it and open CAD again.', null]);
 });
 
 it("the home's first list came with its launch: a file's card reads its picture by its document's id", async () => {

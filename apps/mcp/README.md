@@ -395,7 +395,7 @@ the launch's `_meta` first (`host/capability.ts`).
   rows) stand where the models will be; a model being opened shows a spinner over
   its picture, and takes no second press, until the launch switches to the
   viewer, whose own progress takes over.
-- **A card says why it cannot work, in words a person can act on.** Three states, never
+- **A card says why it cannot work, in words a person can act on.** Four states, never
   confused, and never a host's or a transport's own error string (`host/channel.ts`,
   `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`), and names the browser, never the viewer
   ([Naming the page](../../packages/ui/docs/viewer-ux.md#naming-the-page)):
@@ -426,6 +426,14 @@ the launch's `_meta` first (`host/capability.ts`).
     thread. Quit and reopen Codex to restart it." in a tab, "The CAD plugin stopped
     responding. Quit and reopen Codex to restart it, then ask your agent to show the model
     again." inline.
+  - **CAD's server stopped.** `cad server stop` under a live plugin: `cad mcp` outlives the server
+    and answers every call with cad's one line, an error that refuses nothing
+    (`packages/cad/src/cad_mcp/shim.py`, "Answered here"), so four such syncs in a row mean the
+    server, not the plugin (`host/sync.ts`'s `Lost`). The view is covered by the viewer's own status
+    screen, "CAD is not running.", as the browser viewer's is, the view under it inert, with no
+    action; once a sync answers again the screen goes and the viewer is drawn afresh, as the
+    browser viewer reloads: what failed to load meanwhile is read again, and the view's record
+    gives it back as it was.
   - **The engine refused or failed.** Its own one-line reason, where the viewer shows a
     request's failure. A call that got no reply fails in words of ours ("This chat cannot
     connect to CAD's engine.", "The CAD plugin did not answer in time.", "The

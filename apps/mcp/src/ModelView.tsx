@@ -35,8 +35,10 @@ export interface ViewReporter {
  * tree is its navigation, so it has no home, no explorer and no Back or Forward, and no Open in › Browser; its navbar
  * holds the file's name, its ⋯, the panels' toggles and Full size where the host offers it.
  */
-export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, fullSize, whatsNew, openInBrowser, engineOrigin }: {
-  launch: Launch; sequence: number; bridge: Bridge; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
+export default function ModelView({ launch, sequence, generation = 0, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, fullSize, whatsNew, openInBrowser, engineOrigin }: {
+  launch: Launch; sequence: number; bridge: Bridge;
+  /** Bumped when the view's server answers again after it stopped: the viewer is drawn afresh (`App.tsx`). */
+  generation?: number; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   /**
    * The view shows the one file its host opened, and nothing else (Codex's file handler): no home,
    * no explorer, no history, and no link to another file. The view's, from the launch that opened
@@ -157,7 +159,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
 
   // Every view is under the navbar, the file handler's too: it carries the host's controls and the panels' toggles.
   // The file on screen joins the library every CAD view shares, with its picture.
-  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} chrome="page"
+  return <CadViewer key={generation} client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} chrome="page"
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
     library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory} whatsNew={whatsNew}
     fullSize={fullSize}

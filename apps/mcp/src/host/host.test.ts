@@ -5,7 +5,7 @@ import { createBridge, HostError, type ToolResult } from './bridge';
 import { frameClipboard } from './clipboard';
 import { chatReach, createChatPromptContext } from './prompt';
 import { createServer, ServerError, type SyncReply, type SyncRequest, type ViewEvent } from './server';
-import { createViewSync, LOST_AFTER, SYNC_MS } from './sync';
+import { createViewSync, LOST_AFTER, SYNC_MS, type Lost } from './sync';
 import { createTunnelFetch, decodeBase64, TUNNEL_ORIGIN, TUNNEL_REPLY_MAX_BYTES } from './tunnel';
 
 /** A host frame: records what the page posts and answers with `respond`. */
@@ -198,15 +198,43 @@ describe('a view\'s one call each second', () => {
     vi.useFakeTimers();
     try {
       const refusal = 'This CAD view was opened before CAD restarted: close it and open CAD again.';
-      const server = { sync: vi.fn(async (): Promise<SyncReply> => { throw new ServerError(refusal); }), reply: async () => {} };
-      const said: [boolean, string | undefined][] = [];
+      const server = { sync: vi.fn(async (): Promise<SyncReply> => { throw new ServerError(refusal, 'stale'); }), reply: async () => {} };
+      const said: [boolean, Lost | undefined][] = [];
       const stop = new AbortController();
       createViewSync(server, { id: 'v1', surface: 'tab', model: () => null }, {
         show: () => {}, capture: async () => new Blob(), state: () => ({}),
-        connection: (connected, refused) => said.push([connected, refused]),
+        connection: (connected, lost) => said.push([connected, lost]),
       }).run(stop.signal);
       await vi.advanceTimersByTimeAsync(7_000);
-      expect(said).toEqual([[false, refusal]]);
+      expect(said).toEqual([[false, { kind: 'refused', said: refusal }]]);
+      stop.abort();
+    } finally { vi.useRealTimers(); }
+  });
+
+  // `cad server stop`: `cad mcp` outlives the server and answers each call with cad's line, an error that refuses
+  // nothing. The plugin is not gone, the engine is: the view says CAD is not running, and is back when one runs.
+  it('says the engine stopped when the plugin answers every sync with an error that refuses nothing', async () => {
+    vi.useFakeTimers();
+    try {
+      let down = true;
+      const server = {
+        sync: vi.fn(async (): Promise<SyncReply> => {
+          if (down) throw new ServerError('the cad server is not running: run `cad server start`');
+          return { events: [] };
+        }),
+        reply: async () => {},
+      };
+      const said: [boolean, Lost | undefined][] = [];
+      const stop = new AbortController();
+      createViewSync(server, { id: 'v1', surface: 'tab', model: () => null }, {
+        show: () => {}, capture: async () => new Blob(), state: () => ({}),
+        connection: (connected, lost) => said.push([connected, lost]),
+      }).run(stop.signal);
+      await vi.advanceTimersByTimeAsync(7_000);
+      expect(said).toEqual([[false, { kind: 'engine' }]]);
+      down = false;
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(said).toEqual([[false, { kind: 'engine' }], [true, undefined]]);
       stop.abort();
     } finally { vi.useRealTimers(); }
   });
