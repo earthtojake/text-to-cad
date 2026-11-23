@@ -11,8 +11,8 @@ import { strToU8, zipSync } from 'three/examples/jsm/libs/fflate.module.js';
 
 // Inline fixtures, served from memory: an ASCII STL box (its solid named), a binary STL of one box and one of two
 // bodies (a box, then a smaller tetrahedron before it in the file), a 3MF package with two boxes of two base-material
-// colours, a 3MF whose objects carry no colour, a 3MF of one object, a well formed STL with no triangles, and bytes
-// that are no STL at all.
+// colours, a 3MF whose objects carry no colour, a 3MF of one object, a well formed STL with no triangles, bytes
+// that are no STL at all, and a slicer's print file (a 3MF of G-code and an empty build).
 const CORNERS = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]];
 const TRIANGLES = [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [2, 3, 7], [2, 7, 6], [1, 2, 6], [1, 6, 5], [3, 0, 4], [3, 4, 7]];
 const boxCorners = ([x, y, z], size) => CORNERS.map(corner => [x + corner[0] * size, y + corner[1] * size, z + corner[2] * size]);
@@ -31,7 +31,7 @@ function binaryStl(triangles) {
 const boxFacets = (origin, size) => { const corners = boxCorners(origin, size); return TRIANGLES.map(triangle => triangle.map(index => corners[index])); };
 const tetraFacets = ([x, y, z], size) => [[[0, 0, 0], [0, 1, 0], [1, 0, 0]], [[0, 0, 0], [1, 0, 0], [0, 0, 1]], [[1, 0, 0], [0, 1, 0], [0, 0, 1]], [[0, 0, 0], [0, 0, 1], [0, 1, 0]]]
   .map(triangle => triangle.map(([a, b, c]) => [x + a * size, y + b * size, z + c * size]));
-function threeMf(objects) {
+function threeMf(objects, entries = {}) {
   const colored = objects.some(object => object.color);
   const model = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
@@ -48,6 +48,7 @@ function threeMf(objects) {
     '[Content_Types].xml': strToU8('<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>'),
     '_rels/.rels': strToU8('<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>'),
     '3D/3dmodel.model': strToU8(model),
+    ...entries,
   }));
 }
 const FILES = {
@@ -60,6 +61,7 @@ const FILES = {
   // A binary STL that is well formed and holds no triangles: an 80 byte header and a zero count.
   'empty.stl': Buffer.alloc(84),
   'broken.stl': Buffer.from('solid this is prose and not a mesh\nfacet normal but never a vertex\n'),
+  'plate.gcode.3mf': threeMf([], { 'Metadata/plate_1.gcode': strToU8('G28\nG1 X10 Y10 E1.2 F1500\n') }),
 };
 
 // A file's bytes held back until the test lets them go: the view as it is before the file arrives.
@@ -496,7 +498,7 @@ test('an STL of several bodies lists them largest first once split, and Select p
   assert.deepEqual(errors, []);
 });
 
-test('a corrupt mesh raises the viewer\'s load alert and an empty one says there is no geometry', async (t) => {
+test('a corrupt mesh raises the viewer\'s load alert, an empty one says there is no geometry and a print file says what it is', async (t) => {
   const broken = await open(t, 'broken.stl');
   const alert = broken.pane.getByRole('alert');
   await alert.waitFor();
@@ -513,4 +515,10 @@ test('a corrupt mesh raises the viewer\'s load alert and an empty one says there
   await empty.pane.getByRole('alert').waitFor();
   assert.match(await empty.pane.getByRole('alert').innerText(), /No geometry to display/);
   assert.match(await empty.pane.getByRole('alert').innerText(), /empty\.stl/);
+
+  // A slicer's print file is no broken model: it says what it is, with nothing to retry.
+  const sliced = await open(t, 'plate.gcode.3mf');
+  await sliced.pane.getByRole('alert').waitFor();
+  assert.match(await sliced.pane.getByRole('alert').innerText(), /A print file, not a model[\s\S]*plate\.gcode\.3mf[\s\S]*G-code/);
+  assert.equal(await sliced.pane.getByRole('alert').getByRole('button', { name: 'Retry', exact: true }).count(), 0);
 });

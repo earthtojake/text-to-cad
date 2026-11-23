@@ -22,6 +22,12 @@ import { useI18n } from "@cad/ui/i18n";
 const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
 const NO_REFERENCES = Object.freeze([]);
 
+/** A slicer's print file (a 3MF of G-code, `useMeshScene`'s `sliced`): no model to draw, and nothing broken to retry or report. */
+function slicedFileAlert(fileRef, t) {
+  return { severity: "warning", reportable: false, summary: t("alert.sliced.summary"), title: t("alert.sliced.title"),
+    message: t("alert.sliced.message", { file: fileRef }), recovery: t("alert.sliced.recovery") };
+}
+
 function MeshSurface({ view, data }) {
   const { t } = useI18n();
   const document = useWorkspaceDocument({ view, data });
@@ -29,8 +35,8 @@ function MeshSurface({ view, data }) {
   const scene = loaded.scene;
   const loadAlert = useMemo(() => workspaceLoadAlert({
     catalogError: document.catalogError, error: loaded.error, modelKey: document.modelKey, hasScene: Boolean(scene), t
-  }) || (loaded.empty ? noGeometryAlert(document.modelKey, t) : null),
-  [document.catalogError, loaded.error, loaded.empty, document.modelKey, scene, t]);
+  }) || (loaded.sliced ? slicedFileAlert(document.modelKey, t) : loaded.empty ? noGeometryAlert(document.modelKey, t) : null),
+  [document.catalogError, loaded.error, loaded.empty, loaded.sliced, document.modelKey, scene, t]);
   // A 3MF has objects and a unit; an STL has bodies (`stlBodies.js`) and no unit, so nothing to measure in.
   const threeMf = /\.3mf$/i.test(view.file.path);
   const toolModes = threeMf ? THREE_MF_TOOL_MODES : STL_TOOL_MODES;

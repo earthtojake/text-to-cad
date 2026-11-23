@@ -598,7 +598,8 @@ or a `.3mf` as what it is: triangles, and in a 3MF a colour per object.
   editor's geometry; `kit/shell/usePreviewScene.js`).
 - **Alerts**: a file that fails to parse raises the load alert ("Couldn’t load
   the model", with the loader's error in Details); one that parses to no
-  triangles raises "No geometry to display".
+  triangles raises "No geometry to display", unless it is a 3MF that carries G-code: a slicer's print file
+  (a `.gcode.3mf`), which says so and that it opens in the slicer, a warning with no Retry or Report Issue.
 - **Quick Edit**: as a STEP's — the picked objects or bodies as references, the annotation and the
   views (Clip in their `display`).
 - **Host commands**: the base live commands, and `clearSelection`; `select` is declined with
