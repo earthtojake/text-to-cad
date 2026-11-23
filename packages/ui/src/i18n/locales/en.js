@@ -192,7 +192,7 @@ export default {
   // The page before the viewer answers (`apps/web`'s starting view).
   "app.start.notAnswering": "CAD is not answering",
   "app.engine.notRunning": "CAD is not running.",
-  "app.engine.startIt": "It starts again when your agent next uses CAD or you open the CAD app; this page reconnects on its own.",
+  "app.engine.startIt": "Run cad server start, or ask your agent to start it; this page reconnects on its own.",
   "app.engine.linkReplaced": "This link no longer works.",
   "app.engine.openNewLink": "Ask your agent to open the model again and use the new link.",
   "app.engine.reload": "Reload",

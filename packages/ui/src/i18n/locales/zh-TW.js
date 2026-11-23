@@ -189,7 +189,7 @@ export default {
 
   "app.start.notAnswering": "CAD 沒有回應",
   "app.engine.notRunning": "CAD 未在執行。",
-  "app.engine.startIt": "當你的代理程式下次使用 CAD 或你開啟 CAD 應用時，它會重新啟動；此頁面會自動重新連線。",
+  "app.engine.startIt": "執行 cad server start，或請你的代理程式啟動它；此頁面會自動重新連線。",
   "app.engine.linkReplaced": "此連結已失效。",
   "app.engine.openNewLink": "請讓你的代理程式再次開啟該模型，然後使用新連結。",
   "app.engine.reload": "重新載入",
