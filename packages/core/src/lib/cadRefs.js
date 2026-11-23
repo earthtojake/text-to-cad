@@ -133,6 +133,17 @@ export function isDocumentId(value) {
   return typeof value === "string" && DOCUMENT_ID_RE.test(value);
 }
 
+const PREVIEW_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}~preview-[0-9a-f]{16}$/;
+
+/**
+ * Whether `value` is a preview's id (`cad.engine.ids.is_preview_id`): `<model id>~preview-<token>`, the model a
+ * page draws at parameter values it has not saved. A Quick Edit's references into it name it, and `cad model
+ * inspect` reads them while the page holds it; it is no document id, so nothing else takes one.
+ */
+export function isPreviewId(value) {
+  return typeof value === "string" && PREVIEW_ID_RE.test(value);
+}
+
 /**
  * Whether a file's refs are the engine's grammar: every document the engine draws -- an `.xbf`, its
  * own document; a STEP (`.step`, `.stp`), which it reads and serves as one; a document it holds by its
@@ -140,7 +151,7 @@ export function isDocumentId(value) {
  */
 export function isEngineRefFile(path) {
   const text = String(path || "").trim();
-  return isDocumentId(text) || ENGINE_REF_FILE_RE.test(text);
+  return isDocumentId(text) || isPreviewId(text) || ENGINE_REF_FILE_RE.test(text);
 }
 
 // A JSON string starting at `at` (a quote), read as Python's `raw_decode` reads one: its value and

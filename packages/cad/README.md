@@ -382,8 +382,10 @@ renumbers the list and every citation in the same change.
     holds the bytes its last run read, and runs that run again in the warm worker; a build the new
     values break puts the bytes back, never over another writer's change. A page's preview of other
     values is built in the same worker for that page alone and becomes nothing else: never a file, the
-    document, its record or the cache, never what another page, an export or an agent reads (the
-    engine's **Parameters**).
+    document, its record or the cache, never what another page or an export reads. An agent reads it
+    only by a ref the page's Quick Edit names in it (`<id>~preview-<token>#REF`, what the person picked
+    on screen), with `cad model inspect`, while the page holds it: a face of the preview may be none of
+    the saved model's, so a ref into it is named by the preview (the engine's **Parameters**).
     *Pressure-test*: declare a parameter in a shared module, in a loop and as an expression: each is
     listed read-only and a Save refuses it; edit the script by hand and a Save refuses
     (`script_changed`) until the script runs again.

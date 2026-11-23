@@ -1009,17 +1009,15 @@ def inspect(source: Any, ref: str | None = None, *, query: str | None = None, pr
 
 def _inspected(source: Any, ref: str | None, query: str | None, progress: Callable[[dict], None] | None) -> Facts | list[Facts]:
     """``inspect``, its summary's frames to ``progress`` (a callable, or None for nowhere)."""
-    from urllib.parse import quote
-
     from cad.engine import refs
-    from cad.engine.said import weighed
-    from cad.engine.weights import declares
-
     from cad.engine.addresses import key, parts, split
+    from cad.engine.ids import is_preview_id
 
     if isinstance(source, Document):
         source = source.id  # the handle a model call returns, as every verb takes it: its document, by its id
     named = parts(source)[0]
+    if is_preview_id(named):
+        return _preview_inspected(named, ref, parts(source)[1], query)
     source, embedded_ref = split(source)
     if ref is not None and embedded_ref is not None and ref != embedded_ref:
         raise EngineError("source reference and ref disagree")
@@ -1058,6 +1056,34 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     if ref is not None:
         refs.parse(ref)  # refuse invalid refs before serving
     ident = _ask({"op": "serve", "path": str(path)})["doc"]
+    return _read_inspected(ident, path, source, ref, query, progress)
+
+
+def _preview_inspected(ident: str, ref: str | None, embedded_ref: str | None, query: str | None) -> Facts | list[Facts]:
+    """``inspect`` of a page's preview (``<model id>~preview-<token>``: the model drawn at parameter values the
+    page has not saved), by a ref alone: what the ref names in the geometry on screen, read at the preview's own
+    routes while the page holds it (the engine's ``parameters.Previewing``). It has no closure, no build and no
+    provenance, so no ``made_by``; one let go (saved, reset, changed, or unread for two minutes) is not found."""
+    from cad.engine import refs
+
+    if ref is not None and embedded_ref is not None and ref != embedded_ref:
+        raise EngineError("source reference and ref disagree")
+    ref = ref if ref is not None else embedded_ref
+    if ref is None or query not in (None, "geometry"):
+        raise EngineError(f"{ident} is a page's preview of unsaved parameter values: inspect a ref in it "
+                          f"({ident}#REF), or the model itself by {ident.partition('~')[0]}")
+    refs.parse(ref)
+    return _read_inspected(ident, None, ident, ref, "geometry", None)  # named by the structure's name
+
+
+def _read_inspected(ident: str, path: Path | str | None, source: Any, ref: str | None, query: str,
+                    progress: Callable[[dict], None] | None) -> Facts | list[Facts]:
+    """``inspect``'s reads of the document the engine serves as ``ident``, through its door."""
+    from urllib.parse import quote
+
+    from cad.engine import refs
+    from cad.engine.said import weighed
+    from cad.engine.weights import declares
 
     def get(route: str, counted: Callable[[int, int, str], None] | None = None) -> Any:
         # Read through the engine's door, never its loopback port: a sandboxed shell has the one.

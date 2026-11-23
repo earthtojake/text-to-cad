@@ -372,7 +372,9 @@ engine; everything else in the viewer only looks.
   spent on a value already passed.
 - **Saving** turns the controls off and Save says "Saving…". The rebuilt model arrives as a new version.
 - **The agent learns of a save**: the next Quick Edit message says once what was saved, so the agent keeps the values.
-  Unsaved drafts add a line to every message saying they are shown, not saved. How the tab works:
+  Unsaved drafts add a line to every message saying they are shown, not saved, and what is picked on their preview
+  is named by the preview's id (`<model id>~preview-<token>`), which `cad model inspect` reads as shown. Why: a face
+  of the preview may not be one of the saved model's, and a reference that resolves elsewhere misleads. How the tab works:
   [cad-renderer.md](cad-renderer.md#engine-document-panels).
 
 ### Joints

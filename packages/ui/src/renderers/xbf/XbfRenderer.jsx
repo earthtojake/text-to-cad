@@ -32,7 +32,7 @@ import XbfModelTree from "./XbfModelTree.jsx";
 import XbfPositionSection, { useXbfPose, writeXbfPosition, xbfPoseGiven, xbfPositionRows } from "./XbfPositionSection.jsx";
 import XbfParametersSection, { useXbfParameters } from "./XbfParametersSection.jsx";
 import { MeasureIcon, SelectIcon, SelectMenu, XBF_SELECT_DEFAULT, xbfSelectBadge } from "./XbfSelectionModes.jsx";
-import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfDescriber, xbfNodeRefs, xbfTipper } from "./xbfChips.jsx";
+import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfDescriber, xbfNodeRefs, xbfPickResource, xbfTipper } from "./xbfChips.jsx";
 import { xbfJointHandles } from "./xbfJointHandles.js";
 import { viewportMenuEntries } from "./xbfMenuItems.js";
 import { xbfModelMenu, xbfPartMenu, xbfTangentSources, xbfTopologyMenu } from "./xbfMenus.js";
@@ -623,7 +623,8 @@ function XbfSurface({ view, data }) {
     const elements = ids.filter(isElementId);
     setHover(elements.length ? { parts: EMPTY, element: elements[0] } : { parts: ids, element: null });
   }, []);
-  const resource = shell.frame.resource;
+  // What a pick names: the document, or the preview of unsaved parameter values the scene draws (`xbfPickResource`).
+  const resource = useMemo(() => xbfPickResource(shell.frame.resource, loaded.previewing), [shell.frame.resource, loaded.previewing]);
   // What a pick is, as its chip's card and the hover tip read it (`xbfDescriber`).
   const describe = useMemo(() => xbfDescriber({ scene, tree, facts, t }), [scene, tree, facts, t]);
   const { references, chips } = useXbfSelectionChips({ scene, tree, resource, selectedIds: selected, facts,

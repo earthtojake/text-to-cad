@@ -971,7 +971,7 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
     of another type or of no type, a model's document id given to a file's type, a file given to ``model``;
     and a file of the type's that is not there (``not_found``), whichever the type."""
     from cad.engine.addresses import parts
-    from cad.engine.ids import is_id
+    from cad.engine.ids import is_id, is_preview_id
     from cad_server._internal.cli_errors import Failure
 
     def use(other: str) -> str:
@@ -983,6 +983,13 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
     if is_id(given):
         if entry.has_file:
             raise Failure(f"{source} is a model's document id, not a {entry.suffix} file{use('model')}", "wrong_type")
+        return
+    if is_preview_id(given):
+        # A page's preview of unsaved parameter values, as a Quick Edit's references name it: inspected, nothing more.
+        if entry.has_file or operation != "inspect":
+            raise Failure(f"{given} is a page's preview of a model at unsaved parameter values: cad model inspect "
+                          f"reads a ref in it; cad {document_type} {operation} takes the model, "
+                          f"{given.partition('~')[0]}", "wrong_type")
         return
     script = given.partition("::")[0]
     if script.lower().endswith(".py"):

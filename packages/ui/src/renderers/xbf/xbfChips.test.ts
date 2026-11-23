@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { parsePromptReference } from '@cad/core/prompt';
-import { useXbfSelectionChips, xbfCopyText, xbfNodeRefs } from '../../../dist/renderers/xbf/xbfChips.js';
+import { useXbfSelectionChips, xbfCopyText, xbfNodeRefs, xbfPickResource } from '../../../dist/renderers/xbf/xbfChips.js';
 import { presentXbfTree, xbfCoveringIds } from '../../../dist/renderers/xbf/xbfTree.js';
 
 // What an engine document's selection copies: the engine's canonical refs, one line each, the file's
@@ -70,6 +70,21 @@ it('a model the engine holds by its id is referenced by that id, in the engine g
   const { result } = renderHook(() => useXbfSelectionChips({ scene, tree, resource, selectedIds: ['i2/face/7'],
     facts: new Map(), onRemove: () => {}, onHover: () => {} }));
   expect(result.current.references).toEqual([{ resource, target: { kind: 'cad-selector', selectors: ['kit/hand/finger.2/face 7'] } }]);
+});
+
+it('a pick on a preview of unsaved parameter values names the preview, by its id, which a paste reads back', () => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const preview = `${id}~preview-0123456789abcdef`;
+  const model = { kind: 'cad-model', path: id };
+  const shown = xbfPickResource(model, `http://127.0.0.1:4178/api/v1/documents/model/${encodeURIComponent(preview)}`);
+  expect(shown).toEqual({ kind: 'cad-model', path: preview });
+  expect([xbfPickResource(model, null), xbfPickResource(at('/w/kit.xbf'), `/api/v1/documents/model/${preview}`)])
+    .toEqual([model, at('/w/kit.xbf')]);
+  expect(copied(shown, ['i2/face/7'])).toEqual([`${preview}#kit/hand/finger.2/face 7`]);
+  const { result } = renderHook(() => useXbfSelectionChips({ scene, tree, resource: shown, selectedIds: ['i2/face/7'],
+    facts: new Map(), onRemove: () => {}, onHover: () => {} }));
+  expect(result.current.references).toEqual([{ resource: shown, target: { kind: 'cad-selector', selectors: ['kit/hand/finger.2/face 7'] } }]);
+  expect(parsePromptReference(`${preview}#kit/hand/finger.2/face 7`)).toEqual(result.current.references[0]);
 });
 
 it('a view hides and isolates by the refs Copy Prompt copies, a hidden assembly by its own', () => {

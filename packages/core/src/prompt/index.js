@@ -1,6 +1,6 @@
 import { buildBoardRefToken, isBoardRefPath, parseBoardRefSelector, parseBoardRefToken } from '../lib/boardRefs.js';
 import { buildSchematicRefToken, isSchematicRefPath, parseSchematicRefSelector, parseSchematicRefToken } from '../lib/schematicRefs.js';
-import { buildCadRefToken, isDocumentId, isEngineRefFile, isEngineSelector, isLabelSelector, parseCadRefToken } from '../lib/cadRefs.js';
+import { buildCadRefToken, isDocumentId, isEngineRefFile, isPreviewId, isEngineSelector, isLabelSelector, parseCadRefToken } from '../lib/cadRefs.js';
 
 let operationSequence = 0;
 const operationNamespace = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
@@ -16,8 +16,9 @@ export function validatePromptReference(reference) {
     requireValue(typeof resource.path === 'string' && /^(?:[A-Za-z]:)?\//.test(resource.path) && !/[\\\0]/.test(resource.path)
       && resource.path.replace(/^(?:[A-Za-z]:)?\//, '').split('/').every(part => part && part !== '.' && part !== '..'), 'file paths must be normalized and absolute');
   } else if (resource.kind === 'cad-model') {
-    // A document the engine holds by its id alone (a model's): its id, never a path.
-    requireValue(isDocumentId(resource.path), 'model references name the document by its id');
+    // A document the engine holds by its id alone (a model's): its id, never a path; or a page's preview of it at
+    // unsaved parameter values, by the preview's id, which is what such a view's picks name.
+    requireValue(isDocumentId(resource.path) || isPreviewId(resource.path), 'model references name the document by its id');
   } else {
     requireValue(resource.kind === 'url' && typeof resource.url === 'string', 'unknown resource kind');
     let url; try { url = new URL(resource.url); } catch { /* Report the contract error below. */ }
@@ -125,7 +126,7 @@ export function parsePromptReference(text) {
   }
   const parsed = line ? parseCadRefToken(line) : null;
   if (!parsed || parsed.token.trim() !== line || !parsed.selectors.length) return null;
-  try { return validatePromptReference({ resource: { kind: isDocumentId(parsed.cadPath) ? 'cad-model' : 'workspace-file', path: parsed.cadPath }, target: { kind: 'cad-selector', selectors: parsed.selectors } }); }
+  try { return validatePromptReference({ resource: { kind: isDocumentId(parsed.cadPath) || isPreviewId(parsed.cadPath) ? 'cad-model' : 'workspace-file', path: parsed.cadPath }, target: { kind: 'cad-selector', selectors: parsed.selectors } }); }
   catch { return null; }
 }
 

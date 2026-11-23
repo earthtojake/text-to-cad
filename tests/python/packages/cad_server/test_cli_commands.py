@@ -173,6 +173,22 @@ class TheCommandTable(unittest.TestCase):
                 _refuse_other_type("step", operation, str(part))
                 _refuse_other_type("step", operation, f"{part}#arm")
 
+    def test_a_preview_s_id_is_inspected_and_nothing_else(self) -> None:
+        """A Quick Edit's reference into a page's preview of unsaved parameter values (``<id>~preview-<token>``) is
+        what ``cad model inspect`` reads; any other operation, or type, refuses it by name and names the model."""
+        from cad_server._internal.cli_errors import Failure
+        from cad_server.cli.document_types import _refuse_other_type
+
+        model = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
+        preview = f"{model}~preview-0123456789abcdef"
+        _refuse_other_type("model", "inspect", preview)
+        _refuse_other_type("model", "inspect", f"{preview}#bracket/face 3")
+        for document_type, operation in (("model", "snapshot"), ("model", "export"), ("step", "inspect")):
+            with self.subTest(command=f"{document_type} {operation}"), self.assertRaises(Failure) as refused:
+                _refuse_other_type(document_type, operation, preview)
+            self.assertEqual(refused.exception.reason, "wrong_type")
+            self.assertIn(f"cad {document_type} {operation} takes the model, {model}", str(refused.exception))
+
     def test_a_script_where_a_document_is_wanted_says_cad_run_builds_it(self) -> None:
         """A model's script is never a source: the refusal says the command that builds it and prints its id,
         the skills' own form, and the help says the same -- never ``python SCRIPT.py``."""
