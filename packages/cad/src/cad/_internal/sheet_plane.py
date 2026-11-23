@@ -31,14 +31,16 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from itertools import product
 from typing import Any, Iterable, Sequence
 
 import numpy as np
 
 
 __all__ = ["CHORD_MM", "PAIRS", "SELF_CROSSING_PAIRS", "TIE_MM", "Loop", "Pocket", "Tab", "Width", "arc_points",
-           "area", "as_near", "cast", "crossings", "distance", "feret", "holds", "hull", "inside", "min_rectangle",
-           "nearest", "nearest_pairs", "nest", "pockets", "self_crossings", "tabs", "widths"]
+           "area", "as_near", "cast", "crossings", "distance", "either", "feret", "fewer", "holds", "hull", "inside",
+           "least_feret", "min_rectangle", "nearest", "nearest_pairs", "nest", "pockets", "self_crossings", "tabs",
+           "widths"]
 
 #: The most a sampled curve's chord strays from its arc (mm): a tenth of what a laser holds, and five times
 #: fewer segments than a micron's worth would take. A whole circle is not read through its chords at all.
@@ -49,6 +51,8 @@ TIE_MM = 1e-6
 #: The most pairs (a point and a segment, a ray and a circle) one numpy pass holds: every measure here works
 #: through its pairs this many at a time, so its memory is bounded whatever the outline.
 PAIRS = 1_000_000
+#: The most arcs of one loop whose either sampling a hole's size is taken over: past them, its size as sampled.
+_EITHER_ARCS = 8
 
 
 @dataclass
@@ -61,6 +65,9 @@ class Loop:
     label: Any = None                    # whatever the caller names the loop by (a ref, a handle)
     circle: tuple[float, float, float] | None = None  # (cx, cy, r) when the loop is one whole circle
     through_diameter: float | None = None  # a countersunk hole's through diameter, its loop the countersink's
+    # where rounding decides whether an arc has a chord more: each stretch's points, both ends, each way it could
+    # have been sampled, the fewer first (empty: there is the one way, ``points``)
+    ways: list[list[np.ndarray]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.points = np.asarray(self.points, dtype=float).reshape(-1, 2)
@@ -95,6 +102,21 @@ class Loop:
         if abs(total) < 1e-12:
             return self.points.mean(axis=0)
         return np.array([((x + xn) * cross).sum(), ((y + yn) * cross).sum()]) / (3.0 * total)
+
+
+def fewer(loop: Loop) -> Loop:
+    """The loop with the fewer chords wherever rounding chose: one loop, whatever the rounding."""
+    if loop.circle is not None or not loop.ways:
+        return loop
+    return Loop(np.vstack([ways[0][:-1] for ways in loop.ways]), np.zeros(0, bool), label=loop.label)
+
+
+def either(loop: Loop) -> Loop:
+    """Every segment rounding could have given the loop, as one that goes round twice from its first point,
+    which is either way's: a distance to it is the least of every answer's. For distances and extents alone."""
+    if loop.circle is not None or not loop.ways:
+        return loop
+    return Loop(np.vstack([ways[k][:-1] for k in (0, -1) for ways in loop.ways]), np.zeros(0, bool), label=loop.label)
 
 
 def arc_points(center: Sequence[float], radius: float, start: float, sweep: float,
@@ -413,8 +435,15 @@ def nearest(loops: Sequence[Loop]) -> list[tuple[float, int] | None]:
 def nearest_pairs(loops: Sequence[Loop], within: float = 0.0) -> list[tuple[float, int, int]]:
     """Each loop with every other as near as its nearest (``within``), a pair once: (the lesser of the two
     measures of it, the loop that found it, the other). A pick among equals would leave out a pair, and with
-    it a figure, that rounding picks elsewhere. Each loop's first comes before any loop's rest."""
-    every = as_near(loops, within)
+    it a figure, that rounding picks elsewhere. Each loop's first comes before any loop's rest. Where loops
+    have ``ways``, a distance is the least of them, and as near is as near as the nearest could be."""
+    spread = 2.0 * CHORD_MM if any(loop.ways for loop in loops) else 0.0  # two chords' sag
+    every = as_near([either(loop) for loop in loops], within + spread)
+    if spread:
+        for k, near in enumerate(every):
+            if near:
+                reach = min(_at_most(loops[k], loops[j]) for _, j in near)
+                every[k] = [found for found in near if found[0] < reach + within] or [min(near)]
     ties = [(k, found) for k, near in enumerate(every) for found in near[:1]]
     ties += [(k, found) for k, near in enumerate(every) for found in near[1:]]
     pairs: dict[tuple[int, int], tuple[float, int, int]] = {}
@@ -423,6 +452,22 @@ def nearest_pairs(loops: Sequence[Loop], within: float = 0.0) -> list[tuple[floa
         least, at, to = pairs.get(key, (d, k, other))
         pairs[key] = (min(least, d), at, to)
     return list(pairs.values())
+
+
+def _at_most(first: Loop, second: Loop) -> float:
+    """The most the distance between two loops could be, whichever way each arc was sampled: between their
+    nearest stretches, each the way that is further."""
+    if not any(loop.ways and loop.circle is None for loop in (first, second)):
+        return distance(first, second)[0]
+    sides = []
+    for loop in (first, second):
+        if loop.circle is not None:
+            sides.append(([[np.array([loop.circle[:2]] * 2)]], loop.circle[2]))  # its centre, less its radius
+        else:
+            sides.append((loop.ways or [[np.vstack([loop.points, loop.points[:1]])]], 0.0))
+    (ours, r1), (theirs, r2) = sides
+    return max(0.0, min(max(segments_distance(a[:-1], a[1:], b[:-1], b[1:])[0] for a in mine for b in other)
+                        for mine in ours for other in theirs) - r1 - r2)
 
 
 def as_near(loops: Sequence[Loop], within: float = 0.0) -> list[list[tuple[float, int]]]:
@@ -510,6 +555,14 @@ def feret(points: np.ndarray) -> tuple[float, float, float]:
     diffs = ring[:, None, :] - ring[None, :, :]
     return (float(widths_[i]), float(np.sqrt((diffs ** 2).sum(axis=2)).max()),
             math.atan2(float(edges[i][1]), float(edges[i][0])))
+
+
+def least_feret(loop: Loop) -> tuple[float, float]:
+    """``feret``'s width and length, each the least over the ways the loop's arcs could have been sampled."""
+    if not loop.ways or sum(len(ways) > 1 for ways in loop.ways) > _EITHER_ARCS:
+        return feret(loop.points)[:2]
+    found = [feret(np.vstack([points[:-1] for points in choice])) for choice in product(*loop.ways)]
+    return min(width for width, _, _ in found), min(length for _, length, _ in found)
 
 
 def min_rectangle(points: np.ndarray) -> tuple[float, float, float]:

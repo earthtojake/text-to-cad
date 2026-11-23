@@ -18,6 +18,8 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from typing import Callable
+from unittest import mock
 
 import build123d as bd
 import numpy as np
@@ -739,6 +741,139 @@ class EqualNotchesAndHolesTest(unittest.TestCase):
         analysis = types.SimpleNamespace(holes=holes, bends=[], ref=lambda face: f"face {face}")
         shown = sheet._capped(sheet._holes(analysis, [])[1], "distance_mm")
         self.assertEqual(len({item["location"] for item in shown}), sheet.ITEM_CAP)
+
+
+class SlotBesideAHoleTest(unittest.TestCase):
+    E = 1e-9  # as EqualWebsTest's: rounding, made a known amount and tried either way
+    flat_of = EqualWebsTest.flat_of
+
+    def rounding(self, e: float):
+        """An arc a whole number of steps long sampled with the chord more (``e`` > 0) or without it."""
+        return mock.patch.object(sheet, "math", types.SimpleNamespace(
+            **{**vars(math), "ceil": lambda steps: math.ceil(steps + e)}))
+
+    @staticmethod
+    def broken(part: bd.Shape, rim: Callable[[bd.Edge], bool]) -> bd.Part:
+        return bd.chamfer([edge for edge in part.edges() if rim(edge)], 0.3)
+
+    @staticmethod
+    def slot(x: float, y: float = 0.0, turn: float = 0.0) -> bd.Part:
+        return bd.Pos(x, y, 0) * bd.extrude(bd.SlotOverall(16, 6, rotation=turn), amount=4, both=True)
+
+    @staticmethod
+    def split(part: bd.Shape, *cuts: bd.Plane) -> bd.Solid:
+        """``part`` cut and joined again with no face merged: each skin and wall the cuts cross, in pieces."""
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+
+        pieces = part.solids()
+        for cut in cuts:
+            pieces = [half for piece in pieces for half in piece.split(cut, keep=bd.Keep.ALL).solids()]
+        joined = pieces[0].wrapped
+        for piece in pieces[1:]:
+            joined = BRepAlgoAPI_Fuse(joined, piece.wrapped).Shape()
+        return bd.Compound(joined).solids()[0]
+
+    def parts(self) -> list[tuple[str, bd.Shape]]:
+        def skins_rim(edge: bd.Edge) -> bool:
+            return abs(abs(edge.center().Z) - 1) < 1e-6
+
+        plate = bd.Box(80, 50, 2) - self.slot(-12) - bd.Pos(8, 0, 0) * bd.Cylinder(3, 4)
+        corner = bd.extrude(bd.RectangleRounded(80, 50, 5), amount=1, both=True)
+        corner -= bd.Pos(35.5, 20.5, 0) * bd.Cylinder(1.5, 4)  # nearest the round corner's middle
+        bracket = bent([("line", 50), ("bend", 90, 2.0), ("line", 30)], 2.0, 50) - self.slot(38, 25)
+        return [("broken", self.broken(plate, skins_rim)),
+                ("corner", self.broken(corner, skins_rim)),
+                ("bracket", self.broken(bracket, lambda edge: 26 < edge.center().X < 48
+                                        and 18 < edge.center().Y < 32 and abs(edge.center().Z - 1) > 0.5)),
+                ("split", self.split(plate, bd.Plane.XZ, bd.Plane.YZ.offset(-17), bd.Plane.YZ.offset(-7)))]
+
+    def test_an_arcs_chord_more_or_less_is_one_answer_the_least(self) -> None:
+        half = math.pi / 2 / 37  # the 37 chords of a half turn leave its apex between two points, this far from each
+        found = {}
+        for name, part in self.parts():
+            part.label = "part"
+            with self.subTest(name):
+                answers = []
+                for e in (self.E, -self.E):
+                    with self.rounding(e):
+                        report = measured(part)
+                        answers.append({family: items(report, family)
+                                        for family in ("holes", "hole_spacing", "hole_to_bend")})
+                self.assertEqual(answers[0], answers[1])
+                found[name] = answers[0]
+        for name, spacing in (("broken", 8.7), ("split", 9.0)):  # to a broken hole's rim, to a plain hole
+            with self.subTest(f"{name}: the least"):
+                (slot,) = [hole for hole in found[name]["holes"] if hole["kind"] == "slot"]
+                across = math.hypot(10.0 + 6.0 * math.cos(half), 6.0 * math.sin(half))
+                self.assertEqual(slot["length_mm"], round(across, 4))  # with the chord more
+                self.assertEqual([pair["distance_mm"] for pair in found[name]["hole_spacing"]], [spacing])  # with none
+        self.assertAlmostEqual(found["bracket"]["hole_to_bend"][0]["distance_tangent_mm"], 4.0, places=3)
+
+    def test_a_hole_read_back_is_named_by_a_face_of_its_own(self) -> None:
+        plate = bd.Box(90, 50, 2)
+        for x in (-30, -10, 10, 30):
+            plate -= bd.Pos(x, 0, 0) * bd.Cylinder(4, 4)
+        slots = bd.Box(90, 50, 2) - self.slot(-22, turn=90) - bd.Cylinder(4, 4) - self.slot(22, turn=90)
+        for name, part in (("skin in halves", self.split(plate, bd.Plane.XZ)),
+                           ("broken", self.broken(slots, lambda edge: abs(abs(edge.center().Z) - 1) < 1e-6))):
+            with self.subTest(name):
+                analysis = self.flat_of(part)
+                loops = [loop for loop in analysis.flat_loops if loop.label == "hole"]
+                named, centres = [], []
+                for push in ((self.E, 0), (-self.E, 0), (0, self.E), (0, -self.E)):  # a hair toward each wall
+                    analysis.holes = []
+                    analysis.flat_loops = []
+                    for loop in loops:
+                        drawn, by = loop.points, np.array(push)
+                        if loop.ways and push[0] > 0:  # and once as sampled with the chord more at one end alone
+                            drawn = np.vstack([ways[-1 if k < len(loop.ways) // 2 else 0][:-1]
+                                               for k, ways in enumerate(loop.ways)])
+                        analysis.flat_loops.append(plane.Loop(
+                            drawn + by, np.zeros(0, bool), label="hole",
+                            circle=None if loop.circle is None else (*(np.array(loop.circle[:2]) + by), loop.circle[2]),
+                            ways=[[points + by for points in ways] for ways in loop.ways]))
+                    analysis._holes_from_flat()
+                    named.append([hole.ref for hole in analysis.holes])
+                    centres.append(np.array([hole.xyz for hole in analysis.holes]))
+                self.assertEqual(named, [named[0]] * 4)
+                self.assertLess(max(float(np.abs(each - centres[0]).max()) for each in centres), 1e-6)
+                self.assertEqual(len(set(named[0])), len(loops))  # findings are grouped by it
+                self.assertFalse(set(named[0]) & {analysis.ref(face) for face in analysis.skins})
+
+    def test_a_pair_is_as_near_as_the_nearest_could_be(self) -> None:
+        def slot(x: float) -> plane.Loop:
+            """A slot's end toward a round hole at the origin, sampled 36 chords or 37; as drawn, 37."""
+            side = math.copysign(1.0, x)
+            ways = []
+            for chords in (36, 37):
+                turn = np.linspace(-math.pi / 2, math.pi / 2, chords + 1)
+                ways.append(np.column_stack([x - side * 3.0 * np.cos(turn), 3.0 * np.sin(turn)]))
+                ways[-1][[0, -1]] = [(x, -3.0), (x, 3.0)]
+            back = np.array([(x, 3.0), (x + side * 8, 3.0), (x + side * 8, -3.0), (x, -3.0)])
+            return plane.Loop(np.vstack([ways[1][:-1], back[:-1]]), np.zeros(0, bool), ways=[ways, [back]])
+
+        hole = plane.Loop([(3, 0), (0, 3), (-3, 0), (0, -3)], [False] * 4, circle=(0.0, 0.0, 3.0))
+        behind = plane.Loop([(-25, 0), (-28, 3), (-31, 0), (-28, -3)], [False] * 4, circle=(-28.0, 0.0, 3.0))
+        for further, count in ((0.001, 2), (0.005, 1)):  # within a chord's sag, 0.0027 mm, or past it
+            with self.subTest(further):  # the further slot's own nearest is the hole behind it
+                pairs = plane.nearest_pairs([hole, slot(15.0), slot(-15.0 - further), behind], plane.TIE_MM)
+                found = sorted(round(d, 4) for d, a, b in pairs if 0 in (a, b))
+                self.assertEqual((found[0], len(found)), (9.0, count))
+
+    def test_a_hole_is_in_a_bend_where_either_sampling_reaches_it(self) -> None:
+        analysis = self.flat_of(self.parts()[2][1])
+        (loop,) = [loop for loop in analysis.flat_loops if loop.label == "hole"]
+        (bend,) = analysis.bends
+        low, high = (max(float(((ways[min(k, len(ways) - 1)] - bend.frame[0]) @ bend.frame[1]).max())
+                         for ways in loop.ways) for k in (0, 1))
+        self.assertGreater(low - high, 1e-3)  # the fewer chords have the apex
+        push = bend.frame[1] * (0.0005 - low)
+        ways = [[points + push for points in either] for either in loop.ways]
+        analysis.holes = []
+        analysis.flat_loops = [plane.Loop(np.vstack([either[-1][:-1] for either in ways]), np.zeros(0, bool),
+                                          label="hole", ways=ways)]
+        analysis._holes_from_flat()
+        self.assertTrue(analysis.holes[0].in_bend)
 
 
 class TypeSideTest(unittest.TestCase):

@@ -419,9 +419,9 @@ def _cut_about(face: Any, origin: np.ndarray, axis: np.ndarray, radius: float) -
 # --- wires as points ---------------------------------------------------------------------------------------
 
 
-def _edge_points(edge: Any, reverse: bool, count: int = 48) -> tuple[np.ndarray, str, Any]:
+def _edge_points(edge: Any, reverse: bool, count: int = 48, more: float = 0.0) -> tuple[np.ndarray, str, Any]:
     """An edge's points in its wire's direction: a line's two ends, a curve sampled; its kind and its circle
-    (centre, axis, radius) when it is one."""
+    (centre, axis, radius) when it is one. An arc's chords are counted as if it were ``more`` mm longer."""
     from OCP.BRepAdaptor import BRepAdaptor_Curve
     from OCP.GeomAbs import GeomAbs_Circle, GeomAbs_Line
 
@@ -438,7 +438,7 @@ def _edge_points(edge: Any, reverse: bool, count: int = 48) -> tuple[np.ndarray,
         sweep = abs(last - first)
         step = min(math.radians(5.0), 2.0 * math.acos(max(-1.0, 1.0 - plane.CHORD_MM / radius)) if radius > plane.CHORD_MM
                    else math.radians(5.0))
-        n = int(min(720, max(2, math.ceil(sweep / max(step, 1e-4))))) + 1
+        n = int(min(720, max(2, math.ceil((sweep + more / max(radius, plane.CHORD_MM)) / max(step, 1e-4))))) + 1
         params = np.linspace(first, last, n)
         name = "circle"
         circle = (np.array(brep._xyz(circ.Location())), np.array(brep._xyz(circ.Position().Direction())), radius)
@@ -461,20 +461,29 @@ def _edge_points(edge: Any, reverse: bool, count: int = 48) -> tuple[np.ndarray,
 
 
 def _wire_loop(wire: Any, face: Any, mapping: Callable[[np.ndarray], np.ndarray] | None = None,
-               label: Any = None) -> tuple[plane.Loop, np.ndarray, list[Any]]:
+               label: Any = None, redrawn: Callable[[Any, Any], bool] | None = None
+               ) -> tuple[plane.Loop, np.ndarray, list[Any]]:
     """A wire of a face as a loop: its points (mapped into the plane by ``mapping``, else the face's own
-    XY), each segment's straightness and source edge; also the wire's 3D points and its edges."""
+    XY), each segment's straightness and source edge; also the wire's 3D points and its edges. In the XY,
+    an arc ``redrawn`` (its sweep a rounding's) that is a whole number of chords long is kept either way
+    (``plane.Loop.ways``)."""
     from OCP.BRepTools import BRepTools_WireExplorer
     from OCP.TopAbs import TopAbs_REVERSED
 
     explorer = BRepTools_WireExplorer(wire, face)
-    points3, straight, sources, circles, edges = [], [], [], [], []
+    points3, straight, sources, circles, edges, ways = [], [], [], [], [], []
     while explorer.More():
         edge = explorer.Current()
         reverse = explorer.Orientation() == TopAbs_REVERSED
         pts, kind, circle = _edge_points(edge, reverse)
         edges.append(edge)
         circles.append(circle)
+        sampled = [pts]
+        if redrawn is not None and circle is not None and redrawn(edge, circle):
+            low, high = (_edge_points(edge, reverse, more=slack)[0] for slack in (-plane.TIE_MM, plane.TIE_MM))
+            if len(low) < len(high):
+                sampled = [low, high]
+        ways.append([points[:, :2] for points in sampled])
         for i in range(len(pts) - 1):
             points3.append(pts[i])
             straight.append(kind == "line")
@@ -491,7 +500,34 @@ def _wire_loop(wire: Any, face: Any, mapping: Callable[[np.ndarray], np.ndarray]
         if np.ptp(radii) < 1e-7 and np.ptp(centres, axis=0).max() < 1e-7:
             centre = mapping(centres[:1]) if mapping is not None else centres[:1]
             loop.circle = (float(centre[0, 0]), float(centre[0, 1]), float(radii[0]))
+    if loop.circle is None and any(len(sampled) > 1 for sampled in ways):
+        loop.ways = ways
     return loop, points3, edges
+
+
+def _redrawn(pieces: list[Any]) -> Callable[[Any, Any], bool]:
+    """Whether an arc of the flat was drawn anew, its sweep so known to within rounding: a break's, drawn
+    through three points (``_Analysis._projected``), or a split skin's, merged (``clean``). No arc of the skins'
+    and strips' own ``pieces``, whose parameters are exact, is then as long on its circle."""
+    from OCP.BRepAdaptor import BRepAdaptor_Curve
+    from OCP.GeomAbs import GeomAbs_Circle
+
+    arcs = []
+    for piece in pieces:
+        for edge in piece.edges():
+            curve = BRepAdaptor_Curve(edge.wrapped)
+            if curve.GetType() == GeomAbs_Circle:
+                circ = curve.Circle()
+                arcs.append((*brep._xyz(circ.Location())[:2], circ.Radius(),
+                             abs(curve.LastParameter() - curve.FirstParameter())))
+    own = np.array(arcs, dtype=float).reshape(-1, 4)
+
+    def redrawn(edge: Any, circle: Any) -> bool:
+        curve = BRepAdaptor_Curve(edge)
+        arc = [*circle[0][:2], circle[2], abs(curve.LastParameter() - curve.FirstParameter())]
+        return not (np.abs(own - arc) < plane.TIE_MM).all(axis=1).any()
+
+    return redrawn
 
 
 def _round(loop: plane.Loop) -> tuple[float, float, float] | None:
@@ -1864,12 +1900,13 @@ class _Analysis:
                 pass
         faces = fused.faces()
         self.flat = faces[0] if len(faces) == 1 else bd.Compound(children=list(faces))
+        redrawn = _redrawn(pieces) if broken or len(pieces) > 1 else None
         for face in faces:
-            outer, _, _ = _wire_loop(face.outer_wire().wrapped, face.wrapped)
+            outer, _, _ = _wire_loop(face.outer_wire().wrapped, face.wrapped, redrawn=redrawn)
             outer.label = "outer"
             self.flat_loops.append(outer)
             for wire in face.inner_wires():
-                loop, _, _ = _wire_loop(wire.wrapped, face.wrapped)
+                loop, _, _ = _wire_loop(wire.wrapped, face.wrapped, redrawn=redrawn)
                 loop.label = "hole"
                 loop.circle = loop.circle or _round(loop)
                 self.flat_loops.append(loop)
@@ -1877,16 +1914,21 @@ class _Analysis:
 
     def _holes_from_flat(self) -> None:
         """The flat pattern's holes that no face's inner wire gave: a hole crossing a bend's tangent line is
-        part of the flange's and the bend's outer wires, and a hole only once they are fused."""
+        part of the flange's and the bend's outer wires, and a hole only once they are fused. Its centre is
+        its ``plane.fewer``'s, and of the faces as near that its own comes first: not one another hole is named
+        by, then not a skin or a bend, which holes share (a finding is a ``location``'s)."""
+        named = {self.ref(hole.location_faces[0]) for hole in self.holes}
+        shared = self.skins | self.bend_faces
         recorded = [hole.loop.centroid() for hole in self.holes if len(hole.loop.points)]
         for loop in self.flat_loops:
             if loop.label != "hole" or len(loop.points) < 3:
                 continue
             if recorded and plane.inside(np.array(recorded), [loop]).any():
                 continue
-            centre = loop.centroid()
-            ref, xyz = self.locate(centre)
-            in_bend = any(_in_zone(bend, point) for bend in self.bends for point in loop.points)
+            centre = plane.fewer(loop).centroid()
+            ref, xyz = self.locate(centre, plane.TIE_MM, last=lambda a: (self.ref(a) in named, a in shared))
+            named.add(ref)
+            in_bend = any(_in_zone(bend, point) for bend in self.bends for point in plane.either(loop).points)
             self.holes.append(_HoleLoop(loop, [], np.array(xyz), in_bend, self._sunk_at(np.array(xyz), loop), ref))
 
     def _sunk_at(self, xyz: np.ndarray, loop: plane.Loop) -> float | None:
@@ -2683,16 +2725,18 @@ def _reliefs(analysis: _Analysis, material: list[plane.Loop]) -> list[dict]:
 
 def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], list[dict], list[dict]]:
     holes, spacing, to_bend = [], [], []
+    edges = [plane.either(other) for other in outer]
     for hole in analysis.holes:
         loop = hole.loop
+        reached = plane.either(loop)  # its distances are the least, whichever way rounding sampled its arcs
         if getattr(loop, "through_diameter", None):
             kind, size, length = "round", loop.through_diameter, loop.through_diameter
         elif loop.circle is not None:
             kind, size, length = "round", 2.0 * loop.circle[2], 2.0 * loop.circle[2]
         else:
-            size, length, _ = plane.feret(loop.points)
+            size, length = plane.least_feret(loop)
             kind = "slot" if length > 1.2 * size and not loop.straight.all() else "cutout"
-        edge = min((plane.distance(loop, other)[0] for other in outer), default=None)
+        edge = min((plane.distance(reached, other)[0] for other in edges), default=None)
         item = {"kind": kind, "size_mm": _r(size), "diameter_mm": _r(size) if kind == "round" else None,
                 "length_mm": _r(length), "edge_distance_mm": _r(edge), "in_bend": hole.in_bend,
                 "countersunk": hole.countersink is not None, "countersink_diameter_mm": _r(hole.countersink),
@@ -2706,7 +2750,7 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
             # the bend's two tangent lines and its centre line in the flat; a whole circle's distances are exact
             lines = [_barrier(_frame_points(bend, np.array([x0, x0]), np.array([bend.w0, bend.w1])))
                      for x0 in (0.0, bend.allowance, bend.allowance / 2)]
-            near, far, d_center = (plane.distance(loop, line)[0] for line in lines)
+            near, far, d_center = (plane.distance(reached, line)[0] for line in lines)
             origin, x, y = bend.frame
             if loop.circle is not None:
                 at, radius = np.array(loop.circle[:2]) - origin, loop.circle[2]
