@@ -71,6 +71,13 @@ export interface DownloadPort {
   /** Keeps the exports under way, for `restore` after a reload; never a file. */
   remember?(value: ExportRecord[]): void;
 }
+/**
+ * A place on the host's home: the documents opened lately across every project (`recents`), the pinned ones, the
+ * documents in no project (`standalone`), or one project's page, by the project's id.
+ */
+export type HomeLocation = { view: 'recents' | 'pinned' | 'standalone' } | { view: 'project'; project: string };
+/** What a link or Open in new tab names: a document, by its id (a file no page has opened yet: its path), or a place on the home. */
+export type NavigationTarget = { document: string } | { home: HomeLocation };
 export interface ViewerHost {
   downloads?: DownloadPort;
   files: FileSource;
@@ -88,7 +95,21 @@ export interface ViewerHost {
    */
   navigation: {
     openFile?(path: string): void;
-    home?(): void;
+    /** The home, at a place on it where one is named (a project's page: the navbar's project name). */
+    home?(location?: HomeLocation): void;
+    /**
+     * A target's own address in this host, for a real link (`<a href>`): a person opens it in a new tab with ⌘ or Ctrl
+     * and a click, a middle click, or the link's own menu, and a plain click shows it in this view. Null for a target
+     * with no address. A host whose pages have no address of their own (a page in a sandboxed frame) has none of this,
+     * and every row is a button.
+     */
+    hrefOf?(target: NavigationTarget): string | null;
+    /**
+     * Open a target beside this view, which stays as it is: the item every document's and project's menu offers.
+     * `kind` says where, which is the item's words: `"tab"`, a new tab of this browser (the web page: "Open in new
+     * tab"), or `"browser"`, the person's browser (a page in an app's frame: "Open in browser"). Absent: no item.
+     */
+    openBeside?: { kind: 'tab' | 'browser'; open(target: NavigationTarget): void | Promise<void> };
   };
   /** The navbar's links: the version, X, Discord, GitHub and new issues. A host with none gets none. */
   links?: ViewerLinks;

@@ -57,6 +57,8 @@ export interface FileProject {
   missing?: boolean;
   error?: string | null;
   onShow(): void;
+  /** Its page's own address, where the host has one (`navigation.hrefOf`): the navbar's project name is then a link. */
+  href?: string | null;
 }
 /**
  * One app Open in offers for a file: its id (what `openApp` names) and its name, as drawn (a KiCad's says its
