@@ -11,9 +11,9 @@ engine writes when it registers the build), as is every shape a program handed o
 "shape"``). The home's picture of each is UI state on its record (``preview``), the PNG under
 ``recents/thumbnails`` named by the record and its content: the light viewport's, which the home
 shows in both themes. A project's file the home pictures before any page opened it (``projects.py``)
-is given a record to keep its picture on, with no ``opened``: Recents lists a file only once a page
-opened it (``RecentStore.list``), and a project lists its files whatever their records
-(``RecentStore.entries``).
+is given a record to keep its picture on, with no ``opened`` and no ``created``, which the first page to
+open it gives it: Recents lists a file only once a page opened it (``RecentStore.list``), and a project
+lists its files whatever their records (``RecentStore.entries``).
 
 The pictures are bounded however often a document is edited: a record names one, a new picture
 replaces it at once (``RecentStore.thumbnail``: the old one goes as the new is named), only
@@ -196,9 +196,11 @@ class RecentStore:
 
         def change(record):
             # Where it is now, as its record says it (``root``, ``home``): one an earlier release wrote is
-            # said again as this one says it.
-            made = _file_record(found, now)
-            return {**made, **(record or {}), **{key: made[key] for key in ("root", "home", "namespace", "name")}, "opened": now}
+            # said again as this one says it. Made now (``created``) unless its record says when: a record
+            # the home's picture made has no such time until a page opens the file.
+            made = _file_record(found)
+            return {**made, "created": now, **(record or {}), **{key: made[key] for key in ("root", "home", "namespace", "name")},
+                    "opened": now}
 
         return self.registry.update(file_id(found), change)
 
@@ -332,13 +334,13 @@ def _cad_file(path: str) -> bool:
     return extension_of(path) in VIEWER_EXTENSIONS and os.path.isfile(path)
 
 
-def _file_record(path: str, now: float | None = None) -> dict[str, Any]:
-    """A new record of the CAD file at the canonical path ``path``, made ``now``: never opened yet."""
+def _file_record(path: str) -> dict[str, Any]:
+    """A new record of the CAD file at the canonical path ``path``: where it is, and no time (a page's open
+    gives it ``created`` and ``opened``)."""
     from cad.engine.ids import file_id
 
     folder, name = os.path.dirname(path), os.path.basename(path)
-    return {"id": file_id(path), "kind": "file", "created": time.time() if now is None else now,
-            "root": folder, "home": name, "namespace": folder, "name": name}
+    return {"id": file_id(path), "kind": "file", "root": folder, "home": name, "namespace": folder, "name": name}
 
 
 def _picture_name(ident: str, png: bytes) -> str:

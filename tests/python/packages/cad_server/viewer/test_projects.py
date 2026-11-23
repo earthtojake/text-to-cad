@@ -245,7 +245,10 @@ class ProjectRoutesTest(unittest.TestCase):
         [project] = self.request("GET", "/api/v1/projects")[1]["projects"]
         [row] = project["documents"]
         self.assertTrue(row["thumbnail"], "its picture is kept on a record of its own")
-        self.assertIsNone(row["opened"])
+        self.assertEqual((row["opened"], row["created"]), (None, None), "no page opened it: no time of either")
+        # Opened, it is in Recents, made then, its picture kept.
+        [opened] = self.request("PATCH", "/api/v1/documents", {"action": "open", "path": str(tag)})[1]["documents"]
+        self.assertEqual((opened["created"], opened["thumbnail"]), (opened["opened"], row["thumbnail"]))
         # A file that is no CAD file there gets no record.
         self.request("PATCH", "/api/v1/documents", {"action": "thumbnail", "path": str(self.tmp / "gone.stl"),
                                                     "png": base64.b64encode(PNG).decode("ascii")})
