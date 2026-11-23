@@ -601,6 +601,32 @@ def _chorded(path: list[tuple[float, float, float]]) -> list[tuple[float, float,
 # --- the analysis ------------------------------------------------------------------------------------------
 
 
+def _band(faces: list[Any]) -> Any | None:
+    """The one face that rings of one torus are, each a whole turn and end to end in the torus's own parameter, or
+    None. The kernel does not merge them where that parameter runs past its period (the far half of a hole's full
+    round, swept); two halves that were two faces whole are not end to end in it, and stay two."""
+    import build123d as bd
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+    from OCP.BRepTools import BRepTools
+
+    rings = sorted((BRepTools.UVBounds_s(face.wrapped) for face in faces), key=lambda ring: ring[2])
+    if any(abs(u1 - u0 - 2.0 * math.pi) > 1e-9 for u0, u1, _, _ in rings) or \
+            any(abs(after[2] - ring[3]) > 1e-7 for ring, after in zip(rings, rings[1:])):
+        return None
+    along = [BRepAdaptor_Surface(face.wrapped).Torus().Position().Direction() for face in faces]
+    if any(along[0].Dot(other) < _PARALLEL for other in along):
+        return None
+    u0, u1, low, _ = rings[0]
+    made = BRepBuilderAPI_MakeFace(BRep_Tool.Surface_s(faces[0].wrapped), u0, u1, low, rings[-1][3], 1e-7)
+    if not made.IsDone():
+        return None
+    band = bd.Face(made.Face().Oriented(faces[0].wrapped.Orientation()))
+    area = sum(face.area for face in faces)
+    return band if abs(band.area - area) <= 1e-6 * area else None
+
+
 class _Analysis:
     def __init__(self, part: brep.Part, options: dict[str, Any]) -> None:
         self.part = part
@@ -637,6 +663,7 @@ class _Analysis:
         self._cone_of: dict[int, set[int]] = {}
         self._run_of: dict[int, set[int]] = {}
         self._joined: dict[int, list[Any]] | None = None
+        self._merged_from: dict[int, list[int]] = {}  # a piece -> its break's pieces, the first first (``_laid``)
         self.partners: dict[int, set[int]] = {}
         self.not_sheet: list[dict[str, Any]] = []
         self.off_edges: set[int] = set()          # cut edges of a stretch off the sheet's thickness
@@ -848,8 +875,13 @@ class _Analysis:
         sheet = paired | self.edge_set | set(self.countersinks) | set(self.breaks) | self.formed
         self.sheet_fraction = float(self.areas[[a - 1 for a in sheet]].sum() / self.areas.sum()) if sheet else 0.0
         for a in sorted(self.breaks):
-            self._not_sheet(a, "edge_break", None, 0.0, self._middle(a), self.areas[a - 1])
+            pieces = self._pieces(a)
+            if a != pieces[0]:
+                continue  # counted at its first piece
+            self._not_sheet(a, "edge_break", None, 0.0, self._middle(a), self.areas[[b - 1 for b in pieces]].sum())
             self.not_sheet[-1].update(deviation_mm=None, break_mm=_r(self.breaks[a]))
+            if len(pieces) > 1:
+                self.not_sheet[-1]["pieces"] = [self.ref(b) for b in sorted(pieces)]
         for a in sorted(self.formed):
             self._not_sheet(a, "formed", _r(thickness), 0.0, self._middle(a), self.areas[a - 1])
             self.not_sheet[-1]["deviation_mm"] = None
@@ -1059,7 +1091,10 @@ class _Analysis:
         for _ in range(3):  # a chamfer, the facet where two meet, the next chamfer
             following = []
             for face, skin in frontier:
-                for b in self.neighbors[face]:
+                # one surface is one step, in however many pieces layers cut it (``_run``)
+                front = list(self.neighbors[face])
+                while front:
+                    b = front.pop()
                     if b in paired or b in self.countersinks or b in self.edge_set or skin in reached.get(b, ()):
                         continue
                     extent = self._break_of(b, skin, t, tol)
@@ -1068,6 +1103,7 @@ class _Analysis:
                     reached.setdefault(b, set()).add(skin)
                     depth[b] = max(depth.get(b, 0.0), extent)
                     following.append((b, skin))
+                    front.extend(self.smooth[b] & self._run(b))
             frontier = following
         for a in self.hits:
             if a in paired or a in self.countersinks or a in self.edge_set or a in reached:
@@ -1949,7 +1985,7 @@ class _Analysis:
 
     def _laid(self, ordinal: int) -> list[Any]:
         """A break's face as it is measured and laid into the flat: itself, or, where it is one face in several
-        (a round cut in two by a layer, joined and never merged), the faces they are once merged at the first of
+        (a round cut in two by a layer, joined and never merged), the face they are once merged at the first of
         them and nothing at the others. Laid face by face, a piece that projects narrower than the tolerance the
         flat is fused at is lost there, and a hole's rim with it."""
         if self._joined is None:
@@ -1968,9 +2004,12 @@ class _Analysis:
                     unify = ShapeUpgrade_UnifySameDomain(compound, True, True, True)
                     unify.Build()
                     faces = bd.Compound(unify.Shape()).faces()
+                    if len(faces) == 1:
+                        return faces[0]
+                    torus = self.surfaces[members[0] - 1].kind == "torus"
+                    return _band([self.faces[b - 1] for b in members]) if torus else None
                 except Exception:  # noqa: BLE001 - faces that do not merge are laid as they are
                     return None
-                return faces[0] if len(faces) == 1 else None
 
             self._joined = {}
             for a in sorted(self.breaks):
@@ -1980,7 +2019,7 @@ class _Analysis:
                 # grown a face at a time, from the part's own faces (they share their edges; a merged face
                 # shares none): the kernel merges what it would have made one face, and no more (a round about
                 # a hole that was two faces whole stays two)
-                faces, left = [], list(group)
+                left = list(group)
                 while left:
                     members, whole = [left.pop(0)], None
                     grown = True
@@ -1992,11 +2031,16 @@ class _Analysis:
                                 members.append(b)
                                 left.remove(b)
                                 whole, grown = more, True
-                    faces.append(self.faces[members[0] - 1] if whole is None else whole)
-                if len(faces) < len(group):
-                    self._joined.update({b: [] for b in group})
-                    self._joined[a] = faces
+                    if whole is not None:
+                        self._joined.update({b: [] for b in members})
+                        self._joined[members[0]] = [whole]
+                        self._merged_from.update({b: members for b in members})
         return self._joined.get(ordinal, [self.faces[ordinal - 1]])
+
+    def _pieces(self, ordinal: int) -> list[int]:
+        """The part's faces that are one with face ``ordinal`` as it is laid (``_laid``), the first of them first."""
+        self._laid(ordinal)
+        return self._merged_from.get(ordinal, [ordinal])
 
     def _halves(self, ordinal: int, face: Any = None) -> list[Any]:
         """A break's face (or ``face``, the one face it is with others), as it is laid into the flat: a full round
@@ -2149,7 +2193,8 @@ class _Analysis:
         inverse = np.linalg.inv(flange.to_flat)
         near = self.neighbors[ordinal] | {ordinal}
         for _ in range(2):  # the cut edges behind its breaks, and the facets between them
-            near = near | {c for b in near if b in self.breaks for c in self.neighbors[b]}
+            near = near | {c for b in near if b in self.breaks
+                           for piece in self._pieces(b) for c in self.neighbors[piece]}
         self.regions.append(_Region(outer, lambda points: _apply(
             inverse, np.column_stack([np.asarray(points).reshape(-1, 2), np.zeros(len(np.asarray(points).reshape(-1, 2)))])),
             sorted(near)))

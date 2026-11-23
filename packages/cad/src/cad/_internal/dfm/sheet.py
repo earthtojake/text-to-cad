@@ -533,7 +533,8 @@ def _surface_findings(report: dict[str, Any]) -> list[CheckFinding]:
                 "deep): a laser or waterjet cuts a square edge, so a chamfer or a round is a second operation "
                 "(deburring, an edge-break pass)", here[0].get("location"),
                 "leave the cut edges square and call for deburring, or quote the chamfers as a second operation",
-                value=deepest, unit="mm", refs=_refs(here[0].get("location"), [item.get("face") for item in here])))
+                value=deepest, unit="mm", refs=_refs(here[0].get("location"), [
+                    ref for item in here for ref in item.get("pieces") or [item.get("face")]])))
     return found
 
 
