@@ -655,6 +655,19 @@ class EqualNotchesAndHolesTest(unittest.TestCase):
             named.add(sheet._outline_features(analysis, [loop], 2.0, analysis.locate)["notches"][0]["location"])
         self.assertEqual(len(named), 1, named)
 
+    def test_notches_at_a_skins_corners_are_each_their_own_faces(self) -> None:
+        from cad import step
+
+        # a plate rounded whole, read back from a STEP: each corner's notch is as near (to 1e-11 mm) the skin
+        # as its own faces, and named by the skin all four would be one finding
+        part = (bd.Box(80, 40, 2) + tube(bd.Wire.make_rect(80, 40), 2.0)).solids()[0]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "rounded.step"
+            bd.export_step(part, str(path))
+            result = step.dfm(path, process="sheet")
+        notches = [f.location for f in result.findings if f.code == "sheet.notch_width"]
+        self.assertEqual(len(set(notches)), 4, notches)
+
     def test_holes_as_near_are_each_a_pair(self) -> None:
         def spacing(e: float) -> list[tuple]:
             part = bd.Box(80, 80, 2)

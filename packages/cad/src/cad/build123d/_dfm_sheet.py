@@ -42,7 +42,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Any, Callable
 
 import numpy as np
@@ -2239,9 +2238,10 @@ class _Analysis:
 
     # -- back onto the part -------------------------------------------------------------------------------
 
-    def locate(self, point: Any, within: float = 0.0) -> tuple[str, list[float]]:
+    def locate(self, point: Any, within: float = 0.0, last: Callable[[int], Any] = lambda face: False
+               ) -> tuple[str, list[float]]:
         """The ref of the part's face nearest a point of the flat pattern, and the point on the part: at a corner,
-        as near (``within``) two regions or two faces, the first's."""
+        as near (``within``) two regions or two faces, the first's (of faces, those ``last`` puts first)."""
         import build123d as bd
 
         p = np.asarray(point, dtype=float).reshape(1, 2)
@@ -2276,7 +2276,7 @@ class _Analysis:
             measured.append((a in self.edge_set and d <= reach, d, a))
         kept = [(d, a) for edge, d, a in measured if edge] or [(d, a) for _, d, a in measured]
         closest, first = min(kept, key=lambda found: found[0])
-        nearest = min((a for d, a in kept if d < closest + within), default=first)
+        nearest = min((a for d, a in kept if d < closest + within), key=lambda a: (last(a), a), default=first)
         return self.ref(nearest), _xyz(at)
 
 
@@ -2627,11 +2627,21 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
     they lie between (``cutouts``) -- one feature, where ``hole_spacing`` would say each pair of slots."""
     least = max(1e-3, 0.01 * (thickness or 0.1))
     notches, tabs, webs, gaps = [], [], [], []
-    first_at = partial(analysis.locate, within=plane.TIE_MM) if analysis is not None else locate
+    notch_at = web_at = locate
+    if analysis is not None:  # of faces as near, one no other of the family names, then no skin or bend
+        shared = analysis.skins | analysis.bend_faces  # (which all share): a finding is a location's
+
+        def own_at(named: set[str]) -> Callable[[Any], tuple[str, list[float]]]:
+            def at(point: Any) -> tuple[str, list[float]]:
+                ref, xyz = analysis.locate(point, plane.TIE_MM, last=lambda a: (analysis.ref(a) in named, a in shared))
+                named.add(ref)
+                return ref, xyz
+            return at
+        notch_at, web_at = own_at(set()), own_at(set())
     outer = [loop for loop in loops if loop.label == "outer"]
     for loop in outer:
         for pocket in plane.pockets(loop, least=least):
-            ref, xyz = first_at(pocket.deepest)
+            ref, xyz = notch_at(pocket.deepest)
             notches.append({"width_mm": _r(pocket.width), "length_mm": _r(pocket.depth),
                             "length_to_width": _r(pocket.depth / pocket.width), "area_mm2": _r(pocket.area, 3),
                             "location": ref, "xyz": xyz})
@@ -2645,7 +2655,7 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
         if width.kind == "material":
             if a != b or loops[a].label != "outer":
                 continue  # between two contours: hole_to_edge and hole_spacing measure it
-            ref, xyz = first_at(width.start)
+            ref, xyz = web_at(width.start)
             webs.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz, "said": "a neck of the outline",
                          "across": [_r(v) for v in (*width.start, *width.end)]})
         else:
@@ -2668,7 +2678,7 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
         least_width = min(width_mm for _, width_mm, _ in alike)
         k, _, others = next(bar for bar in alike if bar[1] <= least_width + plane.TIE_MM)
         _, start, end = plane.distance(cutouts[k], cutouts[others[0]], plane.TIE_MM)
-        ref, xyz = first_at(start)
+        ref, xyz = web_at(start)
         between = {cutout for first, _, across in alike for cutout in (first, *across)}
         webs.append({"width_mm": _r(least_width), "location": ref, "xyz": xyz,
                      "across": [_r(float(v)) for v in (*start, *end)],
