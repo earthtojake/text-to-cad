@@ -28,7 +28,7 @@ and edits through its IPC API. There is no board model or build step; the files 
 
 ## Setup
 
-Written for `cad==0.11.16`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+Written for `cad==0.11.17`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
 0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
 If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:

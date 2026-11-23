@@ -954,12 +954,17 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   the other skin's break are short by that break, which is its own finding, not the skin's. A bend's end is broken by a cone or a torus
   about the bend's axis, beside one of its cylinders and a cut edge or a flange's break, within the sheet:
   an `edge_break` too, and the bend's length runs to the cut; a full round run on round the bend is a torus
-  about its axis t/2 round, from one of its cylinders to the other, read the same. A cut edge rounded whole
+  about its axis t/2 round, from one of its cylinders to the other, read the same. A cut that ends in a bend
+  along its axis (a notch's end: a plane parallel to the axis across both cylinders) is a cut edge where it
+  reaches both through its breaks, as it is left square, and a chamfer or a round along it (behind its plane: a
+  step's wall stands in front) is the bend's break, as is the facet where it meets the next. A cut edge rounded whole
   from one skin to the other (a full round, r = t/2: a convex cylinder along the skins, a torus or sphere
   about their normal, and the face that turns a corner of the outline between two) leaves no face of the cut
   square to the skins: it is an `edge_break` of both, no cut edge. A break may be several faces of one
   surface, each joined tangent to the last (a layer cut it across): they are one break, as deep as they are
-  together. The piece of a bend's end's break that lies beside the cut touches no cylinder of the bend, no one
+  together, however many they are: from a skin a surface is one step, and the cut edge behind it is found past
+  all of its pieces. `sheet.edge_break` counts them as one and names every piece (the item's `pieces`). The
+  piece of a bend's end's break that lies beside the cut touches no cylinder of the bend, no one
   piece of a full round touches both skins (or, round a bend, both cylinders), and the corner between two
   full rounds is in pieces as they are: each is read as the whole face is. A cone, torus, sphere or freeform face whose
   rays cross `t` is `formed` (a cone between flanges is not a bend). A face square between two opposite planes that face away from each other,
@@ -1015,8 +1020,14 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   a line), and round a bend at the cylinder midway through the sheet, each half unrolled: an 80 x 40 plate
   with full-round ends unfolds 80 x 40, not 78 x 40, a 50 mm wide bracket with full-round sides is 50 mm
   wide across its bends too, not 48, and a hole with a full-round rim is its narrowest.
+  Beside a cut that ends in a bend, its breaks and the bend's ends' are laid as rectangles up to the line where
+  the cut's plane crosses the cylinder unfolded: such a cut is not radial, so unrolled about the axis a break
+  ran past that line or stopped short of it, and where two met their sampled curves were chords shorter than
+  the tolerance they are fused with (a notched Z bracket, rounded 0.5 mm, unfolded 3506.4 mm2 of 3642.2 or, as
+  it stood, kept a neck 0.0009 mm wide).
   A break in several faces is laid, unrolled and counted as the faces the kernel merges them into (grown a
-  face at a time, so a round that was two faces whole stays two): laid face by face, a piece that projects
+  face at a time, so a round that was two faces whole stays two; rings of one torus end to end, each a whole
+  turn, which the kernel does not merge past the torus's period, are one band): laid face by face, a piece that projects
   narrower than the tolerance the breaks are fused with is lost there, and a hole's rim with it. A merged
   face's edges were cut too: its pieces on in one line are one.
   A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
@@ -1050,7 +1061,7 @@ Every item of a part's families carries its part's `thickness_mm`: what its rule
 | family | per item | notes |
 |---|---|---|
 | `parts` | `thickness_mm`, `is_sheet`, `why`, `sheet_area_fraction`, `bend_count`, `sharp_bend_count`, `flat_length_mm`, `flat_width_mm` (smallest rectangle), `flat_area_mm2`, `flat_overlap_mm2`, `neutral_area_ratio`, `flat_material_fraction`, `bent` (it has a bend: which thickness limit is its), `rolled` (a sheet rolled with no flat flange: not unrolled), `unfold_note`, `not_in_flat` (the flanges no bend reached, each its largest face, and the bends not laid out), `joggles` [{bends, location, xyz}] (two bends meeting tangent with no flat between), `flat_bend_lines` | one per part |
-| `not_sheet` | `kind` (thicker, thinner, unpaired; `edge_break`: a chamfer or round of a cut edge, its depth `break_mm`; `formed`: a cone, torus or freeform face a thickness across), `surface`, `local_thickness_mm`, `sheet_thickness_mm`, `deviation_mm`, `area_mm2`, `judged` (None on a part that is not sheet, or a round a `sharp_bends` item names: no thickness verdict), `face` (its own ref; `location` is its feature's) | a boss, pocket, round, freeform face |
+| `not_sheet` | `kind` (thicker, thinner, unpaired; `edge_break`: a chamfer or round of a cut edge, its depth `break_mm`, the area and, where a layer cut it, the `pieces` (their refs) of the whole of it; `formed`: a cone, torus or freeform face a thickness across), `surface`, `local_thickness_mm`, `sheet_thickness_mm`, `deviation_mm`, `area_mm2`, `judged` (None on a part that is not sheet, or a round a `sharp_bends` item names: no thickness verdict), `face` (its own ref; `location` is its feature's) | a boss, pocket, round, freeform face |
 | `sharp_bends` | `kind` (sharp, inside_only, outside_only, unjoined), `angle_deg`, `inside_radius_mm`, `outside_radius_mm`, `thickness_mm`, `edge_count`, `faces` | a corner joined without a bend: its flange is not in the flat |
 | `bends` | `kind` (bend; hem: 175 to 185 degrees with an inside diameter of at most 4 t, `HEM_DIAMETER_T`, cad's own line -- wider is a U-bend, a bend; curl: over 185), `inside_radius_mm`, `outside_radius_mm`, `radius_to_thickness`, `angle_deg` (bent from flat), `included_angle_deg`, `flanges_angle_deg`, `length_mm`, `axis`, `axis_origin`, `tangent_lines`, `k_factor`, `k_factor_source`, `bend_allowance_mm`, `bend_deduction_mm` (None for a fold of 175 degrees or more -- a hem, a U-bend, a curl: its mold lines meet nowhere, and its flanges have no height from one); `faces` [inside, outside] | location: the inside cylinder |
 | `flanges` | per bend side: `length_tangent_mm` (least along the bend), `length_tangent_half_mm` (reached by half the bend), `length_inside_mm`/`_half`, `length_outside_mm`/`_half` (mold lines: + r·tan(θ/2), + (r+t)·tan(θ/2)), `length_outside_minus_radius_mm`, `stations`, `stations_off_flange` | the length runs to the free edge or the next bend's tangent line, read at 11 stations along the bend; a station whose start is off the flat (the bend runs on past its flange there) has length 0, judged by `sheet.flange_length` as a short flange is, the item then at the bend (`location` its ref, `xyz` that stretch) |
@@ -1058,12 +1069,12 @@ Every item of a part's families carries its part's `thickness_mm`: what its rule
 | `reliefs` | per bend end and side where the flange runs on past the bend's end: `kind` (corner where the end meets another bend's end, relieved or not; else bend), `needed`, `present`, `width_mm`, `depth_tangent_mm`, `depth_centerline_mm`, `depth_centerline_minus_radius_mm`, `detail` | a missing relief has width and depth 0, its detail "no relief" |
 | `hems` | `inside_diameter_mm`, `gap_mm`, `return_length_mm` | the bends of kind hem |
 | `curls` | `inside_radius_mm`, `outside_radius_mm`, `angle_deg` | over 185 degrees |
-| `holes` | `kind` (round, slot, cutout), `size_mm` (diameter, or least width), `length_mm` (largest extent), `edge_distance_mm` (edge to edge), `in_bend`, `countersunk`, `countersink_diameter_mm`; `faces` | location: the hole's wall; a hole read back from the flat (across a tangent line): the face it lies on |
-| `hole_spacing` | `distance_mm` edge to edge, `other` | each hole and its nearest, one of them round (the bar between two cutouts is a web) |
+| `holes` | `kind` (round, slot, cutout), `size_mm` (diameter, or least width), `length_mm` (largest extent), `edge_distance_mm` (edge to edge), `in_bend`, `countersunk`, `countersink_diameter_mm`; `faces` | location: the hole's wall; a hole read back from the flat (across a tangent line, its edge broken, its skin split): the face nearest its centre, of faces as near (within 1e-6 mm) its own before a skin or a bend that holes share. Where an arc of the flat was drawn anew and rounding decides whether it has a chord more, every figure of these three families is the least either way gives |
+| `hole_spacing` | `distance_mm` edge to edge, `other` | each hole and its nearest, every other as near (within 1e-6 mm) a pair of its own (a square grid's hole has two to four), one of them round (the bar between two cutouts is a web) |
 | `hole_to_bend` | `distance_tangent_mm`, `distance_centerline_mm` (+ BA/2), `distance_inside_mm`, `distance_outside_mm`, `distance_outside_minus_radius_mm`, `bend` | the nearest bend, but one the cutout ends (a window across both its tangent lines); a round hole's distances are exact |
-| `notches` | `width_mm` (mouth), `length_mm` (depth), `length_to_width` | pockets of the outline off its hull |
+| `notches` | `width_mm` (mouth), `length_mm` (depth), `length_to_width` | pockets of the outline off its hull; `location` is the deepest point, of points as deep (within 1e-6 mm) the first along the outline, at a corner of faces as near one no other notch names, then no skin or bend (which notches share), then the lower-numbered (in a cut file the first entity's along it) |
 | `tabs` | `width_mm`, `length_mm`, `length_to_width` | facing straight sides, a tip, an inside corner at both sides of the base (proud of the body on three sides: an L plate's leg is no tab) |
-| `webs` | `width_mm`, `said`, `cutouts` | the narrowest material within an outline (a neck, a bridge), and the bar between a cutout that is no round hole and the cutout nearest it: the bars of one width are one item, `cutouts` how many they lie between (a grille is one feature) |
+| `webs` | `width_mm`, `said`, `cutouts` | the narrowest material within an outline (a neck, a bridge), and the bar between a cutout that is no round hole and the cutout nearest it: the bars of one width are one item, `cutouts` how many they lie between (a grille is one feature); `width_mm` is the least found, and of places as narrow (within 1e-6 mm), `location` is the first along the outline, at a corner a face as notches' is |
 | `gaps` | `width_mm`, `between` | the narrowest void (notches, gaps between outlines; across a hole only where it necks in under the hole's own `size_mm`) |
 
 DXF adds `cut_file` (`insunits`, `unit` and `unit_from`: `$INSUNITS` or `--units`, `mm_per_unit`,

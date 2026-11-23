@@ -194,9 +194,10 @@ update does. A server's run, named by `CAD_PLUGIN_SERVER_RUN`, has 15 minutes: e
 is stopped when they are up, with all it started, and no further app is begun; a run still going a
 minute past them, because a step never came back, is ended by a thread of its own, counted as
 stopped, which frees its lock. A failed run, and one where any app failed, is tried again an hour or
-more later: three runs at most for one release. 0.11.12 and 0.11.13 name their server's run
-`CAD_INSTALL_ATTEMPT`, which everything their hosted install command starts inherits, so the install
-command takes both names out of every cad command it starts. A plugin store (Codex's directory,
+more later: three runs at most for one release, counted for that release whichever server began
+them. 0.11.12 and 0.11.13 name their server's run `CAD_INSTALL_ATTEMPT`, which everything their hosted
+install command starts inherits, so the install command takes both names out of every cad command it
+starts. A plugin store (Codex's directory,
 Claude's) updates the copy it installed.
 
 No path loops. The install command runs `cad update` (a person's run alone), `cad plugin install` and
