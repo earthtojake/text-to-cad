@@ -424,16 +424,18 @@ Telemetry, Theme and the version.
 A sidebar at the left lists the places: Recents (every document opened lately, across projects), Pinned, each project
 (`GET /api/v1/projects`, the latest activity first) and Standalone, the documents of no project. The place on screen
 has a heading row (its name; a project's with its folder from `~` and its ⋯: Open in new tab, Copy path, Reveal,
-Remove from CAD, which forgets the project, changes nothing on disk and goes to Recents; then Show, Sort and the
-grid/list switch) over its documents, all of them. The grid's tiles are framed cards, at least 232px wide: the
+Remove from CAD, which forgets the project, changes nothing on disk and goes to Recents; then Sort and grid or list,
+one segmented control), the kinds' chips under it (All, then 3D models, Drawings, Boards, Schematics and Robots, each
+the place holds, with its count: a model built from code and the STEP, STL or GLB exported from it are all 3D models),
+then its documents, all of them. The grid's tiles are framed cards, at least 232px wide: the
 picture (the light viewport's, on the model area's light gradient in both themes, its format's badge at its
-top-left), then, in a compact caption, the kind's glyph (a model's cube, a file's plain file outline, whatever
+top-left: "Code" for a model built from code, "STEP", "KiCad PCB"), then, in a compact caption, the kind's glyph (a model's cube, a file's plain file outline, whatever
 its kind) beside its name over one line: its project's name in Recents and Pinned, a model's script in its project's
 page, a file's size (the server's `size`) and its last activity with its verb ("Edited now",
 "Viewed 5m ago", "Edited 2h ago", "Viewed 3d ago", then the short date: Edited when it changed after it was last
 opened, Viewed when it was opened after it last changed). The list is a table: Name, Project (or, in a project's page,
 Where), Kind, Size, Updated and Created
-over 44px rows, each a document's small picture and name, its format, its size and those two ages with no verb. Every model is a tile and a row of
+over 44px rows, each a document's small picture and name, its format ("Code" for a model), its size and those two ages with no verb. Every model is a tile and a row of
 its own, nothing folded: a model shows its
 name, its glyph and its age. The pin and the ⋯ appear on hover (at a tile's picture's corner, at a row's end); a
 pinned one keeps its pin. The ⋯ menu holds Open, Open in new tab, a file's Copy path and Reveal (a model has

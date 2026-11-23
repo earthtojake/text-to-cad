@@ -187,7 +187,7 @@ function TouchStrip({ tools, views }) {
               <Ellipsis aria-hidden="true" />
             </ToolbarButton>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={6} collisionPadding={8} aria-label={t("toolbar.more")}
+          <DropdownMenuContent align="end" collisionPadding={8} aria-label={t("toolbar.more")}
             className={cn(FLOATING_SURFACE_CLASS, "data-[state=closed]:animate-none!")}
             onCloseAutoFocus={event => {
               // A popover chosen here opens from More once the menu is gone, keeping the focus.

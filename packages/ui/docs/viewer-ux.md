@@ -133,8 +133,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - It reads the library as it opens. With nothing typed it lists the project of the document on screen (the latest
   documents on the home or for a standalone one); typing finds as the home's search does, every word in a name or a
   file's path, "In <project>" first, then "Other projects", at most 50 rows and a line saying how many more there are.
-- A row: the document's picture (the kind's glyph until it loads), its name, and at its right its kind in the project
-  on screen, else its project's name, "Standalone" for one in none. The document on screen's row is marked and opens
+- A row: the document's picture (the kind's glyph until it loads), its name, and at its right its format in the project
+  on screen ("Code" for one built from code), else its project's name, "Standalone" for one in none. The document on screen's row is marked and opens
   nothing. While it reads, placeholder rows; a read that fails or finds nothing says so.
 - Up and Down move, Home and End go to the ends, Enter opens the row here and ⌘Enter (Ctrl+Enter) in a new tab; typing
   always goes to the input. A click opens a row here; where the host gives a document an address the row is a real
@@ -180,14 +180,26 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - **The place** fills the rest, on the page's colour, on 24px gutters, 20px under the navbar. Its heading row: the
   place's name, the page's one larger text (a project's after its folder glyph, with its folder from `~` and its ⋯:
   Open in new tab, Copy path, Reveal, Remove from CAD, which says nothing on disk changed and goes to Recents); at the
-  right Show (All, Models, Files, only when both kinds are listed), Sort (Last activity, the default; Name; Kind) and
-  the grid/list switch. Sort and the layout are the tab's ([Settings memory](#settings-memory)).
+  right Sort (Last activity, the default; Name; Kind: by the chips' kinds in their order, then format, those built from
+  code first, then name) and grid or list, one segmented control. Sort and the layout are the tab's
+  ([Settings memory](#settings-memory)).
+- **The kinds**, a row of chips of its own under the heading row: All, then 3D models, Drawings, Boards, Schematics and
+  Robots, each only where the place holds one, always in that order, each with its count. One is on at a time (All at
+  first); a search and the chip narrow together, and the counts are the place's under the search, before the chip.
+  There is no row where the place holds one kind or none, and a kind chosen in another place that this one lacks shows
+  all of it. The choice is the page's own, as the search is. A document built from code, a STEP, an STL, a 3MF, a GLB
+  and an XBF are 3D models; a DXF a drawing; a KiCad board and schematic a board and a schematic; a URDF or an SRDF a
+  robot (`DOCUMENT_KINDS`: by the row's document type, else its file's extension). Why: a person calls a STEP, an STL
+  or a GLB a model too; "built from code" against "a file on disk" was the implementation showing. A model and the
+  files exported from it stay cards of their own.
 - **Its documents**, all of them: the first 120, then "Show N more". Cards in columns at least 232px wide (the picture
-  on the light gradient, then the name and one line), or 44px rows.
+  on the light gradient with its format's badge, "Code" for a document built from code, then the kind's glyph, the
+  name and one line), or 44px rows.
   - A card's line says where the document is, where that is not plain: in Recents and Pinned its project's name
     ("Standalone" for one in none); in a project's page a model's script under the project's folder. Then a file's
-    size, and its last activity. A list has the same as a column: Project, or in a project's page Where (a model's
-    script, a file's folder).
+    size, and its last activity. A list's columns are Name, then the same as a column (Project, or in a project's page
+    Where: a model's script, a file's folder), Kind (its format, as the badge: "Code", "STEP", "KiCad PCB"), Size,
+    Updated and Created.
   - Each has a pin and a ⋯ (Open, Open in new tab, Copy path, Copy link, Reveal, Pin, Delete, which asks first), shown
     on hover or focus and always on touch; a project's file, listed for being in its folder, has no Delete, and a Pin
     once a page opened it. A pinned document is not listed first: Pinned is its own place.
@@ -773,7 +785,7 @@ in a session, and settings that outlived it would surprise the next one.
 - A reload brings back the file on screen. The page keeps the views of up to 32 files it has left, in memory, and
   gives one back when its file is shown again. A file not yet shown opens fitted, at the defaults.
 - **Never kept**: the tool in hand (every open starts in Select), the selection, measurements, ink, an open card, menu
-  or peek, the phone's sheet, Orbit, where a routine was, and the home's search and Show.
+  or peek, the phone's sheet, Orbit, where a routine was, and the home's search and its kind's chip.
 - **The person's own settings** (the language, the telemetry switch, the What's new already seen) are the host's,
   kept in `settings.json` in the state folder and the same everywhere. The app menu (Settings, in the panel's foot)
   changes them; a file's view settings are never there.

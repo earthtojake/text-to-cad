@@ -63,8 +63,9 @@ const inProjectOrder = <Model extends LibraryModel>(rows: readonly SearchRow<Mod
 /**
  * What the search shows for `query`, grouped, at most `limit` rows in all (`total`: how many there are).
  *
- * - Nothing typed: the documents of the project the document on screen is in (`project`), by kind (its models, then
- *   its files by format, each by name: the home's Sort by Kind); with no project, the latest documents.
+ * - Nothing typed: the documents of the project the document on screen is in (`project`), in the home's Sort by Kind
+ *   (its 3D models, then its drawings, boards, schematics and robots, each by format and name); with no project, the
+ *   latest documents.
  * - Typed: every document whose name has every word, or a file's path (the home's search, `filterModels`): those in
  *   that project first, in its order, then the rest, the latest first.
  */

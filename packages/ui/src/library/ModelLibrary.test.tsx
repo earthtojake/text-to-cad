@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -10,7 +11,9 @@ import { FileViewer } from '../../dist/file-viewer/index.js';
 import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 import { PANEL_PEEK_DELAY_MS, PANEL_PEEK_EXIT_FALLBACK_MS, PANEL_PEEK_LEAVE_MS } from '../../dist/file-viewer/panelPeek.js';
 import { testHost } from '../../dist/host/testing/host.js';
-import { PLACE_ROWS, below, sortDocuments } from '../../dist/library/ModelLibrary.js';
+import { ViewerMobileContext } from '../../dist/file-viewer/responsive.js';
+import { DOCUMENT_KINDS, PLACE_ROWS, below, documentKind, kindChips, sortDocuments } from '../../dist/library/ModelLibrary.js';
+import { DOCUMENT_TYPE_REGISTRY } from '@cad/core/lib/documentTypes.generated.js';
 import type { LibraryModel, LibraryNavigation, LibraryProject, ModelLibrarySource } from './ModelLibrary.js';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -48,13 +51,14 @@ it('starts with its bar (Home at the left, the search at the right), its places 
   // The search keeps its placeholder; every control is the scale's control (28px), its icons 16px.
   expect(screen.getByRole('searchbox', { name: 'Search models' }).getAttribute('placeholder')).toBe('Search');
   expect(screen.getByRole('searchbox', { name: 'Search models' }).className).toContain('h-control');
-  // The place on screen: its name, the page's one larger text, then Sort and the grid/list switch at the row's right.
+  // The place on screen: its name, the page's one larger text, then Sort and the grid/list segmented control at the row's right.
   const main = screen.getByRole('main', { name: 'CAD models' });
   const row = main.firstElementChild!;
   expect(row.querySelector('h2')?.textContent).toBe('Recents');
   expect([...row.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Sort by Last activity', 'Grid', 'List']);
-  expect(['Grid', 'List'].map(name => [screen.getByRole('button', { name }).className.includes('size-control'),
-    screen.getByRole('button', { name }).querySelector('svg')?.getAttribute('class')?.includes('size-4')])).toEqual([[true, true], [true, true]]);
+  // Grid and List are one segmented control: two control-tall toggles on one track.
+  expect(screen.getByRole('group', { name: 'Layout' }).hasAttribute('data-segmented-control')).toBe(true);
+  expect(['Grid', 'List'].map(name => screen.getByRole('button', { name }).className.includes('h-control'))).toEqual([true, true]);
   // No count; the one picture is the welcome's C mark.
   expect(row.querySelector('.cad-library-count')).toBeNull();
   expect([...main.querySelectorAll('img')].map(image => Boolean(image.closest('[data-library-empty]')))).toEqual([true]);
@@ -190,9 +194,9 @@ it('lists rows under a Name, Kind, Size, Updated and Created header: each its pi
       ...[...row.querySelectorAll('[data-column]')].map(cell => [cell.getAttribute('data-column'), cell.textContent])];
   };
   expect(cells('plate.step')).toEqual([true, 'plate.step', ['kind', 'STEP'], ['size', '87 KB'], ['updated', '1d ago'], ['created', '3d ago']]);
-  // A model is a Model with no size; its Created is its first run's; a record from before the time was kept
+  // A model built from code is Code with no size; its Created is its first run's; a record from before the time was kept
   // has an empty Created, and a file that is gone says so where its time on disk was.
-  expect(cells('arm')).toEqual([true, 'arm', ['kind', 'Model'], ['size', '—'], ['updated', '2h ago'], ['created', '2h ago']]);
+  expect(cells('arm')).toEqual([true, 'arm', ['kind', 'Code'], ['size', '—'], ['updated', '2h ago'], ['created', '2h ago']]);
   expect(cells('gone.step')).toEqual([true, 'gone.step', ['kind', 'STEP'], ['size', '—'], ['updated', 'File unavailable'], ['created', '']]);
   // A row's picture has no badge: its Kind says it. Its pin and ⋯ follow its button, at its end.
   expect(list.querySelector('.cad-library-format')).toBeNull();
@@ -238,41 +242,90 @@ it('gives each card one menu: Open, a file\'s Copy path and Reveal where the hos
   expect(items(await menu('bracket.step'))).toEqual(['Open', 'Pin', 'Delete']);
 });
 
-it('marks each card with its kind\'s glyph, and the type filter ("All ▾") shows models or files', async () => {
+it('marks each card with its kind\'s glyph, and narrows the place to one kind with a chip: All first, then each kind it holds, with its count', async () => {
   const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
-  const source = library([model('bracket.step'), model('arm', { path: id, kind: 'model', script: '/work/parts/arm.py' })]);
+  const source = library([model('bracket.step'), model('arm', { path: id, kind: 'model', script: '/work/parts/arm.py' }), model('plate.dxf'),
+    model('blinky.kicad_pcb'), model('arm.stl')]);
   const names = () => within(screen.getByRole('list', { name: 'Files' })).getAllByRole('listitem').map(item => within(item).getAllByRole('button')[0].getAttribute('aria-label'));
-  // A fresh home each time: a second menu opened in one jsdom render stays shut.
-  const choose = async (value: string) => {
-    cleanup();
-    render(<ModelLibrary library={source} />);
-    await screen.findByRole('button', { name: 'Open arm' });
-    const trigger = screen.getByRole('button', { name: 'Show All' });
-    await act(async () => { fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
-    const open = await screen.findByRole('menu');
-    expect(within(open).getAllByRole('menuitemradio').map(item => [item.textContent, item.getAttribute('aria-checked')]))
-      .toEqual([['All', 'true'], ['Models', 'false'], ['Files', 'false']]);
-    await act(async () => { fireEvent.click(within(open).getByRole('menuitemradio', { name: value })); });
-    expect(screen.getByRole('button', { name: `Show ${value}` }).textContent).toBe(value);
-  };
-  render(<ModelLibrary library={source} />);
+  const chips = () => within(screen.getByRole('group', { name: 'Show' })).getAllByRole('button')
+    .map(chip => [chip.getAttribute('aria-label'), chip.getAttribute('aria-pressed')]);
+  render(<ModelLibrary library={source} onSortChange={() => {}} />);
   const arm = await screen.findByRole('button', { name: 'Open arm' });
   expect(arm.querySelector('[data-glyph]')?.getAttribute('data-glyph')).toBe('model');
   expect(screen.getByRole('button', { name: 'Open bracket.step' }).querySelector('[data-glyph]')?.getAttribute('data-glyph')).toBe('file');
-  // A stock dropdown in the place's heading row, in the row's 28px, after its muted label.
-  const trigger = screen.getByRole('button', { name: 'Show All' });
-  expect([trigger.textContent, trigger.className.includes('h-control'), trigger.previousElementSibling?.textContent,
-    trigger.previousElementSibling?.hasAttribute('data-field-label')]).toEqual(['All', true, 'Show', true]);
-  expect(names()).toEqual(['Open bracket.step', 'Open arm']);
-  await choose('Models');
-  expect(names()).toEqual(['Open arm']);
-  await choose('Files');
-  expect(names()).toEqual(['Open bracket.step']);
+  // A row of pills of its own, under the heading row: a model and the files exported from it are 3D models alike.
+  const row = screen.getByRole('group', { name: 'Show' });
+  expect([row.previousElementSibling?.classList.contains('cad-library-toolbar'), row.closest('.cad-library-toolbar')]).toEqual([true, null]);
+  expect(chips()).toEqual([['All, 5', 'true'], ['3D models, 3', 'false'], ['Drawings, 1', 'false'], ['Boards, 1', 'false']]);
+  expect(within(row).getAllByRole('button').map(chip => [chip.textContent, chip.className.includes('h-control')]))
+    .toEqual([['AllAll5', true], ['3D models3D models3', true], ['DrawingsDrawings1', true], ['BoardsBoards1', true]]);
+  fireEvent.click(screen.getByRole('button', { name: '3D models, 3' }));
+  expect(names()).toEqual(['Open bracket.step', 'Open arm', 'Open arm.stl']);
+  expect(chips().map(([, pressed]) => pressed)).toEqual(['false', 'true', 'false', 'false']);
+  fireEvent.click(screen.getByRole('button', { name: 'Boards, 1' }));
+  expect(names()).toEqual(['Open blinky.kicad_pcb']);
+  // A search and the chip narrow together, and the counts follow the search: of the place before the chip.
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'arm' } });
+  expect(chips()).toEqual([['All, 2', 'false'], ['3D models, 2', 'false'], ['Drawings, 0', 'false'], ['Boards, 0', 'true']]);
+  expect(screen.getByRole('main').querySelector('.cad-library-empty')?.textContent).toBe('No matching models.');
+  fireEvent.click(screen.getByRole('button', { name: '3D models, 2' }));
+  expect(names()).toEqual(['Open arm', 'Open arm.stl']);
+  fireEvent.click(screen.getByRole('button', { name: 'All, 2' }));
+  expect(names()).toEqual(['Open arm', 'Open arm.stl']);
   cleanup();
-  // With one kind alone there is nothing to tell apart: no filter.
-  render(<ModelLibrary library={library([model('bracket.step')])} />);
+  // With one kind alone there is nothing to tell apart: no chips. A model and its STEP are one kind.
+  render(<ModelLibrary library={library([model('bracket.step'), model('arm', { path: id, kind: 'model' })])} />);
   await screen.findByRole('button', { name: 'Open bracket.step' });
-  expect(screen.queryByRole('button', { name: /^Show / })).toBeNull();
+  expect(screen.queryByRole('group', { name: 'Show' })).toBeNull();
+});
+
+it('offers a place\'s own kinds, and shows all of a place that lacks the kind chosen in another', async () => {
+  const projects = [
+    { ...project('p1', 'tag', 0), documents: [model('tag.step', { project: 'p1' }), model('tag.dxf', { project: 'p1' }), model('tag.urdf', { project: 'p1' })] },
+    { ...project('p2', 'gear', 0), documents: [model('gear.step', { project: 'p2' }), model('gear.kicad_sch', { project: 'p2' })] },
+    { ...project('p3', 'lone', 2) },
+  ];
+  const source = library([], { projects: async () => projects });
+  const chips = () => [...document.querySelectorAll('[data-library-kinds] button')].map(chip => chip.getAttribute('aria-label'));
+  const view = render(<ModelLibrary library={source} place={{ view: 'project', project: 'p1' }} />);
+  await screen.findByRole('button', { name: 'Open tag.step' });
+  expect(chips()).toEqual(['All, 3', '3D models, 1', 'Drawings, 1', 'Robots, 1']);
+  fireEvent.click(screen.getByRole('button', { name: 'Robots, 1' }));
+  expect(opens()).toEqual(['Open tag.urdf']);
+  // The choice is the page's own, as the place is: a place without robots shows all of its own.
+  view.rerender(<ModelLibrary library={source} place={{ view: 'project', project: 'p2' }} />);
+  await screen.findByRole('button', { name: 'Open gear.step' });
+  expect(chips()).toEqual(['All, 2', '3D models, 1', 'Schematics, 1']);
+  expect(screen.getByRole('button', { name: 'All, 2' }).getAttribute('aria-pressed')).toBe('true');
+  expect(opens()).toEqual(['Open gear.step', 'Open gear.kicad_sch']);
+  // One of one kind: no chips.
+  view.rerender(<ModelLibrary library={source} place={{ view: 'project', project: 'p3' }} />);
+  await screen.findByRole('button', { name: 'Open part_0.stl' });
+  expect(chips()).toEqual([]);
+  // Back where robots are, the choice holds.
+  view.rerender(<ModelLibrary library={source} place={{ view: 'project', project: 'p1' }} />);
+  await screen.findByRole('button', { name: 'Open tag.urdf' });
+  expect(opens()).toEqual(['Open tag.urdf']);
+});
+
+it('knows every document type and every extension the viewer opens as a kind, by the row\'s type first and its file\'s extension else', () => {
+  // Every type the registry has, as a row names it, and each of its files' extensions; and a glTF, which opens as a GLB.
+  const types = DOCUMENT_TYPE_REGISTRY.documentTypes;
+  const missing = [
+    ...types.filter((type: { wire: string }) => !documentKind(model('x', { kind: 'file', documentKind: type.wire, path: '/w/x' }))).map((type: { wire: string }) => type.wire),
+    ...[...types.flatMap((type: { extensions: string[] }) => type.extensions), '.gltf'].filter(extension => !documentKind(model(`x${extension}`))),
+  ];
+  expect(missing).toEqual([]);
+  expect(DOCUMENT_KINDS).toEqual(['models', 'drawings', 'boards', 'schematics', 'robots']);
+  expect(['a.STEP', 'a.stp', 'a.3mf', 'a.xbf', 'a.glb', 'a.dxf', 'a.kicad_pcb', 'a.kicad_sch', 'a.urdf', 'a.srdf'].map(name => documentKind(model(name))))
+    .toEqual(['models', 'models', 'models', 'models', 'models', 'drawings', 'boards', 'schematics', 'robots', 'robots']);
+  // A document built from code is a 3D model, whatever it is named; a row's type wins over its name; a file the viewer
+  // does not open is no kind (All alone lists it).
+  expect(documentKind(model('plate.dxf', { kind: 'model' }))).toBe('models');
+  expect(documentKind(model('board', { documentKind: 'kicad_pcb' }))).toBe('boards');
+  expect(documentKind(model('notes.txt'))).toBeNull();
+  expect(kindChips([model('a.step'), model('notes.txt')], '')).toEqual([]);
+  expect(kindChips([model('a.step'), model('b.dxf'), model('notes.txt')], '')).toEqual([{ kind: 'all', count: 3 }, { kind: 'models', count: 1 }, { kind: 'drawings', count: 1 }]);
 });
 
 it('gives every model of a script its own card and row, each opening itself, with nothing folded', async () => {
@@ -392,7 +445,7 @@ it('shows a model by its run and a file by its opening, whichever came last, eac
     model('arm', { path: id, kind: 'model', opened: null, updated: now - 2 * hour }),
     model('plate.step', { opened: now - 5 * hour, updated: now - 30 * hour }),
   ])} />);
-  expect((await screen.findByRole('button', { name: 'Open arm' })).textContent).toBe('ModelarmEdited 2h ago');
+  expect((await screen.findByRole('button', { name: 'Open arm' })).textContent).toBe('CodearmEdited 2h ago');
   expect(screen.getByRole('button', { name: 'Open plate.step' }).textContent).toBe('STEPplate.stepViewed 5h ago');
 });
 
@@ -457,31 +510,29 @@ it('reads its list again every couple of seconds while the home is up, keeping t
   } finally { vi.useRealTimers(); }
 });
 
-it("counts what a person does on the home by name: a type chosen, a search begun, a card opened, a delete cancelled and one confirmed", async () => {
+it("counts what a person does on the home by name: a kind chosen, a search begun, a card opened, a delete cancelled and one confirmed", async () => {
   const reports: { control: string; count: number; seconds: number }[][] = [];
   const script = '/work/juno/juno.py';
   const ids = ['0', '1'].map(digit => `8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f1${digit}`);
   const source = library([model('juno', { path: ids[0], kind: 'model', script, updated: 10 }),
-    model('wheel', { path: ids[1], kind: 'model', script, updated: 5 }), model('bracket.step')]);
-  // The type filter's choice, in a home of its own: a second menu opened in one jsdom render stays shut.
-  const choose = async (value: string) => {
+    model('wheel', { path: ids[1], kind: 'model', script, updated: 5 }), model('bracket.dxf')]);
+  // A kind chosen by its chip, each by its name; the one already on is no use.
+  const choose = async (...chips: string[]) => {
     const view = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={source} /></ControlUsageProvider>);
     await screen.findByRole('button', { name: 'Open juno' });
-    await act(async () => { fireEvent.pointerDown(screen.getByRole('button', { name: 'Show All' }), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
-    await act(async () => { fireEvent.click(within(await screen.findByRole('menu')).getByRole('menuitemradio', { name: value })); });
+    for (const chip of chips) fireEvent.click(screen.getByRole('button', { name: chip }));
     view.unmount();
     cleanup();
   };
-  await choose('Models');
-  await choose('All'); // already shown: no use
-  expect(reports.flat()).toEqual([{ control: 'home_filter_models', count: 1, seconds: 0 }]);
+  await choose('Drawings, 1', 'Drawings, 1', '3D models, 2', 'All, 3', 'All, 3');
+  expect(reported(reports)).toEqual({ home_kind_drawings: 1, home_kind_models: 1, home_kind_all: 1 });
   reports.length = 0;
   const view = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={source} /></ControlUsageProvider>);
   await screen.findByRole('button', { name: 'Open juno' });
   const search = screen.getByRole('searchbox', { name: 'Search models' });
   for (const value of ['b', 'br', '']) fireEvent.change(search, { target: { value } });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Open bracket.step' })); });
-  await act(async () => { fireEvent.click(within(await menu('bracket.step')).getByRole('menuitem', { name: 'Delete' })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Open bracket.dxf' })); });
+  await act(async () => { fireEvent.click(within(await menu('bracket.dxf')).getByRole('menuitem', { name: 'Delete' })); });
   await act(async () => { fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' })); });
   view.unmount();
   const said = Object.fromEntries(reports.flat().map(({ control, count }) => [control, count]));
@@ -490,8 +541,8 @@ it("counts what a person does on the home by name: a type chosen, a search begun
   cleanup();
   reports.length = 0;
   const again = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={source} /></ControlUsageProvider>);
-  await screen.findByRole('button', { name: 'Open bracket.step' });
-  await act(async () => { fireEvent.click(within(await menu('bracket.step')).getByRole('menuitem', { name: 'Delete' })); });
+  await screen.findByRole('button', { name: 'Open bracket.dxf' });
+  await act(async () => { fireEvent.click(within(await menu('bracket.dxf')).getByRole('menuitem', { name: 'Delete' })); });
   await act(async () => { fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' })); });
   again.unmount();
   expect(reports.flat()).toEqual([{ control: 'home_delete', count: 1, seconds: 0 }]);
@@ -501,12 +552,18 @@ it('counts the pin, from its button or the menu, the grid/list switch, and Copy 
   const reports: { control: string; count: number; seconds: number }[][] = [];
   const fileActions = { platform: 'darwin' as const, perform: { 'copy-path': () => {}, 'copy-link': () => {}, reveal: () => {} } };
   const source = library([model('bracket.step'), model('plate.step', { pinned: true })]);
-  const home = () => render(<ControlUsageProvider report={counts => reports.push(counts)}>
-    <ModelLibrary library={source} fileActions={fileActions} onLayoutChange={() => {}} /></ControlUsageProvider>);
+  // A host that keeps the layout chosen, as the tab does.
+  function Kept() {
+    const [layout, setLayout] = useState<'grid' | 'list'>('grid');
+    return <ModelLibrary library={source} fileActions={fileActions} layout={layout} onLayoutChange={setLayout} />;
+  }
+  const home = () => render(<ControlUsageProvider report={counts => reports.push(counts)}><Kept /></ControlUsageProvider>);
   let view = home();
   await screen.findByRole('button', { name: 'Open bracket.step' });
   const bracket = screen.getByRole('button', { name: 'Open bracket.step' }).closest('li')!;
   await act(async () => { fireEvent.click(within(bracket).getByRole('button', { name: 'Pin' })); });
+  // The layout chosen, then the one already on (no use), then the other.
+  fireEvent.click(screen.getByRole('button', { name: 'List' }));
   fireEvent.click(screen.getByRole('button', { name: 'List' }));
   fireEvent.click(screen.getByRole('button', { name: 'Grid' }));
   await act(async () => { fireEvent.click(within(await menu('bracket.step')).getByRole('menuitem', { name: 'Copy path' })); });
@@ -540,7 +597,7 @@ it("shows every card's light picture in both themes, never turned, and badges it
   expect(picture('video.kicad_pcb').querySelector('img')?.getAttribute('src')).toBe('data:video.kicad_pcb:light.png');
   expect(thumbnail.mock.calls.every(call => call.length === 1)).toBe(true);
   expect(['video.kicad_pcb', 'plate.dxf'].map(name => [picture(name).hasAttribute('data-drawing'), picture(name).hasAttribute('data-thumbnail-variant')])).toEqual([[false, false], [false, false]]);
-  expect(['video.kicad_pcb', 'plate.dxf', 'arm'].map(name => picture(name).querySelector('.cad-library-format')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'Model']);
+  expect(['video.kicad_pcb', 'plate.dxf', 'arm'].map(name => picture(name).querySelector('.cad-library-format')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'Code']);
 });
 
 // A file's size, the server's, goes before its age; a model has none.
@@ -730,10 +787,12 @@ it("sorts the place on screen by last activity, by name or by kind, the host kee
   view.rerender(home('name'));
   expect(opens()).toEqual(['Open arm', 'Open Axle.dxf', 'Open b9.step', 'Open b10.step']);
   expect(screen.getByRole('button', { name: 'Sort by Name' }).textContent).toBe('Name');
-  // By kind: the models, then the files by their format, each by name.
+  // By kind: the 3D models (the one built from code first), then the drawings, each kind by format, then by name.
   view.rerender(home('kind'));
-  expect(opens()).toEqual(['Open arm', 'Open Axle.dxf', 'Open b9.step', 'Open b10.step']);
-  expect(sortDocuments([model('z.step'), model('a.stl'), model('m.dxf')], 'kind').map(item => item.name)).toEqual(['m.dxf', 'z.step', 'a.stl']);
+  expect(opens()).toEqual(['Open arm', 'Open b9.step', 'Open b10.step', 'Open Axle.dxf']);
+  expect(sortDocuments([model('z.step'), model('a.stl'), model('m.dxf'), model('n.urdf'), model('q.kicad_sch'), model('p.kicad_pcb'), model('a.3mf'),
+    model('notes.txt'), model('k', { kind: 'model' })], 'kind').map(item => item.name))
+    .toEqual(['k', 'a.3mf', 'z.step', 'a.stl', 'm.dxf', 'p.kicad_pcb', 'q.kicad_sch', 'n.urdf', 'notes.txt']);
   view.unmount();
   expect(reported(reports)).toEqual({ home_sort_name: 1 });
   cleanup();

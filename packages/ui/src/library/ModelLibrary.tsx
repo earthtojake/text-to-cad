@@ -4,6 +4,8 @@ import { Box, ChevronDown, Clock, Ellipsis, Files, Folder, FolderOpen, LayoutGri
 import { Button } from "../primitives/button.jsx";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../primitives/alert-dialog.jsx";
 import { ValueDropdown } from "../primitives/value-dropdown.jsx";
+import { Pill } from "../primitives/pill.jsx";
+import { SegmentedControl } from "../primitives/segmented-control.jsx";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../primitives/dropdown-menu.jsx";
 import { FieldLabel } from "../primitives/field-label.jsx";
 import { Input } from "../primitives/input.jsx";
@@ -59,6 +61,11 @@ export interface LibraryModel {
   script?: string;
   /** The id of the project it is in (`LibraryProject`): its page lists it; none, a standalone document's. */
   project?: string | null;
+  /**
+   * Its document's type, where the host names it: `cad.registry`'s spelling (`model`, `step`, `3mf`, `kicad_pcb`...).
+   * The home's kinds read it (`documentKind`); a row without it is known by its file's extension.
+   */
+  documentKind?: string;
 }
 
 /** A folder a person opened as a project, with its documents, as the host lists it (a CAD host's `CadProject`). */
@@ -95,12 +102,33 @@ const FORMATS: Readonly<Record<string, string>> = { step: "STEP", stp: "STEP", s
   dxf: "DXF", xbf: "XBF", urdf: "URDF", kicad_pcb: "KiCad PCB", kicad_sch: "KiCad SCH" };
 /** The formats the viewer opens, under the welcome: names, not language. */
 const WELCOME_FORMATS = ["STEP", "STL", "3MF", "GLB", "DXF", "KiCad", "URDF"].join(" · ");
-/** What a card's badge and a row's Kind say: a file's format ("STEP", "KiCad PCB"), or `model` for a document built from code. */
-export function formatLabel(item: LibraryModel, model: string): string {
-  if (deletes(item)) return model;
-  const name = item.path.split(/[\\/]/).pop() ?? "";
-  const extension = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
+const extensionOf = (path: string) => {
+  const name = path.split(/[\\/]/).pop() ?? "";
+  return name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
+};
+/** What a card's badge and a row's Kind say: a file's format ("STEP", "KiCad PCB"), or `code` for a document built from code. */
+export function formatLabel(item: LibraryModel, code: string): string {
+  if (deletes(item)) return code;
+  const extension = extensionOf(item.path);
   return FORMATS[extension] ?? extension.toUpperCase();
+}
+
+/**
+ * What a document is, as a person names it: the home's kinds, each a chip, in this order. Not how it was made: a model
+ * built from code and the STEP, STL or GLB exported from it are all 3D models.
+ */
+export const DOCUMENT_KINDS = ["models", "drawings", "boards", "schematics", "robots"] as const;
+export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+// Each document type (`cad.registry`: its `wire` spelling, which a row's `documentKind` is) and each extension the
+// viewer opens, by its kind. A type the registry adds lands here, or `ModelLibrary.test.tsx` says which is missing.
+const KINDS: Readonly<Record<string, DocumentKind>> = {
+  model: "models", xbf: "models", step: "models", stp: "models", stl: "models", "3mf": "models", glb: "models", gltf: "models",
+  dxf: "drawings", kicad_pcb: "boards", kicad_sch: "schematics", urdf: "robots", srdf: "robots",
+};
+/** A document's kind: a document built from code is a 3D model; another by its type where the row names it, else by its file's extension; null for neither. */
+export function documentKind(item: LibraryModel): DocumentKind | null {
+  if (deletes(item)) return "models";
+  return KINDS[String(item.documentKind ?? "").toLowerCase()] ?? KINDS[extensionOf(item.path)] ?? null;
 }
 /** A size on disk as the Home reads it: bytes, then KB and MB (powers of 1024), in the page's language's digits; "" for none. */
 export function sizeLabel(bytes: number | null | undefined, locale?: string): string {
@@ -150,14 +178,16 @@ export const placeKey = (place: HomeLocation) => (place.view === "project" ? `pr
 
 /**
  * A place's documents in the order the person chose: by last activity (when each was last opened or changed), newest
- * first; by name; or by kind, the models before the files, the files by their format (`format`), each by name. The
- * host's order where two tie. A pinned document is not first: Pinned is a place of its own.
+ * first; by name; or by kind, in the kinds' order (`DOCUMENT_KINDS`, one of none last), then by format (`format`),
+ * those built from code first, then by name. The host's order where two tie. A pinned document is not first: Pinned is a
+ * place of its own.
  */
 export function sortDocuments<Model extends LibraryModel>(documents: readonly Model[], sort: LibrarySort,
   format: (item: Model) => string = item => formatLabel(item, ""), locale?: string): Model[] {
   const names = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
+  const rank = (item: Model) => { const kind = documentKind(item); return kind ? DOCUMENT_KINDS.indexOf(kind) : DOCUMENT_KINDS.length; };
   const by = (a: Model, b: Model) => sort === "name" ? names.compare(a.name, b.name)
-    : sort === "kind" ? Number(deletes(b)) - Number(deletes(a)) || names.compare(format(a), format(b)) || names.compare(a.name, b.name)
+    : sort === "kind" ? rank(a) - rank(b) || Number(deletes(b)) - Number(deletes(a)) || names.compare(format(a), format(b)) || names.compare(a.name, b.name)
       : (lastActivity(b) ?? 0) - (lastActivity(a) ?? 0);
   return documents.map((item, index) => ({ item, index })).sort((a, b) => by(a.item, b.item) || a.index - b.index).map(({ item }) => item);
 }
@@ -193,14 +223,25 @@ export function filterModels<Model extends LibraryModel>(items: readonly Model[]
   return items.filter(item => matches(item, words));
 }
 
-/** What the type filter over the list shows: everything, the documents built from code, or the files. */
-export type LibraryKind = "all" | "models" | "files";
-const ofKind = (item: LibraryModel, kind: LibraryKind) => kind === "all" || (kind === "models") === deletes(item);
+/** What the kinds' chips show: every document, or one kind. */
+export type LibraryKind = "all" | DocumentKind;
+const ofKind = (item: LibraryModel, kind: LibraryKind) => kind === "all" || documentKind(item) === kind;
 
-/** The documents a search and the type filter leave, in the library's order: every model is a card of its own. */
+/** The documents a search and a kind leave, in the library's order: every model is a card of its own. */
 export function shownModels<Model extends LibraryModel>(items: readonly Model[], query: string, kind: LibraryKind = "all"): Model[] {
   const words = wordsOf(query);
   return items.filter(item => ofKind(item, kind) && matches(item, words));
+}
+
+/**
+ * The chips over a place's documents (`items`): All, then each kind the place holds, in the kinds' order, each with how
+ * many a search (`query`) leaves of it. None where the place holds one kind or none: there is nothing to tell apart.
+ */
+export function kindChips(items: readonly LibraryModel[], query: string): { kind: LibraryKind; count: number }[] {
+  const held = DOCUMENT_KINDS.filter(kind => items.some(item => documentKind(item) === kind));
+  if (held.length < 2) return [];
+  const found = filterModels(items, query);
+  return [{ kind: "all", count: found.length }, ...held.map(kind => ({ kind, count: found.filter(item => documentKind(item) === kind).length }))];
 }
 
 const message = (failure: unknown) => failure instanceof Error ? failure.message : String(failure);
@@ -322,11 +363,13 @@ export interface LibraryOrigin {
  *
  * The main area shows the place on screen. Its heading row: the place's name (a project's with its folder glyph, its
  * folder from `~` and its ⋯: Open in new tab, Copy path, Reveal, Remove from CAD, which forgets the project and nothing
- * on disk), then Show (the type filter: All, Models, Files, there where both are listed), Sort (Last activity, Name,
- * Kind) and the grid/list switch. Then the place's documents, every one of them (`PLACE_ROWS` until Show more), each a
- * card (a picture over the kind's glyph, the name, and a line: its project's name in Recents and Pinned, a model's script
- * in its project's page, a file's size, then its last activity with its verb) or a row (Name, Where or Project, Kind,
- * Size, Updated, Created). A card's or a row's main press is a link where the host gives the document an address
+ * on disk), then Sort (Last activity, Name, Kind) and grid or list, one segmented control. Under it the kinds'
+ * chips (`kindChips`: All, 3D models, Drawings, Boards, Schematics, Robots, each the place holds, with its count under the
+ * search), where it holds more than one. Then the place's documents, every one of them (`PLACE_ROWS` until Show more),
+ * each a card (a picture badged with its format, "Code" for one built from code, over the kind's glyph, the name, and a
+ * line: its project's name in Recents and Pinned, a model's script in its project's page, a file's size, then its last
+ * activity with its verb) or a row (Name, Where or Project, Kind: its format, Size, Updated, Created).
+ * A card's or a row's main press is a link where the host gives the document an address
  * (it is named by its `id`; a row with none by its `path`), a button otherwise. Each has a pin and one ⋯ menu: Open, Open in new tab (or Open in browser: `navigation.openBeside`),
  * a file's Copy path and Reveal where the host can (a model has neither), Pin or Unpin, then Delete, which asks first
  * (an AlertDialog saying what goes and what stays on disk) and takes the card off the list at once. A project's file is
@@ -525,7 +568,6 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     return () => observer.disconnect();
   }, [element]);
   const narrow = mobile || tight;
-  const filtering = Boolean(query.trim()) || kind !== "all";
   // The places. Each project's documents; Pinned, from every document listed; Standalone, those of no project.
   const listed = (projects ?? []).map(project => ({ project, documents: project.documents.filter(item => !gone.has(item.path)) }));
   const known = new Map(listed.map(({ project }) => [project.id, project]));
@@ -542,13 +584,15 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const shownName = useRef(onPlaceShown);
   shownName.current = onPlaceShown;
   useEffect(() => { shownName.current?.(placeName); }, [placeName]);
-  const format = (item: Model) => formatLabel(item, t("home.formatModel"));
+  const format = (item: Model) => formatLabel(item, t("home.formatCode"));
   const inPlace = place.view === "project" ? listed.find(entry => entry.project.id === place.project)?.documents ?? []
     : place.view === "pinned" ? pinned : place.view === "standalone" ? standalone : all;
   const ordered = sortDocuments(inPlace, sort, format, locale);
-  const matching = shownModels(ordered, query, kind);
-  // The type filter is there only where there is something to tell apart: models and files both listed.
-  const kinds = everything.some(deletes) && everything.some(item => !deletes(item));
+  // The kinds' chips: the place's kinds, counted under the search. A kind chosen in another place that this one does
+  // not hold shows all of it.
+  const chips = kindChips(inPlace, query);
+  const shownKind = chips.some(chip => chip.kind === kind) ? kind : "all";
+  const matching = shownModels(ordered, query, shownKind);
   const now = Date.now();
   // The document just left, among the place's: its card is ringed and brought into view, past the Show more if need be.
   const left = (item: Model) => Boolean(from && (slashed(item.path) === slashed(from.path) || (from.id && item.id === from.id)));
@@ -754,15 +798,15 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   };
   // The page's heading: "Home", in the navbar where there is one.
   const heading = <h1 className="cad-library-heading" data-library-heading={slots ? "navbar" : "page"}>{t("home.title")}</h1>;
-  // Show and Sort: each a muted label and the one value dropdown (`primitives/value-dropdown.jsx`), drawn as the row's
-  // ghost control.
+  // Sort: a muted label and the one value dropdown (`primitives/value-dropdown.jsx`), drawn as the row's ghost control.
   const CHOICE_CLASS = "cad-library-choice min-w-0 w-auto gap-1 border-0 bg-transparent px-2 shadow-none hover:bg-accent dark:bg-transparent";
-  const kindMenu: ReactNode = kinds ? <span className="cad-library-field"><FieldLabel className="cad-library-field-label">{t("home.kindsAria")}</FieldLabel>
-    <ValueDropdown value={kind} label={t("home.kindsAria")} align="end"
-      options={(["all", "models", "files"] as const).map(value => ({ value, label: t(`home.kind.${value}`) }))}
-      onChange={value => { if (kind !== value) usage.used(`home_filter_${value as LibraryKind}`); setKind(value as LibraryKind); }}
-      className={`cad-library-kind ${CHOICE_CLASS}`}
-      triggerProps={{ "aria-label": t("home.kindAria", { kind: t(`home.kind.${kind}`) }) }} /></span> : null;
+  // The kinds: a row of pills (`primitives/pill.jsx`) under the heading row, All then each kind the place holds, with its
+  // count; one on at a time.
+  const kindRow: ReactNode = chips.length ? <div className="cad-library-kinds" role="group" aria-label={t("home.kindsAria")} data-library-kinds="">
+    {chips.map(chip => <Pill key={chip.kind} pressed={chip.kind === shownKind} count={chip.count} data-kind={chip.kind}
+      aria-label={t("home.kindCount", { kind: t(`home.kind.${chip.kind}`), count: chip.count })}
+      onClick={() => { if (chip.kind !== shownKind) usage.used(`home_kind_${chip.kind}`); setKind(chip.kind); }}>{t(`home.kind.${chip.kind}`)}</Pill>)}
+  </div> : null;
   const sortMenu: ReactNode = onSortChange ? <span className="cad-library-field"><FieldLabel className="cad-library-field-label">{t("home.sortAria")}</FieldLabel>
     <ValueDropdown value={sort} label={t("home.sortAria")} align="end"
       options={(["activity", "name", "kind"] as const).map(value => ({ value, label: t(`home.sort.${value}`) }))}
@@ -780,10 +824,10 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
         onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} onBlur={() => { if (!query) setSearchOpen(false); }} />
     </div>
   </div>;
-  const layoutSwitch = onLayoutChange ? <div className="cad-library-layout" role="group" aria-label={t("home.layout")}>
-    <Button variant="ghost" size="icon-xs" className="size-control" aria-label={t("home.grid")} aria-pressed={layout === "grid"} onClick={() => { usage.used("home_layout_grid"); onLayoutChange("grid"); }}><LayoutGrid className="size-4" aria-hidden="true" /></Button>
-    <Button variant="ghost" size="icon-xs" className="size-control" aria-label={t("home.list")} aria-pressed={layout === "list"} onClick={() => { usage.used("home_layout_list"); onLayoutChange("list"); }}><List className="size-4" aria-hidden="true" /></Button>
-  </div> : null;
+  // Grid or list: one segmented control (`primitives/segmented-control.jsx`).
+  const layoutSwitch = onLayoutChange ? <SegmentedControl className="cad-library-layout" label={t("home.layout")} value={layout}
+    options={[{ value: "grid", label: t("home.grid"), Icon: LayoutGrid }, { value: "list", label: t("home.list"), Icon: List }]}
+    onChange={value => { usage.used(`home_layout_${value as LibraryLayout}`); onLayoutChange(value as LibraryLayout); }} /> : null;
   // The way back to the document just left: its name, and the key that does the same (left out where nothing hovers).
   const backControl = back && from ? <Button variant="outline" size="xs" className="cad-library-back" aria-keyshortcuts="Escape" onClick={back}>
     <span className="cad-library-label">{t("home.backTo", { name: from.name })}</span><kbd className="cad-library-key" aria-hidden="true">{ESCAPE_KEY}</kbd></Button> : null;
@@ -826,7 +870,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       {/* A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits. */}
       <main className="cad-library-content overflow-y-auto" aria-label={t("home.modelsAria")}>
         {/* The place's heading row, every control the scale's: its name (a project's with its folder and its ⋯) and the
-            way back at the left; Show, Sort and the layout at the right. It keeps its shape from place to place. */}
+            way back at the left; Sort and the layout at the right. It keeps its shape from place to place. Under it,
+            the kinds' chips, where the place holds more than one kind. */}
         <div className="cad-library-toolbar" data-library-toolbar="filters">
           <div className="cad-library-place">
             {shownProject ? <Folder className="cad-library-glyph" aria-hidden="true" /> : null}
@@ -835,8 +880,9 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
             {shownProject ? projectMenu(shownProject) : null}
             {backControl}
           </div>
-          <div className="cad-library-controls">{kindMenu}{sortMenu}{layoutSwitch}</div>
+          <div className="cad-library-controls">{sortMenu}{layoutSwitch}</div>
         </div>
+        {kindRow}
         {error ? <div className="cad-library-error" role="alert"><p>{error}</p></div> : null}
         {note && note.at === here ? <p className="cad-library-note" role="status">{note.text}</p> : null}
         {body}

@@ -206,8 +206,8 @@
  * viewer's panel over this page, and the place on screen on the page's colour, full width. The chrome's type scale: the place's name
  * text-heading (15/20, weight 600, the one larger text); the controls text-ui (13/20); the sidebar the panel's one size;
  * a tile's name 12/16 at 500 over its facts, 11/16 muted; the table's cells the same two. Every control is the scale's
- * (28px; a phone's 36), its icons 16px, and neutral: the chosen layout's icon and the document just left's ring alone are
- * the brand's. Spacing on the 4/8/16 scale. */
+ * (28px; a phone's 36), its icons 16px, and neutral: the document just left's ring alone is the brand's. Spacing on the
+ * 4/8/16 scale. */
 .cad-library { display: flex; flex-direction: column; width: 100%; height: 100%; background: var(--background); }
 /* The model area's light gradient, every picture's ground in both themes (the pictures are the light
  * viewport's), with its faint edge. */
@@ -236,9 +236,14 @@
 .cad-library-content { box-sizing: border-box; flex: 1 1 0; min-width: 0; padding: 20px 24px max(40px, calc(var(--cad-host-bottom-inset, 0px) + 16px)); container-type: inline-size; }
 [data-library-narrow] .cad-library-content { padding: 12px 16px max(40px, calc(var(--cad-host-bottom-inset, 0px) + 16px)); }
 /* The place's heading row, every control the scale's: at its left the place's name (a project's after its folder glyph,
-   its folder and its ⋯ following) and the way back to the document just left; at its right Show, Sort and the grid/list
-   switch. It wraps where it must. */
+   its folder and its ⋯ following) and the way back to the document just left; at its right Sort and the grid/list
+   segmented control. It wraps where it must. Where the place holds more than one kind, the kinds' chips are a row of
+   their own 12px under it and 16px over the documents. */
 .cad-library-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; min-height: var(--cad-control); margin-bottom: 16px; }
+.cad-library-toolbar:has(+ .cad-library-kinds) { margin-bottom: 12px; }
+/* The kinds' chips: the panel's tab pills (`primitives/pill.jsx`), 4px apart, hanging 6px (their padding) past the
+   place's edge so their words start on its line; they wrap on a narrow page. */
+.cad-library-kinds { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 16px -6px; }
 .cad-library-place { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; }
 .cad-library-title { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); font-weight: 600; letter-spacing: -0.01em; color: var(--foreground); }
@@ -256,7 +261,7 @@
 .cad-library-heading { display: inline-flex; align-items: center; gap: 8px; min-width: 0; height: var(--cad-control); margin: 0; padding: 0;
   font-size: var(--cad-text-ui); line-height: var(--cad-leading-ui); font-weight: 500; white-space: nowrap; color: var(--foreground); }
 .cad-library-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-/* Show and Sort: a muted label, then the value dropdown as the row's ghost control. */
+/* Sort: a muted label, then the value dropdown as the row's ghost control. */
 .cad-library-field { display: inline-flex; align-items: center; min-width: 0; }
 .cad-library-choice { color: var(--foreground); padding: 0 8px; }
 .cad-library-choice > svg { color: var(--muted-foreground); }
@@ -277,10 +282,6 @@
 }
 .cad-library-search > svg { position: absolute; left: 8px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--muted-foreground); pointer-events: none; }
 .cad-library-search input { padding-left: 32px; padding-right: 8px; }
-/* Grid or list: two control-sized icon buttons; the chosen one on the pressed fill, its icon the brand's. */
-.cad-library-layout { display: flex; gap: 0; }
-.cad-library-layout button { color: var(--muted-foreground); }
-.cad-library-layout button[aria-pressed=true] { background: var(--accent); color: var(--brand-icon); }
 /* Tiles: at least 232px a column, 16px apart, 24px between rows. B, the
    framed card: the picture edge to edge over its caption inside one 1px-bordered box on the card's
    colour; under the pointer its border a step darker, selected (in keyboard focus, or being opened) the

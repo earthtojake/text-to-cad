@@ -32,7 +32,7 @@ the phone's. Every primitive and shared class reads them; script that counts pix
 
 | Token (Tailwind) | Desktop | Phone | What uses it |
 | --- | --- | --- | --- |
-| `--cad-control` (`h-control`, `size-control`) | 28 | 36 | strip and sub-toolbar tiles, navbar buttons, panel tabs, head buttons and settings rows, a tab's actions, Quick Edit's buttons, dropdown triggers, fields |
+| `--cad-control` (`h-control`, `size-control`) | 28 | 36 | strip and sub-toolbar tiles, navbar buttons, panel tabs and pills, head buttons and settings rows, a tab's actions, Quick Edit's buttons, dropdown triggers, fields, a segmented control's options |
 | `--cad-icon-button` (`size-icon-button`) | 24 | 36 | small icon buttons (a card's X), a settings card's controls, the `xs` button |
 | `--cad-row` (`min-h-row`), `--cad-row-sm` | 28, 24 | 36 | menu and dropdown items, the panel's tree rows; a list's rows outside the panel |
 | `--cad-chip` (`h-chip`) | 20 | 28 | chips |
@@ -146,8 +146,8 @@ The tokens are shadcn's neutral set (`styles/tokens.css`), greys with no hue, as
 | `--warning`, `--destructive` | amber, red | amber, red | a warning's icon, edge and tint (its words `--warning-foreground`); an error |
 
 - **The brand marks focus and state, never an action**: focus rings and a focused field's edge, a text selection, a
-  selected row, the tool in hand's glyph, a search's match, the changed dot, the Home's chosen layout, its focused
-  card and the ring round the document just left, and the logo. It is never a button's fill or a link in the chrome, and the panel toggle stays neutral. Why:
+  selected row, the tool in hand's glyph, a search's match, the changed dot, the Home's focused card and the ring round
+  the document just left, and the logo. It is never a button's fill or a link in the chrome, and the panel toggle stays neutral. Why:
   blue says "on" only while nothing else is blue. `--brand-icon` is at least 3:1 on the pressed fill and on white;
   `--brand-text` is darker, for text, as that blue reads dark and odd on a glyph.
 - **A link in the chrome** (the app menu's version, "Made by") is muted `text-tiny` that turns the foreground and
@@ -250,6 +250,8 @@ One component for each job. A renderer brings its tools, rows, tabs and state, b
 | A number a slider sets | `SliderField` | `kit/inspector/SliderField.jsx` |
 | A number with no range | `FileSheetNumberProperty` | `kit/inspector/FileSheet.js` |
 | On or off | `Switch` | `primitives/switch.jsx` |
+| One of several, each a toggle in a row (the Home's kinds) | `Pill` | `primitives/pill.jsx` |
+| One of two (or a few) ways to show the same thing (the Home's grid or list) | `SegmentedControl` | `primitives/segmented-control.jsx` |
 | A chip | `Badge`, as `ReferenceChips` draws it | `kit/tools/quick-edit/ReferenceChips.jsx` |
 | Settings over the view | `SettingsCard` | `kit/view-settings/SettingsCard.jsx` |
 | A tab's Reset and Save | `PanelActions` | `kit/inspector/PanelActions.jsx` |
@@ -296,18 +298,19 @@ quiet button reads as a button and nothing more, and the one filled button is th
 ### Dropdowns
 
 `ValueDropdown` is the one way to pick one value from a list: panel rows, the settings cards, a board's Layer display,
-the Home's Show and Sort. It is built on `DropdownMenu`; there is no Radix Select and no native `<select>`. Why: one
+the Home's Sort. It is built on `DropdownMenu`; there is no Radix Select and no native `<select>`. Why: one
 popup, one keyboard and one touch rule, so a fix lands in every picker.
 
 - **The trigger** shows the chosen option's icon (where the options have icons), its label in the foreground and a
   12px chevron at 60%. It is bordered as a field (`border-input`, `shadow-xs`), the control tall, at least 6rem wide
   and 8px in, and `bg-accent` while open. Its accessible name is "Label: value".
 - **The list** holds radio items, the chosen one ticked at the right, disabled options dimmed, and a `fallback`
-  ("Custom") on the trigger where no option matches. It is at least the trigger's width, end-aligned, 4px under it.
+  ("Custom") on the trigger where no option matches. It is at least the trigger's width, end-aligned, 6px under it
+  (the menu's gap).
 - **Half the row.** A dropdown takes half its row and its label the rest
   (`grid-cols-[minmax(max-content,1fr)_minmax(50%,max-content)]`), growing past half only where its value needs it. A
-  colour field, and a dropdown set to fit (the Home's Show and Sort, each a muted `FieldLabel` and a ghost trigger; a
-  picker on a toolbar tile), are as wide as their content. Why: one as wide as its value reads ragged, and one wider than half for no reason crowds its label.
+  colour field, and a dropdown set to fit (the Home's Sort, a muted `FieldLabel` and a ghost trigger; a picker on a
+  toolbar tile), are as wide as their content. Why: one as wide as its value reads ragged, and one wider than half for no reason crowds its label.
 - **In a settings card every dropdown is one width**: half the content (132px in a desktop's 288px card, 148px in a
   phone's 320px one) or the card's widest
   option (`fixedWidth`, so the width never changes with the choice), 24px tall (36 on a phone), 6px in, 14px icons.
@@ -318,8 +321,10 @@ popup, one keyboard and one touch rule, so a fix lands in every picker.
   panel's foot, the cog lit while it is open), the view's menu, a tab's overflow, a tool's
   chevron and the zoom. A tree row's right-click menu is `ContextMenu`, with the same items. A picker drawn as a toolbar
   tile (Draw's colour and stroke, Clip's axis, Preview's routines) keeps its tile and opens a `DropdownMenu`.
-- **The menu** is `rounded-md` with 4px of padding, at least 8rem wide, 4px to 6px from its trigger and 8px from the
-  window's edges. A menu taller than its room scrolls in a `ScrollArea`.
+- **The menu** is `rounded-md` with 6px of padding (`p-1.5`, on both scales: its items are the row, 28 or 36), at
+  least 8rem wide, 6px from its trigger (`MENU_GAP_PX`, `DropdownMenuContent`'s default, which no menu sets again) and
+  8px from the window's edges. A tool's popover over the strip stands 8px off it, a chip's list 6px or 8px. Why: a menu
+  pressed against its trigger, and tight inside, read cramped. A menu taller than its room scrolls in a `ScrollArea`.
 - **An item** is `text-xs`, at least the row tall, `--cad-pad` in, with a 16px muted icon 8px before its words. It
   takes the accent fill under the pointer or the keyboard, is at 50% when disabled, and is worded in sentence case.
 - **Checks sit on the right** (a dash for some-of), so every item's words start on one edge. Choosing a value closes
@@ -389,6 +394,22 @@ the playback scrubber import the slider primitive. Why: no site brings its own s
 
 **A number with no range** (Params') is `FileSheetNumberProperty`: a bordered field the control tall, a muted fill at
 30%, 8px in, its number tabular. Focus selects it, Enter or leaving commits, Escape puts back; disabled, it is at 50%.
+
+### Pills and the segmented control
+
+- **A pill** (`Pill`) is the panel's tab pill: the control tall, 6px in at each side, `rounded-md`, `text-ui`. The one
+  on is `bg-accent` with the foreground at medium weight; the others muted, with `bg-accent/50` under the pointer. It is
+  as wide as its name at medium weight, so turning one on moves nothing; a count follows its name 4px on, muted,
+  regular and tabular. A row of pills is a labelled group of toggles (`aria-pressed`), one on, 4px apart, hanging 6px
+  past its line so the words stand on it, and wrapping where the row is short: the Home's kinds. The panel's head
+  draws its tabs at the same measures ([The panel's head](#the-panels-head)).
+- **A segmented control** (`SegmentedControl`) is one choice of two (or a few) ways to show the same thing, side by
+  side on one muted track (`bg-muted`), the chosen one raised on it (the page's colour and `shadow-xs`; in dark, the
+  accent). Each option is a toggle (`aria-pressed`) the control tall, its face drawn 2px in, so the track shows 2px
+  round the faces and 4px between them, and its corners are a face's (`rounded-control`) + 2. An icon option is the
+  control + 4 wide, its glyph the glyph token. The group is one Tab stop, on the chosen option; ← and → (Home, End)
+  choose the neighbour and wrap, and pressing the chosen one does nothing. Why: grid and list are one choice, and two
+  loose tiles read as two.
 
 ### Switches and checkboxes
 
@@ -547,7 +568,7 @@ transitions and drawn sizes, not class names, and a test of a layout that is gon
 
 | Test | What it holds |
 | --- | --- |
-| `designSystem.test.js` | the type tokens at both scales, no 10px step, no `text-[Npx]` and no stylesheet font size; no window breakpoint in chrome; every chrome scroll region a `ScrollArea`; menus at `text-xs` on the row, tooltips at `text-tiny`; the Home's type; the navbar's row; rows padded by the row primitive alone; only `SliderField` and the scrubber import the slider |
+| `designSystem.test.js` | the type tokens at both scales, no 10px step, no `text-[Npx]` and no stylesheet font size; no window breakpoint in chrome; every chrome scroll region a `ScrollArea`; menus at `text-xs` on the row, 6px in and 6px off their trigger, tooltips at `text-tiny`; the Home's type; the navbar's row; rows padded by the row primitive alone; only `SliderField` and the scrubber import the slider |
 | `lib/scale.test.js` | `scale.js` equals the stylesheet's tokens, at both scales |
 | `styles/canvas.test.js` | core's written-out colours equal the tokens, and every view's canvas is `--canvas` |
 | `kit/look/sceneColors.test.js` | no view hard-codes a selection, hover or box blue |
@@ -559,7 +580,8 @@ transitions and drawn sizes, not class names, and a test of a layout that is gon
 | … "the type scale and the strip's proportions, as drawn" | the 40px strip of 28px tiles, the 32px head with its rule under the strip, panel and menu text 12/16, the navbar 13/20, a tooltip 11/16 |
 | … "a toolbar button under the pointer is seen…", "Preview's bar takes the backdrop's ink…" | hover fills and ink read on their surface |
 | … "three tabs and the search fit the 232px panel…", "Display's card is the peek card's mirror…" | the tab budget; the card's top, gaps and 12px inset, its 288px width, its dropdowns one width, nothing cut |
-| `library/ModelLibrary.browser.test.mjs` | the Home's sidebar as the panel: 232px on the panel's surface and inset, its 28px rows and the marked place, pushing while pinned and gone collapsed, its peek card 4px in, its grip's bounds, a phone's sheet; the panel's foot under its full-width rule, its tiles on the inset, fitting at 200px, the cog's menu over it; the logo as a link home; the place's heading and gutters; a card and a place as real links; the ring round the document just left, in view; a phone's 36px controls |
+| `library/ModelLibrary.browser.test.mjs` | the Home's sidebar as the panel: 232px on the panel's surface and inset, its 28px rows and the marked place, pushing while pinned and gone collapsed, its peek card 4px in, its grip's bounds, a phone's sheet; the panel's foot under its full-width rule, its tiles on the inset, fitting at 200px, the cog's menu over it; the logo as a link home; the place's heading and gutters; the layout's segmented control (its track and faces) and the kinds' chips under the heading row, wrapping on a narrow page; a menu 6px off its trigger and 6px in; a card and a place as real links; the ring round the document just left, in view; a phone's 36px controls, chips and options |
+| `primitives/segmented-control.test.tsx` | the segmented control's pressed state, its one Tab stop and its keys, and its measures from the scale's tokens |
 | `scripts/test/check-ui-strings.mjs`, `i18n/i18n.test.mjs` | no English literal in the chrome; the locales mirror `en.js` |
 | `tests/python/global/test_document_links.py` | every relative link and `#anchor` in these docs lands on a heading |
 

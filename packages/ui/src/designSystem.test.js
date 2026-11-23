@@ -119,12 +119,30 @@ test("the type scale is three sizes and a heading on fixed line heights, a phone
 test("menus are the xs step on the row and tooltips the tiny step, from the primitives alone", () => {
   for (const file of ["primitives/dropdown-menu.jsx", "primitives/context-menu.jsx"]) {
     const text = readFileSync(join(root, file), "utf8");
-    assert.match(text, /bg-popover (p-1 )?text-xs text-popover-foreground/, `${file} draws its menu at text-xs`);
+    assert.match(text, /bg-popover p-1\.5 text-xs text-popover-foreground/, `${file} draws its menu at text-xs, 6px in`);
     for (const item of text.matchAll(/"[^"]*\bpy-1\.5\b[^"]*"/g)) assert.match(item[0], /min-h-row .*text-xs/, `${file}: ${item[0].slice(0, 60)}`);
     assert.doesNotMatch(text, /leading-4/, `${file}: no fixed line height`);
   }
   assert.match(readFileSync(join(root, "primitives/tooltip.jsx"), "utf8"), /text-tiny leading-\(--cad-leading-tiny\)/);
   assert.doesNotMatch(readFileSync(join(root, "renderers/kit/shell/ViewportContextMenu.jsx"), "utf8"), /DropdownMenuItem className="text-/);
+});
+
+// A menu stands 6px from its trigger and is padded 6px (`docs/design-system.md`, "Menus"), its separators running its
+// full width: the primitives say so once, and a picker on the primitive takes their gap rather than one of its own.
+test("a menu stands 6px from its trigger, padded 6px, from the primitives alone", () => {
+  const menu = readFileSync(join(root, "primitives/dropdown-menu.jsx"), "utf8");
+  assert.match(menu, /export const MENU_GAP_PX = 6;/);
+  assert.match(menu, /sideOffset = MENU_GAP_PX,/);
+  for (const file of ["primitives/dropdown-menu.jsx", "primitives/context-menu.jsx"]) {
+    const text = readFileSync(join(root, file), "utf8");
+    assert.doesNotMatch(text, /bg-popover p-1 /, `${file}: no 4px padding left`);
+    assert.match(text, /"-mx-1\.5 my-1 h-px bg-border"/, `${file}: a separator runs the padded menu's width`);
+  }
+  // The value dropdown, the strip's pickers and Draw's pickers keep the primitive's gap.
+  for (const file of ["primitives/value-dropdown.jsx", "annotation/toolbar.jsx", "renderers/kit/tools/ToolModeMenu.jsx",
+    "renderers/kit/tools/model-effects/ModelViewControls.js", "renderers/kit/tools/FloatingToolBar.js", "renderers/kit/tools/playbar/PreviewPlaybar.jsx"]) {
+    assert.doesNotMatch(readFileSync(join(root, file), "utf8"), /<DropdownMenuContent[^>]*sideOffset=/, `${file} sets no gap of its own`);
+  }
 });
 
 // The logo stands on the page's gutter (`docs/viewer-ux.md`, "The navbar"): the navbar's 8px, the logo centred in its 28px tile (6px)

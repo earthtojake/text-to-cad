@@ -4,6 +4,7 @@ import { useI18n } from "@cad/ui/i18n";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
 import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
 import { TreeRowHeading, TreeRowsLoading } from "@cad/ui/primitives/tree-row";
+import { PILL_CLASS } from "@cad/ui/primitives/pill";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { ChangedDot } from "../tools/ChangedDot.jsx";
@@ -450,7 +451,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
       </span>
     </>;
   };
-  const TAB_CLASS = "flex h-control shrink-0 items-center whitespace-nowrap rounded-md px-1.5 text-ui transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
+  const TAB_CLASS = PILL_CLASS;
   const ICON_BUTTON_CLASS = "grid size-control shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 aria-expanded:bg-accent aria-expanded:text-foreground [&_svg]:size-3.5";
   const tabButton = entry => {
     const on = entry.id === active;
@@ -483,7 +484,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
             <MoreHorizontal aria-hidden="true" />{hiddenTabs.some(entry => changed[entry.id]) ? <ChangedDot /> : null}
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" sideOffset={4} collisionPadding={8} className={cn(FLOATING_SURFACE_CLASS, "min-w-40")} aria-label={t("flatPanel.moreTabs")}
+        <DropdownMenuContent align="end" collisionPadding={8} className={cn(FLOATING_SURFACE_CLASS, "min-w-40")} aria-label={t("flatPanel.moreTabs")}
           data-flat-panel-more-menu="">
           {hiddenTabs.map(entry => {
             const Icon = entry.icon || TAB_ICONS[entry.id];

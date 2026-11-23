@@ -45,7 +45,7 @@ export function ValueDropdown({ value, options, onChange, label, disabled = fals
         <ChevronDown className="size-3 shrink-0 opacity-60" aria-hidden="true" />
       </button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align={align} sideOffset={4} collisionPadding={8} aria-label={label}
+    <DropdownMenuContent align={align} collisionPadding={8} aria-label={label}
       className={cn(FLOATING_SURFACE_CLASS, "min-w-(--radix-dropdown-menu-trigger-width) data-[state=closed]:animate-none!")}>
       <DropdownMenuRadioGroup value={active ? String(active.value) : ""} onValueChange={next => {
         const option = options.find(entry => String(entry.value) === next);

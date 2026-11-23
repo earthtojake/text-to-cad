@@ -81,7 +81,7 @@ function ClipAxisSelect({ viewSettings, onViewSettingsPatch, bounds }) {
       </ToolbarButton>
     </DropdownMenuTrigger>
     {/* Closes with no exit animation, so a quick second press always reaches the button. */}
-    <DropdownMenuContent align="start" sideOffset={4} collisionPadding={8}
+    <DropdownMenuContent align="start" collisionPadding={8}
       className={cn(FLOATING_SURFACE_CLASS, "w-max min-w-0 data-[state=closed]:animate-none!")}>
       {/* As narrow as its settings: first the axes, a compact group of the Theme row's buttons in a row
           as tall as an item; a rule; then the settings, the menu's checkbox items (their check at the right), with no glyphs. */}
