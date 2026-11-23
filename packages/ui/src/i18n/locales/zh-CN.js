@@ -246,34 +246,32 @@ export default {
   "language.ko": "한국어",
 
 
-  "project.tab": "项目",
-
-
-  "project.models": "模型",
-
-
-  "project.files": "文件",
-
-
-  "project.loading": "正在加载…",
-
-
-  "project.empty": "这里还没有模型或 CAD 文件。",
-
-
-  "project.readFailed": "无法读取此项目。",
-
-
-  "project.folderMissing": "此项目的文件夹已不存在。",
-
-
-  "project.truncated": "未列出全部文件：此文件夹中的文件超出了一次可列出的数量。",
-
-
-  "project.showAria": "在主页中显示 {name}",
-
-
   "project.importFolder": "将其文件夹导入为项目…",
+  "project.openNewTab": "在新标签页中打开",
+  "project.openBrowser": "在浏览器中打开",
+  "project.previous": "项目中的上一个",
+  "project.next": "项目中的下一个",
+  "search.menu": "搜索文档",
+  "search.title": "搜索文档",
+  "search.label": "搜索文档",
+  "search.placeholder": "搜索所有文档…",
+  "search.results": "文档",
+  "search.inProject": "在 {name} 中",
+  "search.otherProjects": "其他项目",
+  "search.recent": "最近",
+  "search.standalone": "独立文档",
+  "search.kindModel": "模型",
+  "search.current": "正在查看",
+  "search.reading": "正在读取文档…",
+  "search.failed": "无法读取文档。",
+  "search.nothingFound": "没有与“{query}”匹配的内容",
+  "search.empty": "还没有文档。",
+  "search.more": "显示 {total} 个中的 {shown} 个：输入以缩小范围",
+  "search.openNewTab": "在新标签页中打开",
+  "search.openBrowser": "在浏览器中打开",
+  "search.keyMove": "移动",
+  "search.keyOpen": "打开",
+  "search.keyClose": "关闭",
 
 
   "home.title": "主页",

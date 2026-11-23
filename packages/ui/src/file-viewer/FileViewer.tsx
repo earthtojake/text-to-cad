@@ -6,8 +6,9 @@ import { Button } from "../primitives/button.jsx";
 import LoadingStep from "../loading/LoadingStep.jsx";
 import { EmptyState, ViewerNavbar } from "./navigation/index.js";
 import type { EntryAction } from "./navigation/index.js";
-import { ProjectList } from "./navigation/ProjectList.jsx";
-import { ProjectPanelContext } from "./projectPanel.js";
+import { ProjectKeysContext, projectNeighbours } from "./projectKeys.js";
+import { useControlUsage } from "../usage/controls.js";
+import { useSearchKey } from "../search/searchKey.js";
 import { useFileDocument } from "./hooks/useFileDocument.js";
 import type { FileNavigationAction, FileViewerProps, JsonValue, FileViewerState } from "./types.js";
 import { ViewerMobileContext, useViewerMobileMeasure } from "./responsive.js";
@@ -32,7 +33,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, name, filePath = null, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, project = null, onImportFolder = null, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page", layout }: FileViewerProps) {
+export function FileViewer({ file, name, filePath = null, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, project = null, onImportFolder = null, onSearch = null, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page", layout }: FileViewerProps) {
   // The language the host names (`environment.locale`): this frame's own strings, and everything
   // drawn under it (`I18nProvider`), the nodes the host hands it included.
   const locale = host.environment.locale;
@@ -242,6 +243,30 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const trailing = shownActions.length ? <>
     {shownActions.map(({ id, label, hint, icon: Icon, disabled, active, onInvoke }) => <TooltipHint key={id} content={hint ?? label}><Button type="button" variant="ghost" size="icon-xs" className="size-control shrink-0 rounded-md text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground" aria-label={label} disabled={disabled} aria-pressed={active} onClick={() => { try { void Promise.resolve(onInvoke()).catch(error => onError?.(error)); } catch (error) { onError?.(error instanceof Error ? error : new Error(String(error))); } }}><Icon className="size-4" aria-hidden="true" /></Button></TooltipHint>)}
   </> : null;
+  // The project the document is in: its name before the document's, which goes to the home at it (a link where the
+  // host gives it an address), and its documents, the previous and next of which `[` and `]` and the ⋯ show here
+  // (`projectKeys.js`). A view that shows its file alone (no `openFile`) moves to none.
+  const projectCrumb = useMemo(() => (project ? { name: project.name, href: project.href ?? null, onOpen: project.onShow } : null), [project]);
+  // The document on screen among the project's is the file's by its own path (`filePath`: a host shows a file by its
+  // document's id), a model's by its id.
+  const current = filePath ?? path ?? "";
+  const usage = useControlUsage();
+  // The name of the document moved to, kept for the navbar until the host reads it (as a library card's is).
+  const [arriving, setArriving] = useState<{ path: string; name: string } | null>(null);
+  const around = useMemo(() => (onOpenFile ? projectNeighbours(project?.documents, current) : null), [onOpenFile, project?.documents, current]);
+  const neighbours = useMemo(() => {
+    if (!around || !onOpenFile) return null;
+    const go = (row: { path: string; name: string } | null, control: string) => (row ? () => {
+      usage.used(control);
+      setArriving({ path: row.path, name: row.name });
+      onOpenFile(row.path);
+    } : null);
+    return { previous: go(around.previous, "project_previous"), next: go(around.next, "project_next") };
+  }, [around, onOpenFile, usage]);
+  // Handed to the view as a ref that never changes, so a project read again re-renders no view.
+  const projectKeys = useRef(neighbours);
+  projectKeys.current = neighbours;
+  const arrivingName = arriving && path && arriving.path.replace(/\\/g, "/") === path ? arriving.name : undefined;
   // The on-disk file the view acts on: the file's own path, or none for a document with no file of its own (a model's,
   // by its id), whose file menu acts on the script that builds it.
   const navigationPath = shown ? (shown.file.navigationPath === undefined ? shown.file.path : shown.file.navigationPath)
@@ -256,6 +281,7 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const onDisk = navigationPath ?? shown?.file.sourceFile ?? null;
   // A source moved or deleted keeps Copy path (where it was) and draws what opens it disabled.
   const sourceMissing = Boolean(shown?.file.sourceMissing);
+  const openBeside = host.navigation.openBeside;
   const fileMenu = useMemo(() => {
     const capabilities = new Set((Object.keys(perform ?? {}) as EntryAction[])
       .filter(action => action === "browser" || action === "copy-link" ? Boolean(path) : Boolean(onDisk)));
@@ -265,30 +291,28 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     const apps = appsOf && openApp && path ? (options: { signal: AbortSignal }) => appsOf(document, options) : undefined;
     // Import its folder as a project: a document in no project, on disk (a model's script's folder), where the host can.
     const importFolder = !project && onDisk && onImportFolder ? onImportFolder : null;
-    return path && (capabilities.size || fileMenuItems || importFolder) ? {
+    // Open in new tab (Open in browser): the document beside this view, where the host can -- not twice where Open in's
+    // Browser does the same.
+    const besideOf = openBeside && path && !(openBeside.kind === "browser" && capabilities.has("browser")) ? {
+      label: t(openBeside.kind === "browser" ? "project.openBrowser" : "project.openNewTab"),
+      onSelect: () => { usage.used("file_open_beside"); void Promise.resolve(openBeside.open({ document: path })).catch(error => onError?.(error)); },
+    } : null;
+    return path && (capabilities.size || fileMenuItems || importFolder || besideOf || neighbours) ? {
       platform: host.fileActions?.platform ?? "linux", capabilities, sourceMissing, items: fileMenuItems, apps, onImportFolder: importFolder,
+      beside: besideOf, neighbours,
       onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => {
         const done = action === "app" ? (app ? openApp?.(document, app.target, app.app) : undefined)
           : perform?.[action]?.({ path: target(action) ?? "", kind: "file" });
         void Promise.resolve(done).catch(error => onError?.(error));
       },
     } : null;
-  }, [path, onDisk, sourceMissing, perform, appsOf, openApp, host.fileActions?.platform, fileMenuItems, onError, project, onImportFolder]);
-  // The project the document is in: its name before the document's, which goes to the home at it, and its documents
-  // as the Project tab the view's panel leads with (`projectPanel.js`), a press opening one here. A view that shows its
-  // file alone (no `openFile`) has neither. Handed to the panel beside the renderer, never through it: a project read
-  // again redraws the list alone.
-  const projectCrumb = useMemo(() => (project ? { name: project.name, onOpen: project.onShow } : null), [project]);
-  // The row on screen is the file's by its own path (`filePath`: a host shows a file by its document's id), a model's
-  // by its id.
-  const current = filePath ?? path ?? "";
-  const projectPanel = useMemo(() => (project && onOpenFile ? {
-    label: t("project.tab"),
-    content: <ProjectList project={project} current={current} onOpen={(row: { path: string }) => onOpenFile(row.path)} />,
-  } : null), [project, onOpenFile, current, t]);
+  }, [path, onDisk, sourceMissing, perform, appsOf, openApp, host.fileActions?.platform, fileMenuItems, onError, project, onImportFolder, openBeside, neighbours, usage, t]);
   // The logo's app menu: the host's links and the person's settings (Back to home is `onHome`).
-  const menu = useMemo(() => host.links || appSettings?.length || colorScheme || language ? { links: host.links, appSettings, colorScheme, language, platform: appearance.platform } : null,
-    [host.links, appSettings, colorScheme, language, appearance.platform]);
+  const menu = useMemo(() => host.links || appSettings?.length || colorScheme || language || onSearch
+    ? { links: host.links, appSettings, colorScheme, language, platform: appearance.platform, onSearch } : null,
+    [host.links, appSettings, colorScheme, language, appearance.platform, onSearch]);
+  // ⌘K (Ctrl+K) opens the search, where the host has one, from anywhere on the page but Preview.
+  useSearchKey(onSearch, { platform: appearance.platform, enabled: previewing !== key });
   // The navbar is drawn over every file and over the host's home — there only the logo's menu (no
   // Back to home), Back and Forward where the host keeps the view's history, and the host's
   // actions, as over a file — never over a view drawn small with no chrome
@@ -300,11 +324,11 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const homeSlots = useMemo(() => (navbar && !path && home ? { left: homeLeft, right: homeRight } : null), [navbar, path, home, homeLeft, homeRight]);
   return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><NavbarSlotsContext.Provider value={homeSlots}><NavbarViewSlotContext.Provider value={navbar && path ? viewSlot : null}><PanelPeekContext.Provider value={peek}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={layout ? undefined : mobile ? "mobile" : "desktop"} data-viewer-pinned-layout={layout} tabIndex={-1}>
     {navbar ? (path
-      ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name || name} project={projectCrumb} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}
+      ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name || name || arrivingName} project={projectCrumb} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}
         panels={panelToggles} viewSlot={setViewSlot} />
       : <ViewerNavbar menu={menu} history={history} actions={navbarActions} homeSlots={home ? homeSlotRefs : null} />) : null}
     <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-      <div ref={bodyBox} className="min-w-0 flex-1 overflow-hidden"><ProjectPanelContext.Provider value={projectPanel}>{body}</ProjectPanelContext.Provider></div>
+      <div ref={bodyBox} className="min-w-0 flex-1 overflow-hidden"><ProjectKeysContext.Provider value={projectKeys}>{body}</ProjectKeysContext.Provider></div>
       {overlay}
     </div>
   </div></PanelPeekContext.Provider></NavbarViewSlotContext.Provider></NavbarSlotsContext.Provider></ViewerElementContext.Provider></ViewerHostContext.Provider></ViewerMobileContext.Provider></I18nProvider>;

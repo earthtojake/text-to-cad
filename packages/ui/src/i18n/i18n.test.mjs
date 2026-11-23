@@ -35,8 +35,8 @@ test("Traditional Chinese is Taiwan's own words, not Simplified Chinese converte
   assert.equal(zhTW["file.missing"], "檔案不存在");
   assert.equal(zhTW["home.importFolderButton"], "匯入資料夾");
   assert.equal(zhCN["home.importFolderButton"], "导入文件夹");
-  assert.equal(zhTW["project.files"], "檔案");
-  assert.equal(zhTW["project.loading"], "正在載入…");
+  assert.equal(zhTW["search.otherProjects"], "其他專案");
+  assert.equal(zhCN["search.otherProjects"], "其他项目");
 });
 
 test("normalizeLocale takes the exact locale, else the case-folded one, else nothing", () => {

@@ -19,6 +19,7 @@ import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import { MissingCadFile } from './MissingCadFile.js';
 import { ControlUsageProvider } from '../usage/controls.js';
 import { WhatsNewDialog } from '../whats-new/WhatsNewDialog.js';
+import { DocumentSearch, useDocumentSearch } from '../search/DocumentSearch.js';
 
 // A STEP: read by the engine, at a length its size decides (the home's pictures ask first, as
 // they do for a model's document, by its id).
@@ -95,9 +96,9 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   /**
    * The home's library: the projects and the documents opened before, to open again. A host with one shows it
    * wherever no file is open, and the navbar's logo leads to it from a file; a document in a project has its project's
-   * name before its own, which leads to the home at that project, and its project's list beside it. Without one (a
-   * host whose own navigation shows one file, as a file handler does) a view has a file and nothing else: no home, no
-   * project, and no link to another file.
+   * name before its own, which leads to the home at that project, and [ and ] move through its project; ⌘K searches
+   * every document in it. Without one (a host whose own navigation shows one file, as a file handler does) a view has a
+   * file and nothing else: no home, no project, no search, and no link to another file.
    */
   library?: ModelLibrarySource<Model>;
   /**
@@ -217,7 +218,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const viewing = useSyncExternalStore(live.subscribe, live.current, live.current);
   const onScreen = !path || Boolean(viewing);
 
-  // A file the viewer asks for — a row of the Project list, a renderer's link — is shown by the host.
+  // A file the viewer asks for — the project's next with ], a renderer's link — is shown by the host.
   // A view with no library shows its file and nothing else: it opens no other, and has no home.
   const openFile = useCallback((next: string) => {
     const wanted = normalizePath(next);
@@ -236,8 +237,8 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const viewerHost = useMemo<ViewerHost>(() => ({ ...host, navigation: homed ? { openFile, home } : {} }), [host, openFile, home, homed]);
 
   // The project the document on screen is in (its row's, the nearest project above its file or its script): its name
-  // before the document's, which shows the home at that project (`focus`), and its list beside the view. A host with no
-  // home has neither.
+  // before the document's, which shows the home at that project (`focus`), and its documents, which [ and ] move
+  // through. A host with no home has neither.
   const [focus, setFocus] = useState<string | null>(null);
   useEffect(() => { if (path) setFocus(null); }, [path]);
   const projectRef = homed ? (entry?.project as CadProjectRef | null | undefined) ?? null : null;
@@ -302,11 +303,18 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
         description={isDocumentId(path) ? message : undefined} />
       : <EmptyState title={t("file.openFailed")} description={message} action={goHome} />,
   }), [library, layout, changeLayout, path, picture, host.fileActions, focus, homeFolder, entry, goHome, t, settings.viewportBackground]);
+  // The search of every document (⌘K, the app menu's Search documents), over a document and the home alike, where
+  // the host has a library (`search/`).
+  const search = useDocumentSearch();
+  const searchCurrent = useMemo(() => ({ id: shownId, path: shown, project: projectRef ? { id: projectRef.id, name: projectRef.name } : null }),
+    [shownId, shown, projectRef?.id, projectRef?.name]);
   // What a person does on the screen is counted for the host (`usage/controls.js`); never what a picture drawn
   // out of sight does, which is outside it.
   return <I18nProvider locale={locale}>
     <ControlUsageProvider report={host.usage?.controls}>
-    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
+    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu}
+      overlay={<>{overlay}{library ? <DocumentSearch search={search} library={library} navigation={viewerHost.navigation} current={searchCurrent} onError={onError} /> : null}</>}
+      onSearch={library ? search.show : null} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} project={project} onImportFolder={onImportFolder} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
     {whatsNew && onScreen ? <WhatsNewDialog entry={whatsNew.entry} onDismiss={whatsNew.onDismiss} /> : null}

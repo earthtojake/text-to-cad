@@ -9,7 +9,7 @@ import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenu
 import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 import { usePanelToggles } from '../../dist/file-viewer/panelToggles.js';
 import { PANEL_PEEK_DELAY_MS } from '../../dist/file-viewer/panelPeek.js';
-import { useProjectPanel } from '../../dist/file-viewer/projectPanel.js';
+import { useProjectKey } from '../../dist/file-viewer/projectKeys.js';
 import { ModelLibrary } from '../../dist/library/ModelLibrary.js';
 import { readFileSync } from 'node:fs';
 
@@ -436,46 +436,142 @@ it('ends the app menu with the version the host runs, a link to its release note
   expect(document.querySelector('[data-app-menu] [data-menu-footer]')!.className).toContain('text-tiny');
 });
 
-it('hands the view the Project tab where the document is in a project: its models, then its files by folder, the one on screen marked, a press opening another through the host; and its name before the file\'s goes to the home at it', async () => {
+// A document in a project: three of them, the one on screen the middle one, a model first (by its id).
+const MODEL_ID = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+const PROJECT = { id: 'p1', name: 'parts', root: '/models/parts', documents: [
+  { path: MODEL_ID, name: 'bracket', kind: 'model', folder: '/models/parts/src' },
+  { path: FILE, name: 'a.step', kind: 'file', folder: '/models/parts' },
+  { path: '/models/parts/STEP/b.step', name: 'b.step', kind: 'file', folder: '/models/parts/STEP' },
+] };
+// A view that keys as a CAD view's shell does (`useViewerShortcuts`, whose single keys reach `useProjectKey`).
+const keyed = defineFileRenderer({
+  id: 'keyed', priority: 1, matches: () => true, prepare: async () => ({ data: null }),
+  load: async () => ({ default: () => { const key = useProjectKey(); return <p tabIndex={-1} onKeyDown={event => { if (key(event.nativeEvent)) event.preventDefault(); }}>shown</p>; } }),
+});
+
+it("names the project before the document, which goes to the home at it; no panel of its own: [ and ] and the ⋯ move to the project's previous and next, the name kept on the way, counted", async () => {
   const user = userEvent.setup();
+  const reports: { control: string; count: number }[][] = [];
   const opened: string[] = [];
-  const shown = vi.fn();
-  // A view that draws the Project tab where its frame would: its label and its list.
-  const framed = defineFileRenderer({
-    id: 'framed', priority: 1, matches: () => true,
-    load: async () => ({ default: () => { const panel = useProjectPanel(); return panel ? <section aria-label={panel.label}>{panel.content}</section> : <p>no project</p>; } }),
-    prepare: async () => ({ data: null }),
-  });
-  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
-  const project = { id: 'p1', name: 'parts', root: '/models/parts', onShow: shown, documents: [
-    { path: id, name: 'bracket', kind: 'model', folder: '/models/parts/src' },
-    { path: FILE, name: 'a.step', kind: 'file', folder: '/models/parts' },
-    { path: '/models/parts/STEP/b.step', name: 'b.step', kind: 'file', folder: '/models/parts/STEP' },
-  ] };
-  const browsing = { ...host, navigation: { openFile: (path: string) => { opened.push(path); }, home() {} } };
-  const view = render(<FileViewer file={FILE} host={browsing as any} renderers={[framed]} state={{}} onStateChange={() => {}} project={project as any} />);
-  const tab = await screen.findByRole('region', { name: 'Project' });
-  expect([...tab.querySelectorAll('[data-tree-heading], [data-project-row], [data-project-folder]')].map(node => node.textContent))
-    .toEqual(['Models', 'bracket', 'Files', 'a.step', 'STEP', 'b.step']);
-  expect(within(tab).getByRole('button', { name: 'a.step' }).getAttribute('aria-current')).toBe('page');
-  await user.click(within(tab).getByRole('button', { name: 'b.step' }));
-  await user.click(within(tab).getByRole('button', { name: 'bracket' }));
-  expect(opened).toEqual(['/models/parts/STEP/b.step', id]);
-  // Its name before the file's, which goes to the home at it.
-  await user.click(screen.getByRole('button', { name: 'Show parts on Home' }));
-  expect(shown).toHaveBeenCalledTimes(1);
-  // While its documents are read, it says so; a document in no project, or a view that shows its file alone, has none.
-  view.rerender(<FileViewer file={FILE} host={browsing as any} renderers={[framed]} state={{}} onStateChange={() => {}} project={{ ...project, documents: null } as any} />);
-  expect(within(screen.getByRole('region', { name: 'Project' })).getByRole('status').textContent).toBe('Loading…');
-  view.rerender(<FileViewer file={FILE} host={browsing as any} renderers={[framed]} state={{}} onStateChange={() => {}} project={null} />);
-  expect([screen.queryByText('no project') !== null, screen.queryByRole('button', { name: 'Show parts on Home' })]).toEqual([true, null]);
-  view.rerender(<FileViewer file={FILE} host={{ ...host, navigation: {} } as any} renderers={[framed]} state={{}} onStateChange={() => {}} project={project as any} />);
-  expect(screen.queryByRole('region', { name: 'Project' })).toBeNull();
-  // A file the host shows by its document's id is marked by its own path (`filePath`).
-  view.rerender(<FileViewer file="7a2b3c4d-1b2c-5d3e-8f4a-0123456789ab" filePath="/models/parts/STEP/b.step" host={browsing as any} renderers={[framed]}
-    state={{}} onStateChange={() => {}} project={project as any} />);
-  const marked = await screen.findByRole('region', { name: 'Project' });
-  expect(within(marked).getByRole('button', { name: 'b.step' }).getAttribute('aria-current')).toBe('page');
+  const onShow = vi.fn();
+  const { ControlUsageProvider } = await import('../../dist/usage/controls.js');
+  // A host that shows another document as asked, and names nothing until the document is read.
+  let answer = () => {};
+  const browsing = { ...host, fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } },
+    files: { id: 'one', stat: (path: string) => new Promise(resolve => {
+      const read = () => resolve({ path, name: path === MODEL_ID ? 'bracket' : path.split('/').pop()!, kind: 'file' as const, extension: 'step', size: 1 });
+      if (path === FILE) read(); else answer = read;
+    }) },
+    navigation: { openFile: (path: string) => { opened.push(path); }, home() {} } };
+  const view = (file: string, project: object | null = { ...PROJECT, onShow }) => <ControlUsageProvider report={counts => reports.push(counts)}>
+    <FileViewer file={file} host={browsing as any} renderers={[keyed]} state={{}} onStateChange={() => {}} project={project as any} /></ControlUsageProvider>;
+  const shown = render(view(FILE));
+  const page = await screen.findByText('shown');
+  await user.click(screen.getByRole('button', { name: 'parts' }));
+  expect(onShow).toHaveBeenCalledTimes(1);
+  // The ⋯: Previous in project and Next in project, last.
+  await act(async () => { fireEvent.pointerDown(screen.getByTestId('file-actions'), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).getAllByRole('menuitem').map(item => item.firstChild?.textContent)).toEqual(['Copy path', 'Previous in project', 'Next in project']);
+  await act(async () => { fireEvent.click(within(menu).getByRole('menuitem', { name: /Next in project/ })); });
+  // ] and [: the next and the previous, in the project's order.
+  fireEvent.keyDown(page, { key: ']' });
+  fireEvent.keyDown(page, { key: '[' });
+  expect(opened).toEqual(['/models/parts/STEP/b.step', '/models/parts/STEP/b.step', MODEL_ID]);
+  // Shown as the host shows it: a model, by its id, is named by the name it was moved to until it is read.
+  shown.rerender(view(MODEL_ID));
+  expect(fileName().textContent).toBe('bracket');
+  await act(async () => answer());
+  // At the project's start, [ does nothing and the key is left alone; ] goes on.
+  const first = await screen.findByText('shown');
+  expect(fireEvent.keyDown(first, { key: '[' })).toBe(true);
+  expect(fireEvent.keyDown(first, { key: ']' })).toBe(false);
+  expect(opened.at(-1)).toBe(FILE);
+  shown.unmount();
+  expect(reports.flat().filter(entry => entry.control.startsWith('project_'))).toEqual([{ control: 'project_crumb', count: 1, seconds: 0 },
+    { control: 'project_next', count: 3, seconds: 0 }, { control: 'project_previous', count: 1, seconds: 0 }]);
+});
+
+it("moves through nothing where the document is in no project, the project has no other, or the view shows its file alone", async () => {
+  const opened: string[] = [];
+  const browsing = { ...host, navigation: { openFile: (path: string) => { opened.push(path); } } };
+  const view = render(<FileViewer file={FILE} host={browsing as any} renderers={[keyed]} state={{}} onStateChange={() => {}} project={null} />);
+  fireEvent.keyDown(await screen.findByText('shown'), { key: ']' });
+  view.rerender(<FileViewer file={FILE} host={browsing as any} renderers={[keyed]} state={{}} onStateChange={() => {}}
+    project={{ ...PROJECT, documents: [PROJECT.documents[1]], onShow() {} } as any} />);
+  fireEvent.keyDown(screen.getByText('shown'), { key: ']' });
+  view.rerender(<FileViewer file={FILE} host={{ ...host, navigation: {} } as any} renderers={[keyed]} state={{}} onStateChange={() => {}}
+    project={{ ...PROJECT, onShow() {} } as any} />);
+  fireEvent.keyDown(screen.getByText('shown'), { key: ']' });
+  expect(opened).toEqual([]);
+});
+
+it("offers Open in new tab (or Open in browser) for the document on screen where the host can open it beside, never twice beside Open in's Browser", async () => {
+  const beside = vi.fn();
+  const menuOf = async (navigation: object, perform: object = { 'copy-path': async () => {} }) => {
+    cleanup();
+    render(<FileViewer file={FILE} host={{ ...host, fileActions: { platform: 'darwin', perform }, navigation: { openFile() {}, ...navigation } } as any}
+      renderers={[renderer]} state={{}} onStateChange={() => {}} />);
+    await screen.findByText('shown');
+    await act(async () => { fireEvent.pointerDown(screen.getByTestId('file-actions'), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+    return screen.findByRole('menu');
+  };
+  // A web page's: Open in new tab, after Copy path.
+  let menu = await menuOf({ openBeside: { kind: 'tab', open: beside } });
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in new tab']);
+  await act(async () => { fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open in new tab' })); });
+  expect(beside).toHaveBeenCalledWith({ document: FILE });
+  // An app's frame: Open in browser, where Open in has no Browser of its own; none where it has.
+  menu = await menuOf({ openBeside: { kind: 'browser', open: beside } });
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in browser']);
+  menu = await menuOf({ openBeside: { kind: 'browser', open: beside } }, { 'copy-path': async () => {}, browser: async () => {} });
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in']);
+  // A host with neither: nothing.
+  menu = await menuOf({});
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path']);
+});
+
+it("opens the search with ⌘K on a Mac and Ctrl+K elsewhere, from a field too, and from the app menu's Search documents, its key at the right; never in Preview or over another dialog", async () => {
+  const user = userEvent.setup({ skipHover: true });
+  const onSearch = vi.fn();
+  let report: ((previewing: boolean) => void) | undefined;
+  const previewed = defineFileRenderer({ id: 'previewed', priority: 2, matches: () => true, prepare: async () => ({ data: null }),
+    load: async () => ({ default: (props: any) => { report = props.onPreviewChange; return <input aria-label="note" />; } }) });
+  const homed = (platform: string) => ({ ...host, environment: { colorScheme: 'light', platform }, navigation: { openFile() {}, home() {} } });
+  const view = render(<FileViewer file={FILE} host={homed('darwin') as any} renderers={[previewed]} state={{}} onStateChange={() => {}} onSearch={onSearch} />);
+  const note = await screen.findByRole('textbox', { name: 'note' });
+  fireEvent.keyDown(note, { key: 'k', ctrlKey: true });
+  expect(onSearch).not.toHaveBeenCalled();
+  expect(fireEvent.keyDown(note, { key: 'k', metaKey: true })).toBe(false);
+  expect(onSearch).toHaveBeenCalledTimes(1);
+  // Held, it does not repeat.
+  fireEvent.keyDown(note, { key: 'k', metaKey: true, repeat: true });
+  expect(onSearch).toHaveBeenCalledTimes(1);
+  // In Preview, nothing.
+  act(() => report!(true));
+  fireEvent.keyDown(document.body, { key: 'k', metaKey: true });
+  act(() => report!(false));
+  // Over another dialog, nothing.
+  const dialog = document.body.appendChild(Object.assign(document.createElement('div'), { role: 'dialog' }));
+  dialog.setAttribute('role', 'dialog');
+  fireEvent.keyDown(document.body, { key: 'k', metaKey: true });
+  dialog.remove();
+  expect(onSearch).toHaveBeenCalledTimes(1);
+  // Off a Mac, Ctrl+K.
+  view.rerender(<FileViewer file={FILE} host={homed('win32') as any} renderers={[previewed]} state={{}} onStateChange={() => {}} onSearch={onSearch} />);
+  fireEvent.keyDown(document.body, { key: 'K', ctrlKey: true });
+  expect(onSearch).toHaveBeenCalledTimes(2);
+  // The app menu: Back to home, then Search documents with its key.
+  await user.click(screen.getByRole('button', { name: 'Menu' }));
+  const item = await screen.findByRole('menuitem', { name: /Search documents/ });
+  const items = [...document.querySelectorAll('[data-app-menu] [role^="menuitem"]')];
+  expect([items[0].textContent, items[1].textContent]).toEqual(['Back to home', 'Search documentsCtrl+K']);
+  await user.click(item);
+  expect(onSearch).toHaveBeenCalledTimes(3);
+  // A host with no search has neither.
+  view.rerender(<FileViewer file={FILE} host={homed('win32') as any} renderers={[previewed]} state={{}} onStateChange={() => {}} />);
+  fireEvent.keyDown(document.body, { key: 'K', ctrlKey: true });
+  expect(onSearch).toHaveBeenCalledTimes(3);
 });
 
 it('has no file menu on a document with no file of its own, which its name names; a document in no project offers Import its folder as a project where the host can', async () => {

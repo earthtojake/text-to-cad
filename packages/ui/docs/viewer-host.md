@@ -15,8 +15,8 @@ its file menu has only what needs no file (Browser, Export). `sourceMissing`
 says the source was moved or deleted (the envelope's `source.present` false): the menu keeps Copy path
 and draws what opens the source disabled with its reason, never an error. A model's navbar and Preview's bar name it by its `name`, with no glyph.
 A document in a project (`FileViewerProps.project`: a folder a person opened as one, which a document is in by its
-file, a model by its script) has the project's name before its own in the navbar and the project's documents as the
-Project tab its view's panel leads with; nothing browses the disk outside a project. Python scripts are never
+file, a model by its script) has the project's name before its own in the navbar, and `[` and `]` move through the
+project's documents; the search (⌘K) reaches every document of every project. Nothing browses the disk outside a project. Python scripts are never
 documents: no view opens one, and no project lists one.
 
 The host contains `files`, optional native `fileActions`, `clipboard`,
@@ -213,8 +213,8 @@ and in Preview its bar's Display and Exit preview, the navbar hidden. The host d
 command is the same capture: to a composer destination it delivers the view and
 the selection through `promptContext.deliver`. Neither route detects the platform.
 
-`navigation.openFile(path)` shows a file, by its absolute path (or a document by its id), in this view: a row of
-the Project list, a renderer's link. `navigation.home()`, where the host has a home,
+`navigation.openFile(path)` shows a file, by its absolute path (or a document by its id), in this view: the
+project's previous or next (`[`, `]` and the file menu), a renderer's link. `navigation.home()`, where the host has a home,
 shows it in this view: from a file, the app menu's Back to home (the menu the navbar's
 logo opens) leads to it; over the home the same navbar has the logo and its menu, with no
 Back to home. `CadViewer` implements both
@@ -522,7 +522,7 @@ receives Escape, copy or orbit keys on its behalf
 ([viewer-ux.md](viewer-ux.md#keyboard)). Undo and Redo (the view's one history: Draw's ink, Measure's rulers)
 take ⌘ or Ctrl alike; the host's
 keyboard `platform` (`environment.platform`) names the keys the hints show (⌘C or Ctrl+C, the zoom's, the panel's
-`⌘\` or `Ctrl+\`).
+`⌘\` or `Ctrl+\`), and which of ⌘K and Ctrl+K opens the search, the one key the page binds wherever the focus is.
 
 ## Host chrome slots
 
@@ -629,8 +629,21 @@ The shell handles placement and hides the toolbar in
 Preview; the host owns callbacks and preferences. None of these imply platform
 detection or move application-specific release/network behavior into shared UI.
 
-The project's list is the Project tab the view's panel leads with (`ProjectList.jsx`;
-[FileViewer](file-viewer.md#the-navbar-and-the-project)), docked beside the model as the panel is, a sheet on a phone.
+There are no document tabs in the page: the browser's tabs are the viewer's. A host says how a document or a project
+opens in one. `navigation.hrefOf(target)` is a target's own address, for a real link: the navbar's project name
+(`project.href`, which the host fills from it) and the search's rows are links where it answers, so ⌘ or Ctrl and a
+click, a middle click and the link's own menu are the browser's, and a plain click stays in this view. A host whose
+pages have no address of their own (the CAD app's, in an app's frame) has none, and they are buttons.
+`navigation.openBeside` is the item that opens a target beside this view: the file menu's Open in new tab (`kind:
+"tab"`) or Open in browser (`"browser"`, left out where Open in's Browser is there already) for the document on
+screen, and the search's ⌘Enter and its rows' small button. Absent, neither is offered.
+
+`CadViewer` mounts the search of every document (`search/DocumentSearch.tsx`; [Search](viewer-ux.md#search)) once,
+over a document and over the home, where the host has a `library`: it reads `library.list()` and
+`library.projects()` as it opens, a picture through `library.thumbnail()` for the rows on screen, and opens a row
+through `library.open(row)`, as the home's cards do, so a host that keeps a card's name for the navbar until the
+document is read (the web page) keeps it here too; `navigation.openFile` would take the path alone. The document on
+screen and its project are `CadViewer`'s own, from the catalog.
 
 A file that will not open leaves the navbar (where the host draws one) over a page of the host's
 (`presentation.error`). `CadViewer`'s says "File does not exist" and the file's path

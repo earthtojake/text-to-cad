@@ -245,34 +245,32 @@ export default {
   "language.ko": "한국어",
 
 
-  "project.tab": "프로젝트",
-
-
-  "project.models": "모델",
-
-
-  "project.files": "파일",
-
-
-  "project.loading": "불러오는 중…",
-
-
-  "project.empty": "아직 모델이나 CAD 파일이 없습니다.",
-
-
-  "project.readFailed": "이 프로젝트를 읽을 수 없습니다.",
-
-
-  "project.folderMissing": "이 프로젝트의 폴더가 없습니다.",
-
-
-  "project.truncated": "일부 파일만 표시됩니다. 이 폴더에는 한 번에 표시할 수 있는 것보다 많은 파일이 있습니다.",
-
-
-  "project.showAria": "홈에서 {name} 보기",
-
-
   "project.importFolder": "이 폴더를 프로젝트로 가져오기…",
+  "project.openNewTab": "새 탭에서 열기",
+  "project.openBrowser": "브라우저에서 열기",
+  "project.previous": "프로젝트의 이전 문서",
+  "project.next": "프로젝트의 다음 문서",
+  "search.menu": "문서 검색",
+  "search.title": "문서 검색",
+  "search.label": "문서 검색",
+  "search.placeholder": "모든 문서 검색…",
+  "search.results": "문서",
+  "search.inProject": "{name} 안",
+  "search.otherProjects": "다른 프로젝트",
+  "search.recent": "최근",
+  "search.standalone": "독립 문서",
+  "search.kindModel": "모델",
+  "search.current": "보는 중",
+  "search.reading": "문서를 읽는 중…",
+  "search.failed": "문서를 읽을 수 없습니다.",
+  "search.nothingFound": "“{query}”와 일치하는 항목이 없습니다",
+  "search.empty": "아직 문서가 없습니다.",
+  "search.more": "{total}개 중 {shown}개 표시: 입력해서 좁혀 보세요",
+  "search.openNewTab": "새 탭에서 열기",
+  "search.openBrowser": "브라우저에서 열기",
+  "search.keyMove": "이동",
+  "search.keyOpen": "열기",
+  "search.keyClose": "닫기",
 
 
   "home.title": "홈",

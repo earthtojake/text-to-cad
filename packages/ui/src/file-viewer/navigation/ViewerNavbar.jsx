@@ -1,7 +1,7 @@
-import { ArrowLeft, ArrowRight, Ellipsis } from "lucide-react";
+import { ArrowLeft, ArrowRight, Ellipsis, Folder } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { useI18n } from "@cad/ui/i18n";
@@ -16,6 +16,7 @@ import { AppMenu } from "./AppMenu.jsx";
 import { OpenInMark } from "./appMarks.jsx";
 import { openInMenu } from "./entry-menu.js";
 import { useControlUsage } from "../../usage/controls.js";
+import { prefersCoarsePointer } from "../../lib/coarsePointer.js";
 
 // The file menu's items as telemetry names them (`usage/controls.js`): an app chosen in Open in is
 // `file_open_app`, never which app; Open in's Browser is counted by none.
@@ -33,11 +34,12 @@ const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", "cop
  * where the host has a home, then the person's settings, feedback and links); Back and Forward,
  * where the host keeps the view's own history (`history`), on a desktop's row alone (a phone's has
  * no room for them); where the document is in a project, the project's name and a slash, muted, which goes to the
- * home at that project (`project`: Figma's location before a file's name); the open document's name; and the ⋯ menu
- * of what can be done with the document: Copy path, Open in (Browser, the file manager), the host's own items (the
- * viewer's Export) and, for a document in no project, Import its folder as a project — a model's Copy path and file
- * manager acting on its script. The menu and its submenus are shadcn's own width. Moving between a project's
- * documents is the Project list's, beside the model (`file-viewer/projectPanel.js`): the row has no menu for it.
+ * home at that project (`project`: Figma's location before a file's name; a folder tile in a narrow row and on a
+ * phone); the open document's name; and the ⋯ menu of what can be done with the document: Copy path, Open in new tab,
+ * Open in (Browser, the file manager), the host's own items (the viewer's Export), then Previous and Next in project
+ * or, for a document in no project, Import its folder as a project — a model's Copy path and file manager acting on
+ * its script. The menu and its submenus are shadcn's own width. Moving to any other document is the search's (⌘K,
+ * the app menu's Search documents: `search/DocumentSearch.tsx`).
  *
  * The view's panel toggle (`panels.left`, which the view's frame says: `../panelToggles.js`), the row's first control,
  * before the logo, over a file that has a panel (never over the home); the strip's 28px tile, the same neutral button
@@ -129,16 +131,20 @@ function useOpenInApps(open, apps) {
 }
 
 /**
- * The ⋯ after the file's name: what can be done with the document. Copy path (where its source is,
- * or was); Copy link (its page, with a fresh link: every document, its source there or not); Open in, a submenu of the places it opens in (`openInMenu`: the document's page in the
- * browser, the CAD app's, and the desktop's file manager by its name; then, once the host answers,
- * the source's apps, each export's apps and Default app, a separator between groups); then the
- * host's own items (`items`: the viewer's Export submenu); last, for a document in no project, Import its folder as a
- * project (`onImportFolder`: the desktop's chooser, starting at its folder, so the person picks the level). Each only
- * where the host can do it, and no ⋯ where it can do none. While the source was moved or deleted, what opens it is drawn
- * disabled with the reason: Open in itself where nothing in it can open, else each such entry.
+ * The ⋯ after the file's name: what can be done with the document, from the document itself outwards. Copy path (where
+ * its source is, or was); Copy link (its page, with a fresh link: every document, its source there or not); then where
+ * it opens: Open in new tab (`beside`: its page beside this view, "Open in browser" from an app's frame; none where it
+ * would be Open in's Browser again), then Open in, a submenu of the places it opens in (`openInMenu`: the document's
+ * page in the browser, the CAD app's, and the desktop's file manager by its name; then, once the host answers, the
+ * source's apps, each export's apps and Default app, a separator between groups); then what is made from it, the host's
+ * own items (`items`: the viewer's Export submenu); last, after a separator, the project: for a document in one of more
+ * than one document, Previous in project and Next in project (`neighbours`, each disabled at its end, their keys `[` and
+ * `]` at the right), and for a document in none, Import its folder as a project (`onImportFolder`: the desktop's
+ * chooser, starting at its folder, so the person picks the level). Each only where the host can do it, and no ⋯ where
+ * it can do none. While the source was moved or deleted, what opens it is drawn disabled with the reason: Open in
+ * itself where nothing in it can open, else each such entry.
  */
-function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, onAction, items: hostItems = null, onImportFolder = null }) {
+function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, onAction, items: hostItems = null, onImportFolder = null, beside = null, neighbours = null }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const [open, setOpen] = useState(false);
@@ -147,7 +153,9 @@ function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, 
   // A link to the page needs no source: always there where the host can make one.
   const copyLink = capabilities.has("copy-link");
   const openIn = openInMenu(platform, capabilities, t, { sourceMissing, files });
-  if (!copy && !copyLink && !openIn.length && !hostItems && !onImportFolder) return null;
+  if (!copy && !copyLink && !openIn.length && !hostItems && !onImportFolder && !beside && !neighbours) return null;
+  // A touch screen has no keys to hint at.
+  const keys = !prefersCoarsePointer();
   const perform = (action, app) => { if (FILE_ACTION_CONTROLS[action]) usage.used(FILE_ACTION_CONTROLS[action]); onAction(action, app); };
   const openable = openIn.some(item => item.enabled);
   const label = t("file.openIn");
@@ -160,6 +168,7 @@ function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, 
     <DropdownMenuContent align="start" sideOffset={6}>
       {copy ? <DropdownMenuItem onSelect={() => perform("copy-path")}>{t("file.copyPath")}</DropdownMenuItem> : null}
       {copyLink ? <DropdownMenuItem onSelect={() => perform("copy-link")}>{t("file.copyLink")}</DropdownMenuItem> : null}
+      {beside ? <DropdownMenuItem onSelect={beside.onSelect} data-open-beside="">{beside.label}</DropdownMenuItem> : null}
       {openIn.length ? <DropdownMenuSub>
         {openable ? trigger : <WhyDisabled reason={openIn.find(item => item.reason)?.reason}>{trigger}</WhyDisabled>}
         <DropdownMenuSubContent aria-label={label}>
@@ -175,8 +184,15 @@ function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, 
         </DropdownMenuSubContent>
       </DropdownMenuSub> : null}
       {hostItems}
+      {neighbours ? <>
+        {copy || copyLink || beside || openIn.length || hostItems ? <DropdownMenuSeparator /> : null}
+        <DropdownMenuItem data-project-previous="" disabled={!neighbours.previous} onSelect={() => neighbours.previous?.()}>
+          {t("project.previous")}{keys ? <DropdownMenuShortcut>[</DropdownMenuShortcut> : null}</DropdownMenuItem>
+        <DropdownMenuItem data-project-next="" disabled={!neighbours.next} onSelect={() => neighbours.next?.()}>
+          {t("project.next")}{keys ? <DropdownMenuShortcut>]</DropdownMenuShortcut> : null}</DropdownMenuItem>
+      </> : null}
       {onImportFolder ? <>
-        {copy || copyLink || openIn.length || hostItems ? <DropdownMenuSeparator /> : null}
+        {copy || copyLink || beside || openIn.length || hostItems ? <DropdownMenuSeparator /> : null}
         <DropdownMenuItem data-import-folder="" disabled={sourceMissing} onSelect={() => { usage.used("file_import_folder"); onImportFolder(); }}>
           {t("project.importFolder")}</DropdownMenuItem>
       </> : null}
@@ -194,19 +210,69 @@ function FileName({ path, name: given, after = false }) {
   return <span className={cn("flex min-w-0 items-center gap-1", after && "max-w-[65%] shrink-0", "px-[calc(var(--cad-pad)-4px)]")} data-file-name=""><span className="truncate">{name}</span></span>;
 }
 
+/** The least room the project's name keeps as text: under it (and on a phone) it is the folder tile instead. */
+const CRUMB_LEAST_PX = 80;
+
+/**
+ * Whether the project's name is the folder tile: always on a phone, and on a desktop's row while the room it has (its
+ * own width and whatever the row has left over) is under `CRUMB_LEAST_PX`, or under its whole name where that is
+ * shorter. The room is the same drawn either way, so the choice holds still; measured as the row or the name changes.
+ */
+function useCrumbTile(wrapper, measurer, mobile, name) {
+  const [tile, setTile] = useState(false);
+  useLayoutEffect(() => {
+    const element = wrapper.current, nav = element?.closest("nav");
+    if (mobile || !element || !nav) return undefined;
+    const measure = () => {
+      const control = element.firstElementChild?.getBoundingClientRect().width ?? 0;
+      // What the row has left after its last control (less than nothing where they overflow it).
+      const left = nav.getBoundingClientRect().right - (nav.lastElementChild?.getBoundingClientRect().right ?? 0);
+      const room = control + left;
+      const whole = measurer.current?.getBoundingClientRect().width ?? 0;
+      setTile(room < Math.min(whole, CRUMB_LEAST_PX));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(nav);
+    const named = nav.querySelector("[data-file-name]");
+    if (named) observer.observe(named);
+    return () => observer.disconnect();
+  }, [wrapper, measurer, mobile, name]);
+  return mobile || tile;
+}
+
 /**
  * The project a document is in, before its name (`project / document`): the project's name, muted, which goes to the
- * home at that project, then a slash. Where the row is narrow it gives way first: the name keeps its width.
+ * home at that project, then a slash. Where the host gives the project's page an address (`href`) it is a real link: a
+ * plain click is `onOpen` (in this view), and ⌘ or Ctrl and a click, a middle click or the link's own menu open the
+ * page in a new tab, the browser's own. In a narrow row it truncates down to `CRUMB_LEAST_PX`, and under that, and on a
+ * phone, it is a control-sized folder tile named by the project (its name in a hint), so the way to the project is
+ * never lost; the document's name keeps its width either way.
  */
 function ProjectCrumb({ project }) {
-  const { t } = useI18n();
   const usage = useControlUsage();
-  return <span className="flex min-w-0 shrink items-center" data-navbar-project="">
-    <button type="button" aria-label={t("project.showAria", { name: project.name })} onClick={() => { usage.used("project_crumb"); project.onOpen(); }}
-      className={cn(NAV_ITEM_CLASS, "min-w-0 shrink text-muted-foreground", "px-[calc(var(--cad-pad)-4px)]")}>
-      <span className="truncate">{project.name}</span>
-    </button>
+  const mobile = useViewerMobile();
+  const wrapper = useRef(null), measurer = useRef(null);
+  const tile = useCrumbTile(wrapper, measurer, mobile, project.name);
+  const onClick = event => {
+    if (project.href && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) return;
+    event.preventDefault();
+    usage.used("project_crumb");
+    project.onOpen();
+  };
+  const Element = project.href ? "a" : "button";
+  const own = project.href ? { href: project.href } : { type: "button" };
+  const control = tile
+    ? <TooltipHint content={project.name}><Element {...own} aria-label={project.name} onClick={onClick} data-project-tile=""
+      className={cn(NAV_ITEM_CLASS, "w-control justify-center text-muted-foreground")}><Folder className="size-4" aria-hidden="true" /></Element></TooltipHint>
+    : <Element {...own} onClick={onClick} className={cn(NAV_ITEM_CLASS, "min-w-0 shrink text-muted-foreground", "px-[calc(var(--cad-pad)-4px)]")}>
+      <span className="truncate">{project.name}</span></Element>;
+  return <span ref={wrapper} className={cn("relative flex min-w-0 items-center", tile ? "shrink-0" : "shrink")} data-navbar-project="">
+    {control}
     <span className="shrink-0 text-muted-foreground" aria-hidden="true">/</span>
+    {/* The whole name as the text would draw it, out of sight: what the tile weighs the room against (a desktop's). */}
+    {mobile ? null : <span ref={measurer} aria-hidden="true" className="pointer-events-none invisible absolute top-0 left-0 whitespace-nowrap px-[calc(var(--cad-pad)-4px)]">{project.name}</span>}
   </span>;
 }
 
@@ -279,19 +345,21 @@ function PanelToggleButton({ toggle }) {
 /**
  * @param {object} props
  * @param {(() => void) | undefined} [props.onHome] The host's home, where it has one: the menu's Back to home.
- * @param {{ links?: import("../../host/types.js").ViewerLinks, appSettings?: readonly import("../types.js").AppSetting[], colorScheme?: import("../types.js").ColorSchemeSetting, platform?: string } | null} [props.menu]
- *   The rest of the app's menu: the host's links and the person's settings.
+ * @param {{ links?: import("../../host/types.js").ViewerLinks, appSettings?: readonly import("../types.js").AppSetting[], colorScheme?: import("../types.js").ColorSchemeSetting, platform?: string,
+ *   onSearch?: (() => void) | null } | null} [props.menu]
+ *   The rest of the app's menu: the host's links, the person's settings and, where the host has it, Search documents.
  * @param {import("../types.js").ViewerHistory | null} [props.history] The view's own history, where the host keeps one: Back and Forward after the logo.
  * @param {string | null} [props.file] The open file, by its absolute path (a document with no file of its own: its id).
  * @param {string} [props.name] The document's name where its path does not give it (a model's).
- * @param {{ name: string, onOpen(): void } | null} [props.project] The project the document is in: its name before the
- *   document's, which goes to the home at that project.
+ * @param {{ name: string, href?: string | null, onOpen(): void } | null} [props.project] The project the document is in: its
+ *   name before the document's, which goes to the home at that project (a link where `href` gives its page's address).
  * @param {{ platform: import("./entry-menu.js").Platform, capabilities: ReadonlySet<import("./entry-menu.js").EntryAction>, sourceMissing?: boolean,
  *   apps?: (options: { signal: AbortSignal }) => Promise<import("./entry-menu.js").OpenInFiles | null>,
  *   onAction(action: import("./entry-menu.js").EntryAction | "app", app?: { target: string, app: string }): void, items?: import("react").ReactNode,
- *   onImportFolder?: (() => void) | null } | null} [props.fileMenu]
+ *   onImportFolder?: (() => void) | null, beside?: { label: string, onSelect(): void } | null,
+ *   neighbours?: { previous: (() => void) | null, next: (() => void) | null } | null } | null} [props.fileMenu]
  *   The ⋯ after the name: what the host can do with the document on screen, its own items (Export), and for a document
- *   in no project, Import its folder as a project.
+ *   in a project, Previous and Next in project; in none, Import its folder as a project.
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
  * @param {{ left(element: HTMLElement | null): void, right(element: HTMLElement | null): void } | null} [props.homeSlots]

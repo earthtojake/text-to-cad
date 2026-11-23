@@ -16,14 +16,11 @@ function Hits({ items }: { items: string[] }) {
   return <ul data-query={query}>{found.map(item => <li key={item}>{item}</li>)}</ul>;
 }
 // The panel with its tab held as a view holds it.
-function Panel({ tabs, first, focusSearch = 0, onTab = () => {}, lead = null, sections = null }: { tabs: any[] | null, first: string, focusSearch?: number,
-  onTab?: (id: string) => void, lead?: any, sections?: any }) {
+function Panel({ tabs, first, focusSearch = 0, onTab = () => {} }: { tabs: any[], first: string, focusSearch?: number, onTab?: (id: string) => void }) {
   const [tab, setTab] = useState(first);
-  return <FlatPanel mode="docked" open onClose={() => {}} label="Panel" searchLabel="Search the board" tabs={tabs} sections={sections} lead={lead} tab={tab}
+  return <FlatPanel mode="docked" open onClose={() => {}} label="Panel" searchLabel="Search the board" tabs={tabs} tab={tab}
     onTabChange={(id: string) => { onTab(id); setTab(id); }} width={DEFAULT_PANEL_WIDTH} maxWidth={400} onWidthChange={() => {}} focusSearch={focusSearch} />;
 }
-// The host's tab a document in a project leads its view's panel with (`file-viewer/projectPanel.js`).
-const PROJECT = { id: 'project', label: 'Project', content: <p>the project's list</p>, search: false };
 const row = () => document.querySelector<HTMLElement>('[data-flat-panel-head]')!;
 const searchIcon = () => screen.queryByRole('button', { name: 'Search the board' });
 const box = () => screen.queryByRole('textbox', { name: 'Search the board' }) as HTMLInputElement | null;
@@ -241,29 +238,4 @@ it('marks a changed tab with a dot and ", changed", in the row and in â‹¯, and â
   fireEvent.pointerDown(screen.getByRole('button', { name: 'More tabs' }), { button: 0, ctrlKey: false, pointerType: 'mouse' });
   const item = within(await screen.findByRole('menu', { name: 'More tabs' })).getByRole('menuitem', { name: 'Animation, changed' });
   expect(Boolean(item.querySelector('[data-tool-changed]'))).toBe(true);
-});
-
-it("leads with the host's tab, before the tabs handed in, open where no tab was chosen, and never searched", () => {
-  render(<Panel lead={PROJECT} tabs={[{ id: 'parts', label: 'Parts', content: <Hits items={['R1', 'R2']} /> }, { id: 'nets', label: 'Nets', content: <p>Nets</p> }]} first="" />);
-  expect(tabNames()).toEqual(['Project', 'Parts', 'Nets']);
-  expect(screen.getByRole('tab', { name: 'Project' }).getAttribute('aria-selected')).toBe('true');
-  expect(screen.getByText("the project's list").closest('section')!.hidden).toBe(false);
-  // The search covers the tree-like tabs alone: from the Project tab, it searches Parts.
-  fireEvent.click(searchIcon()!);
-  fireEvent.change(box()!, { target: { value: 'r2' } });
-  expect(document.querySelector('[data-flat-panel-section="project"]')!.hasAttribute('hidden')).toBe(true);
-  expect(document.querySelector('[data-flat-panel-section="parts"] [data-query]')!.textContent).toBe('R2');
-});
-
-it("leads a view's sections with the host's tab too, drawn before them, and shows them as their tabs are chosen", async () => {
-  const ToolPanel = (await import('../tools/ToolPanel.jsx')).default;
-  render(<Panel lead={PROJECT} tabs={null} sections={<ToolPanel id="tree" title="Model"><p>the model's tree</p></ToolPanel>} first="" />);
-  expect(tabNames()).toEqual(['Project', 'Model']);
-  const body = document.querySelector('[data-flat-panel-body]')!;
-  expect([...body.querySelectorAll(':scope > [data-flat-panel-section]')].map(section => section.getAttribute('data-flat-panel-section'))).toEqual(['project', 'tree']);
-  // Every tab stays mounted; the one open is the one shown.
-  const shown = (text: string) => !screen.getByText(text).closest('[hidden]');
-  expect([shown("the project's list"), shown("the model's tree")]).toEqual([true, false]);
-  fireEvent.click(screen.getByRole('tab', { name: 'Model' }));
-  expect([shown("the project's list"), shown("the model's tree")]).toEqual([false, true]);
 });

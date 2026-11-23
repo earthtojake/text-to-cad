@@ -4,10 +4,11 @@ The shared React interface for text-to-cad. `FileViewer` is the complete file vi
 one file by its absolute path (`/a/b.step`, `C:/a/b.step`, `/`-separated in every
 app), or the host's home with none, under a navbar — the logo that opens the app's
 menu, the project the file is in and the file's name, the file menu — with the file's
-content, the project's list beside it, and the loading and error states ([FileViewer](docs/file-viewer.md)).
+content and the loading and error states ([FileViewer](docs/file-viewer.md)).
 `CadViewer` (`@cad/ui/cad-viewer`) is the viewer every app shows:
 FileViewer over a CAD client, with the six CAD renderers, the home (the projects and the
-documents opened before) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
+documents opened before), the search of every document (⌘K) and the standard loading and
+missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.
 
 The viewer's tools, panel, settings, tooltips and keyboard follow two binding documents, the same in
@@ -79,16 +80,18 @@ Every control's label is `FieldLabel` (muted), its value the foreground.
 
 File-tab chrome uses normal-weight type. The navbar's file name, the panel's rows, and
 filter matches use muted/primary text color for emphasis, never bold weight. The
-view's panel's lists — every one of them, the Project, the Model, the Links, the Parts, the Nets, the Hierarchy,
+view's panel's lists — every one of them, the Model, the Links, the Parts, the Nets, the Hierarchy,
 the Layers — share the STEP/xbf Model tree's base components (`primitives/tree-row.jsx`'s row, slot,
 name, detail and heading, `primitives/tree-filter.jsx`'s search highlight and count, `VirtualRows`),
 never a view's own, in the panel's 12px text, one glyph slot a row
 ([the panel's trees](docs/viewer-ux.md#trees)). Both inset
 row backgrounds 5px from their horizontal edges, including selected, hovered and
 filtered rows; nesting adds indentation inside that gutter.
-Moving between documents is the project's: a document in a project has the project's name before
-its own in the navbar, which goes to the home at it, and the project's models and files as the
-Project tab its view's panel leads with (`ProjectList.jsx`), one click from each other. A file's controls are
+Moving between documents is the navbar's, the keys' and the search's, never the panel's: a document in a project
+has the project's name before its own in the navbar, which goes to the project's page on the home (a link, where the
+host gives it an address); `[` and `]` step to the project's previous and next document (`file-viewer/projectKeys.js`);
+and ⌘K (Ctrl+K) searches every document in every project (`search/DocumentSearch.tsx`). The browser's tabs are the
+viewer's tabs: a document or a project opens in a new one from its link, Open in new tab, or ⌘Enter. A file's controls are
 the viewer's own: the tool strip at the view's top centre, the tool in hand's sub-toolbar
 under it, and the one panel docked at its left, the canvas the narrower for it while it pushes it aside (a mouse
 resting on its collapsed toggle peeks it over the view instead, a floating card pushing nothing, pinned only by the toggle).
@@ -108,8 +111,9 @@ src/
   annotation/        the drawing tool's (Draw: freehand and shapes) session, toolbar and ink geometry (its 3D ink is renderers/kit/tools/annotate)
   cad-viewer/        CadViewer (FileViewer + the six CAD renderers + the home), and a CAD client as a FileSource
   file-viewer/       FileViewer, typed source/renderer contracts, the document lifecycle hook
-    navigation/     the navbar, the app menu and its links, the project's list, the file menu
+    navigation/     the navbar, the app menu and its links, the file menu
   library/           a host's home: the projects and the documents opened before, to open again, and their pictures
+  search/            the search of every document (⌘K), over a document and the home
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
     xbf/            an engine document (.xbf) and a STEP: model tree, Params, Joints
@@ -342,13 +346,15 @@ is no Materials editor or persisted material override. See [View styles](docs/re
 
 The navbar leads, over a file with a panel, with the panel's toggle, then the logo (the C mark, over the
 home and over a document alike), which opens the app's menu: Back to home where the host
-has a home, the person's settings (Language, Telemetry, Theme), Send feedback
+has a home, Search documents (⌘K) where it has a library, the person's settings (Language, Telemetry, Theme), Send feedback
 (a new issue titled "Feedback: " where the host has a tracker), GitHub, Discord and, in
 gray, the version and who made it. Where the host keeps the view's own history (the CAD
 app's views), Back and Forward follow on a desktop (a phone has no room for them), disabled where they have nowhere to go. It names the
-file (no glyph) — the name opens Models and Files — and offers its ⋯ menu (Copy path; Open in,
+project the file is in (a folder tile on a phone) and the file (no glyph), and offers its ⋯ menu (Copy path; Open in new
+tab where the host can open a page beside; Open in,
 a submenu of Browser where the host has one and Finder, File Explorer or File manager; then
-Export, a submenu of the formats; a model's Copy path and file manager act on its script). They share one look: transparent until the
+Export, a submenu of the formats; then Previous and Next in project, `[` and `]`, or for a document in no project
+Import its folder as a project; a model's Copy path and file manager act on its script). They share one look: transparent until the
 pointer is on them or their menu is open, with no tooltip. At the right is only what a host
 or a file adds: a dismissed alert's icon, the host's actions (the
 CAD app's Full size), after the view's own, which it portals into the navbar's view slot (Display, then a 3D view's

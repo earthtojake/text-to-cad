@@ -83,13 +83,15 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'quick_edit_copy', 'quick_edit_queue', 'quick_edit_send',
   // Quick Edit's bar coming, and put away by its X: whether it is in the way.
   'quick_edit_shown', 'quick_edit_dismissed', 'board_side', 'board_dimension',
-  // The navbar, its file menu (and a standalone document's Import its folder as a project), the project's name
-  // before the document's, the Project list beside it (a document opened from it), and the app menu. The name
+  // The navbar, its file menu (Open in new tab, a standalone document's Import its folder as a project, Previous and
+  // Next in project, which [ and ] count too), the project's name before the document's, and the app menu. The name
   // menu's Models and Files (the explorer), gone since projects replaced them (`models` ... `explorer_filter`): no
-  // view sends them now, but older releases do.
+  // view sends them now, but older releases do. Then the search of every document: opened, a document picked from
+  // it, and one opened beside the view.
   'navbar_back', 'navbar_forward', 'models', 'models_open', 'models_filter',
   'explorer', 'explorer_filter', 'file_copy_path', 'file_copy_link', 'file_reveal', 'file_open_app', 'home',
-  'file_import_folder', 'project_crumb', 'project_open',
+  'file_import_folder', 'file_open_beside', 'project_crumb', 'project_previous', 'project_next',
+  'search_open', 'search_pick', 'search_new_tab',
   'theme_system', 'theme_light', 'theme_dark', 'language', 'feedback',
   // Export, by format.
   'export_step', 'export_stl', 'export_threemf', 'export_glb', 'export_dxf', 'export_xbf', 'export_original',

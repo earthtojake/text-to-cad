@@ -30,22 +30,22 @@ export interface FileMetadata extends FileEntry {
   mediaType?: string;
   revision?: string;
 }
-/** A document of a project, as its Project list shows it (`@cad/ui/library`'s rows). */
+/** A document of a project, as the project lists it (`@cad/ui/library`'s rows): what `[` and `]` move through. */
 export interface ProjectDocument {
   /** A file's absolute path, a model's id: what `navigation.openFile` opens. */
   path: string;
   name: string;
   /** `model` or `shape` for a document built from code; a file otherwise. */
   kind?: string;
-  /** A file's folder (a model's script's), `/`-separated: the list groups files by it. */
+  /** A file's folder (a model's script's), `/`-separated. */
   folder?: string;
   missing?: boolean;
 }
 /**
  * The project the document on screen is in (`FileViewerProps.project`): its name before the document's in the navbar,
- * which goes to the host's home at it (`onShow`), and its documents, the Project tab the view's panel leads with --
- * null while they are read, with `truncated` where the host's walk of its folder stopped early, `missing` where its
- * folder is gone, `error` where they could not be read.
+ * which goes to the host's home at it (`onShow`), and its documents, in its order, the previous and next of which `[`
+ * and `]` and the file menu show (`projectKeys.js`) -- null while they are read, with `truncated` where the host's walk
+ * of its folder stopped early, `missing` where its folder is gone, `error` where they could not be read.
  */
 export interface FileProject {
   id: string;
@@ -245,9 +245,14 @@ export interface FileViewerProps {
   history?: ViewerHistory;
   /**
    * The project the document on screen is in, where it is in one: its name before the document's in the navbar, and
-   * its documents in the Project tab the view's panel leads with, each opened through `navigation.openFile`.
+   * its documents, the previous and next of which `[` and `]` and the file menu open through `navigation.openFile`.
    */
   project?: FileProject | null;
+  /**
+   * The search of every document, where the host has one (`@cad/ui`'s `search/DocumentSearch.tsx`, which `CadViewer`
+   * mounts): ⌘K (Ctrl+K) anywhere outside Preview, and the app menu's Search documents.
+   */
+  onSearch?: (() => void) | null;
   /**
    * Import its folder as a project, from the ⋯ of a document in no project, where the host can (`project` none): the
    * host's chooser, starting at the document's folder.

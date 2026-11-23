@@ -316,3 +316,28 @@ test("a document in no project offers to import its folder as a project, the cho
   await act(async () => client.publish([{ id, file: id, sourcePath: null, script: '/models/gear/src/gear.py', project: { id: 'p2', name: 'gear', root: '/models/gear' } }]));
   expect(props().project?.name).toBe('gear');
 });
+
+test("mounts the search of every document once, over a document and the home, with the document on screen and its project; a host with no library has none", async () => {
+  const base = cadClient();
+  const client = Object.assign(base, { project: vi.fn(async () => ({ id: 'p1', name: 'parts', root: '/models/parts', documents: [] })),
+    entryOf: (path: string) => (base.getSnapshot() as unknown as { entries: Record<string, unknown>[] }).entries.find(entry => entry.file === path) ?? null });
+  const view = (file: string, extra: object = {}) => <CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())}
+    live={createLiveRegistry()} file={file} library={library} onShow={() => {}} {...extra} />;
+  const { rerender } = render(view('/models/parts/a.step'));
+  await act(async () => client.publish([{ id: 'f1', file: '/models/parts/a.step', project: { id: 'p1', name: 'parts', root: '/models/parts' } }]));
+  // The overlay FileViewer draws holds it: the search, handed what is on screen and the host's navigation.
+  const search = () => [props().overlay].flat().flatMap(node => ((node as ReactElement)?.props as { children?: unknown })?.children ?? [])
+    .flat().find(node => (node as ReactElement | null)?.props && 'search' in ((node as ReactElement).props as object)) as ReactElement<any> | undefined;
+  expect(search()!.props).toMatchObject({ library, current: { id: 'f1', path: '/models/parts/a.step', project: { id: 'p1', name: 'parts' } } });
+  expect(search()!.props.navigation).toBe(props().host.navigation);
+  // ⌘K and the app menu's Search documents open it.
+  expect(search()!.props.search.open).toBe(false);
+  act(() => props().onSearch!());
+  expect(search()!.props.search.open).toBe(true);
+  // Over the home: the same search, nothing on screen.
+  rerender(view(''));
+  expect(search()!.props.current).toMatchObject({ id: null, path: null, project: null });
+  // A host with no library: no search.
+  rerender(view('/models/parts/a.step', { library: undefined }));
+  expect([props().onSearch, search()]).toEqual([null, undefined]);
+});

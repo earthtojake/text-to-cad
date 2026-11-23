@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 // (markdown, code) keeps its own content styles and is not chrome.
 const root = fileURLToPath(new URL(".", import.meta.url));
 const CHROME = ["file-viewer", "host", "primitives", "loading", "annotation", "library", "cad-viewer", "renderers/kit", "renderers/glb", "renderers/mesh", "renderers/dxf",
-  "renderers/board", "renderers/workspace"];
+  "renderers/board", "renderers/workspace", "search"];
 const sources = dir => readdirSync(dir).flatMap(name => {
   const path = join(dir, name);
   if (statSync(path).isDirectory()) return name === "__fixtures__" ? [] : sources(path);
@@ -36,7 +36,8 @@ test("viewer chrome uses the type scale and the viewer breakpoint, never window 
 // `[scrollbar-width:none]`, its clipped edge faded instead) shows no scrollbar to style.
 const NATIVE_SCROLLER = /\boverflow(?:-[xy])?-(?:auto|scroll)\b/;
 const PAGES = ["library/ModelLibrary.tsx"];
-const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "primitives/dropdown-menu.jsx", "renderers/kit/status/ViewerAlertCard.jsx"];
+const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "primitives/dropdown-menu.jsx", "renderers/kit/status/ViewerAlertCard.jsx",
+  "search/DocumentSearch.tsx"];
 
 test("every scroll region in the viewer's chrome is the ScrollArea primitive, never a native scroller", () => {
   const found = [];

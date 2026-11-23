@@ -245,34 +245,32 @@ export default {
   "language.ko": "한국어",
 
 
-  "project.tab": "プロジェクト",
-
-
-  "project.models": "モデル",
-
-
-  "project.files": "ファイル",
-
-
-  "project.loading": "読み込み中…",
-
-
-  "project.empty": "まだモデルも CAD ファイルもありません。",
-
-
-  "project.readFailed": "このプロジェクトを読み込めませんでした。",
-
-
-  "project.folderMissing": "このプロジェクトのフォルダーが見つかりません。",
-
-
-  "project.truncated": "一部のファイルだけを表示しています。このフォルダーには一度に表示できる数より多くのファイルがあります。",
-
-
-  "project.showAria": "{name} をホームで表示",
-
-
   "project.importFolder": "このフォルダーをプロジェクトとして読み込む…",
+  "project.openNewTab": "新しいタブで開く",
+  "project.openBrowser": "ブラウザで開く",
+  "project.previous": "プロジェクト内の前へ",
+  "project.next": "プロジェクト内の次へ",
+  "search.menu": "ドキュメントを検索",
+  "search.title": "ドキュメントを検索",
+  "search.label": "ドキュメントを検索",
+  "search.placeholder": "すべてのドキュメントを検索…",
+  "search.results": "ドキュメント",
+  "search.inProject": "{name} 内",
+  "search.otherProjects": "ほかのプロジェクト",
+  "search.recent": "最近",
+  "search.standalone": "単独のドキュメント",
+  "search.kindModel": "モデル",
+  "search.current": "表示中",
+  "search.reading": "ドキュメントを読み込み中…",
+  "search.failed": "ドキュメントを読み込めませんでした。",
+  "search.nothingFound": "「{query}」に一致するものはありません",
+  "search.empty": "まだドキュメントがありません。",
+  "search.more": "{total} 件中 {shown} 件を表示中：入力して絞り込めます",
+  "search.openNewTab": "新しいタブで開く",
+  "search.openBrowser": "ブラウザで開く",
+  "search.keyMove": "移動",
+  "search.keyOpen": "開く",
+  "search.keyClose": "閉じる",
 
 
   "home.title": "ホーム",

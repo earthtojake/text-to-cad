@@ -246,34 +246,32 @@ export default {
   "language.ko": "한국어",
 
 
-  "project.tab": "專案",
-
-
-  "project.models": "模型",
-
-
-  "project.files": "檔案",
-
-
-  "project.loading": "正在載入…",
-
-
-  "project.empty": "這裡還沒有模型或 CAD 檔案。",
-
-
-  "project.readFailed": "無法讀取此專案。",
-
-
-  "project.folderMissing": "此專案的資料夾已不存在。",
-
-
-  "project.truncated": "未列出全部檔案：此資料夾中的檔案超出一次可列出的數量。",
-
-
-  "project.showAria": "在首頁顯示 {name}",
-
-
   "project.importFolder": "將其資料夾匯入為專案…",
+  "project.openNewTab": "在新分頁中開啟",
+  "project.openBrowser": "在瀏覽器中開啟",
+  "project.previous": "專案中的上一個",
+  "project.next": "專案中的下一個",
+  "search.menu": "搜尋文件",
+  "search.title": "搜尋文件",
+  "search.label": "搜尋文件",
+  "search.placeholder": "搜尋所有文件…",
+  "search.results": "文件",
+  "search.inProject": "在 {name} 中",
+  "search.otherProjects": "其他專案",
+  "search.recent": "最近",
+  "search.standalone": "獨立文件",
+  "search.kindModel": "模型",
+  "search.current": "正在檢視",
+  "search.reading": "正在讀取文件…",
+  "search.failed": "無法讀取文件。",
+  "search.nothingFound": "沒有符合「{query}」的項目",
+  "search.empty": "還沒有文件。",
+  "search.more": "顯示 {total} 個中的 {shown} 個：輸入以縮小範圍",
+  "search.openNewTab": "在新分頁中開啟",
+  "search.openBrowser": "在瀏覽器中開啟",
+  "search.keyMove": "移動",
+  "search.keyOpen": "開啟",
+  "search.keyClose": "關閉",
 
 
   "home.title": "首頁",

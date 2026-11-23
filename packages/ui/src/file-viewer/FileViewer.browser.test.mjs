@@ -38,23 +38,32 @@ async function waitPayload(value) { await page.waitForFunction((expected) => doc
 // this harness's App); here, what needs a layout. Two frames on: what a change asked for has been drawn.
 const settle = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
-test("a document in a project has the project's name before its own, which gives way first in a narrow row and goes to the home at it", async () => {
+test("a document in a project has the project's name before its own: in a narrow row and on a phone a folder tile named by it, the document's name whole; a press goes to the home at it", async () => {
   await reset();
   await waitPayload("root-a notes");
   assert.equal(await pane().locator("[data-navbar-project]").count(), 0, "a document in no project has none");
-  await page.evaluate(() => window.harness.project({ id: "p1", name: "a-project-with-a-rather-long-name-indeed", root: "/work", documents: [] }));
-  const crumb = pane().locator("[data-navbar-project] button");
-  await crumb.waitFor();
-  // In a narrow pane the project's name truncates before the document's does.
-  await page.setViewportSize({ width: 420, height: 700 });
-  await page.evaluate(() => { document.querySelector('[data-testid="primary"]').parentElement.style.width = "420px"; });
-  await settle();
-  const [project, name] = await Promise.all([crumb.evaluate((button) => button.firstElementChild.scrollWidth > button.firstElementChild.clientWidth),
-    pane().locator("[data-file-name] span").evaluate((span) => span.scrollWidth <= span.clientWidth)]);
-  assert.deepEqual({ project, name }, { project: true, name: true }, "the project's name truncated, the document's whole");
-  await crumb.click();
+  const name = "a-project-with-a-rather-long-name-indeed";
+  await page.evaluate((name) => window.harness.project({ id: "p1", name, root: "/work", documents: [] }), name);
+  const crumb = pane().locator("[data-navbar-project]");
+  const text = crumb.getByRole("button", { name, exact: true });
+  await text.waitFor();
+  const whole = (locator) => locator.evaluate((element) => element.scrollWidth <= element.clientWidth);
+  assert.ok(await whole(text.locator("span")), "a wide row has it whole");
+  // A narrow row (a desktop's, its controls left little room): the folder tile, the control's size, and the document's name whole.
+  const nav = '[data-testid="primary"] [data-viewer-navbar] nav';
+  await page.evaluate((nav) => { document.querySelector(nav).style.maxWidth = "140px"; }, nav);
+  const tile = crumb.locator("[data-project-tile]");
+  await tile.waitFor();
+  assert.deepEqual(await tile.evaluate((element) => { const box = element.getBoundingClientRect(); return [element.getAttribute("aria-label"), box.width, box.height]; }), [name, 28, 28]);
+  assert.ok(await whole(pane().locator("[data-file-name] span")), "the document's name whole beside the tile");
+  await tile.click();
   assert.deepEqual(await page.evaluate(() => window.harness.events.filter((event) => event.startsWith("project:"))), ["project:p1"]);
-  await page.setViewportSize({ width: 1280, height: 720 });
+  // Room again: the name again.
+  await page.evaluate((nav) => { document.querySelector(nav).style.maxWidth = ""; }, nav);
+  await text.waitFor();
+  // A phone (the viewer under 600px): the tile at the phone's control, 36px.
+  await page.evaluate(() => { document.querySelector('[data-testid="primary"]').parentElement.style.width = "420px"; });
+  await page.waitForFunction(() => document.querySelector('[data-testid="primary"] [data-project-tile]')?.getBoundingClientRect().width === 36);
 });
 
 test("the renderer is not re-rendered by the frame's own chrome: a navbar action it published or a resize within a layout", async () => {

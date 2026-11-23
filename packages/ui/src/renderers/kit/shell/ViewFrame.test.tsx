@@ -118,28 +118,3 @@ it("the loading covers, Preview's, the update status and the alert card are in t
   }
   vi.unstubAllGlobals();
 });
-
-// A document in a project leads its view's panel with the Project tab (`file-viewer/projectPanel.js`), the host's: before
-// the view's own tabs, and as the whole panel of a view that has none of its own.
-it("leads the view's panel with the project's list where the document is in one, and is the whole panel of a view with none", async () => {
-  const { ProjectPanelContext } = await import('../../../../dist/file-viewer/projectPanel.js');
-  const project = { label: 'Project', content: <p>the project's list</p> };
-  // A wide view: the panel opens by its width, as it does for a file the person has not chosen for.
-  const wide = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 1400, bottom: 900,
-    width: 1400, height: 900, toJSON() {} } as DOMRect);
-  const frame = (panel: object | null, value: object | null) => render(<ProjectPanelContext.Provider value={value}>
-    <ViewFrame file="part.stl" mobile={false} compact={false} chromeHidden={false} failed={false} tools={[]} layout={{}} onLayoutChange={() => {}} panel={panel}>{null}</ViewFrame>
-  </ProjectPanelContext.Provider>);
-  const panelOf = (view: ReturnType<typeof render>) => view.container.querySelector('aside[data-flat-panel]');
-  // No panel of its own and no project: none.
-  expect(panelOf(frame(null, null))).toBeNull();
-  cleanup();
-  // No panel of its own, in a project: the panel is the Project tab, a lone title.
-  let view = frame(null, project);
-  expect([panelOf(view)?.querySelector('[data-flat-panel-heading]')?.textContent, view.getByText("the project's list") !== null]).toEqual(['Project', true]);
-  cleanup();
-  // A panel of its own: the Project tab first, then its tabs.
-  view = frame({ kind: 'board', label: 'Board', searchLabel: 'Search', tabs: [{ id: 'layers', label: 'Layers', content: <p>layers</p> }] }, project);
-  expect(view.getAllByRole('tab').map(tab => tab.getAttribute('data-flat-panel-tab') ?? tab.textContent)).toEqual(['project', 'layers']);
-  wide.mockRestore();
-});

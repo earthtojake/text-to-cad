@@ -24,6 +24,7 @@ import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
 import { fileViewsEqual, plainShellCamera, readFileView, readFileViewSlices, scopeShellCamera, shellPresentationKey, writeFileView } from "./fileView.js";
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
+import { useProjectKey } from "../../../file-viewer/projectKeys.js";
 import { projectionControl } from "./useStageViewport.js";
 import { DISPLAY_MODE_OPTIONS } from "../view-settings/DisplayModeOptions.js";
 import { normalizeViewFeatures } from "@cad/core/common/viewSettings.js";
@@ -563,6 +564,7 @@ export function useRendererShell({
   // The view's panel, as the frame drew it (`ViewFrame.jsx` fills it in): ⌘\\ (Ctrl+\\) shows or hides it; / opens it
   // on its search.
   const panelControl = useRef(null);
+  const projectKey = useProjectKey();
   useViewerShortcuts({
     viewerElement,
     onChord: event => {
@@ -576,8 +578,9 @@ export function useRendererShell({
     onUndo: () => !previewing && historyRef.current.undo(),
     onRedo: () => !previewing && historyRef.current.redo(),
     // A tool's letter takes it up, F frames the model (`toolShortcuts.js`), over the strip the frame
-    // has on screen (`toolKeys`, RendererShell's); never in preview.
+    // has on screen (`toolKeys`, RendererShell's); [ and ] move through the project (`projectKeys.js`); never in preview.
     onKey: event => (event.key === "/" && !event.shiftKey && !previewing && panelControl.current ? panelControl.current.search()
+      : !previewing && projectKey(event) ? true
       : !previewing && !idle && pressToolKey(event, {
       tools: toolKeysRef.current, selectDrawing: tool => annotationRef.current.selectTool(tool),
       fit: () => { controls.used("fit"); viewerRef.current?.resetZoom?.(); } })),

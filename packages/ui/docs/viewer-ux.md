@@ -15,8 +15,8 @@ around it are few, and each stands in the same place for every file.
 
 | Region | Holds | Never holds | Why |
 |---|---|---|---|
-| **Navbar**, across the top | Left: the panel toggle, the logo's app menu, Back and Forward (the CAD app), the file's name and its ⋯. Right: a put-away alert, Display, Preview, the host's actions | Tools, a switch for one file type, the camera | One bar, the same over every file and the home, so each control is where the person last found it |
-| **Panel**, at the left | The file's structure (Model, Links, Parts, Nets, Layers), then what the file declares (Params, Joints, Animation), and one search over its trees | Tools, how the picture is drawn, what is selected | It is where the file is read and where its own settings are set. One panel keeps structure and settings together and leaves the model the rest of the view |
+| **Navbar**, across the top | Left: the panel toggle, the logo's app menu, Back and Forward (the CAD app), the project's name, the file's name and its ⋯. Right: a put-away alert, Display, Preview, the host's actions | Tools, a switch for one file type, the camera, a list of documents | One bar, the same over every file and the home, so each control is where the person last found it |
+| **Panel**, at the left | The file's structure (Model, Links, Parts, Nets, Layers), then what the file declares (Params, Joints, Animation), and one search over its trees | Tools, how the picture is drawn, what is selected, other documents | It is where the file is read and where its own settings are set. One panel keeps structure and settings together and leaves the model the rest of the view |
 | **Tool strip**, top centre of the view | The file's own tools, and under it the row of the tool in hand | View controls (Display, Preview, projection, zoom), a tool the file cannot use | Tools are used most, so they stay in reach, in the same place and order in every file |
 | **The corner**, top right of the view | Camera navigation only: the cube on a 3D view, one "100%" zoom menu on a flat view | Display settings, tools, +/− buttons, a Home button | The corner is where the picture is looked at from. A setting or a tool there would mix moving the camera with changing the picture |
 | **Display card**, under the navbar at the right | How the picture is drawn: Projection, Style, Background, Show grid, and a board's Side and Mode | A camera reset, anything changed often | One place for every file type, so a person always finds it. It is changed now and then, so it waits behind a button |
@@ -37,6 +37,11 @@ These reasons decide the cases the table does not:
   board's layers, and not navbar switches, since the navbar is the same for every file.
 - **Tools go on the strip, and only tools.** Display and Preview are not tools: pressing one leaves the tool in hand.
 - **What is selected is read in Quick Edit's chips,** never in a panel pane: the panel's lists are the hierarchy.
+- **The panel is the document's own.** Moving to another document is the navbar's (the project's name), the keys' (`[`
+  and `]`, ⌘K) and the search's, never a tab beside the model. Why: a list of other documents leading the panel hid the
+  model's own tree, which is what the panel is for.
+- **The browser's tabs are the viewer's tabs.** There are no document tabs in the page: wherever a document or a project
+  is named, opening it in a new tab is laid out plainly (a real link, Open in new tab, ⌘Enter).
 - **Nothing moves under the pointer.** The strip and Quick Edit are centred on the whole view and no panel moves them. A
   peek pushes nothing. Search replaces the panel's head row. A card opens over the view and never pushes it.
 - **What belongs to the picture takes the picture's colours.** Whatever is drawn over a 2D or 3D view (the loading
@@ -67,10 +72,13 @@ chrome that floats over the picture. The home is the navbar over the library.
   draws the real frame, toggle, logo and name included. Why: nothing appears or moves as the app takes over.
 - **Left**, edge to edge: the panel toggle (over a file that has a panel); the logo, which opens the app menu; Back and
   Forward where the host keeps the view's history (the CAD app; desktop only, disabled with nowhere to go); for a
-  document in a project, the project's name and a slash, muted, which goes to the home at that project (Figma's
-  location before a file's name; in a narrow row it gives way first); the file's name (no glyph, no menu of its own);
-  its ⋯. Past the toggle they have no fill at rest, the accent fill on hover and while their menu is open, and no
-  tooltip, since each says what it is.
+  document in a project, the project's name and a slash, muted, which goes to that project's page on the home (Figma's
+  location before a file's name); the file's name (no glyph, no menu of its own); its ⋯. Past the toggle they have no
+  fill at rest, the accent fill on hover and while their menu is open, and no tooltip, since each says what it is.
+- **The project's name** is a real link where the host gives the project's page an address (the web page): a plain
+  click shows it in this view, and ⌘ or Ctrl and a click, a middle click or the link's own menu open it in a new tab. It
+  truncates as the row narrows down to 80px; under that, and always on a phone, it is a control-sized folder tile named
+  by the project (its name in a hint), so the way to the project is never lost, and the file's name keeps its width.
 - **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning), Display, Preview,
   then the host's actions (the CAD app's Full size).
 - The first glyph stands 16px in, on the page's gutter: the panel toggle's icon, on the panel's 16px line; else the
@@ -82,18 +90,39 @@ chrome that floats over the picture. The home is the navbar over the library.
   muted at rest, Display in the accent fill while its card is open, tooltips below (none on a phone). In Preview the
   navbar is hidden, and Preview's own bar stands in its place.
 - **The app menu** (the logo's), over every file and the home, also while a file loads or after it failed: Back to
-  home; Language, the host's switches (Telemetry) and Theme; Send feedback, GitHub, Discord; a muted footer with the
-  version and "Made by". Its rows come from the host; settings rows keep it open. A file's view settings are never here.
-- **The ⋯ file menu**: Copy path, Copy link, Open in ▸ (Browser, the file manager, the source's apps, each export's
-  apps, Default app), then the host's items, Export ▸, then, for a document in no project, Import its folder as a
-  project (the desktop's chooser opening at its folder, so the person picks the level), each only where the host can
-  do it. Apps are looked up as the menu opens; where the source was moved or deleted, what would open it is disabled
-  and says why.
-- **The Project tab**: a document in a project has the project's models, then its CAD files by folder, as the first
-  tab of its view's panel (the one tab of a view with none of its own), one click from each other, the one on screen
-  marked (`ProjectList.jsx`). Nothing above the project is listed, and it has no search. Why: jumping to another
-  document of the same work is the job that matters, and a list beside the model keeps it one click away, where a
-  menu under the name was found and used by few.
+  home and Search documents (⌘K at its right, where the host has a library); Language, the host's switches (Telemetry)
+  and Theme; Send feedback, GitHub, Discord; a muted footer with the version and "Made by". Its rows come from the
+  host; settings rows keep it open. A file's view settings are never here.
+- **The ⋯ file menu**, from the document itself outwards: Copy path, Copy link; where it opens: Open in new tab (from
+  an app's frame, Open in browser, left out where Open in's Browser already is it), Open in ▸ (Browser, the file
+  manager, the source's apps, each export's apps, Default app); what is made of it: the host's items, Export ▸; last,
+  after a rule, its project: Previous in project and Next in project with `[` and `]` at the right (a project of more
+  than one document; each off at its end), or, for a document in no project, Import its folder as a project (the
+  desktop's chooser opening at its folder, so the person picks the level). Each only where the host can do it. Apps
+  are looked up as the menu opens; where the source was moved or deleted, what would open it is disabled and says why.
+- **Moving between documents** replaced the Project tab that once led the panel: the project's name goes to its page
+  on the home; `[` and `]` step through the project, in the order it lists its documents, stopping at its ends; and the
+  search (⌘K) reaches every document in every project ([Search](#search)). Why: the tab pushed the model's own tree
+  aside on every document of a project, to offer what a key or the search does without taking room.
+
+#### Search
+
+- One search of every document in every project (`search/DocumentSearch.tsx`), over a document and over the home:
+  ⌘K (Ctrl+K off a Mac) from anywhere but Preview, a text field too, or the app menu's Search documents. Escape, a
+  press outside or a pick closes it, and the focus goes back where it was. It never opens over another dialog.
+- A card near the top of the page, about 560px wide, on the popups' surface, nothing dimmed behind it; on a phone a
+  sheet the width of the view under the navbar, as the panel's is. Its input has the keyboard; under it the results; on
+  a desktop a line of the keys (Move, Open, Open in new tab where the host can, Close).
+- It reads the library as it opens. With nothing typed it lists the project of the document on screen (the latest
+  documents on the home or for a standalone one); typing finds as the home's search does, every word in a name or a
+  file's path, "In <project>" first, then "Other projects", at most 50 rows and a line saying how many more there are.
+- A row: the document's picture (the kind's glyph until it loads), its name, and at its right its kind in the project
+  on screen, else its project's name, "Standalone" for one in none. The document on screen's row is marked and opens
+  nothing. While it reads, placeholder rows; a read that fails or finds nothing says so.
+- Up and Down move, Home and End go to the ends, Enter opens the row here and ⌘Enter (Ctrl+Enter) in a new tab; typing
+  always goes to the input. A click opens a row here; where the host gives a document an address the row is a real
+  link (a modified click is the browser's), and the row under the pointer or the keys shows a small Open in new tab
+  button at its right end.
 
 #### Projects
 
@@ -268,7 +297,8 @@ The bar where a person writes a note to their agent about what is on screen (`Qu
   never the window, so a narrow desktop window works as a phone. Its sizes are the phone scale
   ([Two scales](design-system.md#two-scales)); what changes in the layout is below.
 - **The page is pinned** (`fixed inset-0`) and never scrolls.
-- **The navbar** is 48px, with no Back or Forward (no room). Display and Preview stay in it, without tooltips.
+- **The navbar** is 48px, with no Back or Forward (no room), and the project's name a folder tile. Display and Preview
+  stay in it, without tooltips.
 - **The panel is a sheet** from the left, under the navbar and over the strip, the model and Quick Edit: 85% of the
   width, at most 20rem, with no scrim. It slides in over 100ms and out over 80ms, starts closed, is never kept open,
   and has no grip and no peek. Inside are the same tabs, search and rows, with row actions always shown.
@@ -282,6 +312,7 @@ The bar where a person writes a note to their agent about what is on screen (`Qu
 - **The Display card** is at least 320px wide (less on a narrower screen), and a tap outside closes it.
 - **Quick Edit** spans the view less 8px a side, above the safe area, and never takes the keyboard by itself.
 - **Menus** open and close at a finger's tap; a submenu opens in place ([Menus](design-system.md#menus)). No hint opens.
+- **The search** is a sheet the width of the view under the navbar, with no line of keys.
 - **Preview**: a tap shows its bar for 2s. What a tap, a double tap and a long press do on the picture is in
   [Selection and gestures](#selection-and-gestures).
 
@@ -659,7 +690,10 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 
 - **Single keys** need no ⌘, Ctrl or Alt, do not repeat, and never fire in a text field or in Preview: V Select,
   M Measure, F Zoom to fit, and Draw's tools, each taking Draw up with that tool: P Pen, ⇧P Highlighter, E Eraser,
-  L Line, ⇧L Arrow, R Rectangle, O Ellipse, T Text.
+  L Line, ⇧L Arrow, R Rectangle, O Ellipse, T Text; and `[` and `]`, the previous and next document of the project
+  (nothing at its ends), through the same keys of the view (`file-viewer/projectKeys.js`).
+- **⌘K** (Ctrl+K) opens the search from anywhere but Preview, a field included, and closes it again; it waits while
+  another dialog is up. Inside it, its own keys ([Search](#search)).
 - **Zoom**: + (or =) in and − out, by half again (also with ⌘ or Ctrl, which then zoom the view, not the page); ⇧1
   fit, ⇧2 the selection, ⇧0 100%. These repeat.
 - **The arrow keys** orbit the viewer that has the focus or the pointer; never in Preview, a text field or a tree row,
@@ -671,7 +705,7 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   text is selected or a field has the focus. **⌘Z, ⇧⌘Z** (Ctrl+Z, Ctrl+Y) undo and redo ink and measurements.
   **Delete** or Backspace deletes picked ink and measurements.
 - **A board**, while it has the keyboard: ⌘H (Ctrl+H) cycles Others, 3 switches 2D and 3D, ⇧F flips the board.
-- **Escape** undoes the innermost thing first: an open menu or dropdown, the Display card, the panel's
+- **Escape** undoes the innermost thing first: the search, an open menu or dropdown, the Display card, the panel's
   search or its peek; then Preview; then the view's own steps, one a press and in the same order in every view: picked
   ink, a box being drawn or a measurement under way, the tool in hand going back to Select (its effect kept), the
   measurements picked, then the selection, then (in a view that isolates) the isolation. Why: Escape leaves the tool first, as in design tools, and the
@@ -682,9 +716,10 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 - Every hint is the one `TooltipHint` ([Tooltips](design-system.md#tooltips)); below is which controls have one.
 - **Which side**: above the strip's tools and Quick Edit's buttons; below Draw's row, the effects' Resets, the zoom,
   the navbar's Display and Preview, and Preview's bar; to the right of the panel toggle.
-- **No hint** where the control says what it is: the logo, Back, Forward, the name, the ⋯, the X on a chip or a card,
-  Play/Pause, the scrubber, the Playback menu, Clip's axis, Colour, Clear, and buttons with words. Exit preview is the
-  one X with a hint. A finger never raises a hint, and the navbar's Display and Preview have none on a phone.
+- **No hint** where the control says what it is: the logo, Back, Forward, the project's name, the name, the ⋯, the X
+  on a chip or a card, Play/Pause, the scrubber, the Playback menu, Clip's axis, Colour, Clear, and buttons with words.
+  Exit preview is the one X with a hint; the project's folder tile names its project in one, and a search row's Open
+  in new tab says so in one. A finger never raises a hint, and the navbar's Display and Preview have none on a phone.
 - **The hover tip** names what a press would pick. Every picking view's frame owns one (`HoverTip.jsx`): under Select,
   after a 450ms rest, a small tip near where the pointer stopped gives the thing's name and a short kind. It goes on
   leaving, on a press or when Select is put down, and takes no pointer. The panel never shows a pick's details.
@@ -714,6 +749,9 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 - **+/− buttons and a Home button in the corner.** The zoom menu, its keys and Zoom to fit already do their work.
 - **A camera "Reset view" row in the Display card.** It reads as the card's Reset; F, a double-click and the menus fit.
 - **Search as a row above the tabs.** Tabs mean nothing while searching, and a second row pushes the list down.
+- **A Project tab leading the panel.** It hid the model's own tree on every document of a project; the project's name,
+  `[` and `]` and the search move between documents without taking the panel.
+- **Document tabs in the page.** The browser already has tabs: every document and project offers a new one instead.
 - **A loading animation.** The animated 3D mark looked dated, cost time, and said nothing the step line does not.
 - **Icons on status screens.** The words carry the state; an icon on an empty page is noise.
 - **A dimmed Quick Edit at rest.** A bar that fades at rest reads as off.

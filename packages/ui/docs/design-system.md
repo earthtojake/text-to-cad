@@ -60,7 +60,7 @@ holds.
 | --- | --- | --- | --- |
 | `text-tiny` | 11/16 | 13/18 | tooltips, key hints, small metadata (the zoom's percentage, the app menu's version, the Home's ages) |
 | `text-xs` | 12/16 | 14/20 | Quick Edit's bar and chips, sub-toolbars, the update status, every menu, list and context menu, toasts |
-| `text-ui` | 13/20 | 15/20 | the navbar and file name, dialogs, the Home, Quick Edit's note, the loading line, status screens; `text-sm` and `text-base` are aliases |
+| `text-ui` | 13/20 | 15/20 | the navbar and file name, dialogs and the search, the Home, Quick Edit's note, the loading line, status screens; `text-sm` and `text-base` are aliases |
 | `text-heading` | 15/20, 600 | 17/22, 600 | the one heading: the Home's without a navbar, its welcome title, the CAD app's notice |
 | `--cad-text-panel` | 12/16 | 14/20 | every step inside the panel and the settings cards |
 
@@ -182,7 +182,7 @@ layout, never a surface. Why: chrome reads as chrome over any canvas, light or d
 | --- | --- | --- | --- |
 | Docked chrome | `bg-sidebar` | opaque, a 1px rule on its inner edge | the navbar, the docked panel, a tab's actions row |
 | Floating chrome | `FLOATING_CHROME_SURFACE_CLASS` | the popover colour at 90%, a border, `shadow-md`, `backdrop-blur-sm` | the strip, sub-toolbars, the tool stack, Quick Edit's bar, the bar over picked ink |
-| Popups | `FLOATING_SURFACE_CLASS` | the popover colour at 95%, a border, `shadow-sm`, `backdrop-blur-md` | dropdown lists, tool menus, the app menu, the view's menu, chip lists |
+| Popups | `FLOATING_SURFACE_CLASS` | the popover colour at 95%, a border, `shadow-sm`, `backdrop-blur-md` | dropdown lists, tool menus, the app menu, the view's menu, chip lists, the search card (a card's 10px corners) |
 | Cards | `PANEL_PEEK_CARD_CLASS`, `SettingsCard` | opaque `bg-sidebar`, a border, `shadow-md`, 10px corners | the panel's peek, the Display card, Preview's Settings |
 | On the picture | the picture's scheme | the zoom: the foreground at 6% (10% under the pointer, 14% open), haloed; the update status: the background at 95% | the corner's zoom, the update status; Preview's bar has no surface |
 
@@ -197,7 +197,8 @@ The view's layers, bottom to top (`kit/shell/ViewFrame.jsx`). New chrome joins o
 2. **The panel**, docked beside the picture, or its peek over it (`z-40`).
 3. **The top layer** (`data-view-top-layer`, `z-50`): the strip, its rows, the tool stack and Quick Edit.
 4. **The Display card**, on the same z and drawn after it (`SETTINGS_CARD_LAYER_CLASS`), over the strip and corner.
-5. **Portalled popups** at the page's end: menus and lists (a card's own too), tooltips, dialogs and sheets.
+5. **Portalled popups** at the page's end: menus and lists (a card's own too), tooltips, dialogs and sheets, and the
+   search card, a dialog with nothing dimmed under it.
 
 ### Motion
 
@@ -257,6 +258,7 @@ One component for each job. A renderer brings its tools, rows, tabs and state, b
 | Loading | `LoadingStep`, over `Progress` | `loading/LoadingStep.jsx` |
 | A status screen | `EmptyState` with a `StatusAction` | `file-viewer/navigation/EmptyState.jsx` |
 | A dialog, a sheet | `Dialog` or `AlertDialog`; `Sheet` | `primitives/dialog.jsx`, `primitives/sheet.jsx` |
+| Finding and opening any document | `DocumentSearch` | `search/DocumentSearch.tsx` |
 
 - **Label and value.** A control's label is `FieldLabel`: muted, regular, the size of where it stands, truncating.
   Its value is the foreground. No control styles its own label. Why: Figma's rule; the eye finds values by colour.
@@ -325,7 +327,7 @@ popup, one keyboard and one touch rule, so a fix lands in every picker.
 
 ### Rows
 
-One primitive draws every list in the panel, the Project list among them: `TreeRowSurface` with `TreeRowGlyph` or
+One primitive draws every list in the panel: `TreeRowSurface` with `TreeRowGlyph` or
 `TreeRowToggle`, `TreeRowName`, `TreeRowDetail`, `TreeRowActions` and `TreeRowHeading`, long lists through
 `VirtualRows`. Only it sets a row's horizontal geometry: no list pads a row, draws a chevron or sets a text size.
 Why: a fix to the row lands in every list. What a row does: [Trees](viewer-ux.md#trees).
@@ -343,6 +345,12 @@ Why: a fix to the row lands in every list. What a row does: [Trees](viewer-ux.md
   name fades out under them.
 - **A heading** (`TreeRowHeading`) is a muted line the control tall, on the inset, at regular weight. **Placeholder
   rows** (`TreeRowsLoading`) stand on the rows' lines while a tab loads, in the muted colour at 20%.
+- **A search result** is no tree's row: a document is found by its picture, which a tree row has no room for. It is
+  the control + 16 tall (44px; 52 on a phone), 8px in, `rounded-md`: a 3:2 picture the control + 4 tall on the light
+  model area (the kind's glyph until it loads), 12px on its name (`text-ui`, regular), then a muted `text-xs` detail at
+  its right end. Under the pointer or the keys it takes `bg-accent`; the document on screen's is `bg-brand-subtle`;
+  its Open in new tab is a small icon button over its right end, as a tree row's actions are. Its group's heading is a
+  muted `text-tiny` line.
 - **Settings rows.** `PanelSelectRow` is a `FieldLabel` and a `ValueDropdown`, the control tall, the dropdown at least
   half the row and 6rem. `PanelSwitchRow` is an optional 16px icon, the label and the switch at the right end; the
   whole row is the switch's label. A parameter with no range is `FileSheetSettingRow`, its field in a 5.5rem column.
@@ -454,6 +462,11 @@ with one).
 - **Dialogs** are shadcn's `Dialog` and `AlertDialog` as shipped, on `text-ui`: one centred card, at most 28rem and
   1rem in from the window's sides, 24px in, `rounded-lg`, over a black overlay at 50%. A dialog has no corner X; it
   closes by its own buttons, Escape or a press outside. The viewer's are What's new and the Home's Delete.
+- **The search** (`search/DocumentSearch.tsx`) is Radix's dialog with no overlay: a card near the page's top, at most
+  35rem and 1rem in from the sides, on the popups' surface with a card's 10px corners, its input row and its keys'
+  line (on the chrome's colour) the control + 16 and + 8 tall, parted from the results by a full-width rule. On a phone
+  it is a sheet the view's width under the navbar, with no keys' line. Why: it is looked through, not at, and the page
+  under it stays in sight.
 - **Sheets** are shadcn's `Sheet`: three quarters of the window wide, at most 20rem. The phone's panel is one, 85%
   wide, with no scrim (its overlay is clear, so a press beside it closes it and reaches nothing under it), sliding with
   the peek's timings and closed by a 48px swipe towards its edge ([A phone](viewer-ux.md#a-phone)).

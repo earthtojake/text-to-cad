@@ -40,6 +40,7 @@ import { FLOATING_CHROME_SURFACE_CLASS } from '../../../../dist/lib/floatingSurf
 import { ControlUsageProvider } from '../../../../dist/usage/controls.js';
 import { PanelTogglesContext } from '../../../../dist/file-viewer/panelToggles.js';
 import { FilePanelContext } from '../../../../dist/file-viewer/filePanel.js';
+import { ProjectKeysContext } from '../../../../dist/file-viewer/projectKeys.js';
 import { PANEL_PEEK_DELAY_MS, PANEL_PEEK_EXIT_FALLBACK_MS } from '../../../../dist/renderers/kit/shell/usePanelPeek.js';
 
 // The panel's toggle, as the navbar draws it (`file-viewer/panelToggles.js`): what the frame says, as a button.
@@ -93,13 +94,16 @@ function tabSettings(initial: object = {}) {
 type Settings = ReturnType<typeof tabSettings>;
 function frame({ name = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, appearance = { colorScheme: 'light' } as object, notice = null as React.ReactNode, viewer = false, data = {} as object,
   usage = null as ((counts: { control: string; count: number; seconds: number }[]) => void) | null,
-  filePanel = null as { panel: object; change(panel: object): void } | null } = {}) {
+  filePanel = null as { panel: object; change(panel: object): void } | null,
+  projectKeys = null as { current: { previous: (() => void) | null; next: (() => void) | null } } | null } = {}) {
   const props = { source: { id: 'one' }, file: { path: `/models/${name}`, name, kind: 'file' }, document: null, notice,
     onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences }, ...data } };
   // `viewer`: inside a viewer's element, as FileViewer draws it, where the viewer's keys are its own.
   const element = () => {
     // `filePanel`: the file's panel as a file viewer keeps it (`filePanel.js`), what the panel writes there.
-    const renderer = <HarnessRenderer {...(props as any)} />;
+    // `projectKeys`: the project's previous and next, as a file viewer hands them to its view (`projectKeys.js`).
+    const own = <HarnessRenderer {...(props as any)} />;
+    const renderer = projectKeys ? <ProjectKeysContext.Provider value={projectKeys}>{own}</ProjectKeysContext.Provider> : own;
     const shell = <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}><NavbarToggles>
       {filePanel ? <FilePanelContext.Provider value={filePanel}>{renderer}</FilePanelContext.Provider> : renderer}</NavbarToggles></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
     // `usage`: the host's count of the controls a person used (`usage/controls.js`).
@@ -922,6 +926,31 @@ it("Orbit's speed comes back with the file's view", async () => {
   frame({ state: writeFileView({ playback: { orbitSpeed: 2 } }) });
   await enterPreview(user);
   expect([previewProps.current.orbit, previewProps.current.orbitSpeed]).toEqual([false, 2]);
+});
+
+it("[ and ] move to the project's previous and next document as single keys: none at an end, in a field, held, with a modifier, or in Preview", async () => {
+  const user = userEvent.setup({ skipHover: true });
+  const moved: string[] = [];
+  const keys = { current: { previous: () => { moved.push('previous'); }, next: null as (() => void) | null } };
+  frame({ viewer: true, projectKeys: keys });
+  const view = document.querySelector<HTMLElement>('[data-slot="cad-file-view"]')!;
+  // At the project's end, ] is nobody's: the key goes on.
+  expect(fireEvent.keyDown(view, { key: ']' })).toBe(true);
+  expect(fireEvent.keyDown(view, { key: '[' })).toBe(false);
+  keys.current.next = () => { moved.push('next'); };
+  fireEvent.keyDown(view, { key: ']' });
+  expect(moved).toEqual(['previous', 'next']);
+  // Held, with ⌘, Ctrl or Alt, or in a text field: none.
+  fireEvent.keyDown(view, { key: ']', repeat: true });
+  for (const modifier of [{ metaKey: true }, { ctrlKey: true }, { altKey: true }]) fireEvent.keyDown(view, { key: ']', ...modifier });
+  const field = view.appendChild(document.createElement('input'));
+  fireEvent.keyDown(field, { key: ']' });
+  field.remove();
+  expect(moved).toEqual(['previous', 'next']);
+  // In Preview: none.
+  await enterPreview(user);
+  fireEvent.keyDown(view, { key: '[' });
+  expect(moved).toEqual(['previous', 'next']);
 });
 
 it('Escape puts the tool in hand down and takes Select up, what it set kept', async () => {

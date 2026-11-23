@@ -1,11 +1,11 @@
-import { ArrowLeft, Check, Info, MessageCircle, Monitor, Moon, Sun } from "lucide-react";
+import { ArrowLeft, Check, Info, MessageCircle, Monitor, Moon, Search, Sun } from "lucide-react";
 import { Fragment, useState } from "react";
 
 import { DropdownMenu as MenuPrimitive } from "radix-ui";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuInlineSub, DropdownMenuInlineSubContent, DropdownMenuInlineSubTrigger, DropdownMenuItem,
-  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger,
-  DropdownMenuTrigger
+  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent,
+  DropdownMenuSubTrigger, DropdownMenuTrigger
 } from "@cad/ui/primitives/dropdown-menu";
 import { LOCALES, useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
@@ -17,6 +17,8 @@ import { useViewerMobile } from "../responsive.js";
 import { DiscordMark, GitHubMark } from "./brandMarks.jsx";
 import { feedbackUrl, MadeBy, useFollow } from "./NavbarLinks.jsx";
 import { useControlUsage } from "../../usage/controls.js";
+import { prefersCoarsePointer } from "../../lib/coarsePointer.js";
+import { searchShortcut } from "../../search/searchKey.js";
 
 const NONE = Object.freeze([]);
 // A setting's row: 32px, its name and its control spaced apart, the control's centre on one line.
@@ -37,7 +39,8 @@ const languageOptions = (language, t) => [
 
 /**
  * The app's menu, from the navbar's logo over every file and over the host's home: what is the
- * person's rather than a file's. First, where the host has a home, Back to home (`onHome`). Then the
+ * person's rather than a file's. First, where the host has a home, Back to home (`onHome`), and where it has the search
+ * of every document, Search documents (`onSearch`), its key (⌘K, Ctrl+K off a Mac) at its right. Then the
  * person's settings, a press keeping the menu open: Language (`language`), one row naming the language in
  * force, whose submenu offers Automatic (the language the context infers, named) and each language under
  * its own name; the host's on/off settings (`appSettings`: Telemetry), a checkbox at the right, filled while on, and
@@ -52,7 +55,7 @@ const languageOptions = (language, t) => [
  *   links?: import("../../host/types.js").ViewerLinks, appSettings?: readonly import("../types.js").AppSetting[],
  *   colorScheme?: import("../types.js").ColorSchemeSetting, platform?: string }} props
  */
-export function AppMenu({ trigger, onHome, links, appSettings = NONE, colorScheme, language, platform }) {
+export function AppMenu({ trigger, onHome, onSearch = null, links, appSettings = NONE, colorScheme, language, platform }) {
   const { t } = useI18n();
   const mobile = useViewerMobile();
   // A phone's Language row opens its choices in place; each opening of the menu starts it closed.
@@ -66,7 +69,12 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, colorSchem
     links?.discord ? { id: "discord", label: "Discord", href: links.discord, icon: DiscordMark } : null,
   ].filter(Boolean);
   const groups = [
-    onHome ? [<DropdownMenuItem key="home" onSelect={onHome} data-menu-home=""><ArrowLeft aria-hidden="true" />{t("menu.backToHome")}</DropdownMenuItem>] : [],
+    [
+      ...(onHome ? [<DropdownMenuItem key="home" onSelect={onHome} data-menu-home=""><ArrowLeft aria-hidden="true" />{t("menu.backToHome")}</DropdownMenuItem>] : []),
+      // The search of every document, its key at the right (none on a touch screen, which has no keys to hint at).
+      ...(onSearch ? [<DropdownMenuItem key="search" onSelect={onSearch} data-menu-search=""><Search aria-hidden="true" />{t("search.menu")}
+        {prefersCoarsePointer() ? null : <DropdownMenuShortcut>{searchShortcut(platform)}</DropdownMenuShortcut>}</DropdownMenuItem>] : []),
+    ],
     // The person's settings, one group of like rows — Language, the host's on/off settings, Theme: a name
     // on the left in the menu's own text and its control on the right — the language in force, a checkbox
     // filled while on, Theme's segmented System, Light and Dark. A press keeps the menu open.

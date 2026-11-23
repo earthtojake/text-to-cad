@@ -2,7 +2,7 @@
 
 `@cad/ui/file-viewer` exports the complete file view: one file by its
 absolute path, under the navbar (or alone, `chrome: "bare"`), with the project it is in (its name
-in the navbar, and its list as the Project tab of the view's panel), renderer loading, and the
+in the navbar, and `[` and `]` through its documents), renderer loading, and the
 loading and error pages.
 It imports no concrete renderer. Applications compose registrations from the
 separate `@cad/ui/renderers/*` entry points and their own
@@ -96,7 +96,8 @@ bar in its place and gives it back as it closes. Over a file, left to right:
 - the text-to-cad "C" logo (named Menu, with no chevron; the same 16px mark over the home),
   which opens the app menu
   (`navigation/AppMenu.jsx`): Back to home where the host has a home
-  (`navigation.home`), the person's settings (`appSettings`), Send feedback, GitHub,
+  (`navigation.home`), Search documents with its key where the host has the search (`onSearch`),
+  the person's settings (`appSettings`), Send feedback, GitHub,
   Discord and, in gray, the version and who made it. FileViewer builds it from
   `host.links`, `appSettings` and `environment.platform`. A host with no home has the
   logo and the menu too, without Back to home;
@@ -104,12 +105,19 @@ bar in its place and gives it back as it closes. Over a file, left to right:
   `ViewerHistory`: the CAD app's views; a browser's page has its own and hands none): two
   arrows, each there always and disabled where it has nowhere to go;
 - where the document is in a project (`project`), the project's name and a slash, muted (Figma's
-  location before a file's name): a press goes to the host's home at that project (`project.onShow`).
-  Where the row is narrow it gives way first: the file's name keeps its width, up to 65% of the row;
+  location before a file's name): a press goes to the host's home at that project (`project.onShow`). Where the
+  host gives that page an address (`project.href`) it is a real link: a plain click is `onShow`, and a modified
+  or middle click, or the link's menu, the browser's new tab. It truncates as the row narrows, down to 80px; under
+  that, and on a phone, it is a control-sized folder tile named by the project: the file's name keeps its width,
+  up to 65% of the row;
 - the open file's name, alone: no glyph, no chevron, and no menu of its own;
-- the ⋯ file menu: Copy path; Open in, a submenu of Browser (`fileActions.perform.browser`)
-  and the file manager by its name (Finder, File Explorer, File manager: `reveal`); then the
-  host's own items (`fileMenuItems`: the viewer's Export submenu); and last, for a document in no
+- the ⋯ file menu, from the document itself outwards: Copy path, Copy link; Open in new tab
+  (`navigation.openBeside`, `{ document }` the document on screen; "Open in browser" where its `kind`
+  is `browser`, and left out where Open in's Browser is there already); Open in, a submenu of Browser
+  (`fileActions.perform.browser`) and the file manager by its name (Finder, File Explorer, File
+  manager: `reveal`); then the host's own items (`fileMenuItems`: the viewer's Export submenu); and
+  last, after a rule, the project: Previous in project and Next in project, their keys `[` and `]`
+  at the right, each off at its end (a project of more than one document), or for a document in no
   project, Import its folder as a project (`onImportFolder`, where the host can: its chooser,
   starting at the document's folder, so the person picks the level). Each only where the
   host's `fileActions` can do it (Copy path and the file manager need a file on disk: a
@@ -119,7 +127,7 @@ bar in its place and gives it back as it closes. Over a file, left to right:
 
 The logo, Back and Forward, the project's name and the ⋯ are one kind of control: transparent
 at rest, the same accent background while the pointer is on it and while its menu is open, a
-pointer cursor, and no tooltip.
+pointer cursor, and no tooltip (the project's folder tile has one: its name).
 
 At the right, only what a host or a file adds: a renderer's actions; the view's own controls, Display (the plain
 cube, whose card holds how the picture is drawn, a 3D view's Projection among it) and a 3D view's or a board's Preview,
@@ -127,16 +135,17 @@ which the view portals into the navbar's view slot (`navbarSlots.js`); and last,
 (`navbarActions`: the CAD app's Full size, inline). Back and Forward are a desktop row's alone: a phone's has no room
 for them. Preview's settings and Exit preview are Preview's bar's.
 
-The project's documents are the **Project** tab the view's panel leads with (`projectPanel.js`, read by the
-view's frame: before the view's own tabs, and the one tab of a view that has none), its list
-`navigation/ProjectList.jsx`: the project's models under Models, then its CAD files under Files, the project
-folder's own first and then each folder's under its path below the project's, each a dense panel row of its glyph
-and name, the one on screen marked (`aria-current`). A press opens a document through `navigation.openFile`; Up and
-Down move between the rows. Nothing above the project is listed and the tab has no search: the panel's search
-covers the view's own trees. While the host reads the project's documents (`project.documents: null`) the tab says
-so; `truncated` (the host's walk of the folder stopped early), `missing` (its folder is gone) and `error` each say
-theirs. The tab is handed to the frame beside the renderer, never through it: a project read again redraws the list
-alone. A view that shows its file alone (no `navigation.openFile`) has none.
+The view's panel is the document's own: no project list leads it. `[` and `]` move to the previous and next of
+the project's documents (`project.documents`, in the host's order, a document gone skipped, nothing past either
+end), opened through `navigation.openFile`, the name the navbar shows kept until the host reads the document
+(`projectKeys.js`). FileViewer hands the two to its view (`ProjectKeysContext`, a ref, so a project read again
+re-renders no view), and the view's own keys reach them (`useProjectKey`, from `kit/shell/useViewerShortcuts.js`):
+single keys, never in a field, held, with a modifier or in Preview. The ⋯'s Previous and Next do the same; both are
+counted (`project_previous`, `project_next`). A view that shows its file alone (no `navigation.openFile`) has none.
+
+`onSearch`, where the host has the search of every document (`CadViewer` mounts `search/DocumentSearch.tsx`), is the
+app menu's Search documents and ⌘K (Ctrl+K off a Mac, by `environment.platform`), bound by FileViewer from anywhere on
+the page but Preview, and never over another dialog ([Search](viewer-ux.md#search)).
 
 The browser harness beside FileViewer exercises injected renderers, source and file
 changes, navigation actions, the project's name and the file menu, the mobile breakpoint,
