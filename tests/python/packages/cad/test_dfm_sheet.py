@@ -1553,6 +1553,63 @@ class ModellingMistakeTest(unittest.TestCase):
                 self.assertEqual([f.code for f in result.findings if f.severity == "warning"], ["sheet.edge_break"])
                 self.assertEqual(len(sheet.unfold(part, k_factor=0.4).faces()), 1)
 
+    def test_a_notch_that_ends_in_a_bend_with_broken_edges_unfolds_to_its_line(self) -> None:
+        # a notch from each side whose end, x = 28, is in the bend's round (from x = 27): that cut is not radial,
+        # so it crosses the bend's inside and its outside at other angles. Its edges broken, it was no cut edge
+        # (sheet.uniform_thickness), and the breaks at the bend's ends unrolled past its line: their fuse lost
+        # every break (3506.4 mm2 of 3642.2) or, as the part stood, kept a neck 0.0009 mm wide (sheet.web_width)
+        first, second = ("bend", 90, 2), ("bend", -90, 2)
+        # the Z's side unfolded is the notched bend's inside, the U's its outside
+        for name, radius, steps, low, high in (  # each notch no further up or down than the bend's axis
+                ("Z", 2, [("line", 27), second, ("line", 14), first, ("line", 27)], -2, 5),
+                ("U", 4, [("line", 27), first, ("line", 40), first, ("line", 27)], -5, 4)):
+            notch = bd.Pos(19, 0, (low + high) / 2) * bd.Box(18, 8, high - low)  # x = 10 to 28
+            part = bent(steps, 2.0, 50.0, name) - bd.Pos(0, 2, 0) * notch - bd.Pos(0, 48, 0) * notch
+            square = checked(part, k_factor=0.4)
+            skins = [f for f in part.faces() if f.geom_type == bd.GeomType.CYLINDER
+                     or (f.area > 100 and abs(f.normal_at().Y) < 0.5)]
+            edges = [e for e in part.edges() if sum(any(e.wrapped.IsSame(o.wrapped) for o in f.edges())
+                                                    for f in skins) == 1]
+            blank = 50 * (sum(step[1] for step in steps if step[0] == "line") + math.pi * (2 + 0.4 * 2))
+            for how, size in ((bd.fillet, 0.5), (bd.chamfer, 0.3)):
+                broken = how(edges, size)
+                for place, where in (("as built", bd.Location()),
+                                     ("moved", bd.Location((3.21, -7.77, 1.13))),
+                                     ("turned", bd.Location((186.9, 290.96, 211.58), (0.612, 0.637, 0.48), 81.626)),
+                                     ("turned again",
+                                      bd.Location((-105.7, -209.5, 90.56), (-0.855, 0.072, -0.269), 20.88))):
+                    with self.subTest(part=name, how=how.__name__, place=place):
+                        result = checked(broken.moved(where), k_factor=0.4)
+                        self.assertEqual([v for v in verdicts(result) if v[1] != "sheet.edge_break"], verdicts(square))
+                        found = result.measurements["parts"]["items"][0]
+                        # the notch runs to where x = 28 crosses the bend's cylinder of the side unfolded
+                        notch_length = 27 - 10 + math.asin(1 / radius) * (2 + 0.4 * 2)
+                        self.assertAlmostEqual(found["flat_area_mm2"], blank - 2 * 6 * notch_length, places=2)
+                        self.assertEqual(
+                            [round(web["width_mm"], 3) for web in result.measurements["webs"]["items"]],
+                            [round(web["width_mm"], 3) for web in square.measurements["webs"]["items"]])
+                        self.assertEqual(len(sheet.unfold(broken.moved(where), k_factor=0.4).faces()), 1)
+                        for item in result.measurements["notches"]["items"]:  # at its cut edge, not the break on it
+                            at = broken.faces()[int(item["location"].split()[-1]) - 1]
+                            self.assertEqual(at.geom_type, bd.GeomType.PLANE)
+                            self.assertGreater(max(abs(at.normal_at().X), abs(at.normal_at().Y)), 0.999)
+
+    def test_a_step_in_a_bend_is_no_break_of_the_cut_beside_it(self) -> None:
+        # a notch cut down to the bend's axis at z = -2 and on to x = 30, past the inside's round (x = 29) and
+        # short of the outside's (x = 31): the 1 mm left is off the thickness, and the wall of that step is no
+        # chamfer of the cut beside it, its edges broken or not
+        steps = [("line", 27), ("bend", -90, 2), ("line", 14), ("bend", 90, 2), ("line", 27)]
+        notch = bd.Pos(20, 0, 1.5) * bd.Box(20, 8, 7)
+        part = bent(steps, 2.0, 50.0, "step") - bd.Pos(0, 2, 0) * notch - bd.Pos(0, 48, 0) * notch
+        skins = [f for f in part.faces() if f.geom_type == bd.GeomType.CYLINDER
+                 or (f.area > 100 and abs(f.normal_at().Y) < 0.5)]
+        edges = [e for e in part.edges() if sum(any(e.wrapped.IsSame(o.wrapped) for o in f.edges())
+                                                for f in skins) == 1
+                 and not (27.5 < (e @ 0).X < 31.5 and abs(e.tangent_at(0.5).Y) > 0.999)]  # the step's left square
+        for name, shape in (("square", part), ("broken", bd.fillet(edges, 0.5))):
+            with self.subTest(edges=name):
+                self.assertIn(("error", "sheet.uniform_thickness"), verdicts(checked(shape, k_factor=0.4)))
+
     def test_an_s_jog_of_two_tangent_bends_unrolls_whole(self) -> None:
         # two bends meeting with no flat between them: a joggle, unrolled one strip after the other
         jog = bent([("line", 40), ("bend", 90, 1.5), ("bend", -90, 1.5), ("line", 40)], 1.5, 40, "jog")
