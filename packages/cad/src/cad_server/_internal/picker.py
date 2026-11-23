@@ -113,7 +113,7 @@ def _command(folder: bool = False, start: str | None = None) -> tuple[list[str],
 
 
 def available() -> bool:
-    """Whether this computer has a chooser to open: the home shows Open only where it does."""
+    """Whether this computer has a chooser to open: the home shows Import only where it does."""
     try:
         _command()
     except PickerFailed:
@@ -122,7 +122,7 @@ def available() -> bool:
 
 
 class FilePicker:
-    """One chooser at a time; a second Open while one is up says so."""
+    """One chooser at a time; a second Import while one is up says so."""
 
     def __init__(self) -> None:
         self._busy = threading.Lock()

@@ -119,7 +119,24 @@ class ProjectsTest(unittest.TestCase):
         ticks = iter([0.0, 0.0, 5.0, 5.0, 5.0, 5.0])
         self.assertEqual(walk(str(self.work), seconds=1.0, clock=lambda: next(ticks)),
                          ([slashed(self.work / "heart_tag.stl")], True))
-        # A link back into a folder is walked once.
+
+    def test_one_folder_of_many_entries_is_read_against_the_clock(self) -> None:
+        for index in range(8):
+            (self.work / f"note_{index}.txt").write_bytes(b"")
+        ticks = iter([0.0, 0.0, 5.0])  # the walk's start, the folder's, then late as the folder is read
+        with mock.patch.object(projects_module, "WALK_CLOCK_ENTRIES", 2):
+            found, truncated = walk(str(self.work), seconds=1.0, clock=lambda: next(ticks))
+        self.assertTrue(truncated, "a folder too large to read in time ends the walk, which says so")
+        self.assertLessEqual(set(found), {slashed(self.work / "heart_tag.stl")})
+
+    def test_folders_are_in_order_a_name_at_a_time(self) -> None:
+        for name in ("a b/x.stl", "a/b/y.stl", "a-1/z.stl"):
+            (self.tmp / "order" / name).parent.mkdir(parents=True)
+            (self.tmp / "order" / name).write_bytes(STL)
+        self.assertEqual(walk(str(self.tmp / "order"))[0],
+                         [slashed(self.tmp / "order" / name) for name in ("a/b/y.stl", "a b/x.stl", "a-1/z.stl")])
+
+    def test_a_link_back_into_a_folder_is_walked_once(self) -> None:
         try:
             os.symlink(self.work, self.work / "lib" / "again", target_is_directory=True)
         except (OSError, NotImplementedError):
@@ -148,6 +165,20 @@ class ProjectsTest(unittest.TestCase):
         # The project inside it has its own.
         self.assertEqual([row["name"] for row in self.projects.documents(inner, store.entries())["documents"]], ["part.stl"])
 
+    def test_a_file_a_page_opened_is_listed_whatever_the_walk_found(self) -> None:
+        store = RecentStore(self.state)
+        record, _ = self.projects.add(str(self.work))
+        gone = self.work / "gone.stl"
+        gone.write_bytes(STL)
+        for path in (self.work / "build" / "z.stl", self.work / ".git" / "x.step", gone, self.work / "heart_tag.stl"):
+            store.opened(str(path))
+        gone.unlink()
+        rows = self.projects.documents(record, store.entries())["documents"]
+        self.assertEqual([row["name"] for row in rows], ["heart_tag.stl", "part.stl", "heart_tag.step", "gift.step",
+                                                         "x.step", "z.stl", "gone.stl"], "the walk's, then the opened ones by path")
+        self.assertEqual([row["name"] for row in rows if row["missing"]], ["gone.stl"])
+        self.assertNotIn("y.stl", [row["name"] for row in rows], "a build folder's file no page opened is not listed")
+
     def test_a_walk_is_kept_a_moment_then_walked_again(self) -> None:
         record, _ = self.projects.add(str(self.work))
         first = self.projects.documents(record, [])
@@ -155,6 +186,34 @@ class ProjectsTest(unittest.TestCase):
         self.assertEqual(self.projects.documents(record, [])["documents"], first["documents"])
         with mock.patch.object(projects_module, "WALK_KEPT_SECONDS", 0.0):
             self.assertIn("new.stl", [row["name"] for row in self.projects.documents(record, [])["documents"]])
+
+    def test_readers_at_once_cost_one_walk(self) -> None:
+        record, _ = self.projects.add(str(self.work))
+        entered, release, walks = threading.Event(), threading.Event(), []
+
+        def slow(root, **options):
+            walks.append(root)
+            entered.set()
+            release.wait(10)
+            return walk(root, **options)
+
+        with mock.patch.object(projects_module, "walk", slow):
+            readers = [threading.Thread(target=self.projects.documents, args=(record, [])) for _ in range(4)]
+            for reader in readers:
+                reader.start()
+            self.assertTrue(entered.wait(10))
+            release.set()
+            for reader in readers:
+                reader.join(10)
+        self.assertEqual(len(walks), 1, "the readers that arrived while it was walked took its answer")
+
+    def test_a_record_from_before_created_was_kept_stays_without_it(self) -> None:
+        store = RecentStore(self.state)
+        path = self.work / "heart_tag.stl"
+        store.registry.put({"id": file_id(path), "kind": "file", "root": str(path.parent), "home": path.name,
+                            "namespace": str(path.parent), "name": path.name, "opened": 1_000_000_000.0})
+        store.opened(str(path))
+        self.assertNotIn("created", store.registry.get(file_id(path)))
 
 
 class ProjectRoutesTest(unittest.TestCase):
@@ -169,7 +228,8 @@ class ProjectRoutesTest(unittest.TestCase):
         state = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.tmp / "state"), "CAD_CACHE_DIR": str(self.tmp / "cache")})
         state.start()
         self.addCleanup(state.stop)
-        server = handler_module.serve(create_cad_app(host="127.0.0.1", port=0), "127.0.0.1", 0)
+        self.app = create_cad_app(host="127.0.0.1", port=0)
+        server = handler_module.serve(self.app, "127.0.0.1", 0)
         self.port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -200,6 +260,9 @@ class ProjectRoutesTest(unittest.TestCase):
         self.assertEqual((status, project["id"], [row["path"] for row in project["documents"]]),
                          (200, ident, [slashed(self.work / "STL" / "tag.stl")]))
         self.assertEqual(self.request("GET", f"/api/v1/projects/{ident}")[1], project)
+        # A file listed is known by its id, opened by a page or not.
+        [row] = project["documents"]
+        self.assertEqual(self.request("GET", f"/api/v1/documents/{row['id']}")[1]["entry"]["project"]["id"], ident)
         self.assertEqual(self.request("DELETE", f"/api/v1/projects/{ident}"), (200, {"projects": []}))
         self.assertEqual(self.request("DELETE", f"/api/v1/projects/{ident}")[0], 404)
         self.assertEqual(self.request("GET", f"/api/v1/projects/{ident}")[0], 404)
@@ -230,6 +293,15 @@ class ProjectRoutesTest(unittest.TestCase):
         self.assertEqual((status, envelope["entry"]["project"]), (200, {"id": ident, "name": "work", "root": slashed(self.work)}))
         before = envelope["revision"]
         self.assertIsNone(self.request("GET", f"/api/v1/documents/{file_id(self.loose)}")[1]["entry"]["project"])
+        # A link to it is the file it names: in its project, however the page spelled its path.
+        link = self.tmp / "link.stl"
+        try:
+            os.symlink(self.work / "STL" / "tag.stl", link)
+        except (OSError, NotImplementedError):
+            link = None
+        if link is not None:
+            status, linked = self.request("GET", f"/api/v1/documents?path={slashed(link)}")
+            self.assertEqual((status, [row["entry"]["project"]["id"] for row in linked["documents"]]), (200, [ident]))
         # Removed, it is standalone again, and its row's digest says so.
         self.request("DELETE", f"/api/v1/projects/{ident}")
         status, envelope = self.request("GET", f"/api/v1/documents/{file_id(self.work / 'STL' / 'tag.stl')}")
@@ -249,9 +321,10 @@ class ProjectRoutesTest(unittest.TestCase):
         # Opened, it is in Recents, made then, its picture kept.
         [opened] = self.request("PATCH", "/api/v1/documents", {"action": "open", "path": str(tag)})[1]["documents"]
         self.assertEqual((opened["created"], opened["thumbnail"]), (opened["opened"], row["thumbnail"]))
-        # A file that is no CAD file there gets no record.
-        self.request("PATCH", "/api/v1/documents", {"action": "thumbnail", "path": str(self.tmp / "gone.stl"),
-                                                    "png": base64.b64encode(PNG).decode("ascii")})
+        # A file that is no CAD file there gets no record, nor does one in no project that no page opened.
+        for path in (self.work / "gone.stl", self.loose):
+            self.request("PATCH", "/api/v1/documents", {"action": "thumbnail", "path": str(path),
+                                                        "png": base64.b64encode(PNG).decode("ascii")})
         self.assertEqual([record["name"] for record in Registry(self.tmp / "state").list()], ["tag.stl"])
 
     def test_projects_are_listed_latest_activity_first(self) -> None:
@@ -260,10 +333,10 @@ class ProjectRoutesTest(unittest.TestCase):
         (other / "a.stl").write_bytes(STL)
         os.utime(other / "a.stl", (1_000_000_000, 1_000_000_000))
         os.utime(self.work / "STL" / "tag.stl", (1_000_000_000, 1_000_000_000))
-        with mock.patch.object(projects_module.time, "time", return_value=1_100_000_000.0):
-            self.request("POST", "/api/v1/projects", {"path": str(self.work)})
-        with mock.patch.object(projects_module.time, "time", return_value=1_200_000_000.0):
-            self.request("POST", "/api/v1/projects", {"path": str(other)})
+        self.app.projects.clock = lambda: 1_100_000_000.0
+        self.request("POST", "/api/v1/projects", {"path": str(self.work)})
+        self.app.projects.clock = lambda: 1_200_000_000.0
+        self.request("POST", "/api/v1/projects", {"path": str(other)})
         self.assertEqual([project["name"] for project in self.request("GET", "/api/v1/projects")[1]["projects"]], ["other", "work"])
         os.utime(self.work / "STL" / "tag.stl")  # written now
         with mock.patch.object(projects_module, "WALK_KEPT_SECONDS", 0.0):

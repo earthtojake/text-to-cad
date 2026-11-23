@@ -436,8 +436,10 @@ class CadApp:
         if entry is not None and "id" not in entry:
             entry["id"] = file_id(entry["file"])
         if entry is not None:
-            # The project it is in (``projects.py``): a file's by its path, a model's by its script.
-            found = self.projects.of(entry["file"] if model is None else (model.get("source") or {}).get("script"))
+            # The project it is in (``projects.py``): a file's by its path, a model's by its script, each as the
+            # projects spell a path (a link to a file is in its target's project, however the page named it).
+            source = entry["file"] if model is None else (model.get("source") or {}).get("script")
+            found = self.projects.of(canonical(source) if source else None)
             entry["project"] = {key: value for key, value in public(found).items() if key in ("id", "name", "root")} if found else None
         entries = [entry] if entry else []
         answer = {"schemaVersion": CAD_CATALOG_SCHEMA_VERSION, "entries": entries, "revision": catalog_revision(entries)}
@@ -1104,7 +1106,7 @@ class CadApp:
         built or written."""
         records = self.projects.list()
         entries = self.recents.entries()
-        found = [self.projects.documents(record, entries, records) for record in records]
+        found = [self._listed(self.projects.documents(record, entries, records)) for record in records]
 
         def activity(project) -> float:
             times = [project.get("opened") or 0, *(max(row.get("opened") or 0, row.get("updated") or 0)
@@ -1115,10 +1117,18 @@ class CadApp:
 
     def project(self, ident) -> dict:
         """``GET /api/v1/projects/<id>``: the project and its documents (``projects.Projects.documents``)."""
-        record = self.projects.get(ident) if is_id(ident) else None
+        record = self.projects.get(ident)
         if record is None:
             raise ApiError(404, f"no project {ident}", "GET /api/v1/projects lists the projects")
-        return self.projects.documents(record, self.recents.entries())
+        return self._listed(self.projects.documents(record, self.recents.entries()))
+
+    def _listed(self, project) -> dict:
+        """``project`` as a route answers it, each of its files known by its id from now on (``remember``): a row's
+        ``id`` opens its page and reads its envelope whether a page opened the file before or not."""
+        for row in project["documents"]:
+            if row.get("record") == "file" and self.file_of(row["id"]) is None:
+                self.remember(row["path"])
+        return project
 
     def _open_project(self, request, response) -> None:
         """``POST /api/v1/projects`` with ``{"path"}``, a folder's absolute path: that folder opened as a
@@ -1141,7 +1151,7 @@ class CadApp:
         """``DELETE /api/v1/projects/<id>``: the project's record forgotten; nothing in its folder changes,
         and its documents are standalone again. Answered with the projects as they now are, as
         ``GET /api/v1/projects`` lists them."""
-        if not (is_id(ident) and self.projects.remove(ident)):
+        if not self.projects.remove(ident):
             raise ApiError(404, f"no project {ident}", "GET /api/v1/projects lists the projects")
         send_json(response, 200, self.project_list())
 
@@ -1370,7 +1380,8 @@ class CadApp:
         elif action == "remove":
             self.recents.remove(key)
         elif action == "thumbnail":
-            self.recents.thumbnail(key, thumbnail_png(payload.get("png")))
+            # A project's file is pictured before any page opens it; any other file only once it has a record.
+            self.recents.thumbnail(key, thumbnail_png(payload.get("png")), make=self.projects.of(key) is not None)
         else:
             raise ValueError(f"unknown recents action {action!r}")
 
@@ -1424,7 +1435,8 @@ class CadApp:
         if type(payload) is not dict or not set(payload) <= {"folder", "start"} or type(payload.get("folder", False)) is not bool:
             raise ValueError("a pick is {} for a file, or {\"folder\": true, \"start\"?: a folder's absolute path}")
         folder = payload.get("folder", False)
-        start = absolute_path(payload["start"]) if payload.get("start") is not None else None
+        # A file's chooser starts where the desktop last left it: ``start`` is the folder chooser's alone.
+        start = absolute_path(payload["start"]) if folder and payload.get("start") is not None else None
         if start is not None and not os.path.isdir(start):
             start = None  # gone since the page named it: the chooser starts where it would
         try:

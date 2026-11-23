@@ -196,11 +196,12 @@ class RecentStore:
 
         def change(record):
             # Where it is now, as its record says it (``root``, ``home``): one an earlier release wrote is
-            # said again as this one says it. Made now (``created``) unless its record says when: a record
-            # the home's picture made has no such time until a page opens the file.
+            # said again as this one says it. Made now (``created``) where no page opened it before: a new
+            # record, or one the home's picture made. A record from before ``created`` was kept stays without.
             made = _file_record(found)
-            return {**made, "created": now, **(record or {}), **{key: made[key] for key in ("root", "home", "namespace", "name")},
-                    "opened": now}
+            first = record is None or not record.get("opened")
+            return {**made, **({"created": now} if first else {}), **(record or {}),
+                    **{key: made[key] for key in ("root", "home", "namespace", "name")}, "opened": now}
 
         return self.registry.update(file_id(found), change)
 
@@ -211,12 +212,12 @@ class RecentStore:
         """Forget a file's entry: its record. The file stays where it is."""
         self.registry.delete(self._ident(path))
 
-    def thumbnail(self, path: str, png: bytes) -> str:
+    def thumbnail(self, path: str, png: bytes, *, make: bool = False) -> str:
         """Keep a PNG for an entry (a file's path, or a model's id): its name. It replaces the record's
         picture in place: written and named under the record's lock, the one it named before then
-        removed (``_sweep_thumbnails``). A file with no record (one of a project's, which the home
-        pictures before any page opens it) is given one, not opened: it keeps the picture, and Recents
-        lists it only once a page opens it. A model's id with no record keeps nothing."""
+        removed (``_sweep_thumbnails``). An entry with no record keeps nothing, but for a CAD file with
+        ``make`` (one of a project's, which the home pictures before any page opens it): it is given a
+        record, not opened, which keeps the picture, and Recents lists it only once a page opens it."""
         from cad.engine.ids import is_id
 
         ident = self._ident(path)
@@ -225,7 +226,7 @@ class RecentStore:
 
         def change(record):
             if record is None:
-                if is_id(path) or not _cad_file(path):
+                if not make or is_id(path) or not _cad_file(path):
                     return None
                 record = _file_record(path)
             before.update(pictures(record))

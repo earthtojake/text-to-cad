@@ -138,8 +138,11 @@ class LauncherTest(unittest.TestCase):
         again = self.launch('.', 'tag.stl', cwd=work / 'STL')
         self.assertEqual((again['projects'][0]['id'], again['projects'][0]['made']), (project['id'], False))
         self.assertEqual(again['url'], again['documents'][0]['url'])
-        # The home folder is no project, and says what to open instead.
-        self.assertIn('home folder', self.launch(str(Path.home()), ok=False, reason='invalid_argument'))
+        # The home folder is no project, and says what to open instead; nothing named beside it is opened.
+        other = self.root / 'other'
+        other.mkdir()
+        self.assertIn('home folder', self.launch('other', str(Path.home()), ok=False, reason='invalid_argument'))
+        self.assertEqual([listed['name'] for listed in json.loads(self.get(launched, '/api/v1/projects')[2])['projects']], ['work'])
 
     def test_launches_reuse_one_engine_which_keeps_the_latest_launch_s_folder(self):
         b, c = self.root / 'b', self.root / 'c'

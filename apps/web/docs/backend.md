@@ -135,9 +135,11 @@ one that is not absolute a 400. A document is in the nearest project above it: a
 script, a shape by where it was handed over. A project's documents are its models (the registry's, whose script is
 in it), by name, then its CAD files, by folder then name: a breadth-first walk of its folder that skips hidden and
 build folders and the folders of the projects inside it, walks no folder twice, and stops at 1000 files, depth 24 or
-1.5 s (`truncated`), kept two seconds so the home and every page's Project list asking each second cost one walk. A
-project's file the home pictures before any page opened it is given a record to keep its picture on, with no
-`opened`: the library lists a file only once a page opened it.
+1.5 s (`truncated`), kept four seconds after it ends and walked by one reader at a time, so the home and every page
+asking again and again cost one walk. A file in it that a page opened is listed whatever the walk found (one in a
+build or hidden folder, past the walk's bounds, or since deleted), after the walk's. Each file listed is known by its
+id from then on. A project's file the home pictures before any page opened it is given a record to keep its picture
+on, with no `opened`: the library lists a file only once a page opened it.
 
 `/api/v1/local/files` (and a file document's `source`) sends only CAD files, and never a file whose own name is hidden:
 a model script, a config, a `.json` beside a model or a key is a 404 whatever path names

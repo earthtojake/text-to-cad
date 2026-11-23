@@ -12,7 +12,10 @@ export interface CadEntry {
   script?: string;
   /** Whether the document's source (a model's script, a file) is on disk now (its envelope's `source.present`). */
   sourcePresent?: boolean;
-  /** The project it is in (a file by its path, a model by its script: the nearest above it); null for a standalone one. */
+  /**
+   * The project it is in (a file by its path, a model by its script: the nearest above it), named in full; null for a
+   * standalone one. A list's row (`CadRecent`) names its project by id alone.
+   */
   project?: CadProjectRef | null;
   kind?: string;
   format?: string;
@@ -83,7 +86,7 @@ export interface CadRecent {
   kind: 'file' | 'model' | 'shape';
   /** A model's or a shape's: the script it was built from (a shape's home). */
   script?: string;
-  /** The id of the project it is in; null for a standalone one. */
+  /** The id of the project it is in (a document's own entry, `CadEntry`, names it in full); null for a standalone one. */
   project?: string | null;
 }
 /** A project as a document names it: its id, its name (its folder's) and its folder, `/`-separated. */

@@ -737,7 +737,7 @@ class Server:
             app = self.tunnel.app
             recents, projects = app.documents({})["documents"], app.project_list()["projects"]
         except Exception:  # the home opens whatever the library says
-            LOG.exception("could not read recents")
+            LOG.exception("could not read the home's documents and projects")
             recents, projects = [], []
         launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "home", "model": None, "recents": recents, "projects": projects}
         if surface:

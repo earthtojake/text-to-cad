@@ -321,8 +321,14 @@ class EngineApp:
         dist = '' if options.get('api_only') else resolve_dist_dir(options.get('dist') or '')
         if not options.get('api_only') and not dist:
             return {'failed': 'The viewer client is not built; build apps/web or install the cad wheel'}
+        from .projects import Refused, project_root
         names = options.get('files') or []
         folders = [name for name in names if self.folder(name, start)]
+        try:
+            # A folder that is no project fails the launch before anything of it is registered or opened.
+            roots = [project_root(self.named(name, start)) for name in folders]
+        except Refused as refusal:
+            return {'failed': f'{refusal}: {refusal.hint}', 'reason': 'invalid_argument'}
         try:
             documents = [self.document(name, start) for name in names if name not in folders]
         except ValueError as error:
@@ -333,10 +339,7 @@ class EngineApp:
             reused = self._default is not None
             app = self.default_app(dist or None)
             app.start = to_posix_path(start)
-        try:
-            projects = [self.project(app, name, start) for name in folders]
-        except ValueError as error:
-            return {'failed': str(error), 'reason': 'invalid_argument'}
+        projects = [self.project(app, root) for root in roots]
         link = self.link()
         for document in documents:
             document['url'] = f'{self.server.url}/{document["id"]}?token={link}'
@@ -347,22 +350,24 @@ class EngineApp:
                 'start': app.start, 'documents': documents, 'projects': projects, 'action': 'reused' if reused else 'started'}
 
     @staticmethod
-    def folder(name, start):
-        """Whether a launch's ``name``, read from ``start`` where it is relative, is a folder (not an id)."""
+    def named(name, start):
+        """The absolute path a launch's ``name`` names: read from ``start`` where it is relative, ``~`` the home folder."""
+        return os.path.abspath(os.path.join(start, os.path.expanduser(name)))
+
+    @classmethod
+    def folder(cls, name, start):
+        """Whether a launch's ``name`` is a folder (not an id)."""
         from cad.engine.ids import is_id
 
-        return not is_id(name) and os.path.isdir(os.path.join(start, os.path.expanduser(name)))
+        return not is_id(name) and os.path.isdir(cls.named(name, start))
 
     @staticmethod
-    def project(app, name, start):
-        """The folder a launch names, opened as a project (``projects.Projects.add``): ``{id, name, root,
-        made}``; ``ValueError`` naming why for a folder that is none (the home folder, one above it)."""
-        from .projects import Refused, public
+    def project(app, root):
+        """The folder ``root`` (``projects.project_root``'s), opened as a project (``projects.Projects.add``):
+        ``{id, name, root, made}``."""
+        from .projects import public
 
-        try:
-            record, made = app.projects.add(os.path.abspath(os.path.join(start, os.path.expanduser(name))))
-        except Refused as refusal:
-            raise ValueError(f'{refusal}: {refusal.hint}') from None
+        record, made = app.projects.add(root)
         found = public(record)
         return {'id': found['id'], 'name': found['name'], 'root': found['root'], 'made': made}
 
