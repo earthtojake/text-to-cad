@@ -146,6 +146,9 @@ Claude Code shows models in its browser pane or your browser. Claude Desktop's C
 Code and uses the same plugin. The install command adds it with the `claude` command; without that
 command, add it in Claude Code's plugin manager with the two commands above.
 
+Claude Desktop's Chat tab is not supported: it has no shell to run `cad` in, and a `cad mcp` server
+added to it by hand is offered no tools. Use the Code tab.
+
 To update:
 
 ```bash
