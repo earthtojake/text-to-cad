@@ -792,7 +792,13 @@ class Server:
 
             answer = request({"op": "document", "id": value}, start=False)
             if not answer or "failed" in answer:
-                raise ToolFailed((answer or {}).get("failed") or f"no document {value} is held", "no_file")
+                said = (answer or {}).get("failed") or f"no document {value} is held"
+                # The engine names the command that builds a document it built before; one it never built (another
+                # server's, a mistyped id) is said with what shows it, never an export opened in its place.
+                if not (answer or {}).get("rebuild"):
+                    said += (": CAD shows what this computer's cad server holds. Run the model's script with `cad run "
+                             "SCRIPT.py` and show the id it prints, not an export of it")
+                raise ToolFailed(said, "no_file")
             return answer["document"].get("path") or value
         path = local_path(value)
         if not os.path.isabs(path):

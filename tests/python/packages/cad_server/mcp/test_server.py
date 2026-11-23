@@ -1012,6 +1012,28 @@ class HeadlessCodexTest(_Session):
                                                         "optionally view; source is a document id (running a model's "
                                                         "script prints it) or a CAD file's absolute path.")
 
+    def test_a_document_id_the_server_does_not_hold_says_how_to_show_it(self) -> None:
+        """An id this computer's cad server never built (another server's): the refusal says to run the model's
+        script and show the id it prints, never to open an export in its place; one it built before keeps the
+        engine's own words, which name the command that builds it again."""
+        ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
+        answers = {"never": {"failed": f"no document {ident} is held", "state": "unsaved", "rebuild": None},
+                   "lost": {"failed": f"{ident} is not saved: run `cad run /w/a.py`", "state": "unsaved",
+                            "rebuild": "cad run /w/a.py"}}
+        for case, answer in answers.items():
+            with self.subTest(case=case), mock.patch("cad.engine.client.request", return_value=answer):
+                for tool in ("cad_open", "cad_show"):
+                    refused = self.call(tool, {"source": ident})
+                    self.assertTrue(refused["isError"])
+                    said = refused["content"][0]["text"]
+                    if case == "never":
+                        self.assertIn(f"no document {ident} is held: CAD shows what this computer's cad server holds. "
+                                      "Run the model's script with `cad run SCRIPT.py` and show the id it prints, not "
+                                      "an export of it", said)
+                    else:
+                        self.assertIn(answer["failed"], said)
+                        self.assertNotIn("not an export", said)
+
     def test_a_model_a_browser_page_shows_already_is_not_opened_again(self) -> None:
         self.server._in_browser = lambda model: model == self.bracket
         shown = self.call("cad_show", {"source": self.bracket})["content"][0]["text"]
