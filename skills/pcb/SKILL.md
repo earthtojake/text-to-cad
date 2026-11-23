@@ -183,8 +183,10 @@ unless the person says to go ahead, and the report then names every error they w
 
 Show the person each model you create or change as soon as its first run succeeds, and any model
 or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
-that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Show it with
-the first of these you have:
+that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Once per project,
+before the first page you show from it, run `cad viewer --json FOLDER` with the project's folder: it
+opens that folder as a project, so the person reaches its other models and files from any one of
+them. Show a page with the first of these you have:
 
 1. `cad_show` among your tools (your host may prefix it): call it with the model's id or the file's
    absolute path; its description says the rest.
