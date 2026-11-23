@@ -808,14 +808,17 @@ it("Preview's bar is its name and its two controls alone; it and the playbar go 
     fireEvent.click(within(previewBar()!).getByRole('button', { name: 'Display' }));
     await wait(2100);
     expect(hidden()).toBe(true);
-    // The focus a press leaves on one of its controls does not hold it (jsdom's focus is no keyboard's) ...
+    // The focus a press leaves on one of its controls does not hold it (jsdom's focus is no keyboard's: from jsdom 31 it
+    // matches `:focus-visible` for any focus(), so say that it is the keyboard's only once it is) ...
+    let keyboard = false;
+    const matches = Element.prototype.matches;
+    override(Element.prototype, 'matches', { value(this: Element, selector: string) { return selector === ':focus-visible' ? keyboard && this === document.activeElement : matches.call(this, selector); } });
     act(() => { within(previewBar()!).getByRole('button', { name: 'Exit preview' }).focus(); });
     await wait(2100);
     expect(hidden()).toBe(true);
     act(() => { within(previewBar()!).getByRole('button', { name: 'Exit preview' }).blur(); });
     // ... the keyboard's does: it brings it back, the playbar's as well as the bar's.
-    const matches = Element.prototype.matches;
-    override(Element.prototype, 'matches', { value(this: Element, selector: string) { return selector === ':focus-visible' ? this === document.activeElement : matches.call(this, selector); } });
+    keyboard = true;
     act(() => { within(previewBar()!).getByRole('button', { name: 'Exit preview' }).focus(); });
     expect(hidden()).toBe(false);
     await wait(5000);
