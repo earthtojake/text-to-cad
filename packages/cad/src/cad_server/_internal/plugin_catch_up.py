@@ -33,7 +33,12 @@ for, so the plugin is this rule's to try again even where no global install's ru
 uv's cache, or could not run at all). 0.11.12 and 0.11.13 read only
 ``for`` of the record, and keep any other field as they find it. Then the last run the server began (``begin``):
 ``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``, then ``ok`` or ``failed``), ``code`` (its
-exit status, null where it could not start) and ``ended``. It is a state record, not a choice, so it lives in the state
+exit status, null where it could not start) and ``ended``; and ``tried``, each release's runs and when its last began,
+by release, which a run of another release leaves as it is. Kept in the last run alone, the count of one release was
+set back by every run of another: two servers of two releases on one state folder (one left running from before an
+update in an engine folder no newer client reaches, as on Linux where one was started with ``XDG_RUNTIME_DIR`` set
+and the other without), where an app's step kept failing, each began a run at every tending, taking turns, with no
+end. It is a state record, not a choice, so it lives in the state
 folder, as the update's own record does, and not in the person's settings. ``cad doctor`` shows it.
 
 **The rule** (``due``), asked by the server as it tends itself, only once nothing is in flight, never in its first
@@ -49,10 +54,11 @@ earlier one). Where the record names no ``for`` (none yet, or unreadable) and ow
 release and nothing runs: the switch was turned on by hand, or no run was ever made, and a computer whose switch was on
 before is taken as up to date. Bounded: a run underway, of any release, begun less than ``RETRY_SECONDS`` ago, is waited
 for; one of this release that failed (or never said how it ended) is tried again not sooner than ``RETRY_SECONDS`` after
-it began, and at a later tending: at most ``TRIES`` runs for one release, each an hour or more after the one before.
-Never in a loop. A run where any app failed is a failed run, though the others went well and it exited 0 (``ended``), so
-an app that is broken for good costs at most ``TRIES`` runs in the background for each release, an hour or more apart,
-and then nothing until cad is newer. ``begin`` asks the record's half of it again under the state folder's lock, as it
+it began, and at a later tending: at most ``TRIES`` runs for one release, each an hour or more after the one before,
+counted for that release (``tried``) whatever runs of other releases come between. Never in a loop. A run where any
+app failed is a failed run, though the others went well and it exited 0 (``ended``), so an app that is broken for
+good costs at most ``TRIES`` runs in the background for each release, an hour or more apart, and then nothing until
+cad is newer. ``begin`` asks the record's half of it again under the state folder's lock, as it
 keeps its run (``_wanted``), so two servers on one state folder never both begin one.
 
 **A run** (``begin``): the record says ``underway`` first; then this cad's own ``cad`` command
@@ -443,12 +449,28 @@ def _wanted(found: dict[str, Any], version: str, now: float) -> bool:
         return False
     if found.get("outcome") == UNDERWAY and not _stale(found, now):
         return False  # waited for, whichever release and whichever server began it
-    if found.get("release") != version:
-        return True
-    tries = found.get("tries")
-    if type(tries) is int and tries >= TRIES:
+    tries, at = _tried(found, version)
+    if tries >= TRIES:
         return False
-    return _stale(found, now)
+    return at is None or _stale({"at": at}, now)
+
+
+def _tried(found: dict[str, Any], version: str) -> tuple[int, float | None]:
+    """How many runs this release, ``version``, has had and when the last began (None: none): kept for each release
+    (``tried``), so a run of another release's server in between never sets them back, and the record's run where it
+    is this release's (all an earlier release kept)."""
+    tries, at = 0, None
+    kept = found.get("tried")
+    for run in (kept.get(version) if isinstance(kept, dict) else None,
+                found if found.get("release") == version else None):
+        if not isinstance(run, dict):
+            continue
+        if type(run.get("tries")) is int:
+            tries = max(tries, run["tries"])
+        began = run.get("at")
+        if isinstance(began, (int, float)) and not isinstance(began, bool):
+            at = began if at is None else max(at, began)
+    return tries, at
 
 
 def begin(told, *, now: float | None = None) -> subprocess.Popen | None:
@@ -478,11 +500,12 @@ def _begin(told, *, now: float | None = None) -> tuple[subprocess.Popen | None, 
             at = time.time() if now is None else now
             if not _wanted(kept, version, at):
                 return None
-            tries = kept.get("tries") if kept.get("release") == version else 0
+            tries = _tried(kept, version)[0] + 1
+            tried = kept.get("tried") if isinstance(kept.get("tried"), dict) else {}
             kept = {key: value for key, value in kept.items() if key not in ("code", "ended")}
             began.append(at)
-            return {**kept, "release": version, "at": at, "tries": (tries if type(tries) is int else 0) + 1,
-                    "outcome": UNDERWAY}
+            return {**kept, "release": version, "at": at, "tries": tries, "outcome": UNDERWAY,
+                    "tried": {**tried, version: {"tries": tries, "at": at}}}
 
         if _change(start) is None:
             return None, None

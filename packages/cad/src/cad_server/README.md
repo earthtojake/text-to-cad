@@ -242,9 +242,10 @@ switch on (turned on by hand, or no run ever made), the record is written for th
 waited for, and the server that begins a run asks the record again under the state folder's lock as it keeps
 it, so two servers never both begin one. A run that failed, where any app failed (its exit status 0 all the
 same), or that never said how it ended, is tried again an hour later at the earliest, at a later tending: at
-most three runs for one release, each an hour or more after the one before, so an app broken for good costs
-at most three runs in the background for each release. Never where the update check is off for the process
-(`CAD_UPDATE_CHECK=0`, CI, a development build), where `CAD_ENGINE_UPDATE_INSTALLER` is set and empty (a
+most three runs for one release, each an hour or more after the one before, counted for that release (a server
+of another release beside it, left running in another engine folder, never sets the count back), so an app
+broken for good costs at most three runs in the background for each release. Never where the update check is
+off for the process (`CAD_UPDATE_CHECK=0`, CI, a development build), where `CAD_ENGINE_UPDATE_INSTALLER` is set and empty (a
 test's way to say the server runs nothing by itself; `cad plugin install` reads no such variable), for a cad
 that is no global install, or while the bridge owes its own run of the hosted install command: until a run of it
 installs cad, which ends it whatever the apps did, an app that failed there left to this rule.

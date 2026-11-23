@@ -2112,6 +2112,42 @@ class PluginCatchUpTest(Case):
             self.assertIsNone(self.begun(now=stale)[0], "up to date: none begun")
         self.assertEqual(self.catch_up.read()["release"], "0.1.0")
 
+    def test_two_servers_of_two_releases_taking_turns_never_set_each_other_s_count_back(self) -> None:
+        """Two servers on one state folder, one of an earlier release left running beside the newer one (another
+        engine folder, which no newer client reaches), and an app's step that fails at every run: each run of one
+        release came between the other's, and when only the last run was kept, each server began a run at every
+        tending, taking turns, with no end. Counted for each release: one run each in the hour, at most ``TRIES``
+        each for good."""
+        self.switch_on()
+        self.catch_up.noted("0.0.9")
+        servers = {"0.1.0": self.catch_up.Catcher(wait=0.0), "0.1.1": self.catch_up.Catcher(wait=0.0)}
+        now = [1_000_000.0]
+        with mock.patch.object(self.catch_up.subprocess, "Popen") as popen, mock.patch("time.time", lambda: now[0]):
+            popen.return_value.poll.return_value = 0  # each run ends as soon as it began (below)
+            begun: list[str] = []
+
+            def tendings(count: int) -> None:
+                for _ in range(count):
+                    for release, catcher in servers.items():
+                        with mock.patch.object(cad_server, "__version__", release):
+                            if catcher.tend(self.told.append):
+                                begun.append(release)
+                                record = self.catch_up.read()
+                                # The run is the installed cad's command, the newer one: its app failed again.
+                                with mock.patch.object(cad_server, "__version__", "0.1.1"), \
+                                        mock.patch.dict(os.environ, {self.catch_up.SERVER_ENV: str(record["at"])}):
+                                    self.catch_up.ended(0, failed=True)
+                        now[0] += 15.0  # each server tends every 30 seconds
+
+            tendings(60)  # half an hour of tendings
+            self.assertEqual(sorted(begun), ["0.1.0", "0.1.1"], "one run of each release in the hour, no more")
+            for _ in range(10):
+                now[0] += self.catch_up.RETRY_SECONDS
+                tendings(4)
+        self.assertEqual((begun.count("0.1.0"), begun.count("0.1.1")), (self.catch_up.TRIES, self.catch_up.TRIES))
+        self.assertEqual(popen.call_count, 2 * self.catch_up.TRIES)
+        self.assertEqual(self.catch_up.read()["tried"]["0.1.1"]["tries"], self.catch_up.TRIES)
+
     def test_a_run_that_never_said_how_it_ended_counts_as_tried_and_failed(self) -> None:
         self.switch_on()
         self.catch_up.noted("0.0.9")
