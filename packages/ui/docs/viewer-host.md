@@ -266,6 +266,17 @@ tool the document cannot use is absent, never drawn disabled:
 - **The person's settings** are the host's to keep where it can: the web keeps the language in the
   browser ([storage](../../../apps/web/docs/storage.md)); there is no Telemetry and no What's new.
 
+## A shared view bundle's host
+
+A shared view bundle is a view bundle a share service keeps, encrypted, for anyone with its link. Its host
+is the view bundle's host above, unchanged: the web's share mode (`/<id>#key=<key>`,
+[apps/web](../../../apps/web/README.md#a-shared-view-bundle)) fetches the share's bytes from its own origin,
+opens them with `openShareArchive(stored, key)` (`@cad/core/client`), which decrypts, unpacks and hands the
+files to `openViewBundle(viewBundleMemorySource(files))`, and shows that service as `?bundle=` does. Everything
+a bundle's view keeps and leaves out stays as it is. What the share adds lives in the host alone: the share's
+status screens (gone, an incomplete or damaged link, a format it does not read, a failure with Retry) and its
+delete page. The key never reaches the viewer: no port, URL, storage or log carries it.
+
 ## Adding a shared feature
 
 1. Implement reusable interaction and presentation in UI, with cross-consumer

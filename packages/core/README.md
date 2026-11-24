@@ -241,6 +241,18 @@ to its file: one element's facts and a part's groups out of the part's one `elem
 `final`, so nothing waits on a next version), a drawing, a robot and the resources their loaders
 read. What needs an engine it leaves out ([workspace resources](docs/workspace-resources.md)).
 
+`openShareArchive(stored, key)` (`client/share.js`) opens a shared view bundle: the bytes a share
+service keeps (`IV || ciphertext-and-tag`, AES-256-GCM, the IV 12 bytes) under the key its link holds
+(32 bytes, base64url), gunzipped (`DecompressionStream`) and read as a POSIX ustar archive
+(`cad-share/1`: regular files alone, by a path relative to the bundle's root, the header's prefix field
+read; an absolute path, a `..`, a path twice, a link or any other entry refuses it whole), then
+`openViewBundle(viewBundleMemorySource(files))`. `readShareArchive` stops at the files. It fails with one
+of two codes: `SHARE_UNREADABLE`, a missing or malformed key, the wrong key or damaged bytes (AES-GCM
+tells them apart no better), and `SHARE_UNSUPPORTED`, bytes that decrypt to no archive or bundle it
+reads. `readShareAddress(href)` reads a share's page address: its path exactly one share id (22
+base64url characters) and its fragment `key=<key>` or `delete=<secret>`; anything else is null.
+`readShareKey` and `isShareSecret` check a key's and a secret's form. No message holds the key.
+
 `createHttpPromptFiles({ origin, fetch })` is the viewer server's maker of a Quick
 Edit's files: `create(request)` posts its views and annotation to `POST /api/v1/local/prompt-files`,
 validates the packet without rendering and answers `{ inline: compactJson }` up to
