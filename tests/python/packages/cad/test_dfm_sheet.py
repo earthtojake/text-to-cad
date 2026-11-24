@@ -1775,6 +1775,49 @@ class ModellingMistakeTest(unittest.TestCase):
                     face = faces[int(item["location"].rsplit(" ", 1)[-1]) - 1]
                     self.assertAlmostEqual(abs(face.normal_at().Z), 0.0, places=6)
 
+    def test_each_part_says_all_of_its_broken_edges_past_the_reports_cap(self) -> None:
+        # sheet.edge_break counted the not_sheet items the report keeps, the document's first ITEM_CAP: a plate of
+        # 408 chamfers said 300, the part after it fewer, and a part whose items all fell past the cap said nothing
+        def perforated(holes: tuple[int, int], depth: float, label: str, y: float = 0.0) -> bd.Part:
+            columns, rows = holes
+            outline = bd.Rectangle(columns * 10 + 4, rows * 10 + 4).face()
+            for hole in bd.GridLocations(10, 10, columns, rows):
+                outline = (outline - hole * bd.Rectangle(4, 4)).face()
+            levels = bd.extrude(outline, amount=2).edges().group_by(bd.Axis.Z)
+            part = bd.Pos(0, y, 0) * bd.chamfer([*levels[0], *levels[-1]], depth)
+            part.label = label
+            return part
+
+        # both sides' four edges round the outline and round each square hole
+        wanted = {"big": (8 * 51, 0.4), "small": (8 * 3, 0.6), "copy": (8 * 51, 0.4)}
+        documents = {
+            "one part": lambda: [perforated((10, 5), 0.4, "big")],
+            "the second's items all past the cap": lambda: [perforated((10, 5), 0.4, "big"),
+                                                            perforated((2, 1), 0.6, "small", 120)],
+            "some of the second's past it": lambda: [perforated((2, 1), 0.6, "small", 120),
+                                                     perforated((10, 5), 0.4, "big")],
+            "a copy, measured once": lambda: [perforated((10, 5), 0.4, "big"), perforated((10, 5), 0.4, "copy", 120)],
+        }
+        for name, parts in documents.items():
+            with self.subTest(document=name):
+                shapes = parts()
+                result = checked(shapes[0] if len(shapes) == 1 else bd.Compound(children=shapes))
+                family = result.measurements["not_sheet"]
+                self.assertEqual(family["count"], sum(wanted[shape.label][0] for shape in shapes))
+                self.assertEqual(len(family["items"]), sheet.ITEM_CAP)  # the report stays capped
+                said = {f.location.split("/")[0]: f for f in result.findings if f.code == "sheet.edge_break"}
+                self.assertEqual(sorted(said), sorted(shape.label for shape in shapes))
+                for shape in shapes:
+                    count, depth = wanted[shape.label]
+                    finding = said[shape.label]
+                    self.assertTrue(finding.message.startswith(f"{count} face(s) chamfer"), finding.message)
+                    self.assertIn(f" more; up to {depth:.3g} mm deep", finding.message)
+                    self.assertAlmostEqual(finding.value, depth, places=6)
+                    # at one of its chamfers, every face it names its own
+                    face = shape.faces()[int(finding.location.rsplit(" ", 1)[-1]) - 1]
+                    self.assertAlmostEqual(abs(face.normal_at().Z), math.sqrt(0.5), places=6)
+                    self.assertTrue(all(ref.startswith(f"{shape.label}/") for ref in finding.refs))
+
     def test_a_round_whose_edges_meet_a_hair_apart_is_laid_whole(self) -> None:
         # a plate notched along half an ellipse, its rims rounded: the kernel may end the mitre where the round
         # along the ellipse meets the one along the plate's edge a fraction of a micron off the vertex it shares

@@ -3127,6 +3127,14 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
             if thickness is not None and isinstance(found, list) and family in FAMILIES[2:]:
                 for item in found:
                     item.setdefault("thickness_mm", thickness)
+        # its broken cut edges, every one: what sheet.edge_break says of the part, whatever the cap leaves of its
+        # items in the document's not_sheet
+        records = result.get("not_sheet")
+        broken = [item for item in records if item.get("kind") == "edge_break" and item.get("judged")] \
+            if isinstance(parts, list) and parts and isinstance(records, list) else []
+        if broken:
+            parts[0]["edge_breaks"] = {"count": len(broken), "location": broken[0].get("location"),
+                                       "break_mm": max(float(item.get("break_mm") or 0.0) for item in broken)}
     report: dict[str, Any] = {}
     partial = []
     for family in FAMILIES:
