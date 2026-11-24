@@ -322,9 +322,11 @@ on Linux and Windows. Compare a baseline and a refactor on the same backend.
 
 From the repository root, `scripts/test/test-viewer-browser.sh` exercises the
 bundled client's format and camera contracts through the real backend, with fresh
-temporary fixtures and a private server/cache; it runs exactly what CI runs
+temporary fixtures and a private server/cache, then, with that engine stopped, a view
+bundle it exported, opened from a plain static file server (the model on screen, a face's
+facts, read-only parameters, and no request for `/api/`); it runs exactly what CI runs
 (picking and kinematics run on every PR in the `packages/ui` browser specs).
-`--only format|camera` runs one gate, and `--out /tmp/viewer-review` retains
+`--only format|camera|bundle` runs one gate, and `--out /tmp/viewer-review` retains
 screenshots and bounded failure diagnostics; the runner cleans up its project and
 processes on exit.
 

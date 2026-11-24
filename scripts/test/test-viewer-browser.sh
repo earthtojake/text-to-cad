@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # One self-contained browser gate for the viewer's format and camera
-# contracts. It runs exactly what CI runs. The project, the engine daemon, the
-# Viewer, and the browser are all owned by this process.
+# contracts, and for a view bundle opened with no engine running. It runs exactly
+# what CI runs. The project, the engine daemon, the Viewer, the static file
+# server and the browser are all owned by this process.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,7 +39,7 @@ while [ "$#" -ne 0 ]; do
       fi
       if [ "$1" = "--out" ]; then out_dir="$2"; else only_gate="$2"; fi
       shift 2 ;;
-    # --only: one gate while working on it: format, camera.
+    # --only: one gate while working on it: format, camera, bundle.
     *) echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE]" >&2; exit 2 ;;
   esac
 done
@@ -223,11 +224,46 @@ cat > "$project/smoke.urdf" <<'URDF'
 </robot>
 URDF
 
+# A view bundle, for the bundle gate: a model of one part whose width is a parameter, exported by the
+# engine into a dot-directory the explorer skips; its script goes once it is built.
+mkdir -p "$project/.bundles"
+cat > "$project/.bundles/plate.py" <<'PLATE'
+import build123d as bd
+from cad import model
+
+width = model.param("width", 40.0, min=20, max=80, unit="mm")
+
+
+@model
+def plate():
+    body = bd.Box(width, 30, 6) - bd.Pos(width / 4, 0, 0) * bd.Cylinder(4, 10)
+    body.label = "plate"
+    return body
+
+
+if __name__ == "__main__":
+    model.export(plate(), "plate.view")
+PLATE
+if ! (cd "$project/.bundles" && "$PYTHON" plate.py && rm plate.py) >"$log" 2>&1 \
+   || [ ! -f "$project/.bundles/plate.view/manifest.json" ]; then
+  echo "FAIL: the view bundle fixture did not export" >&2
+  sed 's/^/    /' "$log" >&2
+  exit 1
+fi
+
 (cd "$project" && "$PYTHON" -m cad_server.viewer --json) >"$log"
 url="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["apiUrl"])' "$log")"
 export VIEWER_TEST_TOKEN="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$log")"
 e2e_args=(--dir "$project" --url "$url")
-[ -n "$out_dir" ] && e2e_args+=(--out "$out_dir")
-[ -n "$only_gate" ] && e2e_args+=(--only "$only_gate")
+bundle_args=(--bundle "$project/.bundles")
+[ -n "$out_dir" ] && e2e_args+=(--out "$out_dir") && bundle_args+=(--out "$out_dir")
+[ -n "$only_gate" ] && e2e_args+=(--only "$only_gate") && bundle_args+=(--only "$only_gate")
 echo "  [setup] $(( $(date +%s) - started_at ))s to fixtures, viewer and port"
-node "$REPO_ROOT/tests/browser/viewer-e2e.mjs" "${e2e_args[@]}"
+if [ "$only_gate" != bundle ]; then
+  node "$REPO_ROOT/tests/browser/viewer-e2e.mjs" "${e2e_args[@]}"
+fi
+# The bundle gate runs with no engine: the server is stopped first, and the page has only a static file server.
+if [ -z "$only_gate" ] || [ "$only_gate" = bundle ]; then
+  "$PYTHON" -m cad_server.engine stop >/dev/null 2>&1 || true
+  node "$REPO_ROOT/tests/browser/viewer-e2e.mjs" "${bundle_args[@]}"
+fi
