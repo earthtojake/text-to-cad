@@ -213,7 +213,6 @@ it("a DXF's strip is Select (in hand), Draw and Measure, its zoom the corner's p
   for (const name of ['Orbit', 'Joints', 'Animation', 'Preview', 'Display settings', 'Projection', 'Explode', 'Clip']) {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
-  expect(pane.querySelectorAll('[data-view-controls] button')).toHaveLength(0);
   // Its view settings, the navbar's Display: its card the viewport's Background alone, Light; a choice is the person's.
   expect([...pane.querySelectorAll('[data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display']);
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });

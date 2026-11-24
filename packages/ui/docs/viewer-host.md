@@ -139,8 +139,8 @@ The controls of every view (an engine document's, GLB, mesh, robot, and a DXF's,
 are its own, over the viewport, in the one frame (`kit/shell/ViewFrame.jsx`): its
 tool strip, the tool in hand's sub-toolbar and its docked panel (a phone's sheet), the corner's control, Quick Edit,
 its view's settings (under a file's navbar Display, whose card docks at the view's right edge — a DXF's and a
-schematic's the Background alone — and, for a 3D view or a board, Preview, the same on a phone; without one Display
-and Preview at the strip's end) and, in Preview, Preview's own bar
+schematic's the Background alone — and, for a 3D view or a board, Preview, the same on a phone) and, in Preview,
+Preview's own bar
 ([Camera, animation and Preview](viewer-ux.md#camera-animation-and-preview)). Nothing a renderer does opens or closes the explorer (only the
 file's name opens that). The layout a person gives the tool stack's panels is one
 of the tab's settings (`settings.toolStack` of the tab record, `@cad/ui/tab-store`),
@@ -207,8 +207,7 @@ render loops. These actions use existing host capabilities for effects. What a
 person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 
 A renderer's controls for the view are the renderer's own: the viewer's for a 3D view, under a file's navbar
-portalled into its view slot (Display, then Preview), the cube alone at the top-right; without a navbar Display and
-Preview at its strip's end;
+portalled into its view slot (Display, then Preview), the cube alone at the top-right;
 and in Preview its bar's Display and Exit preview, the navbar hidden. The host draws none of them. The host's `captureRequest`
 command is the same capture: to a composer destination it delivers the view and
 the selection through `promptContext.deliver`. Neither route detects the platform.
@@ -526,11 +525,10 @@ keyboard `platform` (`environment.platform`) names the keys the hints show (⌘C
 
 ## Host chrome slots
 
-FileViewer draws one navbar, the same wherever it is drawn, over every file and over a host's
-home, in a page's chrome (`FileViewerProps.chrome` / `CadViewerProps.chrome`: `"page"`, the
-default, the web viewer's, and every view of the CAD app's: its sidebar, tabs, cards and file handler). `"bare"` draws
-no navbar at all, over a file or a page that will not open, and what a host still adds is its own, as its notice at the
-viewport's top-right (`notice`); no host hands it today, since the navbar holds the panel's toggle. **The view's
+FileViewer draws one navbar, the same in every host, over every file and over a host's
+home (the web viewer, and every view of the CAD app's: its sidebar, tabs, cards and file handler); only Preview, which
+draws its own bar, and a `compact` view are without it. What a host adds over the view is its own, as its notice at the
+viewport's top-right (`notice`). **The view's
 panel toggle is the navbar's** (`file-viewer/panelToggles.js`): the view's frame says it (`usePanelToggles`), and the
 navbar draws it first, before the logo, the same neutral button open or shut (`aria-expanded` says which, pinned or
 not). Before the view is up (its file being read, its chunk loading, or its frame mounted but its toggle not said yet)
@@ -658,8 +656,7 @@ Background, Show grid; a board's Side, Mode, in 3D Projection | Style, Backgroun
 file viewer draws a view slot there (`file-viewer/navbarSlots.js`'s `NavbarViewSlotContext`) and the view portals them
 in (`NavbarViewControls.jsx`). On a phone the slot holds the same Display and Preview, the picture has no cube or zoom,
 and the panel is a sheet from the left (shadcn's Sheet, portalled into the viewer's element:
-`ViewerElementContext`), so a host keeps the viewer's element round its view. A host that shows the view with no navbar has Display and Preview at the strip's end (a
-phone, their rows in its More). A host that anchors the corner at the left (`--cad-viewport-corner-left`) moves the cube
+`ViewerElementContext`), so a host keeps the viewer's element round its view. A host that anchors the corner at the left (`--cad-viewport-corner-left`) moves the cube
 or the zoom with it, mirrored at the top-left. A host's one notice goes through the shell too: `notice` is drawn at the top-right,
 under the corner (an inset under its lowest control; at the top itself where the corner is at the left), once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under

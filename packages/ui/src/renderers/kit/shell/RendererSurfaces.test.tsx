@@ -42,6 +42,13 @@ import HarnessRenderer from '../../../../dist/renderers/shell-harness/HarnessRen
 import { ViewerElementContext, ViewerHostContext } from '../../../../dist/host/context.js';
 import { testHost } from '../../../../dist/host/testing/host.js';
 import { createAnimationClock } from '../../../../dist/renderers/kit/tools/playbar/animationClock.js';
+import { NavbarViewSlotContext } from '../../../../dist/file-viewer/navbarSlots.js';
+
+// The navbar's view slot, as a file viewer gives it, where the view's Display and Preview stand.
+function NavbarSlot({ children }: { children: React.ReactNode }) {
+  const [slot, setSlot] = React.useState<HTMLElement | null>(null);
+  return <><div ref={setSlot} data-navbar-view="" /><NavbarViewSlotContext.Provider value={slot}>{children}</NavbarViewSlotContext.Provider></>;
+}
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -61,9 +68,9 @@ function mount(host = testHost(), state?: unknown, name = 'one.harness', element
     onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
     state, onStateChange: save, onNavigationActionsChange: navigation, reload() {}, data: { services: { preferences } } };
   // `element`: the viewer the keyboard reaches (its Escape and Delete), as a file viewer provides.
-  const view = render(<ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={element as any}>
+  const view = render(<ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={element as any}><NavbarSlot>
     <HarnessRenderer {...(props as any)} />
-  </ViewerElementContext.Provider></ViewerHostContext.Provider>);
+  </NavbarSlot></ViewerElementContext.Provider></ViewerHostContext.Provider>);
   const canvas = view.container.querySelector('[data-stand-in-viewport] > canvas') as HTMLCanvasElement;
   const overlay = (name: string) => view.container.querySelector(`[data-harness-${name}]`)!.textContent;
   return { ...view, canvas, overlay, save, navigation };
@@ -455,9 +462,9 @@ function mountRoutine(data: Record<string, unknown>, state: unknown = undefined)
   const props = (extra: Record<string, unknown>) => ({ source: { id: 'one' }, file: { path: '/models/one.harness', name: 'one.harness', kind: 'file' },
     document: null, onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' }, state,
     onStateChange() {}, onNavigationActionsChange() {}, reload() {}, data: { services: { preferences }, ...extra } });
-  const view = render(<ViewerHostContext.Provider value={testHost()}><HarnessRenderer {...(props(data) as any)} /></ViewerHostContext.Provider>);
+  const view = render(<ViewerHostContext.Provider value={testHost()}><NavbarSlot><HarnessRenderer {...(props(data) as any)} /></NavbarSlot></ViewerHostContext.Provider>);
   return (extra: Record<string, unknown>) => view.rerender(
-    <ViewerHostContext.Provider value={testHost()}><HarnessRenderer {...(props(extra) as any)} /></ViewerHostContext.Provider>);
+    <ViewerHostContext.Provider value={testHost()}><NavbarSlot><HarnessRenderer {...(props(extra) as any)} /></NavbarSlot></ViewerHostContext.Provider>);
 }
 
 it('opening another file while Preview is up leaves it; crossing touches neither the tools view\'s routine nor Preview\'s', async () => {

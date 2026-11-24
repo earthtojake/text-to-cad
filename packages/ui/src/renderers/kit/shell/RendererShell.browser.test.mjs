@@ -1183,7 +1183,6 @@ test('a renderer says more about its load than a download: finding the file, edi
   const offRight = frameBox.x + frameBox.width - cubeBox.x - cubeBox.width;
   assert.ok(Math.abs(offRight - 2) < 0.5, `the view cube stands 2px from the right edge: ${offRight}px`);
   assert.ok(stackBox.y + stackBox.height <= frameBox.y + frameBox.height - 84 + 0.5, 'the tool stack stops clear of Quick Edit\'s row');
-  assert.equal(await pane.locator('[data-cad-toolbar] [data-view-controls]').count(), 0, 'nothing of the view on the strip');
   assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     ['Display', 'Preview'], 'Display and Preview, the navbar\'s');
   const [viewBox, previewBox] = [await pane.locator('[data-navbar-view-controls] [data-display-settings]').boundingBox(), await pane.locator('[data-view-preview]').boundingBox()];

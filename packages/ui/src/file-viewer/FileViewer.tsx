@@ -30,7 +30,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, name, filePath = null, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page", layout }: FileViewerProps) {
+export function FileViewer({ file, name, filePath = null, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, fileMenuItems, overlay, onError, presentation, layout }: FileViewerProps) {
   // The language the host names (`environment.locale`): this frame's own strings, and everything
   // drawn under it (`I18nProvider`), the nodes the host hands it included.
   const locale = host.environment.locale;
@@ -288,10 +288,10 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // The navbar is drawn over every file and over the host's home — there only the logo's menu (no
   // Back to home), Back and Forward where the host keeps the view's history, and the host's
   // actions, as over a file — never over a view drawn small with no chrome
-  // (`compact`: an offscreen picture), never where the host asks for the view alone (`chrome: "bare"`),
-  // and not while the renderer's Preview is up, which draws its own bar in its place.
+  // (`compact`: an offscreen picture), and not while the renderer's Preview is up, which draws its own
+  // bar in its place.
   const home = loaded.status === "empty" && Boolean(presentation?.home);
-  const navbar = (Boolean(path) || home) && !appearance.compact && chrome !== "bare" && previewing !== key;
+  const navbar = (Boolean(path) || home) && !appearance.compact && previewing !== key;
   const homeSlotRefs = useMemo(() => ({ left: setHomeLeft, right: setHomeRight }), []);
   const homeSlots = useMemo(() => (navbar && !path && home ? { left: homeLeft, right: homeRight } : null), [navbar, path, home, homeLeft, homeRight]);
   return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><NavbarSlotsContext.Provider value={homeSlots}><NavbarViewSlotContext.Provider value={navbar && path ? viewSlot : null}><PanelPeekContext.Provider value={peek}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={layout ? undefined : mobile ? "mobile" : "desktop"} data-viewer-pinned-layout={layout} tabIndex={-1}>

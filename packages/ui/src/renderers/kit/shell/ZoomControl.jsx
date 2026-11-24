@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { ChevronDown, ScanSearch } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger
 } from "@cad/ui/primitives/dropdown-menu";
@@ -65,8 +65,8 @@ export default function ZoomPill({ zoom, style = null }) {
   </div>;
 }
 
-/** The zoom menu's items, for the tile's menu and a phone's More submenu alike. */
-export function ZoomMenuItems({ zoom }) {
+/** The zoom menu's items. */
+function ZoomMenuItems({ zoom }) {
   const { t } = useI18n();
   const keys = zoomShortcuts(useContext(ViewerHostContext)?.environment?.platform);
   // A touch screen has no keys to hint at.
@@ -84,16 +84,10 @@ export function ZoomMenuItems({ zoom }) {
   </>;
 }
 
-/** The zoom as a phone's More submenu (`FloatingToolBar`): a phone has no corner, its view's controls are More's rows. */
-export function zoomViewControl(zoom, { t, disabled = false }) {
-  return { id: "zoom", label: t("zoom.label"), icon: <ScanSearch aria-hidden="true" />, disabled,
-    tile: null, submenu: () => <ZoomMenuItems zoom={zoom} /> };
-}
-
 /**
  * A 3D view's zoom (`ViewZoom`), read live through its viewport (`ShellViewport.jsx`'s handle in
  * `viewerRef`): the zoom against the authored box, its steps about the camera's target, and word of the
- * camera moving. What the zoom's keys and a phone's More reach in every 3D view, a renderer's own frame
+ * camera moving. What the zoom's keys reach in every 3D view, a renderer's own frame
  * or a flat view's frame showing one alike, and a flat view's pill while its picture is in 3D. It hears the
  * camera of the viewport up when it is subscribed: an owner whose viewport comes up later makes it again
  * once it is (a new `subscribe`, which the pill subscribes again).

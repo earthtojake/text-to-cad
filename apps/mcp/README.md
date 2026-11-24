@@ -57,7 +57,7 @@ to `host.presentation`, in one change.
   thread. Each connects to a separate engine session, so an unnamed view belongs to that thread.
 - **Inline (no app: the development switch alone).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
-  the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the panel's toggle first, then the
+  the whole viewer at card size, as a tab is: its navbar (the panel's toggle first, then the
   logo, which opens the app menu; Back and Forward; the file name that opens the name menu; the ⋯,
   the file menu: Copy path, Copy link (the engine's own page of the document,
   `<engine origin>/<id>?token=<link>`, the origin from the launch and the link asked through the
@@ -259,7 +259,7 @@ the launch's `_meta` first (`host/capability.ts`).
   file the host handed over, and nothing else, for as long as it is open: no home
   and no explorer (the host's own file tree is its navigation), no Back or Forward,
   and a renderer's link to another file (a robot's mesh) is plain text. It is drawn
-  under the same 40px navbar as every other view (`chrome: "page"`), so the panel's toggle is there: first the
+  under the same 40px navbar as every other view, so the panel's toggle is there: first the
   panel's toggle, then its logo and app menu, the file's name (no name menu) and its ⋯ (no Open in › Browser; File
   info, the file's facts), then at the right the view's Display and Preview, then Full size where the host offers it.
   Preview's bar hides the
@@ -515,7 +515,7 @@ another model or the home sets that view aside, in memory, until the model is sh
 the web Viewer. A view the
 host creates again (its frame re-created) starts afresh: nothing names a view across its
 frames, so there is nothing to keep its record under. `App.tsx` frames it (full page, or
-an inline card whose height the host is told) under the navbar (`chrome: "page"`) in every
+an inline card whose height the host is told) under the navbar in every
 presentation, the file handler's too (above). Inline, where the host offers
 `fullscreen` among its display modes, the card's **Full size** (lucide `Maximize2`, a small ghost
 icon button) asks it for `ui/request-display-mode` fullscreen; it is the first of the host's

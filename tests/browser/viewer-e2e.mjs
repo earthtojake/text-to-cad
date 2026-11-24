@@ -312,7 +312,7 @@ async function formatGate() {
       if (drawn < (fixture.minCoverage ?? 0.03)) failures.push(`${fixture.format}: no foreground model region (${drawn.toFixed(4)})`);
       // The file's own tools, exactly: one that does not apply is hidden, not disabled.
       const strip = await page.locator('[role="group"][aria-label="Interaction tools"] button').evaluateAll((buttons) =>
-        buttons.filter((button) => !button.closest("[data-view-controls]")).map((button) => button.getAttribute("aria-label")));
+        buttons.map((button) => button.getAttribute("aria-label")));
       for (const label of fixture.tools) if (!strip.includes(label)) failures.push(`${fixture.format}: missing ${label} (strip: ${strip.join(", ")})`);
       if (!fixture.tools.length && strip.length) failures.push(`${fixture.format}: tools on a file that has none (${strip.join(", ")})`);
       if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
@@ -326,7 +326,7 @@ async function formatGate() {
       if (!fixture.sections.length && tabs.length) failures.push(`${fixture.format}: a panel on a file with nothing to read (${tabs.join(", ")})`);
       // How the view is drawn is the navbar's, never the tool strip's: every file's Display button (its card holds
       // Projection on a 3D view), and Preview beside it on a 3D view alone.
-      if (await page.locator("[data-cad-toolbar] [data-view-controls]").count()) failures.push(`${fixture.format}: view controls on the tool strip`);
+      if (await page.locator("[data-cad-toolbar] :is([data-display-settings], [data-view-preview])").count()) failures.push(`${fixture.format}: view controls on the tool strip`);
       const display = page.locator("[data-viewer-navbar] button[data-display-settings]");
       if (await display.count() !== 1) failures.push(`${fixture.format}: ${await display.count()} Display buttons in the navbar (one on every file)`);
       else if ((await display.getAttribute("data-view-projection") !== null) !== fixture.threeD) {
@@ -355,7 +355,7 @@ async function formatGate() {
 }
 
 // Inspect is the tools view, in the file's mode (Solid); Render is Preview's alone, in by
-// Preview at the strip's end and out by Exit preview in Preview's bar, each once the cover over the crossing has lifted.
+// the navbar's Preview and out by Exit preview in Preview's bar, each once the cover over the crossing has lifted.
 async function selectViewingMode(page, current, next) {
   const [press, arrive] = next === "Render" ? ["Preview", "Exit preview"] : ["Exit preview", "Preview"];
   if (!(await page.getByRole("button", { name: press, exact: true }).count())) fail(`viewing mode: expected ${current} before switching to ${next}`);

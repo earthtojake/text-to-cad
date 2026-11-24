@@ -7,9 +7,9 @@ export const STRIP_BUTTON_CLASS = "size-icon-button [&>svg]:size-glyph-sm!";
 // The tool strip at the view's top, Figma's toolbar's proportions at a 28px tile: the bar 40px tall with its 1px
 // border, (40 - 2 - 28) / 2 = 5px in (`TOP_STRIP_SHAPE_CLASS`); a tile's corners 5/32 of it (4px), the bar's its
 // padding and a tile's corner and 1 (10px), so the two curves run parallel; its icons 16px; a tool's menu chevron
-// half a tile wide, its own 14x28 target touching its button (`ToolModeMenu.jsx`). The view's controls where they end
-// it (Display and Preview, where no navbar holds them: `useStripButtonClass`), the model's effects (a renderer's strip tools of its own) and
-// Animation's Play are its tiles too; the panel's head buttons are its tile's size (`FlatPanel.jsx`).
+// half a tile wide, its own 14x28 target touching its button (`ToolModeMenu.jsx`). The model's effects (a renderer's
+// strip tools of its own) and Animation's Play are its tiles too; the panel's head buttons are its tile's size
+// (`FlatPanel.jsx`).
 export const TOP_STRIP_BUTTON_CLASS = "size-control rounded-control [&>svg]:size-glyph!";
 export const TOP_STRIP_SHAPE_CLASS = "items-center gap-step rounded-[calc(var(--cad-radius-control)+6px)] p-[5px]";
 /** A phone's strip tile: the same tile, at a phone's tokens (kept as a name for the touch strip's layout). */
@@ -23,5 +23,3 @@ const StripTouch = createContext(false);
 export const StripTouchProvider = StripTouch.Provider;
 /** Whether the strip in hand is a phone's: its tiles and chevrons are touch-sized. */
 export const useStripTouch = () => useContext(StripTouch);
-/** The class of a tile of the strip in hand: one, the scale sizing it on a phone. */
-export const useStripButtonClass = () => TOP_STRIP_BUTTON_CLASS;
