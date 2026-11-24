@@ -549,6 +549,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "apps/docs/src/lib/docs/cli-reference.generated.json": jobs_on("docs", "core_js", "packages"),
             "apps/docs/src/lib/docs/library-reference.generated.json": jobs_on("docs", "core_js", "packages"),
             "tests/browser/viewer-e2e.mjs": jobs_on("web_viewer"),
+            # The share gate opens a share from the share service's Worker, run by its local runner.
+            "apps/share/src/worker.mjs": jobs_on("web_viewer"),
+            "apps/share/serve.mjs": jobs_on("web_viewer"),
             # The installer rehearsals: the installers, their folder and the workflows; a release.
             "scripts/install/install.sh": jobs_on("installer", "docs"),
             "scripts/install/install.py": jobs_on("installer", "docs"),

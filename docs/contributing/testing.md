@@ -198,7 +198,7 @@ In the table, the packages are `packages/cad`, `packages/aliases` and `scripts/b
 | integration | `kicad` | the packages; its suite | `test-kicad.sh`, in the environment of `cad[kicad]` |
 | integration | `blender` | the packages; its suite | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |
 | integration | `packaging` | what ships in a wheel (the packages, the UI, `apps/web`, `apps/mcp`); the scripts that build and check it | The bundle from clean, its layout, the wheels' contents and the installed commands |
-| integration | `viewer-e2e` | the packages; the UI; `apps/web`; `tests/browser` | The bundle's viewer through the real backend: the launch smoke test, then the format and camera gates in Chromium, then, with the engine stopped, a view bundle opened from a static file server and a shared one from a stand-in for the share service |
+| integration | `viewer-e2e` | the packages; the UI; `apps/web`; `tests/browser`; the share service's Worker and runner | The bundle's viewer through the real backend: the launch smoke test, then the format and camera gates in Chromium, then, with the engine stopped, a view bundle opened from a static file server, and a model `cad share` shared opened from the share service's own Worker (`apps/share/serve.mjs`) |
 | release | `packages (Python 3.11 floor I/2)`, `install (Linux)`, `install (Windows)`, `real install`, `update rehearsal (<system> I/2)` | a full run; a change to the thing itself | [The release tier](#the-release-tier) |
 | gate | `CI` | anything | [The one required check](#the-gate) |
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # One self-contained browser gate for the viewer's format and camera
 # contracts, and for a view bundle opened with no engine running, from a static
-# file server and as a share service serves a shared one. It runs exactly
-# what CI runs. The project, the engine daemon, the Viewer, the static file
-# server and the browser are all owned by this process.
+# file server, and shared by `cad share` and opened from the share service. It
+# runs exactly what CI runs. The project, the engine daemon, the Viewer, the
+# static file server, the share service and the browser are all owned by this
+# process.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,8 +63,10 @@ export CAD_STATE_DIR="$project/state"
 # test's own daemon, one part meshed at a time, stopped on the way out.
 export CAD_ENGINE_DIR="$project/engine" CAD_ENGINE_MESH=inline CAD_CACHE_DIR="$project/no-0.7-store"
 export CAD_VIEWER_DIST="$RUNTIME"
+share_pidfile="$project/share.pid"
 cleanup() {
   "$PYTHON" -m cad_server.engine stop >/dev/null 2>&1 || true
+  if [ -f "$share_pidfile" ]; then kill "$(cat "$share_pidfile")" 2>/dev/null || true; fi
   rm -rf "$project" "$log"
 }
 trap cleanup EXIT
@@ -252,11 +255,42 @@ if ! (cd "$project/.bundles" && "$PYTHON" plate.py && rm plate.py) >"$log" 2>&1 
   exit 1
 fi
 
+# The share gate's share: the same model, shared by `cad share --yes` as a person's agent shares one, against
+# this checkout's share service run locally (apps/share/serve.mjs: the Worker itself, over Node's http, with
+# stand-ins for its bucket and limiter), which serves the bundled client too. The command runs while the
+# engine runs, since the engine makes the bundle it uploads; the gate opens what it printed, the engine stopped.
+share_args=()
+if [ -z "$only_gate" ] || [ "$only_gate" = share ]; then
+  node "$REPO_ROOT/apps/share/serve.mjs" --port 0 --assets "$RUNTIME" >"$project/share.origin" 2>"$project/share.log" &
+  echo "$!" >"$share_pidfile"
+  for _ in $(seq 1 300); do
+    [ -s "$project/share.origin" ] && break
+    kill -0 "$(cat "$share_pidfile")" 2>/dev/null || break
+    sleep 0.1
+  done
+  share_origin="$(head -1 "$project/share.origin" 2>/dev/null || true)"
+  if [[ "$share_origin" != http://* ]]; then
+    echo "FAIL: the share service did not start" >&2
+    sed 's/^/    /' "$project/share.log" >&2
+    exit 1
+  fi
+  plate_id="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["document"]["id"])' \
+    "$project/.bundles/plate.view/manifest.json")"
+  if ! (cd "$project" && CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli share "$plate_id" --yes --json) \
+       >"$project/share.json" 2>"$log"; then
+    echo "FAIL: cad share did not share the bundle fixture's model" >&2
+    sed 's/^/    /' "$project/share.json" "$log" >&2
+    exit 1
+  fi
+  share_args=(--share "$project/share.json")
+fi
+
 (cd "$project" && "$PYTHON" -m cad_server.viewer --json) >"$log"
 url="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["apiUrl"])' "$log")"
 export VIEWER_TEST_TOKEN="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$log")"
 e2e_args=(--dir "$project" --url "$url")
-bundle_args=(--bundle "$project/.bundles")
+# (An empty array expanded under `set -u` is an error in the bash macOS ships, hence the `+`.)
+bundle_args=(--bundle "$project/.bundles" ${share_args[@]+"${share_args[@]}"})
 [ -n "$out_dir" ] && e2e_args+=(--out "$out_dir") && bundle_args+=(--out "$out_dir")
 [ -n "$only_gate" ] && e2e_args+=(--only "$only_gate") && bundle_args+=(--only "$only_gate")
 echo "  [setup] $(( $(date +%s) - started_at ))s to fixtures, viewer and port"
@@ -264,7 +298,7 @@ if [ "$only_gate" != bundle ] && [ "$only_gate" != share ]; then
   node "$REPO_ROOT/tests/browser/viewer-e2e.mjs" "${e2e_args[@]}"
 fi
 # The bundle and share gates run with no engine: the server is stopped first, and the page has only a static
-# file server, or a stand-in for the share service.
+# file server, or the share service.
 if [ -z "$only_gate" ] || [ "$only_gate" = bundle ] || [ "$only_gate" = share ]; then
   "$PYTHON" -m cad_server.engine stop >/dev/null 2>&1 || true
   node "$REPO_ROOT/tests/browser/viewer-e2e.mjs" "${bundle_args[@]}"

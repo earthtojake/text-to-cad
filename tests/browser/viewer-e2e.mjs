@@ -2,8 +2,8 @@
 // Real-browser coverage for the bundled Viewer: every load path opens through the
 // real backend and bundle, the camera holds across modes, and a saved revision re-fits a
 // camera nobody has touched and keeps one the person took; and a view bundle the engine
-// exported opens from a plain static file server, with no engine running, and as a shared one, from a
-// stand-in for the share service under its content security policy. CI runs all of it;
+// exported opens from a plain static file server, with no engine running, and a model `cad share` shared
+// opens from the share service itself, run locally, under its content security policy. CI runs all of it;
 // there is no local-only set. Fixture and process lifecycle belong to
 // scripts/test/test-viewer-browser.sh.
 
@@ -11,8 +11,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { createHash, randomBytes, webcrypto } from "node:crypto";
-import zlib from "node:zlib";
+import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -20,13 +19,14 @@ const { chromium } = createRequire(path.join(REPO, "packages/core/package.json")
 const { PNG } = createRequire(path.join(REPO, "apps/web/package.json"))("pngjs");
 
 function parseArgs(argv) {
-  const args = { url: "", dir: "", out: "", only: "", bundle: "" };
+  const args = { url: "", dir: "", out: "", only: "", bundle: "", share: "" };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === "--url") args.url = argv[++i] || "";
     else if (flag === "--dir") args.dir = argv[++i] || "";
     // A folder of view bundles, for the bundle gate, which runs with no engine.
     else if (flag === "--bundle") args.bundle = argv[++i] || "";
+    else if (flag === "--share") args.share = argv[++i] || "";
     else if (flag === "--out") args.out = argv[++i] || "";
     // One gate at a time while working on it: --only camera.
     else if (flag === "--only") args.only = argv[++i] || "";
@@ -72,8 +72,9 @@ function fail(message) {
 }
 
 // The engine's page's gates read its server (`--url`) and the project it serves (`--dir`); the bundle gate
-// reads a folder of bundles (`--bundle`) and the bundled client alone.
-if (!args.url && !args.bundle) fail("--url or --bundle is required; use the self-contained scripts/test runner");
+// reads a folder of bundles (`--bundle`) and the bundled client alone; the share gate what `cad share` printed
+// (`--share`), its links on the share service.
+if (!args.url && !args.bundle && !args.share) fail("--url, --bundle or --share is required; use the self-contained scripts/test runner");
 if (args.url) {
   if (!args.dir || !path.isAbsolute(args.dir)) fail("--dir must name the absolute served test project");
   for (const fixture of fixtures) {
@@ -819,87 +820,6 @@ async function bundleGate() {
   }
 }
 
-// The share gate's archive, as a share's maker writes one (`cad-share/1`): every file of the bundle but its
-// thumbnail, sorted, as a POSIX ustar archive (each a regular file, mode 0644, mtime 0; a path longer than a
-// header's name split into its prefix field), gzipped; stored as `IV || ciphertext-and-tag` (AES-256-GCM).
-function ustarHeader(name, size) {
-  const block = Buffer.alloc(512);
-  const put = (text, at) => block.write(text, at, "utf8");
-  let prefix = "";
-  if (Buffer.byteLength(name) > 100) {
-    const cut = name.lastIndexOf("/", 155);
-    prefix = name.slice(0, cut);
-    name = name.slice(cut + 1);
-  }
-  put(name, 0); put("0000644\0", 100); put("0000000\0", 108); put("0000000\0", 116);
-  put(`${size.toString(8).padStart(11, "0")}\0`, 124); put("00000000000\0", 136); put("        ", 148);
-  put("0", 156); put("ustar\u000000", 257); put(prefix, 345);
-  put(`${block.reduce((sum, byte) => sum + byte, 0).toString(8).padStart(6, "0")}\0 `, 148);
-  return block;
-}
-function bundleFiles(folder, under = "") {
-  return fs.readdirSync(path.join(folder, under), { withFileTypes: true }).flatMap(entry => {
-    const relative = under ? `${under}/${entry.name}` : entry.name;
-    return entry.isDirectory() ? bundleFiles(folder, relative) : [relative];
-  });
-}
-async function shareOf(folder) {
-  const parts = [];
-  for (const file of bundleFiles(folder).filter(file => file !== "thumbnail.png").sort()) {
-    const bytes = fs.readFileSync(path.join(folder, file));
-    parts.push(ustarHeader(file, bytes.length), bytes, Buffer.alloc((512 - (bytes.length % 512)) % 512));
-  }
-  parts.push(Buffer.alloc(1024));
-  const raw = webcrypto.getRandomValues(new Uint8Array(32));
-  const iv = webcrypto.getRandomValues(new Uint8Array(12));
-  const key = await webcrypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt"]);
-  const sealed = await webcrypto.subtle.encrypt({ name: "AES-GCM", iv }, key, zlib.gzipSync(Buffer.concat(parts)));
-  return { stored: Buffer.concat([iv, Buffer.from(sealed)]), key: Buffer.from(raw).toString("base64url") };
-}
-
-// The page's content security policy, as the share service sends it with every HTML answer.
-const SHARE_CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; "
-  + "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; worker-src 'self' blob:; "
-  + "frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
-
-/**
- * A stand-in for the share service, as small as the page needs: the share's bytes at `/v1/shares/<id>` (a
- * 404 for any other id, or once deleted), its DELETE (noted, then 204), `index.html` at `/<id>` with the
- * service's headers, and the bundled client's files at every other path.
- */
-function serveShare(runtime, id, stored, { csp }) {
-  const deletes = [];
-  let held = stored;
-  const server = http.createServer((request, response) => {
-    const pathname = decodeURIComponent(new URL(request.url, "http://share.local").pathname);
-    const api = /^\/v1\/shares\/([^/]+)$/.exec(pathname);
-    const missing = () => response.writeHead(404, { "content-type": "application/json" })
-      .end(JSON.stringify({ error: "No such share.", hint: "It may have expired." }));
-    if (api) {
-      if (request.method === "DELETE" && api[1] === id) {
-        deletes.push({ url: request.url, authorization: request.headers.authorization || "" });
-        if (!held) { missing(); return; }
-        held = null;
-        response.writeHead(204).end();
-        return;
-      }
-      if (request.method !== "GET" || api[1] !== id || !held) { missing(); return; }
-      response.writeHead(200, { "content-type": "application/octet-stream", "cache-control": "no-store" }).end(held);
-      return;
-    }
-    const file = /^\/[A-Za-z0-9_-]{22}$/.test(pathname) ? path.join(runtime, "index.html") : path.resolve(runtime, `.${pathname}`);
-    if (request.method !== "GET" || !file.startsWith(runtime + path.sep) || !fs.statSync(file, { throwIfNoEntry: false })?.isFile()) {
-      response.writeHead(404).end();
-      return;
-    }
-    const type = STATIC_TYPES[path.extname(file)] || "application/octet-stream";
-    response.writeHead(200, { "content-type": type, "x-content-type-options": "nosniff", "referrer-policy": "no-referrer",
-      ...(type === "text/html" ? { "content-security-policy": csp } : {}) });
-    fs.createReadStream(file).pipe(response);
-  });
-  return new Promise(resolve => server.listen(0, "127.0.0.1", () => resolve({ server, deletes })));
-}
-
 // Every content security policy violation the page meets, as it reports them, for the gate to say.
 const CSP_VIOLATIONS_SCRIPT = () => {
   window.__cspViolations = [];
@@ -908,22 +828,19 @@ const CSP_VIOLATIONS_SCRIPT = () => {
 };
 
 async function shareGate() {
-  // A model the engine exported as a view bundle, shared: packed, encrypted and held by a stand-in for the
-  // share service, and opened by the bundled client at the share's address, served as the service serves
-  // it (index.html at /<id>, with the service's content security policy).
-  const runtime = path.resolve(process.env.CAD_VIEWER_DIST || "");
-  if (!fs.existsSync(path.join(runtime, "index.html"))) fail("CAD_VIEWER_DIST names no bundled client");
-  const folder = path.join(args.bundle, "plate.view");
-  const manifest = JSON.parse(fs.readFileSync(path.join(folder, "manifest.json"), "utf8"));
-  const { stored, key } = await shareOf(folder);
-  const id = randomBytes(16).toString("base64url");
-  const secret = randomBytes(32).toString("base64url");
-  // The index.html's own inline scripts, by their hashes: what the service's policy must allow of them.
-  const inline = [...fs.readFileSync(path.join(runtime, "index.html"), "utf8").matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    .map(([, text]) => `'sha256-${createHash("sha256").update(text).digest("base64")}'`);
-  const csp = SHARE_CSP.replace("script-src 'self' 'wasm-unsafe-eval'", `script-src 'self' 'wasm-unsafe-eval' ${inline.join(" ")}`);
-  const { server, deletes } = await serveShare(runtime, id, stored, { csp });
-  const origin = `http://127.0.0.1:${server.address().port}`;
+  // A model shared as a person's agent shares one: `cad share --yes` (the runner's), against this checkout's
+  // share service run locally (`apps/share/serve.mjs`, the Worker itself over Node's http), which also serves
+  // the bundled client. The gate is handed what the command printed (`--share`, its JSON): the two links.
+  const shared = JSON.parse(fs.readFileSync(args.share, "utf8"));
+  if (shared.ok !== true || typeof shared.view !== "string" || typeof shared.delete !== "string") {
+    fail(`--share names no share the command made: ${args.share}`);
+  }
+  const viewLink = new URL(shared.view);
+  const origin = viewLink.origin;
+  const id = viewLink.pathname.slice(1);
+  const key = new URLSearchParams(viewLink.hash.slice(1)).get("key") || "";
+  const secret = new URLSearchParams(new URL(shared.delete).hash.slice(1)).get("delete") || "";
+  if (!key || !secret || new URL(shared.delete).pathname.slice(1) !== id) fail("the share's links carry no key or secret");
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
   const errors = [];
   const asked = [];
@@ -948,8 +865,9 @@ async function shareGate() {
     });
     await page.addInitScript(MODEL_BOUNDS_SCRIPT);
     await page.addInitScript(CSP_VIOLATIONS_SCRIPT);
-    await page.goto(`${origin}${address}`, { waitUntil: "domcontentloaded" });
+    const answer = await page.goto(`${origin}${address}`, { waitUntil: "domcontentloaded" });
     page.historyAtOpen = await page.evaluate(() => history.length);
+    page.policy = answer?.headers()["content-security-policy"] || "";
     return page;
   }
   const violations = [];
@@ -973,7 +891,12 @@ async function shareGate() {
     const drawn = coverage(PNG.sync.read(await view.locator("canvas").first().screenshot()));
     if (drawn < 0.03) failures.push(`share: no foreground model region (${drawn.toFixed(4)})`);
     results.push({ format: "share", coverage: drawn });
-    if (await view.title() !== manifest.document.name) failures.push(`share: the page is titled ${JSON.stringify(await view.title())}, not its document's name`);
+    if (await view.title() !== shared.document.name) failures.push(`share: the page is titled ${JSON.stringify(await view.title())}, not its document's name`);
+    // The service's policy holds the page to its own origin, and allows its inline scripts by their hashes alone.
+    const scripts = /(?:^|;\s*)script-src ([^;]*)/.exec(view.policy)?.[1] || "";
+    if (!/(?:^|;\s*)connect-src 'self'/.test(view.policy) || /'unsafe-inline'/.test(scripts)) {
+      failures.push(`share: the page's content security policy is not the service's: ${JSON.stringify(view.policy)}`);
+    }
     if (await view.getByTestId("file-actions").count()) failures.push("share: a file menu over a shared model");
     // The key stays where the address holds it: in no storage, and in no other history entry.
     const kept = await view.evaluate(() => ({ history: history.length, href: location.href,
@@ -990,15 +913,17 @@ async function shareGate() {
     // The delete page asks, then sends the deletion with the secret in its Authorization alone.
     const remove = await open(`/${id}#delete=${secret}`);
     await remove.locator('[data-share-state="ask"]').waitFor();
-    if (deletes.length) failures.push("share: the delete page deleted before it was asked to");
+    const deletes = () => asked.filter(request => request.method === "DELETE");
+    if (deletes().length) failures.push("share: the delete page deleted before it was asked to");
     await remove.locator("[data-share-delete]").click();
     await remove.locator('[data-share-state="deleted"]').waitFor();
-    if (deletes.length !== 1 || deletes[0].authorization !== `Bearer ${secret}` || deletes[0].url !== `/v1/shares/${id}`) {
-      failures.push(`share: the deletion was ${JSON.stringify(deletes.map(({ url, authorization }) => ({ url, sent: authorization === `Bearer ${secret}` })))}`);
+    const [deletion, ...more] = deletes();
+    if (!deletion || more.length || deletion.headers.authorization !== `Bearer ${secret}` || deletion.url !== `${origin}/v1/shares/${id}`) {
+      failures.push(`share: the deletion was ${JSON.stringify(deletes().map(({ url, headers }) => ({ url, sent: headers.authorization === `Bearer ${secret}` })))}`);
     }
     await close(remove, "delete");
 
-    // Once deleted (or expired), the view says so.
+    // Once deleted (or expired), the service holds it no more, and the view says so.
     const gone = await open(`/${id}#key=${key}`, { gone: true });
     await gone.locator('[data-share-state="gone"]').waitFor();
     await close(gone, "gone");
@@ -1017,14 +942,12 @@ async function shareGate() {
     }
     if (asked.filter(request => request.method === "DELETE").length !== 1) failures.push("share: the page sent more than one deletion");
     if (logged.some(text => text.includes(key) || text.includes(secret))) failures.push("share: the key or the secret was logged");
-    // The service's policy, with the hashes of index.html's own inline scripts, is all the page needs.
+    // The service's policy is all the page needs.
     for (const violation of violations) console.log(`  share: content security policy: ${JSON.stringify(violation)}`);
     if (violations.length) failures.push(`share: ${violations.length} content security policy violations`);
-    console.log(`  share: script-src needs index.html's ${inline.length} inline scripts' hashes: ${inline.join(" ")}`);
     if (errors.length) failures.push(`share: ${errors.join(" | ")}`);
   } finally {
     await context.close();
-    await new Promise(resolve => server.close(resolve));
   }
 }
 
@@ -1039,7 +962,7 @@ const gates = [
   ["format", formatGate, "url"],
   ["camera", modeCameraGate, "url"],
   ["bundle", bundleGate, "bundle"],
-  ["share", shareGate, "bundle"],
+  ["share", shareGate, "share"],
 ];
 
 if (args.only && !gates.some(([name]) => name === args.only)) fail(`unknown --only gate: ${args.only} (${gates.map(([name]) => name).join(", ")})`);

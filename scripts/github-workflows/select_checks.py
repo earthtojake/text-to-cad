@@ -195,6 +195,8 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/mcp/**",), select(flags=["mcp", "packaging"])),
     Rule(("apps/api/**",), NOTHING),  # its tests need no install: static runs them on every change
     Rule(("apps/share/**",), NOTHING),  # likewise the share service's
+    # ...but viewer-e2e's share gate opens a share from the Worker itself, through its local runner.
+    Rule(("apps/share/src/worker.mjs", "apps/share/src/local.mjs", "apps/share/serve.mjs"), select(flags=["web_viewer"])),
     # js-core, beside docs: check-dependencies.mjs walks every app's source, and the web and mcp
     # jobs run it for theirs.
     Rule(("apps/docs/**",), select(flags=["docs", "core_js"])),
