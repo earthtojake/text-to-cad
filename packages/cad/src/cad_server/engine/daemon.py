@@ -212,7 +212,7 @@ def _note(said: str, denied: bool = False) -> None:
 
 # The requests that serve (``Daemon.serve``: the HTTP server bound on the first), each counted busy
 # while it is underway (``Daemon.handle``).
-SERVING = frozenset({"serve", "viewer", "http", "read", "warm"})
+SERVING = frozenset({"serve", "viewer", "http", "read", "warm", "bundle"})
 # The requests that are no command's, which the last command's time (``Daemon.worked``) never counts
 # (``Daemon.ended``): who answers, a page token read again, an app's hold, cad's own update or the plugin's switched,
 # or cad's update asked for (``cad update``, and its looks while it waits). Besides these, any request marked
@@ -1745,6 +1745,8 @@ class Daemon:
                        if request.get("progress") else None)
             status, body = self.serve(request).read(route, counted)
             send({"ok": True, "status": status, "body": body.decode("utf-8")})
+        elif op == "bundle":
+            self.bundle(request, send)
         elif op == "draw":
             self.draw(request, send)
         elif op == "warm":
@@ -1778,6 +1780,34 @@ class Daemon:
                 self.stopping.set()
         else:
             send({"failed": f"unknown request {op!r}"})
+
+    def bundle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        """``{"op": "bundle", "source", "destinations"}`` (``api.export`` to a ``.view`` folder): the view
+        bundle of a document -- ``{"id"}``, one the engine holds, or ``{"path"}``, a CAD file -- written into
+        each folder by the page's own application, from what it answers a page (its ``bundle``:
+        ``viewer/bundle.py``). Answered ``{"done": {"files": [row]}}``, each row its folder, its document and
+        what was written; a refusal as its type (``refused``), anything else ``failed`` in its words."""
+        source, folders = request.get("source"), request.get("destinations")
+        if not (isinstance(source, dict) and isinstance(source.get("id", source.get("path")), str)
+                and isinstance(folders, list) and folders and all(isinstance(folder, str) for folder in folders)):
+            send(refused(ValueError("bundle takes a source, {id} or {path}, and destinations: [folder]")))
+            return
+        try:
+            application = getattr(self.serve(request).http, "app", None)
+            if application is None:
+                send({"failed": "this engine has no application host"})
+                return
+            rows = []
+            for folder in folders:
+                began = time.monotonic()
+                done = application.bundle(source, folder, version())
+                rows.append({**done, "seconds": round(time.monotonic() - began, 4)})
+        except ValueError as error:
+            send(refused(error))
+        except (OSError, RuntimeError) as error:
+            send({"failed": str(error), **failed_type(error)})
+        else:
+            send({"ok": True, "done": {"files": rows}})
 
     def update(self, request: dict[str, Any]) -> dict[str, Any]:
         """``cad update`` (``{"op": "update"}``, ``"major": true`` for ``cad update --major``): judged

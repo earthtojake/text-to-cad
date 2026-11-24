@@ -147,7 +147,7 @@ disagree, the engine's pages are right about what the code does.
 |---|---|---|
 | The server's README, `src/cad_server/README.md` | The server's shape, its commands, cad's own update and where it keeps things | changing a command, the server's folders or the update |
 | The transport's README, `src/cad_mcp/README.md` | What `cad mcp` does between an agent app and the server | changing how an agent app reaches the server |
-| The engine's README, `src/cad_server/engine/README.md`, and the pages it indexes in `docs/` beside it | The engine, a page per mechanism: models, the server and its workers, the door, document lifetime, progress, the viewer and the snapshot, exports, kinematics, materials, imports, the mesh, the wire format, element names, references, the memo, the build closure and a model's parameters. Read the index, then the one page | changing anything a build, an export, a snapshot or a served document does |
+| The engine's README, `src/cad_server/engine/README.md`, and the pages it indexes in `docs/` beside it | The engine, a page per mechanism: models, the server and its workers, the door, document lifetime, progress, the viewer and the snapshot, exports, kinematics, materials, imports, the mesh, the wire format, the view bundle, element names, references, the memo, the build closure and a model's parameters. Read the index, then the one page | changing anything a build, an export, a snapshot or a served document does |
 
 ## The design laws
 

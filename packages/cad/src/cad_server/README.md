@@ -31,7 +31,8 @@ cad_server/
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
                          #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's
-                         #   (robots), Quick Edit's packets (prompt_files)
+                         #   (robots), Quick Edit's packets (prompt_files), a document's view
+                         #   bundle, its page's reads written as a folder (bundle)
   plugin/                # the plugin in the agent apps, and the one place that names an app, a plugin or
                          #   a skill: the table of apps (apps), this computer and its files (computer),
                          #   where the plugin comes from and what is ours (source), what a person's

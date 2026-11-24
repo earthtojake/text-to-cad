@@ -35,6 +35,7 @@ the last column says which page holds each.
 | [Placements](docs/placements.md) | One prototype placed many times: how a part used ten times stays one part |  |
 | [Mesh](docs/mesh.md) | The one tessellation tolerance, an export's own, edge classes, and what an inspection costs | What an inspection costs |
 | [Wire format](docs/wire-format.md) | The HTTP API under `/api/v1` and the buffers a page reads | The HTTP API |
+| [View bundle](docs/view-bundle.md) | A document's page reads written ahead as a folder of files, `cad <type> export SRC DST.view`: its layout (each read's path in it), its manifest, and how one is written and written again | Layout; The manifest; Writing one |
 | [Element names](docs/element-names.md) | How every face, edge and vertex is named from the feature history that made it |  |
 | [References](docs/references.md) | A ref to a part, an assembly or an element, and how it resolves against the latest build | A model never reads a file its own build writes |
 | [Body retention](docs/body-retention.md) | What a body's key is made of, and when a model's or a `@memo` function's body is replayed instead of run |  |

@@ -367,7 +367,7 @@ class HandBuiltTest(_Folder):
         self.assertEqual(refused("part.stl", "robot.urdf"),
                          "part.stl is a mesh: it has no B-rep, and no URDF export is made from one")
         # A robot format cad does not write is refused as any unknown suffix is, before anything is described.
-        with self.assertRaisesRegex(ExportRefused, r"^robot\.sdf: an export is one of .*\.urdf$"):
+        with self.assertRaisesRegex(ExportRefused, r"^robot\.sdf: an export is one of .*\.urdf, or a view bundle's folder \(\.view\)$"):
             kind_of("robot.sdf")
 
 
