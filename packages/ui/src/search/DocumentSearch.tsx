@@ -262,7 +262,7 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
   const heading = (group: SearchGroup<Model>) => group.id === "here" ? t("search.inProject", { name: project?.name ?? "" })
     : group.id === "other" ? t("search.otherProjects") : group.id === "recent" ? t("search.recent") : null;
   const detail = (row: SearchRow<Model>, group: SearchGroup<Model>["id"]) => onScreen(row) ? t("search.current")
-    : group === "here" ? formatLabel(row.model, t("search.kindCode")) : row.project?.name ?? t("search.standalone");
+    : group === "here" ? formatLabel(row.model, t("search.kindModel")) : row.project?.name ?? t("search.standalone");
   const listed = read.status === "ready" && drawn > 0;
   const status = read.status === "reading" ? t("search.reading") : read.status === "failed" ? t("search.failed")
     : drawn === 0 ? (query.trim() ? t("search.nothingFound", { query: query.trim() }) : t("search.empty")) : null;

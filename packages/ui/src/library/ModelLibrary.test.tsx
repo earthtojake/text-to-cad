@@ -182,6 +182,7 @@ it('lists rows under a Name, Kind, Size, Updated and Created header: each its pi
     model('plate.step', { opened: now - 5 * hour, updated: now - 30 * hour, created: now - 3 * 86400, size: 89_000 }),
     model('arm', { path: id, kind: 'model', script: '/work/parts/arm.py', opened: null, updated: now - 2 * hour, created: now - 2 * hour }),
     model('gone.step', { missing: true, updated: null, opened: now - 3 * 86400, created: null }),
+    model('kit.xbf', { opened: now - 5 * hour, updated: now - 30 * hour, created: now - 3 * 86400, size: 2_048 }),
   ])} layout="list" onLayoutChange={() => {}} />);
   await screen.findByRole('button', { name: 'Open plate.step' });
   const list = screen.getByRole('list', { name: 'Files' });
@@ -194,10 +195,12 @@ it('lists rows under a Name, Kind, Size, Updated and Created header: each its pi
       ...[...row.querySelectorAll('[data-column]')].map(cell => [cell.getAttribute('data-column'), cell.textContent])];
   };
   expect(cells('plate.step')).toEqual([true, 'plate.step', ['kind', 'STEP'], ['size', '87 KB'], ['updated', '1d ago'], ['created', '3d ago']]);
-  // A model built from code is Code with no size; its Created is its first run's; a record from before the time was kept
+  // A model built from code is a Model with no size; its Created is its first run's; a record from before the time was kept
   // has an empty Created, and a file that is gone says so where its time on disk was.
-  expect(cells('arm')).toEqual([true, 'arm', ['kind', 'Code'], ['size', '—'], ['updated', '2h ago'], ['created', '2h ago']]);
+  expect(cells('arm')).toEqual([true, 'arm', ['kind', 'Model'], ['size', '—'], ['updated', '2h ago'], ['created', '2h ago']]);
   expect(cells('gone.step')).toEqual([true, 'gone.step', ['kind', 'STEP'], ['size', '—'], ['updated', 'File unavailable'], ['created', '']]);
+  // An xbf is the engine's own document saved as a file: a Model too, and still a file, with its size.
+  expect(cells('kit.xbf')).toEqual([true, 'kit.xbf', ['kind', 'Model'], ['size', '2 KB'], ['updated', '1d ago'], ['created', '3d ago']]);
   // A row's picture has no badge: its Kind says it. Its pin and ⋯ follow its button, at its end.
   expect(list.querySelector('.cad-library-format')).toBeNull();
   const row = screen.getByRole('button', { name: 'Open plate.step' }).closest('li')!;
@@ -445,7 +448,7 @@ it('shows a model by its run and a file by its opening, whichever came last, eac
     model('arm', { path: id, kind: 'model', opened: null, updated: now - 2 * hour }),
     model('plate.step', { opened: now - 5 * hour, updated: now - 30 * hour }),
   ])} />);
-  expect((await screen.findByRole('button', { name: 'Open arm' })).textContent).toBe('CodearmEdited 2h ago');
+  expect((await screen.findByRole('button', { name: 'Open arm' })).textContent).toBe('ModelarmEdited 2h ago');
   expect(screen.getByRole('button', { name: 'Open plate.step' }).textContent).toBe('STEPplate.stepViewed 5h ago');
 });
 
@@ -597,7 +600,7 @@ it("shows every card's light picture in both themes, never turned, and badges it
   expect(picture('video.kicad_pcb').querySelector('img')?.getAttribute('src')).toBe('data:video.kicad_pcb:light.png');
   expect(thumbnail.mock.calls.every(call => call.length === 1)).toBe(true);
   expect(['video.kicad_pcb', 'plate.dxf'].map(name => [picture(name).hasAttribute('data-drawing'), picture(name).hasAttribute('data-thumbnail-variant')])).toEqual([[false, false], [false, false]]);
-  expect(['video.kicad_pcb', 'plate.dxf', 'arm'].map(name => picture(name).querySelector('.cad-library-format')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'Code']);
+  expect(['video.kicad_pcb', 'plate.dxf', 'arm'].map(name => picture(name).querySelector('.cad-library-format')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'Model']);
 });
 
 // A file's size, the server's, goes before its age; a model has none.
@@ -787,12 +790,13 @@ it("sorts the place on screen by last activity, by name or by kind, the host kee
   view.rerender(home('name'));
   expect(opens()).toEqual(['Open arm', 'Open Axle.dxf', 'Open b9.step', 'Open b10.step']);
   expect(screen.getByRole('button', { name: 'Sort by Name' }).textContent).toBe('Name');
-  // By kind: the 3D models (the one built from code first), then the drawings, each kind by format, then by name.
+  // By kind: the 3D models (the models first: those built from code, then the xbf files), then the drawings, each kind
+  // by format, then by name.
   view.rerender(home('kind'));
   expect(opens()).toEqual(['Open arm', 'Open b9.step', 'Open b10.step', 'Open Axle.dxf']);
   expect(sortDocuments([model('z.step'), model('a.stl'), model('m.dxf'), model('n.urdf'), model('q.kicad_sch'), model('p.kicad_pcb'), model('a.3mf'),
-    model('notes.txt'), model('k', { kind: 'model' })], 'kind').map(item => item.name))
-    .toEqual(['k', 'a.3mf', 'z.step', 'a.stl', 'm.dxf', 'p.kicad_pcb', 'q.kicad_sch', 'n.urdf', 'notes.txt']);
+    model('notes.txt'), model('k', { kind: 'model' }), model('b.xbf'), model('a.xbf'), model('j', { kind: 'model' })], 'kind')
+    .map(item => item.name)).toEqual(['j', 'k', 'a.xbf', 'b.xbf', 'a.3mf', 'z.step', 'a.stl', 'm.dxf', 'p.kicad_pcb', 'q.kicad_sch', 'n.urdf', 'notes.txt']);
   view.unmount();
   expect(reported(reports)).toEqual({ home_sort_name: 1 });
   cleanup();

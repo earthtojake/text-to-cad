@@ -138,7 +138,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   documents on the home or for a standalone one); typing finds as the home's search does, every word in a name or a
   file's path, "In <project>" first, then "Other projects", at most 50 rows and a line saying how many more there are.
 - A row: the document's picture (the kind's glyph until it loads), its name, and at its right its format in the project
-  on screen ("Code" for one built from code), else its project's name, "Standalone" for one in none. The document on screen's row is marked and opens
+  on screen ("Model" for one built from code or an `.xbf` file), else its project's name, "Standalone" for one in none. The document on screen's row is marked and opens
   nothing. While it reads, placeholder rows; a read that fails or finds nothing says so.
 - Up and Down move, Home and End go to the ends, Enter opens the row here and ⌘Enter (Ctrl+Enter) in a new tab; typing
   always goes to the input. A click opens a row here; where the host gives a document an address the row is a real
@@ -184,8 +184,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - **The place** fills the rest, on the page's colour, on 24px gutters, 20px under the navbar. Its heading row: the
   place's name, the page's one larger text (a project's after its folder glyph, with its folder from `~` and its ⋯:
   Open in new tab, Copy path, Reveal, Remove from CAD, which says nothing on disk changed and goes to Recents); at the
-  right Sort (Last activity, the default; Name; Kind: by the chips' kinds in their order, then format, those built from
-  code first, then name) and grid or list, one segmented control. Sort and the layout are the tab's
+  right Sort (Last activity, the default; Name; Kind: by the chips' kinds in their order, then the
+  models (those built from code, then `.xbf` files), then format, then name) and grid or list, one segmented control. Sort and the layout are the tab's
   ([Settings memory](#settings-memory)).
 - **The kinds**, a row of chips of its own under the heading row: All, then 3D models, Drawings, Boards, Schematics and
   Robots, each only where the place holds one, always in that order, each with its count. One is on at a time (All at
@@ -197,12 +197,15 @@ chrome that floats over the picture. The home is the navbar over the library: it
   or a GLB a model too; "built from code" against "a file on disk" was the implementation showing. A model and the
   files exported from it stay cards of their own.
 - **Its documents**, all of them: the first 120, then "Show N more". Cards in columns at least 232px wide (the picture
-  on the light gradient with its format's badge, "Code" for a document built from code, then the kind's glyph, the
-  name and one line), or 44px rows.
+  on the light gradient with its format's badge, "Model" for a document built from code or an `.xbf` file, then the
+  kind's glyph, the name and one line), or 44px rows. Why an xbf says Model: it is the engine's own document saved as
+  a file, the same thing a model's page shows, so it is a model; STEP, STL, 3MF, GLB and the rest are other formats and
+  keep their format's name. Only the label: an xbf is still a file (its glyph, its menu, its size and path, what
+  Delete and Pin do).
   - A card's line says where the document is, where that is not plain: in Recents and Pinned its project's name
     ("Standalone" for one in none); in a project's page a model's script under the project's folder. Then a file's
     size, and its last activity. A list's columns are Name, then the same as a column (Project, or in a project's page
-    Where: a model's script, a file's folder), Kind (its format, as the badge: "Code", "STEP", "KiCad PCB"), Size,
+    Where: a model's script, a file's folder), Kind (its format, as the badge: "Model", "STEP", "KiCad PCB"), Size,
     Updated and Created.
   - Each has a pin and a ⋯ (Open, Open in new tab, Copy path, Copy link, Reveal, Pin, Delete, which asks first), shown
     on hover or focus and always on touch; a project's file, listed for being in its folder, has no Delete, and a Pin

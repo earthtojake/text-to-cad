@@ -97,18 +97,24 @@ export interface ImportedProject {
 /** Whether a row deletes the model (a document built from code) rather than removing a file from the list. */
 export const deletes = (model: LibraryModel) => model.kind === "model" || model.kind === "shape";
 
-// A file's format as people name it, by its extension; one not here is its extension, upper case.
+// A file's format as people name it, by its extension; one not here is its extension, upper case. An xbf is not here:
+// it is the engine's own document saved as a file, what a model's page shows, so it is a model (`isModel`).
 const FORMATS: Readonly<Record<string, string>> = { step: "STEP", stp: "STEP", stl: "STL", glb: "GLB", gltf: "GLTF", "3mf": "3MF",
-  dxf: "DXF", xbf: "XBF", urdf: "URDF", kicad_pcb: "KiCad PCB", kicad_sch: "KiCad SCH" };
+  dxf: "DXF", urdf: "URDF", kicad_pcb: "KiCad PCB", kicad_sch: "KiCad SCH" };
 /** The formats the viewer opens, under the welcome: names, not language. */
 const WELCOME_FORMATS = ["STEP", "STL", "3MF", "GLB", "DXF", "KiCad", "URDF"].join(" · ");
 const extensionOf = (path: string) => {
   const name = path.split(/[\\/]/).pop() ?? "";
   return name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
 };
-/** What a card's badge and a row's Kind say: a file's format ("STEP", "KiCad PCB"), or `code` for a document built from code. */
-export function formatLabel(item: LibraryModel, code: string): string {
-  if (deletes(item)) return code;
+/**
+ * Whether a row is a model: one built from code, or an `.xbf` file, which is the engine's own document saved as a file
+ * (the same thing a model's page shows). Only its label: an xbf is still a file, opened, kept and deleted as one.
+ */
+const isModel = (item: LibraryModel) => deletes(item) || extensionOf(item.path) === "xbf";
+/** What a card's badge and a row's Kind say: `model` for a model (`isModel`), else a file's format ("STEP", "KiCad PCB"). */
+export function formatLabel(item: LibraryModel, model: string): string {
+  if (isModel(item)) return model;
   const extension = extensionOf(item.path);
   return FORMATS[extension] ?? extension.toUpperCase();
 }
@@ -178,8 +184,8 @@ export const placeKey = (place: HomeLocation) => (place.view === "project" ? `pr
 
 /**
  * A place's documents in the order the person chose: by last activity (when each was last opened or changed), newest
- * first; by name; or by kind, in the kinds' order (`DOCUMENT_KINDS`, one of none last), then by format (`format`),
- * those built from code first, then by name. The host's order where two tie. A pinned document is not first: Pinned is a
+ * first; by name; or by kind, in the kinds' order (`DOCUMENT_KINDS`, one of none last), then the models (`isModel`:
+ * those built from code, then `.xbf` files), then by format (`format`), then by name. The host's order where two tie. A pinned document is not first: Pinned is a
  * place of its own.
  */
 export function sortDocuments<Model extends LibraryModel>(documents: readonly Model[], sort: LibrarySort,
@@ -187,7 +193,7 @@ export function sortDocuments<Model extends LibraryModel>(documents: readonly Mo
   const names = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
   const rank = (item: Model) => { const kind = documentKind(item); return kind ? DOCUMENT_KINDS.indexOf(kind) : DOCUMENT_KINDS.length; };
   const by = (a: Model, b: Model) => sort === "name" ? names.compare(a.name, b.name)
-    : sort === "kind" ? rank(a) - rank(b) || Number(deletes(b)) - Number(deletes(a)) || names.compare(format(a), format(b)) || names.compare(a.name, b.name)
+    : sort === "kind" ? rank(a) - rank(b) || Number(isModel(b)) - Number(isModel(a)) || Number(deletes(b)) - Number(deletes(a)) || names.compare(format(a), format(b)) || names.compare(a.name, b.name)
       : (lastActivity(b) ?? 0) - (lastActivity(a) ?? 0);
   return documents.map((item, index) => ({ item, index })).sort((a, b) => by(a.item, b.item) || a.index - b.index).map(({ item }) => item);
 }
@@ -366,7 +372,7 @@ export interface LibraryOrigin {
  * on disk), then Sort (Last activity, Name, Kind) and grid or list, one segmented control. Under it the kinds'
  * chips (`kindChips`: All, 3D models, Drawings, Boards, Schematics, Robots, each the place holds, with its count under the
  * search), where it holds more than one. Then the place's documents, every one of them (`PLACE_ROWS` until Show more),
- * each a card (a picture badged with its format, "Code" for one built from code, over the kind's glyph, the name, and a
+ * each a card (a picture badged with its format, "Model" for one built from code or an `.xbf` file, over the kind's glyph, the name, and a
  * line: its project's name in Recents and Pinned, a model's script in its project's page, a file's size, then its last
  * activity with its verb) or a row (Name, Where or Project, Kind: its format, Size, Updated, Created).
  * A card's or a row's main press is a link where the host gives the document an address
@@ -584,7 +590,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const shownName = useRef(onPlaceShown);
   shownName.current = onPlaceShown;
   useEffect(() => { shownName.current?.(placeName); }, [placeName]);
-  const format = (item: Model) => formatLabel(item, t("home.formatCode"));
+  const format = (item: Model) => formatLabel(item, t("home.formatModel"));
   const inPlace = place.view === "project" ? listed.find(entry => entry.project.id === place.project)?.documents ?? []
     : place.view === "pinned" ? pinned : place.view === "standalone" ? standalone : all;
   const ordered = sortDocuments(inPlace, sort, format, locale);
