@@ -212,10 +212,14 @@ export function createViewBundleClient(source, manifest) {
       tables.set(path, held);
       held.catch(() => { if (tables.get(path) === held) tables.delete(path); });
     }
-    return signal ? Promise.race([held, new Promise((_, reject) => {
-      if (signal.aborted) reject(abortError());
-      signal.addEventListener('abort', () => reject(abortError()), { once: true });
-    })]) : held;
+    if (!signal) return held;
+    // The read is shared: one asker giving up stops waiting for it, and leaves it to the others.
+    return new Promise((resolve, reject) => {
+      const stop = () => reject(abortError());
+      if (signal.aborted) { stop(); return; }
+      signal.addEventListener('abort', stop, { once: true });
+      held.then(resolve, reject).finally(() => signal.removeEventListener('abort', stop));
+    });
   }
 
   // ---- the API a page reads an engine document at, answered from the bundle ----------------------------
