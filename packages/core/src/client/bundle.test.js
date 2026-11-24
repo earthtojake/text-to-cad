@@ -16,9 +16,13 @@ const encode = value => new TextEncoder().encode(typeof value === 'string' ? val
 const table = (name, faces) => ({ faces: Object.fromEntries(faces.map((area, index) => [String(index + 1),
   { kind: 'face', ordinal: index + 1, area, surface: 'plane', name }])), edges: { 1: { kind: 'edge', ordinal: 1, length: 4 } },
 vertices: { 1: { kind: 'vertex', ordinal: 1, position: [0, 0, 0] } }, groups: { faces: { 1: 1, 2: 1 }, edges: { 1: 1 } } });
+// JSON as the bundle's writer spells it: compact, every character past ASCII escaped.
+const asWritten = value => encode(JSON.stringify(value).replace(/[^\x00-\x7f]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`));
+// The structure as a bundle written before the mechanism and the names moved out of it holds it: both its own.
 const FILES = {
-  'structure.json': encode({ name: 'pair.step', path: 'pair.step', version: 'v1', tessellation: TESSELLATION,
-    prototypes: [{ key: PLATE }, { key: PEG }], instances: [{ prototype: 0 }, { prototype: 1 }] }),
+  'structure.json': asWritten({ name: 'pair.step', path: 'pair.step', version: 'v1', tessellation: TESSELLATION,
+    prototypes: [{ key: PLATE, name: 'plaque é', faceNames: { 1: 'f:plate.top' } }, { key: PEG }], instances: [{ prototype: 0 }, { prototype: 1 }],
+    kinematics: { pairs: [] } }),
   [`parts/step-f8f4-0~3A1~3A2/${TESSELLATION}.xbm`]: new Uint8Array([88, 66, 77, 50, 1, 2, 3]),
   [`parts/${PEG}/${TESSELLATION}.xbm`]: new Uint8Array([88, 66, 77, 50, 4]),
   'parts/step-f8f4-0~3A1~3A2/elements.json': encode(table('plate', [12, 20])),
@@ -74,7 +78,8 @@ for (const [kind, make] of Object.entries(SOURCES)) {
     assert.equal(served.final, true);
     assert.ok(served.url.startsWith(`${VIEW_BUNDLE_ORIGIN}/api/v1/documents/`), served.url);
     const where = xbfDocumentSource(served.url);
-    // The structure and each part's buffer, at the tessellation the structure names, are the bundle's bytes.
+    // The structure and each part's buffer, at the tessellation the structure names, are the bundle's bytes: a
+    // structure that holds its mechanism and its names itself is answered exactly as it was written.
     assert.deepEqual(await bytesOf(await served.fetch(`${where.url}/structure`)), STEP_BUNDLE['structure.json']);
     for (const [key, path] of [[PLATE, 'parts/step-f8f4-0~3A1~3A2'], [PEG, `parts/${PEG}`]]) {
       const part = await served.fetch(`${where.url}/parts/${encodeURIComponent(key)}?tessellation=${TESSELLATION}`);
@@ -154,6 +159,82 @@ test("a mesh file's bytes, a robot's meshes and a drawing are read through the s
       client.dispose();
     }
   }
+});
+
+// The engine's structure of a model whose two plates share a part key and differ in their names, a peg whose names
+// are the left plate's, and a pin with none, with the model's mechanism.
+const PLATE_NAMES = { faceNames: { 1: 'f:left.top', 2: 'f:left.side' }, edgeNames: { 1: 'e:left.rim' }, vertexNames: {} };
+const ENGINE_STRUCTURE = { name: 'pair', path: ID, version: 'v2', tessellation: TESSELLATION, units: 'mm',
+  prototypes: [
+    { index: 0, key: PLATE, name: 'left', color: null, ...PLATE_NAMES, faceColors: {}, frames: {} },
+    { index: 1, key: PLATE, name: 'right', color: '#c0392b', faceNames: { 1: 'f:right.top', 2: 'f:right.side' },
+      edgeNames: { 1: 'e:right.rim' }, vertexNames: { 3: 'v:right.corner' }, faceColors: {}, frames: {} },
+    { index: 2, key: PEG, name: 'peg', color: null, ...PLATE_NAMES, faceColors: { 1: '#ffffff' }, frames: {} },
+    { index: 3, key: 'pin', name: 'pin', color: null, faceColors: {}, frames: {} },
+  ],
+  instances: [0, 1, 2, 3].map(prototype => ({ prototype, path: `pair/${prototype}`, matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], color: null })),
+  tree: { name: 'pair', children: [] },
+  kinematics: { pairs: [{ label: 'slide', parent: 'pair/0', child: 'pair/1' }], asBuilt: { slide: 0 } },
+};
+/**
+ * The bundle's files of `structure`, as its writer moves things out of it: the mechanism to `kinematics.json` alone,
+ * and each prototype's names, whichever of the three it has, to a file of compact JSON with sorted keys named by the
+ * SHA-256 of its bytes, which the prototype names in their place.
+ */
+function movedOut(structure) {
+  const { kinematics, ...rest } = structure;
+  const files = { 'kinematics.json': encode(kinematics) };
+  rest.prototypes = structure.prototypes.map(({ faceNames, edgeNames, vertexNames, ...prototype }) => {
+    const names = Object.fromEntries(Object.entries({ edgeNames, faceNames, vertexNames }).filter(([, value]) => value !== undefined));
+    if (!Object.keys(names).length) return prototype;
+    const bytes = encode(names);
+    const path = `names/${createHash('sha256').update(bytes).digest('hex')}.json`;
+    files[path] = bytes;
+    return { ...prototype, names: path };
+  });
+  return { 'structure.json': encode(rest), ...files };
+}
+
+test("a structure whose mechanism and names the bundle keeps apart is answered as the engine's, from either source", async () => {
+  const moved = { ...STEP_BUNDLE, ...movedOut(ENGINE_STRUCTURE) };
+  const all = { ...moved, 'manifest.json': manifestOf(moved) };
+  const named = Object.keys(all).filter(path => path.startsWith('names/'));
+  // The plates share a key and keep two names files; the peg's names are the left plate's file; the pin has none.
+  assert.equal(named.length, 2);
+  // The folder's server, which says how many names files were read through before each was asked for.
+  const base = 'https://files.test/bundles/pair.view/';
+  const asked = [];
+  let read = 0;
+  const fetch = async (url, init = {}) => {
+    const path = url.slice(base.length);
+    asked.push({ path, cache: init.cache, read });
+    if (!Object.hasOwn(all, path)) return new Response('no', { status: 404 });
+    return { ok: true, status: 200, arrayBuffer: async () => { if (path.startsWith('names/')) read += 1; return new Uint8Array(all[path]).buffer; } };
+  };
+  for (const source of [viewBundleUrlSource(base, { fetch }), viewBundleMemorySource(all)]) {
+    const client = await openViewBundle(source);
+    const served = await client.engineDocument('/pair.step');
+    const where = xbfDocumentSource(served.url);
+    assert.deepEqual(await (await served.fetch(`${where.url}/structure`)).json(), ENGINE_STRUCTURE);
+    assert.deepEqual(await (await served.fetch(`${where.url}/structure`)).json(), ENGINE_STRUCTURE);
+    assert.deepEqual(await (await served.fetch(`${where.url}/kinematics`)).json(), ENGINE_STRUCTURE.kinematics);
+    client.dispose();
+  }
+  // Each names file was asked for once, however many prototypes name it and however often the structure is read,
+  // all of them before any was read through; named by their content, they are asked for as the browser's cache has them.
+  const reads = asked.filter(({ path }) => path.startsWith('names/'));
+  assert.deepEqual(reads.map(({ path }) => path).sort(), [...named].sort());
+  assert.ok(reads.every(({ cache, read: before }) => cache === 'default' && before === 0), JSON.stringify(reads));
+
+  // A structure naming a names file the bundle does not hold is no structure with fewer names: it fails, saying which.
+  const lost = { ...moved, 'structure.json': encode({ ...JSON.parse(new TextDecoder().decode(moved['structure.json'])),
+    prototypes: [{ key: PEG, names: 'names/0000.json' }] }) };
+  const client = await openViewBundle(viewBundleMemorySource({ ...lost, 'manifest.json': manifestOf(lost) }));
+  const served = await client.engineDocument('/pair.step');
+  const answer = await served.fetch(`${served.url}/structure`);
+  assert.equal(answer.status, 404);
+  assert.match((await answer.json()).error, /names\/0000\.json/);
+  client.dispose();
 });
 
 test('a model is named by its id, and its parameters are read as a file document\'s', async () => {

@@ -1,36 +1,39 @@
 """``cad share`` -- a document shared for anyone with its link to open in the hosted viewer, with no sign-in, for 7
 days after its last share (``cad_server.sharing``; the engine's **Sharing**).
 
-- ``cad share TARGET [--yes]``: TARGET a document id the engine holds, or a file the viewer opens. The running
-  server writes the document's view bundle into a temporary folder, as ``cad <type> export TARGET DST.view`` writes
-  one; this process packs it (``sharing.archive``) and uploads it (``sharing.upload``) -- never the server, so an
-  agent app's sandbox sees the connection and its network rules apply. It prints the view link, the delete link,
-  the expiry and one line of what travelled. The same document shared again from this computer is uploaded again
-  under the same names: the link stays, and the 7 days start again; where the service refuses them (403), it is a
-  new share. A KiCad board or schematic and a folder are refused: they have no bundle.
+- ``cad share TARGET [--yes]``: TARGET a document id the engine holds, or a file the viewer opens. The running server
+  writes the document's view bundle into the document's folder in cad's cache, over the one it wrote there last, as
+  ``cad <type> export TARGET DST.view`` writes one; this process uploads the files of it the share lacks, in packs,
+  and commits the share (``sharing.send``) -- never the server, so an agent app's sandbox sees the connection and its
+  network rules apply. One ``cad share`` of a document runs at a time: another waits ``LOCK_SECONDS``, saying so, then
+  is refused in a line. It prints the view link, the delete link, the expiry and one line of what travelled. The same
+  document shared again from this computer is the same share: the link stays, the 7 days start again, and only what
+  changed travels. Where the service refuses its names (403), or its record is past its expiry or is not one this cad
+  reads (``cad-share/1``'s), it is a new share. A KiCad board or schematic and a folder are refused: they have no
+  bundle.
 - The first share on a computer needs the person's yes: without ``--yes`` it is refused, in lines an agent can
   pass on (what goes, where, who can open it, for how long, how to delete it), naming the same command with
   ``--yes``, which records the agreement. ``cad share off`` refuses every share, ``--yes`` or not, until ``cad
   share on``.
 - ``cad share status``: whether sharing is on, whether this computer agreed, and its live shares with their links.
-- ``cad share delete TARGET|LINK [--yes]``: the share of a TARGET this computer shared, or the share a delete
-  link names, deleted from the service, asked first as every command that destroys is
-  (``cad_server._internal.consent``).
+- ``cad share delete TARGET|LINK [--yes]``: the share of a TARGET this computer shared, or the share a link names (a
+  delete link, or the view link of a share this computer keeps), deleted from the service, asked first as every
+  command that destroys is (``cad_server._internal.consent``); its document's folder in cad's cache goes with it.
 
-``--json`` answers in one JSON object. Writes of the agreement, the setting and the records are the running
-server's where one answers (``sharing.keep``), else this process's. The key and the secrets are said only inside
-the two links: never in any other line.
+``--json`` answers in one JSON object. Writes of the agreement, the setting, the records and the cache's folders are
+the running server's where one answers (``sharing.keep``), else this process's. A share's id and its secrets are said
+only inside the two links: never in any other line.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
-import shutil
 import sys
-import tempfile
-from collections.abc import Sequence
+import threading
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -40,13 +43,15 @@ DESCRIPTION = (
     "Share a document: anyone with its link opens it in the hosted viewer, with no sign-in, until 7 days after its "
     "last share. TARGET is a document id the engine holds or a file the viewer opens. What goes is its view bundle: "
     "a model's, an .xbf's or a STEP's shapes as meshes with their names, measurements and joints, never its code or "
-    "the CAD file; an STL, a GLB or a 3MF is the file itself. The first share on a computer needs the person's yes "
-    "(--yes). `status` says whether sharing is on and lists this computer's live shares; `on` and `off` turn it on "
-    "and off; `delete` removes a share.")
+    "the CAD file; an STL, a GLB or a 3MF is the file itself. Sharing it again keeps the link and sends only what "
+    "changed. The first share on a computer needs the person's yes (--yes). `status` says whether sharing is on and "
+    "lists this computer's live shares; `on` and `off` turn it on and off; `delete` removes a share.")
 KINDS = {"model": "a model", "xbf": "an .xbf", "step": "a STEP", "stl": "an STL", "glb": "a GLB", "3mf": "a 3MF",
          "dxf": "a DXF", "urdf": "a URDF", "srdf": "an SRDF"}
 MESHES = frozenset({"stl", "glb", "3mf"})
 UNBUNDLED = {"kicad_pcb": "a KiCad board", "kicad_sch": "a KiCad schematic"}
+# How long a share waits for another ``cad share`` of the same document to end before it is refused.
+LOCK_SECONDS = 60.0
 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
@@ -144,19 +149,52 @@ def agreement_lines(service: str, command: str) -> list[str]:
         "  What goes: a model's, an .xbf's or a STEP's shapes as meshes, with their names, measurements and joints, "
         "never its code or the CAD file; an STL, a GLB or a 3MF is the file itself (a DXF its drawing, a URDF or an "
         "SRDF its links, joints and mesh files).",
-        f"  Where: {service}, which stores it encrypted with a key only the link holds.",
+        f"  Where: {service}, which keeps it encrypted under a key made from the link, and keeps neither the link "
+        "nor the key.",
         "  Who: anyone with the link can open it, with no sign-in.",
-        f"  How long: until {sharing.EXPIRY_DAYS} days after its last share (sharing it again keeps the link and "
-        f"starts the {sharing.EXPIRY_DAYS} days again).",
+        f"  How long: until {sharing.EXPIRY_DAYS} days after its last share (sharing it again keeps the link, sends "
+        f"only what changed and starts the {sharing.EXPIRY_DAYS} days again).",
         "  Delete: the delete link it prints removes it, as does `cad share delete TARGET`.",
         f"Ask the person; once they agree, run `{command}`. `cad share off` turns sharing off on this computer.",
     ]
 
 
+@contextlib.contextmanager
+def _locked(document: str, name: str, prog: str) -> Iterator[Path]:
+    """The document's folder in cad's cache (``sharing.folder_of``), made by the running server where one answers
+    (``sharing.keep``), with its lock held for the block: one ``cad share`` of a document at a time. Where another
+    holds it, a line says so and the lock is waited for ``LOCK_SECONDS``; then the command is refused in a line."""
+    from cad_server import sharing
+    from cad_server._internal.cli_errors import Failure
+
+    def made() -> Path:
+        try:
+            return Path(sharing.keep(folder=document)["folder"])
+        except (OSError, KeyError, TypeError) as error:
+            raise Failure(f"could not make the share's folder in cad's cache: {error}") from None
+
+    def waiting() -> None:
+        print(f"{prog}: another `cad share` of {name} runs on this computer: waiting for it to end, "
+              f"{LOCK_SECONDS:.0f} seconds at most", file=sys.stderr, flush=True)
+
+    folder = made()
+    with contextlib.ExitStack() as stack:
+        try:
+            stack.enter_context(sharing.held(folder, wait=LOCK_SECONDS, waiting=waiting, make=made))
+        except sharing.Busy:
+            raise Failure(f"another `cad share` of {name} has run on this computer for {LOCK_SECONDS:.0f} seconds "
+                          "and goes on: share it again once it ends") from None
+        except OSError as error:
+            raise Failure(f"could not lock the share's folder in cad's cache ({folder}): "
+                          f"{error.strerror or error}") from None
+        yield folder
+
+
 def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]) -> int:
+    from cad.engine.ids import file_id
     from cad_server import sharing
     from cad_server._internal.api import share_url
-    from cad_server._internal.cli_errors import Failure
+    from cad_server._internal.cli_errors import Failure, classify
     from cad_server._internal.consent import retry
 
     source, path = _source(target)
@@ -174,60 +212,55 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
             sharing.keep(agree=True)
         except OSError as error:
             raise Failure(f"could not keep the person's agreement, so nothing was uploaded: {error}") from None
-    folder = Path(tempfile.mkdtemp(prefix="cad-share-"))
-    try:
+    ident = source if path is None else file_id(path)
+    with _locked(ident, target, prog) as folder:
+        earlier = next((row for row in _records() if row["service"] == service and row["document"]["id"] == ident
+                        and not sharing.expired(row)), None)
         try:
-            manifest = sharing.bundle(source, folder / "share.view")
+            manifest = sharing.bundle(source, folder / sharing.BUNDLE)
         except (ValueError, RuntimeError, OSError) as error:
             # The engine's refusal or failure of the bundle (``ExportRefused``, ``NotHeld``, ``EngineError``), said by
             # the failure contract in its words.
-            from cad_server._internal.cli_errors import classify
-
             raise classify(error) from None
         try:
-            body, paths = sharing.archive(folder / "share.view")
+            found = sharing.files(folder / sharing.BUNDLE)
         except (sharing.Unsharable, OSError) as error:
             raise Failure(f"the view bundle cannot be shared: {error}") from None
-    finally:
-        shutil.rmtree(folder, ignore_errors=True)
-    if len(body) > sharing.LIMIT:
-        raise Failure(f"{_size(len(body))} is more than the {_size(sharing.LIMIT)} a share takes, so nothing was "
-                      "uploaded")
-    shown = manifest.get("document") or {}
-    document = {"id": str(shown.get("id")), "kind": str(shown.get("kind")), "name": str(shown.get("name")),
-                "path": path}
-    earlier = next((row for row in _records() if row["service"] == service
-                    and row["document"]["id"] == document["id"]), None)
-    share = sharing.share_of(earlier) if earlier is not None else sharing.Share.new(service)
-    try:
-        answer = _uploaded(share, body)
-    except sharing.Refused as refusal:
-        if refusal.status != 403:
-            raise _refused("the upload", refusal) from None
-        share = sharing.Share.new(service)  # that id is no longer this computer's to write: a new share
+        shown = manifest.get("document") or {}
+        document = {"id": ident, "kind": str(shown.get("kind")), "name": str(shown.get("name")), "path": path}
+        share = sharing.share_of(earlier) if earlier is not None else sharing.Share.new(service)
         try:
-            answer = _uploaded(share, body)
-        except sharing.Refused as again:
-            raise _refused("the upload", again) from None
-    record = sharing.record_of(share, document, answer, len(body))
-    unkept = None
-    try:
-        sharing.keep(record=record)
-    except OSError as error:
-        unkept = str(error)
+            sent = _sent(share, found, sharing.stored(folder, share), prog)
+        except sharing.Refused as refusal:
+            if refusal.status != 403:
+                raise _refused(refusal) from None
+            share = sharing.Share.new(service)  # that id is no longer this computer's to write: a new share, whole
+            try:
+                sent = _sent(share, found, None, prog)
+            except sharing.Refused as again:
+                raise _refused(again) from None
+        record = sharing.record_of(share, document, sent.answer)
+        unkept = None
+        try:
+            sharing.keep(record=record, stored=sent.stored)
+        except OSError as error:
+            unkept = str(error)
     again = earlier is not None and earlier["id"] == share.id
-    sent = _sent(document["kind"], paths, len(body))
+    what = _what(document["kind"], [file.path for file in found])
     if as_json:
-        print(json.dumps({"ok": True, "view": share.view, "delete": share.remove, "expires": answer["expires"],
+        print(json.dumps({"ok": True, "view": share.view, "delete": share.remove, "expires": sent.answer["expires"],
                           "id": share.id, "again": again, "document": {name: document[name] for name in
                                                                        ("id", "kind", "name")},
-                          "sent": sent, "kept": unkept is None}, separators=(",", ":")), flush=True)
+                          "sent": {**what, **sent.travelled, "format": sharing.FORMAT, "code": False,
+                                   "cad_file": document["kind"] in MESHES},
+                          "stored": {"files": sent.answer["files"], "bytes": sent.answer["bytes"]},
+                          "kept": unkept is None}, separators=(",", ":")), flush=True)
     else:
-        print(f"Shared {document['name']}, {KINDS.get(document['kind'], document['kind'])}: {sent['what']}, "
-              f"{_size(len(body))} uploaded; {sent['without']}", flush=True)
+        print(f"Shared {document['name']}, {KINDS.get(document['kind'], document['kind'])}: {what['what']}; "
+              f"{_travelled(sent, again)}; {what['without']}", flush=True)
         print(f"View:    {share.view}")
         print(f"Delete:  {share.remove}")
-        print(f"Expires: {_when(answer['expires'])}, {sharing.EXPIRY_DAYS} days after this share"
+        print(f"Expires: {_when(sent.answer['expires'])}, {sharing.EXPIRY_DAYS} days after this share"
               f"{' (the same link as before)' if again else ''}; sharing it again keeps the link and starts the "
               f"{sharing.EXPIRY_DAYS} days again", flush=True)
     if unkept is not None:
@@ -248,21 +281,25 @@ def _records() -> list[dict[str, Any]]:
                       f"{error.strerror or error}") from None
 
 
-def _uploaded(share: Any, body: bytes) -> dict[str, Any]:
-    """The upload (``sharing.upload``), tried once more where the service lost a race to create it (409), which is
-    transient; the network out of reach said in its one line."""
+def _sent(share: Any, found: list[Any], stored: dict[str, Any] | None, prog: str) -> Any:
+    """The share sent and committed (``sharing.send``), a wait the service asks for said once in a line; the network
+    out of reach, and a bundle changed meanwhile, said in their one line. ``Refused`` for the caller."""
     from cad_server import sharing
     from cad_server._internal.cli_errors import Failure
 
-    for attempt in (1, 2):
-        try:
-            return sharing.upload(share, body)
-        except sharing.Unreachable as error:
-            raise Failure(_unreached(share.service, error)) from None
-        except sharing.Refused as refusal:
-            if refusal.status != 409 or attempt == 2:
-                raise
-    raise AssertionError("unreachable")
+    told = threading.Lock()
+
+    def waiting(seconds: float) -> None:
+        if told.acquire(blocking=False):
+            print(f"{prog}: the share service asks this computer to wait {seconds:.0f} seconds before it sends more: "
+                  "waiting", file=sys.stderr, flush=True)
+
+    try:
+        return sharing.send(share, found, stored, waiting=waiting)
+    except sharing.Unreachable as error:
+        raise Failure(_unreached(share.service, error)) from None
+    except (sharing.Unsharable, OSError) as error:
+        raise Failure(f"the view bundle cannot be shared: {error}") from None
 
 
 def _unreached(service: str, error: Exception) -> str:
@@ -273,15 +310,15 @@ def _unreached(service: str, error: Exception) -> str:
             f"shell may reach, it must allow {host}")
 
 
-def _refused(what: str, refusal: Any) -> Any:
+def _refused(refusal: Any) -> Any:
     from cad_server._internal.cli_errors import Failure
 
-    return Failure(f"the share service refused {what} ({refusal.status}): {refusal.error}"
+    return Failure(f"the share service refused {refusal.what} ({refusal.status}): {refusal.error}"
                    + (f"; {refusal.hint}" if refusal.hint else ""))
 
 
-def _sent(kind: str, paths: list[str], size: int) -> dict[str, Any]:
-    """What travelled, from the archive's paths: in words (``what``, ``without``) and as data."""
+def _what(kind: str, paths: list[str]) -> dict[str, Any]:
+    """What the share holds, from its files' paths: in words (``what``, ``without``) and its parts (``parts``)."""
     parts = sorted({path.split("/")[1] for path in paths if path.startswith("parts/") and path.count("/") >= 2})
     meshes = [path for path in paths if path.startswith("meshes/") or (path.startswith("parts/")
                                                                        and path.count("/") == 1)]
@@ -296,8 +333,18 @@ def _sent(kind: str, paths: list[str], size: int) -> dict[str, Any]:
         what = (f"{len(parts)} part{'s' if len(parts) != 1 else ''} as meshes, with their names and measurements"
                 + (" and its joints" if "kinematics.json" in paths else ""))
         without, counted = "no code or CAD file went", len(parts)
-    return {"what": what, "without": without, "parts": counted, "files": len(paths), "bytes": size,
-            "format": "cad-share/1", "code": False, "cad_file": kind in MESHES}
+    return {"what": what, "without": without, "parts": counted}
+
+
+def _travelled(sent: Any, again: bool) -> str:
+    """What went this time, in words: every file of a new share, else the files that changed, beside the whole."""
+    files, size, whole = sent.travelled["files"], sent.travelled["bytes"], _size(sent.answer["bytes"])
+    counted = f"{files} file{'s' if files != 1 else ''}"
+    if not again:
+        return f"{counted}, {_size(size)} uploaded"
+    if not files:
+        return f"nothing changed, nothing uploaded ({whole} in all)"
+    return f"{counted} changed, {_size(size)} uploaded ({whole} in all)"
 
 
 def _size(count: int) -> str:
@@ -379,18 +426,22 @@ def _delete(what: str, *, yes: bool, as_json: bool, prog: str, words: list[str])
     rows = _records()
     link = sharing.parse_link(what)
     if link is not None:
-        origin, ident, word, secret = link
+        origin, ident, secret = link
         if origin != service:
             raise Failure(f"that link is of {origin}, not of the share service this cad uses ({service})",
                           "invalid_argument")
         record = next((row for row in rows if row["service"] == service and row["id"] == ident), None)
-        if word == "key":
+        if secret is None:
             if record is None:
                 raise Failure("a view link deletes nothing, and this computer keeps no share of it: delete it with "
                               "its delete link", "invalid_argument")
             secret = record["delete"]
-        share = sharing.Share(service, ident, "", "", secret)
+        share = sharing.share_of(record) if record is not None else sharing.Share(service, ident, "", secret)
     else:
+        if what.strip().lower().startswith(("http://", "https://")):
+            # Not said back: a mistyped link may still hold a share's id or secret.
+            raise Failure("that is no link of a share: a share's view link is <origin>/<id>, its delete link "
+                          "<origin>/<id>#delete=<secret>", "invalid_argument")
         if is_id(what):
             ident, path = what, None
         else:
@@ -402,30 +453,32 @@ def _delete(what: str, *, yes: bool, as_json: bool, prog: str, words: list[str])
             raise Failure(f"this computer keeps no share of {what} at {service}: `cad share status` lists the ones "
                           "it keeps, and a share's delete link deletes it from anywhere", "not_found")
         share, secret = sharing.share_of(record), record["delete"]
-    name = record["document"]["name"] if record is not None else share.page
-    confirm(f"deleting the share of {name}", f"Delete the share of {name}?", yes=yes, as_json=as_json,
-            command=retry(prog, words),
-            preview=[f"{prog} delete removes {share.page} from the share service: its links open nothing from then "
-                     "on. This cannot be undone."])
-    try:
-        deleted = sharing.delete(share, secret)
-    except sharing.Unreachable as error:
-        raise Failure(_unreached(service, error)) from None
-    except sharing.Refused as refusal:
-        raise _refused("the delete", refusal) from None
-    if any(row["id"] == share.id for row in rows):
+    subject = f"the share of {record['document']['name']}" if record is not None else "the share that link names"
+    confirm(f"deleting {subject}", f"Delete {subject}?", yes=yes, as_json=as_json, command=retry(prog, words),
+            preview=[f"{prog} delete removes {subject} from the share service: its links open nothing from then on. "
+                     "This cannot be undone."])
+    with _locked(record["document"]["id"], record["document"]["name"], prog) if record is not None \
+            else contextlib.nullcontext():
         try:
-            sharing.keep(forget=share.id)
-        except OSError as error:
-            print(f"{prog}: warning: could not forget the share's record ({error})", file=sys.stderr, flush=True)
+            deleted = sharing.delete(share, secret)
+        except sharing.Unreachable as error:
+            raise Failure(_unreached(service, error)) from None
+        except sharing.Refused as refusal:
+            raise _refused(refusal) from None
+        if record is not None:
+            try:
+                sharing.keep(forget=share.id)  # its record, and its document's folder in the cache
+            except OSError as error:
+                print(f"{prog}: warning: could not forget the share's record ({error})", file=sys.stderr, flush=True)
     if as_json:
-        print(json.dumps({"ok": True, "deleted": deleted, "share": share.page,
+        print(json.dumps({"ok": True, "deleted": deleted, "share": share.view,
                           "document": None if record is None else {key: record["document"][key]
                                                                    for key in ("id", "kind", "name")}},
                          separators=(",", ":")), flush=True)
     else:
-        print(f"Deleted the share of {name}: {share.page} opens nothing now" if deleted else
-              f"The share of {name} was gone already (it expired, or was deleted): {share.page} opens nothing")
+        print(f"Deleted {subject}: its links open nothing now" if deleted else
+              f"{subject[0].upper()}{subject[1:]} was gone already (it expired, or was deleted): its links open "
+              "nothing")
     return 0
 
 

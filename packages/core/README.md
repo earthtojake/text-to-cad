@@ -233,25 +233,38 @@ source or starts a source build.
 `openViewBundle(source)` (`client/bundle.js`) is the same service over a view bundle (`cad <type>
 export SRC DST.view`): the answers a page reads of one document, as files, read with no engine
 behind the page from a `ViewBundleSource` -- `viewBundleUrlSource(url)`, a folder on a plain static
-file server, or `viewBundleMemorySource(files)`, the files held in the page -- each the bytes of a
-path of the bundle. It checks the manifest (`view-bundle/1`; a file not its listed size fails), and
+file server, `viewBundleMemorySource(files)`, the files held in the page, or a share's (`openShare`)
+-- each the bytes of a path of the bundle; a source's `dispose`, where it has one, goes with the
+service's. It checks the manifest (`view-bundle/1`; a file not its listed size fails), and
 answers the catalog (the one document: a model by its id, a file by `/<name>`), an engine document
 (its API URL under `http://view-bundle.invalid`, answered by a fetch of its own that maps each route
 to its file: one element's facts and a part's groups out of the part's one `elements.json`; served
 `final`, so nothing waits on a next version), a drawing, a robot and the resources their loaders
-read. What needs an engine it leaves out ([workspace resources](docs/workspace-resources.md)).
+read. The structure it answers is the engine's: where the bundle keeps the mechanism in
+`kinematics.json` alone and each prototype's element names in a file named by their content
+(`names/<sha256>.json`, which the prototype names as `names`), both are put back, each names file
+read once and all of them at once; a structure that holds both itself is answered as its bytes.
+What needs an engine it leaves out ([workspace resources](docs/workspace-resources.md)).
 
-`openShareArchive(stored, key)` (`client/share.js`) opens a shared view bundle: the bytes a share
-service keeps (`IV || ciphertext-and-tag`, AES-256-GCM, the IV 12 bytes) under the key its link holds
-(32 bytes, base64url), gunzipped (`DecompressionStream`) and read as a POSIX ustar archive
-(`cad-share/1`: regular files alone, by a path relative to the bundle's root, the header's prefix field
-read; an absolute path, a `..`, a path twice, a link or any other entry refuses it whole), then
-`openViewBundle(viewBundleMemorySource(files))`. `readShareArchive` stops at the files. It fails with one
-of two codes: `SHARE_UNREADABLE`, a missing or malformed key, the wrong key or damaged bytes (AES-GCM
-tells them apart no better), and `SHARE_UNSUPPORTED`, bytes that decrypt to no archive or bundle it
-reads. `readShareAddress(href)` reads a share's page address: its path exactly one share id (22
-base64url characters) and its fragment `key=<key>` or `delete=<secret>`; anything else is null.
-`readShareKey` and `isShareSecret` check a key's and a secret's form. No message holds the key.
+`openShare(id, service)` (`client/share.js`) opens a shared view bundle (`cad-share/2`), whose link is
+the share's address alone: the AES-256-GCM key every object of it is sealed with is derived from its id
+(`deriveShareBits`: HKDF-SHA256 of the id's text, the salt `cad-share/2`, the info `key`), so no link
+holds a key. `service` is the host's two reads of the share service (`ShareService`): `manifest()`, the
+share's manifest, and `pack(id)`, one of its packs, each sealed (`IV || ciphertext-and-tag`, the IV 12
+bytes, its AAD `cad-share/2 manifest` or `cad-share/2 pack <pack id>`). The manifest names every file of
+the bundle with its size, its SHA-256 and the ranges of packs its gzip member lies in, in order; a read
+fetches each pack it names once, kept while the share is open, opens it, joins the ranges, gunzips them
+(`DecompressionStream`) and checks the size and the SHA-256. Every pack is fetched ahead as soon as the
+manifest is read, the ones holding `manifest.json` and `structure.json` first, `SHARE_PREFETCH` (6) at
+a time, and a read's packs go ahead of the rest; then the bundle opens with `openViewBundle`, and
+disposing its service stops what the share still fetches. It fails with one of three codes:
+`SHARE_DAMAGED`, a manifest that does not open or is not one, or a file not as it says;
+`SHARE_UNAVAILABLE`, a pack the service did not give (the next read asks again); and
+`SHARE_UNSUPPORTED`, a bundle this viewer does not open. A failure of `manifest()` (a share the service
+has none of) is the host's, passed on as it is. `readShareAddress(href)` reads a share's page address:
+its path exactly one share id (22 base64url characters), and its fragment `delete=<secret>` for the
+delete page; any other fragment (such as an earlier link's key) is passed over, and any other path is
+null. `isShareSecret` checks a delete secret's form.
 
 `createHttpPromptFiles({ origin, fetch })` is the viewer server's maker of a Quick
 Edit's files: `create(request)` posts its views and annotation to `POST /api/v1/local/prompt-files`,

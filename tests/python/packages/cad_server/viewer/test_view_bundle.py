@@ -1,11 +1,13 @@
 """A document's view bundle (``cad <type> export SRC DST.view``), written by an engine of this test's own
 and held to the answers that engine gives a page over HTTP: every file the manifest lists is there with its
 size and digest, each is the live answer byte for byte (but what a structure says of the computer it was
-answered on: a file's ``path``, a model's ``closure``, where a robot's meshes are), a part's table holds
-exactly what asking for each element answers of its geometry, a bundle written again after an edit rewrites
-the changed part's files and no other part's, an export that fails leaves the folder as it was, and no file
-of a bundle names a folder of the computer it was made on. A model, an ``.xbf``, a STEP, an STL, a DXF and a
-URDF each have one.
+answered on: a file's ``path``, a model's ``closure``, where a robot's meshes are; and the two things it
+holds apart, its mechanism and its prototypes' element names, which its reader puts back), a prototype's
+names are a file named by its bytes, a part's table holds exactly what asking for each element answers of its
+geometry, a document's part files are asked at once, a bundle written again after an edit rewrites the
+changed part's files and no other part's, an export that fails leaves the folder as it was, and no file of a
+bundle names a folder of the computer it was made on. A model, an ``.xbf``, a STEP, an STL, a DXF and a URDF
+each have one.
 
 The models are written into a fresh temporary folder and built there; nothing reads the sample corpus.
 """
@@ -22,9 +24,11 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 from urllib.parse import quote
 
 from tests.python.support import engine_daemon
@@ -32,10 +36,30 @@ from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the packages' sources, as PYTHONPATH names them
 
+# The peg turns in the plate: a mechanism. The two rims are of one function, so named alike, and of two
+# geometries; the boss and the lug are of one geometry, so one part's key, and named apart.
 MODEL = """
 import build123d as bd
 from cad import step, xbf
 from bd_materials import metals
+
+
+def rim(width):
+    made = bd.Box(width, 4, 2)
+    made.label = "rim"
+    return made
+
+
+def boss():
+    made = bd.Box(3, 3, 3)
+    made.label = "boss"
+    return made
+
+
+def lug():
+    made = bd.Box(3, 3, 3)
+    made.label = "boss"
+    return made
 
 
 @xbf("XBF/pair.xbf")
@@ -45,7 +69,12 @@ def pair():
     plate.label, plate.color = "plate", bd.Color(0.8, 0.1, 0.1)
     peg = bd.Pos(8, 0, 4) * bd.Cylinder(1, 6)
     peg.label, peg.material = "peg", metals.aluminum()
-    return bd.Compound(children=[plate, peg], label="pair")
+    turn = bd.Axis((8, 0, 4), (0, 0, 1))
+    bd.RevoluteJoint("turn", plate, axis=turn, angular_range=(-90, 90))
+    bd.RigidJoint("turn", peg, bd.Plane(origin=turn.position, z_dir=turn.direction).location)
+    plate.joints["turn"].connect_to(peg.joints["turn"], angle=0)
+    return bd.Compound(children=[plate, peg, bd.Pos(0, 10, 0) * rim(4), bd.Pos(10, 10, 0) * rim(6),
+                                 bd.Pos(0, 20, 0) * boss(), bd.Pos(10, 20, 0) * lug()], label="pair")
 
 
 if __name__ == "__main__":
@@ -72,6 +101,21 @@ if __name__ == "__main__":
 """
 
 ELEMENTS = {"faces": "face", "edges": "edge", "vertices": "vertex"}
+NAMES = ("faceNames", "edgeNames", "vertexNames")
+
+
+def put_back(folder: Path) -> dict:
+    """A bundle's structure as its reader answers it (**View bundle**): the mechanism put back from
+    ``kinematics.json`` where the bundle holds one, and each prototype's element names from the file it
+    names, in place of ``names``."""
+    structure = json.loads((folder / "structure.json").read_bytes())
+    if (folder / "kinematics.json").is_file():
+        structure["kinematics"] = json.loads((folder / "kinematics.json").read_bytes())
+    for prototype in structure["prototypes"]:
+        if "names" in prototype:
+            prototype.update(json.loads((folder / prototype.pop("names")).read_bytes()))
+    return structure
+
 
 # A robot of one box cad meshes and one mesh file two links draw; NAME is a visual's name.
 ROBOT = """<?xml version="1.0"?>
@@ -245,8 +289,18 @@ class ViewBundleTest(unittest.TestCase):
                     self.assertNotIn("closure", structure)
                     self.assertEqual(Path(structure["path"]), self.sources[name])
                     portable = {**structure, "path": self.sources[name].name}
-                self.assertEqual((folder / "structure.json").read_bytes(),
-                                 json.dumps(portable, separators=(",", ":")).encode())
+                # And it holds two things apart, each once, which its reader puts back: the mechanism, the
+                # same object as kinematics.json, and each prototype's element names, in a file of their own.
+                bundled = json.loads((folder / "structure.json").read_bytes())
+                self.assertEqual((folder / "structure.json").read_bytes(), json.dumps(bundled, separators=(",", ":")).encode())
+                self.assertEqual(put_back(folder), portable)
+                self.assertNotIn("kinematics", bundled)
+                self.assertEqual([prototype for prototype in bundled["prototypes"] if set(NAMES) & set(prototype)], [])
+                self.assertEqual("kinematics.json" in self.files(folder), "kinematics" in structure)
+                if "kinematics" in structure:
+                    self.assertEqual((folder / "kinematics.json").read_bytes(), self.live(api + "/kinematics"))
+                if name in ("model", "xbf"):  # the model's mechanism, which its xbf holds too
+                    self.assertIn("kinematics", structure)
                 # Every part is meshed before the structure is read: it names each part's unmeshed faces.
                 self.assertTrue(all("unmeshed" in prototype for prototype in structure["prototypes"]))
                 tessellation = structure["tessellation"]
@@ -259,14 +313,35 @@ class ViewBundleTest(unittest.TestCase):
                 self.assertEqual((folder / "measure.json").read_bytes(), self.live(api + "/measure"))
                 self.assertEqual((folder / "look.json").read_bytes(), self.live("/api/v1/look"))
                 self.assertEqual((folder / "look" / "environment.hdr").read_bytes(), self.live("/api/v1/look/environment"))
-                # No joints, so no mechanism, and no page kept a picture of it.
-                self.assertFalse({"kinematics.json", "thumbnail.png"} & self.files(folder))
+                # No page kept a picture of it.
+                self.assertNotIn("thumbnail.png", self.files(folder))
         source = self.live(self.api("stl") + "/source")
         self.assertEqual((self.out / "stl.view" / "source.stl").read_bytes(), source)
         self.assertEqual(source, self.sources["stl"].read_bytes())
         drawing = self.live(self.api("dxf") + "/drawing")
         self.assertEqual(json.loads(drawing)["schemaVersion"] > 0, True, drawing[:200])
         self.assertEqual((self.out / "dxf.view" / "drawing.json").read_bytes(), drawing)
+
+    def test_a_prototypes_names_are_a_file_named_by_its_bytes(self) -> None:
+        for name in ("model", "xbf", "step"):
+            with self.subTest(source=name):
+                folder = self.out / f"{name}.view"
+                bundled = json.loads((folder / "structure.json").read_bytes())
+                held = {path for path in self.files(folder) if path.startswith("names/")}
+                self.assertEqual(held, {prototype["names"] for prototype in bundled["prototypes"] if "names" in prototype})
+                self.assertTrue(held)
+                # Compact JSON of a prototype's names alone, every key sorted, named by its SHA-256.
+                for path in held:
+                    body = (folder / path).read_bytes()
+                    self.assertEqual(path, f"names/{hashlib.sha256(body).hexdigest()}.json")
+                    self.assertEqual(body, json.dumps(json.loads(body), separators=(",", ":"), sort_keys=True).encode())
+                    self.assertLessEqual(set(json.loads(body)), set(NAMES))
+        # Named by what it holds, never by a part's key: the two rims, two geometries named alike, share one;
+        # the boss and the lug, one geometry named apart, hold one each.
+        prototypes = json.loads((self.out / "model.view" / "structure.json").read_bytes())["prototypes"]
+        named = {label: [prototype for prototype in prototypes if prototype["name"] == label] for label in ("rim", "boss")}
+        self.assertEqual([(len({one["key"] for one in alike}), len({one["names"] for one in alike}))
+                          for alike in named.values()], [(2, 1), (1, 2)])
 
     def test_a_robots_bundle_holds_its_meshes_and_names_them_where_it_holds_them(self) -> None:
         folder, api = self.out / "urdf.view", self.api("urdf")
@@ -302,7 +377,7 @@ class ViewBundleTest(unittest.TestCase):
         # model's document -- what made it, which is served live and never written.
         for name in ("model", "step"):
             folder, api = self.out / f"{name}.view", self.api(name)
-            structure = json.loads((folder / "structure.json").read_bytes())
+            structure = put_back(folder)
             measured = json.loads((folder / "measure.json").read_bytes())
             for prototype in structure["prototypes"]:
                 key = prototype["key"]
@@ -453,6 +528,34 @@ class ViewBundleTest(unittest.TestCase):
         self.assertEqual((answer["ok"], row["kind"], Path(row["path"]), row["written"]), (True, "view", folder, True))
         self.assertEqual(row["view"]["document"], self.manifest(folder)["document"])
         self.assertEqual(row["view"]["files"], len(self.files(folder)))
+
+
+class AskedAtOnceTest(unittest.TestCase):
+    """A document's part files are asked at once, ``ASKS`` at a time (``take_all``), each put at its path as it
+    comes in: the engine makes each part's table in a process of its pool, so asked one after another a first
+    bundle's tables would be made on one core."""
+
+    def test_a_documents_part_files_are_asked_at_once(self) -> None:
+        from cad_server.viewer import bundle
+
+        asks = [(f"parts/{key}/{file}", f"/api/v1/documents/model/m/parts/{key}/{file}")
+                for key in ("a", "b") for file in ("0.25-28.5.xbm", "elements.json")]
+        together = threading.Barrier(len(asks), timeout=30)  # each answered once every one is asked
+
+        class App:  # the engine's page's application, standing in: each answer is the path it was asked at
+            def handle(self, request, response) -> None:
+                together.wait()
+                response.send_bytes(200, request.path.encode(), "application/octet-stream")
+
+        folder = Path(tempfile.mkdtemp(prefix="asked-"))
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        (folder / "stage").mkdir()
+        writing = bundle._Bundle(App(), folder / "kit.view", folder / "stage", {}, "0", [])
+        with mock.patch.object(bundle, "ASKS", len(asks)):
+            writing.take_all(asks)
+        self.assertEqual({path: (folder / "stage" / path).read_bytes() for path, _url in asks},
+                         {path: url.encode() for path, url in asks})
+        self.assertEqual(sorted(writing.files), sorted(path for path, _url in asks))
 
 
 def setUpModule() -> None:

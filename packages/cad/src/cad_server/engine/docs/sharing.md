@@ -21,15 +21,16 @@ cad share delete 'https://cad.fun/<id>#delete=<secret>' --yes
   drawing as the viewer draws it; a URDF or an SRDF its links, joints and mesh files. The picture a page kept
   (`thumbnail.png`) is left out: it may be of an earlier version. A KiCad board or schematic, which has no
   bundle yet, and a folder are refused in one line each.
-- **Where.** The share service, `https://cad.fun`, which stores the archive encrypted (AES-256-GCM) under a
-  key the command makes and sends with the upload, then forgets. The key is in the view link's fragment,
-  which no browser sends to a server.
+- **Where.** The share service, `https://cad.fun`, which keeps everything of a share encrypted (AES-256-GCM)
+  under a key it derives from the share's id, and keeps neither the id nor the key. The id is the link's: whoever
+  has the view link can open the model.
 - **Who.** Anyone with the view link. No account, no sign-in.
-- **For how long.** 7 days after the last upload. The same document shared again from the same computer
-  is uploaded again under the same names: the link stays the same and the 7 days start again.
+- **For how long.** 7 days after the last share. The same document shared again from the same computer is
+  the same share: the link stays, the 7 days start again, and only the files that changed travel.
 - **Delete.** The delete link removes it, from any computer and any browser; `cad share delete TARGET`
   removes a share this computer made; asked first, as every command that destroys is (`--yes` where nobody
-  can be asked). An expired share is deleted by the service.
+  can be asked). An expired share is deleted by the service. Either way the document's folder in cad's cache
+  goes too (**What is kept**).
 - **Off.** `cad share off` keeps the person's no: every share is refused until `cad share on`. Shares made
   before stay until they expire or are deleted.
 
@@ -40,16 +41,20 @@ Sharing turned off is refused even with `--yes` (`declined`, exit 1).
 
 ## Where each step runs
 
-1. The running server writes the bundle into a temporary folder this command made, as `cad <type> export
-   TARGET DST.view` writes one; the folder is removed once it is packed.
-2. The command packs it and uploads it in its own process, never through the server or a worker, so an agent
-   app's sandbox sees the connection and its network rules apply. Proxies are taken from the environment,
-   as `urllib` takes them. A connection that cannot be made, or an answer that is not the service's (a proxy's
-   refusal, with no JSON `error`), is said in one line: the network here does not reach the share service, and
-   a sandbox that limits hosts must allow its host.
-3. The agreement, the setting and each share's record are written by the running server for the command
-   (`{"op": "share"}`), as `cad update auto` has its switch written, since a sandboxed shell may not write the
-   state folder; with none answering, the command writes them itself.
+1. The command holds the document's lock in cad's cache: one `cad share` of a document at a time. Another
+   says so in a line, waits for it 60 seconds at most, then is refused in one.
+2. The running server writes the bundle into the document's folder in cad's cache, over the one it wrote there
+   last, as `cad <type> export TARGET DST.view` writes one: only what that bundle lacks is asked of the engine,
+   so sharing a document again costs what changed.
+3. The command takes the bundle's files as its `manifest.json` lists them, packs the ones the share lacks, and
+   uploads the packs and then the share's manifest in its own process, never through the server or a worker,
+   so an agent app's sandbox sees the connection and its network rules apply. Proxies are taken from the
+   environment, as `urllib` takes them. A connection that cannot be made, or an answer that is not the
+   service's (a proxy's refusal, with no JSON `error`), is said in one line: the network here does not reach
+   the share service, and a sandbox that limits hosts must allow its host.
+4. The agreement, the setting, each share's record and the document's folder are written by the running server
+   for the command (`{"op": "share"}`), as `cad update auto` has its switch written, since a sandboxed shell may
+   write neither the state folder nor the cache; with none answering, the command writes them itself.
 
 Its own request is the one a person asks for by name (law 17): nothing else in cad reaches the service.
 
@@ -62,58 +67,89 @@ POSIX), one record a share, dropped once past its expiry:
 
 ```json
 {"format": "cad-shares/1", "shares": [{
-  "id": "<share id>", "key": "<key>", "write": "<write secret>", "delete": "<delete secret>",
+  "id": "<share id>", "write": "<write secret>", "delete": "<delete secret>",
   "service": "https://cad.fun", "view": "<view link>", "remove": "<delete link>",
-  "expires": "2026-12-01T10:00:00Z", "shared": "2026-11-24T10:00:00Z", "bytes": 16308,
+  "expires": "2026-12-01T10:00:00Z", "shared": "2026-11-24T10:00:00Z", "bytes": 3880124,
   "document": {"id": "<document id>", "kind": "model", "name": "arm", "path": null}}]}
 ```
 
-A document is one record per service, by its document id (a file's `path` too). The key and the secrets are
-said only inside the two links and in the record: in no other line of any command, no log and no telemetry.
-The command is counted as any command is: its export as an export (a bundle is no counted kind), nothing of
-the share.
+A document is one record per service, by its document id (a file's `path` too); `bytes` is the share's size as
+the service stores it. A record with a `key` (`cad-share/1`'s) is none, as is one past its expiry: that
+document's next share is a new one. The id and the secrets are said only inside the two links and
+in the record: in no other line of any command, no log, no telemetry and no file of the cache. The command is
+counted as any command is: its export as an export (a bundle is no counted kind), nothing of the share.
+
+`shares/<document id>/` in cad's cache, for each document with a live share:
+
+- `bundle.view/`: the bundle as last shared, written over at each share.
+- `stored.json`: where each file of the share's last commit lives, by the SHA-256 of its bytes, `{"share": "<hex
+  SHA-256 of the share id>", "files": {"<sha256>": [["<pack id>", <offset>, <length>], ...]}}`: the share named by a
+  hash of its id, never the id. One of another share, or one that cannot be read, is none: every file is sent.
+- `lock`: held by the `cad share` or `cad share delete` of the document that runs.
+
+As the records are written, each folder that no live record names is removed (a share deleted, expired or never
+committed), but one whose lock a command holds. Every file there is made again by the next share, which then
+sends every file.
 
 ## What it prints
 
 The view link, the delete link, the expiry and one line of what travelled: the document's name and kind, its
-parts or its file, the bytes uploaded, and that no code (nor, but for a mesh file, the CAD file) went. `--json`
-is one object: `view`, `delete`, `expires`, `id`, `again` (the same link as before), `document` (`id`, `kind`,
-`name`), `sent` (`what`, `without`, `parts`, `files`, `bytes`, `format`, `code`, `cad_file`) and `kept`
-(whether the record was kept). `status --json` is `sharing` (`on` or `off`), `agreed`, `service` and
-`shares` (each its `document`, `view`, `delete`, `expires`); `delete --json` is `deleted` (false where the
-service held it no more), `share` (its address, with no fragment) and `document`.
+parts or its file, the files and bytes uploaded this time and, sharing it again, the share's whole size (`4 files
+changed, 412.0 KiB uploaded (3.5 MiB in all)`, or `nothing changed, nothing uploaded (3.5 MiB in all)`), and
+that no code (nor, but for a mesh file, the CAD file) went. `--json` is one object: `view`, `delete`, `expires`,
+`id`, `again` (the same link as before), `document` (`id`, `kind`, `name`), `sent` (`what`, `without`, `parts`,
+this time's `files`, `bytes` and `packs`, `format`, `code`, `cad_file`), `stored` (the share's `files` and
+`bytes` as the service stores them) and `kept` (whether the record was kept). `status --json` is `sharing` (`on`
+or `off`), `agreed`, `service` and `shares` (each its `document`, `view`, `delete`, `expires`); `delete --json` is
+`deleted` (false where the service held it no more), `share` (its view link) and `document`.
 
 ## The protocol, as the command speaks it
 
-Every random value is from `secrets`, base64url without padding.
+`cad-share/2`. Every random value is from `secrets`, base64url without padding.
 
 | Value | Form |
 | --- | --- |
-| share id | 16 random bytes, 22 characters (`[A-Za-z0-9_-]{22}`) |
-| key | 32 random bytes, 43 characters: an AES-256-GCM key |
+| share id | 16 random bytes, 22 characters (`[A-Za-z0-9_-]{22}`): the capability, which the view link is |
 | write secret | 32 random bytes, 43 characters: upload again |
 | delete secret | 32 random bytes, 43 characters: delete |
 
-The view link is `<origin>/<id>#key=<key>`, the delete link `<origin>/<id>#delete=<delete secret>`. The origin
-is `https://cad.fun`; `CAD_SHARE_URL`, an http or https origin, names another (a test's stand-in, a local run of
-the service), as `CAD_API_URL` names another receiver of telemetry.
+The view link is `<origin>/<id>`, the delete link `<origin>/<id>#delete=<delete secret>`. The origin is
+`https://cad.fun`; `CAD_SHARE_URL`, an http or https origin, names another (a test's stand-in, a local run of the
+service), as `CAD_API_URL` names another receiver of telemetry.
 
-**The archive, `cad-share/1`.** The bundle folder as a gzip-compressed POSIX ustar archive: every regular file
-by its path relative to the bundle's root, `/` separated, `manifest.json` among them, and no folder, link or
-other entry; sorted by path; each with mtime 0, mode 0644, uid and gid 0 and empty user and group names; gzip
-with mtime 0 and no file name, so the same bundle makes the same bytes. A path that does not fit a ustar header
-(a name of 100 bytes, a prefix of 155) is refused, never written another way. The archive is held to 25 MiB
-before it is sent.
+**The files.** The bundle's `manifest.json`, and every file it lists but `thumbnail.png`, by its path in the
+bundle: relative, `/` separated, with no empty, `.` or `..` segment, at most 1024 bytes, 200,000 files at most;
+each a regular file inside the bundle with the bytes its manifest says, or nothing is sent.
 
-**`PUT /v1/shares/<id>`**, upload or upload again: `Authorization: Bearer <write secret>`, `Cad-Share-Key:
-<key>`, `Cad-Delete-Hash: <lowercase hex SHA-256 of the delete secret's 43-character text>`, `Content-Type: application/gzip`,
-`Content-Length`, the archive as the body. `201` (made) or `200` (replaced), `{"id", "expires", "bytes"}`. A
-`403` is a share of that id that another write secret made: the command makes a new share, new names and all,
-once. A `409` is the service's create that lost a race: tried once more, then said with its `error` and `hint`.
+**The packs.** Each file the share lacks (whose bytes `stored.json` does not hold for this share) as one gzip
+member (RFC 1952: level 6, mtime 0, no file name), back to back in packs, in the order a page reads them:
+`manifest.json`, `structure.json`, `names/...`, the other files at the bundle's root, the meshes (`parts/...`,
+`meshes/...`), each part's `elements.json`, then the rest. A pack is closed at 4 MiB, and a member that does not
+fit the room left goes on into the next. A pack's id is the lowercase hex SHA-256 of its bytes.
+
+**`PUT /v1/shares/<id>/packs/<pack id>`**, 4 at a time as they close: `Authorization: Bearer <write secret>`,
+`Cad-Delete-Hash: <lowercase hex SHA-256 of the delete secret's 43-character text>`, `Content-Length`, the pack as
+the body. `201`. The share's first write makes its owner, which keeps the two hashes.
+
+**`PUT /v1/shares/<id>`**, the commit: the same headers, `Content-Type: application/json`, and the share's
+manifest, each file by its path with its bytes' SHA-256 and size and `at`, the ranges of packs whose bytes, joined
+in order, are its member:
+
+```json
+{"format": "cad-share/2", "files": {"manifest.json": {"sha256": "<64 hex>", "bytes": 1234, "at": [["<pack id>", 0, 456]]}}}
+```
+
+`201` (made) or `200` (replaced), `{"id", "expires", "bytes", "files"}`; the service then deletes the packs that
+neither this manifest nor the one it replaced names. A `409` naming `missing` packs: the files in them are packed
+and uploaded again, then the commit made again, twice at most. A `409` naming none (another commit replaced the
+manifest meanwhile): committed again, once. A `403`, to a pack or the commit, is a share of that id that another
+write secret made: the command makes a new share, new names and all, and sends every file, once.
 
 **`DELETE /v1/shares/<id>`**: `Authorization: Bearer <delete secret>`. `204` deleted, `404` none (it expired,
 or was deleted), `403` a secret that matches neither of its hashes.
 
-Every other answer is the service's refusal, `{"error", "hint"}` with its status (400, 401, 411, 413, 429), said
-with both. The service keeps neither secret, only the SHA-256 of each one's text (its ASCII bytes, never the bytes
-it decodes to; a bearer's is hashed the same way), and never the key.
+A `429` is waited out for its `Retry-After`, said once in a line: ten times at most for one request, two minutes
+at most each. Every other answer is the service's refusal, `{"error", "hint"}` with its status (400, 401, 411,
+413), said with both. The service keeps neither secret, only the SHA-256 of each one's text (its ASCII bytes,
+never the bytes it decodes to; a bearer's is hashed the same way), and never the id: from the id alone it derives
+the name it stores the share under and the key it seals each object with.

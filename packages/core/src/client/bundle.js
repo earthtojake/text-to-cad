@@ -5,18 +5,23 @@
 // The bundle is read through one small abstraction, its source: the bytes of a path of the bundle
 // (`read(path)`). Two sources are here: a folder on a plain static file server, by its URL
 // (`viewBundleUrlSource`), and the files held in the page, by path (`viewBundleMemorySource`), for a
-// bundle that reached it some other way (an archive unpacked in the page). Nothing here assumes one
-// request per file, or any request at all.
+// bundle that reached it some other way; a share's is `share.js`'s. Nothing here assumes one request per
+// file, or any request at all. A source with something to let go of (`dispose`) is let go of with the
+// service.
 //
 // The service answers what the viewer's renderers ask of a CAD client, from the bundle alone:
 //
 // - the catalog, which is the bundle's one document: a model by its id, a file by its own name
 //   (`/<name>`: the bundle holds the file's name and no path of the computer it was made on);
 // - an engine document's reads (a model's, an `.xbf`'s, a STEP's: `engineDocument`), at the API URL a
-//   page reads them at, answered by a fetch of the bundle's own that maps each route to its file. A
-//   part's buffer is `parts/<key>/<tessellation>.xbm`; one element's facts, and a part's groups, come
-//   out of the part's one table (`parts/<key>/elements.json`), read once, so nothing is asked per
-//   element. The document is `final`: there is no engine to wait on for a next version;
+//   page reads them at, answered by a fetch of the bundle's own that maps each route to its file. The
+//   structure is the engine's answer, put back together: the bundle keeps the mechanism in
+//   `kinematics.json` alone, and each prototype's element names in a file named by its content
+//   (`names/<sha256>.json`, shared by the prototypes whose names are the same), so a colour edit changes
+//   a small `structure.json` and a part's names travel only when they change. A part's buffer is
+//   `parts/<key>/<tessellation>.xbm`; one element's facts, and a part's groups, come out of the part's
+//   one table (`parts/<key>/elements.json`), read once, so nothing is asked per element. The document is
+//   `final`: there is no engine to wait on for a next version;
 // - a drawing's (`drawing`), a robot's (`robot`) and a mesh file's bytes, through the service's
 //   resources, which read bundle paths (a mesh file's `source.<ext>`, a robot's `parts/<digest>.glb`
 //   and `meshes/<sha256>.<format>`, as its structure names them).
@@ -47,7 +52,9 @@ const KINDS = new Set([...ENGINE_KINDS, 'stl', 'glb', '3mf', 'dxf', 'urdf', 'srd
 const ELEMENT_ROUTES = new Set(['faces', 'edges', 'vertices']);
 // A bundle's files named by their content: the same bytes in every bundle that holds them, so a cache may
 // keep them. The files at the root are the document's own and change with it.
-const CONTENT_NAMED = /^(?:parts|meshes)\//;
+const CONTENT_NAMED = /^(?:parts|meshes|names)\//;
+// What a prototype's names file holds, in the order the engine's structure gives them.
+const ELEMENT_NAMES = ['faceNames', 'edgeNames', 'vertexNames'];
 const decoder = new TextDecoder();
 
 function abortError() {
@@ -176,7 +183,8 @@ function entryOf(manifest) {
 }
 
 /**
- * The viewer's CAD service over one view bundle (`manifest`, already read: `openViewBundle` reads it).
+ * The viewer's CAD service over one view bundle (`manifest`, already read: `openViewBundle` reads it). Disposing
+ * it disposes `source` too, where the source has something to let go of.
  * @param {import('./types.js').ViewBundleSource} source
  * @param {import('./types.js').ViewBundleManifest} manifest
  * @returns {import('./types.js').CadViewBundleClient}
@@ -225,8 +233,40 @@ export function createViewBundleClient(source, manifest) {
   // ---- the API a page reads an engine document at, answered from the bundle ----------------------------
   const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
   const refused = (what) => json({ error: `A view bundle holds no answer to ${what}: that needs an engine.` }, 404);
-  const fileAnswer = async (path, signal) => new Response(await read(path, { signal }),
-    { headers: { 'content-type': files[path]?.type || 'application/octet-stream' } });
+  const bytesAnswer = (path, bytes) => new Response(bytes, { headers: { 'content-type': files[path]?.type || 'application/octet-stream' } });
+  const fileAnswer = async (path, signal) => bytesAnswer(path, await read(path, { signal }));
+  /**
+   * The structure as the engine answered it. Where the bundle keeps the mechanism apart (`kinematics.json`, the
+   * structure holding no `kinematics`) it is put back, and so are the element names each prototype keeps in a file
+   * (`names`: each file read once, all of them at once), the file's name removed. A structure that holds both
+   * itself (a bundle written before they moved) is answered as its bytes.
+   */
+  async function structureAnswer(signal) {
+    const bytes = await read('structure.json', { signal });
+    const structure = JSON.parse(decoder.decode(bytes));
+    if (!structure || typeof structure !== 'object' || Array.isArray(structure)) return bytesAnswer('structure.json', bytes);
+    const mechanism = !Object.hasOwn(structure, 'kinematics') && Object.hasOwn(files, 'kinematics.json');
+    const prototypes = Array.isArray(structure.prototypes) ? structure.prototypes : [];
+    const named = [...new Set(prototypes.filter(prototype => typeof prototype?.names === 'string').map(prototype => prototype.names))];
+    if (!mechanism && !named.length) return bytesAnswer('structure.json', bytes);
+    const [kinematics, ...held] = await Promise.all([mechanism ? once('kinematics.json', signal) : null,
+      ...named.map(path => once(path, signal))]);
+    const names = new Map(named.map((path, index) => {
+      const kept = held[index];
+      if (!kept || typeof kept !== 'object' || Array.isArray(kept)) throw new Error(`The view bundle's ${path} holds no element names.`);
+      return [path, Object.fromEntries(ELEMENT_NAMES.filter(name => Object.hasOwn(kept, name)).map(name => [name, kept[name]]))];
+    }));
+    const restored = { ...structure };
+    if (named.length) {
+      restored.prototypes = prototypes.map(prototype => {
+        if (typeof prototype?.names !== 'string') return prototype;
+        const { names: path, ...rest } = prototype;
+        return { ...rest, ...names.get(path) };
+      });
+    }
+    if (mechanism) restored.kinematics = kinematics;
+    return json(restored);
+  }
   /** What a part's table says of one of its elements, or of its groups: its answer's body. */
   async function fromTable(key, route, ordinal, signal) {
     const table = await once(`parts/${viewBundleSegment(key)}/elements.json`, signal);
@@ -246,7 +286,8 @@ export function createViewBundleClient(source, manifest) {
     const route = at[2].split('/').map(segment => decodeURIComponent(segment));
     const [head, key, element, ordinal] = route;
     if (route.length === 1) {
-      const file = { structure: 'structure.json', kinematics: 'kinematics.json', measure: 'measure.json', drawing: 'drawing.json' }[head];
+      if (head === 'structure') return structureAnswer(signal);
+      const file = { kinematics: 'kinematics.json', measure: 'measure.json', drawing: 'drawing.json' }[head];
       if (file) return fileAnswer(file, signal);
       if (head === 'source') {
         const held = Object.keys(files).find(path => /^source\.[^/]+$/.test(path));
@@ -372,6 +413,7 @@ export function createViewBundleClient(source, manifest) {
       lifetime.abort();
       for (const session of [...sessions]) session.dispose();
       tables.clear();
+      source.dispose?.();
     },
   };
 }

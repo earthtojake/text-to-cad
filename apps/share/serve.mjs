@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The share service on this computer: the real Worker (src/worker.mjs) over Node's http, with
-// stand-ins for its R2 bucket, its static assets and its rate limiter (src/local.mjs).
+// stand-ins for its R2 bucket, its static assets and its two rate limiters (src/local.mjs).
 //
 //   node apps/share/serve.mjs --port PORT --assets DIR [--store DIR] [--host HOST]
 //
@@ -10,9 +10,9 @@
 // --host   the address to listen on (default 127.0.0.1)
 //
 // When it is ready it prints its origin, and nothing else, on one line: http://127.0.0.1:PORT.
-// Every share it keeps is encrypted under its upload's key, as the deployment's are. It allows
-// every upload (its limiter refuses none) and reads MAX_SHARE_BYTES and EXPIRY_DAYS from
-// wrangler.jsonc's `vars`. It stops on SIGINT or SIGTERM.
+// Every share it keeps is sealed under the key its id derives, as the deployment's are. It allows
+// every request (its limiters refuse none) and reads its limits (MAX_PACK_BYTES, MAX_MANIFEST_BYTES,
+// MAX_SHARE_BYTES, EXPIRY_DAYS) from wrangler.jsonc's `vars`. It stops on SIGINT or SIGTERM.
 
 import { statSync } from "node:fs";
 import { parseArgs } from "node:util";

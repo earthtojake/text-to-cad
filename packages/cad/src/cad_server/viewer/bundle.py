@@ -7,22 +7,30 @@ read of its kind, and puts each answer's bytes at the path the layout gives its 
 an answer: the engine and this application make each as they make it for a page -- kernel work in the
 engine's own processes, never in this one -- so a bundled answer is the HTTP answer, byte for byte, but
 where the layout says otherwise: a structure names no place and no code of the computer it was made on (a
-file's ``path``, a model's ``closure``), and a robot's names its meshes where the bundle holds them.
+file's ``path``, a model's ``closure``), and a robot's names its meshes where the bundle holds them. And a
+structure holds two things apart, each once: its mechanism, which is ``kinematics.json`` and so is left
+out of it, and its prototypes' element names, each prototype's in a file named by its own bytes
+(``_names``). A reader puts both back.
 
 What a page asks for on demand, a bundle holds whole: each part's ``elements`` table (every face's,
-edge's and vertex's facts and its groups), made once per part.
+edge's and vertex's facts and its groups), made once per part. A document's part files are asked at once
+(``take_all``): the engine makes each table in a process of its pool, so a first bundle's tables are made
+on every core it has.
 
 Every answer is gathered into a folder made beside the bundle's (``atomic_replace.staging``) before the
 bundle's own is touched, so an export that fails -- the engine's refusal, a document that keeps changing --
 leaves what was there as it was. A new bundle is then that folder, renamed. One written over an earlier
 bundle keeps what it can: a part's files are named by its geometry key (and its mesh by the tessellation),
-so they are the same bytes in every bundle that holds the part; the engine is asked only for the parts the
-folder lacks, only the files whose bytes changed are moved in, the manifest last, and the files the
-document no longer names are removed. A folder whose manifest names a file holds it.
+and a prototype's names by their bytes, so they are the same bytes in every bundle that holds them; the
+engine is asked only for the parts the folder lacks, only the files whose bytes changed are moved in, the
+manifest last, and the files the document no longer names are removed. A folder whose manifest names a
+file holds it.
 """
 from __future__ import annotations
 
+import concurrent.futures
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -48,6 +56,12 @@ MANIFEST = "manifest.json"
 TRIES = 3
 # The longest wait between two asks of an answer still being made (a drawing, a file's read), in seconds.
 RETRY_SECONDS = 1.0
+# How many of a document's part files are asked at once (``take_all``): twice as many as the engine's pool has
+# processes (one a core), each making one part's table, so a process that finishes one finds the next in its
+# queue (measured on a 245-part model, 4 cores: 10.7 s one at a time, 4.7 s four at a time, 4.1 s eight).
+ASKS = 2 * (os.cpu_count() or 2)
+# A prototype's element names, which a bundle holds in a file of their own (``_names``).
+NAMES = ("faceNames", "edgeNames", "vertexNames")
 _JSON = "application/json"
 _CHUNK = 1 << 20
 # A path of a bundle, as a manifest of ours names one: segments of ``_segment``'s letters, joined by ``/``.
@@ -214,6 +228,25 @@ class _Bundle:
         kind, body = self.get(url, waiting)
         self.put(path, body, kind)
 
+    def take_all(self, asks: list[tuple[str, str]]) -> None:
+        """The answers of ``asks``, each a ``(path, url)`` named by its content (``take``'s ``immutable``): those
+        held already kept, the rest asked ``ASKS`` at a time, each put at its path as it comes in. The engine
+        makes each part's table in a process of its pool: asked one after another, a document's tables are
+        made on one core; asked at once, on as many as the pool has."""
+        waiting = iter([(path, url) for path, url in asks if not self.holds(path)])
+        with concurrent.futures.ThreadPoolExecutor(ASKS, thread_name_prefix="cad-bundle") as pool:
+            asked: dict[concurrent.futures.Future, str] = {}
+            while True:
+                for path, url in itertools.islice(waiting, ASKS - len(asked)):
+                    asked[pool.submit(self.get, url)] = path
+                if not asked:
+                    return
+                done, _running = concurrent.futures.wait(asked, return_when=concurrent.futures.FIRST_COMPLETED)
+                for answer in done:
+                    # A refusal fails the writing, once the asks under way are answered: nothing more is asked.
+                    kind, body = answer.result()
+                    self.put(asked.pop(answer), body, kind)
+
     def _portable(self, path: str, body: bytes) -> None:
         """Fail, by name, a JSON file that names a folder of this computer the document comes from: a
         bundle holds no path of the machine it was made on, and nothing of one that would is written.
@@ -296,8 +329,8 @@ def _said(body: bytes) -> str:
 
 def _engine_document(bundle: _Bundle, envelope: dict) -> str:
     """A model's, an ``.xbf``'s or a STEP's: its structure once every part is meshed (so it names each
-    part's unmeshed faces), every part's buffer and table, its parts' facts as wholes, its mechanism, and
-    the look it is drawn in."""
+    part's unmeshed faces), every part's buffer and table (asked at once: ``take_all``), its parts' facts as
+    wholes, its mechanism, its prototypes' element names, and the look it is drawn in."""
     api = envelope["api"]
     status, _kind, body = bundle.ask("POST", f"{api}/mesh")
     if status != 200:
@@ -305,14 +338,17 @@ def _engine_document(bundle: _Bundle, envelope: dict) -> str:
     kind, first = bundle.get(f"{api}/structure")
     structure = json.loads(first)
     tessellation = str(structure["tessellation"])
+    parts = []
     for key in dict.fromkeys(str(prototype["key"]) for prototype in structure["prototypes"]):
         part, folder = f"{api}/parts/{quote(key, safe='')}", f"parts/{_segment(key)}"
-        bundle.take(f"{folder}/{_segment(tessellation)}.xbm", f"{part}?tessellation={quote(tessellation, safe='')}",
-                    immutable=True)
-        bundle.take(f"{folder}/elements.json", f"{part}/elements", immutable=True)
+        parts += [(f"{folder}/{_segment(tessellation)}.xbm", f"{part}?tessellation={quote(tessellation, safe='')}"),
+                  (f"{folder}/elements.json", f"{part}/elements")]
+    bundle.take_all(parts)
     bundle.take("measure.json", f"{api}/measure")
+    mechanism = None
     if "kinematics" in structure:
-        bundle.take("kinematics.json", f"{api}/kinematics")
+        sent, mechanism = bundle.get(f"{api}/kinematics")
+        bundle.put("kinematics.json", mechanism, sent)
     bundle.take("look.json", "/api/v1/look")
     bundle.take("look/environment.hdr", "/api/v1/look/environment")
     if bundle.get(f"{api}/structure")[1] != first:
@@ -323,8 +359,35 @@ def _engine_document(bundle: _Bundle, envelope: dict) -> str:
     if envelope["kind"] != "model":
         structure["path"] = envelope["name"]
     structure.pop("closure", None)
+    # The mechanism is held once: ``kinematics.json`` is the structure's own, which a reader puts back.
+    if mechanism is not None and json.loads(mechanism) != structure.pop("kinematics"):
+        raise RuntimeError(f"{api}/kinematics is not its structure's kinematics: this is a bug in cad")
+    _names(bundle, structure, kind)
     bundle.put("structure.json", json.dumps(structure, separators=(",", ":")).encode(), kind)
     return str(structure["version"])
+
+
+def _names(bundle: _Bundle, structure: dict, kind: str) -> None:
+    """Each prototype's element names (``NAMES``, whichever it has) moved out of ``structure`` into a file of
+    their own, ``names/<sha256>.json``: compact JSON of an object holding them, every key sorted, named by the
+    SHA-256 of its own bytes, which the prototype names in their place (``"names"``). Prototypes that share a
+    part's key can name its elements apart, so a names file is named by what it holds, never by the key, and
+    prototypes named alike share one. One the folder holds already is kept (``holds``)."""
+    for at, prototype in enumerate(structure["prototypes"]):
+        names = {member: prototype[member] for member in NAMES if member in prototype}
+        if not names:
+            continue
+        body = json.dumps(names, separators=(",", ":"), sort_keys=True).encode()
+        path = f"names/{_digest(body)}.json"
+        if path not in bundle.files and not bundle.holds(path):
+            bundle.put(path, body, kind)
+        placed: dict = {}
+        for member, value in prototype.items():
+            if member in NAMES:
+                placed.setdefault("names", path)
+            else:
+                placed[member] = value
+        structure["prototypes"][at] = placed
 
 
 def _mesh_file(bundle: _Bundle, envelope: dict) -> str:

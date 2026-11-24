@@ -9,9 +9,10 @@
   "preview_urls": false,
 
   // The viewer's built client, copied here by `npm --prefix apps/share run build` (build.mjs) and
-  // never committed. A path that is a file is served as it is, with no Worker, but for HTML, which
-  // the Worker answers so that it carries the page's security headers. Every path that is no file,
-  // `/` and a share's page `/<id>` among them, reaches the Worker, as does the API.
+  // never committed, with the `_headers` build.mjs writes. A path that is a file is served as it is,
+  // with no Worker, but for HTML, which the Worker answers so that it carries the page's security
+  // headers. Every path that is no file, `/` and a share's page `/<id>` among them, reaches the
+  // Worker, as does the API.
   "assets": {
     "directory": "./viewer",
     "binding": "ASSETS",
@@ -20,18 +21,24 @@
     "run_worker_first": ["/v1/*", "/*.html"]
   },
 
-  // The shares: IV || ciphertext-and-tag under each share's id, its hashes and expiry beside it.
+  // The shares, each under s/<name>/, the name its id derives: its owner, its sealed manifest and its
+  // sealed packs.
   "r2_buckets": [
     { "binding": "SHARES", "bucket_name": "cad-shares" }
   ],
 
-  // Uploads and deletes, per client address and Cloudflare location: 10 a minute.
+  // Per client address and Cloudflare location: commits and deletes, 10 a minute; packs, 60 a minute.
   "ratelimits": [
-    { "name": "LIMITER", "namespace_id": "47201", "simple": { "limit": 10, "period": 60 } }
+    { "name": "LIMITER", "namespace_id": "47201", "simple": { "limit": 10, "period": 60 } },
+    { "name": "LIMITER_PACKS", "namespace_id": "47202", "simple": { "limit": 60, "period": 60 } }
   ],
 
+  // A pack, 8 MiB; a share manifest, 16 MiB; the packs a share's manifest names, 256 MiB; a share's
+  // life after its last commit, 7 days.
   "vars": {
-    "MAX_SHARE_BYTES": "26214400",
+    "MAX_PACK_BYTES": "8388608",
+    "MAX_MANIFEST_BYTES": "16777216",
+    "MAX_SHARE_BYTES": "268435456",
     "EXPIRY_DAYS": "7"
   },
 

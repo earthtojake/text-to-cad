@@ -9,7 +9,7 @@ export { requestViewerJson, ViewerRequestError, serverErrorMessage, isEngineGone
 export { createHttpCadResourceProvider, cadResourceCacheKey } from './resources.js';
 export { createViewBundleClient, openViewBundle, readViewBundleManifest, viewBundleMemorySource, viewBundleSegment, viewBundleUrlSource,
   VIEW_BUNDLE_FORMAT, VIEW_BUNDLE_MANIFEST, VIEW_BUNDLE_ORIGIN } from './bundle.js';
-export { isShareSecret, openShareArchive, readShareAddress, readShareArchive, readShareKey,
-  SHARE_ARCHIVE_FORMAT, SHARE_ID_PATTERN, SHARE_MAX_BYTES, SHARE_UNREADABLE, SHARE_UNSUPPORTED } from './share.js';
+export { deriveShareBits, isShareSecret, openShare, readShareAddress,
+  SHARE_DAMAGED, SHARE_FORMAT, SHARE_ID_PATTERN, SHARE_PREFETCH, SHARE_UNAVAILABLE, SHARE_UNSUPPORTED } from './share.js';
 
 export * from './exports.js';

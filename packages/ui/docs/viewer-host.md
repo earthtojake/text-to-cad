@@ -268,14 +268,15 @@ tool the document cannot use is absent, never drawn disabled:
 
 ## A shared view bundle's host
 
-A shared view bundle is a view bundle a share service keeps, encrypted, for anyone with its link. Its host
-is the view bundle's host above, unchanged: the web's share mode (`/<id>#key=<key>`,
-[apps/web](../../../apps/web/README.md#a-shared-view-bundle)) fetches the share's bytes from its own origin,
-opens them with `openShareArchive(stored, key)` (`@cad/core/client`), which decrypts, unpacks and hands the
-files to `openViewBundle(viewBundleMemorySource(files))`, and shows that service as `?bundle=` does. Everything
-a bundle's view keeps and leaves out stays as it is. What the share adds lives in the host alone: the share's
-status screens (gone, an incomplete or damaged link, a format it does not read, a failure with Retry) and its
-delete page. The key never reaches the viewer: no port, URL, storage or log carries it.
+A shared view bundle is a view bundle a share service keeps, sealed, for anyone with its link, which is the
+share's address alone. Its host is the view bundle's host above, unchanged: the web's share mode (`/<id>`,
+[apps/web](../../../apps/web/README.md#a-shared-view-bundle)) opens it with `openShare(id, service)`
+(`@cad/core/client`), which reads the share's manifest from the page's own origin, then each file from the
+packs it lies in, fetched once each and kept by the browser, and hands them to `openViewBundle` as a lazy
+source; it shows that service as `?bundle=` does. Everything a bundle's view keeps and leaves out stays as it
+is. What the share adds lives in the host alone: the share's status screens (gone, damaged, a format it does
+not read, a failure with Retry) and its delete page (`/<id>#delete=<secret>`). The delete secret never
+reaches the viewer: no port, URL, storage or log carries it.
 
 ## Adding a shared feature
 

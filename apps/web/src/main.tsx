@@ -1,6 +1,6 @@
 import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createCrashReporter, openShareArchive, openViewBundle, readShareAddress, readShareKey, viewBundleUrlSource } from '@cad/core/client';
+import { createCrashReporter, openShare, openViewBundle, readShareAddress, viewBundleUrlSource } from '@cad/core/client';
 import { createTabStore } from '@cad/ui/tab-store';
 import { EmptyState } from '@cad/ui/navigation';
 import { I18nProvider, resolveLocale, translateIn } from '@cad/ui/i18n';
@@ -11,7 +11,7 @@ import { browserLanguage } from './host/browserLanguage.js';
 import App from './App';
 import BundleApp from './BundleApp';
 import { ShareDelete, ShareFailed } from './SharePage';
-import { fetchShare } from './host/share.js';
+import { shareService } from './host/share.js';
 import { readDocumentId } from './client/workbench/fileParam.js';
 import { readBundleAddress } from './client/workbench/bundleParam.js';
 import { StartingView } from './StartingView';
@@ -34,7 +34,7 @@ document.title = 'text-to-cad';
 const stopStaleBuild = reloadOnStaleBuild();
 
 // The page is the engine's, or it shows one view bundle (its address's `?bundle=`), or a shared one (a share
-// service's `/<id>#key=<key>`, or its delete page, `/<id>#delete=<secret>`): chosen here, once.
+// service's `/<id>`, or its delete page, `/<id>#delete=<secret>`): chosen here, once.
 const share = readShareAddress(window.location.href);
 let bundle: string | null = null;
 let refused: Error | null = null;
@@ -124,17 +124,17 @@ function startViewBundle(element: HTMLElement, address: string | null, refused: 
 }
 
 /**
- * A shared view bundle's page, as a share service serves it at `/<id>`: the view (`#key=<key>`) fetches the
- * share's bytes from this page's own origin (`/v1/shares/<id>`), opens them with the key (`openShareArchive`)
- * and shows the bundle as `?bundle=` does (`BundleApp`); the delete link (`#delete=<secret>`) is the page that
- * deletes it (`ShareDelete`). The key and the secret are read from the address once, here, and are never
- * written anywhere: not to the address or its history, storage, a log or a request but the DELETE's header.
- * Until the share opens the page is the bar `index.html` drew.
+ * A shared view bundle's page, as a share service serves it at `/<id>`: the view reads the share's manifest and
+ * its packs from this page's own origin (`shareService`), opens them with the key its id gives (`openShare`) and
+ * shows the bundle as `?bundle=` does (`BundleApp`); the delete link (`#delete=<secret>`) is the page that deletes
+ * it (`ShareDelete`). The secret is read from the address once, here, and is never written anywhere: not to the
+ * address or its history, storage, a log or a request but the DELETE's header. Until the share opens the page is
+ * the bar `index.html` drew.
  */
 function startShare(element: HTMLElement, address: NonNullable<ReturnType<typeof readShareAddress>>) {
   const root = createRoot(element, { onCaughtError: (error, info) => { console.error(error, info.componentStack); } });
   const controller = new AbortController();
-  let client: Awaited<ReturnType<typeof openShareArchive>> | null = null;
+  let client: Awaited<ReturnType<typeof openShare>> | null = null;
   function dispose() { controller.abort(); stopStaleBuild(); root.unmount(); client?.dispose(); window.removeEventListener('pagehide', onPageHide); }
   function onPageHide(event: PageTransitionEvent) { if (!event.persisted) dispose(); }
   window.addEventListener('pagehide', onPageHide);
@@ -143,12 +143,11 @@ function startShare(element: HTMLElement, address: NonNullable<ReturnType<typeof
     const locale = language ?? resolveLocale(navigator.languages ?? [navigator.language]);
     const page = (node: ReactNode) => root.render(<I18nProvider locale={locale}>{node}</I18nProvider>);
     if ('deleteSecret' in address) { page(<ShareDelete id={address.id} secret={address.deleteSecret} locale={locale} />); return; }
-    const { id, key } = address;
+    const { id } = address;
     const open = async () => {
       page(<div aria-hidden="true" data-boot-navbar="" />);
       try {
-        readShareKey(key);
-        client = await openShareArchive(await fetchShare(id, { signal: controller.signal }), key, { signal: controller.signal });
+        client = await openShare(id, shareService(id), { signal: controller.signal });
       } catch (error) {
         if (!controller.signal.aborted) page(<ShareFailed error={error} locale={locale} onRetry={() => void open()} />);
         return;

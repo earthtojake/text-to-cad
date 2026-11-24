@@ -333,14 +333,33 @@ export interface CadClient extends CadWorkspaceService {
   reportActivity(activity: CadActivity): void;
 }
 /**
- * Where a view bundle's files are read (`viewBundleUrlSource`, `viewBundleMemorySource`): the bytes of one
- * path of the bundle (`manifest.json`, `parts/<key>/<tessellation>.xbm`…), or an error whose `status` is 404
- * for a path it does not hold.
+ * Where a view bundle's files are read (`viewBundleUrlSource`, `viewBundleMemorySource`, a share's): the bytes
+ * of one path of the bundle (`manifest.json`, `parts/<key>/<tessellation>.xbm`…), or an error whose `status` is
+ * 404 for a path it does not hold.
  */
 export interface ViewBundleSource {
   /** The folder's URL, for a bundle read from a file server. */
   readonly url?: string;
   read(path: string, options?: CadRequestOptions): Promise<ArrayBuffer>;
+  /** Let go of what it holds (a share's packs, the fetches under way): the bundle's service calls it once, when it is disposed. */
+  dispose?(): void;
+}
+/**
+ * A share's manifest (`cad-share/2`, sealed by its service): every file of its view bundle by its path, with the
+ * SHA-256 and the size of its own bytes, and where its gzip member lies: `[pack id, offset, length]` ranges of
+ * the packs' bytes (before sealing), joined in order.
+ */
+export interface ShareManifest {
+  format: 'cad-share/2';
+  files: Record<string, { sha256: string; bytes: number; at: [pack: string, offset: number, length: number][] }>;
+}
+/**
+ * The share service's reads of one share (`openShare`), each its sealed bytes (`IV || ciphertext-and-tag`): its
+ * manifest, and one of its packs by its id. A share the service has none of is the host's to say.
+ */
+export interface ShareService {
+  manifest(options?: CadRequestOptions): Promise<ArrayBuffer>;
+  pack(pack: string, options?: CadRequestOptions): Promise<ArrayBuffer>;
 }
 /** A view bundle's `manifest.json` (the engine's documentation, "View bundle"). */
 export interface ViewBundleManifest {

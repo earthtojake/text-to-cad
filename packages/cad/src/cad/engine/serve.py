@@ -26,7 +26,8 @@ answers no ``made_by``, since a file names no model, whichever model's run wrote
 ``GET /api/doc/<id>/part/<key>/groups`` is how a pick of one face or edge grows (each face's
 tangent group, each edge's chain: ``mesh.Topology.groups``); ``.../elements`` the part's whole table,
 every face's, edge's and vertex's facts by ordinal with its groups (``mesh.Topology.elements``: what
-the kernel measures of each, and nothing of the document -- no ``meshed``, no ``made_by``);
+the kernel measures of each, and nothing of the document -- no ``meshed``, no ``made_by``), made once
+and kept by its geometry key as the JSON it answers (``FactCache``, ``Server.table``);
 ``.../volume`` the part's facts as a
 whole -- its volume in cubic millimetres, what its mass is weighed from, its solids and its box in
 its own frame (``mesh.measured``) -- and ``GET /api/doc/<id>/volumes[?keys=K,...]`` every part's (or
@@ -235,36 +236,39 @@ MEASURE_POLL = 0.1
 
 
 class FactCache:
-    """What the kernel measures of each part as a whole (``mesh.measured``: its volume, how many solids
-    it has, its box in its own frame), by geometry key: plain numbers, measured once by the pool and
-    shared by every document and version that holds the part, as its tessellation is. Held under the
-    daemon's one memory budget (``size``, each entry counted as its JSON) and evicted with the
-    tessellations (``Server.trim``): it is measured again when asked."""
+    """What the kernel measures of each part, by geometry key: of the part as a whole (``mesh.measured``:
+    its volume, how many solids it has, its box in its own frame; plain numbers, ``Server.facts``), or of
+    every element of it (``mesh.Topology.elements``: its table, held as the JSON its route answers,
+    ``Server.tables``). Each is made once by the pool and shared by every document and version that holds
+    the part, as its tessellation is. Held under the daemon's one memory budget (``size``, each entry
+    counted as its JSON) and evicted with the tessellations (``Server.trim``): it is made again when
+    asked."""
 
     def __init__(self) -> None:
-        self.items: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
+        self.items: "OrderedDict[str, Any]" = OrderedDict()
         self.sizes: dict[str, int] = {}
         self.size = 0
         self.lock = threading.Lock()
-        self.pending: dict[str, concurrent.futures.Future] = {}  # each key being measured now
+        self.pending: dict[str, concurrent.futures.Future] = {}  # each key being made now
 
-    def get(self, key: str) -> dict[str, Any] | None:
+    def get(self, key: str) -> Any:
         with self.lock:
             found = self.items.get(key)
             if found is not None:
                 self.items.move_to_end(key)
             return found
 
-    def put(self, key: str, facts: dict[str, Any]) -> None:
+    def put(self, key: str, facts: Any) -> None:
         with self.lock:
             self._put(key, facts)
 
-    def _put(self, key: str, facts: dict[str, Any]) -> None:
+    def _put(self, key: str, facts: Any) -> None:
         if key in self.items:
             self.items.move_to_end(key)
             return
         self.items[key] = facts
-        self.sizes[key] = len(key) + len(json.dumps(facts, separators=(",", ":")))
+        self.sizes[key] = len(key) + (len(facts) if isinstance(facts, bytes) else
+                                      len(json.dumps(facts, separators=(",", ":"))))
         self.size += self.sizes[key]
 
     def oldest(self) -> list[str]:
@@ -798,15 +802,21 @@ def _topology_fact(key: str, data: bytes, method: str, args: tuple) -> Any:
     return getattr(found, method)(*args)
 
 
+def _table(key: str, data: bytes) -> bytes:
+    """A part's whole table (``mesh.Topology.elements``) as the JSON its route answers: a pool process's job
+    (``Server.table``), encoded where it is made, so the server keeps and sends its bytes as they come."""
+    return json.dumps(_topology_fact(key, data, "elements", ()), separators=(",", ":")).encode()
+
+
 class _RemoteTopology:
     """A part's ``mesh.Topology`` in a pool process: each fact asked a job in the pool's ``FACT`` queue,
-    ahead of every mesh waiting."""
+    ahead of every mesh waiting. Its whole table is the server's to keep (``Server.table``)."""
 
     def __init__(self, mesher: "Mesher", key: str, data: bytes) -> None:
         self.mesher, self.key, self.data = mesher, key, data
 
     def __getattr__(self, method: str):
-        if method not in {"face", "edge", "vertex", "groups", "elements"}:
+        if method not in {"face", "edge", "vertex", "groups"}:
             raise AttributeError(method)
         return lambda *args: self.mesher.run(_topology_fact, self.key, self.data, method, args, priority=FACT).result()
 
@@ -1019,8 +1029,10 @@ class Server:
         # The daemon's server and a worker's snapshot serve from the process's one cache
         # (``MESHES``); a server of its own (a test's) holds its own.
         self.cache = cache if cache is not None else MeshCache()
-        # Each part's facts as a whole, by its key (``measure``): the server's own, under its budget.
+        # Each part's facts as a whole, by its key (``measure``), and its whole table, by its key
+        # (``table``): the server's own, under its budget.
         self.facts = FactCache()
+        self.tables = FactCache()
         # The documents whose facts an inspection has asked for and waited on, by id (``measure``): a
         # later build of one has its new parts measured before anyone asks (``measure_later``); a
         # document none asked of is never read or measured after its build. In memory alone: an
@@ -1344,21 +1356,21 @@ class Server:
             return found
 
     def memory(self) -> dict[str, Any]:
-        """What the budget counts: the documents' bytes, the tessellations', the parts' facts' and the
-        budget's."""
+        """What the budget counts: the documents' bytes, the tessellations', the parts' facts' (their tables
+        among them) and the budget's."""
         with self.load_lock:
             documents = sum(doc.size for doc in self.served.values())
-        return {"budget": self.budget, "documents": documents, "meshes": self.cache.size, "facts": self.facts.size,
-                "evictions": self.evictions}
+        return {"budget": self.budget, "documents": documents, "meshes": self.cache.size,
+                "facts": self.facts.size + self.tables.size, "evictions": self.evictions}
 
     # --- the memory budget -------------------------------------------------------------
 
     def holding(self) -> int:
         """The bytes held under the budget: every served document's, every tessellation's and every
-        part's facts'."""
+        part's facts' and table's."""
         with self.load_lock:
             documents = sum(doc.size for doc in self.served.values())
-        return documents + self.cache.size + self.facts.size
+        return documents + self.cache.size + self.facts.size + self.tables.size
 
     def _grown(self, spare: str | None = None) -> None:
         """Something was put: past the budget, what is held is evicted (``trim``), never ``spare``
@@ -1368,9 +1380,9 @@ class Server:
 
     def trim(self, target: int, spare: str | None = None) -> list[str]:
         """Evict from memory until what is held is ``target`` bytes or less (the engine's **Document
-        lifetime**): tessellations first, least recently used first, then the parts' facts, then
-        documents, least recently used first -- never a document a page watches, nor its
-        tessellations or facts, nor ``spare``. Every
+        lifetime**): tessellations first, least recently used first, then the parts' tables and facts,
+        then documents, least recently used first -- never a document a page watches, nor its
+        tessellations, tables or facts, nor ``spare``. Every
         document is read again from where it is kept (a file from its file, a model's from the
         engine's cache, which is handed its bytes as it leaves: ``leaving``). The ids evicted."""
         evicted: list[str] = []
@@ -1383,16 +1395,12 @@ class Server:
                     kept.add(spare)
                 spared = {key for ident in kept if ident in self.served for key in self.served[ident].shapes}
             total = self.holding()
-            for key in self.cache.oldest():
-                if total <= target:
-                    break
-                if key not in spared:
-                    total -= self.cache.evict(key)
-            for key in self.facts.oldest():
-                if total <= target:
-                    break
-                if key not in spared:
-                    total -= self.facts.evict(key)
+            for held in (self.cache, self.tables, self.facts):
+                for key in held.oldest():
+                    if total <= target:
+                        break
+                    if key not in spared:
+                        total -= held.evict(key)
             with self.load_lock:
                 order = sorted((ident for ident in self.served if ident not in kept),
                                key=lambda ident: self.used.get(ident, 0))
@@ -1856,6 +1864,42 @@ class Server:
                 self.topologies.popitem(last=False)
         return found
 
+    def table(self, doc: Served, key: str) -> bytes:
+        """A part's whole table (``mesh.Topology.elements``: every face's, edge's and vertex's facts, and its
+        groups) as the JSON its route answers, by its geometry key: kept (``tables``) and shared by every
+        document and version that holds the part, as its facts are, and made once however many ask at a time
+        -- a job of the pool's facts queue, so tables asked at once are made in as many of its processes, or
+        in this process for a server of its own. A part the kernel refuses is every asker's error, and is
+        asked of it again next time."""
+        with self.tables.lock:
+            held = self.tables.items.get(key)
+            if held is not None:
+                self.tables.items.move_to_end(key)
+                return held
+            waiting = self.tables.pending.get(key)
+            making: concurrent.futures.Future = concurrent.futures.Future()
+            if waiting is None:
+                self.tables.pending[key] = making
+        if waiting is not None:
+            return waiting.result()
+        try:
+            data = self.shape_of(doc, key)
+            if self.isolated:
+                made = self.mesher.run(_table, key, data, priority=FACT).result()
+            else:
+                made = json.dumps(self.topology(key, data).elements(), separators=(",", ":")).encode()
+        except BaseException as error:  # every asker hears why; this one raises it
+            with self.tables.lock:
+                self.tables.pending.pop(key, None)
+            making.set_exception(error)
+            raise
+        with self.tables.lock:
+            self.tables.pending.pop(key, None)
+            self.tables._put(key, made)
+        making.set_result(made)
+        self._grown()
+        return made
+
     # --- the parts' facts --------------------------------------------------------------
 
     def measure(self, doc: Served, keys: Any = None, *, wait: bool = True,
@@ -2150,8 +2194,10 @@ class Server:
                         return self.part(handler, doc, key)
                     if len(parts) == 7 and parts[5] in ("face", "edge", "vertex") and parts[6].isdigit():
                         return self.fact(handler, doc, key, parts[5], int(parts[6]))
-                    if len(parts) == 6 and parts[5] in ("groups", "elements"):
-                        return self.json(handler, getattr(self.topology(key, self.shape_of(doc, key)), parts[5])())
+                    if len(parts) == 6 and parts[5] == "groups":
+                        return self.json(handler, self.topology(key, self.shape_of(doc, key)).groups())
+                    if len(parts) == 6 and parts[5] == "elements":
+                        return self.send(handler, 200, self.table(doc, key), "application/json")
                     if len(parts) == 6 and parts[5] == "volume":
                         return self.json(handler, self.measure(doc, [key])[key])
                 if len(parts) == 4 and parts[3] == "mesh" and method == "POST":
@@ -2201,8 +2247,10 @@ class Server:
                 return self.part(handler, doc, key)
             if len(parts) == 7 and parts[5] in ("face", "edge", "vertex") and parts[6].isdigit():
                 return self.fact(handler, doc, key, parts[5], int(parts[6]))
-            if len(parts) == 6 and parts[5] in ("groups", "elements"):
-                return self.json(handler, getattr(self.topology(key, self.shape_of(doc, key)), parts[5])())
+            if len(parts) == 6 and parts[5] == "groups":
+                return self.json(handler, self.topology(key, self.shape_of(doc, key)).groups())
+            if len(parts) == 6 and parts[5] == "elements":
+                return self.send(handler, 200, self.table(doc, key), "application/json")
             if len(parts) == 6 and parts[5] == "volume":
                 return self.json(handler, self.measure(doc, [key])[key])
         return self.error(handler, 404, "not found")

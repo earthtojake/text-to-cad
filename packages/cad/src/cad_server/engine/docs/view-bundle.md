@@ -25,8 +25,8 @@ options (`--tolerance`, `--angle`, `--zero`). It is the one export of a DXF and 
 The row it answers (`Written`, `--json`'s `files`) is the folder, with `view`: its `document`, how many
 `files` it holds, and the paths this export `written` and `removed`.
 
-`cad share` uploads one, packed as one archive, for anyone with its link to open in the hosted viewer
-(**Sharing**).
+`cad share` uploads one for anyone with its link to open in the hosted viewer, sending only the files its
+share does not hold yet (**Sharing**).
 
 A KiCad board or schematic has no view bundle yet: its `export` is KiCad's own (`--to`, into a folder, run
 by the kicad integration) and names no such destination. What one waits on is said under **Writing one**.
@@ -40,12 +40,12 @@ for every document, are at the root likewise. So a reader maps each read of a pa
 | A page's read | In the bundle | Held by |
 | --- | --- | --- |
 | `GET /api/v1/documents/<id>` (the envelope) | `manifest.json`'s `document` (below) | every bundle |
-| `GET <api>/structure` | `structure.json`, read once every part is meshed, so it names each part's `unmeshed` faces | a model, an `.xbf`, a STEP; a robot description |
+| `GET <api>/structure` | `structure.json`, read once every part is meshed, so it names each part's `unmeshed` faces; of a model, an `.xbf` and a STEP, its mechanism and each prototype's element names held apart (below) | a model, an `.xbf`, a STEP; a robot description |
 | `GET <api>/parts/<key>?tessellation=<tessellation>` | `parts/<key>/<tessellation>.xbm`: the part's `XBM2` buffer | each part of a model, an `.xbf`, a STEP |
 | `GET <api>/parts/<key>/faces\|edges\|vertices/<ordinal>` | `parts/<key>/elements.json`, under `faces`, `edges` or `vertices`, by the ordinal | each part of one |
 | `GET <api>/parts/<key>/groups` | `parts/<key>/elements.json`'s `groups` | each part of one |
 | `GET <api>/parts/<key>/volume`, `GET <api>/measure` | `measure.json`: every part's volume, solids and box, by key | a model, an `.xbf`, a STEP |
-| `GET <api>/kinematics` | `kinematics.json` (the structure's `kinematics` too) | one with joints |
+| `GET <api>/kinematics` | `kinematics.json`, which the structure leaves out | one with joints |
 | `GET /api/v1/look`, `GET /api/v1/look/environment` | `look.json`, `look/environment.hdr` (the look names its environment by the API's path, as answered) | a model, an `.xbf`, a STEP |
 | `GET <api>/source` | `source.stl`, `source.glb`, `source.3mf`: the file, which its page parses | an STL, a GLB, a 3MF |
 | `GET <api>/drawing` | `drawing.json` | a DXF |
@@ -92,10 +92,25 @@ written (law 16): what is left is the document's own text (a label, a note) or a
 bundle is the document's envelope, which says where things are on one computer: the manifest says what a
 reader needs of it. `thumbnail.png` is the picture a page last kept, which may be of an earlier version.
 
+**Held once.** The structure of a model, an `.xbf` or a STEP holds two things apart, and a reader puts
+both back before it answers the structure:
+
+- Its mechanism: `kinematics.json` is the structure's `kinematics`, the same object, so where the bundle
+  holds that file, `structure.json` has none.
+- Each prototype's element names (`faceNames`, `edgeNames`, `vertexNames`, whichever it has), in
+  `names/<sha256>.json`: compact JSON of an object holding them, every key sorted, named by the SHA-256 of
+  its own bytes, which the prototype names in their place (`"names": "names/<sha256>.json"`; a prototype
+  with none of the three has none). Prototypes can share a part's key and name its elements apart (one
+  geometry made by two functions), so a names file is named by what it holds, never by the key, and
+  prototypes named alike (one function's parts of two geometries) share one.
+
+So `structure.json` is the tree, the placements and the looks alone, which an edit of a colour or a
+placement changes, and a prototype's names are a file of their own, which changes only with them.
+
 **Named by content.** A part's two files are named by its geometry key, and its buffer by the
-tessellation it was meshed at, as their URLs are; a robot's meshes are named by their bytes. So they are
-the same bytes in every bundle that holds them, and a server may keep them for ever. The files at the
-bundle's root are the document's own and change with it.
+tessellation it was meshed at, as their URLs are; a prototype's names and a robot's meshes are named by
+their bytes. So they are the same bytes in every bundle that holds them, and a server may keep them for
+ever. The files at the bundle's root are the document's own and change with it.
 
 ## The manifest
 
@@ -126,9 +141,12 @@ The writer is the server's (`viewer/bundle.py`), since the answers are: it opens
 does, asks the page's own application, in process, for each read, and puts each answer's bytes at its
 path. It makes no answer itself, so what a bundle holds is what a page is told, and kernel work stays in
 the engine's own processes (law 19): the parts are meshed by the meshing pool into the one mesh cache a
-page reads from, and each table is one job of the pool's facts queue (`mesh.Topology.elements`). The
-library's half is one request through the door (`api.export`, `{"op": "bundle"}`); with `daemon=False`
-there is no server to ask, and a bundle is refused.
+page reads from, and each table is one job of the pool's facts queue (`mesh.Topology.elements`), made once
+and kept by the part's geometry key as its facts are, in memory alone (`serve.Server.table`), so no part's
+table is made twice while the engine runs, whichever document holds it. A document's part files are asked
+at once, twice as many at a time as the pool has processes, so a first bundle's tables are made on every
+core the engine uses. The library's half is one request through the door (`api.export`,
+`{"op": "bundle"}`); with `daemon=False` there is no server to ask, and a bundle is refused.
 
 Every answer is gathered into a folder made beside the bundle's before the bundle's own is touched, so an
 export that fails leaves what was there as it was (law 16). A new bundle is then that folder, renamed. A
