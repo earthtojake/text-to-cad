@@ -782,13 +782,15 @@ class SendTest(unittest.TestCase):
         order = ["manifest.json", "structure.json", "names/ab.json", "kinematics.json", "measure.json",
                  "parts/k/0.25-28.5.xbm", "parts/k/elements.json", "look/environment.hdr"]
         self.assertEqual(sorted(committed), sorted(order))  # every file but the picture
-        named = [seen[1].rsplit("/", 1)[1] for seen in self.service.puts("pack")]
-        self.assertEqual(len(named), 2)
+        # The packs in the order they were made: the large file's member runs from the first into the second.
+        # They go up concurrently, so the order they arrive in says nothing of it.
+        named = [piece[0] for piece in committed["parts/k/0.25-28.5.xbm"]["at"]]
+        self.assertEqual(len(set(named)), 2)
+        self.assertEqual(sorted(seen[1].rsplit("/", 1)[1] for seen in self.service.puts("pack")), sorted(named))
         packs = self.service.shares[share.id]["packs"]
         self.assertEqual(len(packs[named[0]]), sharing.PACK_BYTES)
         self.assertEqual(sorted(committed, key=lambda path: (named.index(committed[path]["at"][0][0]),
                                                              committed[path]["at"][0][1])), order)
-        self.assertEqual([piece[0] for piece in committed["parts/k/0.25-28.5.xbm"]["at"]], named)
         for path in order:
             data = self.service.read(share.id, path)
             self.assertEqual(data, (folder / path).read_bytes(), path)
