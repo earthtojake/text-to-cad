@@ -976,6 +976,12 @@ def _text_box(value: str, x: float, y: float, height: float, align) -> tuple[flo
     return (x0, y0, x0 + width, y0 + height)
 
 
+def _overlap(box: tuple[float, float, float, float], taken: tuple[float, float, float, float]) -> bool:
+    """Whether two boxes share any area. A line is a box of no height (or width), which a box
+    crosses only by spanning it, never by touching it."""
+    return box[0] < taken[2] and box[2] > taken[0] and box[1] < taken[3] and box[3] > taken[1]
+
+
 def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: list | None = None):
     """Build the ezdxf document for one sheet. Returns the document.
 
@@ -1025,34 +1031,66 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings:
     # should give way is the author's call; it says so instead of leaving it to be
     # noticed on the print.
     claimed: list[tuple[str, tuple[float, float, float, float]]] = []
+    # Each linear dimension's line, as (its value, the line's extent): text printed across the
+    # line reads as part of that dimension -- a view's label hung onto the overall width of the
+    # view below -- as surely as text printed over its value does.
+    dim_lines: list[tuple[str, tuple[float, float, float, float]]] = []
 
-    def claim_rendered(dimension) -> None:
+    def claim_rendered(dimension, horizontal: bool | None = None) -> None:
         """A dimension's VALUE lives as MTEXT inside its rendered block, not as
-        TEXT on the sheet, so it is registered from there once it is drawn."""
+        TEXT on the sheet, so it is registered from there once it is drawn; so is
+        a linear dimension's line (``horizontal``), the block's LINE along it."""
         try:
             block = doc.blocks.get(dimension.dxf.geometry)
         except Exception:  # noqa: BLE001 - a dimension with no block draws nothing to collide with
             return
+        own = len(claimed)
+        values = []
         for entity in block:
             if entity.dxftype() != "MTEXT":
                 continue
             value = str(entity.text or "")
+            values.append(value)
             height = float(entity.dxf.char_height or sheet.text_height)
             width, tall = _mtext_extent(value, height)
             insert = entity.dxf.insert
             claim(value, (insert.x - width / 2, insert.y - tall / 2,
                           insert.x + width / 2, insert.y + tall / 2))
+        if horizontal is None:
+            return
+        value = " ".join(values) or "a dimension"
+        said = False
+        for entity in block:
+            if entity.dxftype() != "LINE":
+                continue
+            start, end = entity.dxf.start, entity.dxf.end
+            # The extension lines run across the dimension; only the line along it is its line.
+            if (abs(start.y - end.y) < 1e-6) != horizontal or (abs(start.x - end.x) < 1e-6) == horizontal:
+                continue
+            line = (min(start.x, end.x), min(start.y, end.y), max(start.x, end.x), max(start.y, end.y))
+            # Its own value sits on its line by design; only another's text is printed across it.
+            hit = next((other for other, taken in claimed[:own] if _overlap(line, taken)), None)
+            if hit is not None and not said:
+                overlaps(hit, f"the line of {value.strip()!r}", line)
+                said = True
+            dim_lines.append((value, line))
+
+    def overlaps(value: str, over: str, box: tuple[float, float, float, float]) -> None:
+        """Says `value` is printed over `over`: another's text, quoted, or a dimension's line."""
+        if warnings is not None:
+            warnings.append(
+                f"annotation overlaps: {value.strip()!r} is printed over {over} "
+                f"around ({box[0]:.0f}, {box[1]:.0f}). Give the view more room "
+                "(three_views(gap=...)), or place one of them with offset=."
+            )
 
     def claim(value: str, box: tuple[float, float, float, float]) -> None:
-        for other, taken in claimed:
-            if (box[0] < taken[2] and box[2] > taken[0] and box[1] < taken[3] and box[3] > taken[1]):
-                if warnings is not None:
-                    warnings.append(
-                        f"annotation overlaps: {value.strip()!r} is printed over {other.strip()!r} "
-                        f"around ({box[0]:.0f}, {box[1]:.0f}). Give the view more room "
-                        "(three_views(gap=...)), or place one of them with offset=."
-                    )
-                break
+        hit = next((repr(other.strip()) for other, taken in claimed if _overlap(box, taken)), None)
+        if hit is None:
+            hit = next((f"the line of {other.strip()!r}" for other, taken in dim_lines if _overlap(box, taken)),
+                       None)
+        if hit is not None:
+            overlaps(value, hit, box)
         claimed.append((value, box))
 
     # Frame and title block.
@@ -1273,7 +1311,7 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings:
                 edge = vx1 if offset >= 0 else vx0
                 reach[side] = max(reach[side], abs(base[0] - edge) + sheet.text_height * 1.5)
             d.render()
-            claim_rendered(d.dimension)
+            claim_rendered(d.dimension, horizontal)
 
         # The overall pair is the OUTERMOST row on its side: a drawing reads from the
         # view outward, smallest feature first. Its rows are reserved here so the
