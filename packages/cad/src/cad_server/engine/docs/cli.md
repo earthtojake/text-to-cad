@@ -121,7 +121,8 @@ cad share delete TARGET|LINK [--yes] [--json]
                                              deleted from the service; asked first
 cad fork LINK [FOLDER] [--json]              a share's files downloaded by this process into FOLDER (./<name>; one
                                              that holds files is refused), every entry kept inside it; runs
-                                             nothing and prints the command that builds it (Forking)
+                                             nothing and prints the command that builds it; of a share this
+                                             computer made, where its files are, nothing downloaded (Forking)
 cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]
                                              each document deleted: its record, its document in the engine's
                                              cache and what the engine holds of it (**Delete**); never a

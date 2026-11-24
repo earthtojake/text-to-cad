@@ -369,7 +369,7 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
                 sent = _sent(share, found, sources, title, None, prog)
             except sharing.Refused as again:
                 raise _refused(again) from None
-        record = sharing.record_of(share, document, sent.answer)
+        record = sharing.record_of(share, document, sent.answer, sources)  # with where its files are, for a fork
         unkept = None
         try:
             sharing.keep(record=record, stored=sent.stored)

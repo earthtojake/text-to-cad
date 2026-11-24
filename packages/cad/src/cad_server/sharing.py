@@ -327,8 +327,9 @@ class Sources:
     by its path under the files' ``root``, in path order; the path among them of the script that builds it
     (``entry``: None for a file document); what built it (``made``: cad's release, the build's libraries and its
     platform, each as text; None for a file document); each file left out and why (``left_out``: ``(path, why)``,
-    ``outside`` the files' root, ``gone`` from the disk, or a ``name`` no share takes); and whether the build read a
-    file the engine could not see (``unseen``: its closure's key is null), which a fork may not rebuild it without."""
+    ``outside`` the files' root, ``gone`` from the disk, or a ``name`` no share takes); whether the build read a file
+    the engine could not see (``unseen``: its closure's key is null), which a fork may not rebuild it without; and a
+    file document's own file (``file``, its absolute path: None for a model)."""
 
     files: tuple[File, ...] = ()
     entry: str | None = None
@@ -336,6 +337,7 @@ class Sources:
     root: str | None = None
     left_out: tuple[tuple[str, str], ...] = ()
     unseen: bool = False
+    file: str | None = None
 
     @property
     def size(self) -> int:
@@ -548,7 +550,7 @@ def file_sources(path: str, kind: str) -> Sources:
         else:
             sha256, size = _digest_of(Path(each))
             found.append(File(taken, sha256, size, Path(each)))
-    return Sources(tuple(sorted(found, key=lambda file: file.path)), None, None, root, tuple(left))
+    return Sources(tuple(sorted(found, key=lambda file: file.path)), None, None, root, tuple(left), file=real)
 
 
 # --- the packs ---------------------------------------------------------------------------------------------------
@@ -1115,30 +1117,60 @@ def share_of(record: dict[str, Any]) -> Share:
     return Share(record["service"], record["id"], record["write"], record["delete"])
 
 
-def record_of(share: Share, document: dict[str, Any], answer: dict[str, Any]) -> dict[str, Any]:
+def record_of(share: Share, document: dict[str, Any], answer: dict[str, Any],
+              sources: Sources | None = None) -> dict[str, Any]:
     """A share's record: its names and links, where it lives, when it expires, the document it is of
-    (``{"id", "kind", "name", "path"}``: ``path`` a file's, else None), when it was last shared and its size as the
-    service stores it (``bytes``)."""
-    return {"id": share.id, "write": share.write, "delete": share.delete, "service": share.service,
-            "view": share.view, "remove": share.remove, "expires": answer["expires"], "document": document,
-            "shared": now(), "bytes": answer["bytes"]}
+    (``{"id", "kind", "name", "path"}``: ``path`` a file's, else None), when it was last shared, its size as the
+    service stores it (``bytes``), and where on this computer the files that made it are (``files``: their ``root``,
+    the script among them, ``entry``, and a file document's own ``file``; ``sources``'), which ``cad fork`` of its
+    link points at rather than downloading them."""
+    found = {"id": share.id, "write": share.write, "delete": share.delete, "service": share.service,
+             "view": share.view, "remove": share.remove, "expires": answer["expires"], "document": document,
+             "shared": now(), "bytes": answer["bytes"]}
+    if sources is not None:
+        found["files"] = {"root": sources.root, "entry": sources.entry, "file": sources.file}
+    return found
 
 
 def _record(row: Any) -> bool:
     """Whether ``row`` is a share's record (``record_of``): what the server keeps for a command, and nothing else --
-    not one of ``cad-share/1``'s, whose link held a ``key``."""
+    not one of ``cad-share/1``'s, whose link held a ``key``. One made before records said where its files are has no
+    ``files``."""
     from cad.engine.ids import is_id
 
     if not isinstance(row, dict) or "key" in row:
         return False
-    document = row.get("document")
+    document, files = row.get("document"), row.get("files", {})
     return (isinstance(row.get("id"), str) and _ID.fullmatch(row["id"]) is not None
             and all(isinstance(row.get(name), str) and _SECRET.fullmatch(row[name]) for name in ("write", "delete"))
             and all(isinstance(row.get(name), str) for name in ("view", "remove", "expires", "shared"))
             and isinstance(row.get("service"), str) and row["service"].startswith(("https://", "http://"))
             and type(row.get("bytes")) is int and isinstance(document, dict) and is_id(document.get("id"))
             and all(isinstance(document.get(name), str) for name in ("kind", "name"))
-            and isinstance(document.get("path"), (str, type(None))))
+            and isinstance(document.get("path"), (str, type(None)))
+            and isinstance(files, dict) and all(isinstance(files.get(name), (str, type(None)))
+                                                for name in ("root", "entry", "file")))
+
+
+def made_here(origin: str, ident: str) -> dict[str, Any] | None:
+    """The record of a share this computer made (``records``) at ``origin`` with the id ``ident``, live, whose files
+    are where it was shared from still: their root a folder, with the script among them (a model's ``entry``) or its
+    own file (a file document's) in it; None for any other -- another computer's share, one expired, one that no
+    record says the files of, one whose files moved or went -- and where the records cannot be read."""
+    try:
+        rows = records()
+    except OSError:
+        return None
+    for row in rows:
+        if row["id"] != ident or row["service"].lower() != origin.lower() or expired(row):
+            continue
+        files = row.get("files") or {}
+        root, entry, own = files.get("root"), files.get("entry"), files.get("file")
+        found = os.path.join(root, *entry.split("/")) if isinstance(root, str) and isinstance(entry, str) else own
+        if isinstance(root, str) and os.path.isdir(root) and isinstance(found, str) and os.path.isfile(found):
+            return row
+        return None
+    return None
 
 
 def _write_records(path: Path, rows: list[dict[str, Any]]) -> None:

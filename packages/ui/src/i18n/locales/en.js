@@ -203,7 +203,6 @@ export default {
   "share.unsupported.title": "This shared model cannot be opened here.",
   "share.failed.title": "Could not open this shared model.",
   "share.retry": "Retry",
-  "share.downloadFiles": "Download files",
   "share.delete.title": "Delete this shared model?",
   "share.delete.detail": "The link stops working for everyone.",
   "share.delete.action": "Delete",

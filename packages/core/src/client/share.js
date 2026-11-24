@@ -20,7 +20,7 @@
 // joining the ranges, gunzipping them (`DecompressionStream`) and checking the size and the SHA-256; and every pack
 // the view names is fetched ahead as soon as the manifest is read, a few at a time, so a whole model arrives at
 // full speed while each read takes what has come. Then the bundle opens as any other (`openViewBundle`). The files
-// that made it are not the page's: no pack only they name is fetched, and the host is told only what they are.
+// that made it are not the page's: no pack only they name is fetched.
 //
 // Failures are told apart by `code`: SHARE_DAMAGED, a manifest that does not open or is not one, or a file that is
 // not what the manifest says (a pack that does not open, a range past its end, bytes that are no gzip member or not
@@ -318,16 +318,14 @@ function viewBundleShareSource(view, { key, pack: fetchPack }) {
 /**
  * Open share `id` as the viewer's service over its view: its key derived from the id, its manifest read
  * (`service.manifest`) and opened, then its view bundle read from its packs (`service.pack`), fetched ahead from
- * the start, and opened as any other (`openViewBundle`). The service also says what the share holds beside its view
- * (`share`): its document's name, a model's script and what built it, and the paths of the files that made it,
- * which the share's zip holds; none of their packs is fetched. SHARE_DAMAGED where the manifest does not open or is
- * not one, or a file is not as it says; SHARE_UNAVAILABLE where a pack did not come; SHARE_UNSUPPORTED where the
- * bundle is one this viewer does not open; a failure of `service.manifest` as it is. Disposing the service stops
- * the share's fetches and lets its packs go.
+ * the start (and never a pack only the files that made it lie in), and opened as any other (`openViewBundle`).
+ * SHARE_DAMAGED where the manifest does not open or is not one, or a file is not as it says; SHARE_UNAVAILABLE where
+ * a pack did not come; SHARE_UNSUPPORTED where the bundle is one this viewer does not open; a failure of
+ * `service.manifest` as it is. Disposing the service stops the share's fetches and lets its packs go.
  * @param {string} id
  * @param {import('./types.js').ShareService} service
  * @param {{ signal?: AbortSignal }} [options]
- * @returns {Promise<import('./types.js').CadShareClient>}
+ * @returns {Promise<import('./types.js').CadViewBundleClient>}
  */
 export async function openShare(id, service, { signal } = {}) {
   if (!SHARE_ID_PATTERN.test(String(id))) throw damaged('it names no share.');
@@ -338,11 +336,9 @@ export async function openShare(id, service, { signal } = {}) {
   const plain = await unseal(key, sealed, MANIFEST_AAD, "the share's manifest");
   let parsed;
   try { parsed = JSON.parse(text.decode(plain)); } catch (error) { throw damaged("the share's manifest is not JSON.", error); }
-  const manifest = readShareManifest(parsed);
-  const source = viewBundleShareSource(manifest.view, { key, pack: (pack, options) => service.pack(pack, options) });
-  let client;
+  const source = viewBundleShareSource(readShareManifest(parsed).view, { key, pack: (pack, options) => service.pack(pack, options) });
   try {
-    client = await openViewBundle(source, { signal });
+    return await openViewBundle(source, { signal });
   } catch (error) {
     source.dispose?.();
     // The source's own failures say what they are; whatever else stops the bundle opening is the bundle's.
@@ -350,7 +346,4 @@ export async function openShare(id, service, { signal } = {}) {
     throw Object.assign(new Error(`This shared model holds no view bundle this viewer opens: ${error?.message || error}`),
       { code: SHARE_UNSUPPORTED, cause: error });
   }
-  const { name, entry, made, files } = manifest;
-  return Object.assign(client, { share: Object.freeze({ name, entry, made: made && Object.freeze({ ...made }),
-    files: Object.freeze(Object.keys(files)) }) });
 }

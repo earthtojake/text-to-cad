@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deleteShare, SHARE_GONE, shareApiUrl, shareService, shareZipUrl } from "./share.js";
+import { deleteShare, SHARE_GONE, shareApiUrl, shareService } from "./share.js";
 
 const ID = "AbCdEfGhIjKlMnOpQrSt_-";
 const PACK = "d61037e21c7e5fc5318069739439f61ccea49f6b11a1dad1ecf15cb0d831e680";
@@ -19,8 +19,6 @@ function service(status, body = null) {
 
 test("a share's manifest is read at its API on the page's own origin, never cached, and a 404 says it is gone", async () => {
   assert.equal(shareApiUrl(ID, ORIGIN), `${ORIGIN}/v1/shares/${ID}`);
-  // The files that made it are the service's zip beside the view, on the same origin.
-  assert.equal(shareZipUrl(ID, ORIGIN), `${ORIGIN}/${ID}.zip`);
   const found = service(200, new Uint8Array([1, 2, 3]));
   assert.deepEqual(new Uint8Array(await shareService(ID, { fetch: found.fetch, origin: ORIGIN }).manifest()), new Uint8Array([1, 2, 3]));
   const [asked] = found.asked;

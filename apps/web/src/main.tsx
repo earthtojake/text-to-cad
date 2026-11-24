@@ -10,7 +10,7 @@ import { reloadOnStaleBuild } from './host/staleBuild.js';
 import { browserLanguage } from './host/browserLanguage.js';
 import App from './App';
 import BundleApp from './BundleApp';
-import { ShareDelete, ShareDownload, ShareFailed } from './SharePage';
+import { ShareDelete, ShareFailed } from './SharePage';
 import { shareService } from './host/share.js';
 import { readDocumentId } from './client/workbench/fileParam.js';
 import { readBundleAddress } from './client/workbench/bundleParam.js';
@@ -125,12 +125,11 @@ function startViewBundle(element: HTMLElement, address: string | null, refused: 
 
 /**
  * A shared view bundle's page, as a share service serves it at `/<id>`: the view reads the share's manifest and
- * its view's packs from this page's own origin (`shareService`), opens them with the key its id gives
- * (`openShare`) and shows the bundle as `?bundle=` does (`BundleApp`), with Download files where the share carries
- * the files that made it (`ShareDownload`, a link to their zip); the delete link (`#delete=<secret>`) is the page
- * that deletes it (`ShareDelete`). The secret is read from the address once, here, and is never written anywhere:
- * not to the address or its history, storage, a log or a request but the DELETE's header. Until the share opens
- * the page is the bar `index.html` drew.
+ * its packs from this page's own origin (`shareService`), opens them with the key its id gives (`openShare`) and
+ * shows the bundle as `?bundle=` does (`BundleApp`); the delete link (`#delete=<secret>`) is the page that deletes
+ * it (`ShareDelete`). The secret is read from the address once, here, and is never written anywhere: not to the
+ * address or its history, storage, a log or a request but the DELETE's header. Until the share opens the page is
+ * the bar `index.html` drew.
  */
 function startShare(element: HTMLElement, address: NonNullable<ReturnType<typeof readShareAddress>>) {
   const root = createRoot(element, { onCaughtError: (error, info) => { console.error(error, info.componentStack); } });
@@ -154,8 +153,7 @@ function startShare(element: HTMLElement, address: NonNullable<ReturnType<typeof
         return;
       }
       if (controller.signal.aborted) { client.dispose(); return; }
-      root.render(<StrictMode><BundleApp client={client} tabStore={tabStore} language={language}
-        actions={<ShareDownload id={id} files={client.share.files} />} /></StrictMode>);
+      root.render(<StrictMode><BundleApp client={client} tabStore={tabStore} language={language} /></StrictMode>);
     };
     void open();
   });

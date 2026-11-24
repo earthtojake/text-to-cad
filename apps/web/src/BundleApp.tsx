@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { CadViewer, createCadFileSource } from '@cad/ui/cad-viewer';
 import { createLiveRegistry, type ViewerHost } from '@cad/ui/host';
 import type { Appearance, TabStore } from '@cad/ui/tab-store';
@@ -22,11 +22,9 @@ const NOWHERE = () => {};
  * ports that need no engine: the clipboard (Quick Edit's Copy), this build's links, the tab's appearance and
  * the person's language, kept in this browser (`host/browserLanguage.js`). Everything the engine answered
  * is left out where the viewer reads it: the client has no exports, no parameters to save or preview and no
- * next version, and the host no file actions, no prompt files, no Telemetry and no What's new. What the page
- * offers of its own (a share's Download files) is `actions`, the navbar's host actions at its right end.
+ * next version, and the host no file actions, no prompt files, no Telemetry and no What's new.
  */
-export default function BundleApp({ client, tabStore, language: chosenLanguage = null, actions }: { client: CadViewBundleClient; tabStore: TabStore;
-  language?: string | null; actions?: ReactNode }) {
+export default function BundleApp({ client, tabStore, language: chosenLanguage = null }: { client: CadViewBundleClient; tabStore: TabStore; language?: string | null }) {
   const files = useMemo(() => createCadFileSource(client, { id: 'view-bundle' }), [client]);
   const sayRef = useRef<(key: string, params?: Record<string, unknown>) => string>(english);
   const promptContext = useMemo(() => createWebPromptContext(browserClipboard, browserClipboardSupportsImages(),
@@ -50,6 +48,6 @@ export default function BundleApp({ client, tabStore, language: chosenLanguage =
   return <div className="fixed inset-0 flex flex-col overflow-hidden">
     <div className="isolate min-h-0 flex-1">
       <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={client.file} name={name} onShow={NOWHERE}
-        colorScheme={colorScheme} language={language} navbarActions={actions} />
+        colorScheme={colorScheme} language={language} />
     </div></div>;
 }

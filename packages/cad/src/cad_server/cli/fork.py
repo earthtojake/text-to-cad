@@ -11,6 +11,10 @@ all are whole, so a refused or broken zip leaves nothing (``sharing.unpack``). I
 builds it, and where what built it (``Cad-Share-Made``) differs from this computer's cad and libraries, which a build
 here records (``_here``). It runs nothing: the next step it prints is ``cad run FOLDER/<script>`` (a file's,
 ``cad viewer FOLDER/<file>``), since someone else's code is the person's to run. ``--json`` answers in one object.
+
+A share this computer made (``sharing.made_here``: a live record of that origin and id, whose files are still where
+it was shared from) is downloaded by no one: the command writes nothing, FOLDER included, and says where its files
+are -- their root and the script among them, or a file document's file -- which is where to work on them (``_local``).
 """
 
 from __future__ import annotations
@@ -31,7 +35,8 @@ DESCRIPTION = (
     "Write the files that made a shared document into a folder: a model's script, the modules of its project and the "
     "files it reads, at their paths there; a file document's file. LINK is the share's link (https://cad.fun/<id>), "
     "its files' link (<link>.zip) or its id. It runs nothing: it says what it wrote and where what built it differs "
-    "from this computer's cad and libraries, then the command that builds it, for the person to run.")
+    "from this computer's cad and libraries, then the command that builds it, for the person to run. A share this "
+    "computer made is not downloaded: it says where its files are, to work on them there, and writes nothing.")
 # How long this computer's CAD kernel environment may take to say its libraries.
 VERSIONS_SECONDS = 60.0
 # What a build records of its libraries and its Python, asked of the CAD kernel environment's own Python.
@@ -45,7 +50,8 @@ def build_parser(prog: str = DEFAULT_PROG):
     parser = command_parser(prog=prog, description=DESCRIPTION)
     parser.add_argument("link", metavar="LINK", help="the share's link, its files' link (.zip), or its id")
     parser.add_argument("folder", nargs="?", metavar="FOLDER",
-                        help="where its files go: a folder not there yet, or an empty one (default: ./<its name>)")
+                        help="where its files go: a folder not there yet, or an empty one (default: ./<its name>); "
+                             "not used for a share this computer made")
     parser.add_argument("--json", action="store_true", help="answer in one JSON object")
     return parser
 
@@ -94,6 +100,9 @@ def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
         raise Failure("that is no share's link: a share's link is <origin>/<id>, its files' <origin>/<id>.zip, and "
                       f"an id alone is one of {service}", "invalid_argument")
     origin, ident = found
+    mine = sharing.made_here(origin, ident)
+    if mine is not None:
+        return _local(mine, given, as_json=as_json)
     if given is not None:
         _refused_folder(Path(given))
     told = threading.Lock()
@@ -142,7 +151,7 @@ def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
             [_command("viewer", os.path.join(shown, *viewed.split("/")))] if viewed is not None else [])
     size = sum(count for _path, count in written)
     if as_json:
-        print(json.dumps({"ok": True, "folder": os.path.abspath(folder), "name": top,
+        print(json.dumps({"ok": True, "local": False, "folder": os.path.abspath(folder), "name": top,
                           "files": {"count": len(written), "bytes": size, "paths": paths}, "entry": entry,
                           "made": made, "here": here, "differs": differs, "next": step}, separators=(",", ":")),
               flush=True)
@@ -164,6 +173,26 @@ def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
     if step:
         print(f"Nothing was run: the code is someone else's, the person's to read and run. Next: {step[0]}"
               if entry is not None else f"Next: {step[0]}", flush=True)
+    return 0
+
+
+def _local(record: dict[str, Any], given: str | None, *, as_json: bool) -> int:
+    """A share this computer made, its files where it was shared from (``sharing.made_here``'s ``record``): where
+    they are -- their root and the script among them, or a file document's file -- and that nothing was downloaded
+    or written, FOLDER (``given``) neither. The next step is the one that builds or shows it there: these files are
+    this computer's own."""
+    files = record["files"]
+    root, entry, own = files["root"], files.get("entry"), files.get("file")
+    name = record["document"]["name"]
+    script = os.path.join(root, *entry.split("/")) if entry is not None else None
+    step = [_command("run", script)] if script is not None else [_command("viewer", own)]
+    if as_json:
+        print(json.dumps({"ok": True, "local": True, "name": name, "root": root, "entry": entry, "file": own,
+                          "ignored": given, "next": step}, separators=(",", ":")), flush=True)
+        return 0
+    where = f"its files are in {root}, its script {script}" if script is not None else f"its file is {own}"
+    print(f"{name} was shared from this computer: {where}. Nothing was downloaded"
+          + (f", and {given} was not written" if given is not None else "") + "; work there.", flush=True)
     return 0
 
 

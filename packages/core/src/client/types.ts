@@ -388,20 +388,6 @@ export interface CadViewBundleClient extends CadWorkspaceService {
   readonly file: string;
   engineDocument(file: string, options?: CadRequestOptions): Promise<CadEngineDocument>;
 }
-/** The viewer's service over a share's view (`openShare`), and what the share holds beside it. */
-export interface CadShareClient extends CadViewBundleClient {
-  /**
-   * What the share's manifest says beside its view: the document's name, a model's script (`entry`, one of `files`)
-   * and what built it (`made`), each null for a file document, and the paths of the files that made it, which the
-   * share's zip holds (none, an empty list).
-   */
-  readonly share: {
-    readonly name: string;
-    readonly entry: string | null;
-    readonly made: Readonly<Record<string, string>> | null;
-    readonly files: readonly string[];
-  };
-}
 export interface CadClientOptions {
   resources?: CadResourceProvider;
   origin?: string;

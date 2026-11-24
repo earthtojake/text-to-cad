@@ -107,8 +107,17 @@ It says what it wrote, the script that builds it (`Cad-Share-Entry`), and where 
 differs from this computer: this release, the CAD kernel environment's libraries and Python (not compared where
 that environment is not made yet), the system and the architecture. It runs nothing: the next step it prints is
 `cad run FOLDER/<script>` (a file document's, `cad viewer FOLDER/<file>`), since someone else's code is the person's
-to read and run. `--json` is one object: `folder`, `name`, `files` (`count`, `bytes`, `paths`), `entry`, `made`,
-`here`, `differs` (each `name`, `made`, `here`) and `next`.
+to read and run. `--json` is one object: `local` (false), `folder`, `name`, `files` (`count`, `bytes`, `paths`),
+`entry`, `made`, `here`, `differs` (each `name`, `made`, `here`) and `next`.
+
+**A share this computer made.** A link of a live share this computer's records hold (**What is kept**: that service's
+origin and that id), whose files are still where it was shared from, is downloaded by no one: the command writes
+nothing, FOLDER included (said where one is given), and says where the files are, which is where to work on them:
+`arm was shared from this computer: its files are in <root>, its script <root>/arm.py. Nothing was downloaded; work
+there.`, or a file document's own file. `--json`: `local` (true), `name`, `root`, `entry`, `file` (a file document's),
+`ignored` (the FOLDER given, or null) and `next` (`cad run <root>/<script>`, or `cad viewer <file>`: these files are
+this computer's own). A record of another service, one expired, or one whose files moved or went is no such share:
+its link is downloaded as any other.
 
 ## What is kept
 
@@ -122,11 +131,13 @@ POSIX), one record a share, dropped once past its expiry:
   "id": "<share id>", "write": "<write secret>", "delete": "<delete secret>",
   "service": "https://cad.fun", "view": "<view link>", "remove": "<delete link>",
   "expires": "2026-12-01T10:00:00Z", "shared": "2026-11-24T10:00:00Z", "bytes": 3880124,
-  "document": {"id": "<document id>", "kind": "model", "name": "arm", "path": null}}]}
+  "document": {"id": "<document id>", "kind": "model", "name": "arm", "path": null},
+  "files": {"root": "/home/me/arm", "entry": "arm.py", "file": null}}]}
 ```
 
 A document is one record per service, by its document id (a file's `path` too); `bytes` is the share's size as
-the service stores it. A record with a `key` (`cad-share/1`'s) is none, as is one past its expiry: that
+the service stores it; `files`, where on this computer the files that made it are: their root, the script among them
+(`entry`, a model's) and a file document's own `file`, which `cad fork` of its link points at (**Forking**). A record with a `key` (`cad-share/1`'s) is none, as is one past its expiry: that
 document's next share is a new one. The id and the secrets are said only inside the links and in the record: in no
 other line of any command, no log, no telemetry and no file of the cache. The command is counted as any command is:
 its export as an export (a bundle is no counted kind), nothing of the share.

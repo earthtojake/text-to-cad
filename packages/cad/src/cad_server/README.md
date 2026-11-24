@@ -162,7 +162,8 @@ cad_server/
   until `on`. **`cad share delete TARGET|LINK`**: a share deleted, asked first. The agreement, the setting, the
   records and the cache's folders are written by the server that runs, as `cad update auto`'s switch is, else by the
   command (the engine's **Sharing**). **`cad fork LINK [FOLDER]`**: a share's files downloaded by the command itself
-  into a folder, every entry kept inside it; it runs nothing, and prints the command that builds it.
+  into a folder, every entry kept inside it; it runs nothing, and prints the command that builds it. Of a share this
+  computer made, it downloads nothing and says where its files are.
 
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
 One command can install it with uv where a computer has none: `cad mcp` run from uv's cache, which
