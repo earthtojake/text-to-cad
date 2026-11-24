@@ -1759,6 +1759,27 @@ class ModellingMistakeTest(unittest.TestCase):
         with self.subTest(broken="rounded whole"):
             reads_as(layered(whole, *(level(z) for z in (-0.504, -0.148, 0.208, 0.564))), whole)
 
+    def test_a_countersink_cut_in_layers_keeps_its_hole_whichever_skin_is_unfolded(self) -> None:
+        # a hole chamfered on both rims (a countersink each side), the top one cut 0.008 mm from the wall: laid a
+        # layer at a time, from the top, the thin ring was narrower than the flat is fused at and the hole filled
+        outline = (bd.RectangleRounded(80, 40, 5) - bd.Circle(6)).face()
+        plate = bd.extrude(bd.Pos(0, 0, -1) * outline, amount=2)
+        rims = [edge for edge in plate.edges().filter_by(bd.GeomType.CIRCLE) if abs(edge.radius - 6) < 1e-6]
+        split = layered(bd.chamfer(rims, 0.4), level(0.608))
+        classify = sheet._Analysis.classify
+        for e in (1e-9, -1e-9):  # the top skin a hair larger, then smaller: the side unfolded
+
+            def nudged(analysis: sheet._Analysis, e: float = e) -> None:
+                classify(analysis)
+                for a in analysis.skins:
+                    if analysis.surfaces[a - 1].normal[2] > 0.5:
+                        analysis.areas[a - 1] += e
+
+            with self.subTest(top_larger=e > 0), mock.patch.object(sheet._Analysis, "classify", nudged):
+                report = measured(split)
+                self.assertAlmostEqual(items(report, "parts")[0]["flat_material_fraction"], 1.0, delta=0.002)
+                self.assertEqual([hole["size_mm"] for hole in items(report, "holes")], [12.0])
+
     def test_a_notch_beside_a_break_in_pieces_is_at_its_cut_edge(self) -> None:
         # the cut edges behind a break were looked for two faces in from the skin: with each side's chamfer in
         # three, a notch, a web and a gap were said to be at the chamfer

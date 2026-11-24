@@ -14,7 +14,7 @@ between a skin and its opposite; a cone in several faces (two half faces, as som
 one. A chamfer or a round of a skin's edge is an *edge break*,
 and a face square to the skin it joins to both skins through breaks is a cut edge too (its rays run across
 the plate: its width, never its thickness), as is each face of a cut in several faces across the thickness,
-joined tangent (a plate extruded both ways along an ellipse or a spline); a bend's end is broken by a cone or a torus about its axis; a break in several faces of one surface (a layer cut it across) is one break; a cone, torus or freeform face a thickness across is *formed*
+joined tangent (a plate extruded both ways along an ellipse or a spline); a bend's end is broken by a cone or a torus about its axis; a break in several faces of one surface (a layer cut it across) is one break, and a countersink cut across is one; a cone, torus or freeform face a thickness across is *formed*
 sheet, not a bend. Every other face, and every stretch of a skin whose rays
 cross anything but ``t``, is not sheet (``not_sheet``: a boss, a pocket, a round, at its ref, with how far it
 departs from ``t``).
@@ -2144,10 +2144,12 @@ class _Analysis:
         return bd.make_face(bd.Polyline(*[(float(x), float(y), 0.0) for x, y in polygon], close=True))
 
     def _laid(self, ordinal: int) -> list[Any]:
-        """A break's face as it is measured and laid into the flat: itself, or, where it is one face in several
-        (a round cut in two by a layer, joined and never merged), the face they are once merged at the first of
-        them and nothing at the others. Laid face by face, a piece that projects narrower than the tolerance the
-        flat is fused at is lost there, and a hole's rim with it."""
+        """A break's or a countersink's face as it is measured and laid into the flat: itself, or, where it is one
+        face in several (a round or a countersink cut in two by a layer, joined and never merged), the face they
+        are once merged at the first of them and nothing at the others. Laid face by face, a piece that projects
+        narrower than the tolerance the flat is fused at is lost there, and a hole's rim with it (a countersink's
+        layer 0.008 mm across closed its hole). A countersink's faces split through its axis stay as they are
+        (``_halves`` lays each)."""
         if self._joined is None:
             import build123d as bd
             from OCP.BRep import BRep_Builder
@@ -2171,11 +2173,18 @@ class _Analysis:
                 except Exception:  # noqa: BLE001 - faces that do not merge are laid as they are
                     return None
 
+            # a countersink's faces meet across the thickness at a curve (a layer's cut), its halves at a line
+            curved = {frozenset(join.faces) for join in self.edges
+                      if self.part.edges()[join.ordinal - 1].geom_type.name != "LINE"}
+            groups = [(self._break_faces(a), lambda b, members: True) for a in sorted(self.breaks)]
+            groups += [(sorted(self._cone_faces(c)), lambda b, members: any(
+                frozenset((b, m)) in curved for m in members)) for c in sorted(self.countersinks)]
             self._joined = {}
-            for a in sorted(self.breaks):
-                group = self._break_faces(a)
-                if a != group[0] or len(group) < 2:
+            tried: set[tuple[int, ...]] = set()
+            for group, joins in groups:
+                if len(group) < 2 or tuple(group) in tried:
                     continue
+                tried.add(tuple(group))
                 # grown a face at a time, from the part's own faces (they share their edges; a merged face
                 # shares none): the kernel merges what it would have made one face, and no more (a round about
                 # a hole that was two faces whole stays two)
@@ -2185,7 +2194,7 @@ class _Analysis:
                     grown = True
                     while grown:
                         grown = False
-                        for b in [b for b in left if any(self.smooth[b] & set(members))]:
+                        for b in [b for b in left if any(self.smooth[b] & set(members)) and joins(b, members)]:
                             more = merged([*members, b])
                             if more is not None:
                                 members.append(b)
