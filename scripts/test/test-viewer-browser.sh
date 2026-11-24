@@ -229,7 +229,7 @@ cat > "$project/smoke.urdf" <<'URDF'
 URDF
 
 # A view bundle, for the bundle and share gates: a model of one part whose width is a parameter, exported by the
-# engine into a dot-directory the explorer skips; its script goes once it is built.
+# engine into a dot-directory the explorer skips. Its script stays: a share carries the files that made it.
 mkdir -p "$project/.bundles"
 cat > "$project/.bundles/plate.py" <<'PLATE'
 import build123d as bd
@@ -248,7 +248,7 @@ def plate():
 if __name__ == "__main__":
     model.export(plate(), "plate.view")
 PLATE
-if ! (cd "$project/.bundles" && "$PYTHON" plate.py && rm plate.py) >"$log" 2>&1 \
+if ! (cd "$project/.bundles" && "$PYTHON" plate.py) >"$log" 2>&1 \
    || [ ! -f "$project/.bundles/plate.view/manifest.json" ]; then
   echo "FAIL: the view bundle fixture did not export" >&2
   sed 's/^/    /' "$log" >&2
@@ -288,6 +288,15 @@ if [ -z "$only_gate" ] || [ "$only_gate" = share ]; then
        >"$project/share-again.json" 2>"$log"; then
     echo "FAIL: cad share did not share the bundle fixture's model again" >&2
     sed 's/^/    /' "$project/share-again.json" "$log" >&2
+    exit 1
+  fi
+  # The files that made it, as anyone with the link takes them: `cad fork` downloads the zip the service makes
+  # of them and writes them into a folder, the same bytes as the script that built the model.
+  view_link="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["view"])' "$project/share.json")"
+  if ! (cd "$project" && CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli fork "$view_link" "$project/forked" --json) \
+       >"$project/fork.json" 2>"$log" || ! cmp -s "$project/.bundles/plate.py" "$project/forked/plate.py"; then
+    echo "FAIL: cad fork did not write the shared model's files" >&2
+    sed 's/^/    /' "$project/fork.json" "$log" >&2
     exit 1
   fi
   share_args=(--share "$project/share.json" --share-again "$project/share-again.json")

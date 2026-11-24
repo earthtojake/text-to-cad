@@ -845,6 +845,8 @@ async function shareGate() {
   // The view link is the share's address alone: its id opens it, and nothing follows it.
   if (!/^[A-Za-z0-9_-]{22}$/.test(id) || viewLink.search || viewLink.hash) fail("the view link is not a share's address alone");
   if (!secret || new URL(shared.delete).pathname.slice(1) !== id) fail("the share's delete link carries no secret, or names another share");
+  // The files that made it are a zip beside the view, on the same id (the runner forks it, byte for byte).
+  if (shared.zip !== `${origin}/${id}.zip`) failures.push(`share: the files' link is ${JSON.stringify(shared.zip)}`);
   // Shared again with nothing changed: the same links, and no file travelled again.
   if (args.shareAgain) {
     const again = JSON.parse(fs.readFileSync(args.shareAgain, "utf8"));
@@ -920,6 +922,8 @@ async function shareGate() {
       failures.push(`share: the page's content security policy is not the service's: ${JSON.stringify(view.policy)}`);
     }
     if (await view.getByTestId("file-actions").count()) failures.push("share: a file menu over a shared model");
+    // The files that made it, offered as a plain download of the zip, never fetched until asked for.
+    if (await view.locator(`a[download][href$="/${id}.zip"]`).count() !== 1) failures.push("share: no link to download the files that made it");
     // The id stays where the address holds it: in no storage, and in no other history entry.
     const kept = await view.evaluate(() => ({ history: history.length, href: location.href,
       storage: JSON.stringify({ ...sessionStorage }) + JSON.stringify({ ...localStorage }) }));
