@@ -282,7 +282,15 @@ if [ -z "$only_gate" ] || [ "$only_gate" = share ]; then
     sed 's/^/    /' "$project/share.json" "$log" >&2
     exit 1
   fi
-  share_args=(--share "$project/share.json")
+  # And again, unchanged, as an agent shares after each edit: the same link, and nothing but the commit travels.
+  # The person's yes is this computer's now, so the command no longer asks for it.
+  if ! (cd "$project" && CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli share "$plate_id" --json) \
+       >"$project/share-again.json" 2>"$log"; then
+    echo "FAIL: cad share did not share the bundle fixture's model again" >&2
+    sed 's/^/    /' "$project/share-again.json" "$log" >&2
+    exit 1
+  fi
+  share_args=(--share "$project/share.json" --share-again "$project/share-again.json")
 fi
 
 (cd "$project" && "$PYTHON" -m cad_server.viewer --json) >"$log"

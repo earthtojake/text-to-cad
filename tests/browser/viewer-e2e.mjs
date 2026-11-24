@@ -19,14 +19,16 @@ const { chromium } = createRequire(path.join(REPO, "packages/core/package.json")
 const { PNG } = createRequire(path.join(REPO, "apps/web/package.json"))("pngjs");
 
 function parseArgs(argv) {
-  const args = { url: "", dir: "", out: "", only: "", bundle: "", share: "" };
+  const args = { url: "", dir: "", out: "", only: "", bundle: "", share: "", shareAgain: "" };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === "--url") args.url = argv[++i] || "";
     else if (flag === "--dir") args.dir = argv[++i] || "";
     // A folder of view bundles, for the bundle gate, which runs with no engine.
     else if (flag === "--bundle") args.bundle = argv[++i] || "";
+    // What `cad share` printed, sharing the model and then sharing it again unchanged.
     else if (flag === "--share") args.share = argv[++i] || "";
+    else if (flag === "--share-again") args.shareAgain = argv[++i] || "";
     else if (flag === "--out") args.out = argv[++i] || "";
     // One gate at a time while working on it: --only camera.
     else if (flag === "--only") args.only = argv[++i] || "";
@@ -830,7 +832,8 @@ const CSP_VIOLATIONS_SCRIPT = () => {
 async function shareGate() {
   // A model shared as a person's agent shares one: `cad share --yes` (the runner's), against this checkout's
   // share service run locally (`apps/share/serve.mjs`, the Worker itself over Node's http), which also serves
-  // the bundled client. The gate is handed what the command printed (`--share`, its JSON): the two links.
+  // the bundled client; then shared again, unchanged. The gate is handed what the command printed each time
+  // (`--share`, `--share-again`, its JSON): the two links, and what travelled.
   const shared = JSON.parse(fs.readFileSync(args.share, "utf8"));
   if (shared.ok !== true || typeof shared.view !== "string" || typeof shared.delete !== "string") {
     fail(`--share names no share the command made: ${args.share}`);
@@ -838,10 +841,29 @@ async function shareGate() {
   const viewLink = new URL(shared.view);
   const origin = viewLink.origin;
   const id = viewLink.pathname.slice(1);
-  const key = new URLSearchParams(viewLink.hash.slice(1)).get("key") || "";
   const secret = new URLSearchParams(new URL(shared.delete).hash.slice(1)).get("delete") || "";
-  if (!key || !secret || new URL(shared.delete).pathname.slice(1) !== id) fail("the share's links carry no key or secret");
+  // The view link is the share's address alone: its id opens it, and nothing follows it.
+  if (!/^[A-Za-z0-9_-]{22}$/.test(id) || viewLink.search || viewLink.hash) fail("the view link is not a share's address alone");
+  if (!secret || new URL(shared.delete).pathname.slice(1) !== id) fail("the share's delete link carries no secret, or names another share");
+  // Shared again with nothing changed: the same links, and no file travelled again.
+  if (args.shareAgain) {
+    const again = JSON.parse(fs.readFileSync(args.shareAgain, "utf8"));
+    if (again.ok !== true || again.view !== shared.view || again.delete !== shared.delete) failures.push("share: sharing again did not keep the links");
+    if (!(shared.sent?.files > 0) || shared.sent.files !== shared.stored?.files) {
+      failures.push(`share: the first share sent ${JSON.stringify(shared.sent)} of ${JSON.stringify(shared.stored)}`);
+    }
+    if (again.sent?.files !== 0 || again.sent?.packs !== 0 || again.stored?.files !== shared.stored?.files) {
+      failures.push(`share: sharing the unchanged model again sent ${JSON.stringify(again.sent)} of ${JSON.stringify(again.stored)}`);
+    }
+  }
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  // The packs the page fetched: each is named by its content, so the browser may keep it as it is.
+  const packs = [];
+  context.on("response", (response) => {
+    if (/^\/v1\/shares\/[^/]+\/packs\//.test(new URL(response.url()).pathname)) {
+      packs.push({ status: response.status(), cache: response.headers()["cache-control"] || "" });
+    }
+  });
   const errors = [];
   const asked = [];
   await context.route("**/*", async (route) => {
@@ -881,7 +903,7 @@ async function shareGate() {
   }
   try {
     // The view: the model on screen, titled by its document's name.
-    const view = await open(`/${id}#key=${key}`);
+    const view = await open(`/${id}`);
     await view.locator('[data-slot="cad-file-view"] [aria-busy="false"]').first().waitFor({ timeout: 120_000 });
     await view.waitForFunction(() => {
       const bounds = window.__cadModelBounds?.();
@@ -898,17 +920,20 @@ async function shareGate() {
       failures.push(`share: the page's content security policy is not the service's: ${JSON.stringify(view.policy)}`);
     }
     if (await view.getByTestId("file-actions").count()) failures.push("share: a file menu over a shared model");
-    // The key stays where the address holds it: in no storage, and in no other history entry.
+    // The id stays where the address holds it: in no storage, and in no other history entry.
     const kept = await view.evaluate(() => ({ history: history.length, href: location.href,
       storage: JSON.stringify({ ...sessionStorage }) + JSON.stringify({ ...localStorage }) }));
-    if (kept.history !== view.historyAtOpen || kept.href !== `${origin}/${id}#key=${key}`) failures.push(`share: the page's address or history changed (${kept.href.replace(key, "<key>")})`);
-    if (kept.storage.includes(key)) failures.push("share: the key is in the browser's storage");
+    if (kept.history !== view.historyAtOpen || kept.href !== `${origin}/${id}`) failures.push("share: the page's address or history changed");
+    if (kept.storage.includes(id)) failures.push("share: the share's id is in the browser's storage");
+    if (!packs.length || packs.some(pack => pack.status !== 200 || !/\bimmutable\b/.test(pack.cache))) {
+      failures.push(`share: the model's packs were answered ${JSON.stringify(packs)}`);
+    }
     await close(view, "view");
 
-    // Another key opens nothing: the link is incomplete or damaged.
-    const wrong = await open(`/${id}#key=${randomBytes(32).toString("base64url")}`);
-    await wrong.locator('[data-share-state="damaged"]').waitFor();
-    await close(wrong, "damaged");
+    // An address that names no share opens nothing: the service holds none, and the page says so.
+    const unknown = await open(`/${randomBytes(16).toString("base64url")}`, { gone: true });
+    await unknown.locator('[data-share-state="gone"]').waitFor();
+    await close(unknown, "unknown");
 
     // The delete page asks, then sends the deletion with the secret in its Authorization alone.
     const remove = await open(`/${id}#delete=${secret}`);
@@ -924,16 +949,21 @@ async function shareGate() {
     await close(remove, "delete");
 
     // Once deleted (or expired), the service holds it no more, and the view says so.
-    const gone = await open(`/${id}#key=${key}`, { gone: true });
+    const gone = await open(`/${id}`, { gone: true });
     await gone.locator('[data-share-state="gone"]').waitFor();
     await close(gone, "gone");
 
-    // The page asked its own origin alone, and never sent the key; the secret went in one header of one request.
+    // The page asked its own origin alone: of the API, a share's manifest and packs, and one deletion; the
+    // secret went in one header of one request.
     const away = asked.filter(request => new URL(request.url).origin !== origin);
     if (away.length) failures.push(`share: requests to another origin: ${away.map(request => request.url).join(", ")}`);
     for (const request of asked) {
+      const { pathname, search } = new URL(request.url);
+      if (pathname.startsWith("/v1/") && (search || !/^\/v1\/shares\/[A-Za-z0-9_-]{22}(?:\/packs\/[0-9a-f]{64})?$/.test(pathname)
+        || !(request.method === "GET" || (request.method === "DELETE" && pathname === `/v1/shares/${id}`)))) {
+        failures.push(`share: the page asked the service ${request.method} ${pathname.replace(id, "<id>")}${search}`);
+      }
       const said = `${request.url} ${JSON.stringify(request.headers)} ${request.body}`;
-      if (said.includes(key)) failures.push(`share: the key was sent: ${request.method} ${request.url}`);
       const header = request.method === "DELETE" && request.headers.authorization === `Bearer ${secret}`;
       if (said.includes(secret) && !(header && !`${request.url} ${request.body}`.includes(secret)
         && Object.entries(request.headers).every(([name, value]) => name === "authorization" || !value.includes(secret)))) {
@@ -941,7 +971,7 @@ async function shareGate() {
       }
     }
     if (asked.filter(request => request.method === "DELETE").length !== 1) failures.push("share: the page sent more than one deletion");
-    if (logged.some(text => text.includes(key) || text.includes(secret))) failures.push("share: the key or the secret was logged");
+    if (logged.some(text => text.includes(secret))) failures.push("share: the delete secret was logged");
     // The service's policy is all the page needs.
     for (const violation of violations) console.log(`  share: content security policy: ${JSON.stringify(violation)}`);
     if (violations.length) failures.push(`share: ${violations.length} content security policy violations`);
