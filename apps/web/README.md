@@ -196,8 +196,9 @@ A share service keeps a view bundle as one encrypted archive and serves this sam
 `index.html` at `/<id>` and its files beside it (the build's asset URLs are relative, so `./assets/…`
 resolves to `/assets/…` from `/<id>`). `main.tsx` chooses the share mode first, at start-up, from the
 address alone (`readShareAddress`, `@cad/core/client`): a path that is exactly one share id (22 base64url
-characters) and a fragment `key=<key>` or `delete=<secret>`. Any other address is the bundle's or the
-engine's page, as above; the engine's ids never have a share id's form.
+characters), with a fragment `key=<key>` or `delete=<secret>`; with any other fragment, or none, it is a view
+whose key is missing, and says the link is incomplete. Any other address is the bundle's or the engine's
+page, as above; the engine's ids never have a share id's form.
 
 - `/<id>#key=<key>`: the page fetches `/v1/shares/<id>` from its own origin (`src/host/share.js`), opens the
   bytes with the key (`openShareArchive`) and shows the bundle exactly as `?bundle=` does (`BundleApp`,

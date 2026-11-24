@@ -54,10 +54,11 @@ function base64url(text) {
 
 /**
  * What a page's address says of a share, or null where it names none: its path exactly one share id, and
- * its fragment `key=<key>` (the view) or `delete=<secret>` (the page that deletes it). Nothing else is a
- * share's address: a path of anything else, or a fragment of anything else, is the page's other modes'. The
- * key or secret is as the address spells it, checked only when it is used (`readShareKey`, `isShareSecret`),
- * so a link cut short is still a share's, and says so.
+ * its fragment `key=<key>` (the view) or `delete=<secret>` (the page that deletes it). A path of anything
+ * else is the page's other modes'. A share's path with any other fragment, or none, is a view whose key is
+ * missing (`key: ''`): a link cut short is still a share's, and says so when it is opened, rather than
+ * starting a page that asks an engine the share service does not have. The key or secret is as the address
+ * spells it, checked only when it is used (`readShareKey`, `isShareSecret`).
  * @param {string | URL} href  The page's address.
  * @returns {{ id: string, key: string } | { id: string, deleteSecret: string } | null}
  */
@@ -66,7 +67,7 @@ export function readShareAddress(href) {
   const id = address.pathname.slice(1);
   if (!SHARE_ID_PATTERN.test(id)) return null;
   const said = /^(key|delete)=(.*)$/s.exec(address.hash.slice(1));
-  if (!said) return null;
+  if (!said) return { id, key: '' };
   return said[1] === 'key' ? { id, key: said[2] } : { id, deleteSecret: said[2] };
 }
 

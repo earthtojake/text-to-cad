@@ -129,10 +129,10 @@ test("a share's address is its id alone as the path, and its key or delete secre
   const key = base64url(new Uint8Array(32).fill(7));
   assert.deepEqual(readShareAddress(`https://cad.example/${id}#key=${key}`), { id, key });
   assert.deepEqual(readShareAddress(`http://127.0.0.1:8080/${id}#delete=${key}`), { id, deleteSecret: key });
-  // A link cut short is still a share's: it says so when it is opened.
-  assert.deepEqual(readShareAddress(`https://cad.example/${id}#key=`), { id, key: '' });
+  // A link cut short is still a share's, whatever is left of its fragment: it says so when it is opened.
+  for (const href of [`https://cad.example/${id}#key=`, `https://cad.example/${id}`, `https://cad.example/${id}#`,
+    `https://cad.example/${id}#k=${key}`]) assert.deepEqual(readShareAddress(href), { id, key: '' }, href);
   for (const href of [
-    `https://cad.example/${id}`, `https://cad.example/${id}#`, `https://cad.example/${id}#k=${key}`,
     `https://cad.example/${id}/#key=${key}`, `https://cad.example/x/${id}#key=${key}`, `https://cad.example/${id}x#key=${key}`,
     `https://cad.example/${id.slice(1)}#key=${key}`, `https://cad.example/${id.replace('_', '.')}#key=${key}`,
     `https://cad.example/#key=${key}`, 'https://cad.example/1024a2f2-2b65-5151-8299-282973f2a9fc',
