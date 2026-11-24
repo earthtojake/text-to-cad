@@ -976,13 +976,19 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   keeps its own in `face`), so a pocket's floor and walls are one finding.
 - **Bends.** The skins and bend cylinders joined by tangent edges are the sheet's two sides; the side with
   the largest skin is unfolded (a skin in several faces, split through a hole, read whole: its coplanar faces
-  joined), its coplanar skins the flanges. A bend's angle is its cylinder's angular
+  joined), its coplanar skins the flanges. Where both sides hold a skin as large (within `TIE_MM`, the
+  sheet's two skins where nothing is cut into one alone), each is unfolded and read, and the report holds
+  what either says: an item seen from both is one (its refs, else within two thicknesses on the part), each
+  figure a rule or a finding judges the worse of the two, the rest the first side's (in the part's faces'
+  order); an item one side alone has is kept. A hole sunk, a pocket stepped or a cut run into a bend from
+  one side reads differently from each, and which is largest is rounding's. A bend's angle is its cylinder's angular
   span (checked against the flanges' normals), its length the extent along the axis, its tangent lines
   where the cylinders meet the flanges. A corner joined without a bend is a `sharp_bends` item: two skins at
   an angle meeting at an edge (`Box + Box`, a shelled box), a round on one side of a corner with no
   concentric round a thickness across (`inside_only`, `outside_only`), or skins no bend joins to the unfolded
   side (`unjoined`); their flanges are not in the flat pattern.
-- **Unfold.** Breadth-first from the largest flange: each flange is moved flat (one rigid transform, exact:
+- **Unfold.** Breadth-first from the largest flange (of those as large, the first in the part's faces),
+  along its longest straight edge (of those as long, the first): each flange is moved flat (one rigid transform, exact:
   arcs and holes stay arcs and holes) about its bend and out by `BA = angle * (r + K t)`; each bend is its
   cylinder's outline unrolled into a strip `BA` wide (exact for straight ends, sampled where an end is
   curved). A bend about the same axis, radius and angle as the bend that placed its flange (a bend line a
