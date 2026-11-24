@@ -50,9 +50,10 @@ cad_server/
   analytics.py           # telemetry: usage counts and crash reports, on by default once
                          #   a command has said so, never after a no
   settings.py            # the person's settings: settings.json in the data folder
-  sharing.py             # `cad share`'s client of the share service: a share's names and links, the cad-share/2
-                         #   packs of the files a share lacks, the service's API (urllib, in the command's own
-                         #   process), and what is kept: the agreement, the setting, the records, and each shared
+  sharing.py             # `cad share`'s and `cad fork`'s client of the share service: a share's names and links,
+                         #   the files that made a document, the cad-share/2 packs of the files a share lacks, the
+                         #   service's API (urllib, in the command's own process), a share's zip written into a
+                         #   folder, and what is kept: the agreement, the setting, the records, and each shared
                          #   document's folder in the cache
   language.py            # the language the person chose for the CAD views
   whats_new.py           # the releases whose What's new the person has seen
@@ -151,14 +152,17 @@ cad_server/
   one place in cad that names an agent app, a plugin or a skill.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
 - **`cad share TARGET [--yes]`**: a document (an id the engine holds, or a file the viewer opens) shared for anyone
-  with its link to open in the hosted viewer, for 7 days after its last share: the server writes its view bundle into
-  the document's folder in the cache, over the one it wrote there last, and the command uploads the files the share
-  lacks itself, so an agent app's sandbox sees the connection, and sharing it again sends only what changed.
-  The first share on a computer is refused without `--yes`, the person's yes, in lines that say what goes, where,
-  who can open it, for how long and how to delete it. **`cad share status|on|off`**: whether sharing is on and
-  agreed, and this computer's live shares; `off` refuses every share until `on`. **`cad share delete
-  TARGET|LINK`**: a share deleted, asked first. The agreement, the setting, the records and the cache's folders are
-  written by the server that runs, as `cad update auto`'s switch is, else by the command (the engine's **Sharing**).
+  with its link to open in the hosted viewer and to download the files that made it (a model's script, modules and
+  the files it read, from its build closure, as its last run read them; a file's file), for 7 days after its last
+  share: the server writes its view bundle into the document's folder in the cache, over the one it wrote there
+  last, and the command uploads the files the share lacks itself, so an agent app's sandbox sees the connection, and
+  sharing it again sends only what changed. The first share on a computer is refused without `--yes`, the person's
+  yes, in lines that say what goes, where, who can open it, for how long and how to delete it. **`cad share
+  status|on|off`**: whether sharing is on and agreed, and this computer's live shares; `off` refuses every share
+  until `on`. **`cad share delete TARGET|LINK`**: a share deleted, asked first. The agreement, the setting, the
+  records and the cache's folders are written by the server that runs, as `cad update auto`'s switch is, else by the
+  command (the engine's **Sharing**). **`cad fork LINK [FOLDER]`**: a share's files downloaded by the command itself
+  into a folder, every entry kept inside it; it runs nothing, and prints the command that builds it.
 
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
 One command can install it with uv where a computer has none: `cad mcp` run from uv's cache, which

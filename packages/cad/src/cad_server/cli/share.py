@@ -227,50 +227,77 @@ class _Built:
     name: str
 
 
-def _built(ident: str, closure: dict[str, Any] | None) -> _Built:
-    from cad.engine import api
+def _built(ident: str, live: dict[str, Any], closure: dict[str, Any] | None) -> _Built:
+    """``_Built`` of the model ``ident`` names, from what the engine says of its last run (``live``) and its build
+    closure."""
     from cad.engine.previous import absolute
     from cad.engine.records import rerun
 
-    live = api.inspect(ident, query="build", progress=False).get("live") or {}
     source = live.get("source") or {}
     script = os.path.normpath(str(source.get("script") or ""))
     given = live.get("with")
     again = rerun(script, live.get("python") if isinstance(live.get("python"), str) else None,
                   [item for item in given if isinstance(item, str)] if isinstance(given, list) else None)
     at = live.get("builtAt") if isinstance(live.get("builtAt"), (int, float)) else None
-    # The folder the closure names its script from: its declared xbf's, else the script's.
+    # The folder the closure names its script from: its declared xbf's, as its last run in this engine wrote it; else
+    # the script's; else the one its path climbs down from (``src/arm.py``: an xbf above the script, which a model
+    # taken from the cache after a restart names no more). Whichever spells the script's path from it exactly as the
+    # closure does (``previous``'s ``relpath``): ``../src/arm.py`` resolves from any folder beside the xbf's, and the
+    # files inside that one would be other files.
     xbf = [str(path) for path in live.get("files") or [] if str(path).lower().endswith(".xbf")]
     told = (closure or {}).get("source")
     named = told.get("path") if isinstance(told, dict) else None
-    folder = next((folder for folder in [*(os.path.dirname(path) for path in xbf[:1]), os.path.dirname(script)]
-                   if isinstance(named, str) and os.path.normcase(absolute(named, Path(folder)))
-                   == os.path.normcase(script)), None)
+    steps = named.split("/") if isinstance(named, str) else []
+    above = (str(Path(*Path(script).parts[:-len(steps)])) if steps and ".." not in steps
+             and len(Path(script).parts) > len(steps) else None)
+
+    def spelled(folder: str) -> str:
+        try:
+            return Path(os.path.relpath(script, folder)).as_posix()
+        except ValueError:  # another drive: the closure names it by its whole path
+            return Path(script).as_posix()
+
+    folder = next((folder for folder in [*(os.path.dirname(path) for path in xbf[:1]), os.path.dirname(script),
+                                         *([above] if above else [])]
+                   if isinstance(named, str) and spelled(folder) == named
+                   and os.path.normcase(absolute(named, Path(folder))) == os.path.normcase(script)), None)
     return _Built(at, script, folder, again, str(source.get("explicit_name") or source.get("name") or ident))
 
 
-def _sources(source: str, path: str | None) -> tuple[Any, _Built | None]:
-    """The files that made the document TARGET names (``sharing.Sources``): a file's (``sharing.file_sources``); a
-    model's, from its build closure and its last run (``sharing.model_sources``), refused by the failure contract
-    where its files are not the ones its last run built from, naming the command that runs it again. With a model's
-    last run (``_Built``), else None."""
+def _last_run(ident: str) -> dict[str, Any]:
+    """What the engine says of a document it holds by its id (``inspect``'s ``build`` query): ``live``, a model's last
+    run (``model_info``), or ``file``, a file's ``path``."""
+    from cad.engine import api
+
+    found = api.inspect(ident, query="build", progress=False)
+    return found if isinstance(found, dict) else {}
+
+
+def _sources(source: str, path: str | None) -> tuple[Any, _Built | None, str]:
+    """The files that made the document TARGET names (``sharing.Sources``) and its type's id: a file's
+    (``sharing.file_sources``), by its path or its document's id; a model's, from its build closure and its last run
+    (``sharing.model_sources``), refused by the failure contract where its files are not the ones its last run built
+    from, naming the command that runs it again. With a model's last run (``_Built``), else None."""
     from cad.engine import api
     from cad.registry import type_of
     from cad_server import sharing
     from cad_server._internal.cli_errors import Failure
 
+    found = _last_run(source) if path is None else {}
+    if path is None and not found.get("live") and isinstance((found.get("file") or {}).get("path"), str):
+        path = found["file"]["path"]  # a file's document, named by its id
     if path is not None:
-        found = type_of(path)
-        return sharing.file_sources(path, found.id if found is not None else ""), None
+        kind = getattr(type_of(path), "id", "")
+        return sharing.file_sources(path, kind), None, kind
     closure = api.inspect(source, query="structure", progress=False).get("closure")
-    built = _built(source, closure)
+    built = _built(source, found.get("live") or {}, closure)
     if not isinstance(closure, dict):  # a shape a program handed over: no closure names what made it
-        return sharing.Sources(), built
+        return sharing.Sources(), built, "model"
     if built.folder is None:
         raise Failure(f"cad cannot tell from {built.name}'s last run where its files are: run it again "
                       f"(`{built.again}`), then share it", "failed", next=[built.again])
     try:
-        return sharing.model_sources(closure, built.script, built.folder, built.at), built
+        return sharing.model_sources(closure, built.script, built.folder, built.at), built, "model"
     except sharing.Stale as stale:
         what = (f"{stale.path} changed after {built.name} was built, so its share would not be what built its view"
                 if stale.why == "changed" else f"{stale.path}, which built {built.name}, is gone")
@@ -282,7 +309,6 @@ def _sources(source: str, path: str | None) -> tuple[Any, _Built | None]:
 
 def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]) -> int:
     from cad.engine.ids import file_id
-    from cad.registry import type_of
     from cad_server import sharing
     from cad_server._internal.api import share_url
     from cad_server._internal.cli_errors import Failure, classify
@@ -295,13 +321,12 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
                       "`cad share on`", "declined")
     service = share_url()
     try:
-        sources, built = _sources(source, path)
-    except (ValueError, RuntimeError) as error:
-        raise classify(error) from None  # the engine's refusal: a document it does not hold, said in its words
+        sources, built, kind = _sources(source, path)
+    except (ValueError, RuntimeError, OSError) as error:
+        raise classify(error) from None  # the engine's refusal (a document it does not hold), or the disk's
     if not kept["agreed"]:
         if not yes:
             command = retry(prog, words)
-            kind = "model" if path is None else getattr(type_of(path), "id", "")
             raise Failure("\n".join(agreement_lines(service, command, _goes(kind, sources))), "confirmation_required",
                           next=[command], user_action=True)
         try:
@@ -320,8 +345,8 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
                         and not sharing.expired(row)), None)
         try:
             manifest = sharing.bundle(source, folder / sharing.BUNDLE)
-            if built is not None and _built(source, None).at != built.at:
-                sources, built = _sources(source, path)  # built again meanwhile: the files of the run it shows
+            if built is not None and (_last_run(source).get("live") or {}).get("builtAt") != built.at:
+                sources, built, kind = _sources(source, path)  # built again meanwhile: the files of the run it shows
         except (ValueError, RuntimeError, OSError) as error:
             # The engine's refusal or failure of the bundle (``ExportRefused``, ``NotHeld``, ``EngineError``), said by
             # the failure contract in its words.
@@ -332,16 +357,16 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
             raise Failure(f"the view bundle cannot be shared: {error}") from None
         shown = manifest.get("document") or {}
         document = {"id": ident, "kind": str(shown.get("kind")), "name": str(shown.get("name")), "path": path}
-        name = sharing.share_name(shown.get("name"))
+        title = sharing.share_name(shown.get("name"))
         share = sharing.share_of(earlier) if earlier is not None else sharing.Share.new(service)
         try:
-            sent = _sent(share, found, sources, name, sharing.stored(folder, share), prog)
+            sent = _sent(share, found, sources, title, sharing.stored(folder, share), prog)
         except sharing.Refused as refusal:
             if refusal.status != 403:
                 raise _refused(refusal) from None
             share = sharing.Share.new(service)  # that id is no longer this computer's to write: a new share, whole
             try:
-                sent = _sent(share, found, sources, name, None, prog)
+                sent = _sent(share, found, sources, title, None, prog)
             except sharing.Refused as again:
                 raise _refused(again) from None
         record = sharing.record_of(share, document, sent.answer)

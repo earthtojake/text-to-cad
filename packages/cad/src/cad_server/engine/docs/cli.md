@@ -109,14 +109,19 @@ cad kicad_sch inspect SCHEMATIC [REF] [--json]
 cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display JSON] [...]
                                              one sheet drawn flat (the root unless --sheet names another)
 cad server start [--port N] [--foreground] | stop [--json] | status [--json]; cad server --rotate-token [--yes]
-cad share TARGET [--yes] [--json]          TARGET's view bundle (a document id the engine holds, or a file the
-                                             viewer opens) uploaded by this process for anyone with its link to
-                                             open, 7 days from its last share; the first share on a computer is
+cad share TARGET [--yes] [--json]          TARGET's view bundle and the files that made it (a document id the
+                                             engine holds: its script, modules and the files it read; or a file
+                                             the viewer opens: the file) uploaded by this process for anyone with
+                                             its link to open and download, 7 days from its last share; a model
+                                             edited since its run is refused; the first share on a computer is
                                              refused without --yes, the person's yes (Sharing)
 cad share status|on|off [--json]             whether sharing is on and agreed, and the live shares; on, off
 cad share delete TARGET|LINK [--yes] [--json]
                                              the share of a TARGET this computer shared, or of a delete link,
                                              deleted from the service; asked first
+cad fork LINK [FOLDER] [--json]              a share's files downloaded by this process into FOLDER (./<name>; one
+                                             that holds files is refused), every entry kept inside it; runs
+                                             nothing and prints the command that builds it (Forking)
 cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]
                                              each document deleted: its record, its document in the engine's
                                              cache and what the engine holds of it (**Delete**); never a

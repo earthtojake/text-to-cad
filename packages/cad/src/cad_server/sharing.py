@@ -351,10 +351,12 @@ def share_name(name: object) -> str:
     """A document's name as a share's manifest takes it (``name``): its text without control characters, at most
     ``NAME_CHARACTERS`` characters; ``UNNAMED`` where nothing is left."""
     kept: list[str] = []
+    counted = 0
     for character in str(name or "").strip():
         if unicodedata.category(character) in ("Cc", "Cs"):
             continue
-        if _utf16("".join(kept)) + _utf16(character) > NAME_CHARACTERS:
+        counted += _utf16(character)
+        if counted > NAME_CHARACTERS:
             break
         kept.append(character)
     return "".join(kept).strip() or UNNAMED
@@ -908,10 +910,11 @@ def fork_link(text: str, service: str) -> tuple[str, str] | None:
 
 
 def _decoded(text: Any) -> str | None:
-    """A header's text as the service writes one: UTF-8, every byte but a letter, a digit and ``._~/+-`` as ``%XX``."""
+    """A header's text as the service writes one: UTF-8, every byte but a letter, a digit and ``._~/+-`` as ``%XX``
+    (a ``+`` is itself, never a space); None for none, or for bytes that are no UTF-8."""
     from urllib.parse import unquote
 
-    if not isinstance(text, str) or not text:
+    if not isinstance(text, str):
         return None
     try:
         return unquote(text, encoding="utf-8", errors="strict")
@@ -933,12 +936,12 @@ def download(origin: str, ident: str, into: BinaryIO, *,
     if status != 200:
         raise _refused(status, found, "the share's files", share)
     made: dict[str, str] = {}
-    for part in str(told.get("Cad-Share-Made") or "").split(","):
+    for part in str(told.get("Cad-Share-Made") or "").split(","):  # a name's or a value's own comma is %2C
         name, equals, value = part.strip().partition("=")
         name, value = _decoded(name.strip()), _decoded(value.strip())
-        if equals and name and value is not None:
+        if equals and name is not None and value is not None:  # either may be empty text, as the manifest's may
             made[name] = value
-    return {"entry": _decoded(told.get("Cad-Share-Entry")), "made": made or None}
+    return {"entry": _decoded(told.get("Cad-Share-Entry")) or None, "made": made or None}
 
 
 def _plain(segment: str) -> bool:
@@ -976,6 +979,8 @@ def zip_entries(archive: zipfile.ZipFile) -> tuple[str, list[tuple[str, zipfile.
             raise Damaged(f"{name!r} is neither a file nor a folder")
         if info.flag_bits & 0x1:
             raise Damaged(f"{name!r} is encrypted")
+        if info.compress_type not in (0, 8):  # stored or deflated: a share's member, or its bytes
+            raise Damaged(f"{name!r} is compressed as no share's file is")
         segments = name.rstrip("/").split("/") if info.is_dir() else name.split("/")
         if not all(_plain(segment) for segment in segments):
             raise Damaged(f"{name!r} is no path inside its folder")
@@ -1018,6 +1023,7 @@ def unpack(archive: zipfile.ZipFile, entries: list[tuple[str, zipfile.ZipInfo]],
     one). Whatever fails leaves no file of this run's (``Damaged`` for the zip's fault, ``OSError`` for the disk's).
     Each file written, by its path, with its size."""
     import zipfile
+    import zlib
 
     folder = Path(os.path.abspath(folder))
     folder.parent.mkdir(parents=True, exist_ok=True)
@@ -1040,7 +1046,7 @@ def unpack(archive: zipfile.ZipFile, entries: list[tuple[str, zipfile.ZipInfo]],
                         out.write(chunk)
             except (FileExistsError, NotADirectoryError):
                 raise Damaged(f"two of its files are one file on this computer: {path}") from None
-            except (zipfile.BadZipFile, NotImplementedError, EOFError) as error:
+            except (zipfile.BadZipFile, zlib.error, EOFError) as error:
                 raise Damaged(f"{path}: {error}") from None
             written.append((path, size))
         _place(stage, folder)

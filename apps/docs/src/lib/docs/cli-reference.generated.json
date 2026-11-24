@@ -3569,16 +3569,41 @@
    ]
   },
   {
+   "command": "cad fork",
+   "summary": "write a shared document's files into a folder, running nothing",
+   "usage": "cad fork [--json] LINK [FOLDER]",
+   "description": 142,
+   "arguments": [
+    {
+     "name": "LINK",
+     "help": 143
+    },
+    {
+     "name": "FOLDER",
+     "help": 144,
+     "optional": true
+    }
+   ],
+   "options": [
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 145
+    }
+   ]
+  },
+  {
    "command": "cad mcp",
    "summary": "serve the CAD app to the agent app that starts it, over MCP on stdin and stdout",
    "usage": "cad mcp",
-   "description": 142
+   "description": 146
   },
   {
    "command": "cad plugin",
    "summary": "the plugin in your agent apps: `install` puts it in or updates it; `update auto`: whether cad's updates update it too",
    "usage": "cad plugin {install} ...",
-   "description": 143,
+   "description": 147,
    "arguments": [
     {
      "name": "{install} ...",
@@ -3593,7 +3618,7 @@
    "command": "cad plugin install",
    "summary": "install the plugin in every agent app found on this computer, or update it there",
    "usage": "cad plugin install",
-   "description": 144
+   "description": 148
   },
   {
    "command": "cad plugin update",
@@ -3612,7 +3637,7 @@
    "command": "cad plugin update auto",
    "summary": "show or change whether cad's updates update the plugin too",
    "usage": "cad plugin update auto [{status,on,off}]",
-   "description": 145,
+   "description": 149,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3629,13 +3654,13 @@
    "command": "cad run",
    "summary": "run a script (or -m, -c) as uv run does, cad pinned at this device's release with the integrations its imports use",
    "usage": "cad run [uv run's options] SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE [ARGS...] | COMMAND [ARGS...]",
-   "description": 146
+   "description": 150
   },
   {
    "command": "cad server",
    "summary": "the cad server: start, stop, status",
    "usage": "cad server [--rotate-token] [--yes] {start,stop,status} ...",
-   "description": 147,
+   "description": 151,
    "arguments": [
     {
      "name": "{start,stop,status} ...",
@@ -3651,14 +3676,14 @@
      "flags": [
       "--rotate-token"
      ],
-     "help": 148
+     "help": 152
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 149
+     "help": 153
     }
    ]
   },
@@ -3666,20 +3691,20 @@
    "command": "cad server start",
    "summary": "start the cad server where it is not running",
    "usage": "cad server start [--port PORT] [--foreground]",
-   "description": 150,
+   "description": 154,
    "options": [
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 151
+     "help": 155
     },
     {
      "flags": [
       "--foreground"
      ],
-     "help": 152
+     "help": 156
     }
    ]
   },
@@ -3692,7 +3717,7 @@
      "flags": [
       "--json"
      ],
-     "help": 153
+     "help": 157
     }
    ]
   },
@@ -3705,7 +3730,7 @@
      "flags": [
       "--json"
      ],
-     "help": 154
+     "help": 158
     }
    ]
   },
@@ -3713,15 +3738,15 @@
    "command": "cad share",
    "summary": "share a document by a link anyone can open for 7 days: status, on, off, delete",
    "usage": "cad share TARGET [--yes] [--json]\ncad share status|on|off [--json]\ncad share delete TARGET|LINK [--yes] [--json]",
-   "description": 155,
+   "description": 159,
    "arguments": [
     {
      "name": "TARGET",
-     "help": 156
+     "help": 160
     },
     {
      "name": "TARGET|LINK",
-     "help": 157,
+     "help": 161,
      "optional": true
     }
    ],
@@ -3731,13 +3756,13 @@
       "-y",
       "--yes"
      ],
-     "help": 158
+     "help": 162
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 159
+     "help": 145
     }
    ]
   },
@@ -3745,7 +3770,7 @@
    "command": "cad telemetry",
    "summary": "show or change the usage stats and crash reports CAD sends: status, on, off",
    "usage": "cad telemetry [{status,on,off}]",
-   "description": 160,
+   "description": 163,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3762,7 +3787,7 @@
    "command": "cad update",
    "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
    "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
-   "description": 161,
+   "description": 164,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -3776,7 +3801,7 @@
      "flags": [
       "--major"
      ],
-     "help": 162
+     "help": 165
     }
    ]
   },
@@ -3784,7 +3809,7 @@
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 163,
+   "description": 166,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3801,11 +3826,11 @@
    "command": "cad viewer",
    "summary": "open a viewer page on the running cad server",
    "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 164,
+   "description": 167,
    "arguments": [
     {
      "name": "FILE",
-     "help": 165,
+     "help": 168,
      "optional": true,
      "repeatable": true
     }
@@ -3816,39 +3841,39 @@
       "--host"
      ],
      "metavar": "HOST",
-     "help": 166
+     "help": 169
     },
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 167
+     "help": 170
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 168
+     "help": 171
     },
     {
      "flags": [
       "--no-open"
      ],
-     "help": 169
+     "help": 172
     },
     {
      "flags": [
       "--dist"
      ],
      "metavar": "DIST",
-     "help": 170
+     "help": 173
     },
     {
      "flags": [
       "--api-only"
      ],
-     "help": 171
+     "help": 174
     }
    ]
   }
@@ -3996,6 +4021,10 @@
   "Report this cad: its release, its data and cache folders and what `cad cache prune` would free, the CAD kernel environment and the integrations', and the server. It changes nothing. Exit 1 when the CAD kernel is installed and does not load.",
   "the same report",
   "the report as one JSON document: each check's name, status (ok, info, warning, failed) and detail",
+  "Write the files that made a shared document into a folder: a model's script, the modules of its project and the files it reads, at their paths there; a file document's file. LINK is the share's link (https://cad.fun/<id>), its files' link (<link>.zip) or its id. It runs nothing: it says what it wrote and where what built it differs from this computer's cad and libraries, then the command that builds it, for the person to run.",
+  "the share's link, its files' link (.zip), or its id",
+  "where its files go: a folder not there yet, or an empty one (default: ./<its name>)",
+  "answer in one JSON object",
   "Serve CAD to the agent app that started this process, over MCP on standard input and output: this release's cad server started first, as `cad server start` starts it, and every request passed on to it. The app starts it; there is nothing to configure.",
   "The plugin in your agent apps: install or update it in every app found on this computer, or say whether cad's own updates update it too.",
   "Install the plugin in every agent app found on this computer, each with that app's own command, or update it where it is installed; then remove the older copies of it there. One line is printed per app. It exits 1 where every app it found failed.",
@@ -4009,11 +4038,10 @@
   "run it in this process, its log on this terminal, until it is stopped",
   "what was stopped as JSON",
   "the server's answer as JSON",
-  "Share a document: anyone with its link opens it in the hosted viewer, with no sign-in, until 7 days after its last share. TARGET is a document id the engine holds or a file the viewer opens. What goes is its view bundle: a model's, an .xbf's or a STEP's shapes as meshes with their names, measurements and joints, never its code or the CAD file; an STL, a GLB or a 3MF is the file itself. Sharing it again keeps the link and sends only what changed. The first share on a computer needs the person's yes (--yes). `status` says whether sharing is on and lists this computer's live shares; `on` and `off` turn it on and off; `delete` removes a share.",
+  "Share a document: anyone with its link opens it in the hosted viewer, and downloads the files that made it (the link's .zip, which `cad fork` writes into a folder), with no sign-in, until 7 days after its last share. TARGET is a document id the engine holds or a file the viewer opens. What goes is the files that made it -- a model's script, the modules of its project that it imports and the files it reads, as its last run built it (run it again after an edit); a file's file itself, with a robot description's mesh files -- and its view: its shapes as meshes with their names, measurements and joints. Never the xbf, nor an installed library. Sharing it again keeps the link and sends only what changed. The first share on a computer needs the person's yes (--yes). `status` says whether sharing is on and lists this computer's live shares; `on` and `off` turn it on and off; `delete` removes a share.",
   "a document id the engine holds, or a file the viewer opens (a KiCad board or schematic and a folder have no bundle to share); or status, on, off or delete",
   "after delete: the TARGET this computer shared, or a share's delete link",
   "share: the person agrees to sharing, kept for this computer; delete: delete without asking. Where nobody can be asked (an agent, a pipe, --json) neither runs without it",
-  "answer in one JSON object",
   "Show or change the usage stats and crash reports cad sends from CAD's apps (the CAD app in an agent app, and the viewer) and its build daemon. By default, once a cad command has said so: a random install id, versions, the OS and agent app, counts of CAD tool calls, view activity, which of the viewer's tools and settings are used (never a value or a name), files shown by format, builds and snapshots, how they ended and how long they took, and where cad's own code failed (never a message). `off` sends nothing. Never file names, paths, contents or prompts.",
   "cad installs every newer release of its major version by itself, and a new major version only when you run `cad update --major`. `cad update` updates cad now to the newest release of its major version, even with automatic updates off: cad asks PyPI and, once nothing is running, installs it. A cad server that was running starts again; with none running, none is started. `cad update auto` shows or changes whether cad updates itself.",
   "install the newest release of all, a new major version included, which may ask for changes (https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations)",
