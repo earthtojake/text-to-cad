@@ -7,7 +7,8 @@ engine's one page and exits. The page addresses every document by path, `/<uuid>
 model's id, or a file's id once a launcher (or the page itself) registers it, derived from
 the file's canonical path. `/` is the home: the library alone, the documents opened or built
 before. Python scripts are never documents. The same client also shows one view bundle with no
-engine behind it, from any plain static file server ([A view bundle](#a-view-bundle)).
+engine behind it, from any plain static file server ([A view bundle](#a-view-bundle)), or a shared one,
+from the share service that serves it ([A shared view bundle](#a-shared-view-bundle)).
 
 This app is the browser host of `@cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
@@ -33,7 +34,8 @@ this app. The Python wheel consumes only the production build.
 src/
   App.tsx               the CadViewer's browser host: URL, history, title, appearance, the file menu and the library
   BundleApp.tsx         the host of one view bundle: its document alone, with no engine
-  main.tsx              host/client bootstrap and cleanup, and the choice between the two (`?bundle=`)
+  SharePage.tsx         a shared view bundle's pages that are no view: why it did not open, and its delete page
+  main.tsx              host/client bootstrap and cleanup, and the choice between the three (`?bundle=`, `/<share>#key=`)
   StartingView.tsx      the page while it asks its server what it is: the app's own frame, inert
   host/                 browser clipboard, prompt delivery, the app menu's links, reload under a new server
   persistence/          the tab record in sessionStorage
@@ -188,6 +190,32 @@ do ("Edit these in the script."), and Quick Edit copies. What a bundle-backed vi
 [the host contract's](../../packages/ui/docs/viewer-host.md#a-view-bundles-host). A bundle the page
 cannot open (none named, another origin's, no manifest, another format) says why, on a page of its own.
 
+## A shared view bundle
+
+A share service keeps a view bundle as one encrypted archive and serves this same built client, its
+`index.html` at `/<id>` and its files beside it (the build's asset URLs are relative, so `./assets/…`
+resolves to `/assets/…` from `/<id>`). `main.tsx` chooses the share mode first, at start-up, from the
+address alone (`readShareAddress`, `@cad/core/client`): a path that is exactly one share id (22 base64url
+characters) and a fragment `key=<key>` or `delete=<secret>`. Any other address is the bundle's or the
+engine's page, as above; the engine's ids never have a share id's form.
+
+- `/<id>#key=<key>`: the page fetches `/v1/shares/<id>` from its own origin (`src/host/share.js`), opens the
+  bytes with the key (`openShareArchive`) and shows the bundle exactly as `?bundle=` does (`BundleApp`,
+  titled by the document's name). A 404 says "This shared model has expired or was deleted.", and that a
+  share lasts 7 days after it was last shared, so whoever shared it can share it again; no key, the wrong
+  one or damaged bytes say "This link is incomplete or damaged."; an archive or bundle it does not read
+  says so; anything else says so, with Retry (`SharePage.tsx`).
+- `/<id>#delete=<secret>`: a status screen that asks to delete the shared model (the link stops working for
+  everyone) and whose one action sends `DELETE /v1/shares/<id>` with `Authorization: Bearer <secret>`; then
+  it is deleted, already gone (404) or not this share's link (403). A secret the link cuts short is never sent.
+
+The key and the secret are read from the address once, at start-up, and written nowhere: not to the address
+or its history, storage, a log, or any request but the DELETE's header. The page asks its own origin alone.
+It runs under the service's content security policy (`default-src 'self'`, `script-src 'self'
+'wasm-unsafe-eval'`, `connect-src 'self' data: blob:`, `worker-src 'self' blob:`, …) once that policy also
+allows `index.html`'s two inline scripts by their hashes (the first paint's appearance, and the build's chunk
+ids): they change with the build, so the service computes them from the `index.html` it serves.
+
 ## Behaviours worth knowing before concluding something is broken
 
 - **A file is named by its absolute path, and nothing walks a tree.** The
@@ -324,9 +352,11 @@ From the repository root, `scripts/test/test-viewer-browser.sh` exercises the
 bundled client's format and camera contracts through the real backend, with fresh
 temporary fixtures and a private server/cache, then, with that engine stopped, a view
 bundle it exported, opened from a plain static file server (the model on screen, a face's
-facts, read-only parameters, and no request for `/api/`); it runs exactly what CI runs
+facts, read-only parameters, and no request for `/api/`), and the same bundle shared, from a stand-in for
+the share service under its content security policy (viewed, refused with another key, deleted, then gone,
+with no request off the origin, the key in none and the secret in the DELETE's header alone); it runs exactly what CI runs
 (picking and kinematics run on every PR in the `packages/ui` browser specs).
-`--only format|camera|bundle` runs one gate, and `--out /tmp/viewer-review` retains
+`--only format|camera|bundle|share` runs one gate, and `--out /tmp/viewer-review` retains
 screenshots and bounded failure diagnostics; the runner cleans up its project and
 processes on exit.
 
