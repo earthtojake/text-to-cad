@@ -98,7 +98,7 @@ tab opens in this thread, give the user this link too, to open the model in thei
 Codex app known by its launcher gets the tab alone. A `cad_show` right after a `cad_open` never waits for
 that tab: it says the tab is still opening, and the tab shows the model as it first syncs. A host that
 renders apps never has a browser opened by a tool.
-`CAD_MCP_PRESENTATION=inline|tabs|text` in `cad mcp`'s environment is the development switch: it forces that
+`CAD_MCP_PRESENTATION=inline|tabs|text|artifact` in `cad mcp`'s environment is the development switch: it forces that
 presentation on any client, to test the page's cards (`inline`, as with the reference host `basic-host`),
 its tabs outside Codex, or no tools.
 
@@ -130,6 +130,26 @@ Codex alone: a card is small and scrolls away with the chat, and only Codex's ta
 | VS Code (GitHub Copilot) | `inline` alone | not verified |
 | ChatGPT and OpenAI's other hosts | `inline`, `fullscreen` | not verified |
 | Goose | `inline`, `fullscreen`, `pip` | not verified |
+
+## A Claude artifact (development switch)
+
+`dist/artifact.html` (`src/artifact.ts`, `src/host/artifact.ts`) is the shell as a page claude.ai hosts. An
+artifact reaches an MCP server on the person's computer through the Claude app (its `mcp` capability, the
+server named `host:text-to-cad`), so the page opens CAD itself (`cad_home`), reads the engine's app through
+`cad_http` and starts it, as the shell does: the page a person keeps runs the cad they have. The Claude app
+runs the server from its `claude_desktop_config.json`, with `CAD_MCP_PRESENTATION=artifact`, which lists the
+page's tools alone (all app-only) and puts the page's capability in `cad_home`'s structured content too, since
+an artifact's call answers no `_meta`. The chat beside it is offered no tools, as now. With no chat to send
+to, Queue keeps a Quick Edit's context and Send copies it with the message, to paste into the person's agent.
+
+Where the page reaches no CAD (a browser, or a Claude app with no such server) it shows a recording published
+beside it, `demo.json` (`Recording`: `cad_home`'s result and each `cad_http` reply by `replayKey`, `/app`
+among them), with the way to connect over it. A recording is made against an engine by a page that opens the
+models; neither it nor its models are in Git.
+
+Unverified in the Claude app: whether `host:` servers are carried there and from an installed app, how
+often it asks to confirm `cad_http` (not read-only), and whether artifacts allow its blob modules. The
+artifacts runtime says only an artifact's owner can use host servers for now.
 
 ## Starting: how long a host waits for `cad mcp`
 

@@ -37,5 +37,5 @@ It holds no tool, view or document: the server does. What it does on its own, in
   environment, never in the server's, and tells the server whether it opened.
 - **Says which app started it**, read from its parent processes, which only it can see: the server offers its
   tools to the Codex app alone, told from `codex exec` and the Codex terminal UI by that program, whatever the app
-  declares. `CAD_MCP_PRESENTATION=inline|tabs|text` in this process's environment is a development switch: the
+  declares. `CAD_MCP_PRESENTATION=inline|tabs|text|artifact` in this process's environment is a development switch: the
   server then serves that presentation to any app, for testing.

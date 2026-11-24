@@ -93,5 +93,7 @@ async function start() {
   }
 }
 
-if (window.parent === window) root.render(<Notice title="CAD" message={say('cad.outsideAgent')} t={say} />);
+// A page no host frames and no shell started (`host/shell.ts`, `host/artifact.ts`) has nothing to greet. An artifact
+// installed as an app may be its own window, so the shell decides, not the frame.
+if (!globalThis.__cadShell && window.parent === window) root.render(<Notice title="CAD" message={say('cad.outsideAgent')} t={say} />);
 else void start();

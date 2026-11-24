@@ -112,7 +112,7 @@ class PresentationTest(unittest.TestCase):
                 self.assertEqual(host.presentation(client, offered, launched)[:2], expected)
 
     def test_the_development_switch_forces_a_presentation_on_any_client(self) -> None:
-        for told in ("inline", "tabs", "text"):
+        for told in ("inline", "tabs", "text", "artifact"):
             for client in (self.CURSOR, self.CODEX):
                 self.assertEqual(host.presentation(client, {}, None, told)[:2], (told, told != "text"))
 

@@ -40,7 +40,7 @@ environment, from the request the answer carries (``browser.OPEN``), and says wh
 Where nothing says yet, ``cad_open`` claims no tab: it says the tab opens with its answer where the host shows
 CAD tabs, and until a view calls back its answers give the model's web page too (``UNPROVEN``).
 
-``CAD_MCP_PRESENTATION=inline|tabs|text`` in the shim's environment forces a presentation on any client: a
+``CAD_MCP_PRESENTATION=inline|tabs|text|artifact`` in the shim's environment forces a presentation on any client: a
 development switch, for testing.
 """
 
@@ -354,6 +354,7 @@ class Server:
         self._model: str | None = None  # what this thread last opened or showed
         self._tools: list[dict[str, Any]] | None = None
         self.tabs = False  # decided at initialize: see the module docstring
+        self.artifact = False  # a Claude artifact's server (``_artifact_catalog``)
         self.text = False  # offered no tools
         self._capability_in_catalog = False  # Cursor's: the launching tool carries the capability (``host.carries_capability``)
         # Whether this host shows CAD views (``host.presentation``): True, False, or None while nothing
@@ -502,7 +503,9 @@ class Server:
                                                             transport.get("presentation"))
         self._app = client.get("name") if isinstance(client.get("name"), str) else None
         self._peer_browser = transport.get("browser") if isinstance(transport.get("browser"), dict) else None
-        self.tabs, self.text = presentation == "tabs", presentation == "text"
+        # An artifact is served as a tab is (its home is the sidebar's), with the page's tools alone (``tools``).
+        self.artifact = presentation == "artifact"
+        self.tabs, self.text = presentation in ("tabs", "artifact"), presentation == "text"
         if presentation == "inline":
             self.page = self.page.presenting("inline")
         self._tools = None
@@ -519,7 +522,8 @@ class Server:
             "protocolVersion": requested if requested in _PROTOCOL_VERSIONS else _PROTOCOL_VERSIONS[1],
             "capabilities": capabilities,
             "serverInfo": {"name": NAME, "title": TITLE, "version": __version__, "icons": [ICON]},
-            "instructions": NO_TOOLS_INSTRUCTIONS if self.text else INSTRUCTIONS if self.tabs else INLINE_INSTRUCTIONS,
+            "instructions": (NO_TOOLS_INSTRUCTIONS if self.text or self.artifact else INSTRUCTIONS if self.tabs
+                             else INLINE_INSTRUCTIONS),
         }
 
     # -- the catalog -----------------------------------------------------------
@@ -528,7 +532,7 @@ class Server:
         if self.text:
             return []  # an app that shows no CAD views: it shows a model as a web page (see the module)
         if self._tools is None:
-            self._tools = self._tab_catalog() if self.tabs else self._inline_catalog()
+            self._tools = self._artifact_catalog() if self.artifact else self._tab_catalog() if self.tabs else self._inline_catalog()
         return self._tools
 
     def _tab_catalog(self) -> list[dict[str, Any]]:
@@ -571,6 +575,11 @@ class Server:
              "inputSchema": _object({"view": _VIEW})},
             *self._page_tools(),
         ]
+
+    def _artifact_catalog(self) -> list[dict[str, Any]]:
+        """A Claude artifact's: the page opens CAD itself (``cad_home``) and calls the page's tools. The chat beside it
+        is offered none, as every app but Codex (``host.py``): its agent runs the ``cad`` command."""
+        return [tool for tool in self._tab_catalog() if tool["name"] not in (*_AGENT_TOOLS, "cad_tab", "cad_file")]
 
     def _inline_catalog(self) -> list[dict[str, Any]]:
         shows: dict[str, Any] = {"ui": {"resourceUri": self.page.uri}}
@@ -649,6 +658,10 @@ class Server:
             if not self.text and isinstance(launch, dict):
                 # MCP result metadata is delivered to the app, never put in the model's context.
                 result.setdefault("_meta", {})[_APP_TOKEN_META] = self._app_token
+                if self.artifact:
+                    # An artifact's call answers content and structured content alone, never ``_meta``; the page
+                    # is the only caller: every tool it is listed is the page's alone (``_artifact_catalog``).
+                    result["structuredContent"]["capability"] = self._app_token
                 self._reach(launch)
                 if name in _AGENT_TOOLS and self._cards(context) is None:
                     self._unproven(result, launch)

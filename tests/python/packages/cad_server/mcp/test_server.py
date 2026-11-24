@@ -657,6 +657,29 @@ class SidebarAcrossThreadsTest(_Session):
         self.assertEqual(self.call("cad_view")["structuredContent"]["views"], [])
 
 
+class ArtifactServerTest(_Session):
+    """A Claude artifact, which no app is served but through the development switch: the page opens CAD itself and
+    calls the page's tools; the chat beside it is offered none."""
+
+    client = CLAUDE
+    presentation = "artifact"
+
+    def test_an_artifact_is_listed_the_page_s_tools_alone(self) -> None:
+        tools = self.server.handle("tools/list", {}, None)["tools"]
+        self.assertEqual({tool["name"] for tool in tools}, {"cad_home", *PAGE_TOOLS, "cad_http"})
+        self.assertTrue(all(tool["_meta"]["ui"]["visibility"] == ["app"] for tool in tools))
+        self.assertEqual(self.initialized["instructions"], NO_TOOLS_INSTRUCTIONS)
+
+    def test_its_home_carries_the_page_s_capability_where_the_page_reads_it(self) -> None:
+        # An artifact's call answers content and structured content alone: the capability is there too.
+        result = self.call("cad_home")
+        self.assertEqual(result["structuredContent"]["launch"]["page"], "home")
+        self.assertEqual(result["structuredContent"]["capability"], self.server._app_token)
+        self.assertEqual(result["_meta"]["dev.texttocad/httpToken"], self.server._app_token)
+        reply = self.call("cad_sync", {"view": "v1", "surface": "sidebar", "model": None})
+        self.assertFalse(reply.get("isError"), reply)
+
+
 class InlineServerTest(_Session):
     """Cards, which no app is served but through the development switch: each cad_show mounts a new view in the
     chat."""

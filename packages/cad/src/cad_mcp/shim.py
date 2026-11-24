@@ -76,7 +76,7 @@ LISTS = {"tools/list": ("tools", "notifications/tools/list_changed"),
          "resources/templates/list": ("resourceTemplates", "notifications/resources/list_changed")}
 # The presentations the development switch forces on any client (``CAD_MCP_PRESENTATION``; the server's
 # ``host.presentation``).
-PRESENTATIONS = ("inline", "tabs", "text")
+PRESENTATIONS = ("inline", "tabs", "text", "artifact")
 
 
 def start_server() -> str:
@@ -221,7 +221,7 @@ def call(method, path, body=b"", headers=None, timeout=None):
 
 def initialize_params(params, launcher=None, holder=None, app=None):
     """The host's initialize as the server is sent it: with ``presentation``, the development switch
-    ``CAD_MCP_PRESENTATION`` (``inline``, ``tabs`` or ``text``) where it is set, which the server serves whatever
+    ``CAD_MCP_PRESENTATION`` (``inline``, ``tabs``, ``text`` or ``artifact``) where it is set, which the server serves whatever
     the client is; ``launcher``, the host that started this process (``host.launcher``), for the server to weigh
     (its ``host.presentation``); ``holder``, the name of this process's hold (``Holder``), whose end ends the
     session; ``app``, the capability the session hands its views (``Proxy.app``); and ``browser``: that this

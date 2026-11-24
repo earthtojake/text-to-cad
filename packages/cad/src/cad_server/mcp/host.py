@@ -12,8 +12,9 @@ it to the server with the initialize (``launcher``): that decides. Where it cann
 wrapper), a Codex is offered tabs, and a call made in a ``codex exec`` turn says so in its metadata
 (``headless``), which comes before any declaration.
 
-``CAD_MCP_PRESENTATION=inline|tabs|text`` in the transport's environment (``told``) forces a presentation on
-any client: a development switch, for testing the page's other ways of being shown.
+``CAD_MCP_PRESENTATION=inline|tabs|text|artifact`` in the transport's environment (``told``) forces a presentation
+on any client: a development switch, for testing the page's other ways of being shown. ``artifact`` serves a Claude
+artifact the Claude app runs this server for (``apps/mcp``'s artifact page): the page's tools alone, none for the chat.
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ CODEX_CLIENT = "codex-mcp-client"
 # Reached only through the development switch: Cursor is offered no tools.
 CURSOR_CLIENT = "cursor-vscode"
 # The presentations the development switch can force (``told``).
-PRESENTATIONS = frozenset({"inline", "tabs", "text"})
+PRESENTATIONS = frozenset({"inline", "tabs", "text", "artifact"})
 
 # Where a Codex call says its turn shows no app: ``codex exec`` (and its ``resume``) runs the turn
 # headless, though it greets the server as the Codex app does. Seen from the 0.163 app server's
@@ -46,7 +47,7 @@ def _declares_views(offered: dict[str, Any]) -> bool:
 def presentation(client: dict[str, Any], offered: dict[str, Any], launched: Any,
                  told: Any = None) -> tuple[str, bool | None, str]:
     """How an app is served CAD, from its initialize: ``(presentation, renders, why)``. ``presentation`` is
-    ``tabs`` (the Codex app's catalog), ``inline`` (the development switch alone) or ``text`` (no tools);
+    ``tabs`` (the Codex app's catalog), ``inline`` or ``artifact`` (the development switch alone) or ``text`` (no tools);
     ``renders`` whether it shows CAD views, None where nothing says yet (a Codex whose launcher is unknown and
     that declares nothing: a view reaching the server, or a call, will); ``why`` the evidence, in words for the
     log."""
