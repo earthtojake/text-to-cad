@@ -12,6 +12,7 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/p
 import { createServer } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 
 import worker from "./worker.mjs";
@@ -475,14 +476,25 @@ export async function serve({ port = 0, host = "127.0.0.1", assets, store = null
       const response = await answer(request, incoming.socket.remoteAddress ?? "");
       outgoing.writeHead(response.status, Object.fromEntries(response.headers));
       if (response.body && incoming.method !== "HEAD") {
-        for await (const chunk of response.body) outgoing.write(chunk);
+        // The headers at once, as Cloudflare sends a Worker's; then the body as fast as the client reads it (a
+        // share's zip is made as it goes out), cut off where it fails.
+        outgoing.flushHeaders();
+        await pipeline(Readable.fromWeb(response.body), outgoing);
+      } else {
+        outgoing.end();
       }
-      outgoing.end();
     } catch (error) {
+      // A client that went away is no failure of the service's.
+      if (error?.code === "ERR_STREAM_PREMATURE_CLOSE") return;
       // Its kind alone: an error's message may quote what the request carried.
       console.error(`share: ${error?.name ?? "Error"} answering a request`);
-      if (!outgoing.headersSent) outgoing.writeHead(500, { "Content-Type": "application/json" });
-      outgoing.end(outgoing.headersSent ? undefined : JSON.stringify({ error: "internal", hint: "See the server's log." }));
+      // An answer begun is cut off, never ended as if whole: the client sees it fail.
+      if (outgoing.headersSent) {
+        outgoing.destroy();
+        return;
+      }
+      outgoing.writeHead(500, { "Content-Type": "application/json" });
+      outgoing.end(JSON.stringify({ error: "internal", hint: "See the server's log." }));
     }
   });
   await new Promise((done, failed) => {

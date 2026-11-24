@@ -48,18 +48,21 @@ async function seal(id, plain, aad, iv = webcrypto.getRandomValues(new Uint8Arra
 }
 
 /**
- * A share of `files` (path to bytes, in reading order) as the command packs one and the service seals it: each
- * file's gzip member back to back in packs closed at `packBytes` (a member that does not fit the room left goes on
- * into the next pack), or in a pack of its own each (`each`); each pack named by its SHA-256; the manifest naming
- * every file's ranges.
+ * A share of a view bundle's files (`view`, path to bytes, in reading order) and the files that made it (`files`,
+ * after them) as the command packs one and the service seals it: each file's gzip member back to back in packs
+ * closed at `packBytes` (a member that does not fit the room left goes on into the next pack), or in a pack of its
+ * own each (`each`), a file whose SHA-256 is one already placed given that one's ranges; each pack named by its
+ * SHA-256; the manifest naming the document (a file document's, unless `entry` and `made` say a model's) and every
+ * file's ranges.
  */
-async function makeShare(files, { packBytes = 4 << 20, each = false, id = newId() } = {}) {
+async function makeShare(view, { files = {}, name = 'part.stl', entry = null, made = null, packBytes = 4 << 20, each = false, id = newId() } = {}) {
   const packs = [];
   let open = [];
   let used = 0;
   const close = () => { if (used) packs.push(Buffer.concat(open)); open = []; used = 0; };
-  const placed = {};
-  for (const [path, bytes] of Object.entries(files)) {
+  const members = new Map();
+  const place = map => Object.fromEntries(Object.entries(map).map(([path, bytes]) => {
+    if (members.has(sha256(bytes))) return [path, { sha256: sha256(bytes), bytes: bytes.length, at: members.get(sha256(bytes)) }];
     const member = gzipSync(bytes);
     const at = [];
     for (let offset = 0; offset < member.length;) {
@@ -70,17 +73,22 @@ async function makeShare(files, { packBytes = 4 << 20, each = false, id = newId(
       used += length;
       offset += length;
     }
-    placed[path] = { sha256: sha256(bytes), bytes: bytes.length, at };
     if (each) close();
-  }
+    members.set(sha256(bytes), at);
+    return [path, { sha256: sha256(bytes), bytes: bytes.length, at }];
+  }));
+  const placed = { view: place(view), files: place(files) };
   close();
   const ids = packs.map(sha256);
-  for (const entry of Object.values(placed)) entry.at = entry.at.map(([index, offset, length]) => [ids[index], offset, length]);
-  const manifest = { format: 'cad-share/2', files: placed };
+  const named = new Map([...members.values()].map(at => [at, at.map(([index, offset, length]) => [ids[index], offset, length])]));
+  for (const file of [...Object.values(placed.view), ...Object.values(placed.files)]) file.at = named.get(file.at);
+  const manifest = { format: 'cad-share/2', name, entry, made, ...placed };
   const sealed = new Map();
   for (const [index, pack] of packs.entries()) sealed.set(ids[index], await seal(id, pack, `cad-share/2 pack ${ids[index]}`));
   return { id, manifest, packs: ids, sealed, sealedManifest: await seal(id, encode(manifest), 'cad-share/2 manifest') };
 }
+/** The packs a manifest's map of files (`view`, `files`) names. */
+const packsOf = map => new Set(Object.values(map).flatMap(file => file.at.map(([pack]) => pack)));
 
 /**
  * A stand-in for the share service's reads of `share`: what it was asked, by pack id in order, and how many at most
@@ -152,11 +160,12 @@ test("a share's key and name are its id's, and its objects are sealed, as the co
   assert.equal(sha256(encode(VECTORS.pack)), VECTORS.packId);
   assert.equal(hex(await seal(VECTORS.id, encode(VECTORS.pack), `cad-share/2 pack ${VECTORS.packId}`, zero)), VECTORS.packSealed);
 
-  // The page opens the vector's manifest, and refuses it for what it holds (no files), not as bytes that do not open.
+  // The page opens the vector's manifest, and refuses it for what it holds (the earlier shape: files, and no view),
+  // not as bytes that do not open.
   const vector = Buffer.from(VECTORS.manifestSealed, 'hex');
   const unasked = async () => { throw new Error('no pack is asked for'); };
   await assert.rejects(openShare(VECTORS.id, { manifest: async () => body(vector), pack: unasked }),
-    refusedAs(SHARE_DAMAGED, /lists no manifest\.json/));
+    refusedAs(SHARE_DAMAGED, /has no view/));
   // Under another id's key, sealed for a pack, or a byte changed, it does not open.
   await assert.rejects(openShare(newId(), { manifest: async () => body(vector), pack: unasked }), refusedAs(SHARE_DAMAGED, /manifest does not open/));
   const asPack = await seal(VECTORS.id, encode(VECTORS.manifest), `cad-share/2 pack ${VECTORS.packId}`);
@@ -168,7 +177,8 @@ test("a share's key and name are its id's, and its objects are sealed, as the co
       refusedAs(SHARE_DAMAGED, /manifest does not open/), `byte ${at}`);
   }
   // The vector's pack opens under its id: what it holds is then read as a file's gzip member, which it is not.
-  const naming = { format: 'cad-share/2', files: { 'manifest.json': { sha256: sha256(encode(VECTORS.pack)), bytes: 10, at: [[VECTORS.packId, 0, 10]] } } };
+  const naming = { format: 'cad-share/2', name: 'part.stl', entry: null, made: null, files: {},
+    view: { 'manifest.json': { sha256: sha256(encode(VECTORS.pack)), bytes: 10, at: [[VECTORS.packId, 0, 10]] } } };
   const manifest = await seal(VECTORS.id, encode(naming), 'cad-share/2 manifest');
   const pack = async id => (id === VECTORS.packId ? body(Buffer.from(VECTORS.packSealed, 'hex')) : unasked());
   await assert.rejects(openShare(VECTORS.id, { manifest: async () => body(manifest), pack }),
@@ -179,7 +189,7 @@ test("a share's files are read from the packs that hold them, one split over two
   const files = { 'source.stl': noise(700, 1), 'parts/a.glb': noise(300, 2), 'meshes/b.stl': noise(900, 3), 'parts/empty.bin': new Uint8Array(0),
     'look.json': encode({ version: 4 }) };
   const share = await makeShare(bundle(files), { packBytes: 512 });
-  const split = Object.values(share.manifest.files).filter(entry => new Set(entry.at.map(([id]) => id)).size > 1);
+  const split = Object.values(share.manifest.view).filter(entry => new Set(entry.at.map(([id]) => id)).size > 1);
   assert.ok(share.packs.length > 3 && split.length, `${share.packs.length} packs, ${split.length} files split`);
   const { service, asked } = serve(share);
   const client = await openShare(share.id, service);
@@ -194,6 +204,35 @@ test("a share's files are read from the packs that hold them, one split over two
   const ticket = await client.resources.workerTicket('source.stl');
   structuredClone(ticket.bytes, { transfer: [ticket.bytes] });
   assert.deepEqual(new Uint8Array(await client.resources.readBytes('source.stl')), files['source.stl']);
+  // A file document's share told as it is: its name, no script, nothing of what built it, no files that made it.
+  assert.deepEqual(client.share, { name: 'part.stl', entry: null, made: null, files: [] });
+  client.dispose();
+});
+
+test("a model's share holds the files that made it beside its view: the page fetches no pack only they name, and is told what they are", async () => {
+  // The view's files, then the files that made it in the same packs after them, as the command packs a model: the
+  // last pack of the view's goes on with the first of the files, and the rest of the files have packs of their own.
+  // The bundle's own listing names one of those files too, as though the view held it; the share's view does not.
+  const { 'lib/head.py': head, ...view } = bundle({ 'source.stl': noise(700, 50), 'parts/a.glb': noise(300, 51), 'lib/head.py': noise(900, 52) });
+  // A path may be both the view's and the files' (separate maps): the same bytes, and so the same ranges.
+  const files = { 'part.py': noise(600, 53), 'lib/head.py': head, 'source.stl': view['source.stl'] };
+  const made = { cad: '0.11.17', build123d: '0.13.0', OCP: '8.0.1.1.0', bd_materials: '0.2.6', threejs_materials: '1.2.5',
+    python: '3.13.18', system: 'Linux', arch: 'x86_64' };
+  const share = await makeShare(view, { files, name: 'part', entry: 'part.py', made, packBytes: 512 });
+  assert.deepEqual(share.manifest.files['source.stl'].at, share.manifest.view['source.stl'].at);
+  const viewed = packsOf(share.manifest.view);
+  const theirs = [...packsOf(share.manifest.files)].filter(pack => !viewed.has(pack));
+  assert.ok(theirs.length >= 2 && [...packsOf(share.manifest.files)].some(pack => viewed.has(pack)), 'a pack of both, and packs of the files alone');
+  const { service, asked } = serve(share);
+  const client = await openShare(share.id, service);
+  assert.deepEqual(await readAll(client, ['source.stl', 'parts/a.glb']), [view['source.stl'], view['parts/a.glb']]);
+  // Asked for one of the files alone, the share has no such file of its view, and fetches nothing for it.
+  await assert.rejects(client.resources.readBytes('lib/head.py'), error => error.status === 404 && /holds no lib\/head\.py/.test(error.message));
+  await settled();
+  assert.deepEqual([...asked].sort(), [...viewed].sort(), 'every pack of the view once, and none of the files alone');
+  // What the share holds beside its view, as its manifest says it.
+  assert.deepEqual(client.share, { name: 'part', entry: 'part.py', made, files: ['part.py', 'lib/head.py', 'source.stl'] });
+  assert.ok([client.share, client.share.made, client.share.files].every(Object.isFrozen));
   client.dispose();
 });
 
@@ -202,7 +241,7 @@ test('every pack is fetched ahead, six at a time and the manifest\'s first, and 
   // The bundle's manifest packed last, in a pack of its own as every file is here.
   const { 'manifest.json': listing, ...rest } = bundle(files);
   const share = await makeShare({ ...rest, 'manifest.json': listing }, { each: true });
-  const packOf = path => share.manifest.files[path].at[0][0];
+  const packOf = path => share.manifest.view[path].at[0][0];
   assert.equal(share.packs.length, 10);
   const { service, asked, release, asks, most } = serve(share, { hold: true });
   let opened = null;
@@ -271,28 +310,65 @@ test('a manifest that does not open or is not one, and a file not as it says, ar
   const opening = (manifest, pack = serve(share).service.pack) => openShare(share.id, { manifest: async () => manifest, pack });
   // Not JSON, and not a share's manifest, each saying what.
   await assert.rejects(opening(await sealedAs('{"format":')), refusedAs(SHARE_DAMAGED, /not JSON/));
-  const entry = share.manifest.files['source.stl'];
-  const withFile = (path, value) => ({ format: 'cad-share/2', files: { ...share.manifest.files, [path]: value } });
+  const entry = share.manifest.view['source.stl'];
+  const withFile = (path, value) => ({ ...share.manifest, view: { ...share.manifest.view, [path]: value } });
+  const withSource = (path, value) => ({ ...share.manifest, files: { ...share.manifest.files, [path]: value } });
+  const without = member => Object.fromEntries(Object.entries(share.manifest).filter(([name]) => name !== member));
   const shapes = {
     'an array': [[], /not an object/],
     'another format': [{ ...share.manifest, format: 'cad-share/1' }, /"cad-share\/1", not cad-share\/2/],
-    'no files': [{ format: 'cad-share/2' }, /lists no files/],
-    'no bundle manifest': [{ format: 'cad-share/2', files: { 'source.stl': entry } }, /lists no manifest\.json/],
-    'a path with ..': [withFile('parts/../x', entry), /no path inside a bundle/],
+    // The earlier shape: every file of the bundle as `files`, and nothing of the document.
+    'the earlier shape': [{ format: 'cad-share/2', files: share.manifest.view }, /has no view/],
+    'another member': [{ ...share.manifest, key: 'k' }, /holds "key", which a share's manifest does not/],
+    'no view': [{ ...share.manifest, view: [] }, /has no view/],
+    'no files that made it': [{ ...share.manifest, files: null }, /lists no files that made it/],
+    'no name': [without('name'), /names its document nothing, not 1 to 200 characters/],
+    'an empty name': [{ ...share.manifest, name: '' }, /names its document "", not 1 to 200 characters/],
+    'a name too long': [{ ...share.manifest, name: 'x'.repeat(201) }, /not 1 to 200 characters/],
+    'a name with a control character': [{ ...share.manifest, name: 'part\n.stl' }, /not 1 to 200 characters of text/],
+    'a name of no text': [{ ...share.manifest, name: 'part\ud800' }, /not 1 to 200 characters of text/],
+    'no entry': [without('entry'), /names nothing as its script/],
+    'an entry none of its files': [{ ...share.manifest, entry: 'gone.py' }, /names "gone\.py" as its script, which is none of the files/],
+    // A model's script is among the files that made it, never only among its view's.
+    'an entry of the view alone': [{ ...share.manifest, entry: 'manifest.json' }, /as its script, which is none of the files/],
+    'no made': [without('made'), /says what built it as nothing/],
+    'a made that is a list': [{ ...share.manifest, made: ['cad'] }, /says what built it as \["cad"\]/],
+    'a made value of no text': [{ ...share.manifest, made: { cad: 11 } }, /says what built it/],
+    'a made value too long': [{ ...share.manifest, made: { cad: 'x'.repeat(101) } }, /at most 32 names and values of 100 characters/],
+    'a made name too long': [{ ...share.manifest, made: { ['x'.repeat(101)]: '1' } }, /at most 32 names and values/],
+    'a made of 33 members': [{ ...share.manifest, made: Object.fromEntries(Array.from({ length: 33 }, (_, index) => [`lib${index}`, '1'])) },
+      /at most 32 names and values/],
+    // 200,000 files at most, counted over both maps (each refused for its count before its shape is read).
+    'too many files over both maps': [{ ...share.manifest,
+      view: { ...share.manifest.view, ...Object.fromEntries(Array.from({ length: 100_000 }, (_, index) => [`v${index}`, 0])) },
+      files: Object.fromEntries(Array.from({ length: 100_000 }, (_, index) => [`f${index}`, 0])) }, /lists 200003 files, more than 200000/],
+    'no bundle manifest': [{ ...share.manifest, view: { 'source.stl': entry } }, /lists no manifest\.json in its view/],
+    'a path with ..': [withFile('parts/../x', entry), /in its view, which is no path inside a bundle/],
     'an absolute path': [withFile('/etc/passwd', entry), /no path inside a bundle/],
     'an empty segment': [withFile('parts//x', entry), /no path inside a bundle/],
     'a path too long': [withFile(`parts/${'x'.repeat(1020)}`, entry), /no path inside a bundle/],
-    'no digest': [withFile('x', { ...entry, sha256: 'ABC' }), /no SHA-256, size and ranges/],
+    'no digest': [withFile('x', { ...entry, sha256: 'ABC' }), /gives "x" in its view no SHA-256, size and ranges/],
     'a size below zero': [withFile('x', { ...entry, bytes: -1 }), /no SHA-256, size and ranges/],
     'no ranges': [withFile('x', { ...entry, at: [] }), /no SHA-256, size and ranges/],
     'a range of no pack': [withFile('x', { ...entry, at: [['pack', 0, 1]] }), /no SHA-256, size and ranges/],
     'a range at no whole offset': [withFile('x', { ...entry, at: [[entry.at[0][0], 0.5, 1]] }), /no SHA-256, size and ranges/],
+    // The files that made it keep the same paths and entries as the view's, though the page reads none of them.
+    'a file that made it outside its folder': [withSource('../part.py', entry), /in the files that made it, which is no path inside a folder/],
+    'an absolute file that made it': [withSource('C:/part.py', entry), /in the files that made it, which is no path inside a folder/],
+    'a file that made it with no ranges': [withSource('lib/head.py', { ...entry, at: [] }), /gives "lib\/head\.py" in the files that made it no SHA-256/],
   };
   for (const [what, [manifest, said]] of Object.entries(shapes)) await assert.rejects(opening(await sealedAs(manifest)), refusedAs(SHARE_DAMAGED, said), what);
+  // At its limits it is a share: a name of 200 characters (each one code point, however many UTF-16 units it takes),
+  // and what built it in 32 names and values of 100 characters each.
+  const made = Object.fromEntries(Array.from({ length: 32 }, (_, index) => [String(index).padStart(100, 'x'), 'é'.repeat(100)]));
+  const limits = { ...share.manifest, name: '🧩'.repeat(200), entry: 'part.py', made, files: { 'part.py': entry } };
+  const opened = await opening(await sealedAs(limits));
+  assert.deepEqual(opened.share, { name: limits.name, entry: 'part.py', made, files: ['part.py'] });
+  opened.dispose();
 
   // A file whose bytes are not the manifest's: another digest, another size, a range past its pack, a pack that does
   // not open, ranges that are no gzip member. The bundle's manifest refuses the share; any other file, its read.
-  const pack = share.manifest.files['manifest.json'].at[0][0];
+  const pack = share.manifest.view['manifest.json'].at[0][0];
   const lying = {
     'another digest': [listed => ({ ...listed, sha256: sha256(encode('other')) }), /SHA-256 differs/],
     'more bytes than it says': [listed => ({ ...listed, bytes: listed.bytes - 1 }), /holds more than the \d+ bytes/],
@@ -301,7 +377,7 @@ test('a manifest that does not open or is not one, and a file not as it says, ar
     'no gzip member': [listed => ({ ...listed, at: [[pack, 1, 40]] }), /no whole gzip member/],
   };
   for (const [what, [lie, said]] of Object.entries(lying)) {
-    await assert.rejects(opening(await sealedAs(withFile('manifest.json', lie(share.manifest.files['manifest.json'])))),
+    await assert.rejects(opening(await sealedAs(withFile('manifest.json', lie(share.manifest.view['manifest.json'])))),
       refusedAs(SHARE_DAMAGED, said), `manifest.json: ${what}`);
     const client = await opening(await sealedAs(withFile('source.stl', lie(entry))));
     await assert.rejects(client.resources.readBytes('source.stl'), refusedAs(SHARE_DAMAGED, said), what);
@@ -326,11 +402,11 @@ test("the service's answer is said as it is, a pack it did not give is asked for
 
   // A pack it did not give, at the start or later: the share is not damaged, and the next read asks again.
   const missing = new Map(share.sealed);
-  missing.delete(share.manifest.files['manifest.json'].at[0][0]);
+  missing.delete(share.manifest.view['manifest.json'].at[0][0]);
   await assert.rejects(openShare(share.id, serve({ ...share, sealed: missing }).service),
     refusedAs(SHARE_UNAVAILABLE, /manifest\.json could not be fetched: .*404/));
   const later = new Map(share.sealed);
-  const glb = share.manifest.files['parts/a.glb'].at[0][0];
+  const glb = share.manifest.view['parts/a.glb'].at[0][0];
   later.delete(glb);
   const flaky = { ...share, sealed: later };
   const { service, asked: fetched } = serve(flaky);

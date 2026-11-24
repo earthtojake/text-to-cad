@@ -1,7 +1,7 @@
 // The share service: a Cloudflare Worker over an R2 bucket (SHARES), the viewer's static assets (ASSETS)
-// and two rate limiters (LIMITER for commits and deletes, LIMITER_PACKS for packs). Its API, storage and
-// pages are README.md's; this file is the whole of the service, and `serve.mjs` runs this same module
-// locally over Node's http.
+// and two rate limiters (LIMITER for commits and deletes, LIMITER_PACKS for packs and zips). Its API,
+// storage, pages and zip are README.md's; this file is the whole of the service, and `serve.mjs` runs this
+// same module locally over Node's http.
 //
 // A share's id is the capability. The AES-256-GCM key its objects are sealed with, and the name it is
 // stored under, are derived from the id here, for one request, and dropped with it. Nothing here logs,
@@ -17,7 +17,7 @@ export const DEFAULTS = Object.freeze({
   MAX_SHARE_BYTES: 256 * 1024 * 1024,
   EXPIRY_DAYS: 7,
 });
-/** The most files a share manifest lists. */
+/** The most files a share manifest lists, its view's and its files' together. */
 export const MAX_FILES = 200_000;
 /** The age at which the bucket's lifecycle rule deletes an object, counted from its upload (README.md,
  * "Set-up, once"). A commit stores again what its share keeps that the rule would take before it expires. */
@@ -30,6 +30,7 @@ const SECRET = /^[A-Za-z0-9_-]{43}$/;
 const HEX_SHA256 = /^[0-9a-f]{64}$/;
 const BEARER = /^Bearer ([^\s]+)$/;
 const API = /^\/v1\/shares\/([^/]*)(?:\/packs\/([^/]*))?$/;
+const ZIP = /^\/([A-Za-z0-9_-]{22})\.zip$/;
 const MAX_PATH_BYTES = 1024;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
@@ -82,6 +83,8 @@ async function answer(request, env, now) {
     if (!isRead(request)) return notAllowed("GET, HEAD");
     return new Response(null, { status: 302, headers: { Location: HOME, "Cache-Control": "no-store" } });
   }
+  const zip = ZIP.exec(path);
+  if (zip) return readZip(request, env, zip[1], now);
   if (ID.test(path.slice(1))) {
     // A share's page: the viewer, whatever the fragment (which never reaches this code).
     if (!isRead(request)) return notAllowed("GET, HEAD");
@@ -123,7 +126,7 @@ async function putPack(request, env, id, pack, settings) {
   const length = lengthOf(request);
   if (length === null) return lengthRequired();
   if (length > settings.maxPackBytes) return tooLarge(`A pack is at most ${settings.maxPackBytes} bytes.`);
-  if (!(await allowed(env.LIMITER_PACKS, request))) return limited("pack uploads");
+  if (!(await allowed(env.LIMITER_PACKS, request))) return limited("pack uploads and zips");
 
   const place = await placeOf(id);
   const writeHash = await sha256Hex(writer.secret);
@@ -269,6 +272,438 @@ async function remove(request, env, id) {
   return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
 }
 
+// ---- the files' zip -------------------------------------------------------------------------------
+
+/** `GET /<id>.zip` (and `HEAD`): the files that made the share, as a zip of one folder named for it. It counts
+ * as a pack in LIMITER_PACKS; it is 404 as the share's other reads are. */
+async function readZip(request, env, id, now) {
+  if (!isRead(request)) return notAllowed("GET, HEAD");
+  if (!(await allowed(env.LIMITER_PACKS, request))) return limited("pack uploads and zips");
+  const place = await placeOf(id);
+  const object = await env.SHARES.get(place.manifest);
+  if (!object) return gone();
+  if (expired(object, now)) {
+    await object.body.cancel();
+    await deleteShare(env, place);
+    return gone();
+  }
+  const key = await keyOf(id);
+  const plain = await open(key, new Uint8Array(await object.arrayBuffer()), MANIFEST_AAD);
+  let manifest = null;
+  try {
+    manifest = JSON.parse(STRICT_UTF8.decode(plain));
+  } catch {
+    // Not a manifest this service keeps: no share.
+  }
+  // One an earlier service kept, of the bundle alone, has no view, and no files to give.
+  if (!isObject(manifest) || !isObject(manifest.view) || !isObject(manifest.files)) return gone();
+
+  const folder = safeName(typeof manifest.name === "string" ? manifest.name : "");
+  const headers = {
+    "Content-Type": "application/zip",
+    "Content-Disposition": `attachment; filename="${folder}.zip"`,
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  };
+  if (typeof manifest.entry === "string") headers["Cad-Share-Entry"] = headerText(manifest.entry);
+  const made = isObject(manifest.made) ? Object.entries(manifest.made) : [];
+  if (made.length) headers["Cad-Share-Made"] = made.map(([name, value]) => `${headerText(name)}=${headerText(value)}`).join(", ");
+  if (request.method === "HEAD") return new Response(null, { status: 200, headers });
+  return new Response(zipOf(folder, Object.entries(manifest.files), packReader(env, place, key)), { status: 200, headers });
+}
+
+/** The share's name as a file's and a folder's: letters, digits, `.`, `-` and `_` kept and every other
+ * character `_`, no `.` at either end (so no `.` or `..` folder), at most 100 characters; `share` where
+ * nothing is left. */
+function safeName(name) {
+  const kept = Array.from(name, (character) => (/^[A-Za-z0-9._-]$/.test(character) ? character : "_")).join("");
+  return kept.replace(/^\.+/, "").slice(0, 100).replace(/\.+$/, "") || "share";
+}
+
+/** Text as a header carries it (Cad-Share-Entry, each name and value of Cad-Share-Made): its UTF-8, every byte
+ * but a letter, a digit and `-._~/+` written `%XX` (RFC 3986), so that any text travels, and `,` and `=` part
+ * the members. What holds none of those travels as it is; a percent-decoder reads any back. */
+function headerText(text) {
+  let written = "";
+  for (const byte of UTF8.encode(text)) {
+    const character = String.fromCharCode(byte);
+    written += /^[A-Za-z0-9._~/+-]$/.test(character) ? character : `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;
+  }
+  return written;
+}
+
+/** A share's packs as its zip reads them: each fetched and opened when first asked for, the two last asked for
+ * kept, so a zip holds two packs at most, whatever the share's size. A pack that is not stored or does not
+ * open fails the read, and with it the zip. */
+function packReader(env, place, key) {
+  const held = new Map();
+  return (pack) => {
+    let opened = held.get(pack);
+    if (opened) {
+      held.delete(pack);
+    } else {
+      opened = (async () => {
+        const object = await env.SHARES.get(`${place.packs}${pack}`);
+        const plain = object && await open(key, new Uint8Array(await object.arrayBuffer()), packAad(pack));
+        if (!plain) throw new Error("A pack the share's files name is not stored, or does not open.");
+        return plain;
+      })();
+    }
+    held.set(pack, opened);
+    while (held.size > PACKS_HELD) held.delete(held.keys().next().value);
+    return opened;
+  };
+}
+
+// ---- the zip format (APPNOTE.TXT, PKWARE's .ZIP File Format Specification) --------------------------
+
+/** The values at which a zip's 4-byte sizes and offsets, and its 2-byte count of entries, no longer hold what
+ * they say: from there the field holds its most (0xFFFFFFFF, 0xFFFF), which says "see Zip64", and a Zip64
+ * record holds the value. The tests lower them, to write every Zip64 record for a small zip. */
+export const ZIP64 = Object.freeze({ size: 0xFFFFFFFF, count: 0xFFFF });
+const PACKS_HELD = 2;
+// A gzip member's header in the plain form (RFC 1952: ID1, ID2, CM 8, FLG 0, MTIME, XFL, OS), and its trailer
+// (CRC32, ISIZE).
+const GZIP_HEADER = 10;
+const GZIP_TRAILER = 8;
+const STORED = 0;
+const DEFLATED = 8;
+const UTF8_NAMES = 1 << 11;
+const VERSION = 20; // 2.0: deflate, folders
+const VERSION_ZIP64 = 45; // 4.5
+// Every entry's time: 1980-01-01 00:00, the earliest an MS-DOS date holds, so a share's zip is the same each time.
+const DOS_TIME = 0;
+const DOS_DATE = (1 << 5) | 1;
+// Made on UNIX (3), so a reader takes the modes the external attributes hold: rw-r--r-- for a file, and
+// rwxr-xr-x for the folder, which also holds the MS-DOS directory bit.
+const MADE_ON_UNIX = 3 << 8;
+const FILE_ATTRIBUTES = 0o100644 * 0x10000;
+const FOLDER_ATTRIBUTES = 0o40755 * 0x10000 + 0x10;
+// The zip goes out in pieces of this many bytes, each a copy of its own.
+const ZIP_CHUNK = 64 * 1024;
+
+/** The zip of `files` (a manifest's `[path, entry]`s) under one folder, `folder`: the folder's entry, then each
+ * file's, sorted by path (by its UTF-8 bytes), each named in UTF-8 and dated 1980-01-01 00:00; then the central
+ * directory. A file's gzip member is the zip's data as it is, never compressed again: its deflate stream, with
+ * the CRC-32 and size of its trailer (method 8); a member not of the plain form the command writes is inflated
+ * and stored (method 0) with its CRC-32 computed. `read(pack)` resolves to a pack's bytes, opened. Zip64 where a
+ * size, an offset or the count needs it. A stream of the zip's bytes, made as it is read; it fails where a pack
+ * cannot be read or a member does not inflate. */
+export function zipOf(folder, files, read, limits = ZIP64) {
+  const chunks = zipChunks(folder, files, read, limits);
+  return new ReadableStream({
+    async pull(controller) {
+      const { done, value } = await chunks.next();
+      if (done) controller.close();
+      else controller.enqueue(value);
+    },
+    async cancel() {
+      await chunks.return();
+    },
+  }, { highWaterMark: 0 });
+}
+
+async function* zipChunks(folder, files, read, limits) {
+  const out = new Chunks();
+  const written = [];
+  let offset = 0;
+  // The local header of `file`, its offset and sizes kept for the central directory.
+  const begin = (file) => {
+    const header = localHeader({ ...file, offset }, limits);
+    written.push({ ...file, offset });
+    offset += header.byteLength + file.compressed;
+    return header;
+  };
+
+  // (Each chunk is yielded from a plain loop: in an async generator, `yield*` and `for await` over what is at hand
+  // would cost a promise a step, and a share's zip may hold 200,000 files.)
+  const folderEntry = { name: UTF8.encode(`${folder}/`), method: STORED, crc: 0, compressed: 0, size: 0, folder: true };
+  for (const chunk of out.add(begin(folderEntry))) yield chunk;
+  const sorted = files.map(([path, entry]) => ({ name: UTF8.encode(`${folder}/${path}`), entry })).sort(byName);
+  for (const { name, entry } of sorted) {
+    const length = entry.at.reduce((sum, [, , bytes]) => sum + bytes, 0);
+    // A member in one range, as nearly every one is, is a view of its pack, read once; one split over packs
+    // is read range by range, so that no more than its two last packs are held.
+    const member = entry.at.length === 1 ? await rangeOf(entry.at[0], read) : null;
+    const ranges = (from, to) => (member ? [member.subarray(from, to)] : rangesOf(entry.at, from, to, read));
+    let plain = null;
+    if (length >= GZIP_HEADER + GZIP_TRAILER) {
+      const head = member ? member.subarray(0, GZIP_HEADER) : await bytesOf(entry.at, 0, GZIP_HEADER, read);
+      if (isPlain(head)) {
+        const tail = member ? member.subarray(length - GZIP_TRAILER) : await bytesOf(entry.at, length - GZIP_TRAILER, length, read);
+        plain = trailerOf(tail, length, entry.bytes);
+      }
+    }
+    if (plain) {
+      for (const chunk of out.add(begin({ name, method: DEFLATED, ...plain }))) yield chunk;
+      if (member) {
+        for (const chunk of out.add(member.subarray(GZIP_HEADER, length - GZIP_TRAILER))) yield chunk;
+      } else {
+        for await (const piece of ranges(GZIP_HEADER, length - GZIP_TRAILER)) {
+          for (const chunk of out.add(piece)) yield chunk;
+        }
+      }
+      continue;
+    }
+    // Inflated twice rather than held: once for its CRC-32 and size, which its header goes before, then again
+    // for its bytes.
+    let crc = 0;
+    let size = 0;
+    for await (const piece of inflated(ranges(0, length))) {
+      crc = crc32(piece, crc);
+      size += piece.byteLength;
+    }
+    for (const chunk of out.add(begin({ name, method: STORED, crc, compressed: size, size }))) yield chunk;
+    let again = 0;
+    for await (const piece of inflated(ranges(0, length))) {
+      again += piece.byteLength;
+      for (const chunk of out.add(piece)) yield chunk;
+    }
+    if (again !== size) throw new Error("A member inflated to another size the second time.");
+  }
+
+  const start = offset;
+  for (const file of written) {
+    const record = centralHeader(file, limits);
+    offset += record.byteLength;
+    for (const chunk of out.add(record)) yield chunk;
+  }
+  for (const chunk of out.add(endRecords(written.length, offset - start, start, limits))) yield chunk;
+  for (const chunk of out.rest()) yield chunk;
+}
+
+/** Whether a gzip member's first bytes are the plain form the command writes (RFC 1952: ID1, ID2, CM 8, and
+ * FLG 0: no extra, no name, no comment, no header CRC), so that its deflate stream is its bytes but the 10 of
+ * its header and the 8 of its trailer. */
+function isPlain(head) {
+  return head[0] === 0x1f && head[1] === 0x8b && head[2] === DEFLATED && head[3] === 0;
+}
+
+/** A plain member's CRC-32 and sizes, from its trailer: its CRC-32, and ISIZE, its size modulo 2^32, whose
+ * entry's own size is taken where they agree (a file of 4 GiB or more). */
+function trailerOf(tail, length, bytes) {
+  const view = new DataView(tail.buffer, tail.byteOffset, GZIP_TRAILER);
+  const isize = view.getUint32(4, true);
+  return {
+    crc: view.getUint32(0, true),
+    compressed: length - GZIP_HEADER - GZIP_TRAILER,
+    size: bytes % 2 ** 32 === isize ? bytes : isize,
+  };
+}
+
+/** The bytes of one range, `[pack, offset, length]`: a view of its pack. */
+async function rangeOf([pack, offset, length], read) {
+  const bytes = await read(pack);
+  if (offset + length > bytes.byteLength) throw new Error("A range runs past the end of its pack.");
+  return bytes.subarray(offset, offset + length);
+}
+
+/** The bytes `from` to `to` of the member that `at`'s ranges hold, joined in order: pieces of its packs. */
+async function* rangesOf(at, from, to, read) {
+  let start = 0;
+  for (const range of at) {
+    const end = start + range[2];
+    if (range[2] > 0 && end > from && start < to) {
+      yield (await rangeOf(range, read)).subarray(Math.max(from, start) - start, Math.min(to, end) - start);
+    }
+    start = end;
+    if (start >= to) return;
+  }
+}
+
+async function bytesOf(at, from, to, read) {
+  const bytes = new Uint8Array(to - from);
+  let filled = 0;
+  for await (const piece of rangesOf(at, from, to, read)) {
+    bytes.set(piece, filled);
+    filled += piece.byteLength;
+  }
+  return bytes;
+}
+
+/** Pieces of a gzip member, inflated as they come. */
+async function* inflated(pieces) {
+  const inflating = new DecompressionStream("gzip");
+  const writer = inflating.writable.getWriter();
+  const reader = inflating.readable.getReader();
+  const fed = (async () => {
+    try {
+      for await (const piece of pieces) await writer.write(piece);
+      await writer.close();
+    } catch (error) {
+      // The readable side fails with it, so that the read below does.
+      await writer.abort(error).catch(() => {});
+    }
+  })();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      yield value;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    await fed;
+  }
+}
+
+/** The zip's bytes gathered into chunks of ZIP_CHUNK bytes, each a copy of its own: no chunk is a view of a pack
+ * the reader keeps, or of one it drops. */
+class Chunks {
+  #chunk = new Uint8Array(ZIP_CHUNK);
+  #used = 0;
+
+  /** `bytes` gathered: each chunk they fill, as it fills (one copied at a time, however long they are). */
+  *add(bytes) {
+    for (let at = 0; at < bytes.byteLength;) {
+      const taken = Math.min(bytes.byteLength - at, ZIP_CHUNK - this.#used);
+      this.#chunk.set(bytes.subarray(at, at + taken), this.#used);
+      this.#used += taken;
+      at += taken;
+      if (this.#used === ZIP_CHUNK) {
+        const filled = this.#chunk;
+        this.#chunk = new Uint8Array(ZIP_CHUNK);
+        this.#used = 0;
+        yield filled;
+      }
+    }
+  }
+
+  /** What is gathered and not yet given, as the last chunk. */
+  *rest() {
+    if (this.#used > 0) yield this.#chunk.subarray(0, this.#used);
+  }
+}
+
+/** Whether an entry needs Zip64 anywhere (its sizes in its local header and the central directory, its offset
+ * there), and so says version 4.5. */
+function zip64Of({ compressed, size, offset }, limits) {
+  const sizes = compressed >= limits.size || size >= limits.size;
+  return { sizes, any: sizes || offset >= limits.size };
+}
+
+/** A local file header (APPNOTE 4.3.7); with Zip64, an extra field of both sizes, uncompressed first (4.5.3). */
+function localHeader(file, limits) {
+  const { name, method, crc, compressed, size } = file;
+  const zip64 = zip64Of(file, limits);
+  const header = new Uint8Array(30 + name.byteLength + (zip64.sizes ? 20 : 0));
+  const view = new DataView(header.buffer);
+  view.setUint32(0, 0x04034b50, true);
+  view.setUint16(4, zip64.any ? VERSION_ZIP64 : VERSION, true);
+  view.setUint16(6, UTF8_NAMES, true);
+  view.setUint16(8, method, true);
+  view.setUint16(10, DOS_TIME, true);
+  view.setUint16(12, DOS_DATE, true);
+  view.setUint32(14, crc, true);
+  view.setUint32(18, zip64.sizes ? 0xFFFFFFFF : compressed, true);
+  view.setUint32(22, zip64.sizes ? 0xFFFFFFFF : size, true);
+  view.setUint16(26, name.byteLength, true);
+  view.setUint16(28, zip64.sizes ? 20 : 0, true);
+  header.set(name, 30);
+  if (zip64.sizes) {
+    const at = 30 + name.byteLength;
+    view.setUint16(at, 0x0001, true);
+    view.setUint16(at + 2, 16, true);
+    setUint64(view, at + 4, size);
+    setUint64(view, at + 12, compressed);
+  }
+  return header;
+}
+
+/** A central directory header (APPNOTE 4.3.12); with Zip64, an extra field of each value its field cannot hold,
+ * in the order uncompressed size, compressed size, offset (4.5.3). */
+function centralHeader(file, limits) {
+  const { name, method, crc, compressed, size, offset, folder } = file;
+  const zip64 = zip64Of(file, limits);
+  const big = [size, compressed, offset].map((value) => value >= limits.size);
+  const values = [size, compressed, offset].filter((_, index) => big[index]);
+  const extra = values.length ? 4 + 8 * values.length : 0;
+  const record = new Uint8Array(46 + name.byteLength + extra);
+  const view = new DataView(record.buffer);
+  const version = zip64.any ? VERSION_ZIP64 : VERSION;
+  view.setUint32(0, 0x02014b50, true);
+  view.setUint16(4, MADE_ON_UNIX | version, true);
+  view.setUint16(6, version, true);
+  view.setUint16(8, UTF8_NAMES, true);
+  view.setUint16(10, method, true);
+  view.setUint16(12, DOS_TIME, true);
+  view.setUint16(14, DOS_DATE, true);
+  view.setUint32(16, crc, true);
+  view.setUint32(20, big[1] ? 0xFFFFFFFF : compressed, true);
+  view.setUint32(24, big[0] ? 0xFFFFFFFF : size, true);
+  view.setUint16(28, name.byteLength, true);
+  view.setUint16(30, extra, true);
+  // A comment's length, the disk the file starts on and the internal attributes: none.
+  view.setUint32(38, folder ? FOLDER_ATTRIBUTES : FILE_ATTRIBUTES, true);
+  view.setUint32(42, big[2] ? 0xFFFFFFFF : offset, true);
+  record.set(name, 46);
+  if (extra) {
+    const at = 46 + name.byteLength;
+    view.setUint16(at, 0x0001, true);
+    view.setUint16(at + 2, extra - 4, true);
+    values.forEach((value, index) => setUint64(view, at + 4 + 8 * index, value));
+  }
+  return record;
+}
+
+/** The end of central directory record (APPNOTE 4.3.16), after the Zip64 end of central directory record and
+ * its locator (4.3.14, 4.3.15) where the count, the directory's size or its offset needs them. */
+function endRecords(count, size, offset, limits) {
+  const zip64 = count >= limits.count || size >= limits.size || offset >= limits.size;
+  const records = new Uint8Array((zip64 ? 56 + 20 : 0) + 22);
+  const view = new DataView(records.buffer);
+  let at = 0;
+  if (zip64) {
+    view.setUint32(0, 0x06064b50, true);
+    setUint64(view, 4, 56 - 12);
+    view.setUint16(12, MADE_ON_UNIX | VERSION_ZIP64, true);
+    view.setUint16(14, VERSION_ZIP64, true);
+    // This disk, and the disk the directory starts on: the first, 0.
+    setUint64(view, 24, count);
+    setUint64(view, 32, count);
+    setUint64(view, 40, size);
+    setUint64(view, 48, offset);
+    view.setUint32(56, 0x07064b50, true);
+    setUint64(view, 64, offset + size); // where the Zip64 record starts: right after the directory
+    view.setUint32(72, 1, true); // one disk in all
+    at = 76;
+  }
+  view.setUint32(at, 0x06054b50, true);
+  view.setUint16(at + 8, count >= limits.count ? 0xFFFF : count, true);
+  view.setUint16(at + 10, count >= limits.count ? 0xFFFF : count, true);
+  view.setUint32(at + 12, size >= limits.size ? 0xFFFFFFFF : size, true);
+  view.setUint32(at + 16, offset >= limits.size ? 0xFFFFFFFF : offset, true);
+  return records;
+}
+
+function setUint64(view, at, value) {
+  view.setUint32(at, value % 2 ** 32, true);
+  view.setUint32(at + 4, Math.floor(value / 2 ** 32), true);
+}
+
+/** Entries in the order of their names' bytes. */
+function byName(a, b) {
+  const length = Math.min(a.name.byteLength, b.name.byteLength);
+  for (let index = 0; index < length; index += 1) {
+    if (a.name[index] !== b.name[index]) return a.name[index] - b.name[index];
+  }
+  return a.name.byteLength - b.name.byteLength;
+}
+
+// CRC-32 as zip and gzip compute it: the reflected polynomial 0xEDB88320.
+const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, byte) => {
+  let crc = byte;
+  for (let bit = 0; bit < 8; bit += 1) crc = crc & 1 ? 0xEDB88320 ^ (crc >>> 1) : crc >>> 1;
+  return crc;
+});
+
+/** The CRC-32 of `bytes` following bytes whose CRC-32 is `crc`. */
+function crc32(bytes, crc = 0) {
+  let value = ~crc;
+  for (let index = 0; index < bytes.byteLength; index += 1) value = CRC_TABLE[(value ^ bytes[index]) & 0xFF] ^ (value >>> 8);
+  return ~value >>> 0;
+}
+
 // ---- storage --------------------------------------------------------------------------------------
 
 /** Where a share lives in the bucket: under its name, which its id derives. */
@@ -291,14 +726,17 @@ function ownedBy(owner, writeHash) {
   return sameHex(owner.customMetadata?.write, writeHash);
 }
 
-/** The packs a stored manifest names. It opens (the service sealed what it checked); where it would not,
- * it names none. */
+/** The packs a stored manifest names, in its view and in its files. It opens (the service sealed what it
+ * checked); where it would not, it names none. */
 async function packsNamedBy(object, key) {
   const named = new Set();
   const plain = await open(key, new Uint8Array(await object.arrayBuffer()), MANIFEST_AAD);
   try {
-    for (const entry of Object.values(JSON.parse(STRICT_UTF8.decode(plain)).files)) {
-      for (const [pack] of entry.at) named.add(pack);
+    const manifest = JSON.parse(STRICT_UTF8.decode(plain));
+    for (const map of [manifest.view, manifest.files]) {
+      for (const entry of isObject(map) ? Object.values(map) : []) {
+        for (const [pack] of entry.at) named.add(pack);
+      }
     }
   } catch {
     // None kept: no page opens it either.
@@ -357,8 +795,20 @@ function expired(object, now) {
 
 // ---- the share manifest ---------------------------------------------------------------------------
 
-/** What a commit needs of its share manifest: how many files it lists, and each pack it names with the end
- * of the furthest range it reads there. Or `{ problem }`, a sentence that says what is not of its shape. */
+// A share manifest's members, every one required and no other taken: the view (the bundle a browser draws)
+// and the files that made it (a model's code and what its build read, or a file document's file), each a
+// map of paths to where their bytes lie, with the document's name, its entry and what made it.
+const MEMBERS = ["format", "name", "entry", "made", "view", "files"];
+const MEMBERS_TEXT = `${MEMBERS.slice(0, -1).join(", ")} and ${MEMBERS.at(-1)}`;
+const MAPS = ["view", "files"];
+const MAX_NAME_CHARACTERS = 200;
+const MAX_MADE_MEMBERS = 32;
+const MAX_MADE_CHARACTERS = 100;
+const CONTROL = /\p{Cc}/u;
+
+/** What a commit needs of its share manifest: how many files its view and its files list, and each pack
+ * either names with the end of the furthest range read there. Or `{ problem }`, a sentence that says what
+ * is not of its shape. */
 function checkManifest(body) {
   let manifest;
   try {
@@ -366,32 +816,66 @@ function checkManifest(body) {
   } catch {
     return { problem: "The body is not JSON in UTF-8." };
   }
-  if (!isObject(manifest)) return { problem: "A share manifest is a JSON object, its format and its files." };
-  const other = Object.keys(manifest).find((name) => name !== "format" && name !== "files");
-  if (other !== undefined) return { problem: `A share manifest holds format and files, and no ${quote(other)}.` };
+  if (!isObject(manifest)) return { problem: `A share manifest is a JSON object of ${MEMBERS_TEXT}.` };
+  const other = Object.keys(manifest).find((name) => !MEMBERS.includes(name));
+  if (other !== undefined) return { problem: `A share manifest holds ${MEMBERS_TEXT}, and no ${quote(other)}.` };
+  const absent = MEMBERS.find((name) => !Object.hasOwn(manifest, name));
+  if (absent !== undefined) return { problem: `A share manifest holds ${MEMBERS_TEXT}: this one has no ${absent}.` };
   if (manifest.format !== FORMAT) return { problem: `A share manifest's format is "${FORMAT}".` };
-  if (!isObject(manifest.files)) return { problem: "A share manifest's files are an object: each file by its path." };
-  const paths = Object.keys(manifest.files);
-  if (paths.length > MAX_FILES) return { problem: `A share manifest lists at most ${MAX_FILES} files.` };
-  if (!Object.hasOwn(manifest.files, "manifest.json")) {
-    return { problem: "A share manifest lists the bundle's manifest.json." };
+  if (!isText(manifest.name, 1, MAX_NAME_CHARACTERS) || CONTROL.test(manifest.name)) {
+    return { problem: `A share manifest's name is its document's: text of 1 to ${MAX_NAME_CHARACTERS} characters, no control character.` };
+  }
+  const made = madeProblem(manifest.made);
+  if (made) return { problem: made };
+  for (const map of MAPS) {
+    if (!isObject(manifest[map])) return { problem: `A share manifest's ${map} is an object: each file by its path.` };
+  }
+  const count = Object.keys(manifest.view).length + Object.keys(manifest.files).length;
+  if (count > MAX_FILES) return { problem: `A share manifest lists at most ${MAX_FILES} files, its view's and its files' together.` };
+  if (!Object.hasOwn(manifest.view, "manifest.json")) {
+    return { problem: "A share manifest's view lists the bundle's manifest.json." };
+  }
+  if (manifest.entry !== null && !(typeof manifest.entry === "string" && Object.hasOwn(manifest.files, manifest.entry))) {
+    return { problem: "A share manifest's entry is the path in its files of the script that builds the model, or null." };
   }
   const packs = new Map();
-  for (const path of paths) {
-    const problem = pathProblem(path) ?? entryProblem(manifest.files[path], packs);
-    if (problem) return { problem: `files[${quote(path)}]: ${problem}.` };
+  for (const map of MAPS) {
+    for (const [path, entry] of Object.entries(manifest[map])) {
+      const problem = pathProblem(path, map) ?? entryProblem(entry, packs);
+      if (problem) return { problem: `${map}[${quote(path)}]: ${problem}.` };
+    }
   }
-  return { files: paths.length, packs };
+  return { files: count, packs };
 }
 
-function pathProblem(path) {
+/** What is wrong with `made`, or null: it is null (a file document's), or what built the model, each value text. */
+function madeProblem(made) {
+  const shape = `A share manifest's made is null, or what built the model: at most ${MAX_MADE_MEMBERS} members, ` +
+    `each name and value text of at most ${MAX_MADE_CHARACTERS} characters`;
+  if (made === null) return null;
+  if (!isObject(made) || Object.keys(made).length > MAX_MADE_MEMBERS) return `${shape}.`;
+  const bad = Object.entries(made).find(([name, value]) => !isText(name, 0, MAX_MADE_CHARACTERS)
+                                                          || !isText(value, 0, MAX_MADE_CHARACTERS));
+  return bad ? `${shape}; made[${quote(bad[0])}] is not.` : null;
+}
+
+/** Whether a value is text (a string with no lone surrogate) of `least` to `most` characters. */
+function isText(value, least, most) {
+  if (typeof value !== "string" || !value.isWellFormed() || value.length > 2 * most) return false;
+  const characters = [...value].length;
+  return characters >= least && characters <= most;
+}
+
+function pathProblem(path, map) {
   if (!path.isWellFormed()) return "a path is text";
   if (UTF8.encode(path).byteLength > MAX_PATH_BYTES) return `a path is at most ${MAX_PATH_BYTES} bytes`;
   if (path.startsWith("/") || path.includes("\\") || /^[A-Za-z]:/.test(path)) return "a path is relative and / separated";
   if (path.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
     return "a path has no empty, . or .. segment";
   }
-  if (path === "thumbnail.png") return "the bundle's thumbnail.png is left out of a share";
+  // The bundle's own thumbnail may show an earlier version of the document; a file of that name the build
+  // read is one of the files.
+  if (map === "view" && path === "thumbnail.png") return "the bundle's thumbnail.png is left out of a share";
   return null;
 }
 
@@ -458,13 +942,13 @@ export async function seal(key, plaintext, aad, iv = crypto.getRandomValues(new 
   return stored;
 }
 
-/** What `seal` sealed, or empty bytes where it does not open. */
+/** What `seal` sealed, or null where it does not open. */
 async function open(key, stored, aad) {
   try {
     const params = { name: "AES-GCM", iv: stored.subarray(0, IV_BYTES), additionalData: UTF8.encode(aad) };
     return new Uint8Array(await crypto.subtle.decrypt(params, key, stored.subarray(IV_BYTES)));
   } catch {
-    return new Uint8Array(0);
+    return null;
   }
 }
 

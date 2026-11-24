@@ -3,7 +3,8 @@
  * (`/v1/shares/<id>`): a share's sealed manifest and packs, for the view (`/<id>`: `shareService`, what
  * `@cad/core/client`'s `openShare` reads a share with), and its deletion, for the delete page
  * (`/<id>#delete=<secret>`). The delete secret goes in one place, the DELETE's `Authorization` header: never in
- * a URL, a log or storage. What the bytes are, and how they open, is `openShare`'s.
+ * a URL, a log or storage. What the bytes are, and how they open, is `openShare`'s. The files that made a share
+ * are the service's zip beside its view (`/<id>.zip`), which the page links to and never reads.
  */
 import { serverErrorMessage } from "@cad/core/client";
 
@@ -13,6 +14,11 @@ export const SHARE_GONE = "share-gone";
 /** The API URL of share `id`, on `origin` (the page's own). */
 export function shareApiUrl(id, origin = window.location.origin) {
   return new URL(`/v1/shares/${encodeURIComponent(id)}`, origin).href;
+}
+
+/** The URL of the zip of the files that made share `id`, on `origin` (the page's own). */
+export function shareZipUrl(id, origin = window.location.origin) {
+  return new URL(`/${encodeURIComponent(id)}.zip`, origin).href;
 }
 
 // Every request: no cookie, no referrer (the page's address is no one else's to read).

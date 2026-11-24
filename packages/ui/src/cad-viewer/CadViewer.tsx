@@ -94,6 +94,11 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
    */
   fullSize?: ReactNode;
   /**
+   * The host's own actions for what its page shows, after Full size at the navbar's right end, outermost, over
+   * every file and on the home (a shared model's Download files).
+   */
+  navbarActions?: ReactNode;
+  /**
    * What's new (`@cad/ui/whats-new`'s `useWhatsNew`): the release whose notes to show, once something
    * is on screen -- the home, or a file's view, never its loading page -- and how they are dismissed.
    * A host leaves it out where a dialog has no room, or while a notice of its own covers the view.
@@ -116,7 +121,7 @@ const reportError = (error: Error) => console.error(error);
  * navigates: showing a file, or the home, is the host's `onShow`.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, name, onShow, onShown,
-  library, onThumbnail, colorScheme, language, appSettings, notice, fullSize, history, whatsNew, onError = reportError }: CadViewerProps<Model>) {
+  library, onThumbnail, colorScheme, language, appSettings, notice, fullSize, navbarActions, history, whatsNew, onError = reportError }: CadViewerProps<Model>) {
   // The language the host names: the pages drawn here (the home, a file that will not open) read in it.
   const locale = host.environment.locale;
   const t = translator(locale);
@@ -250,11 +255,13 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
         description={isDocumentId(path) ? message : undefined} />
       : <EmptyState title={t("file.openFailed")} description={message} action={goHome} />,
   }), [library, layout, changeLayout, path, picture, host.fileActions, entry, goHome, t, settings.viewportBackground]);
+  // The navbar's host actions: Full size first, then the host's own; none where it hands neither.
+  const actions = fullSize || navbarActions ? <>{fullSize}{navbarActions}</> : undefined;
   // What a person does on the screen is counted for the host (`usage/controls.js`); never what a picture drawn
   // out of sight does, which is outside it.
   return <I18nProvider locale={locale}>
     <ControlUsageProvider report={host.usage?.controls}>
-    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
+    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={actions} fileMenuItems={menu} overlay={overlay} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
     {whatsNew && onScreen ? <WhatsNewDialog entry={whatsNew.entry} onDismiss={whatsNew.onDismiss} /> : null}

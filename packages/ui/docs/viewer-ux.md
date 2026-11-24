@@ -71,7 +71,8 @@ chrome that floats over the picture. The home is the navbar over the library.
   name (no glyph; a chevron where it opens the name menu); its ⋯. Past the toggle they have no fill at rest, the
   accent fill on hover and while their menu is open, and no tooltip, since each says what it is.
 - **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning), Display, Preview,
-  then the host's actions (the CAD app's Full size).
+  then the host's actions (the CAD app's Full size; a shared model's Download files, a link to the zip of the files
+  that made it, never a file menu's item), each the control's tile with its name as its hint.
 - The first glyph stands 16px in, on the page's gutter: the panel toggle's icon, on the panel's 16px line; else the
   logo's drawn mark (the row's 8px, the tile's 6px and the artwork's 2px).
 - The panel toggle is a 28px tile with the sidebar glyph, the same neutral button open or shut (`aria-expanded` says

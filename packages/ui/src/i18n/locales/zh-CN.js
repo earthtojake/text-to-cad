@@ -200,6 +200,7 @@ export default {
   "share.unsupported.title": "无法在此打开此共享模型。",
   "share.failed.title": "无法打开此共享模型。",
   "share.retry": "重试",
+  "share.downloadFiles": "下载文件",
   "share.delete.title": "删除此共享模型？",
   "share.delete.detail": "链接将对所有人失效。",
   "share.delete.action": "删除",

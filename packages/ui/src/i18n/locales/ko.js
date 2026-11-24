@@ -199,6 +199,7 @@ export default {
   "share.unsupported.title": "이 공유 모델은 여기에서 열 수 없습니다.",
   "share.failed.title": "이 공유 모델을 열 수 없습니다.",
   "share.retry": "다시 시도",
+  "share.downloadFiles": "파일 다운로드",
   "share.delete.title": "이 공유 모델을 삭제할까요?",
   "share.delete.detail": "모든 사람에게 링크가 더 이상 작동하지 않습니다.",
   "share.delete.action": "삭제",

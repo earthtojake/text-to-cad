@@ -1,8 +1,29 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Download } from 'lucide-react';
 import { EmptyState, StatusAction } from '@cad/ui/navigation';
-import { translateIn } from '@cad/ui/i18n';
+import { translateIn, useI18n } from '@cad/ui/i18n';
+import { Button } from '@cad/ui/primitives/button';
+import { TooltipHint } from '@cad/ui/primitives/tooltip';
 import { isShareSecret, SHARE_DAMAGED, SHARE_UNSUPPORTED } from '@cad/core/client';
-import { deleteShare, SHARE_GONE } from './host/share.js';
+import { deleteShare, SHARE_GONE, shareZipUrl } from './host/share.js';
+
+/**
+ * A shared view's Download files, where the share carries the files that made it (`files`, the paths its manifest
+ * names; none where it carries none): a plain link to their zip (`/<id>.zip`, `host/share.js`), which the browser
+ * downloads as any file, by no script of the page's, under the name the service gives it. It is the page's own
+ * action, so the navbar's host action at its right end (`docs/viewer-ux.md`), drawn as the CAD app's Full size is:
+ * the control's tile, its glyph muted, its hint its name.
+ */
+export function ShareDownload({ id, files }: { id: string; files: readonly string[] }) {
+  const { t } = useI18n();
+  if (!files.length) return null;
+  const label = t('share.downloadFiles');
+  return <TooltipHint content={label}>
+    <Button asChild variant="ghost" size="icon-xs" className="size-control shrink-0 rounded-md text-muted-foreground hover:text-foreground">
+      <a href={shareZipUrl(id)} download aria-label={label}><Download className="size-4" aria-hidden="true" /></a>
+    </Button>
+  </TooltipHint>;
+}
 
 /** A share's page that is no view: the app's status screen, alone on the page (`docs/viewer-ux.md`). */
 function SharePage({ state, children }: { state: string; children: ReactNode }) {

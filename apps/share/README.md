@@ -1,15 +1,19 @@
 # Share
 
-`cad.fun`: where a shared model lives. `cad share` uploads the files of a document's view bundle
-that its share does not hold yet, in packs, then commits a manifest that says where each file lies,
-so a share costs what changed. Anyone with the link (`https://cad.fun/<id>`) opens it in the hosted
-viewer, with no sign-in. A share expires 7 days after its last commit. The service is a Cloudflare
-Worker of its own (`cad-share`) over an R2 bucket (`cad-shares`), serving the viewer's built client
-as its static assets.
+`cad.fun`: where a shared model lives. A share is two things under one id: its **view**, the
+document's view bundle, which a browser draws, and **the files that made it**: a model's script, the
+modules its build imported and the files it read, or a file document's file. `cad share` uploads
+the files of both that its share does not hold yet, in packs, then commits a manifest that says
+where each file lies, so a share costs what changed. Anyone with the link (`https://cad.fun/<id>`)
+opens it in the hosted viewer, with no sign-in, and downloads the files that made it as a zip
+(`https://cad.fun/<id>.zip`). A share expires 7 days after its last commit. The service is a
+Cloudflare Worker of its own (`cad-share`) over an R2 bucket (`cad-shares`), serving the viewer's
+built client as its static assets.
 
 **PURPOSE** — keep a share, sealed, for 7 days; hand its bytes to whoever has its link; and serve
-the page that opens it. Its routes, statuses, headers and formats (`cad-share/2`) are a contract with
-every released `cad share` and with the page: they never break.
+the page that opens it and the zip of the files that made it. Its routes, statuses, headers and
+formats (`cad-share/2`) are a contract with every released `cad share` and `cad fork` and with the
+page: they never break.
 
 **MAY DEPEND ON** — Cloudflare Workers' runtime (the web-standard `Request`, `Response` and
 `crypto.subtle`), its R2, static assets and rate limiting bindings, and Node's standard library for
@@ -17,9 +21,9 @@ the local runner and the tests: no npm dependencies, so there is nothing to inst
 of the root npm workspaces and has no lockfile. Its static assets are `apps/web`'s build output,
 copied in before a deploy; it imports nothing of any app or package.
 
-**DEPENDED ON BY** — nothing in the repo imports it. `cad share` (`packages/cad`) reaches it over
-HTTPS (`CAD_SHARE_URL` points it at another origin), and the viewer's share mode (`apps/web`,
-`packages/core`) is the page it serves at `/<id>`.
+**DEPENDED ON BY** — nothing in the repo imports it. `cad share` and `cad fork` (`packages/cad`)
+reach it over HTTPS (`CAD_SHARE_URL` points them at another origin), and the viewer's share mode
+(`apps/web`, `packages/core`) is the page it serves at `/<id>`.
 
 ## Build, run, deploy
 
@@ -46,9 +50,10 @@ binding over the folder given that answers exactly what `wrangler.jsonc`'s `html
 answers, adding to each file it serves what the folder's `_headers` names; the asset-first routing
 and `run_worker_first` read from `wrangler.jsonc`; `CF-Connecting-IP` set from the socket; and the
 two limiters, which allow everything. A stand-in throws on an option it does not emulate rather than
-answering otherwise than R2. `--port 0` takes any free port. When it is ready it prints its origin,
-and nothing else, on one line (`http://127.0.0.1:8787`); point `CAD_SHARE_URL` there. It stops on
-SIGINT or SIGTERM.
+answering otherwise than R2. As Cloudflare does, it sends an answer's headers at once and its body
+as the client reads it, and cuts off a body that fails part way rather than ending it as if whole.
+`--port 0` takes any free port. When it is ready it prints its origin, and nothing else, on one
+line (`http://127.0.0.1:8787`); point `CAD_SHARE_URL` there. It stops on SIGINT or SIGTERM.
 
 Deployment is the `Deploy Share` workflow only (`.github/workflows/deploy-share.yml`), on
 dispatch: it runs the tests, builds the viewer, copies it in, deploys with Wrangler (pinned, through
@@ -86,14 +91,14 @@ The pack id is the lowercase hex SHA-256 of the pack's bytes.
 | `403` | `forbidden` | The share's owner holds another write secret's hash |
 | `411` | `length_required` | No `Content-Length` |
 | `413` | `too_large` | Over `MAX_PACK_BYTES`, by its length or by its body |
-| `429` | `rate_limited` | More packs from this address than `LIMITER_PACKS` allows (`Retry-After: 60`) |
+| `429` | `rate_limited` | More packs and zips from this address than `LIMITER_PACKS` allows (`Retry-After: 60`) |
 
 **`PUT /v1/shares/<id>`**, a commit: the same headers with `Content-Type: application/json`, and
 the [share manifest](#the-share-manifest-cad-share2) as the body.
 
 | Status | `error` | When |
 | --- | --- | --- |
-| `201` | | The share's first manifest, or its first since the last expired: `{"id", "expires", "bytes", "files"}`, `expires` ISO 8601, `bytes` the stored size of the packs it names, `files` how many it lists |
+| `201` | | The share's first manifest, or its first since the last expired: `{"id", "expires", "bytes", "files"}`, `expires` ISO 8601, `bytes` the stored size of the packs it names, `files` how many files its view and its files list together |
 | `200` | | One replaced, the same body: the 7 days start again |
 | `400` | `bad_id`, `bad_secret`, `bad_delete_hash`, `bad_manifest` | As a pack's; a manifest not of its shape, the hint saying what |
 | `401`, `403`, `411` | | As a pack's |
@@ -121,25 +126,86 @@ Another method on a route is `405` with `Allow`; any other `/v1` path is `404`.
 ```json
 {
   "format": "cad-share/2",
-  "files": {
+  "name": "juno",
+  "entry": "juno.py",
+  "made": { "cad": "0.11.17", "build123d": "0.13.0", "python": "3.13.18", "system": "Linux", "arch": "x86_64" },
+  "view": {
     "manifest.json": { "sha256": "<64 hex>", "bytes": 1234, "at": [["<pack id>", 0, 456]] }
+  },
+  "files": {
+    "juno.py": { "sha256": "<64 hex>", "bytes": 5120, "at": [["<pack id>", 456, 1800]] }
   }
 }
 ```
 
-Every file of the bundle by its path; `sha256` and `bytes` the file's own bytes, uncompressed; `at`
-the ranges of packs, `[pack id, offset, length]` into a pack's bytes before sealing, whose bytes,
-joined in order, are the file's gzip member. A commit refuses (`400`) a manifest that is not:
+`view` is every file of the bundle by its path, and `files` every file that made it by its path
+from the files' root (the command decides which; the service takes them as given). In both,
+`sha256` and `bytes` are the file's own bytes, uncompressed, and `at` the ranges of packs,
+`[pack id, offset, length]` into a pack's bytes before sealing, whose bytes, joined in order, are
+the file's gzip member; two entries of the same content may name the same ranges. `name` is the
+document's, `entry` the path in `files` of the script that builds a model, and `made` what built
+it, each value text; a file document's `entry` and `made` are `null`. A commit refuses (`400`) a
+manifest that is not:
 
-- a JSON object, in UTF-8, of `format` (`"cad-share/2"`) and `files` alone;
-- `files` an object of at most 200,000 files, `manifest.json` among them, and not `thumbnail.png`,
-  which is left out of a share (it may show an earlier version of the document);
-- each path relative and `/` separated: no empty, `.` or `..` segment, no leading `/`, no `\`, no
-  drive (`C:`), well-formed text of at most 1024 bytes in UTF-8;
-- each file `sha256`, `bytes` and `at` alone: 64 lowercase hex characters, a whole number, and one or
-  more ranges of a pack id and two whole numbers, each inside its pack (checked once the pack is found).
+- a JSON object, in UTF-8, of `format` (`"cad-share/2"`), `name`, `entry`, `made`, `view` and
+  `files`, each there and no other (a manifest of `format` and `files` alone, the bundle's, is
+  refused);
+- `name` text of 1 to 200 characters, none a control character;
+- `entry` `null`, or a path that `files` lists;
+- `made` `null`, or an object of at most 32 members, each name and value text of at most 100
+  characters;
+- `view` an object listing `manifest.json`, and not `thumbnail.png`, which is left out of a share (it
+  may show an earlier version of the document); `files` an object, which may be empty, and may list
+  a path `view` lists too (a `thumbnail.png` the build read among them); at most 200,000 files in
+  both together;
+- in both, each path relative and `/` separated: no empty, `.` or `..` segment, no leading `/`, no
+  `\`, no drive (`C:`), well-formed text of at most 1024 bytes in UTF-8;
+- in both, each file `sha256`, `bytes` and `at` alone: 64 lowercase hex characters, a whole number,
+  and one or more ranges of a pack id and two whole numbers, each inside its pack (checked once the
+  pack is found).
 
-It cannot read what a pack holds: a file's size and SHA-256 are for the page to check.
+Everything a commit does with the packs a manifest names, it does with those of both maps: it
+refuses (`409`) one that names a pack the share lacks, counts each pack once in the share's size,
+keeps them and the replaced manifest's, and stores them again ahead of the backstop. It cannot read
+what a pack holds: a file's size and SHA-256 are for the page to check.
+
+## The files' zip
+
+**`GET /<id>.zip`** (and `HEAD`), `<id>` a share's id: the files that made it, as a zip, made from
+the stored members as it is sent. The page links to it; `cad fork` downloads it.
+
+| Status | `error` | When |
+| --- | --- | --- |
+| `200` | | The zip: `Content-Type: application/zip`, `Content-Disposition: attachment; filename="<name>.zip"`, `Cache-Control: no-store`, and `Cad-Share-Entry` and `Cad-Share-Made` where the manifest has an `entry` and a `made` of one member or more. A `HEAD` has the same headers and no body |
+| `404` | `not_found` | As a share's other reads: no live manifest (an expired one deletes the share), or one of the bundle alone |
+| `405` | `method_not_allowed` | Another method than `GET` and `HEAD` |
+| `429` | `rate_limited` | A zip, `GET` or `HEAD`, counts as a pack in `LIMITER_PACKS`: past it (`Retry-After: 60`) |
+
+- **The name**: the manifest's `name` made safe, letters, digits, `.`, `-` and `_` kept and every
+  other character `_`, no `.` at either end, at most 100 characters, `share` where nothing is left.
+  It names the file and the zip's one folder: `juno.zip` holds `juno/juno.py`, `juno/lib/head.py`.
+- **`Cad-Share-Entry: <entry>`**, and **`Cad-Share-Made: <name>=<value>, ...`** in the manifest's
+  order. Each path, name and value is percent-encoded UTF-8: every byte but letters, digits and
+  `-._~/+` is `%XX`, so `juno.py` and `0.13.0` travel as they are, any text can travel, and `,` and
+  `=` part the members alone. A percent-decoder (`urllib.parse.unquote`) reads them back.
+- **What it holds**: the folder, then every file of `files` under it, sorted by the bytes of its
+  path, and nothing of `view`; a share with no files is a zip of the empty folder. Each name is
+  UTF-8 (flag bit 11), each time 1980-01-01 00:00, each file `rw-r--r--` and the folder
+  `rwxr-xr-x`, made on UNIX, so a share's zip is the same bytes each time it is asked for.
+- **Not compressed again**: a member of the plain form the command writes (RFC 1952 with FLG 0: no
+  name, no extra) holds a deflate stream, its bytes but its 10-byte header and its 8-byte trailer,
+  and that trailer the CRC-32 and the size (modulo 2^32: the entry's `bytes` where it agrees, for a
+  file of 4 GiB or more). Each becomes an entry of method 8 with that CRC-32 and those sizes, its
+  data the member's own bytes. A member of any other form is inflated and stored (method 0), its
+  CRC-32 computed: inflated once for that, which its header goes before, and again for its bytes.
+- **Zip64** where a size or an offset reaches 0xFFFFFFFF, or the entries 0xFFFF: the sizes in an
+  extra field of the local header and the central directory, the offset in the latter, and the
+  Zip64 end records before the last.
+- **As it goes**: the zip is a stream, made as it is read; it reads the manifest, then each pack the
+  files name when one of them needs it, and keeps the two it last read: a zip holds two packs at
+  most, whatever the share's size. A member split over packs is read range by range. Where a pack
+  is missing or a member does not inflate, the zip fails part way, cut off rather than ended as if
+  whole. Nothing of it is cached or logged.
 
 ## What it stores
 
@@ -160,13 +226,14 @@ A commit reads the manifest it replaces, lists the share's packs (by prefix, pag
 that it names none the share lacks and that they fit, and puts its manifest only if the stored one
 is still the one it read (`etagMatches`, or `If-None-Match: *` where there was none): no commit
 overwrites a manifest it did not see. Then it deletes, in calls of up to 1000 keys, the share's
-packs that neither its manifest nor the one it replaced names; the replaced one's are kept a commit
-longer, for a page that opened it and is still fetching them. A manifest past its expiry is no
-share's: a commit over it answers `201` and keeps none of its packs.
+packs that neither its manifest nor the one it replaced names, in its view or its files; the
+replaced one's are kept a commit longer, for a page that opened it or a zip of it still being read.
+A manifest past its expiry is no share's: a commit over it answers `201` and keeps none of its
+packs.
 
-A read of a share whose manifest is past its expiry, of the manifest or of a pack, deletes the
-whole share (every object under `s/<name>/`, the manifest first and the owner last) and answers
-`404`. A delete does the same at once.
+A read of a share whose manifest is past its expiry, of the manifest, of a pack or of its zip,
+deletes the whole share (every object under `s/<name>/`, the manifest first and the owner last) and
+answers `404`. A delete does the same at once.
 
 **The backstop.** The bucket's lifecycle rule deletes every object 8 days after its upload, the one
 time R2 keeps of an object ([Set-up](#set-up-once)): what a share leaves behind is gone by then,
@@ -187,15 +254,17 @@ before the commit (the rule's 8 days less the share's 7) is not stored again. `B
 
 They are `wrangler.jsonc`'s `vars`; a value that is no positive number is the default. Two rate
 limiters count per client address and Cloudflare location: `LIMITER`, commits and deletes, 10 a
-minute, and `LIMITER_PACKS`, packs, 60 a minute. Reads are not counted. The protocol fixes the
-rest: 200,000 files a manifest, 1024 bytes a path.
+minute, and `LIMITER_PACKS`, pack uploads and zips, 60 a minute. The other reads are not counted.
+The protocol fixes the rest: 200,000 files a manifest, its view's and its files' together; 1024
+bytes a path; 200 characters a name; 32 members of `made`, each name and value 100 characters.
 
 ## The pages
 
 - `GET /` redirects (`302`) to `https://www.texttocad.dev`.
 - `GET /<id>`, a path that is one share id: the viewer's `index.html`, whatever the fragment. The
-  page derives the key from the id, fetches the manifest and the packs it names from this origin,
-  and opens them; `#delete=<secret>` offers the delete. A browser never sends a fragment to a server.
+  page derives the key from the id, fetches the manifest and the packs its view names from this
+  origin, and opens them; `#delete=<secret>` offers the delete. A browser never sends a fragment to
+  a server. Beside it, `/<id>.zip` is [the files' zip](#the-files-zip), which the page links to.
 - Any other path: the viewer's own files (scripts, styles, images), else `404`. A file is served
   without the Worker, so it carries `X-Robots-Tag` by the `_headers` that `build.mjs` writes beside
   the viewer.
@@ -222,8 +291,9 @@ shows each request's path, and with it the id, to whoever runs the service.
 This is encryption at rest under a key only the link holds: someone who reads the bucket alone can
 neither open a share nor tell which link it belongs to, its name being a one-way function of the
 id. It is not encryption on the author's computer: the service seals, so whoever runs the Worker
-could, by changing its code, keep ids from then on. Anyone with the view link can open the share;
-anyone with the delete link (or the author's write secret) can delete it.
+could, by changing its code, keep ids from then on. Anyone with the view link can open the share
+and download the files that made it; anyone with the delete link (or the author's write secret) can
+delete it.
 
 ## Set-up, once
 
@@ -314,6 +384,11 @@ Checked against Cloudflare's documentation on 2026-11-24:
   [HTTP request headers](https://developers.cloudflare.com/fundamentals/reference/http-request-headers/).
 - Web Crypto: HKDF (`importKey`, `deriveBits`) and AES-GCM in `crypto.subtle`.
   [Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/).
+- `DecompressionStream`, with `gzip` among its formats
+  ([Web standards](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)); a
+  `Response` whose body is a `ReadableStream` is sent as it comes, after its status and headers, and
+  the Worker runs on until it is complete or the client goes, within its 128 MB
+  ([Streams](https://developers.cloudflare.com/workers/runtime-apis/streams/)).
 - Logs: `observability.logs.invocation_logs`
   ([Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/));
   tail events redact header values whose names contain `auth`, `key`, `secret`, `token` or `jwt`

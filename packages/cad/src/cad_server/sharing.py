@@ -1,27 +1,38 @@
-"""Sharing a document: its view bundle kept in cad's cache, and the files of it its share lacks uploaded to the share
-service, for anyone with its link to open in the hosted viewer (``cad share``, ``cad_server.cli.share``; the engine's
-**Sharing**).
+"""Sharing a document: its view bundle kept in cad's cache, and the files that made it, uploaded to the share service
+where its share lacks them, for anyone with its link to open in the hosted viewer and to download (``cad share``,
+``cad_server.cli.share``); and a share's files written into a folder (``cad fork``, ``cad_server.cli.fork``; the
+engine's **Sharing**).
 
 What is here is the client's half of the protocol, ``cad-share/2``, the standard library alone:
 
 - **names** (``Share.new``): a share's id (16 random bytes), its write secret and its delete secret (32 each), every
   one from ``secrets``, base64url without padding. The id is the capability: the service derives from it the key it
   seals the share with, and keeps neither; of the two secrets it keeps only each one's SHA-256 (``digest``);
-- **links** (``Share.view``, ``Share.remove``): ``<origin>/<id>``, and ``<origin>/<id>#delete=<secret>``, whose part
-  after ``#`` no browser sends to a server;
-- **the files** (``files``): ``manifest.json`` and every file it lists but ``LEFT_OUT``'s, each a path the protocol
-  takes (``sharable``), a regular file inside the bundle and the bytes the manifest says, in reading order
+- **links** (``Share.view``, ``Share.zip``, ``Share.remove``): ``<origin>/<id>``, ``<origin>/<id>.zip`` (its files),
+  and ``<origin>/<id>#delete=<secret>``, whose part after ``#`` no browser sends to a server;
+- **the view** (``view_files``): ``manifest.json`` and every file it lists but ``LEFT_OUT``'s, each a path the
+  protocol takes (``sharable``), a regular file inside the bundle and the bytes the manifest says, in reading order
   (``reading``): the bundle is taken as its manifest lists it, and nothing else of it is read;
+- **the files that made it** (``Sources``): a model's (``model_sources``) from its build closure -- its script, every
+  module of the project its build imported and every file it read, at their paths under the files' root
+  (``root_of``), none of them changed since the build, nor gone -- and a file document's (``file_sources``): the file
+  itself, and a robot description's mesh files beside it. Never the xbf, nor an installed library (``made`` names
+  each by its version);
 - **the packs** (``Packer``): each file the share lacks as one gzip member (RFC 1952: mtime 0, no name), back to
-  back, a pack closed at ``PACK_BYTES`` and a member that does not fit the room left going on into the next; a pack
-  is named by the lowercase hex SHA-256 of its bytes;
-- **the API** (``send``, ``delete``): ``PUT /v1/shares/<id>/packs/<pack id>``, ``UPLOADS`` at a time as each pack
-  closes, then the commit of the share's manifest, ``PUT /v1/shares/<id>``; and ``DELETE /v1/shares/<id>``. With
-  ``urllib``, in the calling process, so an agent app's sandbox sees the connection and its network rules apply;
-  proxies as ``urllib`` takes them from the environment. A 429 waits for its ``Retry-After``; a commit's 409 that
-  names missing packs sends the files in them again (``RESENDS`` times at most), and one that names none commits
-  again, once. A connection that cannot be made, or an answer that is not the service's (a proxy's refusal: no JSON
-  ``error``), is ``Unreachable``; the service's own refusal is ``Refused``, with its ``error`` and ``hint``;
+  back, the view's files first, a pack closed at ``PACK_BYTES`` and a member that does not fit the room left going
+  on into the next; a pack is named by the lowercase hex SHA-256 of its bytes; two files of the same bytes are one
+  member, named twice;
+- **the API** (``send``, ``delete``, ``download``): ``PUT /v1/shares/<id>/packs/<pack id>``, ``UPLOADS`` at a time as
+  each pack closes, then the commit of the share's manifest, ``PUT /v1/shares/<id>``; ``DELETE /v1/shares/<id>``; and
+  ``GET /<id>.zip``, a share's files. With ``urllib``, in the calling process, so an agent app's sandbox sees the
+  connection and its network rules apply; proxies as ``urllib`` takes them from the environment. A 429 waits for its
+  ``Retry-After``; a commit's 409 that names missing packs sends the files in them again (``RESENDS`` times at most),
+  and one that names none commits again, once. A connection that cannot be made, or an answer that is not the
+  service's (a proxy's refusal: no JSON ``error``), is ``Unreachable``; the service's own refusal is ``Refused``, with
+  its ``error`` and ``hint``;
+- **a fork** (``fork_link``, ``zip_entries``, ``unpack``): a share's zip read as the service makes one, one folder
+  of files, and written into a folder through one made beside it, refusing any entry that would land outside it;
+  nothing of it is run;
 - **what is kept** (``change``): the person's agreement and whether sharing is on (the settings' ``share`` section:
   ``{"agreed": <ISO time>, "on": false}``, on where ``on`` is absent); each share's record (``shares.json`` in the
   state folder, readable and writable by this user alone: ``RECORDS``); and each shared document's folder in the
@@ -31,8 +42,8 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   sandbox may be refused, and writes them itself where none answers. As the records are written, a folder that no
   live record names is removed: a share deleted, expired, or never committed.
 
-The id and the two secrets leave this module only inside the two links, in a record, and where the protocol puts them
-in a request -- the id in its path, the write secret as its ``Authorization``, the delete secret as a hash, or as a
+The id and the two secrets leave this module only inside the links, in a record, and where the protocol puts them in
+a request -- the id in its path, the write secret as its ``Authorization``, the delete secret as a hash, or as a
 delete's ``Authorization`` --: never in an exception's words, a log, telemetry or the cache, where ``STORED`` names a
 share by its id's SHA-256 (``Share.named``).
 """
@@ -48,14 +59,19 @@ import os
 import re
 import secrets
 import shutil
+import stat
 import sys
 import tempfile
 import time
+import unicodedata
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
+
+if TYPE_CHECKING:
+    import zipfile
 
 FORMAT = "cad-share/2"
 RECORDS = "shares.json"
@@ -74,9 +90,24 @@ LEFT_OUT = frozenset({"thumbnail.png"})
 PACK_BYTES = 4 * 1024 * 1024
 # How many packs are uploaded at a time.
 UPLOADS = 4
-# The most files a share holds, and the longest path of one, in bytes of UTF-8 (the protocol's).
+# The most files a share holds over its two maps, the view's and the files that made it, and the longest path of one,
+# in bytes of UTF-8 (the protocol's).
 MOST_FILES = 200_000
 PATH_BYTES = 1024
+# A share's name, its toolchain's members, and the longest name and value of one (the protocol's: in characters as a
+# browser counts them, UTF-16's).
+NAME_CHARACTERS = 200
+MOST_MADE = 32
+MADE_CHARACTERS = 100
+# What a share's name is where its document's gives nothing a manifest takes.
+UNNAMED = "share"
+# The most of a share's zip a fork downloads, and the most it writes out of it: a share is at most 256 MiB as the
+# service stores it (``MAX_SHARE_BYTES``, by default), its files compressed.
+ZIP_BYTES = 1024 * 1024 * 1024
+FORK_BYTES = 4 * 1024 * 1024 * 1024
+# The names Windows gives its devices, which no file there takes (``con.py`` neither).
+_DEVICES = frozenset({"CON", "PRN", "AUX", "NUL", *(f"COM{n}" for n in range(1, 10)),
+                      *(f"LPT{n}" for n in range(1, 10))})
 # How many times a commit's 409 naming missing packs has their files sent again before the share fails.
 RESENDS = 2
 # A 429's waits for one request: each its ``Retry-After`` (``WAIT`` where it names none), of ``LONGEST_WAIT`` at most.
@@ -117,6 +148,19 @@ class Busy(Exception):
     """Another holder kept a document's lock for the whole of the wait (``held``)."""
 
 
+class Stale(Exception):
+    """A model whose files are not the ones its last run built from (``model_sources``): ``path`` changed after the
+    build (``why``: ``changed``), or is gone from the disk (``gone``). Its share would not be what built its view."""
+
+    def __init__(self, path: str, why: str) -> None:
+        super().__init__(f"{path} {'changed after the build' if why == 'changed' else 'is gone'}")
+        self.path, self.why = path, why
+
+
+class Damaged(ValueError):
+    """A share's zip that is not one the service makes (``zip_entries``, ``unpack``, ``download``): its words."""
+
+
 def _token(size: int) -> str:
     return base64.urlsafe_b64encode(secrets.token_bytes(size)).rstrip(b"=").decode("ascii")
 
@@ -146,6 +190,11 @@ class Share:
         return f"{self.service}/{self.id}"
 
     @property
+    def zip(self) -> str:
+        """The files' link: the files that made the document, as a zip of one folder."""
+        return f"{self.service}/{self.id}.zip"
+
+    @property
     def remove(self) -> str:
         return f"{self.service}/{self.id}#delete={self.delete}"
 
@@ -158,12 +207,13 @@ class Share:
         return f"Share({_host(self.service)!r})"
 
 
-# --- the files ---------------------------------------------------------------------------------------------------
+# --- the view ----------------------------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class File:
-    """One file of a bundle that a share holds: its path in the bundle, its bytes' SHA-256 and size, and where it is."""
+    """One file a share holds: its path in the share (in the view bundle, or under the files' root), its bytes'
+    SHA-256 and size, and where it is."""
 
     path: str
     sha256: str
@@ -171,10 +221,10 @@ class File:
     source: Path
 
     def read(self) -> bytes:
-        """Its bytes, still the ones ``files`` read (``Unsharable`` for a bundle changed since)."""
+        """Its bytes, still the ones that were read of it (``Unsharable`` for a file changed since)."""
         data = self.source.read_bytes()
         if len(data) != self.size or hashlib.sha256(data).hexdigest() != self.sha256:
-            raise Unsharable(f"the view bundle's {self.path} changed while it was shared: share it again")
+            raise Unsharable(f"{self.path} changed while it was shared: share it again")
         return data
 
 
@@ -222,7 +272,7 @@ def _digest_of(path: Path) -> tuple[str, int]:
     return found.hexdigest(), size
 
 
-def files(folder: Path) -> list[File]:
+def view_files(folder: Path) -> list[File]:
     """The files of the bundle in ``folder`` that a share holds, in reading order (``reading``): ``manifest.json``, and
     every file it lists but ``LEFT_OUT``'s, each a path a share takes (``sharable``), a regular file inside the folder
     and the bytes the manifest says (its ``sha256`` and ``bytes``). Anything else is ``Unsharable``, in its words."""
@@ -266,6 +316,237 @@ def bundle(target: str, folder: Path) -> dict[str, Any]:
 
     api.export(target, folder)
     return json.loads((folder / MANIFEST).read_text(encoding="utf-8"))
+
+
+# --- the files that made it --------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Sources:
+    """The files that made a document, as its share holds them (``model_sources``, ``file_sources``): each a ``File``
+    by its path under the files' ``root``, in path order; the path among them of the script that builds it
+    (``entry``: None for a file document); what built it (``made``: cad's release, the build's libraries and its
+    platform, each as text; None for a file document); each file left out and why (``left_out``: ``(path, why)``,
+    ``outside`` the files' root, ``gone`` from the disk, or a ``name`` no share takes); and whether the build read a
+    file the engine could not see (``unseen``: its closure's key is null), which a fork may not rebuild it without."""
+
+    files: tuple[File, ...] = ()
+    entry: str | None = None
+    made: dict[str, str] | None = None
+    root: str | None = None
+    left_out: tuple[tuple[str, str], ...] = ()
+    unseen: bool = False
+
+    @property
+    def size(self) -> int:
+        return sum(file.size for file in self.files)
+
+
+def _utf16(text: str) -> int:
+    """How many characters a browser counts in ``text``: its UTF-16 code units."""
+    return sum(2 if ord(character) > 0xFFFF else 1 for character in text)
+
+
+def share_name(name: object) -> str:
+    """A document's name as a share's manifest takes it (``name``): its text without control characters, at most
+    ``NAME_CHARACTERS`` characters; ``UNNAMED`` where nothing is left."""
+    kept: list[str] = []
+    for character in str(name or "").strip():
+        if unicodedata.category(character) in ("Cc", "Cs"):
+            continue
+        if _utf16("".join(kept)) + _utf16(character) > NAME_CHARACTERS:
+            break
+        kept.append(character)
+    return "".join(kept).strip() or UNNAMED
+
+
+def made_of(closure: dict[str, Any]) -> dict[str, str]:
+    """What built a model, from its build closure, as a share's manifest says it (``made``): ``cad``, the release
+    that built it (the closure's ``engine.release``, ``cadgen <release>``), then its ``libs`` and its ``platform``, in
+    the closure's order; each a name and a value of text, of ``MADE_CHARACTERS`` at most, ``MOST_MADE`` of them."""
+    found: dict[str, str] = {}
+    release = str((closure.get("engine") or {}).get("release") or "").split()
+    if release and len(release[-1]) <= MADE_CHARACTERS:
+        found["cad"] = release[-1]
+    for group in ("libs", "platform"):
+        members = closure.get(group)
+        for name, value in (members.items() if isinstance(members, dict) else ()):
+            if (isinstance(name, str) and isinstance(value, str) and name and value and name not in found
+                    and _utf16(name) <= MADE_CHARACTERS and _utf16(value) <= MADE_CHARACTERS
+                    and len(found) < MOST_MADE):
+                found[name] = value
+    return found
+
+
+def _inside(path: str, folder: str) -> bool:
+    """Whether ``path`` is ``folder`` or lies in it (both absolute and normalized), as this system compares them."""
+    path, folder = os.path.normcase(path), os.path.normcase(folder)
+    try:
+        return os.path.commonpath([path, folder]) == folder
+    except ValueError:  # another drive
+        return False
+
+
+def root_of(script: str, paths: list[str], home: str | None = None) -> str:
+    """The files' root of a model's files -- ``script`` (absolute) and ``paths``, the others' -- the deepest folder
+    that holds all of them, but never above the nearest folder over the script's that holds a ``.git`` (a checkout's
+    root) and never above the user's home folder (``home``, else this user's): where those forbid it, the shallowest
+    folder over the script's that neither does, and the files outside it are left out."""
+    folder = os.path.dirname(os.path.normpath(script))
+    drive = os.path.normcase(os.path.splitdrive(folder)[0])
+    try:
+        deepest = os.path.commonpath([folder, *(os.path.dirname(os.path.normpath(path)) for path in paths
+                                                if os.path.normcase(os.path.splitdrive(path)[0]) == drive)])
+    except ValueError:
+        deepest = folder
+    chain = [folder]
+    while os.path.dirname(chain[-1]) != chain[-1]:
+        chain.append(os.path.dirname(chain[-1]))
+    checkout = next((os.path.realpath(at) for at in chain if os.path.lexists(os.path.join(at, ".git"))), None)
+    home = home if home is not None else os.path.expanduser("~")
+    homes = [os.path.realpath(home)] if os.path.isabs(home) else []
+
+    def above(at: str, folder: str) -> bool:  # ``at`` holds ``folder`` and is not it
+        return _inside(folder, at) and os.path.normcase(folder) != os.path.normcase(at)
+
+    for at in reversed(chain):  # from the top: the shallowest folder allowed
+        real = os.path.realpath(at)
+        if _inside(at, deepest) and not any(above(real, cap) for cap in [*([checkout] if checkout else []), *homes]):
+            return at
+    return folder
+
+
+def _taken(path: str, root: str) -> str | None:
+    """``path``'s path under ``root``, as a share's manifest names it (``/`` separated), where a share takes it."""
+    relative = Path(os.path.relpath(path, root)).as_posix()
+    return relative if sharable(relative) else None
+
+
+def model_sources(closure: dict[str, Any], script: str, folder: str, built: float | None, *,
+                  home: str | None = None) -> Sources:
+    """The files that made a model: of its build closure (``closure``: ``cad.model.inspect``'s, every path relative to
+    ``folder``, its xbf's folder where it declares one, else its script's), the script, every module, and every input
+    of kind ``file`` or ``read`` the build found, each at its path under the files' root (``root_of``); a ``font`` only
+    where it lies in that root (a system font is recorded nowhere else needed). ``script`` is its absolute path,
+    ``built`` when its last run built it (``builtAt``). A file outside the root is left out, as is an input gone from
+    the disk, each said (``left_out``). ``Stale`` for the script or a module gone from the disk, and for any file of
+    them modified after ``built``: those are not the files that built the view."""
+    from cad.engine.previous import absolute
+
+    base = Path(folder)
+
+    def at(given: Any) -> str | None:
+        return absolute(given, base) if isinstance(given, str) and given else None
+
+    code = [os.path.normpath(script)]
+    for row in closure.get("modules") or []:
+        path = at(row[0]) if isinstance(row, list) and row else None
+        if path is not None:
+            code.append(path)
+    reads, fonts = [], []
+    for row in closure.get("inputs") or []:
+        if not isinstance(row, list) or not row or row[-1] is None:
+            continue  # a file the build found missing: it read nothing of it
+        if row[0] in ("file", "read") and len(row) >= 3 and at(row[1]):
+            reads.append(at(row[1]))
+        elif row[0] == "font" and len(row) >= 5 and at(row[2]):
+            fonts.append(at(row[2]))
+    for path in code:
+        if not os.path.isfile(path):
+            raise Stale(path, "gone")
+    present = [path for path in reads if os.path.isfile(path)]
+    root = root_of(code[0], [*code[1:], *present], home)
+    left: list[tuple[str, str]] = []
+    chosen: dict[str, str] = {}  # each file that goes, by its path as this system compares paths
+    seen: set[str] = set()
+    for path in [*code, *present]:
+        if os.path.normcase(path) in seen:
+            continue
+        seen.add(os.path.normcase(path))
+        if not _inside(path, root):
+            left.append((path, "outside"))
+        elif _taken(path, root) is None:
+            left.append((path, "name"))
+        else:
+            chosen[os.path.normcase(path)] = path
+    for path in fonts:
+        if os.path.isfile(path) and _inside(path, root) and _taken(path, root) is not None:
+            chosen.setdefault(os.path.normcase(path), path)
+    left += [(path, "gone") for path in dict.fromkeys(reads) if not os.path.isfile(path)]
+    if os.path.normcase(code[0]) not in chosen:
+        raise Unsharable(f"{os.path.basename(code[0])} is named in a way a share cannot hold: rename it")
+    found: list[File] = []
+    for path in chosen.values():
+        try:
+            sha256, size = _digest_of(Path(path))
+            modified = os.stat(path).st_mtime  # after the read: a file written meanwhile is newer still
+        except OSError:
+            raise Stale(path, "gone") from None
+        if built is None or modified > built:
+            raise Stale(path, "changed")
+        found.append(File(str(_taken(path, root)), sha256, size, Path(path)))
+    return Sources(tuple(sorted(found, key=lambda file: file.path)), _taken(code[0], root), made_of(closure), root,
+                   tuple(left), closure.get("key") is None)
+
+
+def _described(path: str, kind: str) -> list[str]:
+    """The files a robot description is drawn from beside itself: a URDF's mesh files, each ``<mesh filename>`` of
+    its visuals and its collisions resolved as the engine resolves one (``urdf_source.mesh_file``); an SRDF's URDF,
+    the one it plans for (``urdf_source.read_srdf``), and that one's. None of a file that does not read: its view
+    bundle says why."""
+    import xml.etree.ElementTree as ET
+
+    from cad.engine import urdf_source
+    from cad.engine.robot_model import local_name
+
+    found: list[str] = []
+    urdf = Path(path)
+    if kind == "srdf":
+        try:
+            described = urdf_source.read_srdf(urdf).sources
+        except Exception:  # noqa: BLE001 - any refusal of it is its view bundle's to say
+            return found
+        if len(described) < 2:
+            return found
+        urdf = Path(described[1])
+        found.append(str(urdf))
+    try:
+        root = ET.parse(urdf).getroot()
+    except (OSError, ET.ParseError):
+        return found
+    for element in root.iter():
+        name = str(element.get("filename") or "").strip() if local_name(element.tag) == "mesh" else ""
+        mesh = urdf_source.mesh_file(name, urdf.parent, str(urdf)) if name else None
+        if mesh is not None:
+            found.append(str(mesh))
+    return found
+
+
+def file_sources(path: str, kind: str) -> Sources:
+    """The files that made a file document (``kind``: its type's id): the file itself, at its own name; a URDF's mesh
+    files too, and an SRDF's URDF with that one's (``_described``), each at its path under the file's folder. One
+    outside that folder is left out, as is one gone from the disk, each said (``left_out``)."""
+    real = os.path.realpath(path)
+    root = os.path.dirname(real)
+    found: list[File] = []
+    left: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for each in [real, *(os.path.realpath(more) for more in (_described(real, kind) if kind in ("urdf", "srdf")
+                                                            else []))]:
+        if os.path.normcase(each) in seen:
+            continue
+        seen.add(os.path.normcase(each))
+        taken = _taken(each, root) if _inside(each, root) else None
+        if not os.path.isfile(each):
+            left.append((each, "gone"))
+        elif not _inside(each, root):
+            left.append((each, "outside"))
+        elif taken is None:
+            left.append((each, "name"))
+        else:
+            sha256, size = _digest_of(Path(each))
+            found.append(File(taken, sha256, size, Path(each)))
+    return Sources(tuple(sorted(found, key=lambda file: file.path)), None, None, root, tuple(left))
 
 
 # --- the packs ---------------------------------------------------------------------------------------------------
@@ -340,29 +621,44 @@ def _scrubbed(text: str, share: Share) -> str:
     return text
 
 
+def _streamed(answer: Any, into: BinaryIO) -> None:
+    """An answer's body written into ``into`` as it arrives: ``ZIP_BYTES`` at most, else ``Damaged``."""
+    size = 0
+    while chunk := answer.read(1 << 20):
+        size += len(chunk)
+        if size > ZIP_BYTES:
+            raise Damaged(f"it is larger than the {ZIP_BYTES // (1024 * 1024)} MiB a share's files are at most")
+        into.write(chunk)
+
+
 def _call(method: str, share: Share, path: str, headers: dict[str, str], body: bytes | None = None,
-          timeout: float = TIMEOUT_SECONDS) -> tuple[int, dict[str, Any] | None, str | None]:
-    """One request of the API, from this process: its status, its JSON answer (None for none) and its
-    ``Retry-After``. A connection that cannot be made, or a refusal that is not the service's -- no JSON ``error``, as a
-    proxy's is -- is ``Unreachable``, in words that hold no name of the share's."""
+          timeout: float = TIMEOUT_SECONDS, *, address: str | None = None,
+          into: BinaryIO | None = None) -> tuple[int, dict[str, Any] | None, Any]:
+    """One request of the API, from this process -- at ``/v1/shares/<id><path>``, or at ``address`` -- its status,
+    its JSON answer (None for none) and its headers; with ``into``, a successful answer's body is written there
+    (``_streamed``) rather than read as JSON. A connection that cannot be made, or a refusal that is not the
+    service's -- no JSON ``error``, as a proxy's is -- is ``Unreachable``, in words that hold no name of the share's."""
     import http.client
     import urllib.error
     import urllib.request
 
     host = _host(share.service)
-    url = f"{share.service}/v1/shares/{share.id}{path}"
+    url = address or f"{share.service}/v1/shares/{share.id}{path}"
     request = urllib.request.Request(url, data=body, method=method, headers={"User-Agent": "cad", **headers})
     try:
         try:
             with urllib.request.urlopen(request, timeout=timeout) as answer:  # noqa: S310 - http(s) only (``share_url``)
-                return answer.status, _answer(answer.read(ANSWER_BYTES)), answer.headers.get("Retry-After")
+                if into is not None:
+                    _streamed(answer, into)
+                    return answer.status, None, answer.headers
+                return answer.status, _answer(answer.read(ANSWER_BYTES)), answer.headers
         except urllib.error.HTTPError as refusal:
             found = _answer(refusal.read(ANSWER_BYTES))
             if found is None or not isinstance(found.get("error"), str):
                 raise Unreachable(f"something other than the share service answered for {host} "
                                   f"(HTTP {refusal.code})") from None
-            return refusal.code, found, refusal.headers.get("Retry-After")
-    except Unreachable:
+            return refusal.code, found, refusal.headers
+    except (Unreachable, Damaged):
         raise
     except TimeoutError:
         raise Unreachable(f"{host} did not answer within {timeout:.0f} seconds") from None
@@ -390,18 +686,19 @@ def _seconds(after: str | None) -> float:
 
 
 def _asked(method: str, share: Share, path: str, headers: dict[str, str], body: bytes | None,
-           waiting: Callable[[float], None] | None) -> tuple[int, dict[str, Any] | None]:
-    """``_call``, asked again after each 429's ``Retry-After`` (``waiting`` told the seconds first), ``WAITS`` times at
-    most and never past ``LONGEST_WAIT``: the status and the answer of the last."""
+           waiting: Callable[[float], None] | None, **more: Any) -> tuple[int, dict[str, Any] | None, Any]:
+    """``_call`` (with ``more``: its ``address``, its ``into``), asked again after each 429's ``Retry-After``
+    (``waiting`` told the seconds first), ``WAITS`` times at most and never past ``LONGEST_WAIT``: the status, the
+    answer and the headers of the last."""
     for attempt in range(WAITS + 1):
-        status, found, after = _call(method, share, path, headers, body)
-        seconds = _seconds(after)
+        status, found, told = _call(method, share, path, headers, body, **more)
+        seconds = _seconds(told.get("Retry-After") if told is not None else None)
         if status != 429 or attempt == WAITS or seconds > LONGEST_WAIT:
             break
         if waiting is not None:
             waiting(seconds)
         time.sleep(seconds)
-    return status, found
+    return status, found, told
 
 
 def _refused(status: int, found: dict[str, Any] | None, what: str, share: Share) -> Refused:
@@ -421,8 +718,8 @@ def _owner(share: Share) -> dict[str, str]:
 
 def _put_pack(share: Share, name: str, pack: bytes, waiting: Callable[[float], None] | None) -> None:
     """``PUT /v1/shares/<id>/packs/<pack id>``: one pack uploaded, ``Refused`` for the service's refusal."""
-    status, found = _asked("PUT", share, f"/packs/{name}", {**_owner(share), "Content-Type": "application/octet-stream",
-                                                            "Content-Length": str(len(pack))}, pack, waiting)
+    status, found, _told = _asked("PUT", share, f"/packs/{name}", {
+        **_owner(share), "Content-Type": "application/octet-stream", "Content-Length": str(len(pack))}, pack, waiting)
     if status not in (200, 201):
         raise _refused(status, found, "a pack", share)
 
@@ -431,8 +728,8 @@ def _commit(share: Share, body: bytes, waiting: Callable[[float], None] | None) 
     """``PUT /v1/shares/<id>``: the share's manifest committed. The service's answer, ``{"expires", "bytes", "files",
     "made"}`` (``bytes``: the stored size of the packs it names; ``made``: a new share, 201, or one replaced, 200);
     ``Refused`` for its refusal, a 409's with the packs it found missing."""
-    status, found = _asked("PUT", share, "", {**_owner(share), "Content-Type": "application/json",
-                                              "Content-Length": str(len(body))}, body, waiting)
+    status, found, _told = _asked("PUT", share, "", {**_owner(share), "Content-Type": "application/json",
+                                                     "Content-Length": str(len(body))}, body, waiting)
     if status not in (200, 201) or found is None or not isinstance(found.get("expires"), str):
         raise _refused(status, found, "the share's manifest", share)
     counted = {name: found[name] if type(found.get(name)) is int else 0 for name in ("bytes", "files")}
@@ -488,22 +785,32 @@ class Sent:
     stored: dict[str, Any]
 
 
-def _manifest(found: list[File], where: dict[str, list[list[Any]]]) -> bytes:
-    """The share's manifest (``cad-share/2``): every file by its path, with its bytes' SHA-256 and size, and the
-    ranges of the packs its gzip member lies in."""
-    return json.dumps({"format": FORMAT, "files": {file.path: {"sha256": file.sha256, "bytes": file.size,
-                                                               "at": where[file.sha256]} for file in found}},
-                      separators=(",", ":")).encode("utf-8")
+def _manifest(name: str, view: list[File], sources: Sources, where: dict[str, list[list[Any]]]) -> bytes:
+    """The share's manifest (``cad-share/2``): its ``name``, the path of the script that builds it among its files
+    (``entry``) and what built it (``made``), then its two maps, ``view`` (the view bundle's files) and ``files`` (the
+    files that made it), each file by its path, with its bytes' SHA-256 and size, and the ranges of the packs its gzip
+    member lies in."""
+
+    def listed(found: Any) -> dict[str, Any]:
+        return {file.path: {"sha256": file.sha256, "bytes": file.size, "at": where[file.sha256]} for file in found}
+
+    return json.dumps({"format": FORMAT, "name": name, "entry": sources.entry, "made": sources.made,
+                       "view": listed(view), "files": listed(sources.files)}, separators=(",", ":")).encode("utf-8")
 
 
-def send(share: Share, found: list[File], stored: dict[str, Any] | None = None, *,
+def send(share: Share, view: list[File], sources: Sources, stored: dict[str, Any] | None = None, *, name: str,
          waiting: Callable[[float], None] | None = None) -> Sent:
-    """The share of ``found`` (``files``) committed once the packs it names are uploaded: a file whose content
-    ``stored`` holds for this share (``STORED``: its last commit) keeps its ranges, and every other goes into new
-    packs, in reading order. A commit's 409 naming missing packs forgets them and sends the files in them again
-    (``RESENDS`` times at most); a 409 naming none commits again, once. ``Refused`` for any other refusal (a 403: a
-    share of that id that another write secret made, which only a new share can be), ``Unreachable`` where the service
-    does not answer, ``Unsharable`` for a file changed meanwhile. ``waiting``: told each wait a 429 asks for."""
+    """The share of ``view`` (``view_files``) and of ``sources`` (the files that made it), named ``name``
+    (``share_name``), committed once the packs it names are uploaded: a file whose content ``stored`` holds for this
+    share (``STORED``: its last commit) keeps its ranges, and every other goes into new packs, the view's in reading
+    order, then the others by their paths; two files of the same bytes are one member, named twice. A commit's 409
+    naming missing packs forgets them and sends the files in them again (``RESENDS`` times at most); a 409 naming
+    none commits again, once. ``Refused`` for any other refusal (a 403: a share of that id that another write secret
+    made, which only a new share can be), ``Unreachable`` where the service does not answer, ``Unsharable`` for a
+    file changed meanwhile, or more files than a share holds. ``waiting``: told each wait a 429 asks for."""
+    found = [*view, *sources.files]
+    if len(found) > MOST_FILES:
+        raise Unsharable(f"its view and its files are {len(found)} files, more than the {MOST_FILES} a share holds")
     where = {sha256: ranges for sha256, ranges in stored["files"].items()} \
         if stored is not None and stored.get("share") == share.named else {}
     unique: dict[str, File] = {}
@@ -524,7 +831,7 @@ def send(share: Share, found: list[File], stored: dict[str, Any] | None = None, 
     resent, again = 0, False
     while True:
         try:
-            answer = _commit(share, _manifest(found, where), waiting)
+            answer = _commit(share, _manifest(name, view, sources, where), waiting)
             break
         except Refused as refusal:
             if refusal.status != 409:
@@ -550,7 +857,7 @@ def delete(share: Share, secret: str) -> bool:
     """``DELETE /v1/shares/<id>`` with a share's delete (or write) secret: True where it was deleted, False where
     the service holds no share of that id (expired, or deleted before); ``Refused`` otherwise (a 403: a secret that
     matches neither of its hashes)."""
-    status, found = _asked("DELETE", share, "", {"Authorization": f"Bearer {secret}"}, None, None)
+    status, found, _told = _asked("DELETE", share, "", {"Authorization": f"Bearer {secret}"}, None, None)
     if 200 <= status < 300:
         return True
     if status == 404:
@@ -575,6 +882,172 @@ def parse_link(link: str) -> tuple[str, str, str | None] | None:
         return origin, ident, None
     secret = parts.fragment[len("delete="):]
     return (origin, ident, secret) if _SECRET.fullmatch(secret) else None
+
+
+# --- a fork ------------------------------------------------------------------------------------------------------
+
+
+def fork_link(text: str, service: str) -> tuple[str, str] | None:
+    """What ``cad fork`` takes, as ``(origin, id)``: a share's view link (``<origin>/<id>``, whatever its fragment), its
+    files' link (``<origin>/<id>.zip``), or its id alone, of the share service at ``service``; None for anything
+    else."""
+    from urllib.parse import urlsplit
+
+    text = text.strip()
+    if _ID.fullmatch(text):
+        return service, text
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return None
+    ident = parts.path.strip("/")
+    ident = ident[:-len(".zip")] if ident.endswith(".zip") else ident
+    if parts.scheme not in ("http", "https") or not parts.netloc or parts.query or not _ID.fullmatch(ident):
+        return None
+    return f"{parts.scheme}://{parts.netloc}", ident
+
+
+def _decoded(text: Any) -> str | None:
+    """A header's text as the service writes one: UTF-8, every byte but a letter, a digit and ``._~/+-`` as ``%XX``."""
+    from urllib.parse import unquote
+
+    if not isinstance(text, str) or not text:
+        return None
+    try:
+        return unquote(text, encoding="utf-8", errors="strict")
+    except UnicodeDecodeError:
+        return None
+
+
+def download(origin: str, ident: str, into: BinaryIO, *,
+             waiting: Callable[[float], None] | None = None) -> dict[str, Any]:
+    """``GET <origin>/<id>.zip``: the files that made a share, a zip of one folder, written into ``into``
+    (``ZIP_BYTES`` at most), from this process as every request here is; and what its headers say of them: the
+    script that builds it (``entry``, ``Cad-Share-Entry``: None for a file document) and what built it (``made``,
+    ``Cad-Share-Made``: ``<name>=<value>, ...``; None for a file document). A 429 is waited out as every request's
+    is; ``Refused`` for the service's refusal (a 404: no share of that id, expired or deleted), ``Unreachable`` where
+    it does not answer, ``Damaged`` for a zip larger than a share's."""
+    share = Share(origin, ident, "", "")
+    status, found, told = _asked("GET", share, "", {"Accept": "application/zip"}, None, waiting,
+                                 address=f"{origin}/{ident}.zip", into=into)
+    if status != 200:
+        raise _refused(status, found, "the share's files", share)
+    made: dict[str, str] = {}
+    for part in str(told.get("Cad-Share-Made") or "").split(","):
+        name, equals, value = part.strip().partition("=")
+        name, value = _decoded(name.strip()), _decoded(value.strip())
+        if equals and name and value is not None:
+            made[name] = value
+    return {"entry": _decoded(told.get("Cad-Share-Entry")), "made": made or None}
+
+
+def _plain(segment: str) -> bool:
+    """Whether a path's segment names a file or a folder here as it does everywhere: no empty, ``.`` or ``..``
+    segment, nothing unprintable, no ``\\`` or ``:`` (a drive, a stream); on Windows none of its device names and
+    nothing it cannot hold (``<>"|?*``, a dot or a space at the end)."""
+    if segment in ("", ".", "..") or not segment.isprintable() or "\\" in segment or ":" in segment:
+        return False
+    if os.name == "nt":
+        if any(character in segment for character in '<>"|?*') or segment[-1] in ". " \
+                or segment.split(".")[0].strip().upper() in _DEVICES:
+            return False
+    return True
+
+
+def zip_entries(archive: zipfile.ZipFile) -> tuple[str, list[tuple[str, zipfile.ZipInfo]]]:
+    """A share's zip read as the service makes one: the name of its one folder, and each file in it by its path
+    there (``/`` separated), in the zip's order. ``Damaged`` for anything else: an entry outside the folder; a path
+    that is absolute, names a drive or holds a segment no folder here takes (``_plain``); a link, or anything but a
+    file or a folder; an encrypted entry; a path twice, or a file where another's folder is; more entries than a
+    share's."""
+    infos = archive.infolist()
+    if len(infos) > 2 * MOST_FILES + 1:
+        raise Damaged(f"it holds {len(infos)} entries, more than a share's files")
+    top: str | None = None
+    found: list[tuple[str, zipfile.ZipInfo]] = []
+    for info in infos:
+        name = info.filename
+        if "\\" in info.orig_filename or name.startswith("/") or "\x00" in info.orig_filename:
+            raise Damaged(f"{name!r} is no path inside its folder")
+        kind = stat.S_IFMT(info.external_attr >> 16)
+        if kind == stat.S_IFLNK:
+            raise Damaged(f"{name!r} is a link")
+        if kind not in (0, stat.S_IFREG, stat.S_IFDIR) or (kind == stat.S_IFDIR and not info.is_dir()):
+            raise Damaged(f"{name!r} is neither a file nor a folder")
+        if info.flag_bits & 0x1:
+            raise Damaged(f"{name!r} is encrypted")
+        segments = name.rstrip("/").split("/") if info.is_dir() else name.split("/")
+        if not all(_plain(segment) for segment in segments):
+            raise Damaged(f"{name!r} is no path inside its folder")
+        if top is None:
+            top = segments[0]
+        if segments[0] != top or (not info.is_dir() and len(segments) < 2):
+            raise Damaged(f"{name!r} is outside the one folder a share's zip holds")
+        if not info.is_dir():
+            found.append(("/".join(segments[1:]), info))
+    if top is None:
+        raise Damaged("it holds nothing, not even its folder")
+    paths = [path for path, _info in found]
+    if len(set(paths)) != len(paths):
+        raise Damaged("it names a file twice")
+    named = set(paths)
+    for path in paths:
+        parts = path.split("/")
+        if any("/".join(parts[:end]) in named for end in range(1, len(parts))):
+            raise Damaged(f"{path!r} lies in a folder that is a file of it")
+    return top, found
+
+
+def _place(stage: Path, folder: Path) -> None:
+    """``stage``'s files moved into ``folder``: renamed as it, where it is not there; else, into it, an empty folder."""
+    try:
+        os.rename(stage, folder)
+        return
+    except OSError:
+        if not folder.is_dir() or any(folder.iterdir()):
+            raise
+    for entry in os.listdir(stage):
+        os.replace(stage / entry, folder / entry)
+    stage.rmdir()
+
+
+def unpack(archive: zipfile.ZipFile, entries: list[tuple[str, zipfile.ZipInfo]], folder: Path) -> list[tuple[str, int]]:
+    """``entries`` (``zip_entries``) of ``archive`` written into ``folder`` -- one not there yet, or an empty one --
+    through a folder made beside it, moved into place once every file is written whole: each checked against its
+    CRC-32 as ``zipfile`` reads it, ``FORK_BYTES`` at most in all, never over another (two paths this system takes for
+    one). Whatever fails leaves no file of this run's (``Damaged`` for the zip's fault, ``OSError`` for the disk's).
+    Each file written, by its path, with its size."""
+    import zipfile
+
+    folder = Path(os.path.abspath(folder))
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    # Made as any folder is (``mkdtemp``'s would be this user's alone), and named so no two forks share one.
+    stage = folder.parent / f".cad-fork-{secrets.token_hex(8)}"
+    stage.mkdir()
+    written: list[tuple[str, int]] = []
+    total = 0
+    try:
+        for path, info in entries:
+            target = stage.joinpath(*path.split("/"))
+            size = 0
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info) as source, open(target, "xb") as out:
+                    while chunk := source.read(1 << 20):
+                        size, total = size + len(chunk), total + len(chunk)
+                        if total > FORK_BYTES:
+                            raise Damaged(f"its files are more than the {FORK_BYTES // 1024 ** 3} GiB a fork writes")
+                        out.write(chunk)
+            except (FileExistsError, NotADirectoryError):
+                raise Damaged(f"two of its files are one file on this computer: {path}") from None
+            except (zipfile.BadZipFile, NotImplementedError, EOFError) as error:
+                raise Damaged(f"{path}: {error}") from None
+            written.append((path, size))
+        _place(stage, folder)
+    except BaseException:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
+    return written
 
 
 # --- what is kept ------------------------------------------------------------------------------------------------

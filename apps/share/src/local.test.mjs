@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 import { APP_ROOT, LocalBucket, localAssets, platform, readConfig, runsWorkerFirst } from "./local.mjs";
-import { DEFAULTS } from "./worker.mjs";
+import { DEFAULTS, nameOf } from "./worker.mjs";
 
 const SERVE = fileURLToPath(new URL("../serve.mjs", import.meta.url));
 const root = mkdtempSync(join(tmpdir(), "share-local-"));
@@ -55,18 +55,20 @@ function newShare() {
   return { id: b64url(randomBytes(16)), write: b64url(randomBytes(32)), delete: b64url(randomBytes(32)) };
 }
 
-/** A share as the command makes one, over HTTP: one pack of the files' gzip members, then the commit. */
-async function share(origin, who, files) {
-  const members = files.map(([, content]) => gzipSync(Buffer.from(content)));
+/** A share as the command makes one, over HTTP: one pack of the gzip members of the view's files and then of
+ * the files that made it, then the commit. */
+async function share(origin, who, view, code = CODE) {
+  const both = [...view.map((file) => ["view", ...file]), ...code.map((file) => ["files", ...file])];
+  const members = both.map(([, , content]) => gzipSync(Buffer.from(content)));
   const pack = new Uint8Array(Buffer.concat(members));
   const packId = sha256(pack);
-  const entries = {};
+  const entries = { view: {}, files: {} };
   let offset = 0;
-  files.forEach(([path, content], index) => {
-    entries[path] = { sha256: sha256(content), bytes: Buffer.byteLength(content), at: [[packId, offset, members[index].length]] };
+  both.forEach(([map, path, content], index) => {
+    entries[map][path] = { sha256: sha256(content), bytes: Buffer.byteLength(content), at: [[packId, offset, members[index].length]] };
     offset += members[index].length;
   });
-  const manifest = JSON.stringify({ format: "cad-share/2", files: entries });
+  const manifest = JSON.stringify({ format: "cad-share/2", name: "juno", entry: code[0]?.[0] ?? null, made: { cad: "0.11.17" }, ...entries });
   const headers = { Authorization: `Bearer ${who.write}`, "Cad-Delete-Hash": sha256(who.delete) };
   const uploaded = await fetch(`${origin}/v1/shares/${who.id}/packs/${packId}`, { method: "PUT", headers, body: pack });
   const commit = () => fetch(`${origin}/v1/shares/${who.id}`, { method: "PUT", headers: { ...headers, "Content-Type": "application/json" }, body: manifest });
@@ -87,6 +89,7 @@ async function unseal(id, stored, aad) {
 }
 
 const BUNDLE = [["manifest.json", '{"format":"view-bundle/1"}'], ["structure.json", '{"tree":[]}']];
+const CODE = [["juno.py", "print('juno')\n"]];
 
 describe("serve.mjs", () => {
   test("prints its origin on one line and serves the Worker: a pack, a commit, the reads, the page, files, a delete", async () => {
@@ -113,6 +116,18 @@ describe("serve.mjs", () => {
       assert.match(page.headers.get("Content-Security-Policy"), /frame-ancestors 'none'/);
       assert.equal(page.headers.get("X-Robots-Tag"), "noindex, nofollow");
       assert.match(await page.text(), /viewer/);
+
+      // The files that made it: a zip the Worker makes as it goes out, beside the page.
+      const zip = await fetch(`${origin}/${who.id}.zip`);
+      assert.equal(zip.status, 200);
+      assert.equal(zip.headers.get("Content-Type"), "application/zip");
+      assert.equal(zip.headers.get("Content-Disposition"), 'attachment; filename="juno.zip"');
+      assert.equal(zip.headers.get("Cad-Share-Entry"), "juno.py");
+      assert.equal(zip.headers.get("X-Robots-Tag"), "noindex, nofollow");
+      const zipped = Buffer.from(await zip.arrayBuffer());
+      assert.equal(zipped.readUInt32LE(0), 0x04034b50);
+      assert.ok(zipped.includes("juno/juno.py") && !zipped.includes("structure.json"), "the files, and nothing of the view");
+      assert.equal(zipped.readUInt32LE(zipped.length - 22), 0x06054b50);
 
       // A file is served by the assets alone (asset-first), with what `_headers` adds; HTML by the Worker.
       const script = await fetch(`${origin}/assets/app.js`);
@@ -182,6 +197,34 @@ describe("serve.mjs", () => {
       await second.stop();
     }
     assert.deepEqual(readdirSync(store), []);
+  });
+
+  test("cuts off a zip that fails part way, never ending it as if whole, and serves on", async () => {
+    const store = join(root, "cut");
+    const who = newShare();
+    const first = start("--port", "0", "--assets", assetsDir, "--store", store);
+    let packId;
+    try {
+      const made = await share(await first.origin, who, BUNDLE, [["juno.py", "print('juno')\n"], ["lib/head.py", "HEAD = 1\n"]]);
+      assert.equal(made.committed.status, 201);
+      packId = made.packId;
+    } finally {
+      await first.stop();
+    }
+    // The pack's sealed bytes, spoilt where it is kept: it no longer opens.
+    const kept = join(store, `${encodeURIComponent(`s/${await nameOf(who.id)}/p/${packId}`)}.bin`);
+    writeFileSync(kept, randomBytes(readFileSync(kept).length));
+
+    const second = start("--port", "0", "--assets", assetsDir, "--store", store);
+    try {
+      const origin = await second.origin;
+      const zip = await fetch(`${origin}/${who.id}.zip`);
+      assert.equal(zip.status, 200);
+      await assert.rejects(zip.arrayBuffer());
+      assert.equal((await fetch(`${origin}/v1/shares/${who.id}`)).status, 200, "it serves on");
+    } finally {
+      await second.stop();
+    }
   });
 
   test("refuses to start without its port or its assets folder", async () => {

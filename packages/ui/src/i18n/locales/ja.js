@@ -199,6 +199,7 @@ export default {
   "share.unsupported.title": "この共有モデルはここでは開けません。",
   "share.failed.title": "この共有モデルを開けませんでした。",
   "share.retry": "再試行",
+  "share.downloadFiles": "ファイルをダウンロード",
   "share.delete.title": "この共有モデルを削除しますか？",
   "share.delete.detail": "リンクは全員に対して機能しなくなります。",
   "share.delete.action": "削除",

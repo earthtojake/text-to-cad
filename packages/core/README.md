@@ -251,13 +251,18 @@ the share's address alone: the AES-256-GCM key every object of it is sealed with
 (`deriveShareBits`: HKDF-SHA256 of the id's text, the salt `cad-share/2`, the info `key`), so no link
 holds a key. `service` is the host's two reads of the share service (`ShareService`): `manifest()`, the
 share's manifest, and `pack(id)`, one of its packs, each sealed (`IV || ciphertext-and-tag`, the IV 12
-bytes, its AAD `cad-share/2 manifest` or `cad-share/2 pack <pack id>`). The manifest names every file of
-the bundle with its size, its SHA-256 and the ranges of packs its gzip member lies in, in order; a read
-fetches each pack it names once, kept while the share is open, opens it, joins the ranges, gunzips them
-(`DecompressionStream`) and checks the size and the SHA-256. Every pack is fetched ahead as soon as the
-manifest is read, the ones holding `manifest.json` and `structure.json` first, `SHARE_PREFETCH` (6) at
-a time, and a read's packs go ahead of the rest; then the bundle opens with `openViewBundle`, and
-disposing its service stops what the share still fetches. It fails with one of three codes:
+bytes, its AAD `cad-share/2 manifest` or `cad-share/2 pack <pack id>`). The manifest names the document
+(`name`; for a model its script, `entry`, and what built it, `made`, each null for a file document) and two
+maps of files by their paths, each with its size, its SHA-256 and the ranges of packs its gzip member lies
+in, in order: the view bundle's (`view`) and the files that made it (`files`, which the service serves as
+the share's zip, `/<id>.zip`), and nothing else. The page reads `view` alone: a read fetches each pack it
+names once, kept while the share is open, opens it, joins the ranges, gunzips them (`DecompressionStream`)
+and checks the size and the SHA-256. Every pack of the view is fetched ahead as soon as the manifest is
+read, the ones holding `manifest.json` and `structure.json` first, `SHARE_PREFETCH` (6) at a time, and a
+read's packs go ahead of the rest; a pack only `files` names is never fetched. Then the bundle opens with
+`openViewBundle`, and its service also says what the share holds beside its view (`share`: `name`,
+`entry`, `made` and the paths of the `files`, for the host to offer the zip where there are any);
+disposing it stops what the share still fetches. It fails with one of three codes:
 `SHARE_DAMAGED`, a manifest that does not open or is not one, or a file not as it says;
 `SHARE_UNAVAILABLE`, a pack the service did not give (the next read asks again); and
 `SHARE_UNSUPPORTED`, a bundle this viewer does not open. A failure of `manifest()` (a share the service

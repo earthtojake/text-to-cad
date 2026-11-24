@@ -1,20 +1,24 @@
-"""``cad share`` -- a document shared for anyone with its link to open in the hosted viewer, with no sign-in, for 7
-days after its last share (``cad_server.sharing``; the engine's **Sharing**).
+"""``cad share`` -- a document shared for anyone with its link to open in the hosted viewer, and to download the files
+that made it, with no sign-in, for 7 days after its last share (``cad_server.sharing``; the engine's **Sharing**).
 
-- ``cad share TARGET [--yes]``: TARGET a document id the engine holds, or a file the viewer opens. The running server
-  writes the document's view bundle into the document's folder in cad's cache, over the one it wrote there last, as
-  ``cad <type> export TARGET DST.view`` writes one; this process uploads the files of it the share lacks, in packs,
-  and commits the share (``sharing.send``) -- never the server, so an agent app's sandbox sees the connection and its
-  network rules apply. One ``cad share`` of a document runs at a time: another waits ``LOCK_SECONDS``, saying so, then
-  is refused in a line. It prints the view link, the delete link, the expiry and one line of what travelled. The same
-  document shared again from this computer is the same share: the link stays, the 7 days start again, and only what
-  changed travels. Where the service refuses its names (403), or its record is past its expiry or is not one this cad
-  reads (``cad-share/1``'s), it is a new share. A KiCad board or schematic and a folder are refused: they have no
-  bundle.
+- ``cad share TARGET [--yes]``: TARGET a document id the engine holds, or a file the viewer opens. What goes is the
+  files that made it -- a model's script, the modules of its project the build imported and the files it read, from
+  its build closure (``sharing.model_sources``); a file document's file itself (``sharing.file_sources``) -- and its
+  view: the running server writes the document's view bundle into the document's folder in cad's cache, over the
+  one it wrote there last, as ``cad <type> export TARGET DST.view`` writes one. This process uploads the files the
+  share lacks, in packs, and commits the share (``sharing.send``) -- never the server, so an agent app's sandbox sees
+  the connection and its network rules apply. A model whose files changed after its last run, or whose script or a
+  module is gone, is refused in a line naming the file and the command that runs it again: its files would not be
+  the ones that built its view. One ``cad share`` of a document runs at a time: another waits ``LOCK_SECONDS``,
+  saying so, then is refused in a line. It prints the view link, the files' link, the delete link, the expiry, one
+  line of what travelled, and a line for what was left out. The same document shared again from this computer is
+  the same share: the link stays, the 7 days start again, and only what changed travels. Where the service refuses
+  its names (403), or its record is past its expiry or is not one this cad reads (``cad-share/1``'s), it is a new
+  share. A KiCad board or schematic and a folder are refused: they have no bundle.
 - The first share on a computer needs the person's yes: without ``--yes`` it is refused, in lines an agent can
-  pass on (what goes, where, who can open it, for how long, how to delete it), naming the same command with
-  ``--yes``, which records the agreement. ``cad share off`` refuses every share, ``--yes`` or not, until ``cad
-  share on``.
+  pass on (what goes -- the code and the files that made it, which anyone with the link can download, and the view --,
+  where, who can open it, for how long, how to delete it), naming the same command with ``--yes``, which records the
+  agreement. ``cad share off`` refuses every share, ``--yes`` or not, until ``cad share on``.
 - ``cad share status``: whether sharing is on, whether this computer agreed, and its live shares with their links.
 - ``cad share delete TARGET|LINK [--yes]``: the share of a TARGET this computer shared, or the share a link names (a
   delete link, or the view link of a share this computer keeps), deleted from the service, asked first as every
@@ -34,18 +38,22 @@ import os
 import sys
 import threading
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 DEFAULT_PROG = "cad share"
 ACTIONS = ("status", "on", "off", "delete")
 DESCRIPTION = (
-    "Share a document: anyone with its link opens it in the hosted viewer, with no sign-in, until 7 days after its "
-    "last share. TARGET is a document id the engine holds or a file the viewer opens. What goes is its view bundle: "
-    "a model's, an .xbf's or a STEP's shapes as meshes with their names, measurements and joints, never its code or "
-    "the CAD file; an STL, a GLB or a 3MF is the file itself. Sharing it again keeps the link and sends only what "
-    "changed. The first share on a computer needs the person's yes (--yes). `status` says whether sharing is on and "
-    "lists this computer's live shares; `on` and `off` turn it on and off; `delete` removes a share.")
+    "Share a document: anyone with its link opens it in the hosted viewer, and downloads the files that made it (the "
+    "link's .zip, which `cad fork` writes into a folder), with no sign-in, until 7 days after its last share. TARGET "
+    "is a document id the engine holds or a file the viewer opens. What goes is the files that made it -- a model's "
+    "script, the modules of its project that it imports and the files it reads, as its last run built it (run it "
+    "again after an edit); a file's file itself, with a robot description's mesh files -- and its view: its shapes as "
+    "meshes with their names, measurements and joints. Never the xbf, nor an installed library. Sharing it again "
+    "keeps the link and sends only what changed. The first share on a computer needs the person's yes (--yes). "
+    "`status` says whether sharing is on and lists this computer's live shares; `on` and `off` turn it on and off; "
+    "`delete` removes a share.")
 KINDS = {"model": "a model", "xbf": "an .xbf", "step": "a STEP", "stl": "an STL", "glb": "a GLB", "3mf": "a 3MF",
          "dxf": "a DXF", "urdf": "a URDF", "srdf": "an SRDF"}
 MESHES = frozenset({"stl", "glb", "3mf"})
@@ -139,19 +147,34 @@ def _source(target: str) -> tuple[str, str | None]:
     return path, path
 
 
-def agreement_lines(service: str, command: str) -> list[str]:
-    """What the first share says, refused, for the person to agree to: what goes, where, who can open it, for how
-    long, how to delete it, and the command that goes on once they agree."""
+def _goes(kind: str, sources: Any) -> str:
+    """What a share of a document of ``kind`` (its type's id) takes of it, in words: its files (``sources``), which
+    anyone with the link can download, and its view."""
+    count = len(sources.files)
+    counted = f"{count} file{'s' if count != 1 else ''}"
+    if kind == "model":
+        files = f"the model's code and the files it reads ({counted})"
+    elif count > 1:
+        files = f"the file itself with {count - 1} file{'s' if count != 2 else ''} it draws from beside it"
+    else:
+        files = "the file itself"
+    view = ("its shapes as meshes, with their names, measurements and joints" if kind in ("model", "xbf", "step") else
+            "its drawing" if kind == "dxf" else "its links, joints and meshes" if kind in ("urdf", "srdf") else
+            "the mesh as the viewer draws it")
+    return f"{files}, which anyone with the link can download, and its view: {view}"
+
+
+def agreement_lines(service: str, command: str, goes: str) -> list[str]:
+    """What the first share says, refused, for the person to agree to: what goes (``goes``: ``_goes``), where, who
+    can open it, for how long, how to delete it, and the command that goes on once they agree."""
     from cad_server import sharing
 
     return [
         "sharing needs the person's yes, once on this computer; nothing was uploaded.",
-        "  What goes: a model's, an .xbf's or a STEP's shapes as meshes, with their names, measurements and joints, "
-        "never its code or the CAD file; an STL, a GLB or a 3MF is the file itself (a DXF its drawing, a URDF or an "
-        "SRDF its links, joints and mesh files).",
+        f"  What goes: {goes}. Never the xbf, nor an installed library.",
         f"  Where: {service}, which keeps it encrypted under a key made from the link, and keeps neither the link "
         "nor the key.",
-        "  Who: anyone with the link can open it, with no sign-in.",
+        "  Who: anyone with the link can open it and download its files, with no sign-in.",
         f"  How long: until {sharing.EXPIRY_DAYS} days after its last share (sharing it again keeps the link, sends "
         f"only what changed and starts the {sharing.EXPIRY_DAYS} days again).",
         "  Delete: the delete link it prints removes it, as does `cad share delete TARGET`.",
@@ -190,8 +213,76 @@ def _locked(document: str, name: str, prog: str) -> Iterator[Path]:
         yield folder
 
 
+@dataclass(frozen=True)
+class _Built:
+    """A model's last run, as the engine says it (``model_info``, by ``inspect``'s ``build`` query): when it was
+    (``at``, its ``builtAt``), its script, the folder its build closure's paths are relative to (its xbf's where it
+    declares one, else its script's: None where the run's record cannot say which), the command that runs it again
+    (``again``) and its name."""
+
+    at: float | None
+    script: str
+    folder: str | None
+    again: str
+    name: str
+
+
+def _built(ident: str, closure: dict[str, Any] | None) -> _Built:
+    from cad.engine import api
+    from cad.engine.previous import absolute
+    from cad.engine.records import rerun
+
+    live = api.inspect(ident, query="build", progress=False).get("live") or {}
+    source = live.get("source") or {}
+    script = os.path.normpath(str(source.get("script") or ""))
+    given = live.get("with")
+    again = rerun(script, live.get("python") if isinstance(live.get("python"), str) else None,
+                  [item for item in given if isinstance(item, str)] if isinstance(given, list) else None)
+    at = live.get("builtAt") if isinstance(live.get("builtAt"), (int, float)) else None
+    # The folder the closure names its script from: its declared xbf's, else the script's.
+    xbf = [str(path) for path in live.get("files") or [] if str(path).lower().endswith(".xbf")]
+    told = (closure or {}).get("source")
+    named = told.get("path") if isinstance(told, dict) else None
+    folder = next((folder for folder in [*(os.path.dirname(path) for path in xbf[:1]), os.path.dirname(script)]
+                   if isinstance(named, str) and os.path.normcase(absolute(named, Path(folder)))
+                   == os.path.normcase(script)), None)
+    return _Built(at, script, folder, again, str(source.get("explicit_name") or source.get("name") or ident))
+
+
+def _sources(source: str, path: str | None) -> tuple[Any, _Built | None]:
+    """The files that made the document TARGET names (``sharing.Sources``): a file's (``sharing.file_sources``); a
+    model's, from its build closure and its last run (``sharing.model_sources``), refused by the failure contract
+    where its files are not the ones its last run built from, naming the command that runs it again. With a model's
+    last run (``_Built``), else None."""
+    from cad.engine import api
+    from cad.registry import type_of
+    from cad_server import sharing
+    from cad_server._internal.cli_errors import Failure
+
+    if path is not None:
+        found = type_of(path)
+        return sharing.file_sources(path, found.id if found is not None else ""), None
+    closure = api.inspect(source, query="structure", progress=False).get("closure")
+    built = _built(source, closure)
+    if not isinstance(closure, dict):  # a shape a program handed over: no closure names what made it
+        return sharing.Sources(), built
+    if built.folder is None:
+        raise Failure(f"cad cannot tell from {built.name}'s last run where its files are: run it again "
+                      f"(`{built.again}`), then share it", "failed", next=[built.again])
+    try:
+        return sharing.model_sources(closure, built.script, built.folder, built.at), built
+    except sharing.Stale as stale:
+        what = (f"{stale.path} changed after {built.name} was built, so its share would not be what built its view"
+                if stale.why == "changed" else f"{stale.path}, which built {built.name}, is gone")
+        raise Failure(f"{what}: run it again (`{built.again}`), then share it",
+                      "failed" if stale.why == "changed" else "not_found", next=[built.again]) from None
+    except (sharing.Unsharable, OSError) as error:
+        raise Failure(f"{built.name}'s files cannot be shared: {error}") from None
+
+
 def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]) -> int:
     from cad.engine.ids import file_id
+    from cad.registry import type_of
     from cad_server import sharing
     from cad_server._internal.api import share_url
     from cad_server._internal.cli_errors import Failure, classify
@@ -203,11 +294,16 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
         raise Failure("sharing is off on this computer, so nothing was uploaded: the person turns it on with "
                       "`cad share on`", "declined")
     service = share_url()
+    try:
+        sources, built = _sources(source, path)
+    except (ValueError, RuntimeError) as error:
+        raise classify(error) from None  # the engine's refusal: a document it does not hold, said in its words
     if not kept["agreed"]:
         if not yes:
             command = retry(prog, words)
-            raise Failure("\n".join(agreement_lines(service, command)), "confirmation_required", next=[command],
-                          user_action=True)
+            kind = "model" if path is None else getattr(type_of(path), "id", "")
+            raise Failure("\n".join(agreement_lines(service, command, _goes(kind, sources))), "confirmation_required",
+                          next=[command], user_action=True)
         try:
             sharing.keep(agree=True)
         except OSError as error:
@@ -224,25 +320,28 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
                         and not sharing.expired(row)), None)
         try:
             manifest = sharing.bundle(source, folder / sharing.BUNDLE)
+            if built is not None and _built(source, None).at != built.at:
+                sources, built = _sources(source, path)  # built again meanwhile: the files of the run it shows
         except (ValueError, RuntimeError, OSError) as error:
             # The engine's refusal or failure of the bundle (``ExportRefused``, ``NotHeld``, ``EngineError``), said by
             # the failure contract in its words.
             raise classify(error) from None
         try:
-            found = sharing.files(folder / sharing.BUNDLE)
+            found = sharing.view_files(folder / sharing.BUNDLE)
         except (sharing.Unsharable, OSError) as error:
             raise Failure(f"the view bundle cannot be shared: {error}") from None
         shown = manifest.get("document") or {}
         document = {"id": ident, "kind": str(shown.get("kind")), "name": str(shown.get("name")), "path": path}
+        name = sharing.share_name(shown.get("name"))
         share = sharing.share_of(earlier) if earlier is not None else sharing.Share.new(service)
         try:
-            sent = _sent(share, found, sharing.stored(folder, share), prog)
+            sent = _sent(share, found, sources, name, sharing.stored(folder, share), prog)
         except sharing.Refused as refusal:
             if refusal.status != 403:
                 raise _refused(refusal) from None
             share = sharing.Share.new(service)  # that id is no longer this computer's to write: a new share, whole
             try:
-                sent = _sent(share, found, None, prog)
+                sent = _sent(share, found, sources, name, None, prog)
             except sharing.Refused as again:
                 raise _refused(again) from None
         record = sharing.record_of(share, document, sent.answer)
@@ -252,19 +351,25 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
         except OSError as error:
             unkept = str(error)
     again = earlier is not None and earlier["id"] == share.id
-    what = _what(document["kind"], [file.path for file in found])
+    what = _what(document["kind"], [file.path for file in found], sources)
+    notes = _notes(sources, built)
     if as_json:
-        print(json.dumps({"ok": True, "view": share.view, "delete": share.remove, "expires": sent.answer["expires"],
-                          "id": share.id, "again": again, "document": {name: document[name] for name in
-                                                                       ("id", "kind", "name")},
-                          "sent": {**what, **sent.travelled, "format": sharing.FORMAT, "code": False,
-                                   "cad_file": document["kind"] in MESHES},
+        print(json.dumps({"ok": True, "view": share.view, "zip": share.zip, "delete": share.remove,
+                          "expires": sent.answer["expires"], "id": share.id, "again": again,
+                          "document": {name: document[name] for name in ("id", "kind", "name")},
+                          "files": {"count": len(sources.files), "bytes": sources.size, "entry": sources.entry,
+                                    "left_out": [{"path": left, "reason": why} for left, why in sources.left_out],
+                                    "unseen": sources.unseen},
+                          "sent": {**what, **sent.travelled, "format": sharing.FORMAT},
                           "stored": {"files": sent.answer["files"], "bytes": sent.answer["bytes"]},
                           "kept": unkept is None}, separators=(",", ":")), flush=True)
     else:
         print(f"Shared {document['name']}, {KINDS.get(document['kind'], document['kind'])}: {what['what']}; "
-              f"{_travelled(sent, again)}; {what['without']}", flush=True)
+              f"{_travelled(sent, again)}", flush=True)
+        for line in notes:
+            print(line)
         print(f"View:    {share.view}")
+        print(f"Files:   {share.zip}")
         print(f"Delete:  {share.remove}")
         print(f"Expires: {_when(sent.answer['expires'])}, {sharing.EXPIRY_DAYS} days after this share"
               f"{' (the same link as before)' if again else ''}; sharing it again keeps the link and starts the "
@@ -273,6 +378,28 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
         print(f"{prog}: warning: this computer could not keep the share's record ({unkept}): sharing it again "
               "makes a new link, and only its delete link deletes this one", file=sys.stderr, flush=True)
     return 0
+
+
+# Why a file that made a document was left out of its share, in a line's words.
+_LEFT_OUT = {"outside": "left out, outside the project", "gone": "left out, no longer on the disk",
+             "name": "left out, named in a way a share cannot hold"}
+
+
+def _notes(sources: Any, built: _Built | None) -> list[str]:
+    """What the share's files are not, a line each: the files left out, by why; a build that read a file the engine
+    could not see; a document no build closure names the code of."""
+    lines = []
+    for why, said in _LEFT_OUT.items():
+        paths = [path for path, reason in sources.left_out if reason == why]
+        if paths:
+            lines.append(f"{said[0].upper()}{said[1:]}: {', '.join(paths)}")
+    if sources.unseen:
+        lines.append("Its build read a file cad could not see, which the share does not hold: a fork may not rebuild "
+                     "it without that file")
+    if built is not None and not sources.files:
+        lines.append(f"No files went: no build closure names the code that made {built.name} (a shape a program "
+                     "handed over)")
+    return lines
 
 
 def _records() -> list[dict[str, Any]]:
@@ -287,9 +414,10 @@ def _records() -> list[dict[str, Any]]:
                       f"{error.strerror or error}") from None
 
 
-def _sent(share: Any, found: list[Any], stored: dict[str, Any] | None, prog: str) -> Any:
-    """The share sent and committed (``sharing.send``), a wait the service asks for said once in a line; the network
-    out of reach, and a bundle changed meanwhile, said in their one line. ``Refused`` for the caller."""
+def _sent(share: Any, view: list[Any], sources: Any, name: str, stored: dict[str, Any] | None, prog: str) -> Any:
+    """The share of the view's files and the files that made it sent and committed (``sharing.send``), a wait the
+    service asks for said once in a line; the network out of reach, and a file changed meanwhile, said in their one
+    line. ``Refused`` for the caller."""
     from cad_server import sharing
     from cad_server._internal.cli_errors import Failure
 
@@ -301,11 +429,11 @@ def _sent(share: Any, found: list[Any], stored: dict[str, Any] | None, prog: str
                   "waiting", file=sys.stderr, flush=True)
 
     try:
-        return sharing.send(share, found, stored, waiting=waiting)
+        return sharing.send(share, view, sources, stored, name=name, waiting=waiting)
     except sharing.Unreachable as error:
         raise Failure(_unreached(share.service, error)) from None
     except (sharing.Unsharable, OSError) as error:
-        raise Failure(f"the view bundle cannot be shared: {error}") from None
+        raise Failure(f"the share cannot be sent: {error}") from None
 
 
 def _unreached(service: str, error: Exception) -> str:
@@ -323,23 +451,31 @@ def _refused(refusal: Any) -> Any:
                    + (f"; {refusal.hint}" if refusal.hint else ""))
 
 
-def _what(kind: str, paths: list[str]) -> dict[str, Any]:
-    """What the share holds, from its files' paths: in words (``what``, ``without``) and its parts (``parts``)."""
+def _what(kind: str, paths: list[str], sources: Any) -> dict[str, Any]:
+    """What the share holds, in words (``what``): the files that made it (``sources``), and its view, from its
+    files' paths, with its parts (``parts``: a robot's mesh files; None for a mesh's or a drawing's view)."""
     parts = sorted({path.split("/")[1] for path in paths if path.startswith("parts/") and path.count("/") >= 2})
     meshes = [path for path in paths if path.startswith("meshes/") or (path.startswith("parts/")
                                                                        and path.count("/") == 1)]
-    if kind in MESHES:
-        what, without, counted = "the file itself", "no code went", None
-    elif kind == "dxf":
-        what, without, counted = "its drawing, as the viewer draws it", "no code or CAD file went", None
-    elif kind in ("urdf", "srdf"):
-        what = f"its links and joints, with {len(meshes)} mesh file{'s' if len(meshes) != 1 else ''}"
-        without, counted = "no code went, nor the description's own file", len(meshes)
+    count = len(sources.files)
+    if kind == "model":
+        files = f"its {count} file{'s' if count != 1 else ''}"
+    elif count > 1:
+        files = f"the file itself with {count - 1} file{'s' if count != 2 else ''} it draws from"
     else:
-        what = (f"{len(parts)} part{'s' if len(parts) != 1 else ''} as meshes, with their names and measurements"
-                + (" and its joints" if "kinematics.json" in paths else ""))
-        without, counted = "no code or CAD file went", len(parts)
-    return {"what": what, "without": without, "parts": counted}
+        files = "the file itself" if count else "none of its files"
+    if kind in MESHES:
+        view, counted = "its view", None
+    elif kind == "dxf":
+        view, counted = "its view (its drawing, as the viewer draws it)", None
+    elif kind in ("urdf", "srdf"):
+        view = f"its view (its links and joints, with {len(meshes)} mesh file{'s' if len(meshes) != 1 else ''})"
+        counted = len(meshes)
+    else:
+        view = (f"its view ({len(parts)} part{'s' if len(parts) != 1 else ''} as meshes, with their names and "
+                f"measurements{' and its joints' if 'kinematics.json' in paths else ''})")
+        counted = len(parts)
+    return {"what": f"{files} and {view}", "parts": counted}
 
 
 def _travelled(sent: Any, again: bool) -> str:
@@ -385,7 +521,8 @@ def _status(as_json: bool) -> int:
         print(json.dumps({"ok": True, "sharing": "on" if kept["on"] else "off", "agreed": kept["agreed"],
                           "service": service, "shares": [
                               {"document": {name: row["document"][name] for name in ("id", "kind", "name")},
-                               "view": row["view"], "delete": row["remove"], "expires": row["expires"]}
+                               "view": row["view"], "zip": sharing.share_of(row).zip, "delete": row["remove"],
+                               "expires": row["expires"]}
                               for row in live]}, separators=(",", ":")), flush=True)
         return 0
     state = ("off: `cad share` uploads nothing until `cad share on`" if not kept["on"] else
@@ -396,6 +533,7 @@ def _status(as_json: bool) -> int:
     for row in live:
         print(f"  {row['document']['name']} ({row['document']['kind']}), until {_when(row['expires'])}")
         print(f"    view:   {row['view']}")
+        print(f"    files:  {sharing.share_of(row).zip}")
         print(f"    delete: {row['remove']}")
     return 0
 

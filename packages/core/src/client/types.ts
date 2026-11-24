@@ -345,13 +345,26 @@ export interface ViewBundleSource {
   dispose?(): void;
 }
 /**
- * A share's manifest (`cad-share/2`, sealed by its service): every file of its view bundle by its path, with the
- * SHA-256 and the size of its own bytes, and where its gzip member lies: `[pack id, offset, length]` ranges of
- * the packs' bytes (before sealing), joined in order.
+ * One file of a share (`ShareManifest`): the SHA-256 and the size of its own bytes, and where its gzip member
+ * lies: `[pack id, offset, length]` ranges of the packs' bytes (before sealing), joined in order.
+ */
+export interface ShareFile { sha256: string; bytes: number; at: [pack: string, offset: number, length: number][] }
+/**
+ * A share's manifest (`cad-share/2`, sealed by its service): its document, and two maps of files by their paths,
+ * its view bundle's (what a page reads) and the files that made it (what its zip holds, never a page's).
  */
 export interface ShareManifest {
   format: 'cad-share/2';
-  files: Record<string, { sha256: string; bytes: number; at: [pack: string, offset: number, length: number][] }>;
+  /** The document's name (the share's zip is named for it). */
+  name: string;
+  /** A model's script, by its path among `files`; null for a file document. */
+  entry: string | null;
+  /** What built a model (the `cad` release, its libraries, its platform), each as text; null for a file document. */
+  made: Record<string, string> | null;
+  /** The view bundle's files, `manifest.json` among them. */
+  view: Record<string, ShareFile>;
+  /** The files that made it, by their paths in the project; may be none. */
+  files: Record<string, ShareFile>;
 }
 /**
  * The share service's reads of one share (`openShare`), each its sealed bytes (`IV || ciphertext-and-tag`): its
@@ -374,6 +387,20 @@ export interface CadViewBundleClient extends CadWorkspaceService {
   /** What the viewer shows it by: a model's id, a file's `/<name>`. */
   readonly file: string;
   engineDocument(file: string, options?: CadRequestOptions): Promise<CadEngineDocument>;
+}
+/** The viewer's service over a share's view (`openShare`), and what the share holds beside it. */
+export interface CadShareClient extends CadViewBundleClient {
+  /**
+   * What the share's manifest says beside its view: the document's name, a model's script (`entry`, one of `files`)
+   * and what built it (`made`), each null for a file document, and the paths of the files that made it, which the
+   * share's zip holds (none, an empty list).
+   */
+  readonly share: {
+    readonly name: string;
+    readonly entry: string | null;
+    readonly made: Readonly<Record<string, string>> | null;
+    readonly files: readonly string[];
+  };
 }
 export interface CadClientOptions {
   resources?: CadResourceProvider;

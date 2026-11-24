@@ -8,7 +8,8 @@ shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations
 ``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the server's (``server``: ``start``,
 ``stop``, ``status``), the CAD app an agent app starts (``mcp``), the engine's verbs (``serve``, ``delete``), ``run``,
 and the installation's (``requirement``, ``setup``, ``doctor``, ``cache``, ``viewer``, ``telemetry``, ``update``, whose
-``update auto`` is cad's own switch, and ``plugin``), and ``share``, a document uploaded for its link. ``cad --help`` lists them all but ``_UNLISTED``'s.
+``update auto`` is cad's own switch, and ``plugin``), ``share``, a document uploaded for its link, and ``fork``, a share's
+files written into a folder. ``cad --help`` lists them all but ``_UNLISTED``'s.
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
 release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
@@ -60,9 +61,11 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "setup": ("cad_server.cli.setup", "the bridge from releases 0.10.0 to 0.11.11"),
     # A page of the running server's; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
-    # A document's view bundle uploaded, by this process, for anyone with its link to open in the hosted viewer.
+    # A document's files and its view bundle uploaded, by this process, for anyone with its link to open in the hosted
+    # viewer and to download; and a share's files downloaded, by this process, into a folder.
     "share": ("cad_server.cli.share", "share a document by a link anyone can open for 7 days: status, on, off, "
                                       "delete"),
+    "fork": ("cad_server.cli.fork", "write a shared document's files into a folder, running nothing"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
     "update": ("cad_server.cli.update", "update cad now to the newest release of its major version (`--major`: of "
                                      "all); `update auto`: whether it does so itself"),

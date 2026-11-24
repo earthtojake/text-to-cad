@@ -129,7 +129,7 @@ selection or a pose, and the formats follow from the file's kind (`export/format
 has nothing to load; it says too whether its scene lies flat on z=0 (`planar`), which adds DXF. The GLB and mesh renderers publish the file shown: its path as the
 document and the catalog hash of the bytes on screen as the revision, which the server checks
 before it converts the file to the other mesh kinds. `FileViewer.navbarActions`, `fileMenuItems` and `overlay` are named
-composition slots: the first is the navbar's right group, outermost (the CAD app's Full size, its one control now; kept as the host's slot); the second is the end of the file's ⋯ menu,
+composition slots: the first is the navbar's right group, outermost (the CAD app's Full size, and a shared model's Download files); the second is the end of the file's ⋯ menu,
 after Copy path and Open in (`CadViewer` puts Export's submenu there); the third is in the
 relative viewport below it. The generic FileViewer knows nothing about export jobs.
 
@@ -269,14 +269,18 @@ tool the document cannot use is absent, never drawn disabled:
 ## A shared view bundle's host
 
 A shared view bundle is a view bundle a share service keeps, sealed, for anyone with its link, which is the
-share's address alone. Its host is the view bundle's host above, unchanged: the web's share mode (`/<id>`,
-[apps/web](../../../apps/web/README.md#a-shared-view-bundle)) opens it with `openShare(id, service)`
-(`@cad/core/client`), which reads the share's manifest from the page's own origin, then each file from the
-packs it lies in, fetched once each and kept by the browser, and hands them to `openViewBundle` as a lazy
-source; it shows that service as `?bundle=` does. Everything a bundle's view keeps and leaves out stays as it
-is. What the share adds lives in the host alone: the share's status screens (gone, damaged, a format it does
-not read, a failure with Retry) and its delete page (`/<id>#delete=<secret>`). The delete secret never
-reaches the viewer: no port, URL, storage or log carries it.
+share's address alone, beside the files that made it (a model's code and the files its build read; a file
+document's file), which the service serves as a zip (`/<id>.zip`). Its host is the view bundle's host above,
+unchanged: the web's share mode (`/<id>`, [apps/web](../../../apps/web/README.md#a-shared-view-bundle)) opens
+it with `openShare(id, service)` (`@cad/core/client`), which reads the share's manifest from the page's own
+origin, then each file of the view from the packs it lies in, fetched once each and kept by the browser (never
+a pack only the files that made it lie in), and hands them to `openViewBundle` as a lazy source; it shows that
+service as `?bundle=` does. Everything a bundle's view keeps and leaves out stays as it is. What the share adds
+lives in the host alone: where the share carries files, **Download files**, the host's action at the navbar's
+right end (`CadViewerProps.navbarActions`), a plain link to the zip with `download`, never a file menu (the
+view still has none); the share's status screens (gone, damaged, a format it does not read, a failure with
+Retry) and its delete page (`/<id>#delete=<secret>`). The delete secret never reaches the viewer: no port,
+URL, storage or log carries it.
 
 ## Adding a shared feature
 
@@ -604,7 +608,7 @@ manager, each where `fileActions` can do it, and is absent where it can do none 
 right-click on the name). Right, only what a host or a file adds: the renderer's navigation
 actions first, then the view's own Display and Preview, which the view portals into the navbar's view slot (below),
 then the host's actions (`navbarActions`: `CadViewer` hands it the host's
-`fullSize`, the CAD app's Full size), outermost.
+`fullSize`, the CAD app's Full size, then the host's own `navbarActions`, a shared model's Download files), outermost.
 
 The app menu is FileViewer's, built from the host's `navigation.home`, `links` and
 `environment.platform` and the person's `FileViewerProps.appSettings` (which `CadViewer`

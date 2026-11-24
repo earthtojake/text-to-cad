@@ -240,14 +240,19 @@ test('a document named by its id is its row, joined by id: the host hears its fi
   expect(detached.getByText('This model’s script is gone')).toBeTruthy();
 });
 
-test("the host's Full size is the navbar's one host action: Export is the file menu's, never the navbar's", () => {
+test("the host's Full size and its own actions are the navbar's host actions, Full size first: Export is the file menu's, never the navbar's", () => {
   const client = cadClient();
   const view = (extra: object) => <CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file=""
     library={library} onShow={() => {}} {...extra} />;
   const { rerender } = render(view({ fullSize: <b data-full="" /> }));
-  const { container } = render(<>{props().navbarActions}</>);
-  expect([...container.querySelectorAll('[data-full]')].map(node => node.tagName)).toEqual(['B']);
-  expect(container.querySelector('[data-export-menu]')).toBeNull();
+  const drawn = () => render(<>{props().navbarActions}</>).container;
+  expect([...drawn().querySelectorAll('[data-full]')].map(node => node.tagName)).toEqual(['B']);
+  expect(drawn().querySelector('[data-export-menu]')).toBeNull();
+  // The host's own (a shared model's Download files) go after Full size, or alone.
+  rerender(view({ fullSize: <b data-full="" />, navbarActions: <a data-own="" href="/x.zip" download="" /> }));
+  expect([...drawn().querySelectorAll('[data-full], [data-own]')].map(node => node.tagName)).toEqual(['B', 'A']);
+  rerender(view({ navbarActions: <a data-own="" href="/x.zip" download="" /> }));
+  expect([...drawn().querySelectorAll('[data-full], [data-own]')].map(node => node.tagName)).toEqual(['A']);
   // A host that hands none: the navbar has no host action, and the file menu no Export without downloads.
   rerender(view({}));
   expect([props().navbarActions ?? null, props().fileMenuItems ?? null]).toEqual([null, null]);

@@ -11,13 +11,16 @@
 // its AAD naming what it is (`cad-share/2 manifest`, `cad-share/2 pack <pack id>`), so neither stands in for the
 // other.
 //
-// The share's manifest names every file of the bundle by its path, with its size, its SHA-256 and where its gzip
-// member lies: one or more ranges of packs, joined in order. A pack is named by the SHA-256 of its bytes and never
-// changes, so the browser keeps it, and a model shared again fetches only the packs it lacks. A file is read here
-// by fetching each pack it names once, opening it, joining the ranges, gunzipping them (`DecompressionStream`) and
-// checking the size and the SHA-256; and every pack the manifest names is fetched ahead as soon as it is read, a
-// few at a time, so a whole model arrives at full speed while each read takes what has come. Then the bundle
-// opens as any other (`openViewBundle`).
+// A share is two things under one id: the view (the bundle a page draws) and the files that made it (a model's
+// script, its modules and the files its build read; a file document's file), which the service serves as a zip
+// beside the view (`/<id>.zip`). The share's manifest names the document, and every file of each by its path, with
+// its size, its SHA-256 and where its gzip member lies: one or more ranges of packs, joined in order. A pack is
+// named by the SHA-256 of its bytes and never changes, so the browser keeps it, and a model shared again fetches
+// only the packs it lacks. A file of the view is read here by fetching each pack it names once, opening it,
+// joining the ranges, gunzipping them (`DecompressionStream`) and checking the size and the SHA-256; and every pack
+// the view names is fetched ahead as soon as the manifest is read, a few at a time, so a whole model arrives at
+// full speed while each read takes what has come. Then the bundle opens as any other (`openViewBundle`). The files
+// that made it are not the page's: no pack only they name is fetched, and the host is told only what they are.
 //
 // Failures are told apart by `code`: SHARE_DAMAGED, a manifest that does not open or is not one, or a file that is
 // not what the manifest says (a pack that does not open, a range past its end, bytes that are no gzip member or not
@@ -43,9 +46,15 @@ export const SHARE_UNSUPPORTED = 'share-unsupported';
 // A delete or write secret: 32 random bytes, base64url without padding.
 const SECRET_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const HEX_SHA256 = /^[0-9a-f]{64}$/;
-// A manifest's limits: the files it lists, and a path's length.
+// What a share's manifest holds, and nothing else.
+const MANIFEST_MEMBERS = new Set(['format', 'name', 'entry', 'made', 'view', 'files']);
+// A manifest's limits: the files it lists over both its maps, a path's length, the document's name in characters,
+// and what built a model: so many members, each name and value so many characters.
 const MAX_FILES = 200_000;
 const MAX_PATH_BYTES = 1024;
+const MAX_NAME = 200;
+const MAX_MADE = 32;
+const MAX_MADE_TEXT = 100;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const MANIFEST_AAD = `${SHARE_FORMAT} manifest`;
@@ -59,6 +68,15 @@ function checkSignal(signal) { if (signal?.aborted) throw abortError(); }
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isCount = value => Number.isSafeInteger(value) && value >= 0;
 const isDigest = value => typeof value === 'string' && HEX_SHA256.test(value);
+/** Whether `value` is text (no lone surrogate) of `least` to `most` characters, each counted as one code point. */
+function isText(value, least, most) {
+  // A code point is at most two UTF-16 units: a string longer than twice `most` has more than `most` of them.
+  if (typeof value !== 'string' || value.length > 2 * most || /\p{Cs}/u.test(value)) return false;
+  const characters = [...value].length;
+  return characters >= least && characters <= most;
+}
+/** A value as a refusal names it: in JSON, cut short where it is long. */
+const quote = value => (JSON.stringify(typeof value === 'string' ? value.slice(0, 80) : value) ?? 'nothing').slice(0, 80);
 const hex = bytes => Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
 
 /** Base64url without padding as bytes, or null where it is none. */
@@ -115,34 +133,52 @@ async function unseal(key, sealed, aad, what) {
   }
 }
 
-/** Whether `path` names a file inside a bundle: relative, `/` separated, no empty, `.` or `..` segment, not too long. */
-function bundlePath(path) {
+/** Whether `path` names a file inside a folder: relative, `/` separated, no empty, `.` or `..` segment, not too long. */
+function relativePath(path) {
   if (!path || path.startsWith('/') || path.includes('\\') || /^[A-Za-z]:/.test(path)) return false;
   if (encoder.encode(path).byteLength > MAX_PATH_BYTES) return false;
   return path.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..');
 }
 
 /**
- * The share's manifest this reader believes: its `format` this reader's, and every file of the bundle by its
- * path (`manifest.json` among them), each with its SHA-256, its size and the ranges of packs that hold its gzip
- * member. Anything else is a damaged link, saying what.
+ * The share's manifest this reader believes, and nothing else, each refusal a damaged link saying what: its
+ * `format` this reader's; its document's `name` (1 to 200 characters of text, no control character); for a model
+ * its script (`entry`, the path of one of its `files`) and what built it (`made`: at most 32 members, each name and
+ * value at most 100 characters of text), each null for a file document; and two maps of files by their paths, the
+ * view bundle's (`view`, `manifest.json` among them) and the files that made it (`files`, which may be none), each
+ * file with its SHA-256, its size and the ranges of packs that hold its gzip member, at most 200,000 over both.
  * @returns {import('./types.js').ShareManifest}
  */
 function readShareManifest(value) {
   if (!isObject(value)) throw damaged("the share's manifest is not an object.");
   if (value.format !== SHARE_FORMAT) throw damaged(`the share's manifest is ${JSON.stringify(value.format ?? null)}, not ${SHARE_FORMAT}.`);
-  const files = value.files;
-  if (!isObject(files)) throw damaged("the share's manifest lists no files.");
-  const paths = Object.keys(files);
-  if (paths.length > MAX_FILES) throw damaged(`the share's manifest lists ${paths.length} files, more than ${MAX_FILES}.`);
-  if (!Object.hasOwn(files, VIEW_BUNDLE_MANIFEST)) throw damaged(`the share's manifest lists no ${VIEW_BUNDLE_MANIFEST}.`);
-  for (const path of paths) {
-    if (!bundlePath(path)) throw damaged(`the share's manifest names ${JSON.stringify(path.slice(0, 80))}, which is no path inside a bundle.`);
-    const entry = files[path];
-    const ranges = isObject(entry) ? entry.at : null;
-    if (!isDigest(entry?.sha256) || !isCount(entry.bytes) || !Array.isArray(ranges) || !ranges.length
-      || !ranges.every(range => Array.isArray(range) && range.length === 3 && isDigest(range[0]) && isCount(range[1]) && isCount(range[2]))) {
-      throw damaged(`the share's manifest gives ${JSON.stringify(path)} no SHA-256, size and ranges of packs.`);
+  const other = Object.keys(value).find(member => !MANIFEST_MEMBERS.has(member));
+  if (other !== undefined) throw damaged(`the share's manifest holds ${quote(other)}, which a share's manifest does not.`);
+  const { name, entry, made, view, files } = value;
+  if (!isObject(view)) throw damaged("the share's manifest has no view.");
+  if (!isObject(files)) throw damaged("the share's manifest lists no files that made it.");
+  if (!isText(name, 1, MAX_NAME) || /\p{Cc}/u.test(name)) {
+    throw damaged(`the share's manifest names its document ${quote(name)}, not 1 to ${MAX_NAME} characters of text.`);
+  }
+  if (entry !== null && !(typeof entry === 'string' && Object.hasOwn(files, entry))) {
+    throw damaged(`the share's manifest names ${quote(entry)} as its script, which is none of the files that made it.`);
+  }
+  if (made !== null && !(isObject(made) && Object.keys(made).length <= MAX_MADE
+    && Object.entries(made).every(([what, release]) => isText(what, 0, MAX_MADE_TEXT) && isText(release, 0, MAX_MADE_TEXT)))) {
+    throw damaged(`the share's manifest says what built it as ${quote(made)}, not at most ${MAX_MADE} names and values of ${MAX_MADE_TEXT} characters.`);
+  }
+  const maps = [[view, 'its view', 'a bundle'], [files, 'the files that made it', 'a folder']];
+  const count = maps.reduce((sum, [map]) => sum + Object.keys(map).length, 0);
+  if (count > MAX_FILES) throw damaged(`the share's manifest lists ${count} files, more than ${MAX_FILES}.`);
+  if (!Object.hasOwn(view, VIEW_BUNDLE_MANIFEST)) throw damaged(`the share's manifest lists no ${VIEW_BUNDLE_MANIFEST} in its view.`);
+  for (const [map, where, inside] of maps) {
+    for (const [path, file] of Object.entries(map)) {
+      if (!relativePath(path)) throw damaged(`the share's manifest names ${quote(path)} in ${where}, which is no path inside ${inside}.`);
+      const ranges = isObject(file) ? file.at : null;
+      if (!isDigest(file?.sha256) || !isCount(file.bytes) || !Array.isArray(ranges) || !ranges.length
+        || !ranges.every(range => Array.isArray(range) && range.length === 3 && isDigest(range[0]) && isCount(range[1]) && isCount(range[2]))) {
+        throw damaged(`the share's manifest gives ${quote(path)} in ${where} no SHA-256, size and ranges of packs.`);
+      }
     }
   }
   return value;
@@ -183,17 +219,17 @@ async function gunzip(ranges, size, path, signal) {
 }
 
 /**
- * The bundle a share holds, as a view bundle's source: each path the share's `manifest` lists, read from the packs
- * that hold it (`pack`, the service's read of one, sealed), opened with `key`. Each pack is fetched once and kept
- * while the source is (a pack that did not come is asked for again by the next read of it); from the start, every
- * pack is fetched ahead, the ones holding `manifest.json` and `structure.json` first, SHARE_PREFETCH at a time,
- * and a read's packs go to the head of the line. `dispose()` stops what is under way and lets the packs go.
- * @param {import('./types.js').ShareManifest} manifest
+ * The bundle a share holds, as a view bundle's source: each path of the share's `view` (its manifest's map of the
+ * bundle's files), read from the packs that hold it (`pack`, the service's read of one, sealed), opened with `key`.
+ * Each pack is fetched once and kept while the source is (a pack that did not come is asked for again by the next
+ * read of it); from the start, every pack the view names is fetched ahead, and no other, the ones holding
+ * `manifest.json` and `structure.json` first, SHARE_PREFETCH at a time, and a read's packs go to the head of the
+ * line. `dispose()` stops what is under way and lets the packs go.
+ * @param {import('./types.js').ShareManifest['view']} view
  * @param {{ key: CryptoKey, pack: import('./types.js').ShareService['pack'] }} options
  * @returns {import('./types.js').ViewBundleSource}
  */
-function viewBundleShareSource(manifest, { key, pack: fetchPack }) {
-  const files = manifest.files;
+function viewBundleShareSource(view, { key, pack: fetchPack }) {
   const lifetime = new AbortController();
   /** Each pack asked for, by its id: its bytes, opened, once they come. */
   const packs = new Map();
@@ -239,14 +275,14 @@ function viewBundleShareSource(manifest, { key, pack: fetchPack }) {
     pump();
     return wanted.map(pack => pack.bytes);
   }
-  const packsOf = path => (Object.hasOwn(files, path) ? files[path].at.map(([id]) => id) : []);
-  want([...new Set([...packsOf(VIEW_BUNDLE_MANIFEST), ...packsOf('structure.json'), ...Object.keys(files).flatMap(packsOf)])], false);
+  const packsOf = path => (Object.hasOwn(view, path) ? view[path].at.map(([id]) => id) : []);
+  want([...new Set([...packsOf(VIEW_BUNDLE_MANIFEST), ...packsOf('structure.json'), ...Object.keys(view).flatMap(packsOf)])], false);
 
   return {
     async read(path, { signal } = {}) {
       checkSignal(signal);
       if (lifetime.signal.aborted) throw abortError();
-      const entry = Object.hasOwn(files, path) ? files[path] : null;
+      const entry = Object.hasOwn(view, path) ? view[path] : null;
       if (!entry) throw Object.assign(new Error(`This shared model holds no ${path}.`), { status: 404 });
       const ids = [...new Set(entry.at.map(([id]) => id))];
       const opened = new Map();
@@ -280,16 +316,18 @@ function viewBundleShareSource(manifest, { key, pack: fetchPack }) {
 }
 
 /**
- * Open share `id` as the viewer's service over its bundle: its key derived from the id, its manifest read
- * (`service.manifest`) and opened, then its bundle read from its packs (`service.pack`), fetched ahead from the
- * start, and opened as any other (`openViewBundle`). SHARE_DAMAGED where the manifest does not open or is not one,
- * or a file is not as it says; SHARE_UNAVAILABLE where a pack did not come; SHARE_UNSUPPORTED where the bundle is
- * one this viewer does not open; a failure of `service.manifest` as it is. Disposing the service stops the share's
- * fetches and lets its packs go.
+ * Open share `id` as the viewer's service over its view: its key derived from the id, its manifest read
+ * (`service.manifest`) and opened, then its view bundle read from its packs (`service.pack`), fetched ahead from
+ * the start, and opened as any other (`openViewBundle`). The service also says what the share holds beside its view
+ * (`share`): its document's name, a model's script and what built it, and the paths of the files that made it,
+ * which the share's zip holds; none of their packs is fetched. SHARE_DAMAGED where the manifest does not open or is
+ * not one, or a file is not as it says; SHARE_UNAVAILABLE where a pack did not come; SHARE_UNSUPPORTED where the
+ * bundle is one this viewer does not open; a failure of `service.manifest` as it is. Disposing the service stops
+ * the share's fetches and lets its packs go.
  * @param {string} id
  * @param {import('./types.js').ShareService} service
  * @param {{ signal?: AbortSignal }} [options]
- * @returns {Promise<import('./types.js').CadViewBundleClient>}
+ * @returns {Promise<import('./types.js').CadShareClient>}
  */
 export async function openShare(id, service, { signal } = {}) {
   if (!SHARE_ID_PATTERN.test(String(id))) throw damaged('it names no share.');
@@ -300,9 +338,11 @@ export async function openShare(id, service, { signal } = {}) {
   const plain = await unseal(key, sealed, MANIFEST_AAD, "the share's manifest");
   let parsed;
   try { parsed = JSON.parse(text.decode(plain)); } catch (error) { throw damaged("the share's manifest is not JSON.", error); }
-  const source = viewBundleShareSource(readShareManifest(parsed), { key, pack: (pack, options) => service.pack(pack, options) });
+  const manifest = readShareManifest(parsed);
+  const source = viewBundleShareSource(manifest.view, { key, pack: (pack, options) => service.pack(pack, options) });
+  let client;
   try {
-    return await openViewBundle(source, { signal });
+    client = await openViewBundle(source, { signal });
   } catch (error) {
     source.dispose?.();
     // The source's own failures say what they are; whatever else stops the bundle opening is the bundle's.
@@ -310,4 +350,7 @@ export async function openShare(id, service, { signal } = {}) {
     throw Object.assign(new Error(`This shared model holds no view bundle this viewer opens: ${error?.message || error}`),
       { code: SHARE_UNSUPPORTED, cause: error });
   }
+  const { name, entry, made, files } = manifest;
+  return Object.assign(client, { share: Object.freeze({ name, entry, made: made && Object.freeze({ ...made }),
+    files: Object.freeze(Object.keys(files)) }) });
 }
