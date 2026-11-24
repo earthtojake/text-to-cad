@@ -10,7 +10,7 @@ reads a file to decide.
 
 One flag, one job: a job runs whole on its flag or is skipped. `static` needs none: the
 version and tree checks, the light contracts (every policy test but HEAVY_POLICY, and
-LIGHT_SKILL_TESTS: tests that need nothing installed) and the API's tests run on every change,
+LIGHT_SKILL_TESTS: tests that need nothing installed), the API's and the share service's tests run on every change,
 so a path only they read selects nothing. The release tier (`floor`, `installer`) runs on a
 full run: a VERSION change, the nightly schedule, a dispatch, Publish Release's call.
 
@@ -194,6 +194,7 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/web/**",), select(flags=["web_client", "web_viewer", "packaging"])),
     Rule(("apps/mcp/**",), select(flags=["mcp", "packaging"])),
     Rule(("apps/api/**",), NOTHING),  # its tests need no install: static runs them on every change
+    Rule(("apps/share/**",), NOTHING),  # likewise the share service's
     # js-core, beside docs: check-dependencies.mjs walks every app's source, and the web and mcp
     # jobs run it for theirs.
     Rule(("apps/docs/**",), select(flags=["docs", "core_js"])),
@@ -275,7 +276,7 @@ RULES: tuple[Rule, ...] = (
     # manifests, configs and root prose, the manual benchmarks, and the sample models no test
     # may read.
     Rule((
-        "scripts/test/test-api.sh", "scripts/test/test.sh",
+        "scripts/test/test-api.sh", "scripts/test/test-share.sh", "scripts/test/test.sh",
         "scripts/release/**", "scripts/github-workflows/deploy-vercel-app.sh", "scripts/look/**",
         "scripts/git-hooks/**", "scripts/bench/**", "scripts/README.md",
         ".github/workflows/release-publish.yml", ".github/workflows/release-prepare.yml",

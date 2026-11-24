@@ -191,6 +191,9 @@ jobs:
       - name: Run the API tests
         run: scripts/test/test-api.sh
 
+      - name: Run the share service's tests
+        run: scripts/test/test-share.sh
+
   # ---- unit and platform: the packages' suites ---------------------------------------------------
 
   # The library's, the server's (the engine's and the viewer backend's included) and the

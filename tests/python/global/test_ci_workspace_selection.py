@@ -87,6 +87,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^apps/web/(src|scripts)/.*\.test\.[cm]?js$",              # apps/web/scripts/run-tests.mjs
             r"^apps/mcp/src/.*\.test\.tsx?$",                          # apps/mcp vitest.config.mjs
             r"^apps/api/src/[^/]*\.test\.mjs$",                         # test-api.sh (node --test)
+            r"^apps/share/src/[^/]*\.test\.mjs$",                       # test-share.sh (node --test)
             r"^scripts/test/check-(dependencies|kit-boundaries|ui-strings)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cad(_server|_mcp)?/(.*/)?test_[^/]*\.py$",  # test-python.sh, test-floor.sh
             r"^tests/python/packages/kicad/(.*/)?test_[^/]*\.py$",       # test-kicad.sh
@@ -474,7 +475,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md", "docs/contributing/testing.md",
                      "skills/cad/SKILL.md", ".claude-plugin/plugin.json", "models/README.md",
                      "packages/cad/src/cad_server/engine/README.md",
-                     "packages/cad/src/cad_server/engine/docs/kinematics.md", "apps/api/package.json",
+                     "packages/cad/src/cad_server/engine/docs/kinematics.md", "apps/api/package.json", "apps/share/package.json",
                      ".github/workflows/release-publish.yml", "scripts/release/bump-version.sh"):
             with self.subTest(path=path):
                 self.assertEqual(jobs_for(path), set())
