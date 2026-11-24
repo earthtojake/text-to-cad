@@ -65,7 +65,7 @@ export function inlineHeight(width: number, maxHeight?: number): number {
  */
 function Frame({ bridge, context, insets, inline = false, floatingComposer = false, overlay = null, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; floatingComposer?: boolean; overlay?: ReactNode; children: ReactNode }) {
   // Where the host's composer floats over the page instead of taking room from it: the room it
-  // covers, which lists scroll clear of. Keep the cube in the opposite corner so a tab's
+  // covers, which lists scroll clear of. Keep the cube on the opposite side (its top-left) so a tab's
   // composer or sidebar chat button never covers it.
   const floating = {
     ...(floatingComposer ? { '--cad-host-bottom-inset': `${context.safeAreaInsets?.bottom || 0}px`,
@@ -92,22 +92,21 @@ function Frame({ bridge, context, insets, inline = false, floatingComposer = fal
 
 /**
  * Inline, the card's way to full size, where the host can show it so: in the navbar, before the
- * host's other actions, over a file and on the home; in the file handler's corner (`CardCorner`),
- * which has no navbar. Two diagonal arrows.
+ * host's other actions, over a file and on the home, in every view. Two diagonal arrows.
  */
 function FullSizeButton({ bridge }: { bridge: Bridge }) {
   const { t } = useI18n();
   const label = t('navbar.fullSize');
   const expand = () => void bridge.request('ui/request-display-mode', { mode: 'fullscreen' }).catch(() => {});
   return <TooltipHint content={label}>
-    <Button variant="ghost" size="icon-xs" className="size-6 text-muted-foreground hover:text-foreground" aria-label={label} onClick={expand}>
-      <Maximize2 className="size-3.5" aria-hidden="true" />
+    <Button variant="ghost" size="icon-xs" className="size-control shrink-0 rounded-md text-muted-foreground hover:text-foreground" aria-label={label} onClick={expand}>
+      <Maximize2 className="size-4" aria-hidden="true" />
     </Button>
   </TooltipHint>;
 }
 
 /**
- * The CAD Viewer's page of each document a launch named, from its `browser` (`cad_server/mcp/server.py`'s
+ * The viewer's page of each document a launch named, from its `browser` (`cad_server/mcp/server.py`'s
  * `_reach`, the link a text client's `cad_show` gives): by absolute path, the home's under ''.
  */
 type Pages = ReadonlyMap<string, string>;

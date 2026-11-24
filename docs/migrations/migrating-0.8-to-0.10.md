@@ -76,7 +76,7 @@ nowhere.
 nothing once it is out (a patch release before 1.0, a patch or minor release from 1.0) and
 switches to it once nothing is running; one that may break something waits for you.
 `cad update auto off` (or Automatic updates in the menu under CAD's logo) leaves them all
-to you: the update button in the CAD Viewer and the CAD app, `cad update`, or the install
+to you: the update button in the viewer and the CAD app, `cad update`, or the install
 command again.
 
 **7. The engine's HTTP API is `/api/v1`**: a script that read the engine's port by hand reads

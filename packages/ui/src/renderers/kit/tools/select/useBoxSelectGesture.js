@@ -1,3 +1,4 @@
+import { SCENE_COLORS } from "@cad/core/lib/viewportTheme.js";
 import { useEffect, useRef } from "react";
 import { boxFromDrag } from "@cad/core/lib/viewer/boxSelect.js";
 import { prefersCoarsePointer } from "../../viewport/dom.js";
@@ -7,7 +8,7 @@ const FINE_DRAG_SLOP_PX = 4;
 const COARSE_DRAG_SLOP_PX = 12;
 // The box's one look, the same in every viewer and whichever way it is drawn: a solid outline in the
 // selection's blue over a light fill of it.
-const BOX_STYLE = Object.freeze({ border: "1px solid #2979ff", background: "rgba(41, 121, 255, 0.12)" });
+const BOX_STYLE = Object.freeze({ border: `1px solid ${SCENE_COLORS.box.border}`, background: SCENE_COLORS.box.fill });
 
 /**
  * Box selection's one gesture, in every viewer that has it: a left drag over the canvas draws a box

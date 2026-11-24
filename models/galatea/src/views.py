@@ -1,4 +1,4 @@
-"""Galatea as the CAD viewer draws it, as frames for the film: no studio, no lens, the viewer's own display modes.
+"""Galatea as the viewer draws it, as frames for the film: no studio, no lens, the viewer's own display modes.
 
     cad run src/views.py            120 frames, 1600 x 900, into tmp/film/views/ (five seconds at 24 a second)
     cad run src/views.py 12         every 12th frame: a quick look

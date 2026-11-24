@@ -18,7 +18,7 @@ const SEARCH_DELAY_MS = 150;
 const SHOWN_FOLDERS = 3;
 // A crumb is a folder's whole name, never cut: the ones that do not fit go into the ellipsis. Only
 // the folder the explorer is in, left on its own, is cut to the row.
-const CRUMB_CLASS = "rounded-sm px-1 py-0.5 hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
+const CRUMB_CLASS = "cad-hit rounded-sm px-1 py-0.5 hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 const CRUMB = `${CRUMB_CLASS} shrink-0 whitespace-nowrap text-muted-foreground`;
 const CURRENT_CRUMB = `${CRUMB_CLASS} min-w-0 truncate text-foreground`;
 // A row is the trees' compact line (`TreeRowSurface`) in 12px text. Its kind is the trees' small,
@@ -81,7 +81,7 @@ function Note({ children, busy = false }) {
 
 /** What a folder opened inline says while it has no rows to show: a row's height, in its glyph's column. */
 function InlineNote({ depth, busy = false, children }) {
-  return <p className="relative flex h-6 items-center gap-1 text-xs text-muted-foreground" style={{ paddingLeft: rowInset(depth) }}
+  return <p className="relative flex h-icon-button items-center gap-1 text-xs text-muted-foreground" style={{ paddingLeft: rowInset(depth) }}
     role={busy ? "status" : undefined}>
     <TreeRowGuides depth={depth} inset={ROW_INSET_PX} />
     <span className="flex size-3 shrink-0 items-center">{busy ? <LoaderCircle className="size-3 animate-spin" aria-hidden="true" /> : null}</span>

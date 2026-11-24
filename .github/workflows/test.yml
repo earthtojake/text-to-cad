@@ -193,7 +193,7 @@ jobs:
 
   # ---- unit and platform: the packages' suites ---------------------------------------------------
 
-  # The library's, the server's (the engine's and the CAD Viewer backend's included) and the
+  # The library's, the server's (the engine's and the viewer backend's included) and the
   # shim's suites, or the test files of them a change itself edits. Run whole they are split
   # over shards, each taking its share of every suite (CAD_TEST_SHARD); a narrowed selection is
   # one shard. The first shard also checks the types,
@@ -426,8 +426,8 @@ jobs:
       ref: ${{ inputs.ref }}
 
   # The install command against the real programs of Claude Code, Codex and Gemini CLI, on Windows, macOS and Linux,
-  # each on a private computer: install (cad a uv tool, its server, a model, the viewer, the doctor), again (cad left
-  # alone, the plugin updated), and from 0.11.10's installer's state (real-install.yml, scripts/test/real-install.py). Measured on macOS
+  # each on a private computer: install (cad a uv tool, its server, a model, the viewer, the doctor), again (cad
+  # installed already, the plugin updated), and from 0.11.10's installer's state (real-install.yml, scripts/test/real-install.py). Measured on macOS
   # with a warm uv cache: 94 s; on a runner, cad's first download and its kernel's (about 240 MB) add a few minutes,
   # Windows the slowest. With the rehearsals: a full run, nightly, and a change to the installers.
   real-install:
@@ -497,6 +497,11 @@ jobs:
         timeout-minutes: 35
         run: python scripts/test/rehearse-update.py bridge --uv-cache "${{ runner.temp }}/uv"
 
+      - name: From 0.11.13, whose own `cad plugin update` runs the install command
+        if: matrix.shard == '1/2'
+        timeout-minutes: 15
+        run: python scripts/test/rehearse-update.py plugin-update --uv-cache "${{ runner.temp }}/uv"
+
       - name: From 0.11.0, the first with an automatic update, by itself
         if: matrix.shard == '1/2'
         timeout-minutes: 15
@@ -519,8 +524,8 @@ jobs:
   # person's computer: netgen, cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the cad-ccx package), solves.
   # Its suite (tests/python/packages/fea, test-fea.sh) is this job's alone: the study's parse, checks and
   # materials, the solves against hand calculations, assemblies, the results folder and its pictures (drawn under
-  # Xvfb), and the command through the library's runner of one operation. Linux only: the stack is the same
-  # wheels everywhere, and the solves are CPU-bound. About 2 minutes.
+  # Xvfb), and the command through the library's runner of one operation. The full suite stays on Linux.
+  # The Windows job below runs one real solve through the command with the wheel for that platform.
   fea:
     name: fea
     needs: changes
@@ -557,6 +562,37 @@ jobs:
 
       - name: Run the fea suite
         run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-fea.sh
+        shell: bash
+
+  fea-windows:
+    name: fea (Windows smoke)
+    needs: changes
+    if: needs.changes.outputs.fea == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        timeout-minutes: 10
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: packages/core
+
+      - name: Install the netgen and calculix integrations
+        timeout-minutes: 5
+        run: uv sync --locked --inexact --group fea
+
+      - name: Solve a cantilever through cad step solve
+        timeout-minutes: 4
+        run: |
+          python -c "from cad._internal.fea.mesh import require_fea_stack; require_fea_stack()"
+          python -m unittest -v tests.python.packages.fea.test_fea.Cantilever.test_the_cli_reports_the_same_numbers_as_json
         shell: bash
 
   # Blender as a Python module (bpy): the server, on its own Python as everywhere, runs one script that
@@ -732,7 +768,7 @@ jobs:
           UI_BROWSER_TEST_CONCURRENCY: "1"
         run: scripts/test/test-js.sh --select ui-${{ matrix.part }}
 
-  # The CAD Viewer's client: Node only. The bundled viewer, served through the real backend,
+  # The viewer's client: Node only. The bundled viewer, served through the real backend,
   # is driven in `viewer-e2e`.
   js-web:
     name: js-web
@@ -755,7 +791,7 @@ jobs:
           playwright: "false"
           npm: packages/core packages/ui apps/web
 
-      - name: Run the CAD Viewer client tests
+      - name: Run the viewer client tests
         run: scripts/test/test-js.sh --select web
 
   # The CAD app an agent host renders: its host adapter's units in jsdom, and the one-file
@@ -784,7 +820,7 @@ jobs:
       - name: Run the CAD app tests and build it
         run: scripts/test/test-js.sh --select mcp
 
-  # The docs site: lint, the Next build and icon verification, and the animated brand marks.
+  # The docs site: lint, the Next build and icon verification.
   docs:
     name: docs
     needs: changes
@@ -885,7 +921,7 @@ jobs:
       - name: Bundle production outputs from clean
         run: scripts/bundle/bundle.sh --clean
 
-      - name: Launch the bundled CAD Viewer through the backend
+      - name: Launch the bundled viewer through the backend
         run: scripts/test/test-viewer-launch.sh
 
       - name: Exercise the bundled viewer in Chromium
@@ -923,6 +959,7 @@ jobs:
       - real-install
       - update-rehearsal
       - fea
+      - fea-windows
       - blender
       - kicad
       - skills

@@ -1,20 +1,14 @@
-"""Helpers shared by the URDF, SDF and SRDF readers and validators.
+"""Helpers shared by the URDF and SRDF readers and validators.
 
-These three formats are different languages with different rules, so most of each
+The two formats are different languages with different rules, so most of each
 reader is rightly its own. What is genuinely common is the plumbing underneath: how a
 path is named in a finding, how an XML tag is stripped of its namespace, how a duplicate
-is spotted. Those had drifted into five, three and three near-copies respectively, which
-is how two spellings of "path relative to the repo" ended up living side by side.
+is spotted. Those had drifted into near-copies, which is how two spellings of "path
+relative to the repo" ended up living side by side.
 
 What deliberately did NOT move here, because the copies are not the same function:
-
-* ``_warn_unknown_children`` — URDF treats a ``ns:tag`` colon prefix as a namespaced
-  extension and skips it; SDF only recognises the ``{uri}tag`` form. Sharing one would
-  silently change which unknown children get reported in one of the two.
-* ``_required_name`` — the SDF *reader* raises ``SdfSourceError`` while the SDF
-  *validator* records a finding and continues. Same question, opposite error models.
-* SRDF's ``_local_name`` — it also strips a ``ns:`` prefix, which the SDF one must not
-  do. See :func:`local_name` below.
+SRDF's ``_local_name``, which also strips a ``ns:`` prefix that this one keeps. See
+:func:`local_name` below.
 """
 
 from __future__ import annotations
@@ -43,8 +37,8 @@ def local_name(tag: object) -> str:
 
     ElementTree expands ``xmlns`` into ``{uri}tag``, so every tag comparison has to strip
     it first. This does NOT strip a literal ``ns:`` prefix: an unexpanded colon prefix
-    means the document declared no such namespace, which SDF reports rather than accepts.
-    SRDF keeps its own variant that strips both.
+    means the document declared no such namespace, so the tag is not the one it looks
+    like. SRDF keeps its own variant that strips both.
     """
     return str(tag).rsplit("}", 1)[-1]
 
@@ -61,8 +55,8 @@ def children(parent: ET.Element, tag_name: str) -> list[ET.Element]:
 def duplicate_values(values: Iterable[str]) -> list[str]:
     """Values appearing more than once, sorted — the shared half of duplicate checking.
 
-    Only the detection is shared. What each format does about it is not: the SDF reader
-    raises, the URDF and SRDF validators add findings under different codes and wordings.
+    Only the detection is shared. What each format does about it is not: the URDF and
+    SRDF validators add findings under different codes and wordings.
     """
     seen: set[str] = set()
     duplicates: set[str] = set()

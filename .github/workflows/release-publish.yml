@@ -132,7 +132,7 @@ jobs:
             echo "Nothing to publish: version $current_version is not past $latest_tag."
           fi
 
-      # Only a deploy key may update the install branches (CONTRIBUTING.md, "Repository settings"),
+      # Only a deploy key may update the install branches (docs/contributing/releases.md, "Repository settings"),
       # and they are pushed after the PyPI upload: a release without the key stops here, before it.
       - name: Check the install branches' deploy key
         if: steps.gate.outputs.should_publish == 'true' && steps.gate.outputs.is_main == 'true'
@@ -213,7 +213,7 @@ jobs:
       # commit before anything else in this run touches the tree. It is checked against
       # the portal's package rules here, ahead of every irreversible step: a package the
       # portal would refuse stops the release before PyPI, not after it. The portal has
-      # no API, so a person uploads this file (CONTRIBUTING.md, Releases); tag-release
+      # no API, so a person uploads this file (docs/contributing/releases.md); tag-release
       # attaches these same bytes to the GitHub Release.
       - name: Build the OpenAI plugin ZIP
         env:
@@ -242,7 +242,7 @@ jobs:
           playwright: "false"
           npm: packages/core packages/ui apps/web apps/mcp
 
-      # The bundle feeds the WHEEL, and it is the only thing that does: the CAD Viewer
+      # The bundle feeds the WHEEL, and it is the only thing that does: the viewer
       # client and the CAD app are both
       # gitignored, so the release commit carries none of them. Nothing
       # here writes to git -- the wheel is the release asset. CAD_RELEASE names the
@@ -256,7 +256,7 @@ jobs:
       - name: Validate production bundle layout
         run: scripts/github-workflows/check-builds.sh --skip-bundle-check
 
-      # The bundle built the CAD Viewer and the CAD app with a source map and a debug id for every
+      # The bundle built the viewer and the CAD app with a source map and a debug id for every
       # chunk, and left the maps out of the wheel. Each chunk a crash on either page can name, with
       # its map, gathered for PostHog and zipped for the GitHub Release (scripts/release/sourcemaps.py).
       - name: Collect the pages' source maps
@@ -387,7 +387,7 @@ jobs:
 
   # The upload alone, and the one job that may mint a token PyPI takes (id-token): it runs in the
   # `release` environment, which deploys from main only, and each of the four projects' trusted
-  # publisher on PyPI names this workflow AND that environment (CONTRIBUTING.md, "Repository
+  # publisher on PyPI names this workflow AND that environment (docs/contributing/releases.md, "Repository
   # settings"). So a run on any other branch -- build-test, or a workflow changed there -- cannot
   # publish. In scripts/release/pypi_release.py's PROJECTS order, each step listed by PyPI's index
   # before the next: the library, which the others pin at the release, first; then cad-server and
@@ -556,7 +556,7 @@ jobs:
       - name: Commit the plugin onto latest, claude-plugin and codex-plugin and push them
         id: branches
         env:
-          # Only a deploy key may update the install branches (CONTRIBUTING.md, "Repository settings"),
+          # Only a deploy key may update the install branches (docs/contributing/releases.md, "Repository settings"),
           # so the release pushes them with its own, which the gate found.
           INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}
           GH_TOKEN: ${{ github.token }}

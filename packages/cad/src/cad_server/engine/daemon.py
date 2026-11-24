@@ -31,8 +31,13 @@ memory-pressure signal (``serve.Pressure``), idle processes are retired in the o
 declarations rank them, least recently used first within a rank: the standby, then render processes,
 then the workers no page watches, and a watched one only when no other is left. A process that says,
 answering, that it alone is over the cap (``retire``: ``worker.retirement``) is retired once its
-request is done. Before a worker is stopped, every document of it the server does not hold is taken
-from it (``models.Models.drain``): a document outlives its worker. A retired script's next build is a
+request is done. A busy one is never retired, but one whose memory, as the system counts it, is past
+the ceiling on one process (``CAD_ENGINE_WORKER_CEILING_MB``, ``worker.memory_ceiling_mb``) at two
+``tend`` rounds running, during one request, is killed, and its request fails saying why, as a build
+out of memory (``Supervisor.overrun``, ``_overran``): a build in native code cannot stop itself, and
+one that runs away would take the machine. Before a worker is stopped,
+every document of it the server does not hold is taken from it (``models.Models.drain``): a document
+outlives its worker. A retired script's next build is a
 fresh worker's, a restart. Each such document is also kept in the engine's cache once it is idle, at
 its drain and at shutdown (``cache``), so a restart of the daemon opens it at once.
 
@@ -78,6 +83,7 @@ pages waiting on a served document the frame's build writes (``serve.Server.buil
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -108,7 +114,7 @@ __all__ = ["DEFAULT_PORT", "PortHeld", "let_go", "main", "port_holder", "worker_
 
 
 def _application(server: Any, host: str, port: int) -> Any:
-    """The server's HTTP application on the engine's listener: the CAD Viewer's and the CAD app's
+    """The server's HTTP application on the engine's listener: the viewer's and the CAD app's
     (``cad_server._internal.engine_host.http_factory``, the one module that imports either)."""
     from cad_server._internal.engine_host import http_factory
 
@@ -225,9 +231,16 @@ def refused(error: Exception) -> dict[str, Any]:
     from cad.engine.serve import NotHeld
     from cad.engine.worker import refusal
 
+    from cad.engine.parameters import ParameterRefused
+
     found: dict[str, Any] = {"failed": str(error), **refusal(error)}
     if isinstance(error, NotHeld):
         found.update(state=error.state, rebuild=error.rebuild)
+    if isinstance(error, ParameterRefused):
+        # Why a change of parameters is refused (``code``), what to do, a parameter's own reason, and a failed
+        # build's whole words (``parameters.Setting``).
+        found.update({key: value for key in ("code", "hint", "reason", "detail")
+                      if isinstance(value := getattr(error, key, None), str)})
     return found
 
 
@@ -262,6 +275,15 @@ def tend_seconds() -> float:
         return max(1.0, float(os.environ[TEND_ENV]))
     except (KeyError, ValueError):
         return TEND_SECONDS
+
+
+def catch_up_seconds() -> float:
+    """How long the server waits after its start before the plugin first catches up (``plugin_catch_up.START_SECONDS``,
+    two tendings), in step with its tending where a test's computer sets that (``CAD_ENGINE_TEND_SECONDS``): as many of
+    its own tendings."""
+    from cad_server._internal.plugin_catch_up import START_SECONDS
+
+    return START_SECONDS * tend_seconds() / TEND_SECONDS
 
 
 def _held(error: OSError) -> bool:
@@ -561,12 +583,12 @@ def switch_auto_update(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def switch_plugin(request: dict[str, Any]) -> dict[str, Any]:
-    """Whether the server runs the install command once where cad is newer than the release it is up to date for
+    """Whether the server runs ``cad plugin install`` once where cad is newer than the release it is up to date for
     (``plugin_catch_up``), switched by the server (``{"op": "plugin_auto_update", "on", "release", "note"}``: ``cad
-    plugin update auto on|off`` where a server runs; ``release``, the asking cad's, which turning it on takes the install
-    command as up to date for; this server's where it names none; ``"note": false``, nothing taken as up to date: the
-    install command's run that turns it on is ending badly), as ``switch_auto_update`` keeps its own: ``{"ok": true,
-    "on"}``, or ``{"failed"}`` in one line."""
+    plugin update auto on|off`` where a server runs; ``release``, the asking cad's, which turning it on takes the plugin
+    as up to date for; this server's where it names none; ``"note": false``, nothing taken as up to date: the install
+    command that turns it on is ending its run badly, or the cad that asks is no global install), as ``switch_auto_update`` keeps
+    its own: ``{"ok": true, "on"}``, or ``{"failed"}`` in one line."""
     from cad_server._internal import auto_update
 
     on = request.get("on")
@@ -607,7 +629,7 @@ class Daemon:
         self.unsaid = ""
         self.refusal: PortHeld | None = None  # its named port held by another process: it stops (``serve``)
         from cad.engine.serve import Pressure
-        from cad.engine.worker import rss_cap_mb
+        from cad.engine.worker import footprint_mb, memory_ceiling_mb, rss_cap_mb
 
         # The system's memory-pressure signal, the server's too once it runs (``serve``): under it the
         # supervisor sheds the standby and its least recently used processes (``Supervisor.shed``); as
@@ -618,6 +640,7 @@ class Daemon:
         # watches, the progress that wakes pages, and the cache's ``saved``.
         self.supervisor = Supervisor(cap or worker_cap(), SERVICES, watched=self.connected,
                                      drain=lambda process: self.models.drain(process), memory=rss_cap_mb,
+                                     ceiling=memory_ceiling_mb, measure=footprint_mb,
                                      pressed=self.pressure.under, on_progress=self.progressed,
                                      on_event={"saved": lambda process, header, payload:
                                                self.models.cache.saved(process, header, payload)})
@@ -666,13 +689,23 @@ class Daemon:
         self.handover = Carrier(time.monotonic())
         self.bridge = Tending()
         # The install command's one run where cad is newer than the release it is up to date for
-        # (``plugin_catch_up``), held while it runs.
+        # (``plugin_catch_up``), held while it runs; none asked for until a short while after this start.
         from cad_server._internal.plugin_catch_up import Catcher
 
-        self.catching = Catcher()
+        self.catching = Catcher(self.began, wait=catch_up_seconds())
         from cad_server.engine.models import Models
 
         self.models = Models(self)
+        from cad_server.engine.parameters import Setting
+
+        # A model's parameters set in its script and the script built again (``parameters``): a page's Save,
+        # ``set``; and a page's look at other values, built in the model's worker and held for that page alone:
+        # ``preview``. Both reach the engine through the page's routes alone (``server.set_parameters``,
+        # ``server.preview_parameters``), never a request of this socket.
+        self.setting = Setting(self)
+        from cad_server.engine.parameters import Previewing
+
+        self.previewing = Previewing(self)
         from cad_server.engine import registry
         from cad_server.engine.checks import Checks, Pool, pool_size
         from cad_server.engine.checks_runner import Limits, Runner
@@ -887,8 +920,10 @@ class Daemon:
                         "progress": frame}
         if "failed" in answer:
             frame = worker.progress or {}
-            # The worker itself failed -- it died, or answered no report: cadgen's to fix, to report.
-            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "reportable": True,
+            # The worker itself failed -- it died, or answered no report: cadgen's to fix, to report; but one the
+            # engine stopped past the ceiling on one process, whose model is the one to change (``_overran``).
+            reportable = not getattr(worker, "overran", None)
+            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "reportable": reportable,
                                "progress": frame}
                         for path in [*outcomes, *self.models.paths(worker, frame.get("job"))]}
         if outcomes:
@@ -1057,6 +1092,10 @@ class Daemon:
                 self.server.revive = self.models.adopt
                 self.server.leaving = self.models.leaving
                 self.server.delete = self.models.delete
+                # A model's parameters as its live worker recorded them, and their ``set`` (``parameters``).
+                self.server.parameters = self.models.live
+                self.server.set_parameters = self.setting.set
+                self.server.preview_parameters = self.previewing.preview
                 application = getattr(self.server.http, "app", None)
                 if application is not None:
                     application.worked = self.stamp  # an agent's tool call is a command too (``mcp.http.Sessions``)
@@ -1343,7 +1382,7 @@ class Daemon:
                 except Gone as error:
                     # One that exited mid-request is not asked again, nor one that never said it was ready.
                     if attempt == 2 or error.during or error.unready:
-                        failed = {"failed": self._where(error, worker), **_unstarted(error)}
+                        failed = {"failed": self._where(error, worker), **_unstarted(error), **_overran(worker)}
                         if worker is not None and not request.get("expected"):
                             self._built(worker, failed, verb=True)
                         send(failed)
@@ -1549,9 +1588,22 @@ class Daemon:
                 return
             with self.busy_lock:
                 self.busy += 1
+            first = contextlib.ExitStack()
             try:
                 script = request["script"]
                 key, cwd, _python = self._routed(request)  # a build's Python is ``caller``'s
+                # The script's turn (``parameters.Setting.building``): a set of it under way first, then this
+                # build before a set of it and before a page's preview of it (``parameters.Previewing``).
+                first.enter_context(self.setting.building(key, send))
+
+                def answered(payload: dict[str, Any], held: Any) -> None:
+                    # The worker and the script's turn are let go BEFORE the answer, so a caller that saves the
+                    # parameters the moment its build returns finds the script free (never ``busy``).
+                    if held is not None:
+                        self.release(held)
+                    first.close()
+                    send(payload)
+
                 for attempt in (1, 2):
                     worker = None
                     fresh = None
@@ -1577,6 +1629,9 @@ class Daemon:
                         if cached is not None:
                             order["cache"] = cached  # what a fresh worker takes a model from, by its key
                         answer = worker.request(order, send)
+                        from cad_server.engine.parameters import ran
+
+                        ran(worker, request, answer)  # the run its parameters' ``set`` builds again, and how it ended
                         answer["worker"] = {"pid": worker.pid, "fresh": fresh}
                         # This server's release, which a script run in its own Python says once a run
                         # when it is another (``contract.notice``); and how that run was made, which the
@@ -1608,20 +1663,24 @@ class Daemon:
                         answer["program"] = request.get("program")
                         self._built(worker, answer)
                         told.update(answer=answer, fresh=fresh, seconds=time.monotonic() - began)
-                        send(answer)
+                        held, worker = worker, None
+                        answered(answer, held)
                         return
                     except Gone as error:
                         # A build is never run twice, nor waited for twice on a worker that never said
                         # it was ready: refused in that one line.
                         if attempt == 2 or error.during or error.unready:
-                            failed = {"failed": self._where(error, worker), **_unstarted(error)}
+                            stopped = _overran(worker)
+                            failed = {"failed": self._where(error, worker), **_unstarted(error), **stopped}
                             if worker is not None:
                                 self._built(worker, failed)
                             # A worker that died under the build: its exit status, where the system said one.
+                            # One the engine stopped past the ceiling did not die: its build ran out of memory.
                             told.update(answer=failed, fresh=fresh, seconds=time.monotonic() - began,
-                                        died=(error.code if error.code is not None else True) if error.during
-                                        else None)
-                            send(failed)
+                                        died=(error.code if error.code is not None else True)
+                                        if error.during and not stopped else None)
+                            held, worker = worker, None
+                            answered(failed, held)
                             return
                     except RuntimeError as error:
                         if not _no_kernel(error):
@@ -1629,12 +1688,14 @@ class Daemon:
                         # No kernel environment to start the worker in: its line, and its type.
                         told.update(answer={"failed": str(error), **failed_type(error)}, unavailable=error,
                                     seconds=time.monotonic() - began)
-                        send(told["answer"])
+                        held, worker = worker, None
+                        answered(told["answer"], held)
                         return
                     finally:
                         if worker is not None:
                             self.release(worker)
             finally:
+                first.close()
                 with self.busy_lock:
                     self.busy -= 1
                     self.worked = time.monotonic()
@@ -1883,7 +1944,8 @@ class Daemon:
     def caught_up(self) -> None:
         """What follows cad's own update, at the server's start and at each quiet tending (``tend``): the install
         command run once where cad is newer than the release it is up to date for and the person's switch says so
-        (``plugin_catch_up``), then the last update attempt counted once, where it ended and nothing it waits for is
+        (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its lock),
+        then the last update attempt counted once, where it ended and nothing it waits for is
         underway (``auto_update.report``). Never on a server that stops; never fails the server."""
         if self.draining or self.stopping.is_set():
             return
@@ -1904,7 +1966,8 @@ class Daemon:
         """What the engine looks after, each ``TEND_SECONDS``: never the process, and nothing by how
         long anything has been idle. A killed client's pipes are swept, and the processes' memory is
         held to its cap and the system's pressure (``Supervisor.shed``: a worker's documents drained
-        first, so they stay held); the memory budget sends unwatched documents out of memory, least recently used
+        first, so they stay held), and a busy one to the ceiling on one process (``Supervisor.overrun``);
+        the memory budget sends unwatched documents out of memory, least recently used
         first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
         once it has waited a window (``_send_counts``); the version check's feed is read in the background where it
         is due (``updates.refresh``), and cad updated where that is due and nothing is in flight
@@ -1922,7 +1985,9 @@ class Daemon:
         if self.door is not None:
             self.door.sweep()
         self.supervisor.shed(self.pressure.under())
+        self.supervisor.overrun()
         self.models.prune()
+        self.previewing.expire()  # a page's previews nobody has read for a while (``parameters.Previewing``)
         _send_counts()
         if self.draining or self.stopping.is_set():
             return
@@ -2032,6 +2097,14 @@ def _unstarted(error: Gone) -> dict[str, str]:
     in, which its caller counts as that (``no_kernel``), never as a refusal. One gone during the work (it died under
     it) is said in its words alone, which say its exit status."""
     return {} if error.during else failed_type(error)
+
+
+def _overran(worker: Process | None) -> dict[str, str]:
+    """A worker the engine stopped past the ceiling on one process (``Supervisor.overrun``) answered by a type, a
+    build out of memory's (``MemoryError``): a limit on the machine's memory reached, which telemetry counts as that
+    (``memory``) and its page does not offer to report -- never a worker that died under the work, nor a mistake
+    in cadgen's code. Nothing for any other worker."""
+    return {"type": "MemoryError"} if worker is not None and getattr(worker, "overran", None) else {}
 
 
 def _no_kernel(error: BaseException) -> bool:

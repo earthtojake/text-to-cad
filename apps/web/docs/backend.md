@@ -106,7 +106,7 @@ the engine holds (`file` is its id, `name` its function, `sourcePath` null: it h
 browse); else a 404 whose `error` is the engine's words for why, naming the command that builds
 it again, and whose `state` the engine's (`unsaved`, `detached`). A script is never a row. An
 envelope says what the document is: `id`, `kind` (`model`, or a file's by its extension: `xbf`,
-`step`, `stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`, `sdf`, `kicad_pcb`, `kicad_sch`), `name`, `version`, `state` (a model's,
+`step`, `stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`), `name`, `version`, `state` (a model's,
 the engine's: `live`, `held`, `building`, `failed`; a file's `live`), `source` (a model's script and
 function, a file's path), `producers`, `api` (where its kind's reads are,
 `/api/v1/documents/<kind>/<id>`), `exports` (the formats its Export offers), and for a document
@@ -170,7 +170,8 @@ The web page uses bounded version waits; the MCP page asks with `wait=0` so a
 version check occupies no host call slot while waiting for an edit. The same
 router handles reads tunneled through `cad_http`, in process. Document buffers
 and routes retain the raw-file response headers and engine authentication.
-The wire format is the engine README's **Wire format** section.
+The wire format is the engine's **Wire format** page
+(`packages/cad/src/cad_server/engine/docs/wire-format.md`).
 
 The browser host constructs a `CadClient` from `@cad/core/client` and
 injects it into the viewer renderers. Catalog subscriptions share the client's

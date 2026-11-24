@@ -1,14 +1,12 @@
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
-import LoadingIcon from "@cad/ui/loading-icon";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "@cad/ui/i18n";
 import { statusLabel } from "./statusLabels.js";
-import { ViewerHostContext } from "../../../host/context.js";
-import { Progress } from "@cad/ui/primitives/progress";
+import LoadingStep from "../../../loading/LoadingStep.jsx";
 
-// Shared by file opening and graphics initialization. There is no headline and no clock:
-// that a model is opening is plain from the mark, and the step line under it says what is
-// actually happening. A long wait only adds the step's detail line.
+// Shared by file opening and graphics initialization: the one indicator (`loading/LoadingStep.jsx`), its step line
+// what is actually happening. There is no headline and no clock; a long wait only adds the step's detail line, and a
+// lost connection its waiting line, the bar held.
 export default function LoadingIndicator({ progress, operationKey = "" }) {
   const { t } = useI18n();
   // The operation that has been loading for over ten seconds, if any: its detail line shows.
@@ -19,18 +17,12 @@ export default function LoadingIndicator({ progress, operationKey = "" }) {
   }, [operationKey]);
   const long = longKey === operationKey;
   const waiting = Boolean(progress?.connectionLost);
-  const reducedMotion = useContext(ViewerHostContext)?.environment.reducedMotion === true;
+  const step = statusLabel(progress?.label, t);
+  const label = waiting ? t("loading.lastStep", { label: step || t("loading.openingModel") }) : step || t("loading.preparingView");
   return (
-    <div className="flex w-[22rem] max-w-[90vw] flex-col gap-3" role="status" aria-live="polite" data-viewer-loading="true">
-      <LoadingIcon active={!waiting} reducedMotion={reducedMotion} className="self-center" />
-      <div className="flex items-baseline justify-between gap-4 text-xs opacity-75">
-        <span className="truncate">{waiting ? t("loading.lastStep", { label: statusLabel(progress?.label, t) || t("loading.openingModel") }) : statusLabel(progress?.label, t) || t("loading.preparingView")}</span>
-        <span className="shrink-0 tabular-nums">{progress?.counts || ""}</span>
-      </div>
-      <Progress value={progress?.percent ?? null} aria-label={statusLabel(progress?.label, t) || t("loading.preparingView")}
-        className={waiting ? "[&_[data-slot=progress-indicator]]:[animation-play-state:paused]" : undefined} />
-      {waiting ? <div className="text-xs opacity-75" aria-live="off">{t("loading.waitingForResponse")}</div> : null}
-      {long && progress?.detail ? <TooltipHint content={progress.detail}><div className="truncate text-xs opacity-60" >{progress.detail}</div></TooltipHint> : null}
-    </div>
+    <LoadingStep label={label} counts={progress?.counts || ""} percent={progress?.percent ?? null} paused={waiting} data-viewer-loading="true">
+      {waiting ? <div aria-live="off">{t("loading.waitingForResponse")}</div> : null}
+      {long && progress?.detail ? <TooltipHint content={progress.detail}><div className="truncate">{progress.detail}</div></TooltipHint> : null}
+    </LoadingStep>
   );
 }

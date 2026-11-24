@@ -714,11 +714,18 @@ def build_coolant(bank: int, sectioned: bool = True):
     # since-deleted rail) that backward reach bit into the head's front
     # face, now that the housing sits flush on it instead: empirically
     # zero clear of `heads.build()`'s head:2 only from tstat_x[1] - 9 on.
+    # A Ø42 neck there reached back exactly to the housing's base plane
+    # (tstat_x[0]), its side tangent to the base face: the fuse came back
+    # unsound and dropped the neck (a bare drum, the hose ending inside it),
+    # and forward it ran 3 mm past the cap's face. Ø36 at the same station
+    # (so the hose, rooted there, keeps its clearance to the head) spans
+    # tstat_x[0] + 3 to the cap's face.
+    neck_d = 36.0
     neck0 = (tstat_x[1] - 9.0, ry, rz)
     neck1 = (neck0[0], ry + hd[1] * 46.0, rz + hd[2] * 46.0)
     housing = fuse_all([
         geo.cyl_x(tstat_x[0], tstat_x[1], 58.0, ry, rz),
-        geo.cyl_along(neck0, neck1, 42.0),
+        geo.cyl_along(neck0, neck1, neck_d),
     ])
     housing = housing - geo.cyl_x(tstat_x[0] - 4.0, tstat_x[1] - 8.0, 34.0, ry, rz)
     housing, _ = soften(housing, 3.0, min_r=0.8)

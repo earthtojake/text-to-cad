@@ -40,7 +40,7 @@ was not checked: an error found is the part's whatever else was not judged. ``ok
 
 Each option belongs to a process (``dfm.<process>.OPTIONS``) or to all (``dfm.COMMON``), and one given to
 another process is refused by name before anything is read, as an option the check does not take would be
-(law 16), and so is a value of another kind (``KINDS``: never coerced, law 17). Each type's ``dfm`` takes the
+(law 15), and so is a value of another kind (``KINDS``: never coerced, law 16). Each type's ``dfm`` takes the
 processes it can be checked for (``processes_for``: a mesh printing, a DXF sheet) and their options alone;
 a mesh asked for another is refused with the reason and the fix (``_MESH_REFUSED``: check the STEP or the model). The standard library alone: the server's command resolves the options here before it starts
 an environment that holds the integration. An xbf or a model given no process is checked for the one its
@@ -228,7 +228,7 @@ def _kinds(given: dict[str, Any], candidates: Any) -> None:
 
 
 def options(document_type: str, process: str | None, given: dict[str, Any], *,
-            candidates: bool = False) -> dict[str, Any] | None:
+            candidates: bool = False, printer_snapshot: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """The options a check of ``process`` runs with: those ``given`` (None, or False for a flag: not given),
     the defaults for the rest. ``ArgumentRefused`` (a ``ValueError``; the command says it as the command
     line's mistake, exit 2) naming the fix for no process or another, an option of another process, a value
@@ -274,6 +274,8 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
         raise ArgumentRefused(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
     if units != "mm" and document_type in _DECLARED:
         raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: {_UNITS_OF}")
+    if process == "printing" and printer_snapshot is not None:
+        module.apply_printer(resolved, printer_snapshot)
     module.validate(resolved, document_type)
     _plausible(process, resolved)
     return resolved
@@ -297,7 +299,7 @@ def _preflight(document_type: str, given: dict[str, Any], candidates: bool) -> N
 
 
 def declared(document_type: str, parts: list[tuple[str, Any]], given: dict[str, Any], *,
-             candidates: bool = False) -> tuple[str, dict[str, Any], dict[str, Any]]:
+             candidates: bool = False, printer_snapshot: dict[str, Any] | None = None) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """The process the parts declare (``parts``: each part's name and its declared material, a
     ``bd_materials.FinishedMaterial`` or None), the options resolved for it (``options``) and the info finding
     that says so (``process_declared``). A declared technology or layer height is taken where none is
@@ -348,7 +350,7 @@ def declared(document_type: str, parts: list[tuple[str, Any]], given: dict[str, 
                 took.append(f"the technology's layer height: the parts declare "
                             f"{', '.join(f'{layer:g}' for layer in sorted(layers))} mm")
     try:
-        resolved = options(document_type, process, chosen, candidates=candidates)
+        resolved = options(document_type, process, chosen, candidates=candidates, printer_snapshot=printer_snapshot)
     except ValueError as error:
         raise ArgumentRefused(f"{error} (the process is {process}, the parts declare {route}: give --process to "
                               f"check another)") from None
@@ -737,6 +739,11 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
     check = {"type": document_type, "process": process, "resolved": resolved, "candidates": bool(candidates),
              **({"given": {name: value for name, value in (given or {}).items() if value is not None and value is not False}}
                 if process is None else {})}
+    if process is None and (printer := check["given"].get("printer")) is not None:
+        from cad._internal.dfm.printing import printer_settings
+
+        # The engine's cache key must include the settings its worker will use.
+        check["printer_settings"] = printer_settings(printer)
     is_file = isinstance(source, (str, os.PathLike)) and label.is_absolute()
     try:
         found: dict[str, Any] | None = api.check(source, check)

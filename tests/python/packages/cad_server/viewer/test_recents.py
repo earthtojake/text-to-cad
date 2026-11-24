@@ -41,20 +41,16 @@ class RecentStoreTest(unittest.TestCase):
         self.assertEqual(set(Registry(self.tmp).list()[0]) - {"pinned", "preview"},
                          {"schema", "id", "kind", "root", "home", "opened", "created", "namespace", "name"}, "its path, and when it was opened, first and last")
 
-    def test_twenty_edits_keep_one_picture_per_theme_and_a_forgotten_entry_keeps_none(self) -> None:
-        # Each revision a view pictures replaces the entry's pictures in place: lots of edits are no bloat.
+    def test_twenty_edits_keep_one_picture_and_a_forgotten_entry_keeps_none(self) -> None:
+        # Each revision a view pictures replaces the entry's picture in place: lots of edits are no bloat.
         store = RecentStore(self.tmp)
         board = str(self.tmp / "a.kicad_pcb")
         store.opened(board)
-        store.thumbnail(board, b"\x89PNG light 0", b"\x89PNG dark 0")
-        after_one = sorted(path.name for path in store.thumbnails.iterdir())
-        for edit in range(1, 21):
-            store.thumbnail(board, b"\x89PNG light %d" % edit, b"\x89PNG dark %d" % edit)
+        for edit in range(21):
+            store.thumbnail(board, b"\x89PNG light %d" % edit)
         [entry] = store.list()
-        self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()),
-                         sorted([entry.thumbnail, entry.thumbnail_dark]))
-        self.assertEqual(len(after_one), 2)
-        self.assertEqual(store.read_thumbnail(entry.thumbnail_dark), b"\x89PNG dark 20")
+        self.assertEqual([path.name for path in store.thumbnails.iterdir()], [entry.thumbnail])
+        self.assertEqual(store.read_thumbnail(entry.thumbnail), b"\x89PNG light 20")
         # Two files with the same picture are two names: forgetting one leaves the other's.
         other = str(self.tmp / "b.kicad_pcb")
         store.opened(other)
@@ -92,23 +88,30 @@ class RecentStoreTest(unittest.TestCase):
         self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()),
                          sorted([shown["0.step"], shown["3.step"]]))
 
-    def test_a_picture_may_have_its_dark_theme_s_beside_it_and_one_without_keeps_its_one(self) -> None:
+    def test_an_earlier_release_s_dark_picture_is_not_listed_and_goes_once_old(self) -> None:
+        # An earlier release kept a board's dark theme's picture beside its light one. The light one is
+        # still the record's picture; the dark one no record names now, so it goes once old, as an orphan.
         store = RecentStore(self.tmp)
-        store.opened("/a.kicad_pcb")
-        store.thumbnail("/a.kicad_pcb", b"\x89PNG light", b"\x89PNG dark")
+        board = str(self.tmp / "a.kicad_pcb")
+        store.opened(board)
+        light = store.thumbnail(board, b"\x89PNG light")
+        dark = "d" * 32 + ".png"
+        (store.thumbnails / dark).write_bytes(b"\x89PNG dark")
+        store.registry.update(store._ident(board),
+                              lambda record: {**record, "preview": {**record["preview"], "thumbnailDark": dark}})
         [entry] = store.list()
-        self.assertEqual(store.read_thumbnail(entry.public()["thumbnailDark"]), b"\x89PNG dark")
+        self.assertNotIn("thumbnailDark", entry.public())
         self.assertEqual(store.read_thumbnail(entry.thumbnail), b"\x89PNG light")
-        # Both are shown, so neither is swept; a picture taken again without one has none.
         old = time.time() - 3600
         for path in store.thumbnails.iterdir():
             os.utime(path, (old, old))
-        store.thumbnail("/a.kicad_pcb", b"\x89PNG light")
-        [entry] = store.list()
-        self.assertIsNone(entry.public()["thumbnailDark"])
-        self.assertEqual([path.name for path in store.thumbnails.iterdir()], [entry.thumbnail])
+        other = str(self.tmp / "b.kicad_pcb")
+        store.opened(other)
+        theirs = store.thumbnail(other, b"\x89PNG other")
+        self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()), sorted([light, theirs]))
+        self.assertEqual({entry.path: entry.thumbnail for entry in store.list()}[board], light)
 
-    def test_a_file_is_updated_when_it_last_changed_on_disk_and_a_gone_one_says_nothing(self) -> None:
+    def test_a_file_is_updated_and_sized_as_it_is_on_disk_and_a_gone_one_says_nothing(self) -> None:
         store = RecentStore(self.tmp / "state")
         model = self.tmp / "part.stl"
         model.write_bytes(b"solid t\nendsolid t\n")
@@ -116,8 +119,10 @@ class RecentStoreTest(unittest.TestCase):
         store.opened(str(model))
         store.opened(str(self.tmp / "gone.stl"))
         shown = {entry["name"]: entry for entry in (recent.public() for recent in store.list())}
-        self.assertEqual((shown["part.stl"]["updated"], shown["part.stl"]["missing"]), (1_700_000_000, False))
-        self.assertEqual((shown["gone.stl"]["updated"], shown["gone.stl"]["missing"]), (None, True))
+        self.assertEqual((shown["part.stl"]["updated"], shown["part.stl"]["size"], shown["part.stl"]["missing"]), (1_700_000_000, len(b"solid t\nendsolid t\n"), False))
+        self.assertEqual((shown["gone.stl"]["updated"], shown["gone.stl"]["size"], shown["gone.stl"]["missing"]), (None, None, True))
+        model.write_bytes(b"solid t\nfacet\nendsolid t\n")  # written again: the next read has its new size
+        self.assertEqual({recent.name or os.path.basename(recent.path): recent.size for recent in store.list()}["part.stl"], len(b"solid t\nfacet\nendsolid t\n"))
         self.assertGreater(shown["part.stl"]["opened"], 1_700_000_000, "opened is the page's, now")
         self.assertNotIn("modified", shown["part.stl"])
 
@@ -134,10 +139,10 @@ class RecentStoreTest(unittest.TestCase):
                                 "entry": "plate", "revision": "r1", "built": built})
         store = RecentStore(self.tmp)
         timed = []
-        with mock.patch.object(recents, "_mtime", side_effect=lambda path: timed.append(path)):
+        with mock.patch.object(recents, "_on_disk", side_effect=lambda path: timed.append(path)):
             [entry] = [recent.public() for recent in store.list()]
-        self.assertEqual(timed, [], "a model's script's time is never read")
-        self.assertEqual((entry["updated"], entry["opened"], entry["missing"]), (built, None, False))
+        self.assertEqual(timed, [], "a model's script's time and size are never read")
+        self.assertEqual((entry["updated"], entry["opened"], entry["missing"], entry["size"]), (built, None, False, None))
         self.assertIsNone(entry["created"], "a record from before the engine kept it says no creation time")
         store.opened(ident)  # a page opened it: its record says when, and its run's time stays
         [entry] = [recent.public() for recent in store.list()]
@@ -204,6 +209,39 @@ class RecentStoreTest(unittest.TestCase):
                          (ident, False, None, "shape", built, str(self.tmp)), "a folder home is where it came from, not a lost file")
         self.assertIn("a shape handed over", entry["shown"])
         self.assertIn("no script to rerun", entry["shown"])
+
+    def test_a_record_of_a_file_no_type_reads_is_kept_unlisted_and_removable(self) -> None:
+        # A state folder as a release that read SDFormat left it: records of .sdf files a page opened (one pinned,
+        # with its picture; one since deleted), beside a URDF's and one of a suffix no release read. An .sdf is
+        # no type now: its record reads as the unknown suffix's does, and nothing fails on either.
+        from cad.engine.ids import file_id
+
+        files, state = self.tmp / "files", self.tmp / "state"
+        files.mkdir()
+        for name in ("robot.sdf", "arm.urdf", "notes.xyz"):
+            (files / name).write_text("<robot/>", encoding="utf-8")
+        (state / "recents" / "thumbnails").mkdir(parents=True)
+        picture = "f5a964f8fe0a7db4ddfeaf22876587a8.png"
+        (state / "recents" / "thumbnails" / picture).write_bytes(b"\x89PNG sdf")
+        for name, extra in (("robot.sdf", {"pinned": True, "preview": {"thumbnail": picture, "pictured": 1_700_000_002.0}}),
+                            ("gone.sdf", {}), ("arm.urdf", {}), ("notes.xyz", {})):
+            ident = file_id(str(files / name))
+            (state / "documents" / ident).mkdir(parents=True)
+            record = {"schema": 1, "id": ident, "kind": "file", "root": str(files), "home": name,
+                      "namespace": str(files), "name": name, "opened": 1_700_000_001.0, "created": 1_700_000_000.0,
+                      **extra}
+            (state / "documents" / ident / "document.json").write_text(json.dumps(record), encoding="utf-8")
+        store = RecentStore(state)
+        entries = {os.path.basename(entry.path): entry for entry in store.list()}
+        self.assertEqual(set(entries), {"robot.sdf", "gone.sdf", "arm.urdf", "notes.xyz"})
+        self.assertEqual({name: entry.row() is None for name, entry in entries.items()},
+                         {"robot.sdf": True, "gone.sdf": True, "arm.urdf": False, "notes.xyz": True},
+                         "no page reads it: listed nowhere, as a suffix no release read")
+        self.assertEqual(entries["arm.urdf"].row()["kind"], "urdf")
+        store.thumbnail(str(files / "arm.urdf"), b"\x89PNG urdf")
+        store.remove(str(files / "robot.sdf"))
+        self.assertEqual({os.path.basename(entry.path) for entry in store.list()}, {"gone.sdf", "arm.urdf", "notes.xyz"})
+        self.assertIsNone(store.read_thumbnail(picture), "its picture went with it")
 
     def test_two_processes_write_at_once_and_a_record_it_cannot_read_is_skipped(self) -> None:
         code = "import sys\nfrom cad_server.viewer.recents import RecentStore\nstore = RecentStore(__import__('pathlib').Path(sys.argv[1]))\n" \

@@ -208,7 +208,7 @@ function roundedColorNumbers(hex) {
 function ColorNumberInput({ label, value, min, max, onChange }) {
   return (
     <label className="min-w-0 space-y-1">
-      <span className="block text-micro uppercase tracking-[0.08em] text-muted-foreground">
+      <span className="block text-tiny uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </span>
       <Input
@@ -217,7 +217,7 @@ function ColorNumberInput({ label, value, min, max, onChange }) {
         max={max}
         value={value}
         onChange={(event) => onChange(clamp(event.currentTarget.value, min, max))}
-        className="h-7 px-1.5 text-tiny"
+        className="h-control px-1.5 text-xs"
       />
     </label>
   )
@@ -394,7 +394,7 @@ function ColorPicker({
 
         {showOpacity ? (
           <div className="space-y-1">
-            <div className="flex items-center justify-between gap-2 text-micro uppercase tracking-[0.08em] text-muted-foreground">
+            <div className="flex items-center justify-between gap-2 text-tiny uppercase tracking-[0.08em] text-muted-foreground">
               <span>{t("colorPicker.opacityHeading")}</span>
               <span>{Math.round(normalizedOpacity * 100)}%</span>
             </div>
@@ -408,10 +408,10 @@ function ColorPicker({
                 onChange={(event) => {
                   onOpacityChange?.(clamp(event.currentTarget.value, 0, 100) / 100)
                 }}
-                className="h-7 px-1.5 text-tiny"
+                className="h-control px-1.5 text-xs"
                 aria-label={t("colorPicker.opacity")}
               />
-              <span className="text-micro text-muted-foreground">%</span>
+              <span className="text-tiny text-muted-foreground">%</span>
             </div>
           </div>
         ) : null}
@@ -423,7 +423,7 @@ function ColorPicker({
               type="button"
               variant={format === option ? "secondary" : "ghost"}
               size="xs"
-              className="h-6 flex-1 px-2 text-micro uppercase"
+              className="h-icon-button flex-1 px-2 text-tiny uppercase"
               onClick={() => setFormat(option)}
             >
               {option}
@@ -442,7 +442,7 @@ function ColorPicker({
                   handleHexCommit(event.currentTarget.value)
                 }
               }}
-              className="h-7 px-1.5 text-tiny font-mono uppercase"
+              className="h-control px-1.5 text-xs font-mono uppercase"
               aria-label={t("colorPicker.hex")}
             />
             {canUseEyeDropper ? (
@@ -450,7 +450,7 @@ function ColorPicker({
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                className="size-7 shrink-0"
+                className="size-control shrink-0"
                 onClick={pickFromScreen}
                 aria-label={t("colorPicker.pickFromScreen")}
 
@@ -489,7 +489,7 @@ function ColorPicker({
           variant="outline"
           size="sm"
           disabled={disabled}
-          className={cn("h-7 w-auto max-w-full justify-start gap-1.5 px-1.5 text-tiny", className)}
+          className={cn("h-control w-auto max-w-full justify-start gap-1.5 px-1.5 text-xs", className)}
           {...props}
         >
           <span

@@ -128,6 +128,21 @@ export function createGlbScene(THREE, document, { sibling = false } = {}) {
     node?.object.traverse((object) => { if (object.isMesh && recordsOf.has(object)) records.push(recordsOf.get(object)); });
     return records;
   };
+  // The file's node tree, as the view's panel lists it: every glTF node, under the node it hangs from, by its name;
+  // a node that draws is a part (`n<index>`, what Select picks), one that only groups is a branch to open.
+  const nodeTree = [];
+  const visitTree = (object, into) => {
+    const index = object.userData?.gltfNode;
+    if (Number.isInteger(index)) {
+      const draws = nodes.has(index);
+      const entry = { id: `n${index}`, node: index, label: draws ? nodeName(nodes.get(index)) : glbNodeName(object), part: draws ? `n${index}` : null, children: [] };
+      into.push(entry);
+      for (const child of object.children) visitTree(child, entry.children);
+      return;
+    }
+    for (const child of object.children) visitTree(child, into);
+  };
+  visitTree(document.scene, nodeTree);
   const pickable = meshes.filter(record => record.node).map(record => record.mesh);
   // A hover is a pick per frame: each rigid geometry gets its accelerator in idle time, the first
   // time a ray reaches its bounds. A deformed one is tested the plain way, where it is drawn.
@@ -182,6 +197,8 @@ export function createGlbScene(THREE, document, { sibling = false } = {}) {
       clipPlanes = Array.isArray(planes) ? planes : [];
       look.setClipPlanes(clipPlanes);
     },
+    /** The file's nodes as a tree: `{ id, node, label, part, children }`, `part` the node's pick (`n12`) where it draws, else null. */
+    nodeTree,
     /** Whether `id` (`n12`) is a node of this file that draws. */
     hasPart: id => nodeOf(id) !== null,
     /** A node's name alone, as its chip says it, measuring nothing: the hover tip's. "" for none. */

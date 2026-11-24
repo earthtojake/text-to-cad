@@ -12,7 +12,6 @@ import type { LiveRegistry } from './host/live';
 import { createChatPromptContext, type ChatReach } from './host/prompt';
 import { translator } from '@cad/ui/i18n';
 import type { Launch } from './host/server';
-import { CardCorner } from './CardCorner';
 import type { ViewSync } from './host/sync';
 import { TUNNEL_ORIGIN } from './host/tunnel';
 
@@ -25,17 +24,16 @@ export interface ViewReporter {
 }
 
 /**
- * One view: the shared CAD viewer over this host — the model a launch names, by its absolute path,
- * or with none, the home (the library, and Open) — under the navbar (`chrome: "page"`): its logo and
+ * One view: the shared viewer over this host — the model a launch names, by its absolute path,
+ * or with none, the home (the library, and Open) — under the navbar: its logo and
  * app menu, Back and Forward, the file's name and menus (its ⋯: Copy path, and Open in › Browser and
  * the file manager), and at the right the host's Full size. A view browses from its model's folder, shows what is opened in place, and adds what it
  * shows to the library. Everything differs by data — what a Quick Edit can do in the chat, whether
  * the view has a home — never by where the view is.
  *
- * Codex's file handler (`surface: file`, `alone`) shows its file alone (`chrome: "bare"`): the host's
- * own file tree is its navigation, so it has no navbar, no home and no file menu (no Open in › Browser); what the
- * navbar would carry that it still has (Full size, where the host offers it) is its
- * corner (`CardCorner`) at the viewport's top-right.
+ * Codex's file handler (`surface: file`, `alone`) shows its file alone, under the same navbar: the host's own file
+ * tree is its navigation, so it has no home, no explorer and no Back or Forward, and no Open in › Browser; its navbar
+ * holds the file's name, its ⋯, the panels' toggles and Full size where the host offers it.
  */
 export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, fullSize, whatsNew, openInBrowser, engineOrigin }: {
   launch: Launch; sequence: number; bridge: Bridge; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
@@ -139,7 +137,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
       return first ? Promise.resolve(first.map(libraryRow)) : client.recents();
     },
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
-    thumbnail: (model, scheme) => client.thumbnail(model, { scheme }),
+    thumbnail: model => client.thumbnail(model),
     open: async entry => { navigate(normalizePath(entry.path)); },
     // Open, with the desktop's chooser where this computer has one: what it picks is shown in place.
     ...(launch.pick ? { pick: async () => { const picked = await client.pick(); if (picked) navigate(normalizePath(picked)); } } : {}),
@@ -157,12 +155,11 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
     environment: { colorScheme, locale, platform },
   }), [client, source, fileActions, promptContext, promptFiles, links, colorScheme, locale, platform]);
 
-  // The navbar carries the host's controls; the file handler, which has none, has its corner: the
-  // host's notice at the viewport's top-right, Quick Edit under it.
+  // Every view is under the navbar, the file handler's too: it carries the host's controls and the panels' toggles.
   // The file on screen joins the library every CAD view shares, with its picture.
-  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} chrome={homed ? 'page' : 'bare'}
+  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate}
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
     library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory} whatsNew={whatsNew}
-    {...homed ? { fullSize } : { notice: <CardCorner fullSize={fullSize} /> }}
+    fullSize={fullSize}
     onThumbnail={(png, pictured) => client.keepThumbnail(png, pictured)} />;
 }

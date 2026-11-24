@@ -1,8 +1,10 @@
-import { useCallback, useContext, useEffect, useRef, useState, type ChangeEvent } from "react";
-import { Box, ChevronDown, Ellipsis, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Box, Ellipsis, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
 import { Button } from "../primitives/button.jsx";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../primitives/alert-dialog.jsx";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../primitives/dropdown-menu.jsx";
+import { ValueDropdown } from "../primitives/value-dropdown.jsx";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../primitives/dropdown-menu.jsx";
 import { Input } from "../primitives/input.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
 import { useI18n } from "../i18n/index.js";
@@ -12,8 +14,9 @@ import { entryMenu } from "../file-viewer/navigation/entry-menu.js";
 import type { EntryAction } from "../file-viewer/navigation/index.js";
 import type { FileActions } from "../file-viewer/types.js";
 import { useControlUsage } from "../usage/controls.js";
-import { ViewerHostContext } from "../host/context.js";
+import { useNavbarSlots } from "../file-viewer/navbarSlots.js";
 import { activityLabel, ageLabel } from "../lib/age.js";
+import logo from "../assets/logo-c.svg";
 
 /** A model someone opened: kept by the host, which also says where it is shown from. */
 export interface LibraryModel {
@@ -35,13 +38,10 @@ export interface LibraryModel {
   missing: boolean;
   /** A picture's name (its content's): `thumbnail()` reads the picture of the row that names it. */
   thumbnail: string | null;
-  /**
-   * Its picture in the dark theme's own colours, where its view draws one (a board's): the card shows
-   * it in the dark theme. Null or absent: `thumbnail` in both.
-   */
-  thumbnailDark?: string | null;
   /** When the picture was taken, in seconds; null without one. A document updated since has an old one. */
   pictured: number | null;
+  /** A file's size on disk, in bytes; null or absent once it is gone, and for a document built from code. */
+  size?: number | null;
   /**
    * What it is: a document built from code, a model's or a shape's (`model`, `shape`), which a row
    * deletes -- the engine's copy and its entry; or a CAD file on disk (`file`, and when the host does
@@ -53,6 +53,28 @@ export interface LibraryModel {
 /** Whether a row deletes the model (a document built from code) rather than removing a file from the list. */
 export const deletes = (model: LibraryModel) => model.kind === "model" || model.kind === "shape";
 
+// A file's format as people name it, by its extension; one not here is its extension, upper case.
+const FORMATS: Readonly<Record<string, string>> = { step: "STEP", stp: "STEP", stl: "STL", glb: "GLB", gltf: "GLTF", "3mf": "3MF",
+  dxf: "DXF", xbf: "XBF", urdf: "URDF", kicad_pcb: "KiCad PCB", kicad_sch: "KiCad SCH" };
+/** The formats the viewer opens, under the welcome: names, not language. */
+const WELCOME_FORMATS = ["STEP", "STL", "3MF", "GLB", "DXF", "KiCad", "URDF"].join(" · ");
+/** What a card's badge and a row's Kind say: a file's format ("STEP", "KiCad PCB"), or `model` for a document built from code. */
+export function formatLabel(item: LibraryModel, model: string): string {
+  if (deletes(item)) return model;
+  const name = item.path.split(/[\\/]/).pop() ?? "";
+  const extension = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
+  return FORMATS[extension] ?? extension.toUpperCase();
+}
+/** A size on disk as the Home reads it: bytes, then KB and MB (powers of 1024), in the page's language's digits; "" for none. */
+export function sizeLabel(bytes: number | null | undefined, locale?: string): string {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return "";
+  const number = (value: number, digits: number) => new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value);
+  if (bytes < 1024) return `${number(bytes, 0)} B`;
+  if (bytes < 1024 ** 2) return `${number(Math.round(bytes / 1024), 0)} KB`;
+  if (bytes < 1024 ** 3) return `${number(bytes / 1024 ** 2, 1)} MB`;
+  return `${number(bytes / 1024 ** 3, 1)} GB`;
+}
+
 /** A host's library of models: read, changed and opened through the host. */
 export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
   /** Pinned first, then by last activity (`lastActivity`), newest first. */
@@ -60,10 +82,10 @@ export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
   /** `delete` for a model's row (`deletes`), `remove` for a file's. */
   change(action: "pin" | "unpin" | "remove" | "delete", model: Model): Promise<readonly Model[]>;
   /**
-   * An image URL for a model's thumbnail (the one its `thumbnail` names), or null; with `"dark"`, its
-   * dark theme's (`thumbnailDark`) where it has one.
+   * An image URL for a model's thumbnail (the one its `thumbnail` names), or null: the light viewport's
+   * picture, which the Home shows in both themes.
    */
-  thumbnail(model: Model, scheme?: "light" | "dark"): Promise<string | null>;
+  thumbnail(model: Model): Promise<string | null>;
   open(model: Model): Promise<void>;
   /**
    * Open: choose a file with the desktop's own file chooser, and show it. A host on a computer with
@@ -103,13 +125,11 @@ const message = (failure: unknown) => failure instanceof Error ? failure.message
 const LIST_MS = 2_000;
 // The chrome's one scroll region (`primitives/scroll-area.jsx`), as this page uses it.
 
-// A card's picture, read once the card is on screen; and a card on screen that wants one (`seen`).
-function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false }: { item: Model; load(item: Model, scheme: "light" | "dark"): Promise<string | null>; seen(item: Model): void; opening?: boolean }) {
+// A card's or a row's picture, read once it is on screen; and one on screen that wants a picture (`seen`).
+// Every picture is the light viewport's, on the model area's light gradient in both themes. A card's
+// carries its format's badge (`badge`).
+function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false, badge = null }: { item: Model; load(item: Model): Promise<string | null>; seen(item: Model): void; opening?: boolean; badge?: string | null }) {
   const { t } = useI18n();
-  // The theme the home is in: a picture drawn in the dark theme's own colours too shows that one in
-  // it, swapped as the theme switches; any other picture is its one in both.
-  const scheme = useContext(ViewerHostContext)?.environment.colorScheme;
-  const variant: "light" | "dark" = scheme === "dark" && item.thumbnailDark ? "dark" : "light";
   const element = useRef<HTMLSpanElement>(null);
   const [image, setImage] = useState<string | null>(null);
   const latest = useRef({ item, seen });
@@ -121,7 +141,7 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = fal
     if (item.missing || !element.current) return;
     const name = item.thumbnail;
     const show = () => {
-      if (name) void load(latest.current.item, variant).then(value => { if (active) setImage(value); }).catch(() => {});
+      if (name) void load(latest.current.item).then(value => { if (active) setImage(value); }).catch(() => {});
       latest.current.seen(latest.current.item);
     };
     if (typeof IntersectionObserver === "undefined") { show(); return () => { active = false; }; }
@@ -132,21 +152,20 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = fal
     });
     observer.observe(element.current);
     return () => { active = false; observer.disconnect(); };
-  }, [item.path, item.thumbnail, item.missing, item.updated, load, variant]);
-  // A drawing's picture is its line work on nothing, in the light theme's pen (`useDrawingView`'s
-  // `thumbnail`): a dark card turns it light, its colours kept.
-  const drawing = /\.dxf$/i.test(item.path) ? "" : undefined;
-  return <span className="cad-library-thumbnail" ref={element} data-drawing={drawing} data-thumbnail-variant={variant}>
+  }, [item.path, item.thumbnail, item.missing, item.updated, load]);
+  return <span className="cad-library-thumbnail" ref={element}>
     {image ? <img src={image} alt="" /> : <Box strokeWidth={1} aria-hidden="true" />}
+    {badge ? <span className="cad-library-format" aria-hidden="true">{badge}</span> : null}
     {opening ? <span className="cad-library-opening"><Spinner aria-label={t("home.openingAria", { name: item.name })} /></span> : null}
   </span>;
 }
 
-/** The list's header row: Name, Updated, Created, over the columns its rows draw (a label each, for the eye: a row names itself). */
+/** The list's header row: Name, Kind, Size, Updated, Created, over the columns its rows draw (a label each, for the eye: a row names itself). */
 function Columns() {
   const { t } = useI18n();
   return <div className="cad-library-columns" aria-hidden="true">
-    <span>{t("home.columnName")}</span><span data-column="updated">{t("home.columnUpdated")}</span><span data-column="created">{t("home.columnCreated")}</span>
+    <span>{t("home.columnName")}</span><span data-column="kind">{t("home.columnKind")}</span><span data-column="size">{t("home.columnSize")}</span>
+    <span data-column="updated">{t("home.columnUpdated")}</span><span data-column="created">{t("home.columnCreated")}</span>
   </div>;
 }
 
@@ -245,14 +264,12 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     };
     draw.current(next).then(done, () => done(false));
   }, [queue, refresh]);
-  const load = useCallback((item: Model, scheme: "light" | "dark") => {
-    // A picture is kept by its name, its content's: a new picture of the row is another name, and its
-    // dark theme's another again.
-    const dark = scheme === "dark" && Boolean(item.thumbnailDark);
-    const name = dark ? `dark:${item.thumbnailDark}` : String(item.thumbnail);
+  const load = useCallback((item: Model) => {
+    // A picture is kept by its name, its content's: a new picture of the row is another name.
+    const name = String(item.thumbnail);
     let image = images.current.get(name);
     if (!image) {
-      image = dark ? current.current.thumbnail(item, "dark") : current.current.thumbnail(item);
+      image = current.current.thumbnail(item);
       images.current.set(name, image);
     }
     return image;
@@ -281,6 +298,11 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   };
   const all = (items ?? []).filter(item => !gone.has(item.path));
   const [kind, setKind] = useState<LibraryKind>("all");
+  // Home's navbar (`file-viewer/navbarSlots.js`): "Recent" and its count, the search and Open go there, on the grid's
+  // column; where there is no navbar they stand in the page's own first row.
+  const slots = useNavbarSlots();
+  // A narrow navbar (under 700px: `styles/globals.css`) shows the search as its icon until it is pressed.
+  const [searchOpen, setSearchOpen] = useState(false);
   // The host lists pinned models first; a search and the type filter keep that order.
   const shown = shownModels(all, query, kind);
   // The type filter is there only where there is something to tell apart: models and files both listed.
@@ -336,16 +358,19 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     </AlertDialogContent>
   </AlertDialog>;
   const age = (seconds: number | null) => ageLabel(seconds, now, t, locale);
-  // A tile's line: its last activity with its verb, Edited or Viewed, whichever came last.
-  const status = (item: Model) => item.missing ? t("home.fileUnavailable") : activityLabel(item, now, t, locale);
-  // A row's glyph is its spinner while it is being opened: a row has no picture to show it over.
-  const name = (item: Model, busy = false) => <span className="cad-library-name">
-    {busy ? <Spinner className="cad-library-glyph" aria-label={t("home.openingAria", { name: item.name })} />
-      : <DocumentGlyph model={deletes(item)} path={item.path} className="cad-library-glyph" />}
+  const format = (item: Model) => formatLabel(item, t("home.formatModel"));
+  // A tile's line: a file's size, then its last activity with its verb, Edited or Viewed, whichever came last.
+  const status = (item: Model) => item.missing ? t("home.fileUnavailable")
+    : [sizeLabel(item.size, locale), activityLabel(item, now, t, locale)].filter(Boolean).join(" · ");
+  // A row's picture is small, 40 by 28, its spinner over it while it is being opened.
+  const name = (item: Model) => <span className="cad-library-name">
+    <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} />
     <span className="cad-library-label">{item.name}</span>
   </span>;
-  // A row's two times, each in its column, with no verb: when it last changed, and when its record was first made.
-  const dates = (item: Model) => <>
+  // A row's columns: its kind and size, then its two times with no verb: when it last changed, and when its record was first made.
+  const columns = (item: Model) => <>
+    <span className="cad-library-status" data-column="kind">{format(item)}</span>
+    <span className="cad-library-status" data-column="size">{sizeLabel(item.size, locale) || "—"}</span>
     <span className="cad-library-status" data-column="updated">{item.missing ? t("home.fileUnavailable") : age(item.updated)}</span>
     <span className="cad-library-status" data-column="created">{age(item.created)}</span>
   </>;
@@ -353,8 +378,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     ? <div className="cad-library-table"><Columns /><ul className="cad-library-list" aria-label={t("home.filesAria")}>{shown.map(item => <li key={item.path} className="cad-library-row" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
       <div className="cad-library-main">
         <button type="button" className="cad-library-open" disabled={item.missing} aria-label={t("home.openAria", { name: item.name })} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
-          {name(item, opening === item.path)}
-          {dates(item)}
+          {name(item)}
+          {columns(item)}
         </button>
         {actions(item)}
       </div>
@@ -362,8 +387,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     : <ul className="cad-library-grid" aria-label={t("home.filesAria")}>{shown.map(item => <li key={item.path} className="cad-library-card" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
       <div className="cad-library-main">
         <button type="button" className="cad-library-open" disabled={item.missing} aria-label={t("home.openAria", { name: item.name })} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
-          <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} />
-          {/* The caption: the kind's glyph at the left of the name over its age. */}
+          <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} badge={format(item)} />
+          {/* The caption: the kind's glyph at the left of the name over its size and age. */}
           <span className="cad-library-body">
             <DocumentGlyph model={deletes(item)} path={item.path} className="cad-library-glyph" />
             <span className="cad-library-text">
@@ -375,40 +400,59 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
         {actions(item)}
       </div>
     </li>)}</ul>;
+  // Open, the host's chooser: neutral, as every control of the row is (never a filled primary).
+  const openButton = (label: string) => <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" onClick={pick ?? undefined}>
+    <FolderOpen className="size-4" aria-hidden="true" />{label}</Button>;
+  const heading = <h1 className="cad-library-heading" data-library-heading={slots ? "navbar" : "page"}>{t("home.recentFiles")}{items !== null && shown.length ? <span className="cad-library-count">{shown.length}</span> : null}</h1>;
+  // The type filter: the one value dropdown (`primitives/value-dropdown.jsx`), drawn as the row's ghost control.
+  const kindMenu: ReactNode = kinds ? <ValueDropdown value={kind} label={t("home.kindsAria")} align={slots ? "start" : "end"}
+    options={(["all", "models", "files"] as const).map(value => ({ value, label: t(`home.kind.${value}`) }))}
+    onChange={value => { if (kind !== value) usage.used(`home_filter_${value as LibraryKind}`); setKind(value as LibraryKind); }}
+    className="cad-library-kind min-w-0 w-auto gap-1 border-0 bg-transparent px-2 shadow-none hover:bg-accent dark:bg-transparent"
+    triggerProps={{ "aria-label": t("home.kindAria", { kind: t(`home.kind.${kind}`) }) }} /> : null;
+  // The search: in a narrow navbar its icon alone until it is pressed (it opens with the keyboard in it), and it goes
+  // back to its icon when it is left empty.
+  const search = <div className="cad-home-search" data-open={searchOpen || query ? "" : undefined}>
+    {slots ? <Button variant="ghost" size="icon-xs" className="cad-home-search-button size-control" aria-label={t("home.searchAria")} aria-expanded={false}
+      onClick={event => { const box = event.currentTarget.parentElement; setSearchOpen(true); requestAnimationFrame(() => box?.querySelector("input")?.focus()); }}><Search className="size-4" aria-hidden="true" /></Button> : null}
+    <div className="cad-library-search">
+      <Search aria-hidden="true" />
+      <Input className="h-control text-ui" type="search" aria-label={t("home.searchAria")} placeholder={t("home.searchPlaceholder")} value={query}
+        onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} onBlur={() => { if (!query) setSearchOpen(false); }} />
+    </div>
+  </div>;
+  const layoutSwitch = onLayoutChange ? <div className="cad-library-layout" role="group" aria-label={t("home.layout")}>
+    <Button variant="ghost" size="icon-xs" className="size-control" aria-label={t("home.grid")} aria-pressed={layout === "grid"} onClick={() => { usage.used("home_layout_grid"); onLayoutChange("grid"); }}><LayoutGrid className="size-4" aria-hidden="true" /></Button>
+    <Button variant="ghost" size="icon-xs" className="size-control" aria-label={t("home.list")} aria-pressed={layout === "list"} onClick={() => { usage.used("home_layout_list"); onLayoutChange("list"); }}><List className="size-4" aria-hidden="true" /></Button>
+  </div> : null;
   // A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits.
   return <div className="cad-library h-full overflow-y-auto text-ui" data-library-layout={layout}>
     <main className="cad-library-content" aria-label={t("home.modelsAria")}>
-      {/* One line of 24px controls, there with no models too: the row keeps its shape from the first open to the hundredth. */}
-      <div className="cad-library-toolbar">
-        <h1 className="cad-library-heading">{t("home.recentFiles")}</h1>
+      {/* Home's controls: in the navbar where there is one (`slots`), else in this row, which keeps the filter and the
+          layout either way, 28px, on the grid's column: the row keeps its shape from the first open to the hundredth. */}
+      {slots ? <>
+        {slots.left ? createPortal(heading, slots.left) : null}
+        {slots.right ? createPortal(<>{search}{pick ? openButton(t("home.open")) : null}</>, slots.right) : null}
+      </> : null}
+      <div className="cad-library-toolbar" data-library-toolbar={slots ? "filters" : "page"}>
+        {slots ? (kindMenu ?? <span />) : heading}
         <div className="cad-library-controls">
-          {kinds ? <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="xs" className="cad-library-kind text-ui" aria-label={t("home.kindAria", { kind: t(`home.kind.${kind}`) })}>
-                {t(`home.kind.${kind}`)}<ChevronDown aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-32">
-              <DropdownMenuRadioGroup aria-label={t("home.kindsAria")} value={kind} onValueChange={(value: string) => { if (kind !== value) usage.used(`home_filter_${value as LibraryKind}`); setKind(value as LibraryKind); }}>
-                {(["all", "models", "files"] as const).map(value => <DropdownMenuRadioItem key={value} value={value} className="">{t(`home.kind.${value}`)}</DropdownMenuRadioItem>)}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu> : null}
-          <div className="cad-library-search">
-            <Search aria-hidden="true" />
-            <Input className="h-6 text-ui" type="search" aria-label={t("home.searchAria")} placeholder={t("home.searchPlaceholder")} value={query} onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} />
-          </div>
-          {onLayoutChange ? <div className="cad-library-layout" role="group" aria-label={t("home.layout")}>
-            <Button variant="ghost" size="icon-xs" aria-label={t("home.grid")} aria-pressed={layout === "grid"} onClick={() => { usage.used("home_layout_grid"); onLayoutChange("grid"); }}><LayoutGrid className="size-3.5" aria-hidden="true" /></Button>
-            <Button variant="ghost" size="icon-xs" aria-label={t("home.list")} aria-pressed={layout === "list"} onClick={() => { usage.used("home_layout_list"); onLayoutChange("list"); }}><List className="size-3.5" aria-hidden="true" /></Button>
-          </div> : null}
-          {pick ? <Button size="xs" className="text-ui" onClick={pick}><FolderOpen className="size-3.5" aria-hidden="true" />{t("home.open")}</Button> : null}
+          {slots ? null : kindMenu}
+          {slots ? null : search}
+          {layoutSwitch}
+          {slots || !pick ? null : openButton(t("home.open"))}
         </div>
       </div>
       {error ? <div className="cad-library-error" role="alert"><p>{error}</p></div> : null}
       {items === null ? <Placeholders layout={layout} />
         : (query || kind !== "all") && all.length && !shown.length ? <p className="cad-library-empty" role="status">{t("home.noMatchingModels")}</p>
-          : !all.length ? <p className="cad-library-empty">{t("home.empty")}</p>
+          : !all.length ? <div className="cad-library-welcome" data-library-empty="">
+            <span className="cad-library-welcome-stage"><img src={logo} alt="" draggable={false} /></span>
+            <h2 className="cad-library-welcome-title">{t("home.emptyTitle")}</h2>
+            <p className="cad-library-welcome-body">{t("home.emptyBody")}</p>
+            {pick ? openButton(t("home.openFile")) : null}
+            <p className="cad-library-welcome-formats" aria-hidden="true">{WELCOME_FORMATS}</p>
+          </div>
             : models}
       {confirm}
     </main>

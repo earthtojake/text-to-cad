@@ -474,7 +474,7 @@ class KernelProcessesUnavailable(RuntimeError):
     is missing a module. Its message carries the original error's type and words, and ``__cause__`` the
     error itself; ``cause`` is a word saying which failure it was, never read from the words (``pool``:
     the pool refused; else the word the server gave the environment's failure). There is no in-process
-    fallback, because kernel work never runs in the engine's threads (law 20). A refused pool is tried
+    fallback, because kernel work never runs in the engine's threads (law 19). A refused pool is tried
     again by the next request; a failed making of the environment is remembered by the server that made
     it, which says what clears it."""
 
@@ -1050,6 +1050,19 @@ class Server:
         # the engine holds of it and then its record and its cached document; None for a server of
         # its own (a test's), whose application deletes the record alone.
         self.delete: Callable[[str], dict[str, Any] | None] | None = None
+        # What the live worker that built a model document recorded of its parameters at the generation served
+        # (the daemon's ``models.Models.live``: where each is spelled in the code), else None; and their ``set``,
+        # which writes them into the model's script and builds it again (the daemon's ``parameters.Setting``),
+        # None for a server of its own (a test's), whose documents no daemon built.
+        self.parameters: Callable[[str, Any], dict[str, Any] | None] = lambda _ident, _version: None
+        self.set_parameters: Callable[[str, Any], dict[str, Any]] | None = None
+        # A page's look at a model at other values of its parameters (the daemon's ``parameters.Previewing``),
+        # None for a server of its own; and the previews it made, each held here for the page that asked
+        # (``keep_preview``), by an id of its own (``<id>~preview-<token>``) that no listing, no version and no
+        # export names, read at the document's read routes and nothing else, and when each was last read.
+        self.preview_parameters: Callable[[str, Any, Any], dict[str, Any]] | None = None
+        self.previews: dict[str, Served] = {}
+        self.preview_reads: dict[str, float] = {}
         if budget is not None:
             self.cache.cap = None
             self.cache.grown = self._grown
@@ -1222,6 +1235,41 @@ class Server:
                 doc.xbf, doc._size = xbf, None  # counted again, its xbf bytes with it
                 self.model_versions[ident] = version
         self._grown()
+
+    def keep_preview(self, ident: str, structure: dict[str, Any], shapes: dict[str, bytes]) -> None:
+        """A preview of a model at other values (``parameters.Previewing``), held for the page that asked
+        under its own id: its structure and its parts' shape bytes, never the model's document, its
+        version or its record; its parts meshed by their keys as every part is (``MeshCache``)."""
+        with self.load_lock:
+            self.previews[ident] = Served(ident, ident, structure, None, dict(shapes),
+                                          {p["key"]: p["name"] for p in structure["prototypes"]})
+
+    def drop_previews(self, idents: Any) -> None:
+        """Previews let go (``parameters.Previewing``): what a page reads of them from now on is not found."""
+        with self.load_lock:
+            for ident in idents:
+                self.previews.pop(ident, None)
+                self.preview_reads.pop(ident, None)
+                self.inspected.discard(ident)  # measured once (``measure``): nothing measures it again
+
+    def preview_read(self, ident: str) -> float:
+        """When a page last read preview ``ident`` (``time.monotonic``), 0 for never."""
+        with self.load_lock:
+            return self.preview_reads.get(ident, 0.0)
+
+    def preview_shapes(self, ident: str, held: Any = ()) -> dict[str, bytes]:
+        """The shape bytes by key a next preview of model ``ident`` need not be sent again: the model's
+        document's where this server holds it, and those of the previews ``held``."""
+        found: dict[str, bytes] = {}
+        with self.load_lock:
+            sources = [self.served.get(ident)] + [self.previews.get(one) for one in held]
+        for doc in sources:
+            if doc is None:
+                continue
+            for key, shape in list(doc.shapes.items()):
+                if isinstance(shape, (bytes, bytearray)) and key not in found:
+                    found[key] = bytes(shape)
+        return found
 
     def has(self, ident: str, version: int, whole: bool = False) -> bool:
         """Whether a model's document is held at ``version`` (``whole``: with its xbf bytes)."""
@@ -1652,8 +1700,20 @@ class Server:
 
     def structure(self, doc: Served) -> dict[str, Any]:
         """The document's structure, each part held with the faces its mesher left
-        without triangles (``unmeshed``, ordinals) and ``BRepCheck``'s verdict on each."""
+        without triangles (``unmeshed``, ordinals) and ``BRepCheck``'s verdict on each, and the
+        parameters it records (``parameters.served``: ``[]`` for none), each said writable only where
+        the live worker that built a model's document recorded where the code spells its value."""
+        from cad.engine import parameters
+
         found = dict(doc.structure)
+        model = doc.ident in self.model_loaders
+        live = None
+        if model:
+            try:
+                live = self.parameters(doc.ident, doc.version)
+            except Exception:  # noqa: BLE001 - what no worker can say is said not writable, never a failed read
+                live = None
+        found["parameters"] = parameters.served(doc.structure.get("parameters"), model=model, live=live)
         found["prototypes"] = prototypes = []
         for prototype in doc.structure["prototypes"]:
             unmeshed = self.cache.unmeshed(prototype["key"])
@@ -2030,6 +2090,8 @@ class Server:
                 return self.json(handler, LOOK.json())
             if parts == ["api", "v1", "look", "environment"]:
                 return self.send(handler, 200, LOOK.environment_path.read_bytes(), "image/vnd.radiance")
+            if len(parts) >= 3 and parts[:2] == ["api", "doc"] and "~preview-" in parts[2]:
+                return self._preview_route(handler, parts, query)
             ident, pose = self.poses.get(parts[2], (parts[2], None)) if len(parts) >= 3 else ("", None)
             if parts[:2] == ["api", "doc"] and ident and not self.holds(ident) and is_id(ident):
                 self.revive(ident)  # a document the engine's cache holds, after a restart
@@ -2105,6 +2167,42 @@ class Server:
             self.error(handler, 400, str(error))
         except Exception as error:  # noqa: BLE001 - a request's failure is its answer
             self.error(handler, 500, f"{type(error).__name__}: {error}")
+
+    def _preview_route(self, handler: BaseHTTPRequestHandler, parts: list[str], query: dict) -> None:
+        """A read of a preview (``keep_preview``): its structure, a part's buffer, a part's groups, facts and
+        volume, and its parts' facts -- what a page draws and measures; never a version, a pose, a mesh run,
+        an export or anything that changes what is held. One let go, or never made, is not found."""
+        with self.load_lock:
+            doc = self.previews.get(parts[2])
+            if doc is not None:
+                self.preview_reads[parts[2]] = time.monotonic()
+        if doc is None:
+            return self.error(handler, 404, "no such preview: the page's values were saved, reset, or changed since")
+        if len(parts) == 3:
+            from cad.engine.mesh_format import TESSELLATION
+
+            if getattr(handler, "prefetch", True):
+                self.prefetch(doc)
+            return self.json(handler, {**self.structure(doc), "tessellation": TESSELLATION})
+        if len(parts) == 4 and parts[3] == "volumes":
+            given = (query.get("keys") or [""])[0]
+            keys = [key for key in given.split(",") if key] if given else None
+            if keys is not None and any(key not in doc.shapes for key in keys):
+                return self.error(handler, 404, "no such part")
+            return self.json(handler, self.measure(doc, keys))
+        if len(parts) >= 5 and parts[3] == "part":
+            key = parts[4]
+            if key not in doc.shapes:
+                return self.error(handler, 404, "no such part")
+            if len(parts) == 5:
+                return self.part(handler, doc, key)
+            if len(parts) == 7 and parts[5] in ("face", "edge", "vertex") and parts[6].isdigit():
+                return self.fact(handler, doc, key, parts[5], int(parts[6]))
+            if len(parts) == 6 and parts[5] == "groups":
+                return self.json(handler, self.topology(key, self.shape_of(doc, key)).groups())
+            if len(parts) == 6 and parts[5] == "volume":
+                return self.json(handler, self.measure(doc, [key])[key])
+        return self.error(handler, 404, "not found")
 
     def posed(self, doc: Served, pose: Any) -> dict[str, Any]:
         """The document's structure, at ``pose`` where one is given: its instances where the

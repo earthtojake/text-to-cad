@@ -12,15 +12,17 @@ export const useViewerMobile = () => useContext(ViewerMobileContext);
  * crosses the breakpoint, so a resize within one layout does not re-render what the element
  * contains. `false` until the first measurement.
  *
- * Returns a callback ref: the element is often not in the first render.
+ * Returns a callback ref: the element is often not in the first render. `enabled` false (a viewer whose layout
+ * is pinned, `FileViewer`'s `layout`) measures nothing.
+ * @param {boolean} [enabled]
  * @returns {[(element: HTMLElement | null) => void, boolean]}
  */
-export function useViewerMobileMeasure() {
+export function useViewerMobileMeasure(enabled = true) {
   const [element, setElement] = useState(null);
   const [mobile, setMobile] = useState(false);
   const ref = useCallback(next => setElement(next), []);
   useLayoutEffect(() => {
-    if (!element) return undefined;
+    if (!element || !enabled) return undefined;
     const measure = () => {
       const width = element.getBoundingClientRect().width;
       setMobile(width > 0 && width < VIEWER_MOBILE_BREAKPOINT);
@@ -29,6 +31,6 @@ export function useViewerMobileMeasure() {
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [element]);
+  }, [element, enabled]);
   return [ref, mobile];
 }

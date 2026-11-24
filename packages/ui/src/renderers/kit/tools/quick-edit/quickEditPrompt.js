@@ -58,14 +58,18 @@ export const quickEditSelection = references => references.filter(reference => r
  * when small or named by the saved .snapshot.json path. No pictures are rendered or attached. Built at the press.
  * `folders` (the host's promise of `{ start, home }`): the message names every file by them — relative to
  * the workspace, else `~/` — the inline packet's `input` too, so no message carries the person's home.
+ * `notes`: what the view itself has to tell the agent with this message, each a line or two of plain
+ * text (what a person changed from the view since the last message), said after what the person wrote
+ * and before the file.
  *
  * @param {{ resource: object, references?: object[], text: string, views?: { label: string }[],
- *   files?: Promise<{ snapshot?: string, inline?: string }> | null,
+ *   files?: Promise<{ snapshot?: string, inline?: string }> | null, notes?: readonly string[],
  *   read?: (path: string) => Promise<Blob>, folders?: Promise<{ start?: string, home?: string }> | null }} quickEdit
  */
-export function createQuickEditContext({ resource, references = [], text, views = [], files = null, read = null, viewUnavailable = "", folders = null }) {
+export function createQuickEditContext({ resource, references = [], text, views = [], files = null, read = null, viewUnavailable = "", folders = null, notes = [] }) {
   const parts = [
     textPart(String(text || "").trim(), "text"),
+    ...notes.map(note => String(note || "").trim()).filter(Boolean).map((note, index) => textPart(note, `note-${index}`)),
     ...(viewUnavailable ? [textPart(`View replay unavailable: ${viewUnavailable}`, "view-unavailable")] : []),
     referencePart({ resource: { ...resource }, target: { kind: "whole-resource" } }, "file"),
     ...quickEditSelection(references).map((reference, index) => referencePart({ ...reference, resource: { ...reference.resource } }, `reference-${index}`)),

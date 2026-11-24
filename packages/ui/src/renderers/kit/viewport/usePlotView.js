@@ -34,13 +34,17 @@ import { createPlotRasters } from "./plotRasters.js";
  * @param {object|null} [options.drawView]  `drawPlot`'s `view`; a new one draws the plot afresh.
  * @param {(ctx: CanvasRenderingContext2D, frame: { transform: object, pixelRatio: number, width: number, height: number }) => void} [options.overlay]
  * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
+ * @param {Parameters<typeof useFlatCanvasView>[0]["takesAway"]} [options.takesAway]  What a tap would take out of the
+ *   selection: such a tap waits the double-click window (`useFlatCanvasView`'s).
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
  * @param {Parameters<typeof useFlatCanvasView>[0]["onDoubleTap"]} [options.onDoubleTap]  A double-click the tool takes (a sheet entered), else the fit.
  * @param {boolean} [options.paused]  The pane is covered (its picture shown another way meanwhile): its rasters
  *   are let go and nothing is painted, until it is uncovered; the view, the capture and the card's picture stay.
+ * @param {boolean} [options.suspended]  The view is covered by one that took the whole page (`useFlatCanvasView`'s): it
+ *   keeps its size, its view and its picture as they were, and is uncovered exactly so.
  */
 export function usePlotView({ plot, restored = null, colorScheme = "light", surround, noun = "board", onViewMoved, drawView = null, overlay = null,
-  onTap = null, onHover = null, onDoubleTap = null, paused = false }) {
+  onTap = null, takesAway = null, onHover = null, onDoubleTap = null, paused = false, suspended = false }) {
   const plotRef = useRef(plot);
   plotRef.current = plot;
   const surroundRef = useRef(surround);
@@ -60,8 +64,8 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
     if (element) element.dataset.boardSettled = final ? "true" : "false";
   }, []);
   // The fit, as its first view and a double-click take it: a board's margin, clear of the tool strip.
-  const view = useFlatCanvasView({ content: plot, bounds: plot?.layout.modelBounds ?? null, restored, colorScheme, onViewMoved, paint, onTap, onHover,
-    fitBox: fitBoardBounds, clearStrip: true, onDoubleTap, middlePan: true, orbitPan: true });
+  const view = useFlatCanvasView({ content: plot, bounds: plot?.layout.modelBounds ?? null, restored, colorScheme, onViewMoved, paint, onTap, takesAway,
+    onHover, fitBox: fitBoardBounds, clearStrip: true, onDoubleTap, middlePan: true, orbitPan: true, suspended });
   const { requestPaint, paintNow, encode } = view;
 
   // One raster cache per plot, view and theme: a new revision, a new set of layers or a switch of
@@ -93,29 +97,25 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
   /**
    * The plot on its own, for a library card: fitted whole to `width` × `height` with the view's
    * margin, drawn as a snapshot draws it but on nothing round it — a board's area, a sheet's paper,
-   * in the theme's colours, the rest clear, so the card's own backdrop is all there is behind it. It
-   * is drawn in both themes from the payload held: the light picture, carrying the dark one as
-   * `dark`, which the library keeps beside it and shows in the dark theme (no card turns a plot's
-   * colours round). The pane's view is left as it is.
+   * in the light theme's colours, the rest clear, so the card's own backdrop is all there is behind
+   * it. The home shows it in both themes, never turned. The pane's view is left as it is.
    */
   const thumbnail = useCallback(async ({ width, height }) => {
     const current = plotRef.current;
     if (!current) throw new Error(`This ${noun} has nothing to picture yet.`);
-    const picture = (theme) => new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(width));
       canvas.height = Math.max(1, Math.round(height));
       const context = canvas.getContext("2d");
       if (!context) { reject(new Error(`The browser cannot draw the ${noun}’s picture.`)); return; }
       clearSurface(context, { width: canvas.width, height: canvas.height });
-      drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height), backdrop: "board", theme });
+      drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height), backdrop: "board", theme: "light" });
       canvas.toBlob((blob) => {
         if (blob) resolve(blob);
         else reject(new Error(`The browser could not encode this ${noun} as a PNG.`));
       }, "image/png");
     });
-    const [light, dark] = await Promise.all([picture("light"), picture("dark")]);
-    return Object.assign(light, { dark });
   }, [noun]);
 
   return { containerRef: view.containerRef, canvasRef: view.canvasRef, controls: view.controls, dragging: view.dragging, fit: view.fit, frame: view.frame, setView: view.setView, zoom: view.zoom,

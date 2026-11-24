@@ -8,12 +8,13 @@ a document of that kind, and the same id under another kind is a 404 that names 
 
 * ``model``, ``xbf``, ``step``: the engine's document -- ``structure``, ``parts/<key>`` (and each
   part's ``faces``/``edges``/``vertices/<ordinal>``, ``groups``, ``volume``), ``measure``,
-  ``kinematics``, ``POST pose``, ``POST mesh``; a file's also its ``source``.
+  ``kinematics``, ``POST pose``, ``POST mesh``; a model's also ``POST parameters`` (its parameters set in
+  its script, ``http_app.CadApp._parameters``); a file's also its ``source``.
 * ``dxf``: ``drawing`` (the 2D payload), ``source``.
 * ``kicad_pcb``: ``plot`` (the board's geometry per layer, and its index), ``drc`` (KiCad's design rule
   check of it), ``source``.
 * ``kicad_sch``: ``plot`` (every sheet of the schematic a page of layers, and its index), ``source``.
-* ``urdf``, ``srdf``, ``sdf``: ``structure`` (the robot resolved for the page), ``parts/<digest>``
+* ``urdf``, ``srdf``: ``structure`` (the robot resolved for the page), ``parts/<digest>``
   (a primitive's mesh), ``source``.
 * ``stl``, ``glb``, ``3mf``: ``source``, which the page parses itself.
 """
@@ -40,7 +41,7 @@ ROBOT_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry
 _SOLID = ["step", "stl", "threemf", "glb", "dxf"]
 EXPORTS = {"model": [*_SOLID, "xbf"], "step": [*_SOLID, "xbf"], "xbf": [*_SOLID, "original"],
            "glb": ["stl", "threemf"], "stl": ["threemf", "glb"], "3mf": ["stl", "glb"],
-           "dxf": [], "urdf": [], "srdf": [], "sdf": [],
+           "dxf": [], "urdf": [], "srdf": [],
            "kicad_pcb": ["gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf"]}
 # A KiCad schematic's are KiCad's too (``cad kicad_sch export --to``, ``exports.SCHEMATIC``).
 EXPORTS["kicad_sch"] = ["pdf", "svg", "netlist", "bom"]

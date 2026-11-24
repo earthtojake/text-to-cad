@@ -1,6 +1,6 @@
 """A robot description resolved into what a page plays and draws.
 
-A URDF, an SDF, or an SRDF with the URDF it plans for, becomes ONE payload: the robot's
+A URDF, or an SRDF with the URDF it plans for, becomes ONE payload: the robot's
 articulation (below: controls per movable joint, joints in their rest frames with affine
 rows over the controls, which link each joint carries, what a drag writes, the named poses
 and the opening pose), the list of visuals to draw (each with its rest placement, its colour
@@ -10,13 +10,12 @@ plays the articulation; it parses no XML, resolves no frame, meshes no shape and
 limit.
 
 The description is read once, in the engine -- a URDF and an SRDF's group states over it by
-``cad.engine.urdf_source``, an SDF by ``cad.engine.sdf_source``,
-each into ``cad.engine.robot_model``'s articulation (every link's frame at rest, its visuals, its joints
-with their mimics and four-bars, its named poses, the facts as written) -- and the payload is the
-page's view of that read, as the OCCT stills (``cad.engine.formats.robot``) are theirs: it turns each
-visual into a mesh the page decodes, carries the mesh's scale in its placement, rounds every number
-and adds the articulation's rows. Where the payload and the stills have read a detail differently, the
-payload's ``Dialect`` keeps the viewer's (``_URDF``, ``_SDF``).
+``cad.engine.urdf_source``, into ``cad.engine.robot_model``'s articulation (every link's frame at rest,
+its visuals, its joints with their mimics and four-bars, its named poses, the facts as written) -- and
+the payload is the page's view of that read, as the OCCT stills (``cad.engine.formats.robot``) are
+theirs: it turns each visual into a mesh the page decodes, carries the mesh's scale in its placement,
+rounds every number and adds the articulation's rows. Where the payload and the stills have read a detail
+differently, the payload's ``Dialect`` keeps the viewer's (``_URDF``).
 
 The articulation (``ARTICULATION_SCHEMA_VERSION``) is played with closed-form arithmetic and
 nothing else::
@@ -45,15 +44,15 @@ The payload::
 
     {
       "schemaVersion": 2,
-      "kind": "urdf" | "sdf" | "srdf",
-      "name": the robot's (an SDF model's) name,
-      "root": the root link; "" for an SDF model whose links float free,
+      "kind": "urdf" | "srdf",
+      "name": the robot's name,
+      "root": the root link,
       "articulation": the articulation (above), whose ``carries`` name links,
       "links": [{"name", "placement", "visuals": [facts], "collisions": [facts], "inertial"}],
       "joints": [{"name", "type", "parent", "child", "axis", "origin", "limit", "mimic", "fourBar"}],
       "visuals": [{"id", "link", "label", "placement", "color", "mesh": {"format", ...}}],
       "srdf": the planning semantics the SRDF declares, or null,
-      "sdf": what an SDF says about itself beyond its links and joints, or null,
+      "sdf": null, as schema 2 names it (the document type it described is gone),
     }
 
 - ``placement`` is a row-major 4x4 in the robot's REST space (the description as written,
@@ -62,12 +61,7 @@ The payload::
   else. A link's visuals sit under the joint that carries the link, and the joint's delta
   moves them. A visual's ``id`` is ``<link>:v<n>`` and its
   ``label`` what a row calls it: the ``name`` the description gave it, else its geometry (the
-  mesh file's name, or ``box``, ``cylinder``, ``sphere``, ``capsule``).
-- An SDF model's nested models (SDFormat 1.6+) are part of the robot: their links, frames
-  and joints are named by scope (``arm::elbow``, ``arm::hand::palm``), a name written in a
-  nested model resolves in that model's namespace, a nested model is posed in the model it is
-  nested in and attached to its ``canonical_link`` (else its first link), and a joint outside
-  it names its links by scoped name. A model placed by ``placement_frame`` is refused.
+  mesh file's name, or ``box``, ``cylinder``, ``sphere``).
 - A control is a joint a person or a job sets: revolute and continuous joints in DEGREES,
   prismatic joints in METRES, each at its declared limits (a continuous joint has none). A
   mimic follower is not a control: its row is its leader's, scaled and offset, so one value
@@ -83,7 +77,7 @@ The payload::
   pivots ``ground_length`` apart, the range reachable, the derived range within the joint's
   limits) is checked here, and refused in words; the page solves nothing.
 - A visual's mesh is the file it names (``format`` the page's decoder: stl, 3mf or glb) or,
-  for a box, cylinder, sphere or capsule, a GLB cadgen meshed (``_internal.primitive_mesh``)
+  for a box, cylinder or sphere, a GLB cadgen meshed (``_internal.primitive_mesh``)
   and holds by the sha256 of its bytes. The payload names
   a file by its absolute path (``path``) and a primitive by that digest (``object``);
   the host that serves it mints each one's ``url`` (:func:`locate_robot_payload`). A mesh
@@ -91,9 +85,8 @@ The payload::
   so one authored in metres needs no mesh scale, while an STL or a 3MF is drawn as the
   numbers it holds, which the mesh scale converts (``0.001`` for millimetres). The placement
   carries the conversion from the page's decoded unit (a GLB decodes into millimetres).
-- Refusals are the validators' (``cad.urdf._source``, ``cad.sdf._validation``,
-  ``cad.srdf._validation``), the engine reader's in the viewer's words (an SDF model the viewer does not
-  place, a joint it does not pose, a frame graph that does not resolve), plus what the page cannot
+- Refusals are the validators' (``cad.urdf._source``, ``cad.srdf._validation``), the engine reader's in
+  the viewer's words (a joint it does not pose, a joint axis of zero), plus what the page cannot
   draw: a mesh in a format it has no decoder for, a shape it has no mesh for, a mesh it cannot
   reach. Every refusal is a :class:`RobotReadError` saying what to change.
 
@@ -116,7 +109,7 @@ from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
 
-from cad.engine import mesh_uri, sdf_source, urdf_source
+from cad.engine import mesh_uri, urdf_source
 from cad.engine.robot_model import Dialect, SourceError
 from cad.engine.urdf_source import TCAD_NAMESPACE
 from cad._internal.findings import format_findings
@@ -153,16 +146,16 @@ _RESOLUTION_REVISION = 2
 # go first. A payload whose mesh went is read again (``robot_payload_bytes(rebuild=True)``).
 PAYLOADS_HELD = 16
 MESHES_HELD = 256
-# Every document type viewed as a robot (``cad.registry``): a URDF, an SRDF and an SDF.
+# Every document type viewed as a robot (``cad.registry``): a URDF and an SRDF.
 ROBOT_SUFFIXES = tuple(extension for entry in DOCUMENT_TYPES.values() if entry.view == "robot"
                        for extension in entry.extensions)
 #: The mesh files the page decodes, by suffix: what a link mesh may be.
 DRAWABLE_MESH_FORMATS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb"}
 #: The shapes cadgen meshes for a visual (``_internal.primitive_mesh``).
-DRAWABLE_SHAPES = ("box", "capsule", "cylinder", "sphere")
+DRAWABLE_SHAPES = ("box", "cylinder", "sphere")
 # What a visual's placement multiplies a decoded mesh by, by format, so the mesh lands in the
 # robot's metres. glTF is metres by its spec and the page decodes a GLB into millimetres (the
-# CAD Viewer's scene unit), so every GLB -- a link's mesh file and a primitive cadgen meshed
+# viewer's scene unit), so every GLB -- a link's mesh file and a primitive cadgen meshed
 # alike -- carries 0.001. An STL has no unit and the page does not read a 3MF's: both are
 # drawn as the numbers they hold, which the description's mesh scale converts to metres.
 _DECODED_TO_METRES = {"glb": 0.001, "stl": 1.0, "3mf": 1.0}
@@ -278,7 +271,6 @@ class _Description:
         self.poses: dict[str, dict[str, float]] = {}  # group states, in control units
         self.home: dict[str, float] = {}
         self.srdf: dict | None = None
-        self.sdf: dict | None = None
 
 
 # --- meshes --------------------------------------------------------------------------------
@@ -334,16 +326,13 @@ def _primitive_descriptor(shape: str, dimensions: dict) -> dict:
     return {"format": "glb", "_primitive": {"shape": shape, "dimensions": dimensions}}
 
 
-# --- URDF, SDF and SRDF (the engine's readers: cad.engine.urdf_source, sdf_source) ----------------------
+# --- URDF and SRDF (the engine's reader: cad.engine.urdf_source) --------------------------------------
 #
 # The description is read once, in the engine, into its articulation; this is the page's view of it:
 # each visual's mesh as the page decodes one (or a primitive cadgen meshes), its placement carrying the
 # mesh's scale to metres, the facts as written. Where the viewer and the stills have read a detail
 # differently, the payload's dialect keeps the viewer's: its words for a refusal (the page shows them),
-# a pose's ``degrees`` true by any of SDFormat's boolean words, a nested model with no link of its own
-# attached through its first nested model, a model relative to anything but the world, a
-# ``placement_frame`` and a link two joints carry refused, a URDF's colours and four-bar numbers read
-# leniently where its validator says nothing of them.
+# a URDF's colours and four-bar numbers read leniently where its validator says nothing of them.
 
 _WORDS = {
     "numbers": "{where} must be {count} numbers, not {written!r}",
@@ -351,29 +340,6 @@ _WORDS = {
     "rgba": None, "four_bar_many": None, "four_bar_number": None, "four_bar_lengths": None,
 }
 _URDF = Dialect(words={**_WORDS, "xml": "{file} could not be read: {error}"}, display=display_path)
-_SDF = Dialect(
-    words={
-        **_WORDS,
-        "xml": "{file} could not be parsed as SDF XML: {error}",
-        "sdf_root": "{file} root element must be <sdf>",
-        "sdf_models": "{file} holds {count} top-level models; the viewer renders one direct <model>",
-        "sdf_worlds": "{file} must hold one direct <model>, or one <world> holding one direct <model>",
-        "sdf_world_models": "{file} world holds {count} models; the viewer renders a world with exactly one direct <model>",
-        "rotation_format": "{where} pose uses rotation_format {format!r}; the viewer reads euler_rpy",
-        "model_relative": "{file} model {model!r} pose is relative_to {relative!r}; the viewer places a model in the world",
-        "placement_frame": "{where} is placed by its placement_frame, which the viewer does not place by; "
-                           "drop placement_frame and pose the model's own frame",
-        "frame_twice": "SDF model {model!r} names {key!r} twice: links, frames, joints and nested models share one namespace",
-        "frame_cycle": "SDF model {model!r} frame graph cycles at {key!r}",
-        "attached_cycle": "SDF model {model!r} attached_to graph cycles at {key!r}",
-        "sdf_joint_type": "{file} joint {joint!r} is a {kind!r} joint; the viewer poses fixed, revolute, continuous and "
-                          "prismatic joints",
-        "sdf_scale": "{where} mesh scale must be 3 numbers, not {written!r}",
-        "joint_unattached": "{file} joint {joint!r} child {child!r} is not attached to a link",
-        "joint_same": "{file} joint {joint!r} must connect different parent and child frames, not {link!r}",
-    },
-    display=display_path,
-)
 
 
 def _read(reader: Callable[..., Any], path: Path, dialect: Dialect, **options: Any) -> Any:
@@ -383,14 +349,13 @@ def _read(reader: Callable[..., Any], path: Path, dialect: Dialect, **options: A
         raise RobotReadError(str(exc)) from None
 
 
-def _mesh_file(visual: Any, *, where: str, base_dir: Path, format_first: bool) -> dict:
+def _mesh_file(visual: Any, *, where: str, base_dir: Path) -> dict:
     """A visual's mesh file as the page decodes one: ``{format, path}``, refused by name where the page
-    has no decoder for it (``format_first``: a URDF's says so before it says the file is not local), the
-    reference names no local file, or no file is there."""
+    has no decoder for it (said before that the file is not local), the reference names no local file,
+    or no file is there."""
     reference, path = visual.reference, visual.shape[1]
-    fmt = _drawable_format(reference, where=where) if format_first else ""
+    fmt = _drawable_format(reference, where=where)
     if mesh_uri.scheme(reference) == "package":
-        fmt = fmt or _drawable_format(reference, where=where)
         if path is None:
             try:
                 mesh_uri.package_file(reference, base_dir, where)
@@ -401,24 +366,16 @@ def _mesh_file(visual: Any, *, where: str, base_dir: Path, format_first: bool) -
             f"{where} names {reference!r}, which is not a local file: the viewer draws the meshes beside "
             "the description; copy the file next to it and name it by a relative path"
         )
-    fmt = fmt or _drawable_format(reference, where=where)
     if not path.is_file():
         raise RobotReadError(f"{where} names {reference!r}, and no file is at {path}")
     return {"format": fmt, "path": str(path)}
 
 
-def _sdf_primitive(where: str, kind: str, dimensions: Mapping[str, Any]) -> None:
-    """An SDF visual's primitive has the dimensions a GLB is meshed from."""
-    if (kind == "box" and "size" not in dimensions) or (kind != "box" and "radius" not in dimensions) \
-            or (kind in ("cylinder", "capsule") and "length" not in dimensions):
-        raise RobotReadError(f"{where} is a <{kind}> with missing or non-positive dimensions; give it positive dimensions")
-
-
-def _described(kind: str, articulation: Any, display: str) -> _Description:
-    """The engine's articulation of a URDF (or an SRDF's) or an SDF as the page takes it: each visual's
+def _described(articulation: Any, display: str) -> _Description:
+    """The engine's articulation of a URDF (or an SRDF's) as the page takes it: each visual's
     mesh the page's (every visual the page cannot draw named together), each placement carrying its
     mesh's scale to metres, the facts as written."""
-    description = _Description(kind, articulation.name, display)
+    description = _Description("urdf", articulation.name, display)
     description.root = articulation.root
     base_dir = Path(articulation.sources[-1]).parent
     undrawable: list[str] = []  # every visual the page cannot draw, named together
@@ -430,30 +387,21 @@ def _described(kind: str, articulation: Any, display: str) -> _Description:
             shape = visual.shape
             try:
                 if shape[0] == "file":
-                    if kind == "sdf" and not visual.reference:
-                        raise RobotReadError(f"{where} is a <mesh> with no <uri>, so there is nothing to load")
-                    mesh = _mesh_file(visual, where=where, base_dir=base_dir, format_first=kind != "sdf")
+                    mesh = _mesh_file(visual, where=where, base_dir=base_dir)
                     local = _multiply(visual.local, _mesh_scale(mesh["format"], shape[2]))
                     label = PurePosixPath(visual.reference).name or "mesh"
                 elif shape[0] in DRAWABLE_SHAPES:
-                    if kind == "sdf":
-                        _sdf_primitive(where, shape[0], shape[1])
                     mesh = _primitive_descriptor(shape[0], dict(shape[1]))
                     local = _multiply(visual.local, _mesh_scale(mesh["format"]))
                     label = shape[0]
-                elif kind != "sdf":
-                    raise RobotReadError(f"{where} uses geometry the viewer cannot draw; give it a mesh, box, cylinder or sphere")
                 else:
-                    what = "has no <geometry>" if shape[0] == "missing" else f"uses <{shape[0]}> geometry, which the viewer cannot draw"
-                    raise RobotReadError(f"{where} {what}. Supported: {', '.join(DRAWABLE_SHAPES)}, mesh. "
-                                         "Replace it with one of those, or reference a mesh file.")
+                    raise RobotReadError(f"{where} uses geometry the viewer cannot draw; give it a mesh, box, cylinder or sphere")
             except RobotReadError as exc:
                 undrawable.append(str(exc))
                 continue
-            # A URDF visual's own name is what its author called it, and what tells several visuals of
-            # one link apart; without one, it is named for its geometry. An SDF's is named for its geometry.
-            if kind != "sdf":
-                label = visual.facts["name"] or label
+            # A visual's own name is what its author called it, and what tells several visuals of one link
+            # apart; without one, it is named for its geometry.
+            label = visual.facts["name"] or label
             link.visuals.append(_Visual(visual.id, label, local, visual.color, mesh, visual.facts))
         link.collisions = articulation.collisions.get(name, [])
         link.inertial = articulation.inertials.get(name)
@@ -469,12 +417,10 @@ def _described(kind: str, articulation: Any, display: str) -> _Description:
         if four_bar is not None and four_bar.get("namespace") == TCAD_NAMESPACE:
             joint.four_bar = four_bar
         joint.facts = dict(linked.facts or {})
-        if kind != "sdf":
-            joint.facts["mimic"] = ({"joint": joint.mimic[0], "multiplier": joint.mimic[1], "offset": joint.mimic[2]}
-                                    if joint.mimic else None)
-            joint.facts["fourBar"] = _four_bar_facts(joint.four_bar)
+        joint.facts["mimic"] = ({"joint": joint.mimic[0], "multiplier": joint.mimic[1], "offset": joint.mimic[2]}
+                                if joint.mimic else None)
+        joint.facts["fourBar"] = _four_bar_facts(joint.four_bar)
         description.joints.append(joint)
-    description.sdf = articulation.sdf
     return description
 
 
@@ -496,22 +442,7 @@ def _validated_urdf(path: Path) -> None:
 
 def _read_urdf(path: Path) -> _Description:
     _validated_urdf(path)
-    return _described("urdf", _read(urdf_source.read_urdf, path, _URDF), display_path(path))
-
-
-def _read_sdf(path: Path) -> _Description:
-    from cad.sdf._source import SdfSourceError
-    from cad.sdf._validation import raise_for_validation_errors, validate_sdf_root
-
-    try:
-        root = ET.parse(path).getroot()
-    except (OSError, ET.ParseError) as exc:
-        raise RobotReadError(f"{display_path(path)} could not be parsed as SDF XML: {exc}") from None
-    try:
-        raise_for_validation_errors(validate_sdf_root(root, source_path=path, base_dir=path.parent))
-    except SdfSourceError as exc:
-        raise RobotReadError(str(exc)) from None
-    return _described("sdf", _read(sdf_source.read_sdf, path, _SDF), display_path(path))
+    return _described(_read(urdf_source.read_urdf, path, _URDF), display_path(path))
 
 
 # --- SRDF ------------------------------------------------------------------------------------
@@ -533,7 +464,7 @@ def paired_urdf_for_srdf(srdf_path: Path) -> Path:
     """The URDF whose robot an SRDF plans for, or a refusal naming the search.
 
     An SRDF carries planning semantics only. It pairs with the same-folder ``.urdf``
-    whose ``<robot name>`` matches -- the rule ``cad srdf validate`` and the CAD Viewer
+    whose ``<robot name>`` matches -- the rule ``cad srdf validate`` and the viewer
     use -- and exactly one may match.
     """
     from cad.srdf._validation import find_paired_urdf
@@ -587,7 +518,7 @@ def _read_srdf(path: Path) -> _Description:
     _validated_urdf(urdf_path)
     # The group states are the engine's poses (each control's value in its unit) and its home the opening.
     articulation = _read(urdf_source.read_srdf, path, _URDF, urdf=urdf_path)
-    description = _described("urdf", articulation, display_path(urdf_path))
+    description = _described(articulation, display_path(urdf_path))
     description.kind = "srdf"
     description.poses, description.home = articulation.poses, articulation.home
     groups_by_name = {group.name: group for group in source.planning_groups}
@@ -1005,7 +936,7 @@ def _payload(description: _Description) -> dict[str, Any]:
         "joints": [joint.facts for joint in description.joints],
         "visuals": visuals,
         "srdf": description.srdf,
-        "sdf": description.sdf,
+        "sdf": None,
     }
 
 
@@ -1022,12 +953,7 @@ def prepare_robot_description(path: Path | str) -> dict[str, Any]:
         raise RobotReadError(f"{resolved.name} is not a robot description: one of {', '.join(ROBOT_SUFFIXES)}")
     if not resolved.is_file():
         raise RobotReadError(f"no file is at {resolved}")
-    if kind == ".urdf":
-        description = _read_urdf(resolved)
-    elif kind == ".sdf":
-        description = _read_sdf(resolved)
-    else:
-        description = _read_srdf(resolved)
+    description = _read_urdf(resolved) if kind == ".urdf" else _read_srdf(resolved)
     return _payload(description)
 
 

@@ -235,7 +235,7 @@ class ServerInfo(HttpLayerTestCase):
         self.assertRegex(info["instance"], r"^[0-9a-f]{16}$")
         self.assertEqual(json.loads(self.fixture.request("GET", "/api/v1/server")[2])["instance"], info["instance"])
         # The kinds of documents it reads, with what each exports.
-        self.assertEqual(info["kinds"]["reads"], ["model", "xbf", "step", "stl", "glb", "3mf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch"])
+        self.assertEqual(info["kinds"]["reads"], ["model", "xbf", "step", "stl", "glb", "3mf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch"])
         self.assertEqual(info["kinds"]["exports"]["xbf"], ["step", "stl", "threemf", "glb", "dxf", "original"])
         self.assertEqual(info["kinds"]["exports"]["dxf"], [])
 
@@ -568,7 +568,7 @@ class NoDistConfigured(unittest.TestCase):
             status, _, body = fixture.request("GET", "/")
             self.assertEqual(status, 404)
             # A build's `view:` link leads here: the page says what is missing, and how to get it.
-            self.assertEqual(body, b"CAD Viewer client is not built; build apps/web or install the cad wheel")
+            self.assertEqual(body, b"The viewer client is not built; build apps/web or install the cad wheel")
             status, _, _ = fixture.request("GET", "/api/v1/server")
             self.assertEqual(status, 200)
         finally:

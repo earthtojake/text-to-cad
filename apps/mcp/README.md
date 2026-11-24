@@ -46,8 +46,8 @@ to `host.presentation`, in one change.
 - **Tabs (the Codex app).** **CAD** in the
   sidebar (the home: the models opened before, and Open), a **CAD** tab beside
   each thread, and *Open with CAD* for a model file. The sidebar and every tab are the
-  whole viewer under its navbar, as a card is (below); *Open with CAD* alone shows its file
-  bare, with no navbar. A tab's name and icon in Codex's tab strip are the page's own `<title>` and icon
+  whole viewer under its navbar, as a card is (below); *Open with CAD* shows its file alone,
+  under the same navbar. A tab's name and icon in Codex's tab strip are the page's own `<title>` and icon
   (`shell.html`: **CAD**, and the blue mark as a 32px PNG data URL), which the Codex app (26.1111.21308,
   read from its bundle 2026-11-15) prefers to the tool's title and icon; it takes an icon only as a PNG, JPEG, WebP or GIF
   data URL of at most 8192 characters (or an `https:` URL), so never the tools' `currentColor` SVG. The agent opens a tab once
@@ -57,8 +57,8 @@ to `host.presentation`, in one change.
   thread. Each connects to a separate engine session, so an unnamed view belongs to that thread.
 - **Inline (no app: the development switch alone).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
-  the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the logo, which
-  opens the app menu, first; Back and Forward; the file name that opens the name menu; the ⋯,
+  the whole viewer at card size, as a tab is: its navbar (the panel's toggle first, then the
+  logo, which opens the app menu; Back and Forward; the file name that opens the name menu; the ⋯,
   the file menu: Copy path, Copy link (the engine's own page of the document,
   `<engine origin>/<id>?token=<link>`, the origin from the launch and the link asked through the
   tunnel; never the tunnel's address), then Open in › Browser and Finder (File Explorer, File manager), a
@@ -66,15 +66,16 @@ to `host.presentation`, in one change.
   script was moved or deleted; Browser needs none), then the apps the server finds on this computer
   for the document's files, through the tunnel as Reveal goes (the source's, each export's as "App
   (file name)", then Default app) — no Export, as this host has no downloads;
-  then, at the right, only Full size where the host can show a view full size; Back and Forward are dropped on a phone-width view), the tool strip ending
-  in Projection, Display and Preview, the view's panel, the view cube, and Quick Edit. In
+  then, at the right, a put-away alert's icon, the view's Display and Preview and, outermost, Full size where the
+  host can show a view full size; Back and Forward are dropped on a phone-width view), the tool strip (no view
+  controls on it), the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
   newer card retires the older ones. The page keeps this presentation, tested and shipped in the same
   bundle, for the day a host's cards are verified; `CAD_MCP_PRESENTATION=inline` reaches it (below).
 
 A Codex call made in a turn that shows no app (`x-codex-turn-metadata.turn_trigger: exec`, which the 0.163 app
 server's binary sends) never loads this page: its `cad_show` and `cad_open` open the model's page in this
-machine's CAD Viewer, `/<id>` (the file registered by its id, as a launch registers it), started if none runs
+machine's viewer, `/<id>` (the file registered by its id, as a launch registers it), started if none runs
 (`cad_server/mcp/browser.py`), in the person's browser through an owner-only redirect file
 (`cad_mcp/browser.py`), and answer with the page's URL for the agent to give the person: "opened in your
 browser at <url>". The host's stdio process (`cad mcp`) makes that open, in the agent's own environment (its
@@ -164,8 +165,8 @@ skills' `cad viewer` link, in the browser pane or the browser.
 
 | Host | CAD's server | Cards |
 | --- | --- | --- |
-| Claude Desktop (Chat and Code tabs) | none: nothing writes an entry in `claude_desktop_config.json`, and the install script (`scripts/install/install.py`'s `claude_desktop`) takes out the `mcpServers.cad` releases 0.7.6 through 0.11.11 wrote there (the rest of the file kept, a copy of the file as it was beside it) | none |
-| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone (the install script removes no `claude mcp add` server). claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.11 name one, which lists no tools when Claude Code starts it | none |
+| Claude Desktop (Chat and Code tabs) | none: nothing writes an entry in `claude_desktop_config.json`, and `cad plugin install` (`cad_server/plugin/apps.py`'s `claude_desktop`) takes out the `mcpServers.cad` releases 0.7.6 through 0.11.11 wrote there (the rest of the file kept, a copy of the file as it was beside it) | none |
+| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone (`cad plugin install` removes no `claude mcp add` server). claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.11 name one, which lists no tools when Claude Code starts it | none |
 | Claude Code in a terminal | none | it draws none |
 
 The server offers no tools to a Claude host that starts it (a config someone wrote by hand, or an
@@ -188,8 +189,8 @@ older entry until Claude Desktop next starts). What was measured of those hosts,
 A server a Claude host starts anyway is offered no tools, as every app's but Codex's. To give Claude Code a
 server again, once flag 1824765482 is on and its view is verified: `.claude-plugin/plugin.json` would name a
 server config of its own (claude.ai's directory's copy stays the skills alone: `scripts/release/plugin_branch.py`
-fails a server in it), and `host.presentation` would name its client. The install script takes Claude Desktop's
-old `cad` entry out (`scripts/install/install.py`'s `claude_desktop`); a server there and in the plugin would
+fails a server in it), and `host.presentation` would name its client. `cad plugin install` takes Claude Desktop's
+old `cad` entry out (`cad_server/plugin/apps.py`'s `claude_desktop`); a server there and in the plugin would
 list CAD twice in the Code tab.
 
 ## Cards: where the page's capability comes from
@@ -223,7 +224,7 @@ the launch's `_meta` first (`host/capability.ts`).
 - **One page, told what to show.** Every surface loads this one page. The tool
   that opened it returns a *launch* — `page` (`home` or `viewer`) and `model`, a
   file's absolute path, a model's document id, or none — and the page renders it: the shared
-  CAD viewer showing that document, or the home. Agents name a file by its absolute path and a
+  viewer showing that document, or the home. Agents name a file by its absolute path and a
   model by the id its script printed (a script is never a document), and
   nothing here branches on a surface's name but one: `surface: file` (below).
 - **A launch is enough to start.** It also carries what the server is — its
@@ -251,18 +252,18 @@ the launch's `_meta` first (`host/capability.ts`).
   again starts with one step. A file handler's view, which shows its file alone,
   keeps none.
 - **What's new is a tab's.** Once a release with notes is installed, a tab (the sidebar, a
-  thread's CAD tab, *Open with CAD*) shows them once, as the CAD Viewer does (`@cad/ui/whats-new`),
+  thread's CAD tab, *Open with CAD*) shows them once, as the viewer does (`@cad/ui/whats-new`),
   kept seen for every view. A card never does, and reads nothing for it: a few hundred pixels of a
   chat are no room for a dialog, and a chat keeps several cards at once.
 - ***Open with CAD* is the file alone.** `cad_file` (`surface: file`) shows the
   file the host handed over, and nothing else, for as long as it is open: no home
   and no explorer (the host's own file tree is its navigation), no Back or Forward,
-  and a renderer's link to another file (a robot's mesh) is plain text. It is the one
-  view with no navbar (`chrome: "bare"`): no logo or app menu, no name or name menu, no ⋯
-  (so no Open in › Browser); what the navbar would carry that it still has is its corner at
-  the viewport's top-right (`CardCorner.tsx`, the viewer's `notice`, Quick Edit under it):
-  Full size where the host offers it. Preview's bar hides the
-  corner as it hides a navbar. Its launch carries no page (`browser`). The agent reads it
+  and a renderer's link to another file (a robot's mesh) is plain text. It is drawn
+  under the same 40px navbar as every other view, so the panel's toggle is there: first the
+  panel's toggle, then its logo and app menu, the file's name (no name menu) and its ⋯ (no Open in › Browser; File
+  info, the file's facts), then at the right the view's Display and Preview, then Full size where the host offers it.
+  Preview's bar hides the
+  navbar as it does everywhere. Its launch carries no page (`browser`). The agent reads it
   (`cad_view` lists it) but shows nothing in it: `cad_show` refuses its view, and
   the page ignores a show that reaches it anyway.
 - **An agent reads the sidebar too, and shows beside its thread.** Each MCP session
@@ -290,7 +291,7 @@ the launch's `_meta` first (`host/capability.ts`).
   module or a chunk is folded into rolldown's map, each import's placeholder is as wide as the
   blob URL that replaces it, and the chunk's debug
   id is the one its edited text and map decide (`@cad/core/chunk-ids`), never the
-  id of the unedited chunk the CAD Viewer may ship. It is on by default once
+  id of the unedited chunk the viewer may ship. It is on by default once
   a `cad` command has said so, once, and nothing asks. The app menu's **Telemetry**
   switch (`appSettings`, through `/api/v1/settings`' `telemetry`) changes the answer, one answer for
   this app and the browser viewer. No tool of the agent's reads or changes it:
@@ -330,7 +331,10 @@ the launch's `_meta` first (`host/capability.ts`).
   over its own model library and analytics. Everything the page asks of the
   server travels this way, as the web page asks its own: the models -- a STEP's
   and an `.xbf`'s reads too, dispatched directly to the engine's document router
-  that serves them (`/api/v1/documents/<kind>/<id>/...`) -- the
+  that serves them (`/api/v1/documents/<kind>/<id>/...`), a model's Parameters
+  Save among them (`POST /api/v1/documents/model/<id>/parameters`, one call held
+  until the rebuild it starts has ended) and the preview of its drafts
+  (`POST /api/v1/documents/model/<id>/preview`, then the preview's reads) -- the
   library and its pictures, Reveal, the person's analytics
   answer and language. One route is the server's own, not the
   viewer's: `/api/v1/local/browser/open`, which opens the web viewer's page of what the view shows
@@ -381,14 +385,17 @@ the launch's `_meta` first (`host/capability.ts`).
   that becomes a blob module only when something imports it, so a view parses
   what it shows rather than all of the app (`vite.config.mjs`). `dist/index.html` is the
   same app as one page, for development and the release's source maps.
+- **Both pages ask browsers not to translate the app** (`translate="no"`, `class="notranslate"` on `<html>`, and
+  `<meta name="google" content="notranslate">`, in `shell.html` and `index.html`): it speaks its own locales,
+  and a browser's page translation rewrites text nodes React owns, so React's next commit throws `NotFoundError`.
 - **Nothing waits unseen.** While the home's list is read, placeholder cards (or
   rows) stand where the models will be; a model being opened shows a spinner over
   its picture, and takes no second press, until the launch switches to the
   viewer, whose own progress takes over.
 - **A card says why it cannot work, in words a person can act on.** Three states, never
   confused, and never a host's or a transport's own error string (`host/channel.ts`,
-  `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`), and names the browser, never the CAD Viewer
-  ([Naming the page](../../packages/ui/docs/settings-ui.md#naming-the-page)):
+  `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`), and names the browser, never the viewer
+  ([Naming the page](../../packages/ui/docs/viewer-ux.md#naming-the-page)):
   - **No channel.** A host can draw the card and carry none of its calls back: the Claude
     app's **Code tab** (observed 2026-10-25) frames `cad_show`'s card as "Widget from
     text-to-cad:cad cad_show", with an expand control of its own, and answers every
@@ -421,7 +428,7 @@ the launch's `_meta` first (`host/capability.ts`).
     connect to CAD's engine.", "The CAD plugin did not answer in time.", "The
     CAD plugin could not be reached.").
 - **No channel, then the engine directly.** Every launch a tool hands an inline card carries,
-  where the engine gives a page, `browser` (the CAD Viewer's page of what it shows, the same
+  where the engine gives a page, `browser` (the viewer's page of what it shows, the same
   link — a page URL's `?token=`, good until the token is rotated ([the web README](../web/README.md#launching))
   — a Codex whose launcher is unknown gives the agent with each show until a view calls back, loopback
   only) and `engine`
@@ -504,15 +511,15 @@ explorer's folders and search over it (`createCadFileSource`), its chat, its fil
 an alert's Report Issue open a new issue), followed through `ui/open-link`,
 and its home: the library. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps
 its view — camera, Display settings, pose — through updates of it, and leaving it for
-another model or the home drops it, as in the web Viewer. A view the
+another model or the home sets that view aside, in memory, until the model is shown again in the same view, as in
+the web Viewer. A view the
 host creates again (its frame re-created) starts afresh: nothing names a view across its
 frames, so there is nothing to keep its record under. `App.tsx` frames it (full page, or
-an inline card whose height the host is told) under the navbar (`chrome: "page"`) in every
-presentation but the file handler's (`chrome: "bare"`, above). Inline, where the host offers
+an inline card whose height the host is told) under the navbar in every
+presentation, the file handler's too (above). Inline, where the host offers
 `fullscreen` among its display modes, the card's **Full size** (lucide `Maximize2`, a small ghost
 icon button) asks it for `ui/request-display-mode` fullscreen; it is the first of the host's
-actions at the navbar's right, over a file and on the home (the corner's first in the file
-handler); it is all the navbar's right end holds. The file menu's
+actions at the navbar's right, over a file and on the home, in every view. The file menu's
 **Open in › Browser** (the host's `fileActions.perform.browser`, `ModelView.tsx`, which `App.tsx`'s
 `openBrowserPage` implements) opens the web viewer's page of the document on screen: the page each launch carries (`browser`: the document's, `/<id>`
 with the link, or the home's), and for a file the person opened that no launch named, the
@@ -525,11 +532,12 @@ browser (503: no display, a remote shell), or the card reaches the engine direct
 card open the launch's page through `ui/open-link` where the host offers it, else as a plain
 link. A view whose launches carried no page (the engine gave none) has no Browser item; the home,
 which has no file, has no file menu. In a tab, Codex's composer floats over the page, and the
-home's list scrolls clear of it (`--cad-host-bottom-inset`). The cube sits at bottom-left
-in this tab presentation, across sidebar, thread and file views, so the composer and
-sidebar chat button can occupy bottom-right. `App.tsx` supplies
+home's list scrolls clear of it (`--cad-host-bottom-inset`). The view's corner (the cube, or a
+flat view's zoom) stands at the top in every host,
+the bottom row Quick Edit's; in this tab presentation, across sidebar, thread and file views, it
+sits at the top-left, mirrored, clear of the sidebar chat button's side. `App.tsx` supplies
 `--cad-viewport-corner-left: 2px` and `--cad-viewport-corner-right: auto`;
-inline hosts (including full-size cards) retain the default bottom-right placement.
+inline hosts (including full-size cards) retain the default top-right placement.
 
 ## Engine transport
 
@@ -563,8 +571,7 @@ scripts/install/dev_install.py codex          # run it in the Codex app
 `scripts/test/test-js.sh --select mcp` is what CI runs: the type check, the tests,
 then the build. A build names itself in the app menu (`vite.config.mjs`, through
 `@cad/ui/build-id`): the release's own build shows `v<VERSION>`, any other
-`v<VERSION>-dev.<commit>`, the commit of the checkout it was built from. Every host
-`dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent Apps"). A checkout's `cad mcp` serves `apps/mcp/dist` when it exists
+`v<VERSION>-dev.<commit>`, the commit of the checkout it was built from. `scripts/install/dev_install.py --help` lists every host it takes (CONTRIBUTING.md, "Test In Agent Apps"). A checkout's `cad mcp` serves `apps/mcp/dist` when it exists
 (`CAD_MCP_APP_DIR` overrides it); a wheel serves `cad_server/_runtime/mcp`,
 built by `scripts/bundle/bundle.sh`.
 

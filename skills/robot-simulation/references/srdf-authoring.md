@@ -1,103 +1,130 @@
-# SRDF Authoring Contract
+# SRDF authoring
 
-Use this reference when writing or editing SRDF XML directly. The `.srdf` file is the source of truth and must be auditable on its own: planning intent and provenance live in the file, and the paired URDF is found by convention.
+Read this before writing or editing a `.srdf`. An SRDF is always written by hand, over a URDF that
+already validates (`cad urdf validate`): it refers to that URDF's links, joints and limits and can
+repair none of them. Its checks are in [srdf-checks.md](srdf-checks.md).
 
-## Extract the URDF Table
+## URDF pairing
 
-Do this before writing any SRDF XML. Parse the paired URDF (read it, or run a three-line ElementTree script for large robots) and write down:
+An SRDF plans for the one `.urdf` in its own folder whose `<robot name>` is its own.
 
-- robot `name` (the SRDF must match it exactly);
-- every link name;
-- every joint: name, type, parent link, child link, lower/upper limits, and whether it has `<mimic>`;
-- the root link and the main serial chains (walk parent→child).
+- Nothing inside the SRDF names the URDF, and file names do not pair them: `arm_dual.srdf` and
+  `arm_precise.srdf` both plan for the `.urdf` beside them whose robot is `arm`.
+- No such URDF, or more than one, is an error from `cad srdf validate` (`no_paired_urdf`,
+  `ambiguous_paired_urdf`) and a refusal from the viewer and `cad srdf snapshot`.
+- `cad srdf validate robot.srdf --urdf elsewhere/robot.urdf` checks against the URDF it is given,
+  in any folder and under any robot name. That result says nothing of the pairing, which the viewer
+  and the snapshot still make by folder and name.
 
-Every name that appears in the SRDF is **copied from this table**. If a name you want is not in the table, the URDF is wrong or your assumption is — resolve that first, in the URDF. This single habit eliminates the most common SRDF failure class: plausible near-miss names and chains that do not exist in the tree.
+## The URDF's table
 
-## Edit Loop
+Before any SRDF XML, read out of the URDF (a few lines of `xml.etree.ElementTree` on a large robot)
+its robot name, every link, every joint with its type, parent, child, limits and whether it carries
+a `<mimic>`, the root, and the chains from it. Every name in the SRDF is copied from that table: the
+near miss (`wrist_roll` for `wrist_roll_joint`) is the usual SRDF defect. A name the table lacks
+means the URDF or the plan is wrong, and the URDF is settled first.
 
-1. Confirm the URDF is valid (`cad urdf validate`) and extract the URDF table.
-2. Read or create the planning ledger ([srdf-ledger.md](srdf-ledger.md)); keep the compact form as a comment block in the `.srdf`.
-3. Author or edit the SRDF XML directly per this contract, in element order: virtual joints, groups, group states, end effectors, passive joints, disabled collisions. Save it next to the URDF with the same robot name — colocation plus name match is how every consumer pairs the files.
-4. Derive — do not invent — disabled collisions ([srdf-disabled-collisions.md](srdf-disabled-collisions.md)) and group-state values (URDF-native units, within limits).
-5. Validate with `cad srdf validate <file.srdf>`; fix findings until clean ([srdf-checks.md](srdf-checks.md)).
-6. Show the result for review ([Show the model](../SKILL.md#show-the-model)).
-7. Run MoveIt smoke tests when a MoveIt environment is available; otherwise report them skipped.
-8. Report assumptions: inferred TCP links, manual collision pairs, unverified planner behavior.
+## Elements
 
-## File Shape
+- **`<group name>`**: a serial arm is one `<chain base_link tip_link>`, from its mount to its flange
+  or tool link. The two must be a parent-to-child path in the URDF, in that order. A gripper or a
+  head lists its `<joint>`s (or `<link>`s, each of which brings the joint above it), and two arms or
+  a whole body list `<group>` subgroups, where a joint reached through two of them goes unreported.
+  A group plans with its moving joints that carry no `<mimic>`: fixed and mimic joints are never
+  planning variables.
+- **`<group_state name group>`**: a `<joint name value>` for each of the group's planning joints, in
+  radians or metres, within the URDF's limits. Call the rest pose `home`: the viewer and
+  `cad srdf snapshot` open there.
+- **`<end_effector name parent_link group parent_group>`**: [End effectors](#end-effectors).
+- **`<virtual_joint name type parent_frame child_link>`** ties the root link to a frame outside the
+  robot (`world`, `odom`): `fixed` for a bolted arm, `planar` or `floating` only for a base that
+  moves. A wheel's joint is in no group unless the planner drives it. A mobile base's group lists
+  its virtual joint, as MoveIt expects, and `cad srdf validate` then reports that name as missing: a
+  limit of the check, not a fault of the file ([srdf-checks.md](srdf-checks.md#the-validator)).
+- **`<passive_joint name>`**: a URDF joint that nothing drives, which no group state may set.
+- **`<disable_collisions link1 link2 reason>`**: [Disabled collisions](#disabled-collisions).
 
-Every authored `.srdf` follows this shape, in this order:
+## End effectors
 
-1. XML declaration: `<?xml version="1.0"?>`.
-2. Planning-ledger comment block (compact form of [srdf-ledger.md](srdf-ledger.md)).
-3. One `<robot>` root with the **same `name` as the paired URDF**: `<robot name="...">`.
-4. `<virtual_joint>` elements, then `<group>`, `<group_state>`, `<end_effector>`, `<passive_joint>`, `<disable_collisions>` — grouped by element type, in that order.
+```xml
+<end_effector name="gripper_eef" parent_link="tool0" group="gripper" parent_group="arm" />
+```
 
-Keep two-space indentation. Comment nontrivial decisions inline (why a chain tip, why a pair is disabled).
+`cad srdf validate` holds each one to this:
 
-## URDF Pairing (non-negotiable)
+- `group` is a group of this SRDF, as is `parent_group` where one is given, and `parent_link` is a
+  link of the URDF.
+- The two groups share no link. A group's links are the ones it lists and the child link of each of
+  its joints, so a chain holds its tip and not its base.
+- `parent_link` is a link of `parent_group`, where one is given, and is in the end-effector group or
+  joined to one of its links by a joint.
 
-An SRDF pairs with its URDF by **colocation and robot name** — nothing else:
+An `<end_effector>` says where the tool attaches, not where it acts, and no check knows the tool
+point. Record the TCP link in [the ledger](#the-ledger), and name it when
+handing the SRDF on wherever it is not the tip a consumer would take from the group.
 
-- Save the `.srdf` in the **same folder** as the `.urdf` it describes.
-- Both files declare the identical `<robot name="...">`.
-- Exactly one `.urdf` in that folder may declare that robot name; the validator and the CAD Viewer resolve the pairing by scanning the folder, and they error when zero or several URDFs match.
-- Matching basenames (`arm.srdf` next to `arm.urdf`) are conventional and recommended for readability, but the robot name is what pairs the files. Multiple SRDF planning variants for one robot (`arm_dual.srdf`, `arm_precise.srdf`) all pair with the same URDF through its name.
-- There is no link element: an SRDF pairs with the same-folder URDF whose robot name matches.
+## Disabled collisions
 
-## Names Come From the URDF Table
+A planner never checks a disabled pair, so a wrong one hides a real collision: each pair comes from
+evidence, never from how the robot looks.
 
-Every `link`, `joint`, `base_link`, `tip_link`, `parent_link`, and group-state joint name must be copied from the extracted URDF table ([below](#extract-the-urdf-table)). Never type a name from memory or from a similar robot; near-miss names (`wrist_roll` vs `wrist_roll_joint`) are the most common SRDF defect and validation will reject them.
+```xml
+<disable_collisions link1="base_link" link2="shoulder_link" reason="Adjacent" />
+```
 
-## Element Contract
+### Where a pair comes from
 
-- `<group>`: prefer exactly one `<chain base_link tip_link>` for a serial manipulator — base to tip must be a real parent→child path in the URDF tree. Use explicit `<joint>`/`<link>` members for non-chain groups (grippers, heads), and `<group>` subgroups for unions (dual-arm, whole-body). Do not mix representations in one group without reason.
-- `<group_state name group>`: one `<joint name value>` per **movable, non-mimic** joint in the group. Radians for revolute/continuous, meters for prismatic, values within URDF limits.
-- `<end_effector name parent_link group parent_group>`: the EE group must not share links with `parent_group`; `parent_link` belongs to the parent group (or is adjacent to the EE group) and is typically the attachment/flange link ([srdf-end-effectors.md](srdf-end-effectors.md)).
-- `<virtual_joint name type parent_frame child_link>`: attaches the robot root to an external frame (`world`). `fixed` for fixed-base arms; `planar`/`floating` only when planning genuinely needs that freedom.
-- `<passive_joint name>`: unactuated joints that planners must not command.
-- `<disable_collisions link1 link2 reason>`: evidence-backed only; see [srdf-disabled-collisions.md](srdf-disabled-collisions.md). No duplicate or reversed-duplicate pairs.
+- **Adjacency**: two links one URDF joint joins, listed from the URDF's joints (a few lines of
+  script on a large robot).
+- **Sampling**: MoveIt Setup Assistant's self-collision matrix, or collision sampling in a known
+  MoveIt configuration, dense enough to cover the poses the task reaches.
+- **A matrix the person gives.**
+- **A pair reviewed by hand**, with what was reviewed written in its reason.
 
-## Golden Skeleton
+A matrix goes stale when geometry, limits or group membership change: derive it again.
+
+### What the validator reads in a reason
+
+`cad srdf validate` requires a `reason` on every pair, and refuses a pair of one link with itself
+and a pair given twice, in either order. Then it reads the reason's words:
+
+- One that contains `adjacent` is held to the URDF: a warning where no joint joins the two links.
+- One that contains none of `adjacent`, `never`, `always`, `default`, `sample`, `setup`, `assistant`
+  or `assum` counts as reasoned by hand (`User`, `Manual: fixture is outside the workspace`). 25 or
+  more of those warn: regenerate the matrix by sampling instead.
+
+So write the reason that is true: Setup Assistant's own word where it made the pair (`Adjacent`,
+`Never`, `Always`, `Default`), and `assumed` only where the person asked for a provisional SRDF and
+the report says so.
+
+## The ledger
+
+The ledger is a comment block that opens the file, as a URDF's does
+([urdf-authoring.md](urdf-authoring.md#the-ledger)), for what the SRDF's XML cannot say: what the
+semantics are for, and where each choice came from.
 
 ```xml
 <?xml version="1.0"?>
 <!--
-  srdf: example_arm | urdf: example_arm.urdf | task: arm IK + gripper control
-  groups: arm (chain base_link->tool0), gripper (joint members)
-  states: home, ready (radians, within URDF limits)
+  srdf: example_arm | urdf: example_arm.urdf | task: arm IK and gripper control
+  groups: arm (chain base_link -> tool0, the IK group), gripper (finger_joint)
+  tcp: tool0, on the flange face
+  states: arm/home, the rest pose (radians, within the URDF's limits)
   disabled collisions: URDF-adjacent pairs only (reason Adjacent)
   assumptions: tool0 is the TCP; no sampled collision matrix yet
 -->
-<robot name="example_arm">
-  <virtual_joint name="world_to_base" type="fixed" parent_frame="world" child_link="base_footprint" />
-  <group name="arm">
-    <chain base_link="base_link" tip_link="tool0" />
-  </group>
-  <group name="gripper">
-    <joint name="finger_joint" />
-  </group>
-  <group_state name="home" group="arm">
-    <joint name="shoulder_pitch" value="0" />
-    <joint name="elbow_pitch" value="0" />
-    <joint name="wrist_roll" value="0" />
-  </group_state>
-  <end_effector name="gripper_eef" parent_link="tool0" group="gripper" parent_group="arm" />
-  <disable_collisions link1="base_link" link2="shoulder_link" reason="Adjacent" />
-</robot>
 ```
 
-## Helper Scripts
+What each line answers for:
 
-Adjacent-pair lists, subgroup unions for many-jointed robots, and degree-to-radian tables are computations: derive them with a short throwaway script over the URDF rather than by hand when the robot has more than a handful of joints. The script is scaffolding; the checked-in `.srdf` remains canonical.
-
-## Group Design
-
-- **Serial manipulator** → one chain group, `base_link` at the mount, `tip_link` at the flange/TCP link. The validator rejects chains that are not a real parent→child path.
-- **Gripper / hand** → joint-member group listing its actuated joints; it becomes the end-effector group.
-- **Dual-arm / whole-body** → subgroup unions. Check for duplicate semantics (a joint reachable through two subgroups) and cycles.
-- **Mobile base** → typically a planar/floating virtual joint plus a group for the base; do not model wheel joints as planning DOF unless the planner consumes them.
-
-Fixed and mimic joints are never planning variables: they do not belong in group states, and chain-derived groups exclude them automatically.
-
-When the URDF changes, the SRDF is checked again: see [interoperability.md](interoperability.md#when-the-urdf-changes).
+- **task**: what is planned (arm IK, a plan to a pose, a gripper, a mobile base, two arms), the
+  primary group, the solver or planner expected, and whether IK constrains orientation or position
+  alone.
+- **groups**: what each is for, and why its base and tip or its members. Also why each virtual and
+  passive joint is there.
+- **tcp**: the link a pose target means ([End effectors](#end-effectors)).
+- **states**: what each named pose is for.
+- **disabled collisions**: where the pairs came from ([Disabled collisions](#disabled-collisions)).
+- **assumptions**: one line for every choice that was inferred: a group's member, a chain's end, the
+  TCP, a virtual joint's frame, a joint taken as passive, a state's values, a pair disabled by hand,
+  a solver setting, a MoveIt check that was not run.

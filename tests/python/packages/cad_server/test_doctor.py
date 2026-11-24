@@ -74,7 +74,7 @@ class DoctorTests(unittest.TestCase):
                               r"  update   this cad is not a global install, so it never updates "
                               r"itself; plugin update auto off\n  newest   the version feed has not been read on this "
                               r"computer yet\n  uv       .+\n  attempt  none\n"
-                              r"  plugin   no record of the install command being up to date on this computer\n$")
+                              r"  plugin   no record of the plugin being up to date on this computer\n$")
 
     def test_the_cache_line_says_what_cad_cache_prune_would_free(self) -> None:
         from cad_server._internal import base

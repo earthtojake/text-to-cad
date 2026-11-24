@@ -33,10 +33,10 @@ export const DXF_FILE = /\.dxf$/i;
 /**
  * A `.dxf` is a 2D render: the backend flattens it with ezdxf and the client
  * paints the primitives on a canvas, with Select (its entities, by handle),
- * Annotate and Measure, and a Layers section where the drawing has layers and
+ * Draw and Measure, and a Layers section where the drawing has layers and
  * blocks to read.
  *
- * A drawing has no Display settings, no Material and no Bends. Registering loads
+ * A drawing's Display is its Background alone; it has no Material and no Bends. Registering loads
  * no three.js, no viewport and no backend connection.
  *
  * It still opens a render session it never draws from. That session is also

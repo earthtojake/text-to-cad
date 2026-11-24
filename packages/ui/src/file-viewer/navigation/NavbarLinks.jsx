@@ -45,5 +45,5 @@ export function MadeBy({ links, onError }) {
   const follow = useFollow(links, onError);
   const handle = String(links.x || "").replace(/\/+$/, "").split("/").pop();
   if (!links.x || !handle) return null;
-  return <a href={links.x} target="_blank" rel="noreferrer" onClick={follow} className="hover:text-foreground" data-link="made-by">{t("menu.madeBy", { handle })}</a>;
+  return <a href={links.x} target="_blank" rel="noreferrer" onClick={follow} className="text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline" data-link="made-by">{t("menu.madeBy", { handle })}</a>;
 }

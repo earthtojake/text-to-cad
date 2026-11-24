@@ -175,7 +175,7 @@ test('On surface steps across faces and onto a part; On plane stays on the level
   assert.ok(Math.max(...heights(surface)) > lift.z + 0.5, `up onto the post: ${heights(surface)}`);
 });
 
-test('text is a card facing the view at the level\'s depth under its anchor corner, in both modes; a fill takes the mode too', () => {
+test('text is a card facing the view at the level\'s depth under its anchor corner, in both modes', () => {
   const { runtime } = rig();
   const card = (id, corners) => ({ kind: 'text', id, corners: outline(corners), text: 'hi', color: '#000', fontPx: 16 });
   for (const placement of ['surface', 'plane']) {
@@ -190,16 +190,6 @@ test('text is a card facing the view at the level\'s depth under its anchor corn
     assert.ok(heights(onPost).every(z => z === 18), `${placement}: ${heights(onPost)}`);
     assert.ok(heights(bare).every(z => z === 8), `${placement}: ${heights(bare)}`);
   }
-  // A fill started on the slab and reaching the post: On surface it climbs onto the post, On plane it stays on the level.
-  const area = { kind: 'area', id: 'fill', outline: outline([[42, 42], [52, 42], [52, 52]]), color: '#0f0', opacity: 0.35 };
-  const [onSurface] = projectAnnotations(runtime, [area], size, { placement: 'surface' });
-  const [onPlane] = projectAnnotations(runtime, [area], size, { placement: 'plane' });
-  assert.ok(onSurface.triangles.length >= 3 && onSurface.outline === 3);
-  assert.ok(heights(onSurface).includes(2) && heights(onSurface).includes(12), `slab and post: ${heights(onSurface)}`);
-  assert.ok(heights(onPlane).every(z => z === 2), `on the level: ${heights(onPlane)}`);
-  // A fill of a shape that lies on a plane of its own is given that plane.
-  const [given] = projectAnnotations(runtime, [area], size, { placement: 'plane', level: { point: [0, 0, 5], normal: [0, 0, 1] } });
-  assert.ok(heights(given).every(z => z === 7), `on the given plane, lifted: ${heights(given)}`);
 });
 
 test('a two-point line is split into pieces of a few pixels in both modes, the pen\'s widths with it', () => {

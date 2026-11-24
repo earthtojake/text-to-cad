@@ -7,6 +7,7 @@
     serve(source, port=0) -> Served
     inspect(source, ref=None) -> Facts (the build closure without a ref)
     check(source, check) -> dict (a manufacturing check, measured in the engine's checks processes)
+    params(source, **values) -> dict (a model's parameters written into its script, the model built again)
     status() / stop()
 
 Every one goes through the daemon (``client``), so the warm worker of the script or of the
@@ -45,8 +46,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
 __all__ = ["Document", "Drawn", "EngineError", "Facts", "IN_CALLER", "IN_ENGINE", "NoDaemon", "Outdated", "Report",
-           "Served", "Stopped", "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers", "serve", "snapshot",
-           "status", "stop", "inspect"]
+           "Served", "Stopped", "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers",
+           "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
     """A request the engine refused or could not run: its words; ``raised``: the type the engine failed with
@@ -365,8 +366,9 @@ def _failed(answer: dict[str, Any]) -> Exception:
         error = kind(text)
     except TypeError:  # a refusal whose type takes more than its words
         error = ValueError(text)
-    # A document not held: what it is, and what builds it again; a snapshot's refusal: the part it refused.
-    for key in ("state", "rebuild", "part"):
+    # A document not held: what it is, and what builds it again; a snapshot's refusal: the part it refused; a
+    # change of parameters refused: why, by one word, what to do, and a parameter's own reason.
+    for key in ("state", "rebuild", "part", "code", "hint", "reason"):
         if key in answer and hasattr(error, key):
             setattr(error, key, answer[key])
     error._engine_refusal = True  # type: ignore[attr-defined]  # the worker's, not this process's (``_error``)
@@ -1205,7 +1207,8 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     materials and their masses, where any part has one, and what the model declares a part or an assembly to weigh
     and its point masses (``declared``: the masses then as the robot description weighs them, ``weights``); the
     parts whose texture maps are not drawn (``untextured``); its joints,
-    mechanism states, configuration sequences and animations; and a model's declared files.
+    mechanism states, configuration sequences and animations; the parameters its script declares
+    (``parameters``); and a model's declared files.
     Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume, inside-out parts or
     masses, and nothing measured for them -- the lists alone."""
     from cad.engine.refs import placed_facts
@@ -1302,6 +1305,9 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
         "sequences": [{"name": name, "duration": motion.get("duration")}
                       for name, motion in (kinematics.get("motions") or {}).items()],
         "animations": structure.get("animations") or [],
+        # What its script declares (``parameters.served``): each its value, kind, range and unit, and whether
+        # the viewer's Save can write it (``writable``, else ``reason``) and where (``source``).
+        "parameters": list(structure.get("parameters") or []),
         "files": list((model or {}).get("files") or []),
     }
     if not measured:
@@ -1349,7 +1355,7 @@ def stop() -> bool:
 #               here (raised in this process, as against told by the daemon or a report), part (a snapshot's
 #               refusal: the part of the request it named, ``SnapshotRefused.part``; where it named one)}
 #     source    export, snapshot: what it read -- "xbf", "step", "glb", "stl", "threemf", "dxf", "urdf",
-#               "sdf", "srdf", "model" (a script's model) or "other"
+#               "srdf", "model" (a script's model) or "other"
 #     found     snapshot: the source file is there (a model's always is)
 #     outputs   export: each destination, {kind, seconds (None for one not written)}
 #     pose      snapshot: a pose was asked for
@@ -1361,7 +1367,7 @@ observers: list[Callable[[dict[str, Any]], None]] = []
 _HEARD = threading.local()  # what the daemon's answers said while a verb ran in this thread (``_heard``)
 _ENGINE = os.path.dirname(os.path.abspath(__file__)) + os.sep
 _SUFFIXES = {".xbf": "xbf", ".step": "step", ".stp": "step", ".glb": "glb", ".stl": "stl", ".3mf": "threemf",
-             ".dxf": "dxf", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".kicad_pcb": "kicad_pcb",
+             ".dxf": "dxf", ".urdf": "urdf", ".srdf": "srdf", ".kicad_pcb": "kicad_pcb",
              ".kicad_sch": "kicad_sch"}
 _FRAME = re.compile(r'  File "(?P<file>[^"]+)", line (?P<line>\d+), in (?P<function>\S.*)')
 _TYPE = re.compile(r"(?P<type>[A-Za-z_][A-Za-z0-9_.]*)(?::|$)")
@@ -1476,8 +1482,9 @@ def _model(report: dict[str, Any]) -> dict[str, Any]:
 def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: dict[str, Any]) -> dict[str, Any] | None:
     """Why a verb failed: the first failed report's error -- a body's (the model's frames, ``build``), or
     a file the engine could not write (``trace``, the engine's) -- else what the verb raised: the worker's
-    own error as it answered it, a worker that died under the work (``worker["died"]``), a refusal, or an
-    error raised here."""
+    own error as it answered it, a worker that died under the work (``worker["died"]``) -- not one the engine
+    stopped itself, which its answer names by a type (past the ceiling on one process, ``MemoryError``) --, a
+    refusal, or an error raised here."""
     told = {"engine": True, "refused": False, "here": False}
     failed = next((report for report in reports if not report.get("ok")), None)
     if failed is not None:
@@ -1489,7 +1496,7 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
 
         text = str(error).partition(WORKER_STDERR)[0]
         died = _DIED.search(text)
-        if died:
+        if died and not error.raised:
             worker["died"] = int(died["status"])
             return {"type": None, "frames": [], **told}
         if _TRACEBACK in text:

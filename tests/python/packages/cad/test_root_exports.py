@@ -21,15 +21,14 @@ HEAVY = ("OCP", "build123d")
 ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint",
           "read_step", "read_xbf", "read_mesh")
 # The root: the version, the deprecation's class, and the document types (``model`` the one with no file).
-TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
+TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch")
 ROOT = ("__version__", "CadDeprecationWarning", *TYPES)
 # The build123d integration's names: our helpers that take build123d's objects.
 NAMESPACES = {
     "cad.build123d": ("mechanism_state", "configuration_sequence", "gear_pair", "rack_and_pinion_pair", "screw_pair",
                       "posed", "animation", "memo", "paint", "GeometryError", "GeometryIssue", "ClosestPoints",
                       "MassProperties", "closest_points", "overlap_volume", "is_sound", "topology_errors",
-                      "boundary_edges", "self_intersections", "mass_properties", "flat_pattern", "planar_faces",
-                      "flatten_face", "flatten_faces", "union_faces", "offset_profile", "dfm", "cnc",
+                      "boundary_edges", "self_intersections", "mass_properties", "dfm", "cnc",
                       "sheet_metal", "molding", "printing", "unfold", "frame", "leaves", "body", "limits", "mass",
                       "point_mass", "free", "link", "materials"),
 }
@@ -63,7 +62,10 @@ class RootExports(unittest.TestCase):
         self.assertIs(cad.stl.read, cad.engine.read_mesh)
         self.assertIs(cad.urdf.validate, cad.urdf.__dict__["validate"])
         self.assertIs(cad.kicad_pcb.read, cad.kicad_pcb.__dict__["read"])
-        self.assertTrue(cad.xbf.export.__doc__.endswith(api.export.__doc__))
+        # An operation's docstring ends with its verb's, without the indentation Python strips by itself only from 3.13.
+        import inspect
+
+        self.assertTrue(cad.xbf.export.__doc__.endswith(inspect.cleandoc(api.export.__doc__)))
 
     def test_what_the_root_says_of_its_types_is_what_it_has(self):
         """Every type is in the root's docstring and in the imports type checkers read, and no type that
@@ -104,7 +106,7 @@ class RootExports(unittest.TestCase):
     def test_each_namespace_is_exactly_its_declared_names(self):
         import importlib
 
-        from cad.build123d import _dfm_check, _dfm_sheet, _flatten, _geometry, _leaves
+        from cad.build123d import _dfm_check, _dfm_sheet, _geometry, _leaves
         from cad.engine import declarations, mechanism, model
         from cad.engine.formats.kicad import board_index, geometry, summary
 
@@ -114,7 +116,6 @@ class RootExports(unittest.TestCase):
                    "body": declarations, "limits": declarations, "mass": declarations, "point_mass": declarations,
                    "free": declarations, "link": declarations,
                    **{name: _geometry for name in _geometry.__all__},
-                   **{name: _flatten for name in NAMESPACES["cad.build123d"] if hasattr(_flatten, name)},
                    **{name: _dfm_check for name in ("dfm", "cnc", "sheet_metal", "molding", "printing")},
                    "unfold": _dfm_sheet}
         for namespace, names in NAMESPACES.items():
@@ -190,7 +191,7 @@ class RootExports(unittest.TestCase):
 
     def test_a_name_the_root_never_had_is_pythons_own_error(self):
         # No backwards compatibility: a retired name is no name, and says nothing about history.
-        # ``build`` among them: a model builds by a decorated function's call, never cad.build (law 12).
+        # ``build`` among them: a model builds by a decorated function's call, never cad.build (law 11).
         for name in ("Material", "materials", "build", "read_scene", "AssemblyHelper", "label_shape", "revolute", "compound_from_instances",
                      "mechanism_state", "animation", "select", "report", "track", "serve", "status", "stop",
                      "daemon", "server", "srgb", "srgb_to_linear", "linear_to_srgb", "validate", "check"):
@@ -210,20 +211,20 @@ class RootExports(unittest.TestCase):
         self.assertEqual(["HEAVY:"], marked, "importing cadgen pulled in the CAD stack")
 
     def test_model_body_helpers_do_not_import_the_cad_stack(self):
-        """`from cad.build123d import flat_pattern` sits in a model's MODULE BODY, so the module behind it
+        """`from cad.build123d import closest_points` sits in a model's MODULE BODY, so the module behind it
         must defer the kernel -- its `import build123d` bound lazily (`_internal/lazy_kernel.py`)
         -- or every such model pays the ~2.5s import in the process that only asks the daemon to
-        build it."""
+        build it. `_flatten`, which earlier spellings still import from, defers it the same way."""
         code = (
-            "import sys, cad.build123d._flatten;"
-            "from cad.build123d import flat_pattern;"
+            "import sys, cad.build123d._geometry, cad.build123d._flatten;"
+            "from cad.build123d import closest_points;"
             "from cad._internal.lazy_kernel import loaded;"
             f"print('HEAVY:' + ','.join(m for m in {HEAVY!r} if loaded(m)))"
         )
         proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         marked = [ln for ln in proc.stdout.splitlines() if ln.startswith("HEAVY:")]
-        self.assertEqual(["HEAVY:"], marked, "cad.build123d._flatten imported the kernel at module scope")
+        self.assertEqual(["HEAVY:"], marked, "a helper's module imported the kernel at module scope")
 
 
 if __name__ == "__main__":

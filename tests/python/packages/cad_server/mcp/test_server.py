@@ -701,7 +701,7 @@ class InlineServerTest(_Session):
         # The engine gives no page: the launch goes without one, and the card still mounts.
 
         def refuse(_model=None) -> str:
-            raise ViewerUnavailable("CAD Viewer client is not built")
+            raise ViewerUnavailable("The viewer client is not built")
 
         self.server._viewer_url = refuse
         launch = self.launch("cad_show", {"source": self.bracket})
@@ -752,10 +752,10 @@ class InlineServerTest(_Session):
             self.assertEqual((status, "no browser" in answer["error"]), (503, True))
 
             def refuse(_model=None) -> str:
-                raise ViewerUnavailable("CAD Viewer client is not built")
+                raise ViewerUnavailable("The viewer client is not built")
 
             self.server._viewer_url = refuse
-            self.assertEqual(self.http("POST", route, {}), (503, {"error": "CAD Viewer client is not built"}))
+            self.assertEqual(self.http("POST", route, {}), (503, {"error": "The viewer client is not built"}))
         with mock.patch.object(browser_open, "display_refusal", return_value="there is no display to open a browser on"):
             self.assertEqual(self.http("POST", route, {}), (503, {"error": "there is no display to open a browser on"}))
 
@@ -776,7 +776,7 @@ class InlineServerTest(_Session):
                          ["data:", "blob:"])
 
     def test_a_mounted_view_warms_the_engine_s_meshing_pool_where_the_kernel_reads_it(self) -> None:
-        # The engine starts its pool with the first view, never with a build (law 19): a view the kernel reads.
+        # The engine starts its pool with the first view, never with a build (law 18): a view the kernel reads.
         # A mesh the page parses itself starts none -- it neither waits for the kernel environment to be made
         # nor fails where the machine cannot start the pool.
         warmed = []
@@ -843,8 +843,8 @@ class InlineServerTest(_Session):
     def test_a_step_and_an_engine_document_are_shown_and_the_agent_is_told_so(self) -> None:
         # The page draws both from what the cadgen engine serves of them (``cad_server.viewer.xbf``).
         tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
-        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, SDF, KiCad PCB, KiCad schematic)", tools["cad_show"]["description"])
-        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, SDF, KiCad PCB, KiCad schematic)", self.initialized["instructions"])
+        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, KiCad PCB, KiCad schematic)", tools["cad_show"]["description"])
+        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, KiCad PCB, KiCad schematic)", self.initialized["instructions"])
         for name in ("arm.xbf", "arm.step", "ARM.STP"):
             model = self.workspace / "parts" / name
             model.write_bytes(b"\0")

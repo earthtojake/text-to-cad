@@ -85,7 +85,7 @@ export const libraryRow = (row) => ({ ...row, kind: row.record, documentKind: ro
 const libraryRows = (reply) => (Array.isArray(reply?.documents) ? reply.documents.map(libraryRow) : []);
 
 /**
- * An explicit connection to a CAD Viewer, which serves files by absolute path. Its catalog holds
+ * An explicit connection to a viewer, which serves files by absolute path. Its catalog holds
  * the files on screen, each read as it is asked for. Construction never starts requests.
  * @param {import("./types.js").CadClientOptions} options
  * @returns {import("./types.js").CadClient}
@@ -145,6 +145,24 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
   function changeSettings(body, operation) {
     forgetSettings();
     return request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body, operation }).finally(forgetSettings);
+  }
+
+  /**
+   * A guarded POST of a model's parameters (`setModelParameters`, `previewModelParameters`): answered once the
+   * engine's build has ended, so nothing bounds the wait. A refusal carries the engine's `code`
+   * (`lib/xbf/xbfParameters.js`'s `PARAMETER_REFUSALS`) on the error raised, with its `hint`, the parameter's
+   * `reason` and a failed build's whole words (`detail`); its message is the engine's own.
+   */
+  async function parameterRequest(path, body, signal, operation) {
+    try {
+      return await request(path, { method: 'POST', headers: JSON_POST, body, signal, operation });
+    } catch (error) {
+      const refusal = error?.failure?.payload;
+      if (typeof refusal?.code !== 'string' || !refusal.code) throw error;
+      throw Object.assign(new Error(error.failure.detail, { cause: error }), { code: refusal.code,
+        hint: typeof refusal.hint === 'string' ? refusal.hint : '', ...(typeof refusal.reason === 'string' ? { reason: refusal.reason } : {}),
+        ...(typeof refusal.detail === 'string' ? { detail: refusal.detail } : {}) });
+    }
   }
 
   async function request(path, { signal, file = '', params = {}, method = 'GET', headers = {}, body, timeoutMs = 0, idempotent = false, operation = 'request' } = {}) {
@@ -351,21 +369,17 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       return request(`${API}/documents`, { method: 'PATCH', headers: JSON_POST, body: change, operation: 'recents' }).then(libraryRows);
     },
     async keepThumbnail(png, path) {
-      // A picture drawn in the dark theme's own colours too (a board's) carries it as `dark`: kept beside it.
-      const encode = async (blob) => encodeBase64(new Uint8Array(await blob.arrayBuffer()));
-      return client.changeRecents({ action: 'thumbnail', path, png: await encode(png), ...(png.dark ? { dark: await encode(png.dark) } : {}) });
+      return client.changeRecents({ action: 'thumbnail', path, png: encodeBase64(new Uint8Array(await png.arrayBuffer())) });
     },
-    async thumbnail(model, { signal, scheme } = {}) {
+    async thumbnail(model, { signal } = {}) {
       // A document's picture, by its id; the picture's name (its content's) keeps an older one out of any cache.
-      const response = await fetchImpl(client.thumbnailUrl(model, { scheme }), { signal, cache: 'no-store' });
+      const response = await fetchImpl(client.thumbnailUrl(model), { signal, cache: 'no-store' });
       if (!response.ok) return null;
       return `data:image/png;base64,${encodeBase64(new Uint8Array(await response.arrayBuffer()))}`;
     },
-    thumbnailUrl(model, { scheme } = {}) {
-      // In the dark theme, its dark theme's picture where it has one; else its one picture.
-      const dark = scheme === 'dark' && model.thumbnailDark;
-      return cadApiUrl(`${API}/documents/${encodeURIComponent(model.id)}/thumbnail`,
-        { origin, params: dark ? { v: model.thumbnailDark, scheme: 'dark' } : { v: model.thumbnail } });
+    thumbnailUrl(model) {
+      // Its one picture, the light viewport's, which the home shows in both themes.
+      return cadApiUrl(`${API}/documents/${encodeURIComponent(model.id)}/thumbnail`, { origin, params: { v: model.thumbnail } });
     },
     pick() {
       return request(`${API}/local/pick`, { method: 'POST', headers: { 'x-cad-viewer': '1' }, operation: 'pick' }).then((reply) => reply.path ?? null);
@@ -492,6 +506,44 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         await pause(Math.min(Math.max(Number(reply.retryMs) || 0, 0), ENGINE_RETRY_MAX_MS), signal);
         if (disposed) throw abortError();
       }
+    },
+    async setModelParameters(id, values, { signal } = {}) {
+      // New values for a model's declared parameters (`POST /api/v1/documents/model/<id>/parameters`):
+      // the ENGINE rewrites those numbers in the model's script, where its last run recorded them, and
+      // builds it again; the page then reads the rebuilt document as it reads any new version. The
+      // request names the model by its id and the parameters by name, each value a number: never a
+      // path, never text. Guarded as every change is. Answered once the build has ended, so nothing
+      // bounds the wait. A refusal carries the engine's `code` (`lib/xbf/xbfParameters.js`'s
+      // `PARAMETER_REFUSALS`) on the error raised, with its `hint`; its message is the engine's own.
+      if (!isDocumentId(id)) throw new TypeError('A model is named by its document id.');
+      const named = values && typeof values === 'object' && !Array.isArray(values) ? Object.entries(values) : [];
+      if (!named.length || !named.every(([, value]) => typeof value === 'number' && Number.isFinite(value))) {
+        throw new TypeError('A parameter takes a finite number.');
+      }
+      return parameterRequest(`${API}/documents/model/${encodeURIComponent(id)}/parameters`,
+        { values: Object.fromEntries(named) }, signal, 'parameters');
+    },
+    async previewModelParameters(id, values, { page, signal } = {}) {
+      // A model at other values of its declared parameters, for this page alone
+      // (`POST /api/v1/documents/model/<id>/preview`): the ENGINE builds it in the model's worker and holds
+      // it for the page that asked, writing nothing -- not the script, not the document. Answered once that
+      // build has ended with the preview's own id, whose structure and parts the page reads as it reads a
+      // document's (`/api/v1/documents/model/<preview id>/...`, `previewUrl`); `preview: null` for values that
+      // are the document's (the page's previews let go: `{}` is Reset); `superseded: true` for a request a
+      // newer one of the same document replaced before it built. `page` is the page's own token, which keeps
+      // its previews from another page's. Refused as `setModelParameters` is, by the same codes.
+      if (!isDocumentId(id)) throw new TypeError('A model is named by its document id.');
+      if (typeof page !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(page)) throw new TypeError('A preview names its page by a token.');
+      const named = values && typeof values === 'object' && !Array.isArray(values) ? Object.entries(values) : null;
+      if (!named || !named.every(([, value]) => typeof value === 'number' && Number.isFinite(value))) {
+        throw new TypeError('A parameter takes a finite number.');
+      }
+      const answer = await parameterRequest(`${API}/documents/model/${encodeURIComponent(id)}/preview`,
+        { values: Object.fromEntries(named), page }, signal, 'parameters-preview');
+      const held = answer?.preview;
+      return held && typeof held.id === 'string'
+        ? { ...answer, preview: { ...held, url: viewerOriginUrl(origin, `${API}/documents/model/${encodeURIComponent(held.id)}`) } }
+        : answer;
     },
     async engineHolds(file, { signal } = {}) {
       // Whether the engine holds a read of the document now (its envelope's `held`), asked without starting one.

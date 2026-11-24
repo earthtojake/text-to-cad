@@ -3,13 +3,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@cad/ui/
 import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { TOOL_PANEL_BUTTON_CLASS } from "./ToolPanel.jsx";
-import { useStripTouch } from "./stripTouch.js";
 
 // The strip's chevron: the second half of its tool's control (`FloatingToolBar.js` draws the two under
-// one fill), as tall as the strip's 24px tile and touching it, so the strip's own gap is the only
+// one fill), as tall as the strip's tile (the control) and half as wide (14px on a desktop: its own target, as Figma's) and touching it, so the strip's own gap is the only
 // space before the next tool, as between any two. Over the pair's fill it only brightens, on its own
 // hover and while its menu is open, with no line between the halves.
-const CHEVRON_CLASS = "grid h-6 w-3 shrink-0 place-items-center rounded-l-none rounded-r-sm text-sidebar-foreground/70 outline-none transition group-hover/split:text-sidebar-accent-foreground hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-ring/45 disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-foreground/10 aria-expanded:text-sidebar-accent-foreground";
+const CHEVRON_CLASS = "grid h-control w-[calc(var(--cad-control)/2)] shrink-0 place-items-center rounded-l-none rounded-r-control text-sidebar-foreground/70 outline-none transition group-hover/split:text-sidebar-accent-foreground hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-ring/45 disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-foreground/10 aria-expanded:text-sidebar-accent-foreground";
 
 /**
  * A tool's settings: a button and the ordinary dropdown it opens with whatever the tool offers
@@ -24,14 +23,12 @@ const CHEVRON_CLASS = "grid h-6 w-3 shrink-0 place-items-center rounded-l-none r
 export function ToolSettingsMenu({ label, triggerLabel = label, disabled = false, trigger = "settings", triggerProps = null, onOpenChange,
   contentClassName = "", children }) {
   const chevron = trigger === "chevron";
-  // On a phone's strip the chevron is the 36px tile's height and wide enough to touch.
-  const touch = useStripTouch();
   return <DropdownMenu modal={false} onOpenChange={onOpenChange}>
     <DropdownMenuTrigger asChild>
       <button type="button" aria-label={triggerLabel} disabled={disabled} {...triggerProps}
-        className={chevron ? cn(CHEVRON_CLASS, touch && "h-9 w-5 rounded-r-md")
+        className={chevron ? CHEVRON_CLASS
           : cn(TOOL_PANEL_BUTTON_CLASS, "disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-accent aria-expanded:text-foreground")}>
-        {chevron ? <ChevronDown className={cn("shrink-0", touch ? "size-3" : "size-2")} strokeWidth={3} aria-hidden="true" /> : <SlidersHorizontal className="size-3" aria-hidden="true" />}
+        {chevron ? <ChevronDown className="size-[calc(var(--cad-glyph)*0.6)] shrink-0" strokeWidth={3} aria-hidden="true" /> : <SlidersHorizontal className="size-3" aria-hidden="true" />}
       </button>
     </DropdownMenuTrigger>
     {/* Closes with no exit animation, so a quick second press always reaches the button. */}

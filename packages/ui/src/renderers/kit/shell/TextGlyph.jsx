@@ -37,7 +37,7 @@ export default function TextGlyph({ text, className, ...props }) {
   );
 }
 
-/** A `TextGlyph` of `text` as an icon component, which a control handed an icon (`StateButton.jsx`'s `icon`) draws. */
+/** A `TextGlyph` of `text` as an icon component, for a menu row's or a More row's icon (a board's 2D and 3D). */
 export function textGlyphIcon(text) {
   const Icon = props => <TextGlyph text={text} {...props} />;
   Icon.displayName = `TextGlyph(${text})`;

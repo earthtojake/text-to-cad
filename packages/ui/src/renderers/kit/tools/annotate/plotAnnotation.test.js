@@ -7,7 +7,7 @@ import { plotAnnotationDocument, plotAnnotationSurface } from "./plotAnnotation.
 // negated, so the sheet's top-left corner (0, 0) is on screen at (20, 10) and y runs down the pane.
 const TRANSFORM = Object.freeze({ scale: 10, offsetX: 20, offsetY: 10 });
 const MIRROR = 20; // the sheet's vertical centre line: where the board is mirrored about from below
-const STROKE = Object.freeze({ id: "1", kind: "stroke", color: "#ff00ff", width: 4, opacity: 1, dash: "solid", closed: false,
+const STROKE = Object.freeze({ id: "1", kind: "stroke", color: "#ff00ff", width: 4, opacity: 1, closed: false,
   points: [{ x: 70, y: 60 }, { x: 170, y: 60 }] });
 
 const surfaceOn = (mirrorX) => plotAnnotationSurface({ transform: () => TRANSFORM, mirrorX: () => mirrorX, canvas: () => null });

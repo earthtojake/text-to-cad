@@ -4,7 +4,7 @@
 // beyond fetch: the viewer's robot renderer (`useRobotDocument`, which adds its progress,
 // its warm reopen and its abort) and the parity page's headless stage both load a robot
 // through these, so they draw the same payload, fetch the same meshes and fail on the
-// same missing one. The page reads no description: URDF, SRDF and SDF are one payload.
+// same missing one. The page reads no description: a URDF and an SRDF are one payload.
 
 import { isAbortError } from "../renderAssetClient.js";
 import { loadRenderMeshByUrl, peekRenderMeshByUrl } from "../render/meshLoaders.js";

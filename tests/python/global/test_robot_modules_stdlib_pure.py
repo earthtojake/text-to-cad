@@ -1,4 +1,4 @@
-"""The URDF/SRDF/SDF VALIDATION family in cadgen must stay stdlib-pure.
+"""The URDF/SRDF VALIDATION family in cadgen must stay stdlib-pure.
 
 These modules are deliberately extraction-ready: robot-description validation is a
 text/XML problem, not a CAD-kernel problem, and keeping the family free of
@@ -31,26 +31,21 @@ FAMILY = [
         "urdf/_source.py",
         "srdf/_source.py",
         "srdf/_validation.py",
-        "sdf/_source.py",
-        "sdf/_validation.py",
-        "sdf/_external.py",
         "_internal/findings.py",
         "_internal/xml_common.py",
         # The document types the CLIs are shells over (packages/cad/README.md). They are the
         # family's front door now, so they inherit its purity rule.
         "urdf/__init__.py",
         "srdf/__init__.py",
-        "sdf/__init__.py",
         "_internal/document_type.py",
         "_internal/aliases.py",
         "registry.py",
         "_internal/validation_door.py",
         "engine/mesh_uri.py",  # what every reader of a mesh reference resolves it with
         "engine/urdf_source.py",  # the URDF (and SRDF) reader: the stills' and the payload's, stdlib only
-        "engine/sdf_source.py",  # the SDF reader: the stills' and the payload's, stdlib only
         "engine/robot_model.py",  # the one articulation the readers make
     )
-] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf.py", "srdf.py", "sdf.py")]
+] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf.py", "srdf.py")]
 
 # Heavy roots that would break extraction-readiness. The packages themselves are allowed only
 # for the family's own light members (findings, xml_common, and each other).
@@ -61,11 +56,7 @@ ALLOWED_CADGEN = {
     "cad.urdf._source",
     "cad.srdf._source",
     "cad.srdf._validation",
-    "cad.sdf._source",
-    "cad.sdf._validation",
-    "cad.sdf._external",
     "cad.engine.urdf_source",  # the URDF reader, in the engine
-    "cad.engine.sdf_source",  # the SDF reader, in the engine
     "cad.engine.robot_model",  # the articulation every reader of a robot makes
     # MuJoCo's compile (the mujoco integration's): imported in the function that compiles, never by a
     # read, and itself imports mujoco only inside that function.
@@ -89,6 +80,9 @@ ALLOWED_CADGEN = {
     # (``cad.engine.ranges``, numpy) are imported in the function that sweeps.
     "cad._internal.ranges",
     "cad._internal.aliases",  # the earlier spellings: stdlib only
+    # A model's parameters (no robot type's): ``cad.model.param``, loaded on first use, and what a Save
+    # checks and writes, stdlib only.
+    "cad.engine.parameters",
     "cad._internal.refused",  # an argument refused by name (the command's exit 2): one ValueError, stdlib only
     # Reached only when a decorator or an engine operation is called (``cad.step.export``,
     # ``cad urdf snapshot``), never by a check: imported in the function that dispatches to it.
@@ -156,7 +150,7 @@ class ImportCost(unittest.TestCase):
 
     def test_the_namespaces_import_without_the_heavy_stack(self) -> None:
         code = (
-            "import sys, cad.urdf, cad.srdf, cad.sdf;"
+            "import sys, cad.urdf, cad.srdf;"
             f"print('HEAVY:' + ','.join(m for m in {HEAVY_AT_IMPORT!r} if m in sys.modules))"
         )
         proc = subprocess.run(

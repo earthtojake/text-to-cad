@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { FieldLabel } from "@cad/ui/primitives/field-label";
 import { Check } from "lucide-react";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { cn } from "@cad/ui/utils";
@@ -20,13 +21,10 @@ export function formatNumber(value, digits = 2) {
   return numeric.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
-// One line a row: the label at the left, as wide as its words, and the value at the
-// right, taking the rest, so a short value never wraps under a wide empty label
-// column. Sized for the tool stack's narrowest width: a value too long for what is
-// left wraps between words, and breaks inside one only when the word alone is
-// wider than its room (a long id). Compact (2px above and below), and in the
-// panel's one face and size: labels and values alike are the UI font at
-// `text-tiny`, numbers kept in tabular figures.
+// One row of a detail's facts grid (`ItemDetail.jsx`'s `<dl>`, two columns): the label, muted, in the
+// grid's fixed first column, and the value left-aligned in the second, so a column of values lines up;
+// each 28px, a value too long for its room wrapping between words (and inside one only when the word
+// alone is wider than its room, a long id). Numbers in tabular figures (`MonoValue`).
 //
 // The label carries what the row means (`title`), as a hint. A click on the value copies it, as
 // it reads (`copy` says otherwise: a coordinate's `CoordValue` carries its own, "x, y, z"; a chip's ID
@@ -48,16 +46,16 @@ export function InfoRow({ label, children, title, copy }) {
   };
   const copied = copyable && flash.copied;
   return (
-    <div className="flex items-baseline justify-between gap-3 py-0.5" data-info-row="">
-      <TooltipHint content={title}><span className="shrink-0 text-tiny text-muted-foreground">{label}</span></TooltipHint>
-      <div onClick={onClick} data-copied={copied ? "" : undefined}
-        className={cn("relative min-w-0 text-right text-tiny text-sidebar-foreground [overflow-wrap:break-word]",
+    <div className="contents" data-info-row="">
+      <TooltipHint content={title}><FieldLabel as="dt" className="leading-7">{label}</FieldLabel></TooltipHint>
+      <dd onClick={onClick} data-copied={copied ? "" : undefined}
+        className={cn("relative flex min-h-control min-w-0 items-center text-left text-foreground [overflow-wrap:anywhere]",
           copyable && "cursor-pointer rounded-sm transition-colors hover:text-foreground")}>
         <div ref={value} className={copied ? "invisible" : undefined}>{children}</div>
-        {copied ? <span className="absolute right-0 top-0 inline-flex items-center gap-1 whitespace-nowrap text-foreground">
-          <Check className="size-2.5" aria-hidden="true"/>{t("chip.copied")}
+        {copied ? <span className="absolute inset-y-0 left-0 inline-flex items-center gap-1 whitespace-nowrap text-foreground">
+          <Check className="size-3" aria-hidden="true"/>{t("chip.copied")}
         </span> : null}
-      </div>
+      </dd>
     </div>
   );
 }
@@ -70,7 +68,7 @@ export function MonoValue({ children }) {
 export function CoordValue({ vector, digits = 2 }) {
   const values = Array.isArray(vector) ? vector : [];
   return (
-    <span className="inline-flex flex-wrap items-baseline justify-end gap-x-3 gap-y-0.5 tabular-nums"
+    <span className="inline-flex flex-wrap items-baseline gap-x-3 gap-y-0.5 tabular-nums"
       data-copy={[0, 1, 2].map(index => +(Number(values[index]) || 0).toFixed(digits)).join(", ")}>
       {AXES.map((axis, index) => (
         <span key={axis.key} className="inline-flex items-baseline gap-1">

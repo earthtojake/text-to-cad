@@ -11,14 +11,17 @@
  *                              receiver reads (`Later`), which the sender keeps and sends again
  *   POST   /v1/forget          {install}: forget everything sent under an install id -> 204, or 429 past
  *                              the limit per address and per install id (limit.mjs)
+ *   POST   /v1/install         one report of where a run of the install command failed, with no working cad
+ *                              to count it (install.mjs) -> 204, or 429 past the limit per address
  *   GET    /v1/health          -> 200, or 503 naming a missing setting (posthog.mjs: SETTINGS)
  *                              or PostHog's status when it will not take the project's keys
  *
  * It keeps no IP address and passes on nothing the batch does not name. The one thing it adds is the
- * country the host places the request in, on each of the batch's events: never the address it came from,
- * nor anything finer.
+ * country the host places the request in, on each of the batch's events and on a report of a failed install:
+ * never the address it came from, nor anything finer.
  */
 import { Invalid, isUuid, Later, MAX_BYTES, rowsOf } from './events.mjs';
+import { MAX_REPORT_BYTES, reportOf } from './install.mjs';
 import { withoutNoise } from './noise.mjs';
 
 const COUNTRY = /^[A-Z]{2}$/; // ISO 3166-1 alpha-2, as the host gives it; anything else is no country
@@ -61,31 +64,44 @@ const senderOf = batch => {
   return parts.length ? ` (${parts.join(', ')})` : '';
 };
 // Which endpoint, by a name of ours: a path is the caller's to choose.
-const ENDPOINTS = new Set(['/v1/events', '/v1/forget']);
+const ENDPOINTS = new Set(['/v1/events', '/v1/forget', '/v1/install']);
 const refuse = (status, path, reason, batch) => {
   console.warn(`telemetry ${ENDPOINTS.has(path) ? path : 'request'} refused ${status}: ${reason}${senderOf(batch)}`);
   return reply(status, { error: reason });
 };
 
-async function json(request) {
+async function json(request, most = MAX_BYTES, what = 'batch') {
   const text = await request.text();
-  if (new TextEncoder().encode(text).length > MAX_BYTES) throw new Invalid('the batch is too large');
+  if (new TextEncoder().encode(text).length > most) throw new Invalid(`the ${what} is too large`);
   try { return JSON.parse(text); } catch { throw new Invalid('the body is not JSON'); }
+}
+
+// One more request under `key`, or the 429 that refuses it and says when to ask again: nothing is queued.
+function limited(limiter, key, path) {
+  const taken = limiter.take(key);
+  if (taken.ok) return null;
+  const refused = refuse(429, path, 'too many requests');
+  refused.headers.set('retry-after', String(taken.retryAfter));
+  return refused;
 }
 
 /**
  * @param {Request} request
- * @param {{ insert(rows: object[], context: { country: string | null }): Promise<void>, forget(id: string): Promise<void>,
- *   ready(): Promise<void> }} store `ready`: throws when the service will not take a batch (health asks).
+ * @param {{ insert(rows: object[], context: { country: string | null }): Promise<void>,
+ *   report(report: object, context: { country: string | null }): Promise<void>, forget(id: string): Promise<void>,
+ *   ready(): Promise<void> }} store `report`: takes one report of a failed install. `ready`: throws when the service
+ *   will not take a batch (health asks).
  * @param {{ missing?: string[], country?: string | null, versions?: () => Promise<object | null>,
  *   releases?: () => Promise<object | null> }} [options] `missing`: settings the host
  *   lacks, by name (health says so). `country`: where the host places the request, from its IP address.
  *   `releases` and `versions`: the version feed's two addresses (versions.mjs). `limiter`: how often one caller may
  *   ask to forget (limit.mjs), by `client`, the address the host says the request came from, and by install id.
+ *   `installLimiter`: how often one `client` may report a failed install.
  */
-export async function handle(request, store, { missing = [], country, versions, releases, limiter, client } = {}) {
+export async function handle(request, store, { missing = [], country, versions, releases, limiter, installLimiter, client } = {}) {
   const { pathname } = new URL(request.url);
   const path = pathname.replace(/\/+$/, '');
+  const placed = COUNTRY.test(country ?? '') ? country : null;
   let batch; // what /v1/events parsed, for the line a refusal logs
   try {
     // Unhealthy without its settings, or with a service that will not take its keys: a deploy's check fails
@@ -108,9 +124,10 @@ export async function handle(request, store, { missing = [], country, versions, 
       }
       return reply(200, { ok: true });
     }
-    // No browser posts here. text-to-cad posts from Python's urllib, which sends no Origin header, while a
-    // browser sends one with every POST, a form's, `sendBeacon`'s and a no-cors fetch's included. And only
-    // JSON is read, which a page can post to another site only after a CORS preflight nothing here approves.
+    // No browser posts here. text-to-cad posts from Python's urllib, and its install command from curl, wget or
+    // PowerShell too, none of which sends an Origin header, while a browser sends one with every POST, a form's,
+    // `sendBeacon`'s and a no-cors fetch's included. And only JSON is read, which a page can post to another site
+    // only after a CORS preflight nothing here approves.
     if (request.method === 'POST') {
       if (request.headers.has('origin')) return refuse(403, path, 'not from a browser');
       if (!JSON_TYPE.test(request.headers.get('content-type') ?? '')) return refuse(415, path, 'the body must be application/json');
@@ -120,7 +137,16 @@ export async function handle(request, store, { missing = [], country, versions, 
       // Crashes that are never text-to-cad's bug go no further (noise.mjs), counted in one line by name.
       const { rows, dropped } = withoutNoise(rowsOf(batch));
       if (dropped.size) console.info(`telemetry dropped ${[...dropped].map(([name, n]) => `${name} ${n}`).join(', ')}${senderOf(batch)}`);
-      if (rows.length) await store.insert(rows, { country: COUNTRY.test(country ?? '') ? country : null });
+      if (rows.length) await store.insert(rows, { country: placed });
+      return reply(204);
+    }
+    // Where a run of the install command failed, from a computer with no working cad to count it: one report, under
+    // an id made for that run alone, so nothing here is kept under an id that lasts and there is nothing to forget.
+    // Open to anyone, so one address may report only so often (limit.mjs): a run reports at most once.
+    if (path === '/v1/install' && request.method === 'POST') {
+      const refused = installLimiter && client ? limited(installLimiter, `address ${client}`, path) : null;
+      if (refused) return refused;
+      await store.report(reportOf(await json(request, MAX_REPORT_BYTES, 'report')), { country: placed });
       return reply(204);
     }
     // The id rides in the body, never the path: the host's request logs keep each path beside the
@@ -129,21 +155,14 @@ export async function handle(request, store, { missing = [], country, versions, 
     // anywhere -- may ask only so often (limit.mjs): beyond that, a 429 saying when to ask again, which a
     // client takes as a deletion it still owes.
     if (path === '/v1/forget' && request.method === 'POST') {
-      const limited = key => {
-        const taken = limiter.take(key);
-        if (taken.ok) return null;
-        const refused = refuse(429, path, 'too many requests');
-        refused.headers.set('retry-after', String(taken.retryAfter));
-        return refused;
-      };
       if (limiter && client) {
-        const refused = limited(`address ${client}`);
+        const refused = limited(limiter, `address ${client}`, path);
         if (refused) return refused;
       }
       const { install } = await json(request) ?? {};
       if (!isUuid(install)) return refuse(400, path, 'not an install id');
       if (limiter) {
-        const refused = limited(`install ${install.toLowerCase()}`);
+        const refused = limited(limiter, `install ${install.toLowerCase()}`, path);
         if (refused) return refused;
       }
       await store.forget(install);

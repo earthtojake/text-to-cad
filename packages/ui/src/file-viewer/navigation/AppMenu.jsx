@@ -20,7 +20,7 @@ import { useControlUsage } from "../../usage/controls.js";
 
 const NONE = Object.freeze([]);
 // A setting's row: 32px, its name and its control spaced apart, the control's centre on one line.
-const SETTING_ROW_CLASS = "flex min-h-8 items-center justify-between gap-2 py-0.5 pr-1 pl-2 text-tiny text-foreground";
+const SETTING_ROW_CLASS = "flex min-h-[max(2rem,var(--cad-row))] items-center justify-between gap-2 py-0.5 pr-1 pl-pad text-xs text-foreground";
 const COLOR_SCHEMES = Object.freeze([["system", Monitor], ["light", Sun], ["dark", Moon]]);
 // AUTOMATIC is the Language submenu's value for "no choice": the context decides.
 const AUTOMATIC = "automatic";
@@ -112,9 +112,9 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, colorSchem
             </span>
           </TooltipHint> : null}
         </span>
-        <span className="grid size-6 shrink-0 place-items-center" aria-hidden="true">
-          <span className="grid size-3.5 place-items-center rounded-[4px] border border-input text-primary-foreground group-data-[state=checked]/setting:border-primary group-data-[state=checked]/setting:bg-primary">
-            <Check className="hidden size-3 group-data-[state=checked]/setting:block" strokeWidth={3} />
+        <span className="grid size-icon-button shrink-0 place-items-center" aria-hidden="true">
+          <span className="grid size-(--cad-check) place-items-center rounded-[4px] border border-input text-primary-foreground group-data-[state=checked]/setting:border-primary group-data-[state=checked]/setting:bg-primary">
+            <Check className="hidden size-[calc(var(--cad-check)-2px)] group-data-[state=checked]/setting:block" strokeWidth={3} />
           </span>
         </span>
       </MenuPrimitive.CheckboxItem>),
@@ -123,7 +123,7 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, colorSchem
         <MenuPrimitive.RadioGroup value={colorScheme.preference} onValueChange={value => { usage.used(`theme_${value}`); colorScheme.onPreferenceChange(value); }} aria-label={t("menu.theme")}
           className="-mr-0.5 flex shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5">
           {COLOR_SCHEMES.map(([id, Icon]) => <MenuPrimitive.RadioItem key={id} value={id} aria-label={t(`appearance.${id}`)} onSelect={event => event.preventDefault()}
-            className="grid size-6 cursor-default place-items-center rounded-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus:bg-accent focus:text-foreground data-[state=checked]:bg-background data-[state=checked]:text-foreground data-[state=checked]:shadow-xs"
+            className="grid size-icon-button cursor-default place-items-center rounded-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus:bg-accent focus:text-foreground data-[state=checked]:bg-background data-[state=checked]:text-foreground data-[state=checked]:shadow-xs"
             data-theme-option={id}>
             <Icon className="size-3.5" aria-hidden="true" />
           </MenuPrimitive.RadioItem>)}
@@ -136,7 +136,7 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, colorSchem
   ].filter(group => group.length);
   // Only the version shortens to fit the line, never the rest of it, and says itself whole when it does.
   const version = links?.version ? <TooltipHint content={`v${links.version}`} overflowOnly>{links.release
-    ? <a href={links.release} target="_blank" rel="noreferrer" onClick={follow} className="min-w-0 truncate hover:text-foreground"
+    ? <a href={links.release} target="_blank" rel="noreferrer" onClick={follow} className="min-w-0 truncate text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
       data-menu-version="">v{links.version}</a>
     : <span className="min-w-0 truncate" data-menu-version="">v{links.version}</span>}</TooltipHint> : null;
   const madeBy = links?.x ? <MadeBy links={links} /> : null;

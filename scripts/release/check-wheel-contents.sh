@@ -5,7 +5,7 @@ set -euo pipefail
 # the server and the shim), and its aliases' (cad-server, cad-mcp, cadgen), which carry nothing but cad at
 # the release and the commands each shipped until 0.11.11 (cad-server's `cad`, cad-mcp's `cad-mcp`).
 #
-# The server ships JavaScript it serves (the CAD Viewer's built client, the CAD app page) and
+# The server ships JavaScript it serves (the viewer's built client, the CAD app page) and
 # non-Python data it reads (collation.json); the library ships the page `serve` shows a document
 # in and the environment image its look lights with.
 # Those arrive through `[tool.setuptools.package-data]`, which is exactly the kind of
@@ -97,11 +97,21 @@ REQUIRED=(
   "cad_server/_internal/auto_update.py"
   "cad_server/_internal/auto_update_helper.py"
   "cad_server/cli/auto_update.py"
-  # The install command as cad runs it: `cad plugin update` (its command below), run by the server of a newer cad
-  # where `cad plugin update auto` is on (`plugin_catch_up`, the rule it runs by), and once by the bridge's install mode.
+  # The install command as the bridge's install mode runs it, once (`install_script`); and `cad plugin`, its command:
+  # `cad plugin install`, which the server of a newer cad runs where `cad plugin update auto` is on (`plugin_catch_up`,
+  # the rule it runs by), and which the install command hands the agent apps to.
   "cad_server/_internal/install_script.py"
   "cad_server/_internal/plugin_catch_up.py"
   "cad_server/cli/plugin.py"
+  # What those two run: the plugin in the agent apps, every module of it, each imported before a run begins. A
+  # wheel without one is a cad whose `cad plugin install` dies at import, and with it every run of the install
+  # command, which gets PyPI's newest cad and hands over to it.
+  "cad_server/plugin/__init__.py"
+  "cad_server/plugin/computer.py"
+  "cad_server/plugin/source.py"
+  "cad_server/plugin/apps.py"
+  "cad_server/plugin/terminal.py"
+  "cad_server/plugin/run.py"
   # What the updaters and launchers of 0.10.0 to 0.11.11 run in a release they bring: `cad setup
   # --engine-update`, the records their switch starts a server by, and the module their `cad` command runs.
   "cad_server/cli/setup.py"
@@ -109,8 +119,11 @@ REQUIRED=(
   "cad_server/_internal/proxy.py"
   # The script Open in starts a person's Blender with on a GLB or an STL (apps.BLENDER_SCRIPT).
   "cad_server/_internal/open_in_blender.py"
-  # Its README: the mechanisms the package's laws name.
+  # Its README and the pages it indexes: the mechanisms the package's laws name. Two pages stand for the folder,
+  # which the package data takes whole.
   "cad_server/engine/README.md"
+  "cad_server/engine/docs/architecture.md"
+  "cad_server/engine/docs/wire-format.md"
   "cad_server/_runtime/viewer/index.html"
   # Each page's third-party notice, written by its build: the wheel redistributes what they inline.
   "cad_server/_runtime/viewer/THIRD_PARTY_LICENSES.txt"

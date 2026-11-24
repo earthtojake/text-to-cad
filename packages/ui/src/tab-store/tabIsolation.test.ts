@@ -28,7 +28,7 @@ test('a new tab starts at the defaults and two tabs never meet: each reload brin
   // Tab two, in the same browser: none of it.
   const second = createTabStore(two.record());
   expect(second.getSnapshot()).toEqual(defaultTabRecord());
-  expect(second.settings.getSnapshot()).toEqual({ toolStack: { panels: {}, collapsed: {} }, appearance: 'system', library: { layout: 'grid' }, explorer: { folder: null } });
+  expect(second.settings.getSnapshot()).toEqual({ toolStack: { panels: {}, collapsed: {} }, appearance: 'system', viewportBackground: 'light', library: { layout: 'grid' }, explorer: { folder: null } });
   const fresh = readFileView(second.files.read('/models/part.step', 'step'));
   expect([fresh.display.mode, fresh.playback]).toEqual(['solid', DEFAULT_PLAYBACK]);
   second.settings.update({ appearance: 'light' });
@@ -38,7 +38,8 @@ test('a new tab starts at the defaults and two tabs never meet: each reload brin
   const settings = reloaded.settings.getSnapshot();
   expect([settings.appearance, settings.toolStack.panels]).toEqual(['dark', { tree: { width: 240 } }]);
   const view = readFileView(reloaded.files.read('/models/part.step', 'step'));
-  expect([view.display.mode, view.playback.orbitSpeed, view.playback.autoplay]).toEqual(['wireframe', 3, true]);
+  // An old record's Autoplay is read harmlessly and dropped.
+  expect([view.display.mode, view.playback.orbitSpeed, 'autoplay' in view.playback]).toEqual(['wireframe', 3, false]);
 
   // Tab two reloaded: its own.
   const secondReloaded = createTabStore(two.record());
@@ -50,10 +51,10 @@ test('a new tab starts at the defaults and two tabs never meet: each reload brin
 test("preview's settings are the file's: kept across a reload of the tab, and another file has its own defaults", () => {
   const tab = browserTab();
   const store = createTabStore(tab.record());
-  // A fresh file: orbit at 1× (preview opens still: on or off is not kept), the routine's own loop, Autoplay off.
-  expect(readFileView(store.files.read('/models/part.step', 'step')).playback).toEqual({ orbitSpeed: 1, autoplay: false });
-  // Orbit's speed 2×, Loop off, Autoplay on — the file's view as the shell writes it.
-  const chosen = { orbitSpeed: 2, autoplay: true, loop: false };
+  // A fresh file: orbit at 1× (preview opens still: on or off is not kept), the routine's own loop.
+  expect(readFileView(store.files.read('/models/part.step', 'step')).playback).toEqual({ orbitSpeed: 1 });
+  // Orbit's speed 2×, Loop off — the file's view as the shell writes it.
+  const chosen = { orbitSpeed: 2, loop: false };
   store.files.write('/models/part.step', 'step', writeFileView({ playback: chosen }) as never);
   expect(readFileView(store.files.read('/models/part.step', 'step')).playback).toEqual(chosen);
 

@@ -12,7 +12,7 @@ it('checkbox and radio items carry their check on the right, with no left gutter
   </DropdownMenuContent></DropdownMenu>);
   for (const name of ['Alpha', 'Beta', 'Loop']) {
     const item = screen.getByRole(name === 'Loop' ? 'menuitemcheckbox' : 'menuitemradio', { name });
-    expect(item.className).toMatch(/\bpl-2\b/);
+    expect(item.className).toMatch(/\bpl-pad\b/);
     expect(item.className).toMatch(/\bpr-8\b/);
     expect(item.querySelector('span.absolute')!.className).toMatch(/\bright-2\b/);
   }

@@ -26,7 +26,7 @@ for every other kind.
 | `glb` (`gltf`) | `glb-mesh` |
 | `dxf` | `dxf` |
 | `kicad_pcb` | `kicad_pcb` |
-| `urdf`, `srdf`, `sdf` | `robot` |
+| `urdf`, `srdf` | `robot` |
 | anything else | `step`, the table's default row |
 
 An entry names its format twice, the catalog's `kind` and the resolved source format. When they

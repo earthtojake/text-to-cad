@@ -15,24 +15,30 @@ test('the strip draws the tools it is handed, in order, and knows none by name',
 });
 
 const rules = tools => {
-  const view = render(FloatingToolBar, { tools, views: [{ id: 'display', label: 'Display', icon: null, tile: null }] });
-  const row = elements(view.tree).filter(node => node.props['data-strip-rule'] === '' || typeof node.props.label === 'string' || node.props['data-view-controls'] === '')
-    .map(node => (node.props['data-strip-rule'] === '' ? '|' : node.props['data-view-controls'] === '' ? 'VIEW' : node.props.label));
+  const view = render(FloatingToolBar, { tools });
+  const row = elements(view.tree).filter(node => node.props['data-strip-rule'] === '' || typeof node.props.label === 'string')
+    .map(node => (node.props['data-strip-rule'] === '' ? '|' : node.props.label));
   view.unmount();
   return row;
 };
 
-test('one thin rule parts the strip\'s two sections: the tools that pick, then the model\'s effects with the view\'s controls after them, no rule between', () => {
-  assert.deepEqual(rules([tool('select'), tool('pencil'), tool('shapes'), tool('measure'), tool('explode', { group: 'model' }), tool('clip', { group: 'model' })]),
-    ['SELECT', 'PENCIL', 'SHAPES', 'MEASURE', '|', 'EXPLODE', 'CLIP', 'VIEW']);
+test('no rule parts the strip: the tools and the model\'s effects are one row', () => {
+  assert.deepEqual(rules([tool('select'), tool('draw'), tool('measure'), tool('explode', { group: 'model' }), tool('clip', { group: 'model' })]),
+    ['SELECT', 'DRAW', 'MEASURE', 'EXPLODE', 'CLIP']);
 });
 
-test('with one group of tools only, the view\'s controls are the second section, after a rule', () => {
-  assert.deepEqual(rules([tool('select'), tool('pencil'), tool('shapes'), tool('measure')]), ['SELECT', 'PENCIL', 'SHAPES', 'MEASURE', '|', 'VIEW']);
+test('the strip is at Figma\'s toolbar\'s proportions at a 28px tile: a 40px bar 5px in, 10px corners, tiles with 4px corners', () => {
+  const view = render(FloatingToolBar, { tools: [tool('select')] });
+  const [group] = elements(view.tree).filter(node => node.props.role === 'group');
+  // At THE scale's tokens (`globals.css`): the control (28px) with its corners (4px), the bar's corners those and 6 (10px).
+  assert.match(group.props.className, /rounded-\[calc\(var\(--cad-radius-control\)\+6px\)\]/);
+  assert.match(group.props.className, /p-\[5px\]/);
+  assert.match(buttons(view.tree)[0].props.className, /size-control rounded-control \[&>svg\]:size-glyph!/);
+  view.unmount();
 });
 
 test('a tool with a menu is one control: its button and chevron under one fill, lit while the tool is in hand', () => {
-  const view = render(FloatingToolBar, { tools: [tool('select', { active: true, menu: 'MENU' }), tool('measure', { menu: 'MENU' }), tool('pencil')] });
+  const view = render(FloatingToolBar, { tools: [tool('select', { active: true, menu: 'MENU' }), tool('measure', { menu: 'MENU' }), tool('draw')] });
   const splits = elements(view.tree).filter(node => node.props['data-tool-split'] === '');
   assert.deepEqual(splits.map(node => node.props['data-active']), ['', undefined], 'the pair, lit with the tool in hand');
   assert.ok(splits.every(node => /group\/split/.test(node.props.className)), 'one hover for the pair');
@@ -56,12 +62,15 @@ test('every press reaches onSelect, and a press is all a tool is: no tool opens 
 });
 
 test('a phone\'s strip keeps its 36px tiles in one row and hands what does not fit, from its end, to More', () => {
-  // A STEP's strip: Select with its filter's chevron, five more tools, then Display and Preview (a host with no navbar).
-  const entries = [{ width: 56, view: false }, ...Array(5).fill({ width: 36, view: false }), { width: 36, view: true }, { width: 36, view: true }];
+  // A strip of six: Select with its filter's chevron, then five more tools.
+  const entries = [{ width: 56 }, ...Array(5).fill({ width: 36 })];
   // A 375px phone (the column 359px): everything fits, no More.
-  assert.equal(touchStripFit(entries, 359), 8);
-  // A 320px phone (304px): Select and the next three tools, then More (the last tool, Display, Preview).
-  assert.equal(touchStripFit(entries, 304), 5);
+  assert.equal(touchStripFit(entries, 359), 6);
+  // Exactly as wide as the six (12 + 56 + 5 × 36 + 5 × 4): still no More.
+  assert.equal(touchStripFit(entries, 268), 6);
+  // A pixel less: More takes a tile's room, so two tools go into it.
+  assert.equal(touchStripFit(entries, 267), 4);
   // Narrower still: fewer tools before More.
   assert.equal(touchStripFit(entries, 200), 3);
 });
+

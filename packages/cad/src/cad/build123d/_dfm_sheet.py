@@ -9,9 +9,12 @@ nothing turns with its placement. A planar face whose rays mostly reach an antip
 away is a *skin*. A pair of coaxial cylinders, one concave and one convex, whose rays cross ``t`` is a
 *bend* (with no flat skin beside them: a tube, or a rolled sheet -- ``rolled``). A face
 touching both faces of a pair (a skin and its opposite, a bend's inside and outside) is a cut *edge*; a cone
-between a skin and a hole's wall is a countersink. A chamfer or a round of a skin's edge is an *edge break*,
+between a skin and a hole's wall is a countersink, and so is the cone of a hole sunk through the full thickness,
+between a skin and its opposite; a cone in several faces (two half faces, as some systems write a hole) is
+one. A chamfer or a round of a skin's edge is an *edge break*,
 and a face square to the skin it joins to both skins through breaks is a cut edge too (its rays run across
-the plate: its width, never its thickness); a bend's end is broken by a cone or a torus about its axis; a cone, torus or freeform face a thickness across is *formed*
+the plate: its width, never its thickness), as is each face of a cut in several faces across the thickness,
+joined tangent (a plate extruded both ways along an ellipse or a spline); a bend's end is broken by a cone or a torus about its axis; a break in several faces of one surface (a layer cut it across) is one break; a cone, torus or freeform face a thickness across is *formed*
 sheet, not a bend. Every other face, and every stretch of a skin whose rays
 cross anything but ``t``, is not sheet (``not_sheet``: a boss, a pocket, a round, at its ref, with how far it
 departs from ``t``).
@@ -27,7 +30,8 @@ the axis, and its tangent lines where the cylinders meet the flanges.
 (r + K t)`` (the length of the neutral surface, ``K`` the K-factor), the bend itself unrolled into a strip
 ``BA`` wide. The flanges' faces are moved exactly (a rigid transform each), so their holes and arcs stay
 exact; a bend's strip is its cylinder's outline unrolled (exact for straight-ended bends, sampled where an
-end is curved), and the breaks of its ends with it. Two bends meeting tangent with no flat between meet at a joint, a flange of no faces the
+end is curved), and the breaks of its ends with it, those beside a cut that ends in the bend up to that
+cut's line. Two bends meeting tangent with no flat between meet at a joint, a flange of no faces the
 walk passes through (``_joints``): a joggle where they turn opposite ways, a compound bend where they turn the
 same way; a flange between two opposed bends is an offset's web (``web_of``). The pieces are fused into the flat pattern (``unfold``). Holes, their distances (to the edge,
 to each other, to each bend in four conventions), flanges' lengths, reliefs, notches, tabs and webs are all
@@ -415,9 +419,9 @@ def _cut_about(face: Any, origin: np.ndarray, axis: np.ndarray, radius: float) -
 # --- wires as points ---------------------------------------------------------------------------------------
 
 
-def _edge_points(edge: Any, reverse: bool, count: int = 48) -> tuple[np.ndarray, str, Any]:
+def _edge_points(edge: Any, reverse: bool, count: int = 48, more: float = 0.0) -> tuple[np.ndarray, str, Any]:
     """An edge's points in its wire's direction: a line's two ends, a curve sampled; its kind and its circle
-    (centre, axis, radius) when it is one."""
+    (centre, axis, radius) when it is one. An arc's chords are counted as if it were ``more`` mm longer."""
     from OCP.BRepAdaptor import BRepAdaptor_Curve
     from OCP.GeomAbs import GeomAbs_Circle, GeomAbs_Line
 
@@ -434,7 +438,7 @@ def _edge_points(edge: Any, reverse: bool, count: int = 48) -> tuple[np.ndarray,
         sweep = abs(last - first)
         step = min(math.radians(5.0), 2.0 * math.acos(max(-1.0, 1.0 - plane.CHORD_MM / radius)) if radius > plane.CHORD_MM
                    else math.radians(5.0))
-        n = int(min(720, max(2, math.ceil(sweep / max(step, 1e-4))))) + 1
+        n = int(min(720, max(2, math.ceil((sweep + more / max(radius, plane.CHORD_MM)) / max(step, 1e-4))))) + 1
         params = np.linspace(first, last, n)
         name = "circle"
         circle = (np.array(brep._xyz(circ.Location())), np.array(brep._xyz(circ.Position().Direction())), radius)
@@ -457,20 +461,29 @@ def _edge_points(edge: Any, reverse: bool, count: int = 48) -> tuple[np.ndarray,
 
 
 def _wire_loop(wire: Any, face: Any, mapping: Callable[[np.ndarray], np.ndarray] | None = None,
-               label: Any = None) -> tuple[plane.Loop, np.ndarray, list[Any]]:
+               label: Any = None, redrawn: Callable[[Any, Any], bool] | None = None
+               ) -> tuple[plane.Loop, np.ndarray, list[Any]]:
     """A wire of a face as a loop: its points (mapped into the plane by ``mapping``, else the face's own
-    XY), each segment's straightness and source edge; also the wire's 3D points and its edges."""
+    XY), each segment's straightness and source edge; also the wire's 3D points and its edges. In the XY,
+    an arc ``redrawn`` (its sweep a rounding's) that is a whole number of chords long is kept either way
+    (``plane.Loop.ways``)."""
     from OCP.BRepTools import BRepTools_WireExplorer
     from OCP.TopAbs import TopAbs_REVERSED
 
     explorer = BRepTools_WireExplorer(wire, face)
-    points3, straight, sources, circles, edges = [], [], [], [], []
+    points3, straight, sources, circles, edges, ways = [], [], [], [], [], []
     while explorer.More():
         edge = explorer.Current()
         reverse = explorer.Orientation() == TopAbs_REVERSED
         pts, kind, circle = _edge_points(edge, reverse)
         edges.append(edge)
         circles.append(circle)
+        sampled = [pts]
+        if redrawn is not None and circle is not None and redrawn(edge, circle):
+            low, high = (_edge_points(edge, reverse, more=slack)[0] for slack in (-plane.TIE_MM, plane.TIE_MM))
+            if len(low) < len(high):
+                sampled = [low, high]
+        ways.append([points[:, :2] for points in sampled])
         for i in range(len(pts) - 1):
             points3.append(pts[i])
             straight.append(kind == "line")
@@ -487,7 +500,50 @@ def _wire_loop(wire: Any, face: Any, mapping: Callable[[np.ndarray], np.ndarray]
         if np.ptp(radii) < 1e-7 and np.ptp(centres, axis=0).max() < 1e-7:
             centre = mapping(centres[:1]) if mapping is not None else centres[:1]
             loop.circle = (float(centre[0, 0]), float(centre[0, 1]), float(radii[0]))
+    if loop.circle is None and any(len(sampled) > 1 for sampled in ways):
+        loop.ways = ways
     return loop, points3, edges
+
+
+def _redrawn(pieces: list[Any]) -> Callable[[Any, Any], bool]:
+    """Whether an arc of the flat was drawn anew, its sweep so known to within rounding: a break's, drawn
+    through three points (``_Analysis._projected``), or a split skin's, merged (``clean``). No arc of the skins'
+    and strips' own ``pieces``, whose parameters are exact, is then as long on its circle."""
+    from OCP.BRepAdaptor import BRepAdaptor_Curve
+    from OCP.GeomAbs import GeomAbs_Circle
+
+    arcs = []
+    for piece in pieces:
+        for edge in piece.edges():
+            curve = BRepAdaptor_Curve(edge.wrapped)
+            if curve.GetType() == GeomAbs_Circle:
+                circ = curve.Circle()
+                arcs.append((*brep._xyz(circ.Location())[:2], circ.Radius(),
+                             abs(curve.LastParameter() - curve.FirstParameter())))
+    own = np.array(arcs, dtype=float).reshape(-1, 4)
+
+    def redrawn(edge: Any, circle: Any) -> bool:
+        curve = BRepAdaptor_Curve(edge)
+        arc = [*circle[0][:2], circle[2], abs(curve.LastParameter() - curve.FirstParameter())]
+        return not (np.abs(own - arc) < plane.TIE_MM).all(axis=1).any()
+
+    return redrawn
+
+
+def _round(loop: plane.Loop) -> tuple[float, float, float] | None:
+    """A round hole whose rim chords drew (a break's, a cone's laid in pieces): its points on one circle, within
+    their sag, and no chord sagging more."""
+    if len(loop.points) < 12:
+        return None
+    centre = loop.centroid()
+    radii = np.linalg.norm(loop.points - np.asarray(centre)[None], axis=1)
+    if float(np.ptp(radii)) > 2.0 * plane.CHORD_MM + 1e-6:
+        return None
+    radius = float(radii.max())
+    half = np.linalg.norm(np.roll(loop.points, -1, axis=0) - loop.points, axis=1) / 2.0
+    if float((radius - np.sqrt(np.maximum(radius ** 2 - half ** 2, 0.0))).max()) > 2.0 * plane.CHORD_MM + 1e-6:
+        return None
+    return (float(centre[0]), float(centre[1]), radius)
 
 
 def _unslivered(face: Any) -> Any:
@@ -544,6 +600,14 @@ def _simplify(points: np.ndarray) -> np.ndarray:
     return np.array(kept)
 
 
+def _in_line(a: tuple[float, float, float], b: tuple[float, float, float], c: tuple[float, float, float]) -> bool:
+    """Whether b lies between a and c on their line, in the plane (within a ten-millionth of a millimetre: a
+    short piece's direction is no steadier than its ends are exact)."""
+    u, v = (b[0] - a[0], b[1] - a[1]), (c[0] - b[0], c[1] - b[1])
+    return abs(u[0] * v[1] - u[1] * v[0]) <= 1e-7 * math.hypot(c[0] - a[0], c[1] - a[1]) \
+        and u[0] * v[0] + u[1] * v[1] > 0.0
+
+
 def _chorded(path: list[tuple[float, float, float]]) -> list[tuple[float, float, float]]:
     """A sampled curve's path in the plane as the fewest of its points whose chords stay within ``CHORD_MM``
     of the rest (as an arc's chords do): a curve in a plane square to the plate (the mitre where two rounds
@@ -574,6 +638,32 @@ def _chorded(path: list[tuple[float, float, float]]) -> list[tuple[float, float,
 # --- the analysis ------------------------------------------------------------------------------------------
 
 
+def _band(faces: list[Any]) -> Any | None:
+    """The one face that rings of one torus are, each a whole turn and end to end in the torus's own parameter, or
+    None. The kernel does not merge them where that parameter runs past its period (the far half of a hole's full
+    round, swept); two halves that were two faces whole are not end to end in it, and stay two."""
+    import build123d as bd
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+    from OCP.BRepTools import BRepTools
+
+    rings = sorted((BRepTools.UVBounds_s(face.wrapped) for face in faces), key=lambda ring: ring[2])
+    if any(abs(u1 - u0 - 2.0 * math.pi) > 1e-9 for u0, u1, _, _ in rings) or \
+            any(abs(after[2] - ring[3]) > 1e-7 for ring, after in zip(rings, rings[1:])):
+        return None
+    along = [BRepAdaptor_Surface(face.wrapped).Torus().Position().Direction() for face in faces]
+    if any(along[0].Dot(other) < _PARALLEL for other in along):
+        return None
+    u0, u1, low, _ = rings[0]
+    made = BRepBuilderAPI_MakeFace(BRep_Tool.Surface_s(faces[0].wrapped), u0, u1, low, rings[-1][3], 1e-7)
+    if not made.IsDone():
+        return None
+    band = bd.Face(made.Face().Oriented(faces[0].wrapped.Orientation()))
+    area = sum(face.area for face in faces)
+    return band if abs(band.area - area) <= 1e-6 * area else None
+
+
 class _Analysis:
     def __init__(self, part: brep.Part, options: dict[str, Any]) -> None:
         self.part = part
@@ -602,9 +692,16 @@ class _Analysis:
         self.breaks: dict[int, float] = {}        # chamfers and rounds of a cut edge: face -> its depth along t
         self.break_skins: dict[int, set[int]] = {}  # each one's skins (the side it breaks)
         self.bend_breaks: dict[int, int] = {}     # the breaks of a bend's ends: face -> the bend face it breaks
+        self.bend_rounds: set[int] = set()        # those rounded whole, from one of its cylinders to the other
+        self.bend_cuts: dict[int, set[int]] = {}  # a cut that ends in a bend, along its axis -> the breaks by it
         self.formed: set[int] = set()             # cones, tori, freeform faces a thickness across: formed
         self.countersinks: dict[int, float] = {}
         self.wall_of: dict[int, int] = {}
+        self._cones_read: set[int] = set()
+        self._cone_of: dict[int, set[int]] = {}
+        self._run_of: dict[int, set[int]] = {}
+        self._joined: dict[int, list[Any]] | None = None
+        self._merged_from: dict[int, list[int]] = {}  # a piece -> its break's pieces, the first first (``_laid``)
         self.partners: dict[int, set[int]] = {}
         self.not_sheet: list[dict[str, Any]] = []
         self.off_edges: set[int] = set()          # cut edges of a stretch off the sheet's thickness
@@ -625,6 +722,7 @@ class _Analysis:
         self.block = False                        # no face a skin's width against its opposite: a bar, a block
         self._boxes: tuple[np.ndarray, np.ndarray] | None = None
         self._sheet_volume: float | None = None
+        self._sunk_walls: dict[int, int] | None = None  # each face of a countersunk hole's wall -> its cone
 
     def ref(self, ordinal: int) -> str:
         return self.part.ref("face", int(ordinal))
@@ -767,27 +865,44 @@ class _Analysis:
             surface = self.surfaces[a - 1]
             if a in paired or surface.kind != "cone":
                 continue
+            # a cone in several faces (two half faces, as some systems write a hole; one a corner of the outline
+            # cuts from the rest) is one: what its faces touch together
+            near = self._cone_neighbors(a)
             axis = np.array(surface.axis)
-            skins = [b for b in self.neighbors[a] if b in self.skins
-                     and abs(float(np.dot(self.surfaces[b - 1].normal, axis))) > _PARALLEL]
+            skins = sorted(b for b in near if b in self.skins
+                           and abs(float(np.dot(self.surfaces[b - 1].normal, axis))) > _PARALLEL)
             # a hole's wall (concave): a cone above an outline's convex round is that edge's chamfer
-            walls = [b for b in self.neighbors[a] if self.surfaces[b - 1].kind == "cylinder"
-                     and self.surfaces[b - 1].concave is not False
-                     and b not in paired and self._coaxial(surface, self.surfaces[b - 1], 1e-3)]
+            walls = sorted(b for b in near if self.surfaces[b - 1].kind == "cylinder"
+                           and self.surfaces[b - 1].concave is not False
+                           and b not in paired and self._coaxial(surface, self.surfaces[b - 1], 1e-3))
+            rim = 2.0 * max(self._largest_circle(c) for c in self._cone_faces(a))
+            own = [b for b in skins if b in self.neighbors[a]] or skins
             if skins and walls:
-                self.countersinks[a] = 2.0 * self._largest_circle(a)
-                self.wall_of[a] = walls[0]
-                stands_for[a] = skins[0]
+                self.countersinks[a] = rim
+                self.wall_of[a] = next((b for b in walls if b in self.neighbors[a]), walls[0])
+                stands_for[a] = own[0]
+            elif surface.concave and any(c in self.partners.get(b, ()) for b in skins for c in skins) \
+                    and self._through_circle(a) is not None:
+                # a hole sunk through the full thickness, to a knife edge at the far skin or past it: no wall is
+                # left, the hole is the cone's small end, and the skin it is sunk into the one it faces
+                self.countersinks[a] = rim
+                stands_for[a] = max(own, key=lambda b: float(
+                    (self.normals[a] @ np.array(self.surfaces[b - 1].normal)).mean()))
+        # and for every face of that skin its cone meets (a skin in several faces, split through the hole)
+        sunk_into = {a: {b for b in self._cone_neighbors(a) if b in self.skins and self._coplanar(b, skin)}
+                     for a, skin in stands_for.items()}
         for a in self.hits:
             if a in paired or a in self.countersinks:
                 continue
-            near = {stands_for.get(b, b) for b in self.neighbors[a]}
+            near = {c for b in self.neighbors[a] for c in sunk_into.get(b, {b})}
             near = [b for b in near if b in paired]
             if any(c in self.partners.get(b, ()) for b in near for c in near):
                 self.edge_set.add(a)
         self._edge_breaks(paired, stands_for)
         self._bend_breaks(paired)
+        self._cuts_across(paired)
         self._full_rounds()
+        self._whole_depths()
         self._formed(thickness, tol, paired)
         # a face square to two opposite planar faces is a cut edge of whatever lies between them, whatever its
         # thickness: a stretch off the sheet's thickness is judged on its skins, not on its edges' rays, which
@@ -799,8 +914,13 @@ class _Analysis:
         sheet = paired | self.edge_set | set(self.countersinks) | set(self.breaks) | self.formed
         self.sheet_fraction = float(self.areas[[a - 1 for a in sheet]].sum() / self.areas.sum()) if sheet else 0.0
         for a in sorted(self.breaks):
-            self._not_sheet(a, "edge_break", None, 0.0, self._middle(a), self.areas[a - 1])
+            pieces = self._pieces(a)
+            if a != pieces[0]:
+                continue  # counted at its first piece
+            self._not_sheet(a, "edge_break", None, 0.0, self._middle(a), self.areas[[b - 1 for b in pieces]].sum())
             self.not_sheet[-1].update(deviation_mm=None, break_mm=_r(self.breaks[a]))
+            if len(pieces) > 1:
+                self.not_sheet[-1]["pieces"] = [self.ref(b) for b in sorted(pieces)]
         for a in sorted(self.formed):
             self._not_sheet(a, "formed", _r(thickness), 0.0, self._middle(a), self.areas[a - 1])
             self.not_sheet[-1]["deviation_mm"] = None
@@ -970,10 +1090,39 @@ class _Analysis:
             return None
         return float(heights.max() - heights.min())
 
+    def _split_cuts(self, paired: set[int], stands_for: dict[int, int], reached: dict[int, set[int]]) -> None:
+        """Cut edges in several faces across the thickness: a plate extruded both ways along an ellipse or a
+        spline (the kernel merges the halves of a plane or a cylinder, and leaves a surface of extrusion's two
+        faces, split at mid-thickness), layers joined and never merged. No one face of such a cut touches both
+        skins. From each skin (and from its countersinks and its breaks, ``reached``) the faces square to it are
+        followed through their tangent joins: a face reached from a skin and from its opposite is a cut edge."""
+        loose = {a for a in self.hits if a not in paired and a not in self.countersinks and a not in self.edge_set}
+        # a face of the cut that is a cut edge already (a break of each skin beside it) is followed through
+        through = loose | self.edge_set
+        found: dict[int, set[int]] = {}
+        for skin in sorted(self.skins):
+            doors = {skin} | {c for c, s in stands_for.items() if s == skin} | \
+                {b for b, skins in reached.items() if skin in skins}
+            front = sorted({a for door in doors for a in self.neighbors[door]
+                            if a in through and self._square(a, skin)})
+            seen = set(front)
+            while front:
+                a = front.pop()
+                for b in sorted(self.smooth[a]):
+                    if b in through and b not in seen and self._square(b, skin):
+                        seen.add(b)
+                        front.append(b)
+            for a in seen & loose:
+                found.setdefault(a, set()).add(skin)
+        for a, skins in found.items():
+            if any(c in self.partners.get(b, ()) for b in skins for c in skins):
+                self.edge_set.add(a)
+
     def _edge_breaks(self, paired: set[int], stands_for: dict[int, int]) -> None:
         """The chamfers and rounds that break the cut edges (``breaks``), and the cut edges behind them: a face
-        square to a skin, joined to it and to its opposite skin through such faces, is a cut edge. Its rays run
-        across the plate, so they measure its width, never its thickness."""
+        square to a skin, joined to it and to its opposite skin through such faces, is a cut edge, and so is one
+        of a cut in several faces across the thickness (``_split_cuts``). Its rays run across the plate, so
+        they measure its width, never its thickness."""
         t, tol = float(self.thickness), self.tolerance
         reached: dict[int, set[int]] = {}
         depth: dict[int, float] = {}
@@ -981,7 +1130,10 @@ class _Analysis:
         for _ in range(3):  # a chamfer, the facet where two meet, the next chamfer
             following = []
             for face, skin in frontier:
-                for b in self.neighbors[face]:
+                # one surface is one step, in however many pieces layers cut it (``_run``)
+                front = list(self.neighbors[face])
+                while front:
+                    b = front.pop()
                     if b in paired or b in self.countersinks or b in self.edge_set or skin in reached.get(b, ()):
                         continue
                     extent = self._break_of(b, skin, t, tol)
@@ -990,9 +1142,8 @@ class _Analysis:
                     reached.setdefault(b, set()).add(skin)
                     depth[b] = max(depth.get(b, 0.0), extent)
                     following.append((b, skin))
+                    front.extend(self.smooth[b] & self._run(b))
             frontier = following
-        if not reached:
-            return
         for a in self.hits:
             if a in paired or a in self.countersinks or a in self.edge_set or a in reached:
                 continue
@@ -1002,6 +1153,7 @@ class _Analysis:
             if any(c in self.partners.get(b, ()) for b in near for c in near) and \
                     any(self._square(a, b) for b in near if b in self.skins):
                 self.edge_set.add(a)
+        self._split_cuts(paired, stands_for, reached)
         # a break of a cut edge: beside one, beside a break of the opposite skin (two chamfers meeting at a
         # knife edge), or beside such a break (the facet where two chamfers meet)
         used = {b for b in reached if self.neighbors[b] & self.edge_set or any(
@@ -1021,7 +1173,8 @@ class _Analysis:
         """The chamfers and rounds of a bend's ends (``bend_breaks``, and ``breaks`` with the skins' own): a
         cone or a torus about the bend's axis beside one of its cylinders, within the sheet and no deeper than
         it, at a cut edge or at a flange's break. A cut edge broken along a flange is broken round the bend
-        too."""
+        too, and one rounded whole round it (a full round, r = t/2: a torus from one cylinder to the other,
+        which touches both sides and so was read as a cut edge) is a break too (``bend_rounds``)."""
         t, tol = float(self.thickness), self.tolerance
         for c in sorted(self.bend_faces):
             cylinder = self.surfaces[c - 1]
@@ -1029,7 +1182,29 @@ class _Analysis:
             into = 1.0 if cylinder.concave else -1.0  # the sheet lies outside a bend's inside face
             for b in sorted(self.neighbors[c]):
                 surface = self.surfaces[b - 1]
-                if b in paired or b in self.countersinks or b in self.edge_set or b in self.breaks \
+                # a full round of the sheet's side run on round the bend: a torus about its axis, t/2 round,
+                # between its two cylinders
+                whole = b in self.edge_set and surface.kind == "torus" and \
+                    abs(float(surface.minor_radius or 0.0) - t / 2) <= tol and \
+                    bool(self.neighbors[b] & self.partners.get(c, set()))
+                # and one a layer cut in several faces: no one of them touches both cylinders, and none is a cut
+                # edge
+                run = self._run(b) if surface.kind == "torus" and not whole else {b}
+                if len(run) > 1 and abs(float(surface.minor_radius or 0.0) - t / 2) <= tol \
+                        and self._coaxial(cylinder, surface, 1e-3) \
+                        and not any(a in paired or a in self.countersinks or a in self.edge_set or a in self.breaks
+                                    for a in run):
+                    near = {x for a in run for x in self.neighbors[a]} - run
+                    rel = self._boundary(sorted(run), per_edge=3) - origin
+                    depth = into * (np.linalg.norm(rel - np.outer(rel @ axis, axis), axis=1) - float(cylinder.radius))
+                    if near & self.partners.get(c, set()) and near & (self.edge_set | set(self.breaks)) \
+                            and depth.min() >= -tol and depth.max() <= t + tol:
+                        for a in sorted(run):
+                            self.breaks[a] = float(depth.max() - depth.min())
+                            self.bend_breaks[a] = c
+                            self.bend_rounds.add(a)
+                        continue
+                if b in paired or b in self.countersinks or (b in self.edge_set and not whole) or b in self.breaks \
                         or surface.kind not in ("cone", "torus") or not self._coaxial(cylinder, surface, 1e-3) \
                         or float(surface.minor_radius or 0.0) > t + tol \
                         or not self.neighbors[b] & (self.edge_set | set(self.breaks)):
@@ -1040,6 +1215,106 @@ class _Analysis:
                     continue
                 self.breaks[b] = float(depth.max() - depth.min())
                 self.bend_breaks[b] = c
+                if whole:
+                    self.bend_rounds.add(b)
+                    self.edge_set.discard(b)
+                    continue
+                # and the rest of it, where a layer cut it in several faces: the one beside the cut edge does
+                # not touch the cylinder
+                for other in sorted(self._run(b) - {b}):
+                    if other in paired or other in self.countersinks or other in self.edge_set or other in self.breaks:
+                        continue
+                    rel = self._boundary([other], per_edge=3) - origin
+                    depth = into * (np.linalg.norm(rel - np.outer(rel @ axis, axis), axis=1) - float(cylinder.radius))
+                    if depth.min() < -tol or depth.max() > t + tol:
+                        continue
+                    self.breaks[other] = float(depth.max() - depth.min())
+                    self.bend_breaks[other] = c
+
+    def _cuts_across(self, paired: set[int]) -> None:
+        """A cut that ends in a bend, along its axis (a notch's end), its edges broken: a plane parallel to the axis
+        that crosses both cylinders and reaches them through their breaks is a cut edge, as it is where it is left
+        square. A chamfer or a round along it (behind its plane: a step's wall meets it in a corner, and stands in
+        front of it), and the facet where that meets the next cut's, are breaks of the bend (``bend_breaks``);
+        they and the breaks of the bend's ends beside them are laid up to the line the cut makes on the side
+        unfolded (``bend_cuts``, ``_stopped``)."""
+        t, tol = float(self.thickness), self.tolerance
+        taken = paired | self.edge_set | set(self.countersinks) | set(self.breaks)
+        beside: dict[int, tuple[int, float]] = {}  # a face within the sheet -> the cylinder beside it, and how deep
+        along: set[int] = set()                    # those that may break an edge along the axis
+        for c in sorted(self.bend_faces):
+            cylinder = self.surfaces[c - 1]
+            axis, origin = np.array(cylinder.axis), np.array(cylinder.origin)
+            into = 1.0 if cylinder.concave else -1.0
+            for b in sorted(self.neighbors[c] - taken):
+                surface = self.surfaces[b - 1]
+                rel = self._boundary([b], per_edge=3) - origin
+                depth = into * (np.linalg.norm(rel - np.outer(rel @ axis, axis), axis=1) - float(cylinder.radius))
+                if depth.min() < -tol or depth.max() > t + tol:
+                    continue
+                beside[b] = c, float(np.ptp(depth))
+                if (surface.kind == "plane" and abs(float(np.dot(surface.normal, axis))) < 1e-6) or (
+                        surface.kind == "cylinder" and surface.concave is False
+                        and float(surface.radius or math.inf) <= t + tol
+                        and abs(float(np.dot(surface.axis, axis))) > _PARALLEL
+                        and not self._coaxial(cylinder, surface, 1e-3)):
+                    along.add(b)
+        planes = [a for a in self.hits if a not in taken and self.surfaces[a - 1].kind == "plane"]
+        found: set[int] = set()  # the breaks of these cuts
+        # a chamfer reaches both cylinders through its cut as the cut does through it: the cut is the one that
+        # touches neither, or, broken on one side alone, the larger
+        for a in sorted(planes, key=lambda a: (bool(self.neighbors[a] & self.bend_faces), -self.areas[a - 1], a)):
+            if a in found:
+                continue
+            surface = self.surfaces[a - 1]
+            normal, at = np.array(surface.normal), np.array(surface.origin)
+            behind = {b for b in self.neighbors[a] & along
+                      if float(((self._boundary([b], per_edge=3) - at) @ normal).max()) <= tol}
+            reached = set()
+            for b in self.neighbors[a]:
+                c = b if b in self.bend_faces else beside[b][0] if b in behind else self.bend_breaks.get(b)
+                if c in self.bend_faces:
+                    cylinder = self.surfaces[c - 1]
+                    if abs(float(normal @ np.array(cylinder.axis))) < 1e-6 and \
+                            abs(float(normal @ (at - np.array(cylinder.origin)))) < float(cylinder.radius):
+                        reached.add(c)
+            if not any(d in self.partners.get(c, ()) for c in reached for d in reached):
+                continue
+            self.edge_set.add(a)
+            along.discard(a)
+            beside.pop(a, None)
+            broken = behind & along
+            # and the facet where one meets the break of the next cut
+            broken |= {b for f in broken for b in self.neighbors[f] & set(beside)
+                       if self.surfaces[b - 1].kind in (*_FREEFORM, "sphere") and self.neighbors[b] & self.edge_set}
+            found |= broken
+            for b in sorted(broken):
+                self.bend_breaks[b], self.breaks[b] = beside[b]
+            self.bend_cuts[a] = broken | {f for b in broken | {a} for f in self.neighbors[b] if f in self.bend_breaks}
+
+    def _break_faces(self, a: int) -> list[int]:
+        """Break ``a`` and the faces of its surface that are the same break (``_run``): of the same skins, or of
+        the same bend."""
+        return sorted(b for b in self._run(a) if b in self.breaks
+                      and self.break_skins.get(b) == self.break_skins.get(a)
+                      and self.bend_breaks.get(b) == self.bend_breaks.get(a))
+
+    def _whole_depths(self) -> None:
+        """A break in several faces is as deep as they are together."""
+        for a in sorted(self.breaks):
+            group = self._break_faces(a)
+            if a != group[0] or len(group) < 2:
+                continue
+            points = self._boundary(group, per_edge=3)
+            if a in self.bend_breaks:
+                cylinder = self.surfaces[self.bend_breaks[a] - 1]
+                axis, rel = np.array(cylinder.axis), points - np.array(cylinder.origin)
+                depth = float(np.ptp(np.linalg.norm(rel - np.outer(rel @ axis, axis), axis=1)))
+            else:
+                depth = max((float(np.ptp(points @ np.array(self.surfaces[s - 1].normal)))
+                             for s in self.break_skins.get(a, ())), default=self.breaks[a])
+            for b in group:
+                self.breaks[b] = depth
 
     def _full_rounds(self) -> None:
         """A cut edge rounded whole, from one skin to the other (a full round, r = t/2): a convex cylinder along
@@ -1061,6 +1336,22 @@ class _Analysis:
             self.breaks[a] = max(float(depth) for depth in depths if depth is not None)
             self.break_skins[a] = set(skins)
             rounds.append(a)
+        # and one a layer cut in several faces: no one of them touches both skins, and each is a break already,
+        # of the skin it is beside or of both. Together they are a break of both
+        pieces: set[int] = set()
+        for a in sorted(self.breaks):
+            run = self._run(a)
+            if a in pieces or len(run) < 2 or self.surfaces[a - 1].kind not in ("cylinder", "torus", "sphere"):
+                continue
+            pieces |= run
+            skins = {s for b in run for s in self.neighbors[b] & self.skins}
+            if any(b not in self.breaks or b in self.bend_breaks for b in run) or \
+                    not any(c in self.partners.get(b, ()) for b in skins for c in skins) or \
+                    any(self._break_of(b, s, t, tol) is None for b in run for s in skins):
+                continue
+            for b in sorted(run):
+                self.break_skins[b] = set(skins)
+                rounds.append(b)
         # and where two meet at a corner of the outline, the face that turns it (a sphere, a torus, a swept
         # round's surface of revolution), which touches the skins at a point, if at all: within the sheet, a break
         # of the skins of the round beside it
@@ -1068,8 +1359,11 @@ class _Analysis:
             a = rounds.pop()
             for b in sorted(self.neighbors[a]):
                 kind = self.surfaces[b - 1].kind
-                if b in self.breaks or b in self.edge_set or b in self.skins or b in self.bend_faces or \
-                        b in self.countersinks or kind not in ("torus", "sphere", "revolution"):
+                # (a piece of that face a layer cut off may be a break of the one skin it faces already)
+                piece = b in self.breaks and len(self._run(b)) > 1 and b not in self.bend_breaks and \
+                    self.break_skins.get(b, set()) < self.break_skins[a]
+                if (b in self.breaks and not piece) or b in self.edge_set or b in self.skins or b in self.bend_faces \
+                        or b in self.countersinks or kind not in ("torus", "sphere", "revolution"):
                     continue
                 depths = [self._depth(b, s, t, tol) if kind == "revolution" else self._break_of(b, s, t, tol)
                           for s in sorted(self.break_skins[a])]
@@ -1101,6 +1395,125 @@ class _Analysis:
                 best = max(best, curve.Circle().Radius())
         return best
 
+    def _through_circle(self, cone: int) -> tuple[list[Any], np.ndarray, tuple[np.ndarray, np.ndarray, float]] | None:
+        """A countersink's hole: its cone's smallest whole circle (where it meets the wall, or the far skin of
+        one sunk through the full thickness); None where the cone has no whole circle (a hole the outline
+        cuts)."""
+        circles = self._whole_circles(cone)
+        return circles[0] if circles else None
+
+    def _whole_circles(self, cone: int) -> list[tuple[list[Any], np.ndarray, tuple[np.ndarray, np.ndarray, float]]]:
+        """A cone's whole circles, smallest first: each point's edge, the points (closed) and the circle. A cone
+        in several faces (two half faces, as some systems write a hole) is whole: its arcs of one circle that
+        together are a whole turn are that circle."""
+        from OCP.BRepAdaptor import BRepAdaptor_Curve
+
+        circles: list[tuple[tuple[np.ndarray, np.ndarray, float], float, list[tuple[Any, np.ndarray]]]] = []
+        seen: set[int] = set()
+        for face in sorted(self._cone_faces(cone)):
+            for edge in self.faces[face - 1].edges():
+                ordinal = self.part.edge_ordinal(edge)
+                if ordinal in seen:
+                    continue  # the circle two faces of the cone share
+                seen.add(ordinal)
+                points, _, circle = _edge_points(edge.wrapped, False)
+                if circle is None:
+                    continue
+                curve = BRepAdaptor_Curve(edge.wrapped)
+                turn = abs(curve.LastParameter() - curve.FirstParameter())
+                for i, (other, total, arcs) in enumerate(circles):
+                    if abs(other[2] - circle[2]) < 1e-6 * max(1.0, circle[2]) \
+                            and float(np.linalg.norm(other[0] - circle[0])) < 1e-6 * max(1.0, circle[2]):
+                        circles[i] = (other, total + turn, [*arcs, (edge.wrapped, points)])
+                        break
+                else:
+                    circles.append((circle, turn, [(edge.wrapped, points)]))
+        whole = []
+        for circle, total, arcs in sorted(circles, key=lambda item: item[0][2]):
+            if total < 2.0 * math.pi - 1e-6:
+                continue
+            if len(arcs) == 1:
+                edge, points = arcs[0]
+                whole.append(([edge] * len(points), points, circle))
+                continue
+            # the arcs' points in turn about the axis, closed
+            centre, axis, _ = circle
+            u = _perpendicular(axis)
+            v = np.cross(axis, u)
+            edges = [edge for edge, points in arcs for _ in points[:-1]]
+            points = np.vstack([points[:-1] for _, points in arcs])
+            order = np.argsort(np.arctan2((points - centre) @ v, (points - centre) @ u))
+            points, edges = points[order], [edges[i] for i in order]
+            whole.append(([*edges, edges[0]], np.vstack([points, points[:1]]), circle))
+        return whole
+
+    def _cone_neighbors(self, cone: int) -> set[int]:
+        """The faces a cone's faces touch, but its own."""
+        faces = self._cone_faces(cone)
+        return {b for a in faces for b in self.neighbors[a]} - faces
+
+    def _cone_faces(self, cone: int) -> set[int]:
+        """``cone`` and the faces of the same cone it runs on in, each joined tangent to the last."""
+        if cone in self._cone_of:
+            return self._cone_of[cone]
+
+        def same(a: int, b: int) -> bool:
+            sa, sb = self.surfaces[a - 1], self.surfaces[b - 1]
+            if sb.kind != "cone" or not self._coaxial(sa, sb, 1e-6):
+                return False
+            ta, tb = math.tan(math.radians(sa.half_angle_deg)), math.tan(math.radians(sb.half_angle_deg))
+            if abs(abs(ta) - abs(tb)) > 1e-9 or abs(ta) < 1e-12:
+                return False
+            apex = lambda s, tan: np.array(s.origin) - np.array(s.axis) * s.radius / tan  # noqa: E731
+            return float(np.linalg.norm(apex(sa, ta) - apex(sb, tb))) < 1e-6 * max(1.0, sa.radius)
+
+        found, front = {cone}, [cone]
+        while front:
+            a = front.pop()
+            for b in self.smooth[a] - found:
+                if same(a, b):
+                    found.add(b)
+                    front.append(b)
+        for a in found:
+            self._cone_of[a] = found
+        return found
+
+    def _run(self, a: int) -> set[int]:
+        """``a`` and the faces of the same surface it runs on in, each joined tangent to the last: one face a
+        layer cut in several (layers joined and never merged). A plane, a cylinder, a cone, a torus and a sphere
+        are the same by their figures; any other surface by its kind."""
+        if a in self._run_of:
+            return self._run_of[a]
+
+        def same(a: int, b: int) -> bool:
+            sa, sb = self.surfaces[a - 1], self.surfaces[b - 1]
+            if sa.kind != sb.kind:
+                return False
+            if sa.kind == "plane":
+                return self._coplanar(a, b)
+            if sa.kind == "cylinder":
+                return self._same_cylinder(a, b)
+            if sa.kind == "cone":
+                return b in self._cone_faces(a)
+            near = 1e-6 * max(1.0, float(sa.radius or 0.0))
+            if sa.kind in ("torus", "sphere"):
+                return float(np.linalg.norm(np.array(sa.origin) - np.array(sb.origin))) < near \
+                    and abs(float(sa.radius) - float(sb.radius)) < near \
+                    and (sa.kind == "sphere" or (abs(float(sa.minor_radius) - float(sb.minor_radius)) < near
+                                                 and abs(float(np.dot(sa.axis, sb.axis))) > _PARALLEL))
+            return True
+
+        found, front = {a}, [a]
+        while front:
+            c = front.pop()
+            for b in self.smooth[c] - found:
+                if same(c, b):
+                    found.add(b)
+                    front.append(b)
+        for b in found:
+            self._run_of[b] = found
+        return found
+
     def _not_sheet(self, ordinal: int, kind: str, local: float | None, deviation: float, point: Any,
                    area: float) -> None:
         self.not_sheet.append({"kind": kind, "surface": self.surfaces[ordinal - 1].kind,
@@ -1124,8 +1537,16 @@ class _Analysis:
                 if b in nodes:
                     sides.join(a, b)
         groups = sides.groups()
-        largest = max(self.skins, key=lambda a: (self.areas[a - 1], -a))
-        self.side = next(set(group) for group in groups if largest in group)
+        # the side holding the largest skin, a skin in several faces (split through a hole) whole: its coplanar
+        # faces joined
+        whole = _Sets()
+        for a in self.skins:
+            whole.add(a)
+            for b in self.smooth[a]:
+                if b in self.skins and self._coplanar(a, b):
+                    whole.join(a, b)
+        largest = max(whole.groups(), key=lambda g: (float(self.areas[[m - 1 for m in g]].sum()), -min(g)))
+        self.side = next(set(group) for group in groups if largest[0] in group)
         # flanges: the side's coplanar skins joined by tangent edges
         flats = _Sets()
         for a in self.side:
@@ -1267,14 +1688,29 @@ class _Analysis:
         if self._sheet_volume is None:
             cut = 0.0
             for a, c in self.bend_breaks.items():
+                if a in self.bend_rounds:
+                    # rounded whole, from one cylinder to the other: what it cut runs out to the outline's plane
+                    # square to the axis, where the round is widest (the prisms up to it, as up to a skin)
+                    surface = self.surfaces[a - 1]
+                    axis, centre = np.array(surface.axis, dtype=float), np.array(surface.origin, dtype=float)
+                    side = 1.0 if float(((self._boundary([a], per_edge=3) - centre) @ axis).mean()) > 0.0 else -1.0
+                    cut += sum(_cut_below(face, [(centre + side * float(surface.minor_radius) * axis, side * axis)])
+                               for face in self._laid(a))
+                    continue
                 cylinder = self.surfaces[c - 1]
-                cut += _cut_about(self.faces[a - 1], np.array(cylinder.origin), np.array(cylinder.axis),
-                                  float(cylinder.radius))
+                cut += sum(_cut_about(face, np.array(cylinder.origin), np.array(cylinder.axis),
+                                      float(cylinder.radius)) for face in self._laid(a))
             for a in [*self.countersinks, *(b for b in self.breaks if b not in self.bend_breaks)]:
-                skins = self.break_skins.get(a) or {b for b in self.neighbors[a] & self.skins if abs(float(
+                near = self._cone_neighbors(a) if a in self.countersinks else self.neighbors[a]
+                skins = self.break_skins.get(a) or {b for b in near & self.skins if abs(float(
                     np.dot(self.surfaces[b - 1].normal, self.surfaces[a - 1].axis))) > _PARALLEL}
-                cut += _cut_below(self.faces[a - 1], [(np.array(self.surfaces[s - 1].origin),
-                                                       np.array(self.surfaces[s - 1].normal)) for s in sorted(skins)])
+                planes: list[int] = []  # a skin in several faces (split through the hole or the round) is one
+                for s in sorted(skins):
+                    if not any(self._coplanar(s, p) for p in planes):
+                        planes.append(s)
+                cut += sum(_cut_below(face, [(np.array(self.surfaces[s - 1].origin),
+                                              np.array(self.surfaces[s - 1].normal)) for s in planes])
+                           for face in self._laid(a))
             self._sheet_volume = float(self.part.shape.volume) + cut
         return self._sheet_volume
 
@@ -1300,10 +1736,11 @@ class _Analysis:
         sa, sb = self.surfaces[a - 1], self.surfaces[b - 1]
         return self._coaxial(sa, sb) and abs(sa.radius - sb.radius) < 1e-6 * max(1.0, sa.radius)
 
-    def _boundary(self, faces: list[int], per_edge: int = 9) -> np.ndarray:
+    def _boundary(self, faces: list[Any], per_edge: int = 9) -> np.ndarray:
+        """Points along the edges of ``faces`` (each the part's face of that number, or a face itself)."""
         points = []
         for a in faces:
-            for edge in self.faces[a - 1].edges():
+            for edge in (self.faces[a - 1] if isinstance(a, int) else a).edges():
                 for u in np.linspace(0.0, 1.0, per_edge):
                     p = edge.position_at(float(u))
                     points.append((p.X, p.Y, p.Z))
@@ -1333,7 +1770,8 @@ class _Analysis:
         span = 2 * math.pi - float(gaps[widest])
         phi0 = float(phis[(widest + 1) % len(phis)])
         # to the cut: a bend's end's breaks are its length too, as a flange's are its outline
-        ends = [b for b, c in self.bend_breaks.items() if c in members or c in others]
+        # (one in several faces as the one face it is: its widest point is on no edge of a piece of it)
+        ends = [face for b, c in self.bend_breaks.items() if c in members or c in others for face in self._laid(b)]
         ws = np.concatenate([rel, self._boundary(ends) - origin]) @ axis if ends else rel @ axis
         bend = _Bend(number, sorted(members), others, sorted(inner), sorted(outer), axis, origin, e1, e2,
                      float(surface.radius), float(radii[True]), float(radii[False]), phi0, span,
@@ -1429,21 +1867,23 @@ class _Analysis:
             sides = set(flange.faces) | {b for a in flange.faces for b in self.partners.get(a, ())}
             # and a countersink sunk into this side (its skin's hole is the countersink's rim, the cut the hole
             # below it) or beside a break (the round end of a chamfered slot, read back from the flat)
-            sunk = {c: self.neighbors[c] & sides for c in self.countersinks
-                    if self.neighbors[c] & (set(flange.faces) | set(self.breaks))}
+            sunk = {c: self._cone_neighbors(c) & sides for c in self.countersinks
+                    if self._cone_neighbors(c) & (set(flange.faces) | set(self.breaks))}
             for b, skins in [*self.break_skins.items(), *sunk.items()]:
                 if skins & sides:
-                    for face in self._halves(b):
-                        projected = self._projected(b, flange, face)
-                        if projected is not None:
-                            broken.append(projected)
+                    for whole in self._laid(b):
+                        for face in self._halves(b, whole):
+                            projected = self._projected(b, flange, face)
+                            if projected is not None:
+                                broken.append(projected)
         for bend in self.bends:
             if bend.to_flat is not None:
                 pieces.extend(self._strip(bend))
                 # its ends' breaks: the cylinder stops short of the cut as a skin does, so each is unrolled too
                 faces = {*bend.side_faces, *bend.other_faces}
-                broken.extend(piece for b, c in self.bend_breaks.items() if c in faces
-                              for piece in [self._unrolled(b, bend)] if piece is not None)
+                broken.extend(piece for b, c in self.bend_breaks.items() if c in faces for whole in self._laid(b)
+                              for half in self._bend_halves(b, whole)
+                              for piece in [self._unrolled(b, bend, half)] if piece is not None)
         if not pieces:
             return
         overlap = _overlap(pieces)
@@ -1460,34 +1900,54 @@ class _Analysis:
                 pass
         faces = fused.faces()
         self.flat = faces[0] if len(faces) == 1 else bd.Compound(children=list(faces))
+        redrawn = _redrawn(pieces) if broken or len(pieces) > 1 else None
         for face in faces:
-            outer, _, _ = _wire_loop(face.outer_wire().wrapped, face.wrapped)
+            outer, _, _ = _wire_loop(face.outer_wire().wrapped, face.wrapped, redrawn=redrawn)
             outer.label = "outer"
             self.flat_loops.append(outer)
             for wire in face.inner_wires():
-                loop, _, _ = _wire_loop(wire.wrapped, face.wrapped)
+                loop, _, _ = _wire_loop(wire.wrapped, face.wrapped, redrawn=redrawn)
                 loop.label = "hole"
+                loop.circle = loop.circle or _round(loop)
                 self.flat_loops.append(loop)
         self._holes_from_flat()
 
     def _holes_from_flat(self) -> None:
         """The flat pattern's holes that no face's inner wire gave: a hole crossing a bend's tangent line is
-        part of the flange's and the bend's outer wires, and a hole only once they are fused."""
+        part of the flange's and the bend's outer wires, and a hole only once they are fused. Its centre is
+        its ``plane.fewer``'s, and of the faces as near that its own comes first: not one another hole is named
+        by, then not a skin or a bend, which holes share (a finding is a ``location``'s)."""
+        named = {self.ref(hole.location_faces[0]) for hole in self.holes}
+        shared = self.skins | self.bend_faces
         recorded = [hole.loop.centroid() for hole in self.holes if len(hole.loop.points)]
         for loop in self.flat_loops:
             if loop.label != "hole" or len(loop.points) < 3:
                 continue
             if recorded and plane.inside(np.array(recorded), [loop]).any():
                 continue
-            centre = loop.centroid()
-            if loop.circle is None and len(loop.points) >= 12:
-                # a round hole whose rim a break's chords drew: its points on one circle, within their sag
-                radii = np.linalg.norm(loop.points - np.asarray(centre)[None], axis=1)
-                if float(np.ptp(radii)) <= 2.0 * plane.CHORD_MM + 1e-6:
-                    loop.circle = (float(centre[0]), float(centre[1]), float(radii.max()))
-            ref, xyz = self.locate(centre)
-            in_bend = any(_in_zone(bend, point) for bend in self.bends for point in loop.points)
-            self.holes.append(_HoleLoop(loop, [], np.array(xyz), in_bend, None, ref))
+            centre = plane.fewer(loop).centroid()
+            ref, xyz = self.locate(centre, plane.TIE_MM, last=lambda a: (self.ref(a) in named, a in shared))
+            named.add(ref)
+            in_bend = any(_in_zone(bend, point) for bend in self.bends for point in plane.either(loop).points)
+            self.holes.append(_HoleLoop(loop, [], np.array(xyz), in_bend, self._sunk_at(np.array(xyz), loop), ref))
+
+    def _sunk_at(self, xyz: np.ndarray, loop: plane.Loop) -> float | None:
+        """The countersink of a hole the flat gave (a skin in several faces, split through the hole, holds no
+        wire of it): the one whose axis runs through it, its hole this one's size."""
+        if loop.circle is None:
+            return None
+        for cone in sorted(set(self.countersinks) - self._cones_read):
+            surface = self.surfaces[cone - 1]
+            axis, offset = np.array(surface.axis), xyz - np.array(surface.origin)
+            if float(np.linalg.norm(offset - axis * float(offset @ axis))) > 1e-3 * max(1.0, loop.circle[2]):
+                continue
+            wall = self.wall_of.get(cone)
+            small = self._through_circle(cone) if wall is None else None
+            radius = float(self.surfaces[wall - 1].radius) if wall is not None else small[2][2] if small else None
+            if radius is not None and abs(radius - loop.circle[2]) <= 2.0 * plane.CHORD_MM:
+                self._cones_read |= self._cone_faces(cone)
+                return self.countersinks[cone]
+        return None
 
     def _twin(self, bend: _Bend, parent: _Flange, child: _Flange) -> _Bend | None:
         """The bend that placed ``child`` from ``parent`` when ``bend`` is another stretch of its line: about the
@@ -1592,28 +2052,164 @@ class _Analysis:
                     shape = shape.cut(hole).faces()[0]
                     self._hole(wire, face, loop, inner3, in_bend=True)
             pieces.append(shape)
+            # a cut that ends in it is behind its breaks, as a flange's cut edges are
+            cuts = {cut for cut, beside in self.bend_cuts.items() if beside & self.neighbors[a]}
             self.regions.append(_Region(plane.Loop(polygon, np.ones(len(polygon), bool)), self._from_flat_bend(bend),
-                                        sorted(self.neighbors[a] | {a})))
+                                        sorted(self.neighbors[a] | {a} | cuts)))
         return pieces
 
-    def _unrolled(self, ordinal: int, bend: _Bend) -> Any | None:
-        """A bend's end's break unrolled with its bend (its outline about the axis, as the strip's), or None."""
+    def _bend_halves(self, ordinal: int, face: Any = None) -> list[Any]:
+        """A bend's end's break (or ``face``, the one face it is with others), as it is unrolled: a full round in
+        its two halves, split where it is widest, at the cylinder midway through the sheet (whole, its outline
+        unrolls onto itself); any other whole."""
         import build123d as bd
 
-        face = self.faces[ordinal - 1]
+        face, surface = self.faces[ordinal - 1] if face is None else face, self.surfaces[ordinal - 1]
+        if ordinal not in self.bend_rounds:
+            return [face]
+        t = float(self.thickness)
+        axis, origin = np.array(surface.axis, dtype=float), np.array(surface.origin, dtype=float)
+        reach = 4.0 * (float(surface.radius) + t)
+        try:
+            middle = bd.Solid.make_cylinder(float(surface.radius), 2 * reach,
+                                            bd.Plane(tuple(origin - reach * axis), z_dir=tuple(axis)))
+            wall = middle.faces().filter_by(bd.GeomType.CYLINDER)[0]
+            halves = [half for half in face.split(wall, keep=bd.Keep.ALL) if isinstance(half, bd.Face)]
+        except Exception:  # noqa: BLE001 - a round that does not split is unrolled whole
+            return [face]
+        return halves if len(halves) == 2 else [face]
+
+    def _cut_line(self, cut: int, bend: _Bend) -> tuple[float, float, float, float]:
+        """A cut that ends in ``bend``, in its strip: how far along the allowance the cut's plane crosses the
+        cylinder unfolded, the way out of the sheet there (1 or -1 along it), and from where to where along the
+        axis the cut runs: between the cut edges it meets."""
+        normal = np.array(self.surfaces[cut - 1].normal, dtype=float)
+        across = np.cross(normal, bend.axis)
+        middle = self._middle(cut) - bend.origin
+        offset = float(middle @ normal)
+        reach = math.sqrt(max(0.0, bend.radius_side ** 2 - offset * offset))
+        at = min((bend.origin + float(middle @ bend.axis) * bend.axis + offset * normal + sign * reach * across
+                  for sign in (1.0, -1.0)), key=lambda point: float(np.linalg.norm(point - bend.origin - middle)))
+        origin, x, _ = bend.frame
+        line, off = (self._unroll(bend)(np.array([at, at + 1e-3 * normal]))[:, :2] - origin) @ x
+        others = self.edge_set - {cut}
+        ends = [tuple(vertex) for edge in self.faces[cut - 1].edges()
+                if others & set(self.edge_faces.get(self.part.edge_ordinal(edge), ())) for vertex in edge.vertices()]
+        ws = bend.w(np.array(ends)) if ends else np.zeros(0)
+        if not len(ws) or float(np.ptp(ws)) <= self.tolerance:
+            ws = bend.w(self._boundary([cut]))
+        return float(line), math.copysign(1.0, off - line), float(ws.min()), float(ws.max())
+
+    def _stopped(self, ordinal: int, points: np.ndarray, bend: _Bend, cuts: list[int]) -> np.ndarray:
+        """A break beside a cut that ends in its bend, as it is laid: the rectangle it spans along the axis and
+        along the allowance, beside the cut up to the cut's line, past it up to the cut's end; a side nearer the
+        line or an end than the breaks are fused at is on it, as is one nearer an end than the break is deep (the
+        mitre where it meets the next). Unrolled about the axis as it is, a face of a cut that is not radial runs
+        past that line or stops short of it (as the side unfolded is the bend's inside or its outside), and the
+        curves where two breaks meet there are chords shorter than that tolerance."""
+        origin, x, y = bend.frame
+        near = 2.5 * plane.CHORD_MM
+        mitre = max(near, self.breaks.get(ordinal, 0.0))
+        laid = np.column_stack([(points - origin) @ x, (points - origin) @ y])
+        low, high = laid.min(axis=0), laid.max(axis=0)
+        for cut in cuts:
+            line, out, start, end = self._cut_line(cut, bend)
+            middle = (low[1] + high[1]) / 2.0
+            low[0] = line if abs(low[0] - line) < near else low[0]
+            high[0] = line if abs(high[0] - line) < near else high[0]
+            if middle <= start:
+                high[1] = min(high[1], start)
+            elif middle >= end:
+                low[1] = max(low[1], end)
+            else:
+                low[1] = start if low[1] < start + mitre else low[1]
+                high[1] = end if high[1] > end - mitre else high[1]
+                (high if out > 0.0 else low)[0] = line
+        if (high - low).min() <= self.tolerance:
+            return np.zeros((0, 2))  # all of it past the cut
+        corners = np.array([low, (high[0], low[1]), high, (low[0], high[1])])
+        return origin + corners[:, :1] * x + corners[:, 1:] * y
+
+    def _unrolled(self, ordinal: int, bend: _Bend, face: Any = None) -> Any | None:
+        """A bend's end's break (or ``face``, a part of it) unrolled with its bend (its outline about the axis,
+        as the strip's; beside a cut that ends in the bend, up to it, ``_stopped``), or None."""
+        import build123d as bd
+
+        face = self.faces[ordinal - 1] if face is None else face
         outer, _, _ = _wire_loop(face.outer_wire().wrapped, face.wrapped, self._unroll(bend))
-        polygon = _simplify(outer.points)
+        cuts = [cut for cut, beside in self.bend_cuts.items() if ordinal in beside]
+        polygon = _simplify(self._stopped(ordinal, outer.points, bend, cuts) if cuts else outer.points)
         if len(polygon) < 3:
             return None
         return bd.make_face(bd.Polyline(*[(float(x), float(y), 0.0) for x, y in polygon], close=True))
 
-    def _halves(self, ordinal: int) -> list[Any]:
-        """A break's face, as it is laid into the flat: a full round in its two halves, split where it is widest,
-        at the sheet's mid-plane (each half's outline projects onto the plane as its shadow; the whole round's
-        folds back on itself to a line); any other break whole."""
+    def _laid(self, ordinal: int) -> list[Any]:
+        """A break's face as it is measured and laid into the flat: itself, or, where it is one face in several
+        (a round cut in two by a layer, joined and never merged), the face they are once merged at the first of
+        them and nothing at the others. Laid face by face, a piece that projects narrower than the tolerance the
+        flat is fused at is lost there, and a hole's rim with it."""
+        if self._joined is None:
+            import build123d as bd
+            from OCP.BRep import BRep_Builder
+            from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain
+            from OCP.TopoDS import TopoDS_Compound
+
+            def merged(members: list[int]) -> Any | None:
+                """The one face the kernel makes of the part's faces ``members``, or None."""
+                try:
+                    compound, builder = TopoDS_Compound(), BRep_Builder()
+                    builder.MakeCompound(compound)
+                    for b in members:
+                        builder.Add(compound, self.faces[b - 1].wrapped)
+                    unify = ShapeUpgrade_UnifySameDomain(compound, True, True, True)
+                    unify.Build()
+                    faces = bd.Compound(unify.Shape()).faces()
+                    if len(faces) == 1:
+                        return faces[0]
+                    torus = self.surfaces[members[0] - 1].kind == "torus"
+                    return _band([self.faces[b - 1] for b in members]) if torus else None
+                except Exception:  # noqa: BLE001 - faces that do not merge are laid as they are
+                    return None
+
+            self._joined = {}
+            for a in sorted(self.breaks):
+                group = self._break_faces(a)
+                if a != group[0] or len(group) < 2:
+                    continue
+                # grown a face at a time, from the part's own faces (they share their edges; a merged face
+                # shares none): the kernel merges what it would have made one face, and no more (a round about
+                # a hole that was two faces whole stays two)
+                left = list(group)
+                while left:
+                    members, whole = [left.pop(0)], None
+                    grown = True
+                    while grown:
+                        grown = False
+                        for b in [b for b in left if any(self.smooth[b] & set(members))]:
+                            more = merged([*members, b])
+                            if more is not None:
+                                members.append(b)
+                                left.remove(b)
+                                whole, grown = more, True
+                    if whole is not None:
+                        self._joined.update({b: [] for b in members})
+                        self._joined[members[0]] = [whole]
+                        self._merged_from.update({b: members for b in members})
+        return self._joined.get(ordinal, [self.faces[ordinal - 1]])
+
+    def _pieces(self, ordinal: int) -> list[int]:
+        """The part's faces that are one with face ``ordinal`` as it is laid (``_laid``), the first of them first."""
+        self._laid(ordinal)
+        return self._merged_from.get(ordinal, [ordinal])
+
+    def _halves(self, ordinal: int, face: Any = None) -> list[Any]:
+        """A break's face (or ``face``, the one face it is with others), as it is laid into the flat: a full round
+        in its two halves, split where it is widest, at the sheet's mid-plane (each half's outline projects onto
+        the plane as its shadow; the whole round's folds back on itself to a line); any other break whole."""
         import build123d as bd
 
-        face, skins = self.faces[ordinal - 1], self.break_skins.get(ordinal, set())
+        face = self.faces[ordinal - 1] if face is None else face
+        skins = self.break_skins.get(ordinal, set())
         if len(skins) < 2 or self.surfaces[ordinal - 1].kind not in ("cylinder", "torus", "sphere", "revolution"):
             return [face]
         skin = self.surfaces[min(skins) - 1]
@@ -1653,22 +2249,51 @@ class _Analysis:
             """The projected outline as exact edges: an arc about the plate's normal stays an arc, a line or an
             arc square to the plate (a round's end) is the chord it projects to, any other curve its chords
             (``_chorded``)."""
-            made = []
+            drawn: list[tuple[str, Any]] = []  # a whole circle, an arc's three points, a path's points
             for points, circle in pieces:
                 ends = flat(points[0]), flat(points[-1])
                 if circle is not None and abs(float(circle[1] @ normal)) > _PARALLEL:
                     if math.dist(*ends) < 1e-9:
-                        made.append(bd.Edge.make_circle(circle[2], bd.Plane(flat(circle[0]))))
+                        drawn.append(("circle", circle))
                     else:
-                        made.append(bd.ThreePointArc(ends[0], flat(points[len(points) // 2]), ends[1]))
+                        drawn.append(("arc", [ends[0], flat(points[len(points) // 2]), ends[1]]))
                 elif circle is None and len(points) > 2:
-                    path = _chorded([flat(p) for p in points])
-                    made.extend(bd.Line(a, b) for a, b in zip(path, path[1:]) if math.dist(a, b) > 1e-9)
+                    drawn.append(("path", _chorded([flat(p) for p in points])))
                 elif math.dist(*ends) > 1e-9:
-                    made.append(bd.Line(*ends))
+                    drawn.append(("path", list(ends)))
+            # each piece starts where the last one ends: the kernel joins two edges at a vertex within its
+            # tolerance, and an edge may end a hair off it (an edge a layer cut, the mitre where a round along an
+            # ellipse meets one along a line). The wire drawn here joins edges within 1e-7 mm alone: left open,
+            # the outline fell back to its sampled points, whose chords along a mitre are shorter than the
+            # tolerance the breaks are fused with, and the fuse lost material there
+            runs = [points for how, points in drawn if how != "circle"]
+            for last, following in zip(runs, runs[1:] + runs[:1]):
+                if last is not following and 0.0 < math.dist(last[-1], following[0]) < 1e-6:
+                    following[0] = last[-1]
+            made: list[Any] = []  # an edge, or a straight piece's two ends
+
+            def straight(a: tuple[float, float, float], b: tuple[float, float, float]) -> None:
+                # two pieces on in one line are one (a mitre between two rounds, in the faces a layer cut it in)
+                if made and isinstance(made[-1], tuple) and _in_line(made[-1][0], a, b):
+                    made[-1] = (made[-1][0], b)
+                else:
+                    made.append((a, b))
+
+            for how, points in drawn:
+                if how == "circle":
+                    made.append(bd.Edge.make_circle(points[2], bd.Plane(flat(points[0]))))
+                elif how == "arc":
+                    made.append(bd.ThreePointArc(*points))
+                else:
+                    for a, b in zip(points, points[1:]):
+                        if math.dist(a, b) > 1e-9:
+                            straight(a, b)
+            if len(made) > 2 and isinstance(made[0], tuple) and isinstance(made[-1], tuple) \
+                    and _in_line(made[-1][0], *made[0]):
+                made[0] = (made.pop()[0], made[0][1])
             if not made:
                 return None
-            built = bd.Face(bd.Wire(made))
+            built = bd.Face(bd.Wire([bd.Line(*piece) if isinstance(piece, tuple) else piece for piece in made]))
             return built if built.area > 1e-9 else None
 
         try:
@@ -1690,12 +2315,30 @@ class _Analysis:
                     outer, _, _ = _wire_loop(face.outer_wire().wrapped, face.wrapped, mapping)
                     return polygon_face(outer.points)
             # a whole turn about an axis (a cone, a torus round a hole or a disc): its closed edges, the largest
-            # less the rest
-            rings = []
-            for edge in edges:
-                if not any(edge.wrapped.IsSame(seam.wrapped) for seam in seams):
-                    points, _, circle = _edge_points(edge.wrapped, False)
-                    rings.append(exact([(points, circle)]) if circle is not None else polygon_face(mapping(points)))
+            # less the rest; and where the outline cuts it (a countersink whose rim runs off the plate: a whole
+            # turn at its hole, none at its rim), the edges between two passes of the seam, one outline
+            rings, runs = [], [[]]
+            explorer = BRepTools_WireExplorer(face.outer_wire().wrapped, face.wrapped)
+            while explorer.More():
+                edge = explorer.Current()
+                if any(edge.IsSame(seam.wrapped) for seam in seams):
+                    runs.append([])
+                else:
+                    points, _, circle = _edge_points(edge, explorer.Orientation() == TopAbs_REVERSED)
+                    if float(np.linalg.norm(points[0] - points[-1])) < 1e-9:
+                        rings.append(exact([(points, circle)]) if circle is not None else polygon_face(mapping(points)))
+                    else:
+                        runs[-1].append((points, circle))
+                explorer.Next()
+            for run in ([[*runs[-1], *runs[0]], *runs[1:-1]] if len(runs) > 1 else runs):
+                if not run:
+                    continue
+                if float(np.linalg.norm(run[0][0][0] - run[-1][0][-1])) > 1e-6:
+                    return None  # no outline of its own: the skin's stands there
+                try:
+                    rings.append(exact(run))
+                except Exception:  # noqa: BLE001 - edges that do not close exactly: their sampled outline
+                    rings.append(polygon_face(mapping(np.vstack([points for points, _ in run]))))
             rings = sorted((ring for ring in rings if ring is not None), key=lambda ring: -ring.area)
             if not rings:
                 return None
@@ -1710,16 +2353,48 @@ class _Analysis:
         inverse = np.linalg.inv(flange.to_flat)
         near = self.neighbors[ordinal] | {ordinal}
         for _ in range(2):  # the cut edges behind its breaks, and the facets between them
-            near = near | {c for b in near if b in self.breaks for c in self.neighbors[b]}
+            near = near | {c for b in near if b in self.breaks
+                           for piece in self._pieces(b) for c in self.neighbors[piece]}
         self.regions.append(_Region(outer, lambda points: _apply(
             inverse, np.column_stack([np.asarray(points).reshape(-1, 2), np.zeros(len(np.asarray(points).reshape(-1, 2)))])),
             sorted(near)))
+        # each countersink's hole once: its cone may be in several faces, its skin too (split through the hole)
+        rims = self._cones_read
         for wire in face.inner_wires():
             touched = {f for edge in wire.edges() for f in self.edge_faces.get(self.part.edge_ordinal(edge), ())}
             if touched & set(self.breaks):
                 continue  # a hole with a broken edge: read back from the flat, at its cut size
+            sunk = sorted(touched & set(self.countersinks))
+            if sunk and (touched - {ordinal} - set(sunk) or not all(
+                    self._coaxial(self.surfaces[sunk[0] - 1], self.surfaces[c - 1], 1e-3) for c in sunk)):
+                continue  # a cutout a countersink's rim runs into, two rims that overlap: read back from the flat
+            rims |= {c for cone in sunk for c in self._cone_faces(cone)}
             loop, points3, _ = _wire_loop(wire.wrapped, face.wrapped, mapping)
+            if len(loop.points) < 3:
+                continue  # a point the skin is touched at (a full round's corner): one degenerate edge, no hole
             self._hole(wire, face, loop, points3)
+        # a countersink whose rim is no whole circle of the skin's (it runs off the outline, into a cutout or
+        # into another rim) is part of a wire that is no hole of its own: its hole is the cone's small end,
+        # which the flat has once the cone is laid into it. Where the skin is in several faces, split through
+        # the hole, its rim is whole all the same, in the cone's faces: the hole is that, as a wire's would be.
+        skin = self.surfaces[ordinal - 1]
+        for cone in sorted((self.neighbors[ordinal] & set(self.countersinks)) - rims):
+            if cone in rims:
+                continue  # another face of a cone already read
+            rims |= self._cone_faces(cone)
+            circles = self._whole_circles(cone)
+            if not circles:
+                continue
+            here = [c for c in circles if abs(float((c[2][0] - np.array(skin.origin)) @ np.array(skin.normal)))
+                    < 1e-6 * max(1.0, c[2][2])]
+            edges, points3, (centre, _, radius) = here[-1] if here else circles[0]
+            flat = mapping(points3[:-1])
+            loop = plane.Loop(flat[:, :2], np.zeros(len(flat), dtype=bool), edges[:-1])
+            at = mapping(centre[None])[0]
+            loop.circle = (float(at[0]), float(at[1]), float(radius))
+            if here:
+                loop.through_diameter = 2.0 * float(circles[0][2][2])
+            self.holes.append(_HoleLoop(loop, [self.wall_of.get(cone, cone)], centre, False, self.countersinks[cone]))
 
     def _hole(self, wire: Any, face: Any, loop: plane.Loop, points3: np.ndarray, in_bend: bool = False) -> None:
         skin = self.part.face_ordinal(face)
@@ -1739,17 +2414,39 @@ class _Analysis:
                     walls = [through] + [w for w in walls if w != through]
         if through is not None:
             loop.through_diameter = 2.0 * float(self.surfaces[through - 1].radius)
+        elif countersink is not None:
+            # sunk through the full thickness: no wall, the hole its cone's small end
+            small = next((self._through_circle(wall) for wall in walls if wall in self.countersinks), None)
+            if small is not None:
+                loop.through_diameter = 2.0 * float(small[2][2])
         elif countersink is None:
-            for cone, wall in self.wall_of.items():
-                if wall in walls:
-                    countersink = self.countersinks[cone]
+            if self._sunk_walls is None:
+                self._sunk_walls = {face: cone for cone, wall in self.wall_of.items() for face in self._wall_faces(wall)}
+            for wall in walls:
+                if wall in self._sunk_walls:
+                    countersink = self.countersinks[self._sunk_walls[wall]]
         centre = points3.mean(axis=0) if len(points3) else np.zeros(3)
         self.holes.append(_HoleLoop(loop, walls or [skin], centre, in_bend, countersink))
 
+    def _wall_faces(self, wall: int) -> set[int]:
+        """A hole's wall whole: ``wall`` and the faces the same cylinder runs on in across the thickness, each
+        joined tangent to the last (a wall in layers: the countersink is beside one face, the far skin's rim
+        beside another)."""
+        found, front = {wall}, [wall]
+        while front:
+            a = front.pop()
+            for b in self.smooth[a] - found:
+                if self.surfaces[a - 1].kind == self.surfaces[b - 1].kind == "cylinder" and self._same_cylinder(a, b):
+                    found.add(b)
+                    front.append(b)
+        return found
+
     # -- back onto the part -------------------------------------------------------------------------------
 
-    def locate(self, point: Any) -> tuple[str, list[float]]:
-        """The ref of the part's face nearest a point of the flat pattern, and the point on the part."""
+    def locate(self, point: Any, within: float = 0.0, last: Callable[[int], Any] = lambda face: False
+               ) -> tuple[str, list[float]]:
+        """The ref of the part's face nearest a point of the flat pattern, and the point on the part: at a corner,
+        as near (``within``) two regions or two faces, the first's (of faces, those ``last`` puts first)."""
         import build123d as bd
 
         p = np.asarray(point, dtype=float).reshape(1, 2)
@@ -1757,7 +2454,7 @@ class _Analysis:
         for candidate in self.regions:
             inside = plane.inside(p, [candidate.loop])[0]
             d = 0.0 if inside else plane.segments_distance(p, p, candidate.loop.a, candidate.loop.b)[0]
-            if d < best:
+            if d < best - within:
                 best, region = d, candidate
         if region is None:
             return self.part.ref("face", 1), [float(p[0, 0]), float(p[0, 1]), 0.0]
@@ -1773,16 +2470,18 @@ class _Analysis:
         bound = np.linalg.norm(np.maximum(0.0, np.maximum(lo[faces - 1] - at, at - hi[faces - 1])), axis=1)
         # a point of the outline lies on a cut edge's face: the nearest of those within a thickness, else
         # the nearest face of all; faces whose boxes are farther than the best found are not measured
-        best: dict[bool, tuple[float, int]] = {}
+        measured: list[tuple[bool, float, int]] = []
+        least = math.inf
         for k in np.argsort(bound):
             a = int(faces[k])
-            if best and bound[k] > min(value[0] for value in best.values()) and bound[k] > reach:
+            if bound[k] > least + within and bound[k] > reach:
                 break
             d = self.faces[a - 1].distance_to(vector)
-            edge = a in self.edge_set and d <= reach
-            if edge not in best or d < best[edge][0]:
-                best[edge] = (d, a)
-        nearest = (best.get(True) or best[False])[1]
+            least = min(least, d)
+            measured.append((a in self.edge_set and d <= reach, d, a))
+        kept = [(d, a) for edge, d, a in measured if edge] or [(d, a) for _, d, a in measured]
+        closest, first = min(kept, key=lambda found: found[0])
+        nearest = min((a for d, a in kept if d < closest + within), key=lambda a: (last(a), a), default=first)
         return self.ref(nearest), _xyz(at)
 
 
@@ -2026,16 +2725,18 @@ def _reliefs(analysis: _Analysis, material: list[plane.Loop]) -> list[dict]:
 
 def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], list[dict], list[dict]]:
     holes, spacing, to_bend = [], [], []
+    edges = [plane.either(other) for other in outer]
     for hole in analysis.holes:
         loop = hole.loop
+        reached = plane.either(loop)  # its distances are the least, whichever way rounding sampled its arcs
         if getattr(loop, "through_diameter", None):
             kind, size, length = "round", loop.through_diameter, loop.through_diameter
         elif loop.circle is not None:
             kind, size, length = "round", 2.0 * loop.circle[2], 2.0 * loop.circle[2]
         else:
-            size, length, _ = plane.feret(loop.points)
+            size, length = plane.least_feret(loop)
             kind = "slot" if length > 1.2 * size and not loop.straight.all() else "cutout"
-        edge = min((plane.distance(loop, other)[0] for other in outer), default=None)
+        edge = min((plane.distance(reached, other)[0] for other in edges), default=None)
         item = {"kind": kind, "size_mm": _r(size), "diameter_mm": _r(size) if kind == "round" else None,
                 "length_mm": _r(length), "edge_distance_mm": _r(edge), "in_bend": hole.in_bend,
                 "countersunk": hole.countersink is not None, "countersink_diameter_mm": _r(hole.countersink),
@@ -2049,7 +2750,7 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
             # the bend's two tangent lines and its centre line in the flat; a whole circle's distances are exact
             lines = [_barrier(_frame_points(bend, np.array([x0, x0]), np.array([bend.w0, bend.w1])))
                      for x0 in (0.0, bend.allowance, bend.allowance / 2)]
-            near, far, d_center = (plane.distance(loop, line)[0] for line in lines)
+            near, far, d_center = (plane.distance(reached, line)[0] for line in lines)
             origin, x, y = bend.frame
             if loop.circle is not None:
                 at, radius = np.array(loop.circle[:2]) - origin, loop.circle[2]
@@ -2088,15 +2789,21 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
                 "inside_radius_mm": _r(bend.inside_radius), "bend_angle_deg": _r(bend.angle),
                 "location": item["location"], "xyz": item["xyz"]})
     pairs: dict[tuple[int, int], dict] = {}
-    for i, nearest in enumerate(plane.nearest([hole.loop for hole in analysis.holes])):
-        if nearest is not None:
-            key = (min(i, nearest[1]), max(i, nearest[1]))
-            if holes[key[0]]["kind"] != "round" and holes[key[1]]["kind"] != "round":
-                continue  # the bar between two cutouts is a web (``_outline_features``), not two holes' spacing
-            pairs.setdefault(key, {"distance_mm": _r(nearest[0]), "location": holes[key[0]]["location"],
-                                   "other": holes[key[1]]["location"], "xyz": holes[key[0]]["xyz"]})
-    spacing = sorted(pairs.values(), key=lambda item: item["distance_mm"])
-    return holes, spacing, to_bend
+    for d, i, j in plane.nearest_pairs([hole.loop for hole in analysis.holes], plane.TIE_MM):
+        key = (min(i, j), max(i, j))
+        if holes[key[0]]["kind"] != "round" and holes[key[1]]["kind"] != "round":
+            continue  # the bar between two cutouts is a web (``_outline_features``), not two holes' spacing
+        pairs[key] = {"distance_mm": _r(d), "location": holes[key[0]]["location"],
+                      "other": holes[key[1]]["location"], "xyz": holes[key[0]]["xyz"]}
+    return holes, _one_a_place_first(list(pairs.values())), to_bend
+
+
+def _one_a_place_first(items: list[dict]) -> list[dict]:
+    """``hole_spacing``'s items nearest first, and of those as near one at each place before a second at any: a
+    finding is a place's, and the list is cut at ``ITEM_CAP`` where holes as near have several pairs each."""
+    items = sorted(items, key=lambda item: item["distance_mm"])
+    first = {item["location"]: item for item in reversed(items)}
+    return sorted(items, key=lambda item: (item["distance_mm"], first[item["location"]] is not item))
 
 
 def _span_within(points: np.ndarray, lo: float, hi: float) -> tuple[float, float] | None:
@@ -2127,10 +2834,21 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
     they lie between (``cutouts``) -- one feature, where ``hole_spacing`` would say each pair of slots."""
     least = max(1e-3, 0.01 * (thickness or 0.1))
     notches, tabs, webs, gaps = [], [], [], []
+    notch_at = web_at = locate
+    if analysis is not None:  # of faces as near, one no other of the family names, then no skin or bend
+        shared = analysis.skins | analysis.bend_faces  # (which all share): a finding is a location's
+
+        def own_at(named: set[str]) -> Callable[[Any], tuple[str, list[float]]]:
+            def at(point: Any) -> tuple[str, list[float]]:
+                ref, xyz = analysis.locate(point, plane.TIE_MM, last=lambda a: (analysis.ref(a) in named, a in shared))
+                named.add(ref)
+                return ref, xyz
+            return at
+        notch_at, web_at = own_at(set()), own_at(set())
     outer = [loop for loop in loops if loop.label == "outer"]
     for loop in outer:
         for pocket in plane.pockets(loop, least=least):
-            ref, xyz = locate(pocket.deepest)
+            ref, xyz = notch_at(pocket.deepest)
             notches.append({"width_mm": _r(pocket.width), "length_mm": _r(pocket.depth),
                             "length_to_width": _r(pocket.depth / pocket.width), "area_mm2": _r(pocket.area, 3),
                             "location": ref, "xyz": xyz})
@@ -2144,7 +2862,7 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
         if width.kind == "material":
             if a != b or loops[a].label != "outer":
                 continue  # between two contours: hole_to_edge and hole_spacing measure it
-            ref, xyz = locate(width.start)
+            ref, xyz = web_at(width.start)
             webs.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz, "said": "a neck of the outline",
                          "across": [_r(v) for v in (*width.start, *width.end)]})
         else:
@@ -2157,19 +2875,21 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
             gaps.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz,
                          "between": "one contour" if a == b else "two contours"})
     cutouts = [loop for loop in loops if loop.label == "hole" and loop.circle is None]
-    bars: dict[int, tuple[dict[str, Any], set[int]]] = {}
-    for k, found in enumerate(plane.nearest(cutouts)):
-        if found is None:
-            continue
-        if round(found[0] * 1000) not in bars:
-            _, start, end = plane.distance(cutouts[k], cutouts[found[1]])
-            ref, xyz = locate(start)
-            bars[round(found[0] * 1000)] = ({"width_mm": _r(found[0]), "location": ref, "xyz": xyz,
-                                             "across": [_r(float(v)) for v in (*start, *end)]}, set())
-        bar, between = bars[round(found[0] * 1000)]
-        between.update((k, found[1]))
-        bar.update(cutouts=len(between), said=f"between {len(between)} cutouts")
-    webs.extend(bar for bar, _ in bars.values())
+    bars: dict[int, list[tuple[int, float, list[int]]]] = {}  # a width's: a cutout, the width, every one as near
+    for k, near in enumerate(plane.as_near(cutouts, plane.TIE_MM)):
+        if near:
+            width_mm = min(near)[0]
+            size = round(round(width_mm, 6) * 1000)  # to the micron, half of one rounding one way whatever the noise
+            bars.setdefault(size, []).append((k, width_mm, [j for _, j in near]))
+    for alike in bars.values():  # one item: the least of their widths, at the first as narrow
+        least_width = min(width_mm for _, width_mm, _ in alike)
+        k, _, others = next(bar for bar in alike if bar[1] <= least_width + plane.TIE_MM)
+        _, start, end = plane.distance(cutouts[k], cutouts[others[0]], plane.TIE_MM)
+        ref, xyz = web_at(start)
+        between = {cutout for first, _, across in alike for cutout in (first, *across)}
+        webs.append({"width_mm": _r(least_width), "location": ref, "xyz": xyz,
+                     "across": [_r(float(v)) for v in (*start, *end)],
+                     "cutouts": len(between), "said": f"between {len(between)} cutouts"})
     return {"notches": notches, "tabs": tabs, "webs": webs, "gaps": gaps}
 
 
@@ -2528,6 +3248,7 @@ def unfold(shape: Any, *, thickness: float | None = None, k_factor: float | None
         return cut
     cut.label = "CUT"
     lines = [line for item in found for line in item.bend_lines]
-    bends = bd.Compound(children=lines) if lines else bd.Compound([])  # (Compound() of nothing is refused)
+    # One shape of all the lines, not an assembly of them: a child would be a part of its own, on a layer of its own.
+    bends = bd.Compound(lines)
     bends.label = "BEND"
     return bd.Compound(children=[cut, bends])

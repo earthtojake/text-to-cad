@@ -46,6 +46,7 @@ import { studioEnvironmentCacheFor } from "../look/studioEnvironmentCache.js";
 import { isKitScene } from "../scene.js";
 import LoadingIndicator from "../status/LoadingIndicator.js";
 import AnnotationOverlay from "../tools/annotate/AnnotationOverlay.jsx";
+import { backdropScheme } from "../tools/PreviewChrome.jsx";
 import { useSceneEffects } from "../tools/model-effects/useSceneEffects.js";
 import { TOUCH_HIT_PX, prefersCoarsePointer } from "../viewport/dom.js";
 import { annotationAt, annotationsInBox } from "../../../annotation/geometry.js";
@@ -61,7 +62,7 @@ import { renderThumbnail } from "../viewport/thumbnail.js";
 import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 import ViewportError from "../status/ViewportError.jsx";
 import { useI18n } from "@cad/ui/i18n";
-import { VIEWPORT_CUBE_BOTTOM, VIEWPORT_CUBE_SIZE, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
+import { VIEWPORT_CUBE_SIZE, VIEWPORT_CUBE_TOP, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
 
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
 // The theme's lights on the viewer runtime (`useViewerRuntime`): what Render and a scene's own rig hide.
@@ -384,6 +385,9 @@ const ShellViewport = forwardRef(function ShellViewport({
     // frames in the room under the strip, which depends on the height, so a fit to Preview's
     // height kept after it would leave the view off the open fit when it is uncovered.
     if (suspendedRef.current || !refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
+    // The zoom's reading follows: a pane that changed size (a panel docked, the page's chrome gone under Preview and
+    // back) rescales an orthographic camera without moving it, which the controls report to no one.
+    runtime.controls?.dispatchEvent?.({ type: CAMERA_ZOOMED_EVENT });
     emitPerspectiveChange(runtime);
     // A resize can change what is on screen without changing the stored perspective,
     // so the settle is reported here rather than left to perspective deduplication.
@@ -1270,6 +1274,8 @@ const ShellViewport = forwardRef(function ShellViewport({
   const transitionBackdrop = viewerTransitionBackdrop({
     renderMode, renderConfiguration, background: normalizedThemeSettings.background, viewerTheme
   });
+  // The indicator in the ink of the backdrop it is on (Render's, where it has its own), else the viewport's: never the app's.
+  const transitionScheme = backdropScheme({ color: transitionBackdrop.backgroundColor }, appearance);
 
   return (
     <div
@@ -1280,7 +1286,8 @@ const ShellViewport = forwardRef(function ShellViewport({
     >
       <div className="h-full w-full" ref={mountRef} />
       {coveringModeTransition ? (
-        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center" style={transitionBackdrop} role="status" data-viewer-transition={renderMode ? "render" : "inspect"}>
+        <div className={`pointer-events-none absolute inset-0 z-20 flex items-center justify-center ${transitionScheme}`} style={transitionBackdrop} role="status"
+          data-viewer-transition={renderMode ? "render" : "inspect"} data-scheme={transitionScheme}>
           <LoadingIndicator
             progress={loadingPresentation?.busy ? loadingPresentation.progress : { label: "Preparing view" }}
             operationKey={`${resolvedPresentationKey}:${renderMode}`}
@@ -1296,16 +1303,17 @@ const ShellViewport = forwardRef(function ShellViewport({
         showViewPlane
         isLoading={isLoading}
         meshData={scene}
-        // Close into the bottom-right corner, clear of the canvas's left edge: the cube's box
-        // is larger than the cube, whose labels overhang it.
+        // Close into the top-right corner (the bottom row is Quick Edit's), clear of the canvas's left edge: the cube's
+        // box is larger than the cube, whose labels overhang it.
         viewPlaneOffsetRight={VIEWPORT_CORNER_INSET_PX}
-        viewPlaneOffsetBottom={VIEWPORT_CUBE_BOTTOM}
+        viewPlaneOffsetTop={VIEWPORT_CUBE_TOP}
         viewPlaneSize={VIEWPORT_CUBE_SIZE}
         compact={false}
         activeViewPlaneFace={activeViewPlaneFace}
         viewPlaneFaces={VIEW_PLANE_FACES}
         orientation={viewPlaneOrientation}
         viewerTheme={viewerTheme}
+        scheme={appearance}
         activateViewPlaneFace={activateViewPlaneFace}
         orbitViewCube={orbitFromViewCube}
       />

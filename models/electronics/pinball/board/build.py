@@ -5,7 +5,7 @@ rules), place, art, the routes planned (`scripts/routes.py`, the longest step), 
     cad run build.py
 
 The KiCad files are build output (`.gitignore` keeps them out of Git): run this before opening the board or the
-schematic in the CAD Viewer or in KiCad, and before any script that reads the board (`check_board.py`,
+schematic in the viewer or in KiCad, and before any script that reads the board (`check_board.py`,
 `check_fit.py`). It needs the `cad` command (KiCad 10.99's kicad-cli and API come with it) and KiCad's stock
 libraries, which `build_libraries.py` reads from macOS's KiCad.app or from `KICAD_STOCK`. The board is made again
 each time (the old one removed first), so a build is the same from a clean checkout and over an earlier build.

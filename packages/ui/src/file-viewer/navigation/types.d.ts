@@ -1,5 +1,5 @@
 /** Package-owned contracts for the shared navigation primitives. */
-import type { ComponentType, ElementType, ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { FileSource } from "../types.js";
 
 /* -------------------------------------------------------------------- */
@@ -55,16 +55,15 @@ export function folderTrail(path: string): { name: string; path: string }[];
 /** The folder holding `path`. */
 export function parentFolder(path: string): string;
 
-/** The one empty state, used by every pane in both apps. */
+/** The one status screen, used by every full-area state in both apps: quiet, a 22rem column centred in the area. */
 export const EmptyState: ComponentType<{
-  icon: ElementType;
   title: string;
   description?: string;
   action?: ReactNode;
   className?: string;
-  /** `warn` is for a missing prerequisite, not an idle state. */
-  tone?: "muted" | "warn";
 }>;
+/** A status screen's action: the panel's small quiet button. */
+export const StatusAction: ComponentType<import("react").ButtonHTMLAttributes<HTMLButtonElement>>;
 
 export function fuzzyMatch(
   needle: string,
@@ -75,7 +74,8 @@ export function fuzzyMatch(
  * The one navbar, over a file and over a host's home (with no file, history or Back to home). Left: the logo, which opens the app's menu
  * (`AppMenu`), Back and Forward where the host keeps the view's history (`history`), the open file's
  * name, with no glyph (the door to the name menu: Models and Files, where the host has them) and its ⋯ (Copy path, Open in, then
- * the host's own items: the CAD viewer's Export). Right: `trailing` (the file's actions), then `actions`, outermost.
+ * the host's own items: the viewer's Export). Over a file with a panel, the panel's toggle comes
+ * first, before the logo. Right: `trailing` (the file's actions), then `actions`, outermost.
  * Back and Forward are a desktop row's alone: a phone's has no room for them.
  */
 export const ViewerNavbar: ComponentType<{
@@ -97,7 +97,7 @@ export const ViewerNavbar: ComponentType<{
   recent?: { list(): Promise<readonly import("../types.js").RecentDocument[]>; onOpen: (path: string) => void } | null;
   /**
    * The ⋯ after the name: Copy path, then Open in (Browser, and the file manager by its name), each
-   * where `capabilities` has it, then `items` (the host's own: the CAD viewer's Export submenu). None
+   * where `capabilities` has it, then `items` (the host's own: the viewer's Export submenu). None
    * where it would be empty.
    */
   fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; sourceMissing?: boolean;
@@ -107,6 +107,14 @@ export const ViewerNavbar: ComponentType<{
   trailing?: ReactNode;
   /** The host's own actions (the CAD app's Full size, inline). */
   actions?: ReactNode;
+  /**
+   * The view's panel toggle (`../panelToggles.js`, said by its frame): the row's first control, before the logo, the
+   * same neutral button open or shut (`aria-expanded` says which).
+   */
+  panels?: import("../panelToggles.js").PanelToggles | null;
+  /** Over the home: the two places its controls go ("Recent" and its count; the search and Open), on the grid's column (`../navbarSlots.js`). */
+  homeSlots?: { left(element: HTMLElement | null): void; right(element: HTMLElement | null): void } | null;
+  viewSlot?: ((element: HTMLElement | null) => void) | null;
   className?: string;
 }>;
 
@@ -126,7 +134,7 @@ export const AppMenu: ComponentType<{
 }>;
 
 /**
- * A file's icon. The nine formats the CAD Viewer renders get its own
+ * A file's icon. The nine formats the viewer renders get its own
  * per-format glyphs; everything else is one lucide table.
  */
 export const FileIcon: ComponentType<{ path: string; className?: string; strokeWidth?: number }>;

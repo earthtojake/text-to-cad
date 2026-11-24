@@ -15,10 +15,14 @@ from __future__ import annotations
 import json
 import math
 import tempfile
+import types
 import unittest
 from pathlib import Path
+from typing import Callable
+from unittest import mock
 
 import build123d as bd
+import numpy as np
 
 from cad._internal import manufacturing
 from cad._internal import sheet_plane as plane
@@ -65,6 +69,81 @@ def bent(steps: list[tuple], t: float, width: float, label: str = "part") -> bd.
     part = bd.extrude(bd.Plane.XZ * profile(steps, t), amount=-width)
     part.label = label
     return part
+
+
+def centre(steps: list[tuple], t: float) -> bd.Wire:
+    """``profile``'s path a t/2 into the sheet (its bends turning left only), in XZ as ``bent`` places it."""
+    x, y, heading, edges = 0.0, 0.0, 0.0, []
+    for step in steps:
+        dx, dy = math.cos(heading), math.sin(heading)
+        if step[0] == "line":
+            start = (x - t / 2 * dy, y + t / 2 * dx)
+            edges.append(bd.Line(start, (start[0] + step[1] * dx, start[1] + step[1] * dy)))
+            x, y = x + step[1] * dx, y + step[1] * dy
+            continue
+        _, angle, inside = step
+        cx, cy = x - (inside + t) * dy, y + (inside + t) * dx
+        first = math.atan2(y - cy, x - cx)
+        edges.append(bd.CenterArc((cx, cy), inside + t / 2, math.degrees(first), angle))
+        x, y = cx + (inside + t) * math.cos(first + math.radians(angle)), \
+            cy + (inside + t) * math.sin(first + math.radians(angle))
+        heading += math.radians(angle)
+    return bd.Plane.XZ * bd.Wire(edges)
+
+
+def tube(path: bd.Wire, t: float) -> bd.Part:
+    """A round bar ``t`` across along ``path``: what rounds a ``t`` sheet's edge whole."""
+    edge = path.edges()[0]
+    ring = bd.Face(bd.Wire(bd.Edge.make_circle(t / 2, bd.Plane(edge @ 0, z_dir=edge % 0))))
+    return bd.sweep(ring, path=path, transition=bd.Transition.ROUND)
+
+
+def rounded(steps: list[tuple], t: float, width: float, sides: int) -> bd.Part:
+    """The bracket ``width`` wide, ``sides`` of its sides rounded whole, or (3) its whole outline."""
+    if sides < 3:
+        part = bd.Pos(0, t / 2 * (sides - 1), 0) * bent(steps, t, width - t / 2 * sides)
+        for y in (width - t / 2, t / 2)[:sides]:
+            part = part + tube(bd.Pos(0, y, 0) * centre(steps, t), t)
+        return part
+    inner = [("line", steps[0][1] - t / 2), *steps[1:-1], ("line", steps[-1][1] - t / 2)]
+    near, far = (bd.Pos(t / 2, y, 0) * centre(inner, t) for y in (t / 2, width - t / 2))
+    path = bd.Wire([*near.edges(), bd.Line(near @ 1, far @ 1), *reversed(far.edges()),
+                    bd.Line(far @ 0, near @ 0)])
+    return bd.Pos(t / 2, t / 2, 0) * bent(inner, t, width - t) + tube(path, t)
+
+
+def layered(part: bd.Shape, *tools: bd.Shape) -> bd.Solid:
+    """``part`` cut along each of ``tools`` (by the kernel's splitter) and joined again as the kernel
+    joins it: the same solid, no face merged."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse, BRepAlgoAPI_Splitter
+    from OCP.collections import List_TopoDS_Shape
+
+    parts, cutters = List_TopoDS_Shape(), List_TopoDS_Shape()
+    parts.Append(part.solids()[0].wrapped)
+    for tool in tools:
+        cutters.Append(tool.wrapped)
+    op = BRepAlgoAPI_Splitter()
+    op.SetArguments(parts)
+    op.SetTools(cutters)
+    op.Build()
+    joined, *rest = bd.Compound(op.Shape()).solids()
+    while rest:  # the next piece that touches what is joined so far
+        for piece in rest:
+            fuse = BRepAlgoAPI_Fuse(joined.wrapped, piece.wrapped)
+            fuse.Build()
+            solids = bd.Compound(fuse.Shape()).solids()
+            if len(solids) == 1:
+                joined = solids[0]
+                rest.remove(piece)
+                break
+        else:
+            raise AssertionError("the pieces do not join")
+    return joined
+
+
+def level(z: float) -> bd.Face:
+    """A face across Z at ``z``, wider than any part here."""
+    return bd.Face.make_rect(400, 400, bd.Plane.XY.offset(z))
 
 
 def _wall(t: float, r: float, length: float, height: float) -> bd.Part:
@@ -277,6 +356,9 @@ class UnfoldTest(unittest.TestCase):
         outline, lines = cut.children
         self.assertEqual(len(outline.faces()[0].inner_wires()), 2)
         self.assertEqual(len(lines.edges()), 2)
+        # The lines are one shape, not an assembly of them: a child would be a part of its own, which a DXF writes
+        # on a layer of its own name and the cut-file check then reads as an open cut.
+        self.assertEqual(len(lines.children), 0)
         round_holes = [i for i in items(report, "holes") if i["kind"] == "round"]
         self.assertEqual([i["diameter_mm"] for i in round_holes], [6.0])
         # a flat plate has no bend line, and unfolds to the same two layers, one of them empty
@@ -432,6 +514,366 @@ class OutlineTest(unittest.TestCase):
         self.assertAlmostEqual(tab["width_mm"], 5.0, places=4)
         self.assertAlmostEqual(tab["length_mm"], 15.0, places=4)
         self.assertGreater(tab["xyz"][0], 40.0)  # located at the tab
+
+    def test_the_hull_keeps_the_corners_of_a_side_that_is_vertical_but_for_rounding(self) -> None:
+        # a flat's outline as an unfold laid it: the points of its two vertical sides differ in x by rounding
+        # (1e-15), so they come sorted by that and not by y. The hull dropped the corners (-50, -37) and
+        # (0, 31.4), and the flat read 77.262 x 37.377 for 68.398 x 50
+        low, top = 9.39822971502571, 31.39822971502571
+        points = [(-6.0, -12.0), (-6.0, low), (9.369662123902149e-17, low), (5.523736751135049e-17, top),
+                  (-50.00000000000001, top), (-50.0, low), (-44.0, 9.398229715025709), (-44.0, -12.0),
+                  (-50.0, -12.0), (-50.0, -37.0), (2.613352407788645e-15, -37.0), (-5.492429656686475e-18, -12.0)]
+        self.assertEqual(plane.hull(points).tolist(), [4, 9, 10, 3])
+        long, short, _ = plane.min_rectangle(points)
+        self.assertAlmostEqual(long, top + 37.0, places=9)
+        self.assertAlmostEqual(short, 50.0, places=9)
+
+
+class EqualWebsTest(unittest.TestCase):
+    # Equal lengths come out some 1e-14 mm apart, another way in each process that builds the part. Here
+    # each is off by a known amount, far under plane.TIE_MM, one way and then the other: one answer.
+    E = 1e-9
+
+    def webs(self, part: bd.Shape) -> list[tuple]:
+        part.label = "part"
+        return [(item["location"], tuple(round(v, 3) + 0.0 for v in (*item["xyz"], *item["across"])))
+                for item in items(measured(part), "webs")]
+
+    def test_of_necks_as_narrow_the_first_is_named(self) -> None:
+        def plate(e: float) -> bd.Part:
+            part = bd.Box(90, 50, 2)
+            for x, off in ((-20, e), (20, -e)):  # two necks 20 wide, one a hair narrower
+                for y in (-25, 25):
+                    part -= bd.Pos(x, y + (off if y < 0 else -off), 0) * bd.Box(10, 30, 4)
+            return part
+
+        def bracket(e: float) -> bd.Part:
+            part = bent([("line", 50), ("bend", 90, 2.0), ("line", 30)], 2.0, 50)
+            for y, off in ((0, e), (50, -e)):  # notched ends: a neck beside each, one a hair narrower
+                part -= bd.Pos(12 + off, y, 1) * bd.Box(8, 12, 8)
+            return part
+
+        for name, build in (("plate", plate), ("bracket", bracket)):
+            with self.subTest(name):
+                self.assertEqual(self.webs(build(self.E)), self.webs(build(-self.E)))
+
+    def test_of_bars_as_wide_the_first_is_named(self) -> None:
+        def grid(e: float) -> bd.Part:
+            part = bd.Box(90, 80, 2)
+            for x in (-10, 10):
+                for y in (-10, 10):  # each window has two neighbours as near
+                    off = e if x * y > 0 else -e
+                    part -= bd.Pos(x + off, y - off, 0) * bd.Box(12, 12, 4)
+            return part
+
+        self.assertEqual(self.webs(grid(self.E)), self.webs(grid(-self.E)))
+
+    def flat_of(self, plate: bd.Shape) -> sheet._Analysis:
+        plate.label = "plate"
+        analysis = sheet._Analysis(brep.parts_of(plate).parts[0], OPTIONS)
+        analysis.probe()
+        analysis.classify()
+        analysis.find_bends()
+        analysis.unfold()
+        return analysis
+
+    def test_a_corner_is_one_faces(self) -> None:
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+
+        analysis = self.flat_of(bd.Box(60, 40, 2) - bd.Box(12, 12, 4))
+        (window,) = [loop for loop in analysis.flat_loops if loop.label == "hole"]
+        for number, corner in enumerate(window.points):  # a bar's end: as near either of two walls
+            with self.subTest(number):
+                refs = {analysis.locate(corner + self.E * (other - corner) / 12.0, plane.TIE_MM)[0]
+                        for other in (window.points[number - 1], window.points[(number + 1) % 4])}
+                self.assertEqual(len(refs), 1, refs)
+        # where a skin in two faces has its seam, each with a cut edge of its own
+        left, right = (bd.Pos(x, 0, 0) * bd.Box(30, 40, 2) for x in (-15, 15))
+        fused = BRepAlgoAPI_Fuse(left.solids()[0].wrapped, right.solids()[0].wrapped)  # (joined, no face merged)
+        halves = self.flat_of(bd.Compound(fused.Shape()).solids()[0])
+        first, second = (region.loop.points for region in halves.regions[:2])
+        seam = next(p for p in first if (np.linalg.norm(second - p, axis=1) < 1e-6).any())
+        along = (second.mean(axis=0) - first.mean(axis=0)) / 30.0
+        self.assertEqual(halves.locate(seam + self.E * along, plane.TIE_MM)[0],
+                         halves.locate(seam - self.E * along, plane.TIE_MM)[0])
+
+    def test_rounding_moves_no_station_and_splits_no_width(self) -> None:
+        def outline(*points: tuple[float, float], label: str) -> plane.Loop:
+            return plane.Loop(points, [True] * len(points), label=label)
+
+        def webs(loops: list[plane.Loop]) -> list[tuple]:
+            found = sheet._outline_features(None, loops, 2.0, lambda point: ("", [float(v) for v in point]))["webs"]
+            return [(item["width_mm"], [round(v, 3) + 0.0 for v in item["across"]], item.get("cutouts"))
+                    for item in found]
+
+        def strip(e: float) -> list[plane.Loop]:  # its sides a whole number of stations long, but for rounding
+            return [outline((0, 0), (6 + e, 0), (6 + e, 4), (0, 4), label="outer")]
+
+        def pairs(e: float) -> list[plane.Loop]:  # two bars 2.0125 wide: half a micron past a whole one
+            return [outline((x, 0), (x + 4, 0), (x + 4, 9), (x, 9), label="hole")
+                    for x in (0, 6.0125 + e, 20, 26.0125 - e)]
+
+        def strips(e: float) -> list[plane.Loop]:  # two outlines with necks as narrow
+            return [outline((x, 0), (x + 9, 0), (x + 9, width), (x, width), label="outer")
+                    for x, width in ((0, 4 + e), (20, 4 - e))]
+
+        def leaning(e: float) -> list[plane.Loop]:  # a bar as narrow at either end, but for rounding
+            return [outline((0, 0), (4, 0), (4, 9), (0, 9), label="hole"),
+                    outline((6 + e, 0), (10, 0), (10, 9), (6 - e, 9), label="hole")]
+
+        for name, loops in (("station", strip), ("width", pairs), ("order", strips), ("bar's end", leaning)):
+            with self.subTest(name):
+                self.assertEqual(webs(loops(self.E)), webs(loops(-self.E)))
+        self.assertEqual([cutouts for *_, cutouts in webs(pairs(self.E))], [4])
+
+    def test_a_neck_between_stations_is_found_however_its_side_rounds(self) -> None:
+        # a V 0.9 from the middle of a side 10 long: between its 20 stations, on one of the 21 that rounding
+        # gave it as often. Equal places may be one; the width is the least that any ray found
+        for e in (0.0, self.E, -self.E, 1e-12, -1e-12):
+            with self.subTest(e):
+                side = 10.0 + e
+                outline = bd.Polyline((0, 0), (side, 0), (side, -12), (30, -12), (30, 20), (6, 20), (6, 6), (5, 0.9),
+                                      (4, 6), (4, 20), (-20, 20), (-20, -12), (0, -12), close=True)
+                plate = bd.extrude(bd.make_face(outline), amount=2.0)
+                plate.label = "plate"
+                (finding,) = [f for f in checked(plate).findings if f.code == "sheet.web_width"]
+                self.assertAlmostEqual(finding.value, 0.9, places=4)
+        slope = plane.Loop([(0, 0), (6, 0), (6, 4 - 5e-7), (0, 4)], [True] * 4, label="outer")
+        (web,) = [width for width in plane.widths([slope], [True]) if width.kind == "material"]
+        self.assertLess(web.width, 4 - 4e-7)  # the first of equal places, the least of their widths
+        # bars that round to one micron are one item: its width the least of theirs, not the first's
+        slots = [plane.Loop([(x, 0), (x + 4, 0), (x + 4, 9), (x, 9)], [True] * 4, label="hole")
+                 for x in (0, 5.1439, 20, 25.1435)]
+        (bar,) = sheet._outline_features(None, slots, 2.0, lambda point: ("", [0.0, 0.0, 0.0]))["webs"]
+        self.assertEqual((bar["width_mm"], bar["cutouts"]), (1.1435, 4))
+
+    def test_every_cutout_as_near_is_counted_whichever_comes_first(self) -> None:
+        # the corner one is 3 from two others, and one of those is 1 from a fourth: three cutouts share the 3
+        def window(x: float, y: float) -> plane.Loop:
+            return plane.Loop([(x, y), (x + 8, y), (x + 8, y + 8), (x, y + 8)], [True] * 4, label="hole")
+
+        for e in (0.0, self.E, -self.E):
+            four = [window(0, 0), window(11 + e, 0), window(0, 11), window(0, 20)]
+            for order in ((0, 1, 2, 3), (0, 2, 1, 3)):
+                with self.subTest(e=e, order=order):
+                    found = sheet._outline_features(None, [four[i] for i in order], 4.0,
+                                                    lambda point: ("", [0.0, 0.0, 0.0]))["webs"]
+                    self.assertEqual(sorted((round(w["width_mm"], 3), w["cutouts"]) for w in found),
+                                     [(1.0, 2), (3.0, 3)])
+
+
+class EqualNotchesAndHolesTest(unittest.TestCase):
+    E = 1e-9  # as EqualWebsTest's: rounding, made a known amount and tried either way
+    flat_of = EqualWebsTest.flat_of
+
+    def test_of_points_as_deep_the_first_is_a_notchs_and_notches_come_along_the_outline(self) -> None:
+        def pockets(e: float) -> list[tuple]:
+            points = [(0, -25 - e),  # on a straight side: the hull's vertex one way, not the other
+                      (15, -25), (15, -10 + e), (25, -10 - e), (25, -25),
+                      (45, -25), (45, 25), (-45, 25), (-45, -25),
+                      (-25, -25), (-25, -10 - e), (-15, -10 + e), (-15, -25)]
+            return [tuple(round(v, 3) for v in pocket.deepest)
+                    for pocket in plane.pockets(plane.Loop(points, [True] * len(points)))]
+
+        self.assertEqual(pockets(self.E), [(15.0, -10.0), (-25.0, -10.0)])
+        self.assertEqual(pockets(-self.E), [(15.0, -10.0), (-25.0, -10.0)])
+
+    def test_a_notchs_corner_is_one_faces(self) -> None:
+        analysis = self.flat_of(bd.Box(90, 50, 2) - bd.Pos(0, 25, 0) * bd.Box(10, 30, 4))
+        (outer,) = analysis.flat_loops
+        (pocket,) = plane.pockets(outer)
+        k = int(np.argmin(np.linalg.norm(outer.points - np.array(pocket.deepest), axis=1)))
+        named = set()
+        for other in (outer.points[k - 1], outer.points[(k + 1) % len(outer.points)]):  # a hair along either side
+            points = outer.points.copy()
+            points[k] += self.E * (other - points[k]) / np.linalg.norm(other - points[k])
+            loop = plane.Loop(points, outer.straight, label="outer")
+            named.add(sheet._outline_features(analysis, [loop], 2.0, analysis.locate)["notches"][0]["location"])
+        self.assertEqual(len(named), 1, named)
+
+    def test_notches_at_a_skins_corners_are_each_their_own_faces(self) -> None:
+        from cad import step
+
+        # a plate rounded whole, read back from a STEP: each corner's notch is as near (to 1e-11 mm) the skin
+        # as its own faces, and named by the skin all four would be one finding
+        part = (bd.Box(80, 40, 2) + tube(bd.Wire.make_rect(80, 40), 2.0)).solids()[0]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "rounded.step"
+            bd.export_step(part, str(path))
+            result = step.dfm(path, process="sheet")
+        notches = [f.location for f in result.findings if f.code == "sheet.notch_width"]
+        self.assertEqual(len(set(notches)), 4, notches)
+
+    def test_holes_as_near_are_each_a_pair(self) -> None:
+        def spacing(e: float) -> list[tuple]:
+            part = bd.Box(80, 80, 2)
+            for x in (-10, 10):
+                for y in (-10, 10):  # each hole has two neighbours as near
+                    off = e if x * y > 0 else -e
+                    part -= bd.Pos(x + off, y - off, 0) * bd.Cylinder(4, 4)
+            part.label = "part"
+            return [(item["location"], item["other"], [round(v, 3) + 0.0 for v in item["xyz"]])
+                    for item in items(measured(part), "hole_spacing")]
+
+        found = spacing(self.E)
+        self.assertEqual(len(found), 4)
+        self.assertEqual(sorted(found), sorted(spacing(-self.E)))
+
+    def test_a_pair_is_its_lesser_measure_and_a_holes_first_comes_before_any_rest(self) -> None:
+        def hole(x: float, y: float, r: float) -> plane.Loop:
+            return plane.Loop([(x - r, y), (x, y - r), (x + r, y), (x, y + r)], [False] * 4, circle=(x, y, r))
+
+        first, second = hole(0.0, 0.0, 2.2), hole(3.0, 0.0, 0.1)
+        there, back = plane.distance(first, second)[0], plane.distance(second, first)[0]
+        self.assertNotEqual(there, back)  # one length measured from either end
+        for loops in ([first, second], [second, first]):
+            self.assertEqual([d for d, _, _ in plane.nearest_pairs(loops, plane.TIE_MM)], [min(there, back)])
+        grid = [hole(x, y, 3.0) for y in (0.0, 10.0) for x in (0.0, 10.0, 20.0)]
+        pairs = [(k, other) for _, k, other in plane.nearest_pairs(grid, plane.TIE_MM)]
+        self.assertEqual(pairs, [(0, 1), (2, 1), (3, 0), (4, 1), (5, 2), (3, 4), (4, 5)])
+
+    def test_the_cap_holds_as_many_holes_as_it_can(self) -> None:
+        holes = []
+        for k in range(18 * 18):  # 612 pairs as near, at 323 holes
+            x, y = 8.0 * (k % 18), 8.0 * (k // 18)
+            loop = plane.Loop([(x - 3, y), (x, y - 3), (x + 3, y), (x, y + 3)], [False] * 4, circle=(x, y, 3.0))
+            holes.append(sheet._HoleLoop(loop, [k + 1], np.zeros(3), False, None))
+        analysis = types.SimpleNamespace(holes=holes, bends=[], ref=lambda face: f"face {face}")
+        shown = sheet._capped(sheet._holes(analysis, [])[1], "distance_mm")
+        self.assertEqual(len({item["location"] for item in shown}), sheet.ITEM_CAP)
+
+
+class SlotBesideAHoleTest(unittest.TestCase):
+    E = 1e-9  # as EqualWebsTest's: rounding, made a known amount and tried either way
+    flat_of = EqualWebsTest.flat_of
+
+    def rounding(self, e: float):
+        """An arc a whole number of steps long sampled with the chord more (``e`` > 0) or without it."""
+        return mock.patch.object(sheet, "math", types.SimpleNamespace(
+            **{**vars(math), "ceil": lambda steps: math.ceil(steps + e)}))
+
+    @staticmethod
+    def broken(part: bd.Shape, rim: Callable[[bd.Edge], bool]) -> bd.Part:
+        return bd.chamfer([edge for edge in part.edges() if rim(edge)], 0.3)
+
+    @staticmethod
+    def slot(x: float, y: float = 0.0, turn: float = 0.0) -> bd.Part:
+        return bd.Pos(x, y, 0) * bd.extrude(bd.SlotOverall(16, 6, rotation=turn), amount=4, both=True)
+
+    @staticmethod
+    def split(part: bd.Shape, *cuts: bd.Plane) -> bd.Solid:
+        """``part`` cut and joined again with no face merged: each skin and wall the cuts cross, in pieces."""
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+
+        pieces = part.solids()
+        for cut in cuts:
+            pieces = [half for piece in pieces for half in piece.split(cut, keep=bd.Keep.ALL).solids()]
+        joined = pieces[0].wrapped
+        for piece in pieces[1:]:
+            joined = BRepAlgoAPI_Fuse(joined, piece.wrapped).Shape()
+        return bd.Compound(joined).solids()[0]
+
+    def parts(self) -> list[tuple[str, bd.Shape]]:
+        def skins_rim(edge: bd.Edge) -> bool:
+            return abs(abs(edge.center().Z) - 1) < 1e-6
+
+        plate = bd.Box(80, 50, 2) - self.slot(-12) - bd.Pos(8, 0, 0) * bd.Cylinder(3, 4)
+        corner = bd.extrude(bd.RectangleRounded(80, 50, 5), amount=1, both=True)
+        corner -= bd.Pos(35.5, 20.5, 0) * bd.Cylinder(1.5, 4)  # nearest the round corner's middle
+        bracket = bent([("line", 50), ("bend", 90, 2.0), ("line", 30)], 2.0, 50) - self.slot(38, 25)
+        return [("broken", self.broken(plate, skins_rim)),
+                ("corner", self.broken(corner, skins_rim)),
+                ("bracket", self.broken(bracket, lambda edge: 26 < edge.center().X < 48
+                                        and 18 < edge.center().Y < 32 and abs(edge.center().Z - 1) > 0.5)),
+                ("split", self.split(plate, bd.Plane.XZ, bd.Plane.YZ.offset(-17), bd.Plane.YZ.offset(-7)))]
+
+    def test_an_arcs_chord_more_or_less_is_one_answer_the_least(self) -> None:
+        half = math.pi / 2 / 37  # the 37 chords of a half turn leave its apex between two points, this far from each
+        found = {}
+        for name, part in self.parts():
+            part.label = "part"
+            with self.subTest(name):
+                answers = []
+                for e in (self.E, -self.E):
+                    with self.rounding(e):
+                        report = measured(part)
+                        answers.append({family: items(report, family)
+                                        for family in ("holes", "hole_spacing", "hole_to_bend")})
+                self.assertEqual(answers[0], answers[1])
+                found[name] = answers[0]
+        for name, spacing in (("broken", 8.7), ("split", 9.0)):  # to a broken hole's rim, to a plain hole
+            with self.subTest(f"{name}: the least"):
+                (slot,) = [hole for hole in found[name]["holes"] if hole["kind"] == "slot"]
+                across = math.hypot(10.0 + 6.0 * math.cos(half), 6.0 * math.sin(half))
+                self.assertEqual(slot["length_mm"], round(across, 4))  # with the chord more
+                self.assertEqual([pair["distance_mm"] for pair in found[name]["hole_spacing"]], [spacing])  # with none
+        self.assertAlmostEqual(found["bracket"]["hole_to_bend"][0]["distance_tangent_mm"], 4.0, places=3)
+
+    def test_a_hole_read_back_is_named_by_a_face_of_its_own(self) -> None:
+        plate = bd.Box(90, 50, 2)
+        for x in (-30, -10, 10, 30):
+            plate -= bd.Pos(x, 0, 0) * bd.Cylinder(4, 4)
+        slots = bd.Box(90, 50, 2) - self.slot(-22, turn=90) - bd.Cylinder(4, 4) - self.slot(22, turn=90)
+        for name, part in (("skin in halves", self.split(plate, bd.Plane.XZ)),
+                           ("broken", self.broken(slots, lambda edge: abs(abs(edge.center().Z) - 1) < 1e-6))):
+            with self.subTest(name):
+                analysis = self.flat_of(part)
+                loops = [loop for loop in analysis.flat_loops if loop.label == "hole"]
+                named, centres = [], []
+                for push in ((self.E, 0), (-self.E, 0), (0, self.E), (0, -self.E)):  # a hair toward each wall
+                    analysis.holes = []
+                    analysis.flat_loops = []
+                    for loop in loops:
+                        drawn, by = loop.points, np.array(push)
+                        if loop.ways and push[0] > 0:  # and once as sampled with the chord more at one end alone
+                            drawn = np.vstack([ways[-1 if k < len(loop.ways) // 2 else 0][:-1]
+                                               for k, ways in enumerate(loop.ways)])
+                        analysis.flat_loops.append(plane.Loop(
+                            drawn + by, np.zeros(0, bool), label="hole",
+                            circle=None if loop.circle is None else (*(np.array(loop.circle[:2]) + by), loop.circle[2]),
+                            ways=[[points + by for points in ways] for ways in loop.ways]))
+                    analysis._holes_from_flat()
+                    named.append([hole.ref for hole in analysis.holes])
+                    centres.append(np.array([hole.xyz for hole in analysis.holes]))
+                self.assertEqual(named, [named[0]] * 4)
+                self.assertLess(max(float(np.abs(each - centres[0]).max()) for each in centres), 1e-6)
+                self.assertEqual(len(set(named[0])), len(loops))  # findings are grouped by it
+                self.assertFalse(set(named[0]) & {analysis.ref(face) for face in analysis.skins})
+
+    def test_a_pair_is_as_near_as_the_nearest_could_be(self) -> None:
+        def slot(x: float) -> plane.Loop:
+            """A slot's end toward a round hole at the origin, sampled 36 chords or 37; as drawn, 37."""
+            side = math.copysign(1.0, x)
+            ways = []
+            for chords in (36, 37):
+                turn = np.linspace(-math.pi / 2, math.pi / 2, chords + 1)
+                ways.append(np.column_stack([x - side * 3.0 * np.cos(turn), 3.0 * np.sin(turn)]))
+                ways[-1][[0, -1]] = [(x, -3.0), (x, 3.0)]
+            back = np.array([(x, 3.0), (x + side * 8, 3.0), (x + side * 8, -3.0), (x, -3.0)])
+            return plane.Loop(np.vstack([ways[1][:-1], back[:-1]]), np.zeros(0, bool), ways=[ways, [back]])
+
+        hole = plane.Loop([(3, 0), (0, 3), (-3, 0), (0, -3)], [False] * 4, circle=(0.0, 0.0, 3.0))
+        behind = plane.Loop([(-25, 0), (-28, 3), (-31, 0), (-28, -3)], [False] * 4, circle=(-28.0, 0.0, 3.0))
+        for further, count in ((0.001, 2), (0.005, 1)):  # within a chord's sag, 0.0027 mm, or past it
+            with self.subTest(further):  # the further slot's own nearest is the hole behind it
+                pairs = plane.nearest_pairs([hole, slot(15.0), slot(-15.0 - further), behind], plane.TIE_MM)
+                found = sorted(round(d, 4) for d, a, b in pairs if 0 in (a, b))
+                self.assertEqual((found[0], len(found)), (9.0, count))
+
+    def test_a_hole_is_in_a_bend_where_either_sampling_reaches_it(self) -> None:
+        analysis = self.flat_of(self.parts()[2][1])
+        (loop,) = [loop for loop in analysis.flat_loops if loop.label == "hole"]
+        (bend,) = analysis.bends
+        low, high = (max(float(((ways[min(k, len(ways) - 1)] - bend.frame[0]) @ bend.frame[1]).max())
+                         for ways in loop.ways) for k in (0, 1))
+        self.assertGreater(low - high, 1e-3)  # the fewer chords have the apex
+        push = bend.frame[1] * (0.0005 - low)
+        ways = [[points + push for points in either] for either in loop.ways]
+        analysis.holes = []
+        analysis.flat_loops = [plane.Loop(np.vstack([either[-1][:-1] for either in ways]), np.zeros(0, bool),
+                                          label="hole", ways=ways)]
+        analysis._holes_from_flat()
+        self.assertTrue(analysis.holes[0].in_bend)
 
 
 class TypeSideTest(unittest.TestCase):
@@ -936,16 +1378,104 @@ class ModellingMistakeTest(unittest.TestCase):
                     if len(edges) > len(top):  # both skins broken: their breaks fused on, one piece
                         self.assertEqual(len(sheet.unfold(part).faces()), 1)
 
+    def test_a_cut_edge_in_several_faces_across_the_thickness_is_one_cut(self) -> None:
+        # a plate extruded both ways along an ellipse or a spline: the kernel merges the halves of a plane or a
+        # cylinder and leaves such a cut two faces, split at mid-thickness. Neither touches both skins, so
+        # neither was a cut edge (FAILED, sheet.uniform_thickness), and no break of its edges was one: the
+        # flat stopped at the skins, 1 mm short across 0.5 mm chamfers, an elliptical hole 1 mm large. Layers
+        # joined and never merged (planes, cylinders, a bracket's sides and ends) read the same
+        def agrees(split: bd.Shape, whole: bd.Shape, **options) -> None:
+            result, wanted = checked(split, **options), checked(whole, **options)
+            self.assertTrue(wanted.ok, [f.message for f in wanted.findings if f.severity == "error"])
+            self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+            self.assertEqual(verdicts(result), verdicts(wanted))
+            found, expected = (r.measurements["parts"]["items"][0] for r in (result, wanted))
+            for key in ("thickness_mm", "flat_length_mm", "flat_width_mm", "flat_area_mm2", "flat_material_fraction"):
+                self.assertAlmostEqual(found[key], expected[key], places=3, msg=key)
+            for family, keys in (("holes", ("size_mm", "countersunk", "countersink_diameter_mm")), ("bends", ("length_mm",))):
+                self.assertEqual([[item[key] for key in keys] for item in result.measurements[family]["items"]],
+                                 [[item[key] for key in keys] for item in wanted.measurements[family]["items"]], family)
+            self.assertEqual(len(sheet.unfold(split, **options).faces()), 1)
+
+        def rims(part: bd.Shape, both: bool) -> list[bd.Edge]:
+            levels = part.edges().group_by(bd.Axis.Z)
+            return [*levels[-1], *(levels[0] if both else [])]
+
+        def joined(first: bd.Shape, *more: bd.Shape) -> bd.Solid:
+            """The solids fused as the kernel fuses them: no face merged with the next (build123d's fuse merges)."""
+            from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+
+            shape = first.wrapped
+            for other in more:
+                fuse = BRepAlgoAPI_Fuse(shape, other.wrapped)
+                fuse.Build()
+                shape = fuse.Shape()
+            return bd.Compound(shape).solids()[0]
+
+        def layered(outline: bd.Face, *levels: float) -> bd.Solid:
+            return joined(*(bd.extrude(bd.Pos(0, 0, low) * outline, amount=high - low)
+                            for low, high in zip(levels, levels[1:])))
+
+        spline = bd.Edge.make_spline([bd.Vector(x, y) for x, y in ((40, 0), (25, 18), (-5, 20), (-38, 12),
+                                                                  (-40, -6), (-15, -20), (20, -17))], periodic=True)
+        chamfer, fillet = (bd.chamfer, 0.5, True), (bd.fillet, 0.5, False)
+        for name, outline, breaks in (("ellipse", bd.Ellipse(40, 20).face(), (chamfer, fillet)),
+                                      ("spline", bd.Face(bd.Wire(spline)), ()),
+                                      ("elliptical hole", (bd.Rectangle(80, 40) - bd.Ellipse(12, 6)).face(), (chamfer,))):
+            whole, split = bd.extrude(outline, amount=2), bd.extrude(outline, amount=1, both=True)
+            with self.subTest(part=name, extruded="both ways"):
+                agrees(split, whole)
+            for how, size, both in breaks:
+                with self.subTest(part=name, extruded="both ways", broken=(how.__name__, size, both)):
+                    agrees(how(rims(split, both), size), how(rims(whole, both), size))
+
+        plate = (bd.RectangleRounded(80, 40, 5) - bd.Pos(-15, 0) * bd.SlotOverall(30, 8) - bd.Pos(25, 8) * bd.Circle(4)).face()
+        whole = bd.extrude(plate, amount=2)
+        for levels in ((0, 1, 2), (0, 0.6, 1.3, 2)):
+            with self.subTest(part="plate, a slot and a hole", layers=levels):
+                split = layered(plate, *levels)
+                self.assertGreater(len(split.faces()), len(whole.faces()))
+                agrees(split, whole)
+        with self.subTest(part="plate, a slot and a hole", layers=levels, broken="chamfer 0.4, both skins"):
+            agrees(bd.chamfer(rims(split, True), 0.4), bd.chamfer(rims(whole, True), 0.4))
+
+        # under a countersink the hole's wall reaches that skin through the cone: the wall in two faces
+        sunk = self._sunk((80, 40, 3), top=[(-20, 0)], bottom=[(20, 0)], hole=5, rim=7)
+        with self.subTest(part="countersunk holes", layers=2):
+            split = joined(*sunk.split(bd.Plane.XY, keep=bd.Keep.BOTH))
+            self.assertGreater(len(split.faces()), len(sunk.faces()))
+            agrees(split, sunk)
+
+        # an L bracket in two layers, one inside the other: its sides and ends each in two faces
+        def steps(radius: float) -> list[tuple]:
+            return [("line", 30), ("bend", 90, radius), ("line", 40)]
+
+        outer = bd.extrude(bd.Plane.XZ * profile(steps(3.0), 1.0), amount=-50)
+        inner = bd.extrude(bd.Plane.XZ * (bd.Pos(0, 1) * profile(steps(2.0), 1.0)), amount=-50)
+        with self.subTest(part="L bracket", layers=2):
+            split, whole = joined(outer, inner), bent(steps(2.0), 2.0, 50.0)
+            self.assertGreater(len(split.faces()), len(whole.faces()))
+            agrees(split, whole, k_factor=0.4)
+
+        # and what is no cut edge stays none: a bead along the middle of a plate's edge, tangent to the square
+        # faces above and below it (the faces followed are the square ones alone)
+        bead = bd.Spline((40, -0.5), (40.3, 0), (40, 0.5), tangents=((0, 1), (0, 1)))
+        section = bd.Wire([*bd.Polyline((40, 0.5), (40, 1), (-40, 1), (-40, -1), (40, -1), (40, -0.5)).edges(), bead])
+        beaded = checked(bd.extrude(bd.Plane.XZ * bd.Face(section), amount=-40))
+        self.assertIn(("error", "sheet.uniform_thickness"), verdicts(beaded))
+
     @staticmethod
     def _sunk(size: tuple[float, float, float], top: list[tuple[float, float]], bottom: list[tuple[float, float]],
-              hole: float, rim: float) -> bd.Part:
-        """A plate with ``hole`` mm holes countersunk to ``rim`` mm from its top (at ``top``) and from below."""
+              hole: float, rim: float, angle: float = 82.0, plate: bd.Part | None = None) -> bd.Part:
+        """A plate (``plate``, or a box) with ``hole`` mm holes countersunk to ``rim`` mm at ``angle`` degrees
+        from its top (at ``top``) and from below."""
         with bd.BuildPart() as built:
-            bd.Box(*size)
+            bd.Box(*size) if plate is None else bd.add(plate)
             for side, places in ((1, top), (-1, bottom)):
                 for x, y in places:
                     with bd.Locations(bd.Pos(x, y, side * size[2] / 2) * bd.Rot(0 if side > 0 else 180, 0, 0)):
-                        bd.CounterSinkHole(radius=hole / 2, counter_sink_radius=rim / 2, depth=size[2])
+                        bd.CounterSinkHole(radius=hole / 2, counter_sink_radius=rim / 2, depth=size[2],
+                                           counter_sink_angle=angle)
         return built.part
 
     def test_a_countersink_in_the_unfolded_side_leaves_the_flat_its_through_hole(self) -> None:
@@ -963,6 +1493,309 @@ class ModellingMistakeTest(unittest.TestCase):
                 part = result.measurements["parts"]["items"][0]
                 self.assertAlmostEqual(part["flat_area_mm2"], 3200 - len(holes) * math.pi * 2.5 ** 2, delta=0.1)
                 self.assertAlmostEqual(part["flat_material_fraction"], 1.0, places=2)
+
+    def test_a_countersink_through_the_sheet_or_with_a_cut_rim_leaves_the_flat_its_hole(self) -> None:
+        # a countersink was a cone between a skin and a hole's wall, its rim a whole circle in that skin. Sunk
+        # through the full thickness there is no wall: the cone was a cut edge, the flat's hole the rim where
+        # that skin unfolded (11 mm for 5) and the cone's cut missing from the material. With its rim off the
+        # outline, in a cutout or in another rim, the cone is no whole turn there: laid into the flat edge by
+        # edge it left the hole out (47.7 mm2 of a plate, a false sheet.web_width; two rims that overlap,
+        # sheet.flat_incomplete), and the wire its rim is part of was read as the hole
+        slot = bd.Box(80, 40, 3) - bd.Box(30, 6, 10)
+        under = [(-25, 10), (25, 10), (0, -12), (25, -10)]  # four rims below: the top is the larger skin
+        for name, part, holes, cut in (
+                ("to a knife edge", self._sunk((80, 40, 3), [(-20, 0)], [(20, 0)], 5.0, 11.0, 90.0), [(5.0, 11.0)] * 2, 0.0),
+                ("past the far skin", self._sunk((80, 40, 3), [(-20, 0)], [(20, 0)], 5.0, 13.0, 90.0), [(7.0, 13.0)] * 2, 0.0),
+                ("its rim off the outline", self._sunk((80, 40, 3), [(37, 0)], [(-37, 0)], 5.0, 10.0), [(5.0, 10.0)] * 2, 0.0),
+                ("its rim off a corner", self._sunk((80, 40, 3), [(37, 17)], [(-37, -17)], 5.0, 10.0), [(5.0, 10.0)] * 2, 0.0),
+                ("its rim in a slot", self._sunk((80, 40, 3), [(18.5, 0)], [(-18.5, 0)], 5.0, 10.0, plate=slot),
+                 [(5.0, 10.0), (5.0, 10.0), (6.0, None)], 180.0),
+                ("two rims that overlap", self._sunk((80, 40, 3), [(-4.5, 0), (4.5, 0)], under, 5.0, 10.0), [(5.0, 10.0)] * 6, 0.0),
+                ("to a knife edge and off the outline", self._sunk((80, 40, 3), [(36.5, 0)], [(-36.5, 0)], 5.0, 11.0, 90.0),
+                 [(5.0, 11.0)] * 2, 0.0)):
+            with self.subTest(part=name):
+                result = checked(part)
+                self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+                self.assertFalse({code for _, code in verdicts(result)} - {"sheet.hole_to_edge", "sheet.hole_spacing"})
+                found = sorted(((hole["size_mm"], hole["countersink_diameter_mm"]) for hole in
+                                result.measurements["holes"]["items"]), key=lambda hole: (hole[0], hole[1] or 0.0))
+                self.assertEqual(found, holes)
+                area = 3200 - cut - sum(math.pi * (size / 2) ** 2 for size, rim in holes if rim)
+                item = result.measurements["parts"]["items"][0]
+                self.assertAlmostEqual(item["flat_area_mm2"], area, delta=0.05 * len(holes))  # each rim's chords
+                self.assertAlmostEqual(item["flat_material_fraction"], 1.0, places=2)
+                self.assertAlmostEqual(sheet.unfold(part).area, area, delta=0.02)
+        # on a bracket's flange, from each of its skins
+        bracket = bent([("line", 30), ("bend", 90, 2), ("line", 40)], 2.0, 60.0)
+        with bd.BuildPart() as built:
+            bd.add(bracket)
+            for z, turn, y in ((2.0, 0, 15), (0.0, 180, 45)):
+                with bd.Locations(bd.Pos(15, y, z) * bd.Rot(turn, 0, 0)):
+                    bd.CounterSinkHole(radius=1.6, counter_sink_radius=3.6, depth=2.0, counter_sink_angle=90.0)
+        result, plain = checked(built.part, k_factor=0.4), checked(bracket, k_factor=0.4)
+        self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+        self.assertEqual([(hole["size_mm"], hole["countersink_diameter_mm"]) for hole in result.measurements["holes"]["items"]],
+                         [(3.2, 7.2)] * 2)
+        self.assertAlmostEqual(result.measurements["parts"]["items"][0]["flat_area_mm2"],
+                               plain.measurements["parts"]["items"][0]["flat_area_mm2"] - 2 * math.pi * 1.6 ** 2, delta=0.1)
+
+    def test_a_countersink_in_several_faces_reads_as_the_part_whole(self) -> None:
+        # some systems write a closed face as two halves with no seam (OCCT's ShapeUpgrade_ShapeDivideClosed
+        # leaves the same). A cone sunk to a knife edge in two halves has no whole circle, so it was a cut edge
+        # (the flat's hole its rim, 11 mm for 5); a corner of the outline cuts a piece of a cone in three from
+        # every skin, and that piece was no sheet at all; a cone laid into the flat in pieces left a round hole
+        # of chords, read as a cutout. A plate cut through its holes and joined unmerged holds no wire of them:
+        # its countersinks were not countersunk, and a skin in several faces counted each chamfer once a face
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse, BRepAlgoAPI_Splitter
+        from OCP.BRepCheck import BRepCheck_Analyzer
+        from OCP.collections import List_TopoDS_Shape
+        from OCP.ShapeUpgrade import ShapeUpgrade_ShapeDivideClosed
+
+        def divided(part: bd.Part, points: int) -> bd.Solid:
+            """Each closed face of ``part`` in ``points + 1`` faces."""
+            op = ShapeUpgrade_ShapeDivideClosed(part.wrapped)
+            op.SetNbSplitPoints(points)
+            op.Perform()
+            return bd.Compound(op.Result()).solids()[0]
+
+        def cut_through(part: bd.Part, xs: list[float]) -> bd.Solid:
+            """``part`` cut across X at each of ``xs`` (by the kernel's splitter) and joined again as the kernel
+            joins it, no face merged."""
+            parts, tools = List_TopoDS_Shape(), List_TopoDS_Shape()
+            parts.Append(part.solids()[0].wrapped)
+            for x in xs:
+                tools.Append(bd.Face.make_rect(400, 400, bd.Plane(origin=(x, 0, 0), x_dir=(0, 0, 1), z_dir=(-1, 0, 0))).wrapped)
+            op = BRepAlgoAPI_Splitter()
+            op.SetArguments(parts)
+            op.SetTools(tools)
+            op.Build()
+            pieces = sorted(bd.Compound(op.Shape()).solids(), key=lambda piece: piece.center().X)
+            joined = pieces[0]
+            for piece in pieces[1:]:
+                op = BRepAlgoAPI_Fuse(joined.wrapped, piece.wrapped)
+                op.Build()
+                joined = bd.Compound(op.Shape()).solids()[0]
+            return joined
+
+        def drilled(plate: bd.Part, holes: list[tuple[float, float, int]], hole: float, rim: float) -> bd.Part:
+            """``plate`` (3 mm) with ``hole`` mm holes sunk at 90 degrees to ``rim`` mm, from its top (side 1) or
+            from below (-1): a drill and a cone, cut. (A ``CounterSinkHole``'s faces, divided, are no valid
+            solid.)"""
+            r, big = hole / 2, rim / 2
+            for x, y, side in holes:
+                tool = bd.Pos(0, 0, 1) * (bd.Cylinder(r, 5, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX))
+                                          + bd.Cone(r, big + 1, big - r + 1,
+                                                    align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX)))
+                plate = plate - bd.Pos(x, y, side * 1.5) * bd.Rot(0 if side > 0 else 180, 0, 0) * tool
+            return plate
+
+        def read(part: bd.Shape) -> tuple[tuple, list[float]]:
+            """What must be the same, and the flat's length, width, area and material fraction."""
+            result = checked(part, k_factor=0.4)
+            item = result.measurements["parts"]["items"][0]
+            return ((result.status, verdicts(result), sorted(
+                        (hole["size_mm"], hole["countersink_diameter_mm"], hole["edge_distance_mm"])
+                        for hole in result.measurements["holes"]["items"])),
+                    [item["flat_length_mm"], item["flat_width_mm"], item["flat_area_mm2"], item["flat_material_fraction"]])
+
+        plate, slot = bd.Box(80, 40, 3), bd.Box(80, 40, 3) - bd.Box(30, 6, 10)
+        disc = bd.Cylinder(20, 3)
+        three = [(-20, 0, 1), (0, 8, 1), (20, 0, -1)]  # two from the top: the bottom is the larger skin
+        for name, whole, made in (
+                ("a knife edge, in halves", drilled(plate, three, 5.0, 11.0), lambda part: divided(part, 1)),
+                ("past the far skin, in thirds", drilled(plate, three, 5.0, 13.0), lambda part: divided(part, 2)),
+                ("its rim off a corner, in thirds", drilled(plate, [(37, 17, 1), (0, 0, 1), (-37, -17, -1)], 5.0, 10.0),
+                 lambda part: divided(part, 2)),
+                ("its rim off a corner from each skin, in thirds", drilled(plate, [(37.9, 17.9, 1), (-37.9, -17.9, -1)], 3.2, 6.4),
+                 lambda part: divided(part, 2)),
+                ("its rim off a corner, cut through its hole", drilled(plate, [(37, 17, 1)], 5.0, 10.0),
+                 lambda part: cut_through(part, [37.0])),
+                # three rims at one end: the bottom is the larger skin, but its middle piece is smaller than the top's
+                ("the larger skin in pieces", drilled(plate, [(-20, 0, -1), (30, -12, 1), (30, 0, 1), (30, 12, 1)], 3.2, 6.4),
+                 lambda part: cut_through(part, [-20.0, 20.0])),
+                ("its rim in a slot's side, in thirds", drilled(slot, [(0, 7, 1), (0, -7, -1)], 5.0, 10.0),
+                 lambda part: divided(part, 2)),
+                ("cut through its holes", self._sunk((80, 40, 3), [(-20, 0), (0, 5)], [(20, 0)], 5.0, 10.0),
+                 lambda part: cut_through(part, [-20.0, 0.0, 20.0])),
+                ("a knife edge, cut through its holes", self._sunk((80, 40, 3), [(-20, 0), (0, 5)], [(20, 0)], 5.0, 11.0, 90.0),
+                 lambda part: cut_through(part, [-20.0, 0.0, 20.0])),
+                ("a disc chamfered on one edge, cut through its axis",
+                 bd.chamfer(disc.edges().sort_by(bd.Axis.Z)[-1], 1.0), lambda part: cut_through(part, [0.0]))):
+            with self.subTest(part=name):
+                split = made(whole)
+                self.assertGreater(len(split.faces()), len(whole.faces()))
+                self.assertTrue(BRepCheck_Analyzer(split.wrapped).IsValid())
+                (got, sizes), (want, wanted) = read(split), read(whole)
+                self.assertEqual(got, want)
+                for value, expected, delta in zip(sizes, wanted, (2e-3, 2e-3, 0.05, 5e-4)):
+                    self.assertAlmostEqual(value, expected, delta=delta)  # the material: a cone's cut, triangulated
+                self.assertAlmostEqual(sheet.unfold(split).area, sheet.unfold(whole).area, delta=0.05)
+
+    def test_a_break_in_several_faces_reads_as_the_part_whole(self) -> None:
+        # a part in layers, joined and never merged (a kernel fuse, an import), has every face a layer crosses
+        # in several. A round of a cut edge in two was laid into the flat piece by piece: the piece beside the
+        # cut projects a few microns wide, under the tolerance the flat is fused at, and was lost there, a
+        # hole's rim with it (the hole filled, sheet.flat_incomplete). Round a bend's end the piece beside the
+        # cut does not touch the bend's cylinder, so it was no break (sheet.uniform_thickness), and neither was
+        # a corner of an outline rounded whole, nor a full round run on round a bend
+        def within(steps: list[tuple], t: float, depth: float, width: float) -> bd.Shell:
+            """The surface ``depth`` into ``bent(steps, t, width)`` from the face its path runs on, run on past
+            the part's ends and sides."""
+            longer = [("line", steps[0][1] + 10), *steps[1:-1], ("line", steps[-1][1] + 10)]
+            path = centre([(how, size, *(inside + t - 2 * depth for inside in radius))
+                           for how, size, *radius in longer], 2 * depth)
+            return bd.Shell.extrude(bd.Pos(-10, -10, 0) * path, (0, width + 20, 0))
+
+        def agrees(split: bd.Shape, whole: bd.Shape, **options) -> None:
+            self.assertGreater(len(split.faces()), len(whole.faces()))
+            result, wanted = checked(split, **options), checked(whole, **options)
+            self.assertTrue(wanted.ok, [f.message for f in wanted.findings if f.severity == "error"])
+            self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+            self.assertEqual(verdicts(result), verdicts(wanted))
+            found, expected = (r.measurements["parts"]["items"][0] for r in (result, wanted))
+            for key in ("thickness_mm", "flat_length_mm", "flat_width_mm", "flat_material_fraction"):
+                self.assertAlmostEqual(found[key], expected[key], places=3, msg=key)
+            self.assertAlmostEqual(found["flat_area_mm2"], expected["flat_area_mm2"], delta=0.05)
+            for family, keys in (("holes", ("size_mm", "countersunk")), ("bends", ("length_mm",))):
+                self.assertEqual([[item[key] for key in keys] for item in result.measurements[family]["items"]],
+                                 [[item[key] for key in keys] for item in wanted.measurements[family]["items"]], family)
+            # the breaks are said as deep as the whole part's, not as one piece of one
+            deep = [next(f.value for f in r.findings if f.code == "sheet.edge_break") for r in (result, wanted)]
+            self.assertAlmostEqual(deep[0], deep[1], places=3)
+            self.assertEqual(len(sheet.unfold(split, **options).faces()), 1)
+
+        def rims(part: bd.Shape, both: bool) -> list[bd.Edge]:
+            levels = part.edges().group_by(bd.Axis.Z)
+            return [*levels[-1], *(levels[0] if both else [])]
+
+        # flat plates 2 thick (z = 0 to 2), their rims broken, cut level inside the breaks
+        holed = (bd.RectangleRounded(80, 40, 5) - bd.Pos(-15, 0) * bd.SlotOverall(30, 8)
+                 - bd.Pos(25, 8) * bd.Circle(4)).face()
+        notched = (bd.Rectangle(80, 40) - bd.Pos(0, 20) * bd.Ellipse(12, 6)).face()
+        for name, outline, how, size, both, cuts, turn in (
+                ("round, cut near its foot", holed, bd.fillet, 0.9, False, (1.118,), False),
+                ("chamfers, each cut in two", holed, bd.chamfer, 0.8, True, (0.72, 1.28), False),
+                ("rounds that meet in mitres", bd.Rectangle(80, 40).face(), bd.fillet, 0.2, True, (1.89,), False),
+                ("round along an ellipse, cut twice", notched, bd.fillet, 0.4, False, (1.64, 1.8), True),
+                ("rounds along an ellipse, cut near their feet", notched, bd.fillet, 0.2, True, (0.18, 1.82), False)):
+            with self.subTest(plate=name):
+                whole = how(rims(bd.extrude(outline, amount=2), both), size)
+                split = layered(whole, *(level(z) for z in cuts))
+                agrees(*((turned(split), turned(whole)) if turn else (split, whole)))
+
+        # a plate cut across, its round's faces end to end: the outline is chorded as the whole part's is
+        whole = bd.fillet(rims(bd.extrude(bd.Ellipse(40, 20).face(), amount=2), False), 0.9)
+        with self.subTest(plate="round along an ellipse, cut across"):
+            agrees(layered(whole, bd.Face.make_rect(400, 400, bd.Plane.YZ.offset(7))), whole)
+
+        # a plate's outline and holes rounded whole (r = t/2), cut off its mid-plane: one with round corners and
+        # holes, one with square corners (a face of its own turns each)
+        for name, outline in (("round corners, holes", holed), ("square corners", bd.Rectangle(80, 40).face())):
+            whole = bd.extrude(bd.Pos(0, 0, -1) * outline, amount=2)
+            for wire in outline.wires():
+                whole = whole + tube(wire, 2.0)
+            for off in (0.04, 0.4):
+                with self.subTest(plate="rounded whole", corners=name, cut_off_the_middle=off):
+                    agrees(layered(whole, level(off)), whole)
+
+        # an L bracket, its sides' edges rounded along the flanges and round the bend (or round the bend alone),
+        # cut along a surface inside the rounds: near the foot of the outside ones, then of the inside ones
+        steps = [("line", 30), ("bend", 90, 2.0), ("line", 40)]
+        square = bent(steps, 2.0, 50.0)
+        sides = [edge for face in square.faces().filter_by(bd.Axis.Y) for edge in face.edges()
+                 if abs(edge.length - 2.0) > 1e-6]
+        for name, edges in (("all round", sides),
+                            ("round the bend", [edge for edge in sides if edge.geom_type == bd.GeomType.CIRCLE])):
+            whole = bd.fillet(edges, 0.6)
+            for depth in (0.57, 1.46):
+                with self.subTest(bracket=name, cut_at=depth):
+                    agrees(layered(whole, within(steps, 2.0, depth, 50.0)), whole, k_factor=0.4)
+
+        # and one whose sides are rounded whole, round the bend too
+        whole = rounded(steps, 2.0, 50.0, 2)
+        for depth in (1.04, 1.6):
+            with self.subTest(bracket="sides rounded whole", cut_at=depth):
+                agrees(layered(whole, within(steps, 2.0, depth, 50.0)), whole, k_factor=0.4)
+
+    def test_a_break_in_many_pieces_is_one_break(self) -> None:
+        # a break was followed three faces in from its skin, so the fourth piece of one cut three times over was
+        # off the thickness (sheet.uniform_thickness), and sheet.edge_break counted the pieces (26 for 13)
+        def broken(result):
+            return next(f for f in result.findings if f.code == "sheet.edge_break")
+
+        def reads_as(split: bd.Shape, whole: bd.Shape) -> None:
+            result, wanted = checked(split), checked(whole)
+            self.assertEqual(verdicts(result), verdicts(wanted))
+            found, expected = broken(result), broken(wanted)
+            self.assertEqual(found.message.split()[0], expected.message.split()[0])  # as many faces
+            self.assertAlmostEqual(found.value, expected.value, places=3)
+            family, whole_family = (r.measurements["not_sheet"] for r in (result, wanted))
+            self.assertEqual(family["count"], whole_family["count"])
+            self.assertAlmostEqual(sum(item["area_mm2"] for item in family["items"]),
+                                   sum(item["area_mm2"] for item in whole_family["items"]), delta=0.05)
+            part, whole_part = (r.measurements["parts"]["items"][0] for r in (result, wanted))
+            self.assertAlmostEqual(part["flat_area_mm2"], whole_part["flat_area_mm2"], delta=0.05)
+            self.assertEqual([hole["size_mm"] for hole in result.measurements["holes"]["items"]],
+                             [hole["size_mm"] for hole in wanted.measurements["holes"]["items"]])
+
+        outline = (bd.RectangleRounded(80, 40, 5) - bd.Circle(6)).face()
+        plate = bd.extrude(outline, amount=2)
+        top = plate.edges().group_by(bd.Axis.Z)[-1]
+        for how in (bd.fillet, bd.chamfer):
+            whole = how(top, 0.6)
+            for cuts in ((1.7,), (1.5, 1.7, 1.9), (1.5, 1.6, 1.7, 1.8, 1.9)):
+                with self.subTest(broken=how.__name__, pieces=len(cuts) + 1):
+                    split = layered(whole, *(level(z) for z in cuts))
+                    reads_as(split, whole)
+                    # counted once, and every piece of it named
+                    self.assertEqual(len(broken(checked(split)).refs),
+                                     (len(cuts) + 1) * len(broken(checked(whole)).refs))
+
+        # rounded whole: the far half of a hole's round lies past its torus's period, where the kernel does not
+        # merge its pieces; the thin one was lost in the flat and the hole filled
+        whole = bd.extrude(bd.Pos(0, 0, -1) * outline, amount=2)
+        for wire in outline.wires():
+            whole = whole + tube(wire, 2.0)
+        with self.subTest(broken="rounded whole"):
+            reads_as(layered(whole, *(level(z) for z in (-0.504, -0.148, 0.208, 0.564))), whole)
+
+    def test_a_notch_beside_a_break_in_pieces_is_at_its_cut_edge(self) -> None:
+        # the cut edges behind a break were looked for two faces in from the skin: with each side's chamfer in
+        # three, a notch, a web and a gap were said to be at the chamfer
+        outline = (bd.Rectangle(80, 40) - bd.Pos(0, 17) * bd.Rectangle(3, 6) - bd.Pos(-20, -8) * bd.Circle(5)
+                   - bd.Pos(-8.5, -8) * bd.Circle(5)).face()
+        plate = bd.extrude(outline, amount=2)
+        levels = plate.edges().group_by(bd.Axis.Z)
+        split = layered(bd.chamfer([*levels[0], *levels[-1]], 0.6), *(level(z) for z in (0.1, 0.5, 1.5, 1.9)))
+        faces, report = split.faces(), checked(split).measurements
+        for family in ("notches", "webs", "gaps"):
+            self.assertTrue(report[family]["items"], family)
+            for item in report[family]["items"]:
+                with self.subTest(family=family, at=item["location"]):
+                    face = faces[int(item["location"].rsplit(" ", 1)[-1]) - 1]
+                    self.assertAlmostEqual(abs(face.normal_at().Z), 0.0, places=6)
+
+    def test_a_round_whose_edges_meet_a_hair_apart_is_laid_whole(self) -> None:
+        # a plate notched along half an ellipse, its rims rounded: the kernel may end the mitre where the round
+        # along the ellipse meets the one along the plate's edge a fraction of a micron off the vertex it shares
+        # with the edge along the skin (within that vertex's tolerance). The round's outline laid into the flat
+        # did not close over that gap and was laid as its sampled points, the mitre's chords a hundredth of a
+        # millimetre long, under the tolerance the breaks are fused with: the fuse lost material there (the
+        # flat two faces, 5 mm2 short, 99.7% of the material)
+        outline = (bd.Rectangle(80, 40) - bd.Pos(0, 20) * bd.Ellipse(12, 6)).face()
+        plate = bd.extrude(outline, amount=2)
+        levels = plate.edges().group_by(bd.Axis.Z)
+        unbroken = checked(plate).measurements["parts"]["items"][0]["flat_area_mm2"]
+        for name, edges, radius in (("one rim", levels[-1], 0.4), ("both rims", levels[0] + levels[-1], 0.2)):
+            with self.subTest(rounded=name):
+                part = bd.fillet(edges, radius)
+                found = checked(part).measurements["parts"]["items"][0]
+                self.assertAlmostEqual(found["flat_area_mm2"], unbroken, delta=0.05)
+                self.assertAlmostEqual(found["flat_material_fraction"], 1.0, places=3)
+                flat = sheet.unfold(part)
+                self.assertEqual(len(flat.faces()), 1)
+                # the outline's area, within its chords' sag along the notch
+                self.assertAlmostEqual(flat.area, 80 * 40 - math.pi * 12 * 6 / 2, delta=0.3)
 
     def test_what_countersinks_and_edge_breaks_cut_is_not_missing_from_the_flat(self) -> None:
         # the flat's area was held against the part's volume, which countersinks and edge breaks cut after the
@@ -1038,6 +1871,95 @@ class ModellingMistakeTest(unittest.TestCase):
                                  [hole["size_mm"] for hole in want.measurements["holes"]["items"]])
                 self.assertEqual([f.code for f in result.findings if f.severity == "warning"], ["sheet.edge_break"])
                 self.assertEqual(len(sheet.unfold(part).faces()), 1)
+
+    def test_a_full_round_run_on_round_a_bend_is_unrolled_with_it(self) -> None:
+        # a bracket's side edges rounded whole along its flanges and round its bends: round a bend the round is
+        # a torus from one of its cylinders to the other, which was read as the cut edge, so the bend's strip
+        # stopped at the skins, a t/2 short of the round on each such side (48 mm of a 50 mm bend) and the
+        # flanges' rounds ran on past it (sheet.bend_relief_width, a relief 0 mm wide): FAILED. Where the whole
+        # outline is rounded, a corner's round touches the skin at a point, which the skin holds as a wire of
+        # one degenerate edge, and the holes were not measured (measurement_failed)
+        l_steps = [("line", 30), ("bend", 90, 2.0), ("line", 40)]
+        u_steps = [("line", 30), ("bend", 90, 2.0), ("line", 40), ("bend", 90, 2.0), ("line", 30)]
+        sixty = [("line", 30), ("bend", 60, 2.0), ("line", 40)]
+        cases = (("L bracket, both sides", l_steps, 2.0, 2), ("U bracket, one side", u_steps, 2.0, 1),
+                 ("60 degrees, both sides", sixty, 1.5, 2),
+                 ("60 degrees, its whole outline", sixty, 2.0, 3))  # (its unfolded skin holds such a wire)
+        for name, steps, t, sides in cases:
+            with self.subTest(part=name):
+                part, width = rounded(steps, t, 50.0, sides), 50.0
+                result = checked(part, k_factor=0.4)
+                want = checked(bent(steps, t, width), k_factor=0.4).measurements["parts"]["items"][0]
+                self.assertTrue(result.ok, [f.message for f in result.findings if f.severity in ("error", "warning")
+                                            and f.code != "sheet.edge_break"])
+                found = result.measurements["parts"]["items"][0]
+                for key in ("flat_length_mm", "flat_width_mm"):
+                    self.assertAlmostEqual(found[key], want[key], places=3)
+                # (the whole outline's corners are rounded a t/2 in the flat too)
+                corners = (4 - math.pi) * (t / 2) ** 2 if sides == 3 else 0.0
+                self.assertAlmostEqual(found["flat_area_mm2"], want["flat_area_mm2"] - corners, delta=0.05)
+                self.assertAlmostEqual(found["flat_material_fraction"], 1.0, places=3)
+                self.assertEqual([b["length_mm"] for b in result.measurements["bends"]["items"]],
+                                 [width] * (len(steps) // 2))
+                self.assertEqual([f.code for f in result.findings if f.severity == "warning"], ["sheet.edge_break"])
+                self.assertEqual(len(sheet.unfold(part, k_factor=0.4).faces()), 1)
+
+    def test_a_notch_that_ends_in_a_bend_with_broken_edges_unfolds_to_its_line(self) -> None:
+        # a notch from each side whose end, x = 28, is in the bend's round (from x = 27): that cut is not radial,
+        # so it crosses the bend's inside and its outside at other angles. Its edges broken, it was no cut edge
+        # (sheet.uniform_thickness), and the breaks at the bend's ends unrolled past its line: their fuse lost
+        # every break (3506.4 mm2 of 3642.2) or, as the part stood, kept a neck 0.0009 mm wide (sheet.web_width)
+        first, second = ("bend", 90, 2), ("bend", -90, 2)
+        # the Z's side unfolded is the notched bend's inside, the U's its outside
+        for name, radius, steps, low, high in (  # each notch no further up or down than the bend's axis
+                ("Z", 2, [("line", 27), second, ("line", 14), first, ("line", 27)], -2, 5),
+                ("U", 4, [("line", 27), first, ("line", 40), first, ("line", 27)], -5, 4)):
+            notch = bd.Pos(19, 0, (low + high) / 2) * bd.Box(18, 8, high - low)  # x = 10 to 28
+            part = bent(steps, 2.0, 50.0, name) - bd.Pos(0, 2, 0) * notch - bd.Pos(0, 48, 0) * notch
+            square = checked(part, k_factor=0.4)
+            skins = [f for f in part.faces() if f.geom_type == bd.GeomType.CYLINDER
+                     or (f.area > 100 and abs(f.normal_at().Y) < 0.5)]
+            edges = [e for e in part.edges() if sum(any(e.wrapped.IsSame(o.wrapped) for o in f.edges())
+                                                    for f in skins) == 1]
+            blank = 50 * (sum(step[1] for step in steps if step[0] == "line") + math.pi * (2 + 0.4 * 2))
+            for how, size in ((bd.fillet, 0.5), (bd.chamfer, 0.3)):
+                broken = how(edges, size)
+                for place, where in (("as built", bd.Location()),
+                                     ("moved", bd.Location((3.21, -7.77, 1.13))),
+                                     ("turned", bd.Location((186.9, 290.96, 211.58), (0.612, 0.637, 0.48), 81.626)),
+                                     ("turned again",
+                                      bd.Location((-105.7, -209.5, 90.56), (-0.855, 0.072, -0.269), 20.88))):
+                    with self.subTest(part=name, how=how.__name__, place=place):
+                        result = checked(broken.moved(where), k_factor=0.4)
+                        self.assertEqual([v for v in verdicts(result) if v[1] != "sheet.edge_break"], verdicts(square))
+                        found = result.measurements["parts"]["items"][0]
+                        # the notch runs to where x = 28 crosses the bend's cylinder of the side unfolded
+                        notch_length = 27 - 10 + math.asin(1 / radius) * (2 + 0.4 * 2)
+                        self.assertAlmostEqual(found["flat_area_mm2"], blank - 2 * 6 * notch_length, places=2)
+                        self.assertEqual(
+                            [round(web["width_mm"], 3) for web in result.measurements["webs"]["items"]],
+                            [round(web["width_mm"], 3) for web in square.measurements["webs"]["items"]])
+                        self.assertEqual(len(sheet.unfold(broken.moved(where), k_factor=0.4).faces()), 1)
+                        for item in result.measurements["notches"]["items"]:  # at its cut edge, not the break on it
+                            at = broken.faces()[int(item["location"].split()[-1]) - 1]
+                            self.assertEqual(at.geom_type, bd.GeomType.PLANE)
+                            self.assertGreater(max(abs(at.normal_at().X), abs(at.normal_at().Y)), 0.999)
+
+    def test_a_step_in_a_bend_is_no_break_of_the_cut_beside_it(self) -> None:
+        # a notch cut down to the bend's axis at z = -2 and on to x = 30, past the inside's round (x = 29) and
+        # short of the outside's (x = 31): the 1 mm left is off the thickness, and the wall of that step is no
+        # chamfer of the cut beside it, its edges broken or not
+        steps = [("line", 27), ("bend", -90, 2), ("line", 14), ("bend", 90, 2), ("line", 27)]
+        notch = bd.Pos(20, 0, 1.5) * bd.Box(20, 8, 7)
+        part = bent(steps, 2.0, 50.0, "step") - bd.Pos(0, 2, 0) * notch - bd.Pos(0, 48, 0) * notch
+        skins = [f for f in part.faces() if f.geom_type == bd.GeomType.CYLINDER
+                 or (f.area > 100 and abs(f.normal_at().Y) < 0.5)]
+        edges = [e for e in part.edges() if sum(any(e.wrapped.IsSame(o.wrapped) for o in f.edges())
+                                                for f in skins) == 1
+                 and not (27.5 < (e @ 0).X < 31.5 and abs(e.tangent_at(0.5).Y) > 0.999)]  # the step's left square
+        for name, shape in (("square", part), ("broken", bd.fillet(edges, 0.5))):
+            with self.subTest(edges=name):
+                self.assertIn(("error", "sheet.uniform_thickness"), verdicts(checked(shape, k_factor=0.4)))
 
     def test_an_s_jog_of_two_tangent_bends_unrolls_whole(self) -> None:
         # two bends meeting with no flat between them: a joggle, unrolled one strip after the other

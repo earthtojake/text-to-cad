@@ -39,7 +39,7 @@ from typing import Any, Mapping, Sequence
 
 __all__ = ["Routed", "route"]
 
-#: The keys an entry of the plan, and route's keyword options, may name (law 16: a closed set).
+#: The keys an entry of the plan, and route's keyword options, may name (law 15: a closed set).
 OPTIONS = ("layers", "width", "clearance", "vias", "via_cost")
 _KEYS = ("net", "pads", *OPTIONS)
 #: What a via costs, in millimetres of track, where the plan does not say.

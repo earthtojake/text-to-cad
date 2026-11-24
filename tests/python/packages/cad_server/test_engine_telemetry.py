@@ -108,11 +108,11 @@ class EngineTelemetryTest(unittest.TestCase):
         stopped = facts(ok=False, error=error("KeyboardInterrupt", here=True))
         self.assertEqual(engine_telemetry.counts(stopped, "script")["builds"][0]["outcome"], "cancelled")
 
-        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 11.
+        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 12.
         for found, via in ((built, "script"), (facts(ok=False, error=model), "script"), (died, "command")):
             self.assertTrue(analytics.spool(engine_telemetry.counts(found, via), path=self.settings))
         [payload] = self.sent()
-        self.assertEqual((payload["schema"], payload["process"]), (11, "cli"))
+        self.assertEqual((payload["schema"], payload["process"]), (12, "cli"))
         self.assertEqual(payload["events"], [
             {"name": "build", "kind": "model", "via": "command", "count": 1, "failed": 0, "crashed": 1, "cancelled": 0,
              "cached": 0, "seconds": 0.5, "longest": 0.5},
@@ -143,7 +143,7 @@ class EngineTelemetryTest(unittest.TestCase):
         # drawings and robot descriptions as documents and meshes are.
         from cad.engine import api
 
-        for suffix, kind in ((".xbf", "xbf"), (".step", "step"), (".3mf", "3mf"), (".dxf", "dxf"), (".urdf", "urdf"), (".sdf", "sdf"),
+        for suffix, kind in ((".xbf", "xbf"), (".step", "step"), (".3mf", "3mf"), (".dxf", "dxf"), (".urdf", "urdf"),
                              (".srdf", "srdf")):
             told = api._facts("snapshot", (self.tmp / f"secret{suffix}", self.tmp / "out.png"), {}, {}, None, None, 0.5)
             self.assertEqual(engine_telemetry.counts(told, "command"),
@@ -392,6 +392,10 @@ class EngineTelemetryTest(unittest.TestCase):
             (({"failed": "the worker for secret_model.py exited (-11) during the build"}, True, -11),
              {"outcome": "crashed", "cached": False}, {"health": {"workers": 1, "crashes": 1},
                                                        "crashes": [analytics.died(-11)]}),
+            # One the engine stopped past the ceiling on one process: out of memory, the machine's; no crash.
+            (({"failed": "the worker for secret_model.py exited (-9) during the build: the engine stopped it at "
+                         "9.0 GiB of memory, over the 8.0 GiB one process may hold", "type": "MemoryError"}, False, None),
+             {"outcome": "failed", "cached": False, "reason": "memory"}, {}),
         ]
         for (answer, fresh, died), build, extra in cases:
             with self.subTest(build=build, extra=extra):
@@ -480,7 +484,7 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertFalse(self.settings.with_name(analytics.SPOOL).exists())
         [kept] = [json.loads(line) for line in self.settings.with_name(analytics.KEPT).read_text(encoding="utf-8").splitlines()]
         self.assertEqual((kept["batch"]["process"], kept["batch"]["schema"], kept["batch"]["events"][0]["kind"]),
-                         ("cli", 11, "xbf"))
+                         ("cli", 12, "xbf"))
 
 
 class ThroughTheDaemonTest(unittest.TestCase):

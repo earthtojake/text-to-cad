@@ -515,6 +515,25 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   (axial; radial: square to the axis and meeting it; perpendicular: square to it, beside it; off_axis). Drill table: Wikipedia
   "Drill bit sizes" (ASME B94.11M): metric 0.2-25 mm in its steps, fractional 1/64 in to 1 3/4 in, #80-#1,
   A-Z.
+  A hole's **mouth** (`_dfm_cnc_holes.mouths`): `mouth` is `whole` where no wall cuts it. A wall cuts it where
+  faces that are none of the hole's and rise along its axis, either way (`Model.rises`: a cavity's wall, a
+  step's, the part's side, another hole's), meet its narrowest cylinder by two convex edges with an opening
+  between them, and from the axis, 0.05 mm inside an end the hole opens by (`MOUTH_INSET_MM`; a tenth of the
+  hole's run where that is less), a ray through the middle of that opening meets no wall of the hole -- a
+  drill starts there with part of its tip over the void: `stepped` where the opening ends at a floor (an edge
+  of the cylinder crosses its middle and the wall is met just beyond: the mouth lies on two levels), `open`
+  where it runs the hole's whole length (a hole that breaks out of the part's side). `past_wall_mm` (how far
+  the hole's circle reaches past that wall, the move back that clears it: a plane's by its normal where the
+  cylinder meets it, a cylinder's along the axis by the distance between the two axes; 0 where no wall cuts
+  it), `open_deg` (the angle of the cylinder the wall opens), `open_mm` (how far along the axis), `cut_by` (the
+  wall it reaches furthest past) and `cut_faces` (the faces the opening lies between: one wall's, two walls' at
+  a corner, or the two faces of a wall thinner than the hole that stands across its mouth, a rib); of several
+  openings, the one that reaches furthest. Two sides that face each other across the opening (their normals'
+  cosine under -0.7, `SLOT_SIDES`, as a gap's two faces, each in front of the other) are a slot's that runs
+  into the hole -- a slit across a clamp's bore, a keyway, a channel that leaves a hole --, cut after it:
+  `slotted`, no wall the hole crosses. No cut either: an opening in the hole's side below its mouth (a cross
+  hole's, a cavity's), an end on a face that does not rise (an inclined one, a curved one), a modelled thread's
+  groove where it runs out, and a counterbore's own wall (the mouth judged is the drilled cylinder's).
 - **threads** — modelled threads: non-analytic faces (no surface of revolution) whose edge points sweep >= 350
   degrees about a cylinder's axis in a radial band under a third of the radius, with a flank edge winding half
   a turn or more (a pitch), with their end caps. `internal`, `major_diameter_mm`,
@@ -778,7 +797,9 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
 makes as drawn; a warning a recommendation, a cost or a risk: it is made.
 
 A number a published guide states cites it: Protolabs Network (Hubs)'s "How to design parts for CNC
-machining" (`hubs-cnc`) and its CNC machining service page's maximum part sizes (`hubs-cnc-service`). A floor
+machining" (`hubs-cnc`) and its CNC machining service page's maximum part sizes (`hubs-cnc-service`). A
+practice that guide says nothing of and another states cites that one: Fictiv's "CNC machining design guide"
+(`fictiv-cnc`), for a hole a wall cuts (`cnc.partial_hole`, below). A floor
 no guide states is cad's own (`rules.OWN`: its finding's `source` reads `cad, ...`, never the
 publisher's name, and the rule's note gives the reason). A limit that follows the tools is the smallest
 `--tools` tool's where one is given. With none, one tool floor holds for holes, slots and corners: the 0.05 mm
@@ -799,6 +820,17 @@ diameters a section), groove depth (a quarter of the bore a warning, half of it 
 and width (five). The part's size alone fails no part: long-bed mills and vertical lathes exist, so both size
 rules are warnings, and only a `--stock` given that the part does not fit is an error.
 
+`cnc.partial_hole` (a warning) is a drilled hole a wall cuts at its mouth (`holes.mouth` `stepped` or `open`):
+its figure is the hole's reach past that wall (`past_wall_mm`), and any is said. The guide states the practice
+and no number -- "Partial holes should be avoided because there is a high chance of tip wander", and drilled
+holes are placed "so they are not intersecting with an existing cavity in the part" -- so the limit is none
+at all, and never an error: the part is made, the hole drilled before its wall is cut, or milled, and the wall
+keeps the hole's scallop. A hole an end mill makes (a flat floor, a diameter over the largest drill) is
+measured and not judged, and a slot that runs into a hole is the slot's (`slotted`). A hole that breaks out of
+the part's side is one too where the check reads a hole at all, 300 degrees or more of its wall left (its two
+feather edges are `cnc.knife_edge`'s besides); with less left it is a notch of the outline, an end mill's, and
+no hole.
+
 The pocket and corner rules apply under `--turning` too, to the live tooling's pockets. Under `--turning` the
 milling rules -- `sharp_internal_edge`, `gap_width*`, `inclined_feature`, `special_cutter`, `undercut`,
 `setups` -- are `not_applicable`, and `cnc.turning_not_judged` (info) says what turning does not judge.
@@ -813,7 +845,9 @@ Each finding's message ends with what its item says of itself (`Rule.detail`): `
 edge, height and depth below the top; a round corner's rules its height and its cavity (`pocket`; the finding
 is at the corner's own face); `sharp_internal_edge` its edge, the two faces (in words, `between`: every ref an
 item carries is one ref), the void angle and xyz
-(its fix names the angle); every `walls` and `gaps` rule the face across (`opposite`) and the thinnest point.
+(its fix names the angle); every `walls` and `gaps` rule the face across (`opposite`) and the thinnest point;
+`partial_hole` the wall (`cut_by`), the angle of the hole's wall it opens and, of a stepped mouth, how far
+from the mouth.
 
 Fact findings (not rules): `cnc.stock_too_small` (e: the part does not fit `--stock`), `cnc.no_turning_axis`
 (e, `--turning` on a part with no surface of revolution), `cnc.mostly_not_turned` (w, under half the area
@@ -840,7 +874,10 @@ the travel between them not); a rounded recess fed from an open side that no str
 face no line reaches is tried for a disc plunged along its shank alone); a disc cutter's shank (taken of no
 breadth: the floor is geometry's, a real cutter reaches less); an angled fixture's reach (an inclined feature is counted as one more setup); fixturing and
 workholding; tolerances, surface finish, cycle time or cost; thread callouts on a drawing (only modelled
-threads and tap-drill diameters); hole axes other than a cylinder's (a slot milled as a hole); pockets whose
+threads and tap-drill diameters); hole axes other than a cylinder's (a slot milled as a hole); a hole's end
+on an inclined or a curved face, an opening a cavity makes in a hole's side below its mouth, and the order a
+shop cuts in (a wall across a hole's mouth is said, `cnc.partial_hole`; whether the hole is drilled before
+that wall is cut is the shop's); pockets whose
 floor is not planar (a 3D-contoured cavity is reported through access and walls, not as a pocket); sharp
 edges are judged at their midpoint; text and engraving are recognised only as many fine faces and as
 narrow gaps; a crease a ball end mill makes is accepted at `BALL_VOID_DEG` whatever the part's tolerance
@@ -897,18 +934,39 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   with no flat flange: sheet (`parts.rolled`), which this check does not unroll, so its `bends` are not
   measured and the check is `NOT CHECKED`, never an error of the part's. A face touching both faces of a pair
   is a cut edge; a cone between a skin and a coaxial
-  hole wall is a countersink. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
+  hole wall is a countersink, and so is the cone of a hole sunk through the full thickness (to a knife edge at
+  the far skin, or past it): it touches both skins, no wall is left, and its hole is its small end. A cone in
+  several faces (two half faces, as some systems write a hole) is one: its small end is the circle its faces'
+  arcs close together, and a hole a skin split through it holds no wire of, read back from the flat, is
+  countersunk where a countersink's axis runs through it and that countersink's hole is its size. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
   most `t` along it, a cone, torus or sphere about its normal; along an ellipse or a spline, a face with no
   axis to read whose sampled normals all face the skin's side, at a slant to it somewhere; within the sheet)
   is an `edge_break`, and a face square to the skin (a plane across it, a cylinder about its normal, a face
   with no axis square to it at every sample) that reaches it and its opposite skin through breaks is a cut
-  edge: its rays run across the plate and measure its width, never its thickness. A skin's rays that reach
+  edge: its rays run across the plate and measure its width, never its thickness. A cut may be several faces
+  across the thickness, none touching both skins: a plate extruded both ways along an ellipse or a spline
+  (the kernel merges the two halves of a plane or a cylinder, and leaves a surface of extrusion's two faces,
+  split at mid-thickness), layers joined and never merged. From each skin, its countersinks and its breaks,
+  the faces square to it are followed through their tangent joins (through one that is a cut edge already,
+  too), and a face reached from a skin and from
+  its opposite is a cut edge; a hole's wall in several faces is one wall, and the countersink beside one of
+  them is the hole's. A skin's rays that reach
   the other skin's break are short by that break, which is its own finding, not the skin's. A bend's end is broken by a cone or a torus
   about the bend's axis, beside one of its cylinders and a cut edge or a flange's break, within the sheet:
-  an `edge_break` too, and the bend's length runs to the cut. A cut edge rounded whole from one skin to the
-  other (a full round, r = t/2: a convex cylinder along the skins, a torus or sphere about their normal, and
-  the face that turns a corner of the outline between two) leaves no face of the cut square to the skins: it
-  is an `edge_break` of both, no cut edge. A cone, torus, sphere or freeform face whose
+  an `edge_break` too, and the bend's length runs to the cut; a full round run on round the bend is a torus
+  about its axis t/2 round, from one of its cylinders to the other, read the same. A cut that ends in a bend
+  along its axis (a notch's end: a plane parallel to the axis across both cylinders) is a cut edge where it
+  reaches both through its breaks, as it is left square, and a chamfer or a round along it (behind its plane: a
+  step's wall stands in front) is the bend's break, as is the facet where it meets the next. A cut edge rounded whole
+  from one skin to the other (a full round, r = t/2: a convex cylinder along the skins, a torus or sphere
+  about their normal, and the face that turns a corner of the outline between two) leaves no face of the cut
+  square to the skins: it is an `edge_break` of both, no cut edge. A break may be several faces of one
+  surface, each joined tangent to the last (a layer cut it across): they are one break, as deep as they are
+  together, however many they are: from a skin a surface is one step, and the cut edge behind it is found past
+  all of its pieces. `sheet.edge_break` counts them as one and names every piece (the item's `pieces`). The
+  piece of a bend's end's break that lies beside the cut touches no cylinder of the bend, no one
+  piece of a full round touches both skins (or, round a bend, both cylinders), and the corner between two
+  full rounds is in pieces as they are: each is read as the whole face is. A cone, torus, sphere or freeform face whose
   rays cross `t` is `formed` (a cone between flanges is not a bend). A face square between two opposite planes that face away from each other,
   nearer each other than its own rays run, is the cut edge of a stretch off the thickness (a 3 mm wall's end
   cap): the stretch is judged on its skins, not on rays that run along it. Everything else, and any stretch
@@ -917,7 +975,8 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   thickness that touch are one feature: they share the ref of the one furthest off it (`location`; each
   keeps its own in `face`), so a pocket's floor and walls are one finding.
 - **Bends.** The skins and bend cylinders joined by tangent edges are the sheet's two sides; the side with
-  the largest skin is unfolded, its coplanar skins the flanges. A bend's angle is its cylinder's angular
+  the largest skin is unfolded (a skin in several faces, split through a hole, read whole: its coplanar faces
+  joined), its coplanar skins the flanges. A bend's angle is its cylinder's angular
   span (checked against the flanges' normals), its length the extent along the axis, its tangent lines
   where the cylinders meet the flanges. A corner joined without a bend is a `sharp_bends` item: two skins at
   an angle meeting at an edge (`Box + Box`, a shelled box), a round on one side of a corner with no
@@ -942,20 +1001,45 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   the area its pieces share -- each two intersected, never their areas less the fused pattern's, which a
   STEP written as NURBS loses a little of -- is its overlap (`flat_overlap_mm2`);
   a hole of the fused flat no face's inner wire gave (one crossing a bend's tangent line, part of both
-  faces' outer wires) is read back from it, `in_bend` where it reaches a bend's strip. Where a chamfer or a
+  faces' outer wires) is read back from it, `in_bend` where it reaches a bend's strip (a skin's inner wire
+  of one degenerate edge, a point a full round's corner touches the skin at, is no hole). Where a chamfer or a
   round breaks the cut edge the skin stops short of the cut, so each flange's breaks are laid into its plane
   and fused on: the flat is the cut outline (an 80 x 40 x 3 plate chamfered 0.5 mm unfolds 80 x 40, not 79 x
   39), and a hole with a broken rim is read back from it at its cut size. A break's edge that is no line and
   no arc (its end where it meets the next break at a corner of the outline: an ellipse's arc between two
   rounds, a conic between a chamfer along a line and one along an arc) is laid as chords within `CHORD_MM`
-  of it, as an arc's are, so none is shorter than the tolerance the breaks are fused with. A bend's ends'
+  of it, as an arc's are, so none is shorter than the tolerance the breaks are fused with. Its edges are laid
+  end to end, each from where the last one ends: the kernel joins two at a vertex within its tolerance and
+  may end one a fraction of a micron off it (the mitre where a round along an ellipse meets one along a
+  line). Drawn as they end, such an outline did not close and was laid as its sampled points instead, a
+  mitre's chords shorter than the fuse's tolerance, and the fuse lost material there (a plate notched along
+  an ellipse and rounded read 99.7% of it, its flat in two faces). A bend's ends'
   breaks are unrolled with its strip, and every break is laid face up, as the flanges are (the far skin's
   project face down, and were left beside the flat as pieces of their own). A full round is laid in its two
   halves, split at the sheet's mid-plane where it is widest (laid whole, its outline folds back on itself to
-  a line): an 80 x 40 plate with full-round ends unfolds 80 x 40, not 78 x 40, and a hole with a full-round
-  rim is its narrowest.
+  a line), and round a bend at the cylinder midway through the sheet, each half unrolled: an 80 x 40 plate
+  with full-round ends unfolds 80 x 40, not 78 x 40, a 50 mm wide bracket with full-round sides is 50 mm
+  wide across its bends too, not 48, and a hole with a full-round rim is its narrowest.
+  Beside a cut that ends in a bend, its breaks and the bend's ends' are laid as rectangles up to the line where
+  the cut's plane crosses the cylinder unfolded: such a cut is not radial, so unrolled about the axis a break
+  ran past that line or stopped short of it, and where two met their sampled curves were chords shorter than
+  the tolerance they are fused with (a notched Z bracket, rounded 0.5 mm, unfolded 3506.4 mm2 of 3642.2 or, as
+  it stood, kept a neck 0.0009 mm wide).
+  A break in several faces is laid, unrolled and counted as the faces the kernel merges them into (grown a
+  face at a time, so a round that was two faces whole stays two; rings of one torus end to end, each a whole
+  turn, which the kernel does not merge past the torus's period, are one band): laid face by face, a piece that projects
+  narrower than the tolerance the breaks are fused with is lost there, and a hole's rim with it. A merged
+  face's edges were cut too: its pieces on in one line are one.
   A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
   rim, the flat's the hole under it (a plate countersunk from both sides has one whichever side unfolds).
+  A rim that runs off the outline, into a cutout or into another rim is no whole circle of the skin's, and
+  the cone no whole turn there: the edges between two passes of its seam are laid as one outline, less the
+  hole, which is read from the cone's small end; the wire that rim is part of is no hole of its own and is
+  read back from the flat. A cone in several faces is laid face by face, and where a corner of the outline
+  leaves one of them touching no skin, it is laid with the rest of its cone; a round hole of the flat whose
+  rim such pieces drew in chords (its points on one circle within their sag) is round, no cutout. What a
+  countersink or a break cuts is counted up to the plane of the skin it faces once, however many faces that
+  skin is in.
   `cad.build123d.unfold(shape, thickness=, k_factor=, material=, bend_lines=False)` returns it
   (`bend_lines=True`: a Compound of `CUT` and `BEND` children, one DXF layer each, `BEND` empty for a flat
   plate), and raises `ValueError`
@@ -965,9 +1049,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   spline's alike (at most 720 points; 48 to a curve left an 80 x 40 ellipse 79.957 long). At K = 0.5 the flat area equals volume / t exactly (`neutral_area_ratio`); the flat's area
   with each strip widened to K = 0.5, over volume / t, is `flat_material_fraction`: 1 where the flat holds
   all of the part's material. The volume is the sheet's as cut and bent: the part's, and what its
-  countersinks and edge breaks cut from it afterwards (under each one's face, up to the skin it faces, or
-  for a bend's end the cylinder it breaks, on the face's triangulation), which the blank has and the flat's
-  area counts.
+  countersinks and edge breaks cut from it afterwards (under each one's face, up to the skin it faces, for
+  a bend's end the cylinder it breaks, or for a full round round a bend the outline's plane square to the
+  axis, where it is widest: it runs from one cylinder to the other; on the face's triangulation), which the
+  blank has and the flat's area counts.
 
 ### Families (each `{"items": [...], "count": n}`, items sorted worst first, capped at 300)
 
@@ -976,7 +1061,7 @@ Every item of a part's families carries its part's `thickness_mm`: what its rule
 | family | per item | notes |
 |---|---|---|
 | `parts` | `thickness_mm`, `is_sheet`, `why`, `sheet_area_fraction`, `bend_count`, `sharp_bend_count`, `flat_length_mm`, `flat_width_mm` (smallest rectangle), `flat_area_mm2`, `flat_overlap_mm2`, `neutral_area_ratio`, `flat_material_fraction`, `bent` (it has a bend: which thickness limit is its), `rolled` (a sheet rolled with no flat flange: not unrolled), `unfold_note`, `not_in_flat` (the flanges no bend reached, each its largest face, and the bends not laid out), `joggles` [{bends, location, xyz}] (two bends meeting tangent with no flat between), `flat_bend_lines` | one per part |
-| `not_sheet` | `kind` (thicker, thinner, unpaired; `edge_break`: a chamfer or round of a cut edge, its depth `break_mm`; `formed`: a cone, torus or freeform face a thickness across), `surface`, `local_thickness_mm`, `sheet_thickness_mm`, `deviation_mm`, `area_mm2`, `judged` (None on a part that is not sheet, or a round a `sharp_bends` item names: no thickness verdict), `face` (its own ref; `location` is its feature's) | a boss, pocket, round, freeform face |
+| `not_sheet` | `kind` (thicker, thinner, unpaired; `edge_break`: a chamfer or round of a cut edge, its depth `break_mm`, the area and, where a layer cut it, the `pieces` (their refs) of the whole of it; `formed`: a cone, torus or freeform face a thickness across), `surface`, `local_thickness_mm`, `sheet_thickness_mm`, `deviation_mm`, `area_mm2`, `judged` (None on a part that is not sheet, or a round a `sharp_bends` item names: no thickness verdict), `face` (its own ref; `location` is its feature's) | a boss, pocket, round, freeform face |
 | `sharp_bends` | `kind` (sharp, inside_only, outside_only, unjoined), `angle_deg`, `inside_radius_mm`, `outside_radius_mm`, `thickness_mm`, `edge_count`, `faces` | a corner joined without a bend: its flange is not in the flat |
 | `bends` | `kind` (bend; hem: 175 to 185 degrees with an inside diameter of at most 4 t, `HEM_DIAMETER_T`, cad's own line -- wider is a U-bend, a bend; curl: over 185), `inside_radius_mm`, `outside_radius_mm`, `radius_to_thickness`, `angle_deg` (bent from flat), `included_angle_deg`, `flanges_angle_deg`, `length_mm`, `axis`, `axis_origin`, `tangent_lines`, `k_factor`, `k_factor_source`, `bend_allowance_mm`, `bend_deduction_mm` (None for a fold of 175 degrees or more -- a hem, a U-bend, a curl: its mold lines meet nowhere, and its flanges have no height from one); `faces` [inside, outside] | location: the inside cylinder |
 | `flanges` | per bend side: `length_tangent_mm` (least along the bend), `length_tangent_half_mm` (reached by half the bend), `length_inside_mm`/`_half`, `length_outside_mm`/`_half` (mold lines: + r·tan(θ/2), + (r+t)·tan(θ/2)), `length_outside_minus_radius_mm`, `stations`, `stations_off_flange` | the length runs to the free edge or the next bend's tangent line, read at 11 stations along the bend; a station whose start is off the flat (the bend runs on past its flange there) has length 0, judged by `sheet.flange_length` as a short flange is, the item then at the bend (`location` its ref, `xyz` that stretch) |
@@ -984,12 +1069,12 @@ Every item of a part's families carries its part's `thickness_mm`: what its rule
 | `reliefs` | per bend end and side where the flange runs on past the bend's end: `kind` (corner where the end meets another bend's end, relieved or not; else bend), `needed`, `present`, `width_mm`, `depth_tangent_mm`, `depth_centerline_mm`, `depth_centerline_minus_radius_mm`, `detail` | a missing relief has width and depth 0, its detail "no relief" |
 | `hems` | `inside_diameter_mm`, `gap_mm`, `return_length_mm` | the bends of kind hem |
 | `curls` | `inside_radius_mm`, `outside_radius_mm`, `angle_deg` | over 185 degrees |
-| `holes` | `kind` (round, slot, cutout), `size_mm` (diameter, or least width), `length_mm` (largest extent), `edge_distance_mm` (edge to edge), `in_bend`, `countersunk`, `countersink_diameter_mm`; `faces` | location: the hole's wall; a hole read back from the flat (across a tangent line): the face it lies on |
-| `hole_spacing` | `distance_mm` edge to edge, `other` | each hole and its nearest, one of them round (the bar between two cutouts is a web) |
+| `holes` | `kind` (round, slot, cutout), `size_mm` (diameter, or least width), `length_mm` (largest extent), `edge_distance_mm` (edge to edge), `in_bend`, `countersunk`, `countersink_diameter_mm`; `faces` | location: the hole's wall; a hole read back from the flat (across a tangent line, its edge broken, its skin split): the face nearest its centre, of faces as near (within 1e-6 mm) its own before a skin or a bend that holes share. Where an arc of the flat was drawn anew and rounding decides whether it has a chord more, every figure of these three families is the least either way gives |
+| `hole_spacing` | `distance_mm` edge to edge, `other` | each hole and its nearest, every other as near (within 1e-6 mm) a pair of its own (a square grid's hole has two to four), one of them round (the bar between two cutouts is a web) |
 | `hole_to_bend` | `distance_tangent_mm`, `distance_centerline_mm` (+ BA/2), `distance_inside_mm`, `distance_outside_mm`, `distance_outside_minus_radius_mm`, `bend` | the nearest bend, but one the cutout ends (a window across both its tangent lines); a round hole's distances are exact |
-| `notches` | `width_mm` (mouth), `length_mm` (depth), `length_to_width` | pockets of the outline off its hull |
+| `notches` | `width_mm` (mouth), `length_mm` (depth), `length_to_width` | pockets of the outline off its hull; `location` is the deepest point, of points as deep (within 1e-6 mm) the first along the outline, at a corner of faces as near one no other notch names, then no skin or bend (which notches share), then the lower-numbered (in a cut file the first entity's along it) |
 | `tabs` | `width_mm`, `length_mm`, `length_to_width` | facing straight sides, a tip, an inside corner at both sides of the base (proud of the body on three sides: an L plate's leg is no tab) |
-| `webs` | `width_mm`, `said`, `cutouts` | the narrowest material within an outline (a neck, a bridge), and the bar between a cutout that is no round hole and the cutout nearest it: the bars of one width are one item, `cutouts` how many they lie between (a grille is one feature) |
+| `webs` | `width_mm`, `said`, `cutouts` | the narrowest material within an outline (a neck, a bridge), and the bar between a cutout that is no round hole and the cutout nearest it: the bars of one width are one item, `cutouts` how many they lie between (a grille is one feature); `width_mm` is the least found, and of places as narrow (within 1e-6 mm), `location` is the first along the outline, at a corner a face as notches' is |
 | `gaps` | `width_mm`, `between` | the narrowest void (notches, gaps between outlines; across a hole only where it necks in under the hole's own `size_mm`) |
 
 DXF adds `cut_file` (`insunits`, `unit` and `unit_from`: `$INSUNITS` or `--units`, `mm_per_unit`,
@@ -1442,7 +1527,8 @@ the options go on to the engine unresolved), and `resolved` carries plain values
 `printable_height` as `build_volume`, the first `nozzle_diameter` as `nozzle` -- each only where its own option is
 not given -- and `printer` as `{name, file, supplied}`, the name `printer_settings_id`, else `name`, else the file's.
 The volume is then the printer's own, judged as `--build-volume` is (`volume_origin` names the printer and the
-file), the nozzle a nozzle given. A file that is no such 3MF or JSON, or has no bed or height, is refused naming
+file and says the volume is the bed's bounding box: a round bed's outline and an excluded zone are not read), the
+nozzle a nozzle given. A file that is no such 3MF or JSON, or has no bed or height, is refused naming
 the file; a preset with `inherits` and no bed holds only its differences, and the refusal says to give a 3MF the
 slicer saved. A technology other than `fdm` refuses it.
 The build volume is the printer's given (`--build-volume` or `--printer`), else a typical machine of the

@@ -1,6 +1,6 @@
 ---
 name: print3d
-description: Prints a part - slices an `.stl`, `.3mf` or `.obj` into printer-ready G-code with OrcaSlicer, headless or in the app, with built-in profiles for most FDM printers (Prusa, Bambu Lab, Creality, Voron), and sends it to a Bambu Lab printer through Bambu Connect or Bambu Studio. Use when the person wants a model sliced or printed. Never starts a print; whether a part will print is the cad skill's check.
+description: Gets a part 3D printed - slices an .stl, .3mf or .obj into G-code with OrcaSlicer and, for a Bambu Lab printer, hands it to Bambu's own app. Use when the person wants a model sliced, printed or sent to their printer (Prusa, Bambu Lab, Creality, Voron and most FDM printers). Whether a part will print well is the cad skill's check.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -8,22 +8,22 @@ metadata:
 
 # 3D printing
 
-Get a part printed: slice it for the person's printer and hand the print to the printer's app. The
-part itself is designed with the cad skill, and whether it will print (walls, overhangs, supports,
-orientation) is the cad skill's manufacturing check: run it first when the person asks. This skill
-never starts a print.
+Get a part printed: slice it for the person's printer and hand the result to the printer's own app.
+Designing the part, and checking whether it will print (walls, overhangs, supports, orientation), is
+the cad skill's.
 
 ## Start with the task
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **Slice it to G-code** | `cad orcaslicer presets machine --match "<printer>"` | [Slice with OrcaSlicer](#slice-with-orcaslicer) |
-| **Print on a Bambu Lab printer** | The sliced `.gcode.3mf` | [Print on a Bambu Lab printer](#print-on-a-bambu-lab-printer) |
-| **Will this print?** | The cad skill's printing check ($cad) | Its manufacturing references |
+| Slice to G-code | OrcaSlicer's command line, with the person's presets | [Slice with OrcaSlicer](#slice-with-orcaslicer) |
+| Print on a Bambu Lab printer | The sliced `.gcode.3mf`, opened in Bambu Connect | [Bambu Lab printers](#bambu-lab-printers) |
+| Print on any other printer | The `.gcode`, given to the person | [Any other printer](#any-other-printer) |
+| Will this print? | The cad skill's printing check | Its manufacturing references |
 
 ## Setup
 
-Written for `cad==0.11.13`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+Written for `cad==0.11.17`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
 0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
 If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
@@ -31,151 +31,105 @@ https://github.com/earthtojake/text-to-cad
 A project written for an earlier version may need changes; the migration guides say what:
 https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
+`cad` is needed only to write the mesh a slicer takes from a text-to-cad model or a STEP:
+
+```bash
+cad model export "$ID" part.3mf
+cad step export part.step part.3mf
+```
+
+OrcaSlicer is the person's own install: `brew install --cask orcaslicer` on macOS (its command line is
+`/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer`), or a release from
+https://github.com/OrcaSlicer/OrcaSlicer/releases on Windows and Linux (`orca-slicer`; on Linux, the
+AppImage or Flatpak). Below, `<orca>` is that command, and `<orca> --help` is its interface
+(https://www.orcaslicer.com/wiki/cli/cli_mode).
+
 ## Slice with OrcaSlicer
 
-Slice with OrcaSlicer, headless (below) or by opening the model in the
-OrcaSlicer app for the person. The agent never contacts a printer: for a Bambu
-Lab printer, the result is sent through Bambu Connect ([below](#print-on-a-bambu-lab-printer));
-for any other printer, give the person the `.gcode`.
+The command line slices with the settings it is given: a printer, a process and a filament preset.
+Two things carry them:
 
-### Install OrcaSlicer
+- **A project file** the person saved from the app (File > Save Project, a `.3mf`): it holds its
+  models and every setting, and slices as it is. This is the sure route.
+- **Preset files**, passed with `--load-settings "process.json;printer.json"` and
+  `--load-filaments "a.json;b.json"` (one filament per material, in order).
 
-- macOS: `brew install --cask orcaslicer`. The command line is
-  `/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer`.
-- Windows and Linux: install a release from
-  https://github.com/OrcaSlicer/OrcaSlicer/releases. The command is
-  `orca-slicer`; on Linux, run it from the AppImage or Flatpak.
+A preset as OrcaSlicer stores it holds only its differences from the preset its `inherits` names, and
+an export from the app (File > Export > Export Preset Bundle) is an archive of those same files. The
+person's own are under `user/` in the configuration folder: `~/Library/Application Support/OrcaSlicer`,
+`~/.config/OrcaSlicer` (a Flatpak's `~/.var/app/com.orcaslicer.OrcaSlicer/config/OrcaSlicer`) or
+`%APPDATA%\OrcaSlicer`. The built-in ones they inherit from are in `system/` beside them and in the
+app's `resources/profiles`: JSON files before OrcaSlicer 2.5, binary caches (`.opc`) from it.
 
-Below, `<orca>` is that command.
+Whether the command line fills in the parents depends on its version, so check what it sliced with:
+the settings are written into the G-code (`grep -m1 "nozzle_temperature =" plate_1.gcode`, and the
+same for the bed size and layer height). Where they are OrcaSlicer's defaults and not the preset's,
+this version wants complete presets: merge the chain, parents first, the child last (skip nothing: a
+parent may inherit in turn; of two presets with one name, take the one whose `compatible_printers`
+lists the printer), and put the printer's name in the process's `compatible_printers`. From 2.5 the
+parents are in the caches and cannot be read: use a project file there.
 
-### Slice headless
+Use the presets the person prints with, and never invent one: a wrong bed size or temperature can
+damage a printer. Where there are none to slice headless with, open the model in the app instead.
 
-OrcaSlicer's command line (https://www.orcaslicer.com/wiki/cli/cli_mode) needs
-complete presets: it doesn't fill in a preset's parent settings, and it slices
-only with a process whose compatible printers name the printer.
-`cad orcaslicer` writes them from OrcaSlicer's presets, searching the person's
-own first, then OrcaSlicer's built-in profiles. It reads and writes preset
-files alone: it never runs OrcaSlicer, and works offline.
+```bash
+<orca> model.stl \
+  --load-settings "presets/process.json;presets/printer.json" \
+  --load-filaments presets/filament.json \
+  --arrange 1 --slice 0 \
+  --outputdir /absolute/path/to/out --export-3mf model.gcode.3mf
+```
 
-1. Find the person's printer, process and filament presets. Prefer the presets
-   they print with; never invent one, since a wrong bed size or
-   temperature can damage the printer.
+This writes `plate_1.gcode` and the sliced `model.gcode.3mf` into the folder; give `--outputdir` an
+absolute path. It reads `.stl`, `.3mf`, `.obj` and `.amf`. A setting is overridden with
+`--<setting>=<value>`, its key written with hyphens (`--layer-height=0.16`).
 
-   ```bash
-   cad orcaslicer presets machine --match "MK4S"
-   cad orcaslicer presets process --match "@MK4S 0.4"
-   cad orcaslicer presets filament --match "PLA @MK4S"
-   ```
-
-2. Write the complete presets. It prints the files it wrote, as JSON:
-
-   ```bash
-   cad orcaslicer complete --printer "Prusa MK4S 0.4 nozzle" \
-     --process "0.20mm SPEED @MK4S 0.4" --filament "Prusa Generic PLA @MK4S" \
-     --out presets
-   ```
-
-   `--printer`, `--process` and `--filament` also take a preset's JSON file;
-   give `--filament` once per material, and `--profiles` another folder of
-   presets to search first.
-
-   OrcaSlicer 2.5 and later keeps its built-in presets in binary caches
-   (`.opc`) that `cad orcaslicer` can't read. When a command says so, there
-   is no preset to slice headless with: open the model in the app instead
-   ([Open in OrcaSlicer](#open-in-orcaslicer)), unless the person has a
-   folder of complete preset JSON files to give with `--profiles`.
-
-3. Slice. Give `--outputdir` an absolute path:
-
-   ```bash
-   <orca> model.stl \
-     --load-settings "presets/process.json;presets/printer.json" \
-     --load-filaments presets/filament-1.json \
-     --arrange 1 --slice 0 \
-     --outputdir /absolute/path/to/out --export-3mf model.gcode.3mf
-   ```
-
-   This writes `plate_1.gcode`, the plain G-code, and `model.gcode.3mf`, the
-   sliced 3MF, into that folder. The command line reads `.stl`,
-   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad model export <id> part.3mf`, or `cad step export part.step part.3mf`).
-   Override one setting with `--<setting>=<value>`, using the setting's key
-   with hyphens for underscores, such as `--layer-height=0.16`.
-
-### Open in OrcaSlicer
-
-When the person would rather pick presets and slice themselves, or no preset can
-be found, open the model in the app: `open -a OrcaSlicer model.stl` on macOS,
-`Start-Process model.stl` on Windows when OrcaSlicer opens that file type, or
+To let the person pick presets and slice themselves, open the model in the app: `open -a OrcaSlicer
+model.stl` on macOS, `Start-Process model.stl` on Windows where OrcaSlicer opens that file type,
 `orca-slicer model.stl` on Linux. The app also reads STEP.
 
-## Print on a Bambu Lab printer
+## Bambu Lab printers
 
-Bambu Lab printers take print jobs from other software only through Bambu
-Connect, Bambu Lab's desktop app for third-party tools
-(https://wiki.bambulab.com/en/software/third-party-integration). Open a sliced
-file in Bambu Connect, or an unsliced model in Bambu Studio; the person
-picks the printer and starts the print there. The agent never controls a
-printer and never asks for access codes.
+A Bambu Lab printer takes jobs from other software only through Bambu Connect, Bambu Lab's desktop app
+for third-party tools (https://wiki.bambulab.com/en/software/bambu-connect; Windows 10 and macOS 13
+or later, signed in to the person's account). The person picks the printer and starts the print there.
+Never ask for access codes.
 
-Bambu Connect runs on Windows 10 or later and macOS 13 or later, signed in to the
-person's Bambu Lab account, with the printer on that account or reachable in LAN
-mode (https://wiki.bambulab.com/en/software/bambu-connect). On Linux, where Bambu
-Connect is still in development, use Bambu Studio.
-
-| What the person has | Handoff |
+| What the person has | Hand it off by |
 | --- | --- |
-| A sliced `.gcode.3mf`, from OrcaSlicer's command line or Bambu Studio's or OrcaSlicer's "Export plate sliced file" | Open it in Bambu Connect |
-| A plain `.gcode` sliced with this printer's Bambu profile | Open it in Bambu Connect; if Bambu Connect refuses it, slice the model in Bambu Studio instead |
-| A model with no slice: `.3mf`, `.stl` or `.step` (from a text-to-cad model: `cad model export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
+| A sliced `.gcode.3mf` | Opening it in Bambu Connect |
+| A plain `.gcode` sliced with this printer's Bambu profile | Opening it in Bambu Connect; if refused, slice the model in Bambu Studio |
+| An unsliced `.3mf`, `.stl` or `.step` | Opening it in Bambu Studio, which slices and sends it. On Linux, where Bambu Connect is still in development, this is the route |
 
-### Open a file in Bambu Connect
-
-Bambu Connect imports a file from a `bambu-connect://import-file` link with
-three parameters: `path`, the file's absolute path, and `name`, the name to
-show, each percent-encoded the way JavaScript's `encodeURIComponent` does it
-(Python: `urllib.parse.quote(value, safe="")`); and `version=1.0.0`. For
-`/Users/me/prints/bracket.gcode.3mf`:
+Bambu Connect imports a file from a `bambu-connect://import-file` link with three parameters: `path`
+(the file's absolute path) and `name` (the name to show), each percent-encoded as JavaScript's
+`encodeURIComponent` does (Python: `urllib.parse.quote(value, safe="")`), and `version=1.0.0`:
 
 ```text
 bambu-connect://import-file?path=%2FUsers%2Fme%2Fprints%2Fbracket.gcode.3mf&name=bracket&version=1.0.0
 ```
 
-Open the link with `open "<link>"` on macOS, or `Start-Process "<link>"` in
-PowerShell on Windows. Bambu Connect comes forward with the file loaded.
+Open the link with `open "<link>"` on macOS or `Start-Process "<link>"` in PowerShell. Bambu Studio
+opens a model with `open -a BambuStudio <file>` on macOS (some installs name it `Bambu Studio`), from
+its File menu on Windows, or `bambu-studio <file>` on Linux.
 
-### Open a model in Bambu Studio
-
-On macOS run `open -a BambuStudio <file>` (some installs name the app
-`Bambu Studio`). On Windows open the file from Bambu Studio's File menu, or run
-`Start-Process <file>` when Bambu Studio is the file's default app. On Linux run
-`bambu-studio <file>`, or open it from the AppImage or Flatpak.
-
-### Finish in the app
-
-Before the person presses Print, tell them what to check: the printer, plate
-type, nozzle, filament and AMS mapping, a clear build plate, and someone nearby
-for the first layer. Never report a print as started: the agent can't see the
-printer, and the app shows the job and its progress.
-
-Out of scope: starting, pausing or cancelling prints without the person, and
-reading printer status. Bambu Lab's firmware takes those from other software
-only through Bambu Connect, or in Developer Mode, which is LAN-only and
-disconnects the printer from Bambu Cloud.
+Before the person presses Print, tell them what to check: the printer, plate type, nozzle, filament
+and AMS mapping, a clear build plate, and someone nearby for the first layer. This hand-off shows the
+agent nothing of the printer, so do not report a print as started.
 
 ## Any other printer
 
-The person prints the `.gcode` from their printer's app, its web interface
-(PrusaLink, OctoPrint, Mainsail, Fluidd) or an SD card.
+The person prints the `.gcode` from their printer's app, its web interface (PrusaLink, OctoPrint,
+Mainsail, Fluidd) or an SD card.
 
 ## Check each change
 
 Before anyone prints a slice:
 
-- `<orca> model.stl --info` prints the model's size; it has to fit the bed.
-- Check the slice's settings, which OrcaSlicer writes at the end of the G-code:
+- `<orca> model.stl --info` prints the model's size, which has to fit the bed.
+- OrcaSlicer writes the slice's settings at the end of the G-code. Confirm they match the person's
+  printer and material:
 
   ```bash
   grep -E '^; (printer_model|nozzle_diameter|filament_type|nozzle_temperature|hot_plate_temp|bed_temperature) =|printing time' out/plate_1.gcode
   ```
-
-  Confirm they match the person's printer and material before anyone prints it.

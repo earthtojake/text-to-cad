@@ -75,8 +75,8 @@ export interface CadRecent {
   pinned: boolean; missing: boolean;
   /** The picture's name (its content's), and when it was taken. */
   thumbnail: string | null; pictured: number | null;
-  /** Its picture in the dark theme's own colours, where its view draws one (a board's); null or absent: `thumbnail` in both. */
-  thumbnailDark?: string | null;
+  /** A file's size on disk, in bytes; null once it is gone, and for a document built from code (its script is never read). */
+  size?: number | null;
   /** A CAD file on disk, or a document built from code: a model's, or a shape a program handed over. */
   kind: 'file' | 'model' | 'shape';
   /** A model's or a shape's: the script it was built from (a shape's home). */
@@ -158,14 +158,45 @@ export interface CadEngineDocument {
   fetch: typeof fetch;
 }
 /**
- * What `GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure` answers: a URDF, SDF or SRDF resolved by the server into the articulation
+ * What a save of a model's parameters answers (`POST /api/v1/documents/model/<id>/parameters`): each
+ * value the engine wrote into the script (one equal to the script's is not written, and not listed),
+ * with the script's absolute path and the line it is on, and the models it built again.
+ */
+export interface CadParametersSaved {
+  id: string;
+  written: { name: string; from: number; to: number; file: string; line: number }[];
+  rebuilt: string[];
+}
+/**
+ * What a preview of a model's parameters answers (`POST /api/v1/documents/model/<id>/preview`): the model
+ * built at those values for this page alone, nothing written -- its own id and the URL its structure and
+ * parts are read at (a document's routes), its version, the document version it was built against
+ * (`basis`), the values it differs from the document by, the build's seconds and how its memo went. `preview:
+ * null`: the values are the document's (the page's previews let go). `superseded`: a newer request of the
+ * same document took its place before it built.
+ */
+export interface CadParametersPreview {
+  id: string;
+  preview?: { id: string; url: string; version: string; basis: string | null; values: Record<string, number>;
+    seconds: number | null; memo: Record<string, number> | null } | null;
+  superseded?: boolean;
+}
+/**
+ * A save or a preview the engine refused, as `setModelParameters` and `previewModelParameters` raise it: the
+ * engine's message, its `code` (`no_worker`, `unknown_parameter`, `not_writable`, `not_a_number`,
+ * `out_of_range`, `script_changed`, `busy`, `build_failed`), what to do about it (`hint`), for `not_writable`
+ * the parameter's `reason`, and for `build_failed` the build's whole words (`detail`).
+ */
+export interface CadParametersRefusal extends Error { code: string; hint: string; reason?: string; detail?: string }
+/**
+ * What `GET /api/v1/documents/<urdf|srdf>/<id>/structure` answers: a URDF or an SRDF resolved by the server into the articulation
  * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
  * with its colour and the URL of the mesh it draws), and what the description says about its
  * links and joints, as written. See `packages/cad/src/cad_server/robot_payload.py`.
  */
 export interface CadRobotPayload {
   schemaVersion: number;
-  kind: 'urdf' | 'sdf' | 'srdf';
+  kind: 'urdf' | 'srdf';
   name: string;
   root: string;
   articulation: Record<string, unknown>;
@@ -173,7 +204,8 @@ export interface CadRobotPayload {
   joints: Record<string, unknown>[];
   visuals: { id: string; link: string; label: string; placement: number[]; color: string; mesh: { format: string; url: string } }[];
   srdf: Record<string, unknown> | null;
-  sdf: Record<string, unknown> | null;
+  /** Always null: schema 2 names it, and the document type it described is gone. */
+  sdf: null;
   [key: string]: unknown;
 }
 /** Byte tickets own their buffer exclusively: workers may detach it. URL tickets are approved by the provider. */
@@ -216,13 +248,13 @@ export interface CadWorkspaceService {
    * A change to the library (`open`, `pin`, `unpin`, `thumbnail`; `remove` a file's entry, its file
    * untouched; `delete` a model, its entry and the engine's copy): the library as it now is.
    */
-  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string; dark?: string }): Promise<CadRecent[]>;
-  /** Keep a model's picture in the library, and its dark theme's beside it where the picture carries one (`dark`: a board's). */
-  keepThumbnail(png: Blob & { dark?: Blob }, path: string): Promise<CadRecent[]>;
+  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
+  /** Keep a model's picture in the library: the light viewport's, which the home shows in both themes. */
+  keepThumbnail(png: Blob, path: string): Promise<CadRecent[]>;
   /** A library picture, of the row it is of (its document's id, the picture's name), as a data URL; null when there is none. */
-  thumbnail(model: { id?: string; thumbnail?: string | null; thumbnailDark?: string | null }, options?: CadRequestOptions & { scheme?: 'light' | 'dark' }): Promise<string | null>;
+  thumbnail(model: { id?: string; thumbnail?: string | null }, options?: CadRequestOptions): Promise<string | null>;
   /** The URL of a library picture (`GET /api/v1/documents/<id>/thumbnail`), versioned by the picture's name. */
-  thumbnailUrl(model: { id?: string; thumbnail?: string | null; thumbnailDark?: string | null }, options?: { scheme?: 'light' | 'dark' }): string;
+  thumbnailUrl(model: { id?: string; thumbnail?: string | null }): string;
   /** Open: the model the person picks with the desktop's chooser, by its absolute path, or null. */
   pick(): Promise<string | null>;
   /** Show a file, by its absolute path, in the desktop's file manager. */
@@ -268,6 +300,21 @@ export interface CadWorkspaceService {
   engineDocument?(file: string, options?: CadRequestOptions & { onProgress?(frame: Record<string, unknown>): void }): Promise<CadEngineDocument>;
   /** Whether the engine holds a read of the document now (its envelope's `held`), asked without starting one. */
   engineHolds?(file: string, options?: CadRequestOptions): Promise<boolean>;
+  /**
+   * `POST /api/v1/documents/model/<id>/parameters`: new values for a model's declared parameters, by
+   * name, each a finite number. The engine rewrites them in the model's script and builds it again,
+   * and answers once that build has ended; a refusal rejects with a `CadParametersRefusal`. The one
+   * call of a view that changes a design. A host that cannot make it leaves it out, and its views
+   * show a model's parameters without a way to save them.
+   */
+  setModelParameters?(id: string, values: Record<string, number>, options?: CadRequestOptions): Promise<CadParametersSaved>;
+  /**
+   * `POST /api/v1/documents/model/<id>/preview`: the model at other values of its declared parameters, for
+   * this page alone (`page`, the page's own token): the engine builds it in the model's worker and writes
+   * nothing; the page reads the preview's structure and parts as a document's. `{}` lets the page's previews
+   * go. A host that cannot make it leaves it out, and its views show a value only once it is saved.
+   */
+  previewModelParameters?(id: string, values: Record<string, number>, options: CadRequestOptions & { page: string }): Promise<CadParametersPreview>;
   readonly resources: CadResourceProvider;
   createRenderSession(options?: { file?: string }): CadRenderSession;
   dispose(): void;

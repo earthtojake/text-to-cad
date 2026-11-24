@@ -20,7 +20,7 @@ await build({
       path: args.kind.startsWith('require') ? require.resolve(args.path) : pathToFileURL(require.resolve(args.path)).href,
       external: true,
     }));
-    // The shared CAD viewer, reduced to what this host hands it: what it draws is its own suite's.
+    // The shared viewer, reduced to what this host hands it: what it draws is its own suite's.
     plugin.onResolve({ filter: /^@cad\/ui\/cad-viewer$|useViewerAutoReload\.js$|host\/viewerLinks\.js$/ }, args => ({ path: args.path, namespace: 'host-test' }));
     // The tab store the host really uses; nothing else of the shared UI renders here.
     plugin.onResolve({ filter: /^@cad\/ui\/tab-store$/ }, () => ({ path: fileURLToPath(new URL('../../../packages/ui/src/tab-store/index.ts', import.meta.url)) }));
@@ -200,6 +200,53 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   }
 });
 
+test('a document\'s page has its name from its first frame where the boot learned it, and never its id', async () => {
+  const MODEL = '906f6bff-80e7-5331-b842-dd377b720a7b';
+  const dom = new JSDOM('<div id="root"></div>', { url: `http://cad.local/${MODEL}` });
+  const { window } = dom;
+  const matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, localStorage: window.localStorage, sessionStorage: window.sessionStorage, matchMedia, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  window.matchMedia = matchMedia;
+  const fetchBefore = globalThis.fetch;
+  // The model's envelope, answered when the test says.
+  let answer = () => {};
+  const envelope = { id: MODEL, kind: 'xbf', entry: { id: MODEL, file: MODEL, sourcePath: null, name: 'qdd_actuator' }, revision: '' };
+  globalThis.fetch = async (url, init = {}) => {
+    if (url === `/api/v1/documents/${MODEL}`) await new Promise(resolve => { answer = resolve; });
+    const reply = url === `/api/v1/documents/${MODEL}` ? envelope : url === '/api/v1/settings' ? { language: { locale: null } } : { documents: [] };
+    return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
+  };
+  const page = async (boot) => {
+    const client = { ...createWebCadClient({ document: window.document }), serverInfo: async () => ({ start: '/m' }) };
+    // The boot's ask (`main.tsx`): the document the URL names, beside the server's description.
+    const asked = client.resolveEntry(MODEL).catch(() => {});
+    await boot(asked);
+    const root = createRoot(window.document.getElementById('root'));
+    await act(() => root.render(createElement(App, { client, server: { start: '/m' }, tabStore: createTabStore(sessionTabRecord(window.sessionStorage)) })));
+    return { client, root, asked };
+  };
+  const named = () => [snapshot().name, window.document.title];
+  try {
+    // Answered before the description: the first render has the name.
+    const known = await page(async asked => { answer(); await asked; });
+    assert.equal(snapshot().file, MODEL);
+    assert.deepEqual(named(), ['qdd_actuator', 'qdd_actuator']);
+    await act(() => known.root.unmount());
+    known.client.dispose();
+    // Not answered yet: no name, never the id, and the page's own title, until the catalog answers.
+    window.document.title = 'text-to-cad';
+    const later = await page(async () => {});
+    assert.deepEqual(named(), ['', 'text-to-cad']);
+    await act(async () => { answer(); await later.asked; });
+    assert.deepEqual(named(), ['qdd_actuator', 'qdd_actuator']);
+    await act(() => later.root.unmount());
+    later.client.dispose();
+  } finally {
+    globalThis.fetch = fetchBefore;
+    dom.window.close();
+  }
+});
+
 test('a page whose engine is gone says so in its language, over the page, until the engine answers', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: `http://cad.local/${ONE}` });
   const { window } = dom;
@@ -234,6 +281,9 @@ test('a page whose engine is gone says so in its language, over the page, until 
     assert.equal(window.document.querySelectorAll('[role="alert"]').length, 1);
     const under = alert()?.nextElementSibling;
     assert.deepEqual([under?.hasAttribute('inert'), under?.getAttribute('aria-hidden')], [true, 'true']);
+    // Out of sight too: a stacking context of its own under the notice, so no layer of the view (its tool strip, at
+    // the notice's own z-50 and later in the page) is drawn over it.
+    assert.equal(under?.classList.contains('isolate'), true);
     assert.doesNotMatch(alert()?.textContent ?? '', /Failed to fetch|\{/, 'never the failure itself');
     assert.equal(snapshot() !== undefined, true, 'the page stays under it');
     catalog = 'restarted';
@@ -262,6 +312,9 @@ test('the notice says the page reconnects, and how to start the engine', async (
     await act(() => root.render(createElement(EngineStopped, { locale: 'en' })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
       'CAD is not running.It starts again when your agent next uses CAD or you open the CAD app; this page reconnects on its own.Reload');
+    // The one quiet status screen: words and a small quiet button (the control's height), no icon.
+    const screen = dom.window.document.querySelector('[data-status-screen]');
+    assert.deepEqual([screen?.querySelector('svg'), screen?.querySelector('button')?.classList.contains('h-control')], [null, true]);
     await act(() => root.render(createElement(EngineStopped, { locale: 'en', refused: true })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
       "This link no longer works.Ask your agent to open the model again and use the new link.");

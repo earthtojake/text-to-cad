@@ -583,6 +583,27 @@ def _short_runs(loop: plane.Loop, most_turn_deg: float = 20.0, least_count: int 
 # --- bend lines ---------------------------------------------------------------------------------------------
 
 
+def _apart(pairs: list[tuple[float, int, int]]) -> list[tuple[float, int, int]]:
+    """The pairs, each said at the hole that found it, but moved to its other where that gives one more hole a
+    pair of its own: a finding is a hole's, and the pairs of holes as near are more than one a hole. The
+    nearest are placed first, so that the pairs under any limit have as many holes as they can."""
+    to: dict[int, int] = {}  # a hole -> the other of the pair said at it
+    for _, first, second in sorted(pairs, key=lambda pair: round(pair[0], 4)):  # (by the figure a limit judges)
+        for hole, other in ((first, second), (second, first)):
+            end, passed = hole, set()
+            while end in to and end not in passed:
+                passed.add(end)
+                end = to[end]
+            if end in to:
+                continue  # all that way have a pair, round a ring
+            while hole in to:  # each on the way hands its pair to that pair's other, down to one with none
+                held, to[hole] = to[hole], other
+                hole, other = held, hole
+            to[hole] = other
+            break
+    return [(d, b, a) if to.get(a) != b and to.get(b) == a else (d, a, b) for d, a, b in pairs]
+
+
 def _line(piece: _Piece) -> plane.Loop:
     """A bend line as a loop of no area, for the plane's distances and rays."""
     return plane.Loop(piece.points[[0, -1]], np.ones(2, dtype=bool))
@@ -735,7 +756,7 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     """The cut-file report of the DXF ``source``: facts alone."""
     import ezdxf
 
-    from cad.build123d._dfm_sheet import _outline_features
+    from cad.build123d._dfm_sheet import _one_a_place_first, _outline_features
     from cad.engine.export.dxf import document_is_drawing, validate_drawing_document
 
     path = Path(str(source)).expanduser().resolve()
@@ -864,7 +885,8 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
                 "location": _where(source), "xyz": [round(float(v), 4) for v in (*loops[i].centroid(), 0.0)]})
 
     def locate(point: Any) -> tuple[str, list[float]]:
-        """The entity nearest a point of the plane: the loops tried nearest box first."""
+        """The entity nearest a point of the plane, at a corner the first along its loop: the loops tried
+        nearest box first."""
         p = np.asarray(point, dtype=float).reshape(2)
         gap = np.linalg.norm(np.maximum(0.0, np.maximum(lows - p, p - highs)), axis=1)
         best, where = math.inf, None
@@ -872,7 +894,7 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
             if gap[j] >= best:
                 break
             d, _ = plane._point_segment(p[None], loops[j].a, loops[j].b)
-            k = int(np.argmin(d[0]))
+            k = int(np.argmax(d[0] <= d[0].min() + plane.TIE_MM))
             if d[0, k] < best:
                 best, where = float(d[0, k]), loops[j].source[k]
         return (_where(where) if where is not None else "cut file"), [round(float(p[0]), 4), round(float(p[1]), 4), 0.0]
@@ -928,14 +950,13 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
                                                  "location": record["location"], "xyz": record["xyz"],
                                                  "convention": "to the bend layer's line, read as the bend's "
                                                                "centre line"})
-        pairs: dict[tuple[int, int], dict] = {}
-        for k, found in enumerate(plane.nearest([loops[h] for h in mine])):
-            if found is not None and "round" in (records[k]["kind"], records[found[1]]["kind"]):
-                d, g = found  # (the bar between two cutouts is a web: ``_outline_features``)
-                pairs.setdefault((min(k, g), max(k, g)), {
-                    "distance_mm": round(d, 4), "location": records[k]["location"],
-                    "other": records[g]["location"], "xyz": records[k]["xyz"]})
-        families["hole_spacing"].extend(pairs.values())
+        pairs = [(d, k, g) for d, k, g in plane.nearest_pairs([loops[h] for h in mine], plane.TIE_MM)
+                 if "round" in (records[k]["kind"], records[g]["kind"])]  # (two cutouts' bar is a web: ``_outline_features``)
+        for d, k, g in _apart(pairs):
+            families["hole_spacing"].append({
+                "distance_mm": round(d, 4), "location": records[k]["location"],
+                "other": records[g]["location"], "xyz": records[k]["xyz"]})
+    families["hole_spacing"] = _one_a_place_first(families["hole_spacing"])
     suspect = _units_suspect(unit, extents, options)
     if suspect:
         report["scale"].update(units_suspect=True, note=suspect)

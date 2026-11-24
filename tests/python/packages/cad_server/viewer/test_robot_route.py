@@ -1,4 +1,4 @@
-"""A robot document (``/api/v1/documents/<urdf|srdf|sdf>/<id>/...``) against a real launched server.
+"""A robot document (``/api/v1/documents/<urdf|srdf>/<id>/...``) against a real launched server.
 
 The fixture writes its own descriptions into a fresh temporary folder; nothing here reads the
 sample corpus. A description is opened by its absolute path, as every file is: its ``structure``

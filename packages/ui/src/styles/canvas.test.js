@@ -12,12 +12,16 @@ import { cssColorToHex, resolveCanvasColor } from "../renderers/kit/look/canvasC
 import { readDrawingThemeColors } from "../renderers/dxf/themeColors.js";
 
 const tokens = await readFile(new URL("./tokens.css", import.meta.url), "utf8");
-const declared = (selector) => {
+const declared = (selector, token = "canvas") => {
   const block = tokens.slice(tokens.indexOf(`${selector} {`));
-  return cssColorToHex(/--canvas:\s*([^;]+);/u.exec(block.slice(0, block.indexOf("}")))?.[1] ?? "");
+  return cssColorToHex(new RegExp(`\\n\\s*--${token}:\\s*([^;]+);`, "u").exec(block.slice(0, block.indexOf("}")))?.[1] ?? "");
 };
 
-for (const [scheme, selector] of [["light", ":root"], ["dark", ".dark"]]) {
+for (const [scheme, selector] of [["light", ":root, .light"], ["dark", ".dark"]]) {
+  test(`in the ${scheme} theme core's written-out background and foreground are the tokens`, () => {
+    assert.equal(APP_THEME_COLORS[scheme].background, declared(selector, "background"));
+    assert.equal(APP_THEME_COLORS[scheme].foreground, declared(selector, "foreground"));
+  });
   test(`in the ${scheme} theme every view's canvas is the --canvas token`, () => {
     const canvas = declared(selector);
     assert.match(canvas ?? "", /^#[0-9a-f]{6}$/u, `${selector} declares --canvas`);

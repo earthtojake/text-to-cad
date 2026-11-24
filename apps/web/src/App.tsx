@@ -39,7 +39,7 @@ export function useTabAppearance(tabStore: TabStore): { preference: Appearance; 
 const DOCUMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
- * The CAD Viewer's page: one document at a time, by the id its URL's path names (`/<id>`: a model's,
+ * The viewer's page: one document at a time, by the id its URL's path names (`/<id>`: a model's,
  * or a file's, which the server registers when it is opened), or the home (`/`): the models opened
  * before. A file opened by its path (from Files, or the home's Open) is asked for its id first, and shown by it. The browser's own history is the way back:
  * showing a document or the home is a new entry.
@@ -99,13 +99,29 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     window.addEventListener('popstate', sync);
     return () => window.removeEventListener('popstate', sync);
   }, []);
-  // Once the catalog has the document: the page is named after it alone ("bracket.step", "juno";
-  // the home is "text-to-cad"), and the library every CAD view
+  // The document's name, never its id: the catalog's row of it (which the boot asks for with the
+  // server's description, `main.tsx`, so a document's page has it from its first frame where the server
+  // answers in time), else the name it had when it was shown before or on the home's card it was
+  // opened from; else none yet, its place in the navbar empty until the catalog answers. A file
+  // opened by its path and not found is named by its path's last segment.
+  const names = useRef(new Map<string, string>());
+  const catalogName = useSyncExternalStore(client.subscribe,
+    () => String((file ? client.entryOf?.(normalizePath(file)) : null)?.name || ''), () => '');
+  if (file && catalogName) names.current.set(file, catalogName);
+  const name = catalogName || names.current.get(file) || '';
+  // The file the catalog has on screen, by its own path (a model's document by its id): `onShown`.
+  const [shownPath, setShownPath] = useState<string | null>(null);
+  // The page is named after it alone ("bracket.step", "juno"; a file with no name of its own, after its
+  // path's last segment); the home, or a document whose name is not known yet, is "text-to-cad".
+  useEffect(() => {
+    const fileName = (path: string | null) => (path && !DOCUMENT_ID.test(path) ? normalizePath(path).split('/').pop() || '' : '');
+    document.title = name || fileName(shownPath) || fileName(file) || 'text-to-cad';
+  }, [name, shownPath, file]);
+  // Once the catalog has the document, the library every CAD view
   // shares says it was opened now: a file joins it (counted, as a code, for analytics), and a model,
   // known by its id alone and in it since its run, has its opened time.
   const shown = useCallback((path: string | null) => {
-    const entry = path ? client.entryOf?.(path) : null;
-    document.title = path ? String(entry?.name || path.split('/').pop()) : 'text-to-cad';
+    setShownPath(path);
     if (path) void client.changeRecents({ action: 'open', path }).catch(() => {});
   }, [client]);
   // The home: the library every CAD view shares, and Open with the desktop's chooser where the
@@ -113,8 +129,12 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   const library = useMemo<ModelLibrarySource>(() => ({
     list: () => client.recents(),
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
-    thumbnail: (model, scheme) => Promise.resolve(client.thumbnailUrl(model, { scheme })),
-    open: async entry => { await show(entry.path); },
+    thumbnail: model => Promise.resolve(client.thumbnailUrl(model)),
+    open: async entry => {
+      // The card's name is the document's until the catalog says it.
+      for (const key of [entry.id, normalizePath(entry.path)]) if (key && entry.name) names.current.set(key, entry.name);
+      await show(entry.path);
+    },
     ...(server.pick ? { pick: async () => { const picked = await client.pick(); if (picked) await show(picked); } } : {}),
   }), [client, server.pick, show]);
   const appearance = useTabAppearance(tabStore);
@@ -165,11 +185,13 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     reload: () => { reloadWhenClean(() => window.location.reload()); },
     ask: () => client.serverInfo({ fresh: true }).then(info => info, error => (isEngineRefused(error) ? { refused: true } : null)) });
   const refused = askedRefused ?? readRefused;
-  return <div className="relative flex h-svh flex-col overflow-hidden">{engineGone ? <EngineStopped locale={locale} refused={refused} /> : null}
+  return <div className="fixed inset-0 flex flex-col overflow-hidden">{engineGone ? <EngineStopped locale={locale} refused={refused} /> : null}
     {/* The engine gone, its notice is the page's one: what is under it (a view's own "can't reach"
-        card among it) is out of reach and unheard until it is back. */}
-    <div className="min-h-0 flex-1" inert={engineGone || undefined} aria-hidden={engineGone || undefined}>
-    <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={next => { void show(next); }} onShown={shown}
+        card among it) is out of reach and unheard until it is back, and out of sight: the page is a stacking
+        context of its own (`isolate`), so no layer of a view's (its tool strip and Quick Edit's bar stand at
+        `z-50`, over the view's panels) paints over the notice. The view stays mounted under it, as it was. */}
+    <div className="isolate min-h-0 flex-1" inert={engineGone || undefined} aria-hidden={engineGone || undefined}>
+    <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} name={name} onShow={next => { void show(next); }} onShown={shown}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings}
       colorScheme={colorScheme} language={language}
       whatsNew={engineGone ? undefined : { entry: whatsNew.entry, onDismiss: whatsNew.dismiss }} />

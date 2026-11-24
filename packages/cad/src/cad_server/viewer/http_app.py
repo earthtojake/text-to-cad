@@ -60,18 +60,11 @@ import threading
 _EXPORTS_LOCK = threading.Lock()
 
 POST_GUARD_HEADER = "x-cad-viewer"
-# A thumbnail travels as base64 in the change's JSON: 512 KiB of PNG, its dark theme's beside it where
-# its view draws one, and room for the rest.
+# A thumbnail travels as base64 in the change's JSON: 512 KiB of PNG, and room for the rest, an earlier
+# release's page's second picture included (its dark theme's, which is not read).
 _LIBRARY_BODY_LIMIT = 1536 * 1024
 # A thumbnail's name is its content's (``recents.RecentStore.thumbnail``): nothing else is read.
 _THUMBNAIL_NAME = re.compile(r"[0-9a-f]{32}\.png")
-
-
-def _dark_thumbnail(payload):
-    """A thumbnail change's dark theme's picture (``dark``, base64, as ``png``), where its view drew one."""
-    from .recents import thumbnail_png
-
-    return thumbnail_png(payload["dark"]) if payload.get("dark") else None
 
 
 _CAD_EXTENSIONS = ", ".join(sorted(VIEWER_EXTENSIONS))
@@ -155,7 +148,7 @@ def _update_identity_digest(digest, base_dir, *, suffix: str = "") -> None:
 
 
 # What a page's address answers where no client is built (``_serve_dist``): the sentence ``cad viewer`` says.
-NOT_BUILT = "CAD Viewer client is not built; build apps/web or install the cad wheel"
+NOT_BUILT = "The viewer client is not built; build apps/web or install the cad wheel"
 
 
 def identity_token(dist_dir: str) -> str:
@@ -228,11 +221,24 @@ _FUNNEL_HINTS = {400: "fix the request as the error says", 404: "check the path 
 _ELEMENTS = {"faces": "face", "edges": "edge", "vertices": "vertex"}
 _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure, "
                   "kinematics, POST pose, POST mesh")
+# A model's own: its parameters set in its script, and a look at other values of them (a preview).
+_MODEL_ROUTES = _ENGINE_ROUTES + ", POST parameters, POST preview"
+# What a preview (``<id>~preview-<token>``, the engine's ``parameters.Previewing``) is read at: what a page draws
+# and measures of it, nothing else.
+_PREVIEW_ROUTES = "structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure"
+PREVIEW_MARK = "~preview-"
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
                 "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source"}
+# The status a refused change of a model's parameters is answered with, by its ``code``
+# (``cad.engine.parameters.CODES``): 400 for a request that names what the model has not or gives a value it
+# does not take -- the same request fails again --; 409 for one the model's state refuses now -- no live worker
+# that recorded where its parameters are, one the code does not spell as a number, a script changed since its
+# run, a build of it running, a build at the new values that failed (the script put back as it was).
+PARAMETER_STATUS = {"unknown_parameter": 400, "not_a_number": 400, "out_of_range": 400, "no_worker": 409,
+                    "not_writable": 409, "script_changed": 409, "busy": 409, "build_failed": 409}
 # A model's document has no file, so no source.
-_KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
+_KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _MODEL_ROUTES
                 for entry in DOCUMENT_TYPES.values()}
 # This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
 # served by an engine that restarted since it loaded. One per process, the engine's.
@@ -678,6 +684,10 @@ class CadApp:
                 return self._methods(request, {"GET": lambda: send_json(response, 200, self.documents(request.query, first))})
             return self._kind_route(request, response, first, rest[1], rest[2:])
         ident = first
+        if PREVIEW_MARK in ident:
+            # A page's preview is no document: it has no envelope, version, thumbnail or export.
+            raise ApiError(404, f"no route {request.path}", f"a preview's routes are {_PREVIEW_ROUTES}, "
+                           "under /api/v1/documents/model/<id>~preview-<token>/")
         if len(rest) == 1:
             return self._methods(request, {"GET": lambda: send_json(response, 200, self.envelope(ident)),
                                            "DELETE": lambda: self._forget(response, ident)})
@@ -686,7 +696,7 @@ class CadApp:
             return self._methods(request, {"GET": lambda: self._relay(request, response, f"/api/doc/{ident}/version",
                                                                       request.query)})
         if rest[1:] == ["thumbnail"]:
-            return self._methods(request, {"GET": lambda: self._thumbnail(response, ident, request.query.get("scheme"))})
+            return self._methods(request, {"GET": lambda: self._thumbnail(response, ident)})
         if rest[1:] == ["exports"]:
             return self._methods(request, {"POST": lambda: self._export(request, response, ident)})
         raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
@@ -912,6 +922,8 @@ class CadApp:
         (``cad/engine/serve.py``'s routes, in process: ``_relay``)."""
         doc = f"/api/doc/{ident}"
         query = request.query
+        if PREVIEW_MARK in ident and not (rest in (["structure"], ["measure"]) or (len(rest) >= 2 and rest[0] == "parts")):
+            raise ApiError(404, f"no route {request.path}", f"a preview's routes are {_PREVIEW_ROUTES}")
         if rest == ["structure"]:
             return self._methods(request, {"GET": lambda: self._relay(request, response, doc, query)})
         if rest == ["kinematics"]:
@@ -922,6 +934,10 @@ class CadApp:
             return self._methods(request, {"POST": lambda: self._pose(request, response, kind, doc)})
         if rest == ["mesh"]:
             return self._methods(request, {"POST": lambda: self._relay(request, response, f"{doc}/mesh", query)})
+        if rest == ["parameters"] and kind == "model":
+            return self._methods(request, {"POST": lambda: self._parameters(request, response, ident)})
+        if rest == ["preview"] and kind == "model":
+            return self._methods(request, {"POST": lambda: self._preview(request, response, ident)})
         if len(rest) >= 2 and rest[0] == "parts" and rest[1]:
             part = f"{doc}/part/{rest[1]}"
             if len(rest) == 2:
@@ -933,13 +949,79 @@ class CadApp:
                     request, response, f"{part}/{_ELEMENTS[rest[2]]}/{rest[3]}")})
         raise ApiError(404, f"no route {request.path}", f"a {kind}'s routes are {_KIND_ROUTES[kind]}")
 
+    def _parameters(self, request, response, ident) -> None:
+        """``POST /api/v1/documents/model/<id>/parameters`` with ``{"values": {name: number, ...}}``: the
+        model's parameters written into its script and the model built again (``set_parameters``: the engine's
+        ``set``, the Parameters tab's Save), answered ``200 {"id", "written", "rebuilt"}`` once it is built.
+        A change refused is the routes' answer (``{"error", "hint"}``) with its ``code`` (``PARAMETER_STATUS``
+        says each one's status) and, for ``not_writable``, the parameter's ``reason``; ``build_failed`` carries
+        the build's whole words too (``detail``). The request names parameters and numbers alone: never a
+        path, never text."""
+        self._limit(request, 65536)
+        payload = json.loads(request.body() or b"{}")
+        if type(payload) is not dict or set(payload) != {"values"} or type(payload["values"]) is not dict:
+            raise ValueError('a change of parameters is {"values": {name: number, ...}}')
+        self._parameter_answer(response, lambda: self.set_parameters(ident, payload["values"]))
+
+    def _preview(self, request, response, ident) -> None:
+        """``POST /api/v1/documents/model/<id>/preview`` with ``{"values": {name: number, ...}, "page": token}``:
+        the model at those values, built in its worker and held for that page alone (``preview_parameters``: the
+        engine's ``parameters.Previewing``), never written to its script or its document. Answered ``200`` with
+        ``{"id", "preview": {"id", "version", "basis", "values", "seconds", "memo"}}`` -- the preview's own id, read
+        at ``/api/v1/documents/model/<that id>/structure`` and its parts' routes --, ``{"id", "preview": null}``
+        for values that are the document's (the page's previews let go: Reset, a Save that landed), or ``{"id",
+        "superseded": true}`` for a request a newer one replaced before it built. Refused as ``parameters`` is,
+        by the same ``code``s and statuses. The request names parameters, numbers and the page's own token alone:
+        never a path, never text the engine runs."""
+        self._limit(request, 65536)
+        payload = json.loads(request.body() or b"{}")
+        if type(payload) is not dict or set(payload) != {"values", "page"} or type(payload["values"]) is not dict:
+            raise ValueError('a preview is {"values": {name: number, ...}, "page": token}')
+        self._parameter_answer(response, lambda: self.preview_parameters(ident, payload["values"], payload["page"]))
+
+    def preview_parameters(self, ident, values, page) -> dict:
+        """A model's preview (``_preview``): the engine's, so an application with none under it has none."""
+        raise ApiError(404, "documents are served by the installation's engine",
+                       "open the document in the CAD Viewer: `cad viewer <file>`")
+
+    def _parameter_answer(self, response, asked) -> None:
+        """The answer of a change of parameters or a preview (``asked``), or its refusal as the routes answer one:
+        ``{"error", "hint"}`` with its ``code`` (``PARAMETER_STATUS`` says each one's status), the parameter's
+        ``reason`` for ``not_writable``, and a failed build's whole words (``detail``); a document the engine
+        does not hold, its state and what builds it again."""
+        from cad.engine.parameters import ParameterRefused
+
+        try:
+            answer = asked()
+        except ParameterRefused as refused:
+            extra = {"code": refused.code}
+            if refused.code == "not_writable":
+                extra["reason"] = refused.reason
+            if isinstance(getattr(refused, "detail", None), str):
+                extra["detail"] = refused.detail
+            raise ApiError(PARAMETER_STATUS.get(str(refused.code), 409), str(refused),
+                           refused.hint or "run the model's script again", **extra) from None
+        except ValueError as error:
+            if not hasattr(error, "state"):
+                raise
+            # A document the engine does not hold (the engine's ``NotHeld``): its state, and what builds it again.
+            raise ApiError(404, str(error), getattr(error, "rebuild", None) or "run the model's script again",
+                           state=error.state) from None
+        send_json(response, 200, answer)
+
+    def set_parameters(self, ident, values) -> dict:
+        """A model's parameters set (``_parameters``): the engine's, so an application with none under it has
+        no model to set."""
+        raise ApiError(404, "documents are served by the installation's engine",
+                       "open the document in the CAD Viewer: `cad viewer <file>`")
+
     def _read(self, request, route: str, query=(), prefetch=True) -> tuple[int, str, dict, bytes]:
         """The engine's answer to one of its document reads (``route``: ``/api/doc/<id>...``,
         ``/api/v1/look...``): ``(status, content type, headers, body)``; ``prefetch``: a structure read
         starts meshing its parts, which a page reads next. Documents are the engine's: an
         application with none under it serves none."""
         raise ApiError(404, "documents are served by the installation's engine",
-                       "open the document in the CAD Viewer: `cad viewer <file>`")
+                       "open the document in the viewer: `cad viewer <file>`")
 
     def _relay(self, request, response, route: str, query=()) -> None:
         """The engine's answer to ``route``, sent on: its error, a JSON object, gains a ``hint``
@@ -1170,7 +1252,7 @@ class CadApp:
         return self._picker
 
     def _change_recents(self, payload) -> None:
-        """A change to the library -- ``{action, path, png?, dark?}``, a file by its absolute path, a model by
+        """A change to the library -- ``{action, path, png?}``, a file by its absolute path, a model by
         its id (its entry's ``path``). A file opened is
         also counted for analytics, and so is a model's page, under its own ``model`` kind; a model's entry
         is the engine's, written when it builds, so only when a page opened it (``open``), pinning, its
@@ -1188,7 +1270,7 @@ class CadApp:
             elif action == "delete":
                 self.delete_document(ident)
             elif action == "thumbnail":
-                self.recents.thumbnail(ident, thumbnail_png(payload.get("png")), _dark_thumbnail(payload))
+                self.recents.thumbnail(ident, thumbnail_png(payload.get("png")))
             elif action == "open":
                 # The page of a document the library holds: a file shown, as a file's is (``files``).
                 if self.recents.opened(ident) is not None and self.analytics is not None:
@@ -1211,7 +1293,7 @@ class CadApp:
         elif action == "remove":
             self.recents.remove(key)
         elif action == "thumbnail":
-            self.recents.thumbnail(key, thumbnail_png(payload.get("png")), _dark_thumbnail(payload))
+            self.recents.thumbnail(key, thumbnail_png(payload.get("png")))
         else:
             raise ValueError(f"unknown recents action {action!r}")
 
@@ -1223,16 +1305,16 @@ class CadApp:
 
         delete(self.recents.registry, ident)
 
-    def _thumbnail(self, response, ident, scheme=None):
+    def _thumbnail(self, response, ident):
         """``GET /api/v1/documents/<id>/thumbnail``: the picture the library keeps of the document, by
-        its record (the PNG named by its content: ``recents.RecentStore.thumbnail``); with
-        ``?scheme=dark``, its dark theme's where it has one, else that same picture."""
+        its record (the PNG named by its content: ``recents.RecentStore.thumbnail``), the one picture
+        in either theme."""
         try:
             record = self.recents.registry.get(ident) if is_id(ident) else None
         except OSError:
             record = None
         preview = (record or {}).get("preview") or {}
-        name = str((scheme == "dark" and preview.get("thumbnailDark")) or preview.get("thumbnail") or "")
+        name = str(preview.get("thumbnail") or "")
         png = self.recents.read_thumbnail(name) if _THUMBNAIL_NAME.fullmatch(name) else None
         if png is None:
             raise ApiError(404, f"no picture of {ident}", "a document's picture is taken when its page shows it")
@@ -1379,7 +1461,7 @@ class CadApp:
         response.send_json(status, body)
 
     def _handle_robot(self, request, response, path, mesh, api):
-        """``GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure``: the robot description resolved
+        """``GET /api/v1/documents/<urdf|srdf>/<id>/structure``: the robot description resolved
         for the page, or ``.../parts/<digest>`` one of the primitive meshes cadgen made for it
         (``robots.py`` owns both rules; ``api`` is where the document's reads are). Real work on a
         miss -- the validators, the frame graph, meshing a shape -- so it is counted, as the drawing

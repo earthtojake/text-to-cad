@@ -29,13 +29,16 @@ NAMES = {
             "memo": "cad.build123d.memo", "paint": "cad.build123d.paint", "export": "cad.engine.api.export",
             "snapshot": "cad.engine.api.snapshot", "inspect": "cad.engine.api.inspect"},
     "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},
+    "cad.build123d": {name: f"cad.build123d._flatten.{name}" for name in (
+        "flat_pattern", "planar_faces", "flatten_face", "flatten_faces", "union_faces", "offset_profile")},
+    "cad.mujoco": {"compile_model": "cad.mujoco._compile.compile_model",
+                   "compile_findings": "cad.mujoco._compile.compile_findings"},
 }
 MODULES = {
     "cad.ap242": "cad.build123d", "cad.gltf": "cad.build123d", "cad.geometry": "cad.build123d._geometry",
     "cad.flatten": "cad.build123d._flatten", "cad.findings": "cad._internal.findings",
     "cad.xml_common": "cad._internal.xml_common", "cad.check_fonts": "cad._internal.check_fonts",
-    "cad.urdf_source": "cad.urdf._source", "cad.sdf_source": "cad.sdf._source",
-    "cad.sdf_validation": "cad.sdf._validation", "cad.sdf_external": "cad.sdf._external",
+    "cad.urdf_source": "cad.urdf._source",
     "cad.srdf_source": "cad.srdf._source", "cad.srdf_validation": "cad.srdf._validation",
 }
 

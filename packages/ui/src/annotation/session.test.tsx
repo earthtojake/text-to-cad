@@ -47,15 +47,12 @@ it("the colour and weight are what is drawn next; the selection's restyle is one
   expect(current().items.map(item => item.color)).toEqual(['#ff2d55', '#ff2d55', '#ff2d55', '#ff2d55']);
 });
 
-it("a fill joins its shape's group in its colour, one step; an undo takes the pick of ink it removes", () => {
+it("an undo takes the pick of ink it removes", () => {
   const session = renderHook(() => useAnnotationSession('pencil', CAD));
   const current = () => session.result.current;
   act(() => current().add([stroke('r', { closed: true, color: '#00e5ff' })]));
-  act(() => current().fill('r', [{ id: 'f', kind: 'area', points: new Float32Array(9), color: '#ff2d55' } as any]));
-  const [shape, fill] = current().items;
-  expect(fill).toMatchObject({ id: 'f', color: '#00e5ff', group: shape.group });
-  expect(shape.group).toBeTruthy();
-  act(() => current().select(['r', 'f']));
+  act(() => current().add([stroke('s')]));
+  act(() => current().select(['r', 's']));
   act(() => current().undo());
   expect(current().items.map(item => item.id)).toEqual(['r']);
   expect(current().selected).toEqual(['r']);
@@ -111,13 +108,13 @@ it('Placement is what is drawn next: on the surface at first, kept like the colo
   expect(current().style.placement).toBe('plane');
 });
 
-it('Pencil and Shapes each keep what they draw with — the pen and the rectangle first — and share the ink, not the style', () => {
+it('the pencil and shapes families (Draw\'s two modes) each keep what they draw with — the pen and the rectangle first — and share the ink, not the style', () => {
   const session = renderHook(({ family }) => useAnnotationSession(family, CAD), { initialProps: { family: 'shapes' as 'pencil' | 'shapes' | null } });
   const current = () => session.result.current;
   // Shapes is up: its tool in hand is the rectangle.
   expect(current()).toMatchObject({ tool: 'rectangle', pencil: 'freedraw', shape: 'rectangle' });
   act(() => { current().selectColor('#39ff14'); current().selectStrokeWidth(4); current().selectPlacement('plane'); });
-  // Choosing in Pencil's menu (a pencil tool) leaves Shapes' choice alone, and Pencil takes it up.
+  // Choosing a pencil tool (on the drawing row) leaves Shapes' choice alone, and the pencil family takes it up.
   act(() => current().selectTool('highlighter'));
   expect(current()).toMatchObject({ tool: 'rectangle', pencil: 'highlighter', shape: 'rectangle' });
   session.rerender({ family: 'pencil' });

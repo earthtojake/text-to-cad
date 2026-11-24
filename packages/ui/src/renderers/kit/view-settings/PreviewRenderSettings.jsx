@@ -1,118 +1,105 @@
-import { Minus, Plus, RotateCcw } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 import { previewSettingsChanged, resolvePreviewSettings } from "@cad/core/common/viewSettings.js";
 import { Button } from "@cad/ui/primitives/button";
-import { ScrollArea } from "@cad/ui/primitives/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@cad/ui/primitives/select";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
-import { cn } from "@cad/ui/utils";
-import { useI18n } from "@cad/ui/i18n";
-import {
-  FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetColorPicker, FileSheetSettingRow,
-  FileSheetSettingsSection
-} from "../inspector/FileSheet.js";
-import { SliderField } from "../inspector/SliderField.jsx";
-
-// Every control fills the row's control column at the row's 24px height.
-const CONTROL_CLASS = "!h-6 w-full min-w-0";
-// A dropdown or colour is as wide as its value, at the row's right end, where every control ends.
-const CHOICE_WIDTH_CLASS = "ml-auto w-fit max-w-full";
-
-// `label` is what the row shows, short under its section's heading ("Opacity" under Floor); `name`
-// is the control's accessible name, whole ("Floor opacity").
-function Choice({ label, name = label, value, options, onChange, disabled = false }) {
-  return <FileSheetSettingRow label={label} disabled={disabled}>
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger aria-label={name} size="sm" className={cn(FILE_SHEET_SELECT_TRIGGER_CLASSES, CONTROL_CLASS, CHOICE_WIDTH_CLASS)}><SelectValue /></SelectTrigger>
-      <SelectContent>{options.map(([id, title]) => <SelectItem key={id} value={id}>{title}</SelectItem>)}</SelectContent>
-    </Select>
-  </FileSheetSettingRow>;
-}
-function Range({ label, name = label, value, onChange, min = 0, max = 1, step = 0.01, disabled = false,
-  scale = 100, format = v => `${Math.round(v * 100)}%` }) {
-  const { t } = useI18n();
-  const commit = draft => {
-    // The value also commits an untouched blur. Its formatted readout may be
-    // rounded, so only a changed draft is an edit to Preview's sparse settings.
-    if (draft === format(value)) return;
-    const parsed = Number.parseFloat(draft) / scale;
-    if (!Number.isFinite(parsed)) return;
-    const clamped = Math.min(max, Math.max(min, parsed));
-    const precision = String(step).split(".")[1]?.length || 0;
-    const next = Number(clamped.toFixed(precision));
-    if (next !== value) onChange(next);
-  };
-  return <SliderField label={label} name={name} value={value} min={min} max={max} step={step} disabled={disabled}
-    onValueChange={onChange} text={format(value)} onTextCommit={commit} textLabel={t("render.valueOf", { name })} />;
-}
-function Color({ label, name = label, value, onChange, disabled = false }) {
-  return <FileSheetSettingRow label={label} disabled={disabled}>
-    <FileSheetColorPicker aria-label={name} value={value} onChange={onChange} disabled={disabled} className={cn("!h-6 min-w-0", CHOICE_WIDTH_CLASS)} />
-  </FileSheetSettingRow>;
-}
-
-/** By part's palette: a swatch per colour, then add and remove, wrapping in the control column. */
-function Palette({ colors, onChange }) {
-  const { t } = useI18n();
-  const iconButton = (label, Icon, disabled, onClick) => <TooltipHint content={label}>
-    <Button type="button" variant="ghost" size="icon-xs" aria-label={label} disabled={disabled} onClick={onClick}
-      className="size-5 text-muted-foreground hover:text-foreground"><Icon className="size-3.5" aria-hidden="true" /></Button>
-  </TooltipHint>;
-  return <FileSheetSettingRow label={t("render.palette")} className="h-auto min-h-6 items-start [&>span]:pt-1">
-    <div className="flex flex-wrap gap-1 py-0.5">
-      {colors.map((value, index) => <FileSheetColorPicker key={index} aria-label={t("render.partColourN", { n: index + 1 })} value={value} showValue={false}
-        className="!size-5 justify-center p-0" swatchClassName="size-3"
-        onChange={color => onChange(colors.map((entry, i) => i === index ? color : entry))} />)}
-      {iconButton(t("render.addColour"), Plus, colors.length >= 50, () => onChange([...colors, "#94a3b8"]))}
-      {iconButton(t("render.removeLastColour"), Minus, colors.length <= 1, () => onChange(colors.slice(0, -1)))}
-    </div>
-  </FileSheetSettingRow>;
-}
+import { english } from "@cad/ui/i18n";
+import { FileSheetColorPicker } from "../inspector/FileSheet.js";
 
 /**
- * Preview's own settings (Render's part colours, lighting, background and floor), every one visible
- * without opening sections. `settings` is Preview's sparse settings; `display` the file's, for the
- * appearance it pins.
+ * Preview's own settings (Render's part colours, lighting, background and floor) as the sections of its settings card
+ * (`kit/shell/PreviewSettings.jsx`, `SettingsCard.jsx`'s rows), every one visible without opening anything: **Part
+ * colours** (its Source, then its Colour or By part's palette), **Lighting** (Quality, Exposure, Rotation, Softbox,
+ * Fill), **Background** (Colour, Opacity) and **Floor**, a switch heading its rows (Colour, Opacity, Placement, Finish)
+ * while it is on.
+ *
+ * `render`: `{ settings, display, appearance, lightingQuality, partColours, onPatch, onReset }` — Preview's sparse
+ * settings, the file's display (for the appearance it pins), the app's, and the writes. `partColours` false for a view
+ * whose scene wears no surface look (its picture is its colours): Part colours, which would change nothing there, is
+ * left out.
  */
-export function PreviewRenderSettings({ settings = {}, display = {}, appearance = "light", lightingQuality = "preview", onPatch, onReset }) {
-  const { t } = useI18n();
+
+/** `render`'s settings resolved, and whether Reset has anything to put back. */
+export function previewRenderState({ settings = {}, display = {}, appearance = "light", lightingQuality = "preview" } = {}) {
   const options = { appearance: display?.appearance ?? (appearance === "dark" ? "dark" : "light"), lightingQuality };
-  const look = resolvePreviewSettings(settings, options);
-  const patch = (name, value) => onPatch({ [name]: value });
-  const color = (name, title, disabled = false) => <Color label={t("render.colour")} name={title} value={look[name].color} disabled={disabled} onChange={color => patch(name, { color })} />;
-  const opacity = (name, title) => <Range label={t("render.opacity")} name={title} value={look[name].opacity} onChange={opacity => patch(name, { opacity })} />;
-  return <div className="flex min-h-0 flex-1 flex-col">
-    <ScrollArea className="min-h-0 flex-1">
-      <div className="p-1">
-        <FileSheetSettingsSection title={t("render.partColours")}>
-          <Choice label={t("render.source")} name={t("render.colourSource")} value={look.parts.colorMode} options={[["original", t("render.source.original")], ["single", t("render.source.single")], ["by-part", t("render.source.byPart")]]}
-            onChange={colorMode => patch("parts", { colorMode })} />
-          {look.parts.colorMode === "by-part"
-            ? <Palette colors={look.parts.colors} onChange={colors => patch("parts", { colors })} />
-            : color("parts", t("render.partColour"), look.parts.colorMode !== "single")}
-        </FileSheetSettingsSection>
-        <FileSheetSettingsSection title={t("render.lighting")}>
-          <Choice label={t("render.quality")} value={look.lighting.quality} options={[["preview", t("render.quality.preview")], ["final", t("render.quality.final")]]} onChange={quality => patch("lighting", { quality })} />
-          <Range label={t("render.exposure")} value={look.lighting.exposure} min={-5} max={5} step={0.1} scale={1} format={v => `${v.toFixed(1)} EV`} onChange={exposure => patch("lighting", { exposure })} />
-          <Range label={t("render.rotation")} value={look.lighting.rotation} min={-180} max={180} step={1} scale={1} format={v => `${v}°`} onChange={rotation => patch("lighting", { rotation })} />
-          <Range label={t("render.softbox")} name={t("render.softboxSize")} value={look.lighting.size} min={0.25} max={3} step={0.05} scale={1} format={v => `${v.toFixed(2)}×`} onChange={size => patch("lighting", { size })} />
-          <Range label={t("render.fill")} value={look.lighting.fill} onChange={fill => patch("lighting", { fill })} />
-        </FileSheetSettingsSection>
-        <FileSheetSettingsSection title={t("render.background")}>
-          {color("background", t("render.backgroundColour"))}{opacity("background", t("render.backgroundOpacity"))}
-        </FileSheetSettingsSection>
-        {/* The floor switches on and off: its section's heading checkbox; off, the section folds to it. */}
-        <FileSheetSettingsSection title={t("render.floor")} enabled={look.floor.enabled} onEnabledChange={enabled => patch("floor", { enabled })}>
-          {color("floor", t("render.floorColour"))}{opacity("floor", t("render.floorOpacity"))}
-          <Choice label={t("render.placement")} value={look.floor.placement} options={[["lowest", t("render.placement.lowest")], ["origin", t("render.placement.origin")]]} onChange={placement => patch("floor", { placement })} />
-          <Choice label={t("render.finish")} value={look.floor.finish} options={[["matte", t("render.finish.matte")], ["glossy", t("render.finish.glossy")]]} onChange={finish => patch("floor", { finish })} />
-        </FileSheetSettingsSection>
-      </div>
-    </ScrollArea>
-    <div className="shrink-0 border-t border-border p-1">
-      <Button type="button" variant="ghost" size="xs" className="h-7 w-full justify-start gap-2 px-2 text-tiny font-normal text-muted-foreground hover:text-foreground"
-        disabled={!previewSettingsChanged(settings, options)} onClick={onReset}>
-        <RotateCcw className="size-3.5" aria-hidden="true" />{t("render.reset")}
-      </Button>
-    </div>
+  return { look: resolvePreviewSettings(settings, options), changed: previewSettingsChanged(settings, options) };
+}
+
+// A number's commit from its typed value: only a changed draft is an edit to Preview's sparse settings (the value also
+// commits an untouched blur, and its readout may be rounded).
+const commitOf = ({ value, onChange, min, max, step, scale, format }) => draft => {
+  if (draft === format(value)) return;
+  const parsed = Number.parseFloat(draft) / scale;
+  if (!Number.isFinite(parsed)) return;
+  const precision = String(step).split(".")[1]?.length || 0;
+  const next = Number(Math.min(max, Math.max(min, parsed)).toFixed(precision));
+  if (next !== value) onChange(next);
+};
+
+/** By part's palette: a swatch per colour, then add and remove, wrapping at the row's right. */
+function Palette({ colors, onChange, t }) {
+  const iconButton = (label, Icon, disabled, onClick) => <TooltipHint content={label}>
+    <Button type="button" variant="ghost" size="icon-xs" aria-label={label} disabled={disabled} onClick={onClick}
+      className="cad-hit size-5 text-muted-foreground hover:text-foreground"><Icon className="size-3.5" aria-hidden="true" /></Button>
+  </TooltipHint>;
+  return <div className="flex flex-wrap justify-end gap-1 py-0.5">
+    {colors.map((value, index) => <FileSheetColorPicker key={index} aria-label={t("render.partColourN", { n: index + 1 })} value={value} showValue={false}
+      className="!size-5 justify-center p-0" swatchClassName="size-3"
+      onChange={color => onChange(colors.map((entry, i) => i === index ? color : entry))} />)}
+    {iconButton(t("render.addColour"), Plus, colors.length >= 50, () => onChange([...colors, "#94a3b8"]))}
+    {iconButton(t("render.removeLastColour"), Minus, colors.length <= 1, () => onChange(colors.slice(0, -1)))}
   </div>;
+}
+
+/** Preview's Render sections, after Orbit's (`PreviewSettings.jsx`). */
+export function previewRenderSections(render, t = english) {
+  const { partColours = true, onPatch } = render;
+  const { look } = previewRenderState(render);
+  const patch = (name, value) => onPatch({ [name]: value });
+  const choice = (id, label, name, value, entries, onChange) => ({ kind: "select", id, label, name, value,
+    options: entries.map(([entry, title]) => ({ value: entry, label: title })), onChange });
+  const range = (id, label, name, value, onChange, { min = 0, max = 1, step = 0.01, scale = 100, format = v => `${Math.round(v * 100)}%` } = {}) => ({
+    kind: "slider", id, label, name, value, min, max, step, scale, text: format(value), valueLabel: t("render.valueOf", { name }), onChange,
+    onCommit: commitOf({ value, onChange, min, max, step, scale, format }) });
+  const color = (id, name, group, disabled = false) => ({ kind: "color", id, label: t("render.colour"), name, value: look[group].color, disabled,
+    onChange: value => patch(group, { color: value }) });
+  const opacity = (id, name, group) => range(id, t("render.opacity"), name, look[group].opacity, value => patch(group, { opacity: value }));
+  return [
+    partColours ? [
+      { kind: "heading", id: "parts", label: t("render.partColours") },
+      choice("parts-source", t("render.source"), t("render.colourSource"), look.parts.colorMode,
+        [["original", t("render.source.original")], ["single", t("render.source.single")], ["by-part", t("render.source.byPart")]], colorMode => patch("parts", { colorMode })),
+      look.parts.colorMode === "by-part"
+        ? { kind: "custom", id: "parts-palette", label: t("render.palette"), node: <Palette colors={look.parts.colors} onChange={colors => patch("parts", { colors })} t={t} /> }
+        : color("parts-colour", t("render.partColour"), "parts", look.parts.colorMode !== "single")
+    ] : [],
+    [
+      { kind: "heading", id: "lighting", label: t("render.lighting") },
+      choice("lighting-quality", t("render.quality"), t("render.quality"), look.lighting.quality,
+        [["preview", t("render.quality.preview")], ["final", t("render.quality.final")]], quality => patch("lighting", { quality })),
+      range("lighting-exposure", t("render.exposure"), t("render.exposure"), look.lighting.exposure, exposure => patch("lighting", { exposure }),
+        { min: -5, max: 5, step: 0.1, scale: 1, format: v => `${v.toFixed(1)} EV` }),
+      range("lighting-rotation", t("render.rotation"), t("render.rotation"), look.lighting.rotation, rotation => patch("lighting", { rotation }),
+        { min: -180, max: 180, step: 1, scale: 1, format: v => `${v}°` }),
+      range("lighting-size", t("render.softbox"), t("render.softboxSize"), look.lighting.size, size => patch("lighting", { size }),
+        { min: 0.25, max: 3, step: 0.05, scale: 1, format: v => `${v.toFixed(2)}×` }),
+      range("lighting-fill", t("render.fill"), t("render.fill"), look.lighting.fill, fill => patch("lighting", { fill }))
+    ],
+    [
+      { kind: "heading", id: "background", label: t("render.background") },
+      color("background-colour", t("render.backgroundColour"), "background"),
+      opacity("background-opacity", t("render.backgroundOpacity"), "background")
+    ],
+    [
+      // The floor switches on and off: its section's heading's switch; off, the section folds to it.
+      { kind: "switch", head: true, id: "floor", label: t("render.floor"), value: look.floor.enabled, onChange: enabled => patch("floor", { enabled }) },
+      ...(look.floor.enabled ? [
+        color("floor-colour", t("render.floorColour"), "floor"),
+        opacity("floor-opacity", t("render.floorOpacity"), "floor"),
+        choice("floor-placement", t("render.placement"), t("render.placement"), look.floor.placement,
+          [["lowest", t("render.placement.lowest")], ["origin", t("render.placement.origin")]], placement => patch("floor", { placement })),
+        choice("floor-finish", t("render.finish"), t("render.finish"), look.floor.finish,
+          [["matte", t("render.finish.matte")], ["glossy", t("render.finish.glossy")]], finish => patch("floor", { finish }))
+      ] : [])
+    ]
+  ];
 }

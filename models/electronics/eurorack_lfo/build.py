@@ -4,7 +4,7 @@ schematic sheets, the board with the netlist, the placement, the routing, the po
     cad run build.py
 
 The KiCad files the scripts write are build output (`.gitignore` keeps them out of Git): run this before opening
-the board or the schematic in the CAD Viewer or in KiCad, and before any script that reads the board (`src/`,
+the board or the schematic in the viewer or in KiCad, and before any script that reads the board (`src/`,
 `check_twin_orbit.py`, `scripts/check_schematic.py`). `twin_orbit.kicad_pro` is not written by a script: it is the
 source of the board's rules and netclasses, and KiCad makes the board beside it. It needs the `cad` command (KiCad
 10.99's kicad-cli and API come with it) and KiCad's stock libraries, which the generators read from macOS's

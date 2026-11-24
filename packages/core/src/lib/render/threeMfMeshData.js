@@ -768,8 +768,9 @@ export function bridgeThreeMfMaterialModel(bytes, path = '3MF model') {
 async function threeMfLoaderPackage(buffer) {
   const { unzipSync, zipSync } = await import('three/examples/jsm/libs/fflate.module.js');
   const entries = unzipSync(new Uint8Array(buffer));
-  let adapted = false, materialBearing = false, unit = null;
+  let adapted = false, materialBearing = false, unit = null, gcode = false;
   for (const [path, bytes] of Object.entries(entries)) {
+    gcode ||= /\.gcode$/i.test(path);
     if (!/\.model$/i.test(path)) continue;
     const result = bridgeThreeMfMaterialModel(bytes, path);
     entries[path] = result.bytes; adapted ||= result.adapted; materialBearing ||= result.materialBearing;
@@ -778,9 +779,15 @@ async function threeMfLoaderPackage(buffer) {
   // Store rather than recompress: this temporary package exists only for the loader.
   const bytes = adapted ? zipSync(entries, { level: 0 }) : null;
   return { buffer: bytes ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) : buffer,
-    materialBearing, unit: unit || await declared3MfUnit(buffer) };
+    materialBearing, gcode, unit: unit || await declared3MfUnit(buffer) };
 }
 
+/**
+ * A 3MF package as mesh data, in the unit its root model declares. A package with no triangles that
+ * carries G-code is a slicer's print file (what Bambu Studio and OrcaSlicer export as `.gcode.3mf`:
+ * the plate's G-code, its thumbnails and an empty build), not a model: its data says so (`sliced`).
+ * @param {ArrayBuffer} buffer
+ */
 export async function buildMeshDataFrom3MfBuffer(buffer) {
   const [THREE, { ThreeMFLoader }, { toCreasedNormals }] = await Promise.all([
     import("three"),
@@ -791,7 +798,8 @@ export async function buildMeshDataFrom3MfBuffer(buffer) {
   const compatible = await threeMfLoaderPackage(buffer);
   const { unit } = compatible;
   try {
-    return { ...buildMeshDataFromThreeMfGroup(THREE, loader.parse(compatible.buffer), { toCreasedNormals }), unit };
+    const meshData = { ...buildMeshDataFromThreeMfGroup(THREE, loader.parse(compatible.buffer), { toCreasedNormals }), unit };
+    return !meshData.indices.length && compatible.gcode ? { ...meshData, sliced: true } : meshData;
   } catch (error) {
     // The geometry-only package fallback cannot retain a metallic material table.
     // Keep its existing compatibility role for ordinary packages, never hide a

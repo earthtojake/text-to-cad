@@ -162,7 +162,7 @@ Full log: `GAUNTLET.md`.
   - **Exhaust collector:** the interlock is unresolved, so its moves are forced through the parts around it.
 - **Running clip:** `tmp/final/running.mp4`, an 8 s seamless 720° loop showing the firing order,
   cam ring, pushrods, impeller and propeller at 2/3 crank speed. The same clip, `running`, is
-  embedded in the assembly for the CAD Viewer.
+  embedded in the assembly for the viewer.
 
 ## Repo defects found (BUGS.md)
 

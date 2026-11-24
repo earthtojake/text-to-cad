@@ -97,11 +97,11 @@ export function drawingPickTip(drawing, id, unit = "", t = english) {
 }
 
 /**
- * An entity, as Quick Edit's chip and the Selected pane say it: its name, and what the drawing says of it
- * — its handle and DXF type, its layer, the block an INSERT places, a circle's or arc's centre and radius,
- * and what it measures (a straight run's length, a circle's diameter, else the size of its box), each in the
- * drawing's unit as Measure reads it there (`unit`: `drawingUnits`'s, "units" for none); for the hover tip,
- * its headline measure ("25.00 mm", "Ø 12.00 mm").
+ * An entity, as its Quick Edit chip's card says it: its name, and a few key facts — its layer, the block an
+ * INSERT places, and what it measures (a straight run's length, a circle's diameter, else the size of its
+ * box), each in the drawing's unit as Measure reads it there (`unit`: `drawingUnits`'s, "units" for none);
+ * for the hover tip, its headline measure ("25.00 mm", "Ø 12.00 mm"). Its handle is its name's and its
+ * reference's already.
  * @param {import("@cad/core/lib/drawing2d/drawing.js").DrawingEntity} entity
  */
 export function describeEntity(entity, unit = "", t = english) {
@@ -112,12 +112,8 @@ export function describeEntity(entity, unit = "", t = english) {
     name: entityName(entity, t),
     tip,
     facts: [
-      { label: t("drawing.handle"), value: entity.handle },
-      { label: t("drawing.typeLabel"), value: entity.type || "—" },
       { label: t("drawing.layer"), value: entity.layer || "0" },
       ...(entity.block ? [{ label: t("drawing.type.block"), value: entity.block }] : []),
-      ...(entity.center ? [{ label: t("drawing.centre"), value: `${at(entity.center[0])}, ${at(entity.center[1])}` }] : []),
-      ...(entity.radius != null ? [{ label: t("drawing.radius"), value: at(entity.radius) }] : []),
       ...(diameter !== null ? [{ label: t("measure.diameter"), value: at(diameter) }] : []),
       ...(length !== null ? [{ label: t("measure.length"), value: at(length) }] : []),
       ...(size ? [{ label: t("part.size"), value: `${at(size[0])} × ${at(size[1])}` }] : [])
@@ -127,22 +123,16 @@ export function describeEntity(entity, unit = "", t = english) {
 
 /**
  * An entity, as the frame reads a pick (`kit/inspector/inspect.js`'s `DetailItem`): `describeEntity`'s name,
- * tip and facts, its reference id as its ID, and, for a block reference, the other references of its
- * block as what it is connected to (the payload names a block reference's contents by the reference, so
- * they are not picks of their own); nothing for any other entity.
+ * tip and facts, the entity in focus alone (a block reference's others are the Layers' rows).
  */
 export function describeDrawingPick(drawing, id, unit = "", t = english) {
   const handle = drawingHandleOf(id);
   const entity = handle && HANDLE.test(handle) ? drawing.entities.get(handle) : null;
   if (!entity) return null;
   const described = describeEntity(entity, unit, t);
-  const others = entity.type === "INSERT" && entity.block
-    ? [...drawing.entities.values()].filter(other => other.type === "INSERT" && other.block === entity.block && other.handle !== entity.handle) : [];
   return {
-    id: `entity:${handle}`, pick: drawingReferenceId(handle), kind: entity.type === "INSERT" ? "block" : "", title: described.name, tip: described.tip, ref: drawingReferenceId(handle),
-    facts: described.facts,
-    related: others.length ? { title: t("drawing.sameBlock", { name: entity.block }), count: String(others.length),
-      rows: others.map(other => ({ id: other.handle, kind: "block", pick: drawingReferenceId(other.handle), label: `#${other.handle}`, detail: other.layer || "0" })) } : null
+    id: `entity:${handle}`, pick: drawingReferenceId(handle), kind: entity.type === "INSERT" ? "block" : "", title: described.name, tip: described.tip,
+    facts: described.facts
   };
 }
 
@@ -193,21 +183,13 @@ export function drawingUnits(units) {
   return unit ? { unit, declared: true } : { unit: UNITLESS, declared: false };
 }
 
-/** A Layers section is worth its tile from this many layers, or with any block reference in it. */
-export const LAYERS_SECTION_MIN_LAYERS = 4;
-
 /**
- * Whether a drawing has the structure a Layers section is for: several layers to show and hide
- * (`LAYERS_SECTION_MIN_LAYERS` or more drawn on), or block references, whose contents a layer
- * nests. A flat pattern of two or three layers (CUT, BEND) and no blocks has none: its section
- * would be a few rows saying what the drawing already shows.
+ * Whether a drawing shows its Layers section: always, once it is read — a drawing of one layer has its one row, as a
+ * part file's Model has its one, so the panel reads the same whatever the drawing holds.
  * @param {import("@cad/core/lib/drawing2d/drawing.js").PreparedDrawing | null} drawing
  */
 export function layersSectionShown(drawing) {
-  if (!drawing) return false;
-  if (drawing.layers.length >= LAYERS_SECTION_MIN_LAYERS) return true;
-  for (const entity of drawing.entities.values()) if (entity.type === "INSERT") return true;
-  return false;
+  return Boolean(drawing);
 }
 
 /**
@@ -218,6 +200,8 @@ export function layersSectionShown(drawing) {
  * @returns {{ name: string, color: string | null, entities: number, inserts: { handle: string, block: string }[] }[]}
  */
 export function layerRows(drawing) {
+  // None yet: the drawing still loading, its Layers tab already the panel's.
+  if (!drawing) return [];
   const inserts = new Map();
   for (const entity of drawing.entities.values()) {
     if (entity.type !== "INSERT") continue;

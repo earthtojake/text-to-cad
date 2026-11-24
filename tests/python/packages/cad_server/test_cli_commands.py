@@ -12,8 +12,11 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
+from tests.python.support.agent_apps import a_home_of_its_own
 from tests.python.support.paths import add_sources
 
 add_sources()
@@ -33,7 +36,6 @@ TYPES = {
     "dxf": ("snapshot", "dfm"),
     "urdf": ("snapshot", "validate"),
     "srdf": ("snapshot", "validate"),
-    "sdf": ("snapshot", "validate"),
     "kicad_pcb": ("export", "snapshot", "inspect", "drc"),
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
 }
@@ -76,17 +78,28 @@ class TheCommandTable(unittest.TestCase):
                 self.assertEqual(_run(argv)[0], 0, "unlisted, and parsed as ever")
 
     def test_the_switches_are_update_auto_and_the_old_spellings_are_gone(self) -> None:
-        """``cad update auto`` and ``cad plugin update [auto]``; ``cad auto-update``, ``cad plugin install`` and ``cad
-        plugin auto-update`` answer as commands that never existed (no release had them)."""
+        """``cad update auto``, ``cad plugin install`` and ``cad plugin update [auto]``; ``cad auto-update`` and ``cad
+        plugin auto-update`` answer as commands that never existed (no release had them), and ``cad plugin install``
+        takes no options. Only its help and its usage errors are asked here: the command itself changes the agent apps
+        of the computer it runs on (``tests/python/packages/cad_server/plugin`` runs it on a computer of its own). So
+        that a parser that one day took one of these lines would not run it on this one, they are asked in a home of
+        their own, with nothing on PATH."""
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        root = Path(scratch.name).resolve()
+        (root / "bin").mkdir()
+        a_home_of_its_own(self, root / "home", root / "bin")
         for argv, usage in ((["update", "--help"], "usage: cad update [-h] [--major]"),
                             (["update", "auto", "--help"], "usage: cad update auto [-h] [{status,on,off}]"),
+                            (["plugin", "install", "--help"], "usage: cad plugin install [-h]"),
                             (["plugin", "update", "--help"], "usage: cad plugin update [-h] [auto [{status,on,off}]]"),
                             (["plugin", "update", "auto", "--help"],
                              "usage: cad plugin update auto [-h] [{status,on,off}]")):
             with self.subTest(argv=argv):
                 code, said, _ = _run(argv)
                 self.assertEqual((code, said.splitlines()[0]), (0, usage))
-        for argv in (["auto-update"], ["auto-update", "on"], ["plugin", "install"], ["plugin", "auto-update", "on"],
+        for argv in (["auto-update"], ["auto-update", "on"], ["plugin", "install", "--force"],
+                     ["plugin", "install", "claude"], ["plugin", "auto-update", "on"],
                      ["update", "auto", "maybe"], ["update", "--major", "auto"], ["update", "auto", "--major"]):
             with self.subTest(argv=argv):
                 self.assertEqual(_run(argv)[0], 2)
@@ -291,7 +304,10 @@ class MujocoCheck(unittest.TestCase):
         code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
         self.assertIn("integrations, for a tool's own files cad checks or writes and does not show (cad <integration> "
-                      "<operation> [FILE]):\n  mujoco      check              compile a MuJoCo model", said)
+                      "<operation> [FILE]):\n  mujoco  check  compile a MuJoCo model", said)
+        # A deprecated integration's commands still run (the 30 days a command the skills used is kept) and are
+        # no longer listed: `cad orcaslicer`, deprecated (a project saved from OrcaSlicer's app slices as it is).
+        self.assertNotIn("orcaslicer", said.split("integrations, for a tool's own files", 1)[1])
         code, said, _ = _run(["mujoco", "--help"])
         self.assertEqual(0, code)
         self.assertIn("usage: cad mujoco <operation> FILE [options]", said)
@@ -300,6 +316,15 @@ class MujocoCheck(unittest.TestCase):
         code, _, err = _run(["mjcf", "validate", str(self.model)])
         self.assertEqual((code, err), (2, "cad: unknown command 'mjcf' (did you mean 'mujoco'?); 'cad --help' lists the "
                                           "commands\n"))
+
+    def test_a_deprecated_integration_still_runs_and_says_so_once_on_stderr(self) -> None:
+        line = "cad orcaslicer: deprecated and will be removed: "
+        with tempfile.TemporaryDirectory() as folder:
+            _, _, err = _run(["orcaslicer", "presets", "machine", "--profiles", folder])
+            self.assertEqual(err.count(line), 1, err)
+            # A program's reply stays one document: under --json nothing is said beside it.
+            _, _, err = _run(["orcaslicer", "presets", "machine", "--profiles", folder, "--json"])
+            self.assertNotIn(line, err)
 
     def test_the_parser_is_the_generated_one(self) -> None:
         from cad_server.cli.integrations import build_parser

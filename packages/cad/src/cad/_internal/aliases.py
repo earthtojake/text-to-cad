@@ -51,6 +51,18 @@ NAME_ALIASES: dict[str, dict[str, str]] = {
     },
     # The 0.10 call shapes, each a CheckResult or a CheckFinding.
     "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},
+    # build123d's own calls under names of ours (``Plane.to_local_coords``, ``offset``, ``fuse``): a drawing calls them.
+    "cad.build123d": {
+        "flat_pattern": "cad.build123d._flatten.flat_pattern",
+        "planar_faces": "cad.build123d._flatten.planar_faces",
+        "flatten_face": "cad.build123d._flatten.flatten_face",
+        "flatten_faces": "cad.build123d._flatten.flatten_faces",
+        "union_faces": "cad.build123d._flatten.union_faces",
+        "offset_profile": "cad.build123d._flatten.offset_profile",
+    },
+    # MuJoCo's own compile under names of ours: a script compiles with MuJoCo, and ``check`` is the check.
+    "cad.mujoco": {"compile_model": "cad.mujoco._compile.compile_model",
+                   "compile_findings": "cad.mujoco._compile.compile_findings"},
 }
 
 #: What the deprecation says to use instead, where the new path is not one object: the root's
@@ -61,6 +73,18 @@ _ADVICE = {
     "cad.inspect": "cad.<document_type>.inspect (cad.model.inspect, cad.step.inspect, ...)",
     "cad.results.ValidationResult": "cad.results.CheckResult (findings=, each with location=)",
     "cad.results.ValidationIssue": "cad.results.CheckFinding (severity, code, message, location=, hint=)",
+    "cad.flatten": "build123d's own calls: bd.Plane(face).to_local_coords(face) lays a face into XY, bd.offset "
+                   "compensates for kerf",
+    "cad.build123d.flat_pattern": "build123d's own calls: bd.Plane(face).to_local_coords(face) on the part's "
+                                  "face, then bd.offset(profile, amount=kerf)",
+    "cad.build123d.planar_faces": "build123d's own selectors: shape.faces().filter_by(bd.GeomType.PLANE), then "
+                                  ".filter_by(bd.Axis.Z) and .sort_by(bd.Axis.Z)",
+    "cad.build123d.flatten_face": "bd.Plane(face).to_local_coords(face), build123d's own",
+    "cad.build123d.flatten_faces": "bd.Plane(face).to_local_coords(face) for each face, build123d's own",
+    "cad.build123d.union_faces": "a + b, or a.fuse(b).clean(), build123d's own",
+    "cad.build123d.offset_profile": "bd.offset(profile, amount=...), build123d's own",
+    "cad.mujoco.compile_model": "mujoco.MjModel.from_xml_path, MuJoCo's own",
+    "cad.mujoco.compile_findings": "cad.mujoco.check, whose result holds the compile's findings",
 }
 
 #: ``old module -> new module``: a module the library had, answered by the module that holds its names now.
@@ -73,9 +97,6 @@ MODULE_ALIASES: dict[str, str] = {
     "cad.xml_common": "cad._internal.xml_common",
     "cad.check_fonts": "cad._internal.check_fonts",
     "cad.urdf_source": "cad.urdf._source",
-    "cad.sdf_source": "cad.sdf._source",
-    "cad.sdf_validation": "cad.sdf._validation",
-    "cad.sdf_external": "cad.sdf._external",
     "cad.srdf_source": "cad.srdf._source",
     "cad.srdf_validation": "cad.srdf._validation",
 }

@@ -12,9 +12,9 @@ type from some input; many integrations may produce one type, each stating which
 content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
 shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
 ``dfm`` a 3D type's manufacturing check, ``interference`` a B-rep type's check that no two parts share volume,
-``solve`` a B-rep type's stress study, ``ranges`` a mechanism's joint
-stops found from its geometry, ``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check,
-``validate`` a robot description's conformance check.
+``solve`` a B-rep type's stress study, ``ranges`` a mechanism's joint stops found from its geometry,
+``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check, ``validate`` a robot
+description's conformance check.
 
 ``model`` is the one type with no file: a model built from code and held in the engine's memory,
 addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
@@ -113,6 +113,10 @@ class Integration:
     #: on a file take (``FILE_OPERATIONS``), and an integration with none of those names none.
     operations: tuple[Operation, ...] = ()
     files: tuple[str, ...] = ()
+    #: Set where its operations are deprecated: what to do instead, in a line. They keep working while skill
+    #: text of the last 30 days uses them (the compatibility law's first tier), ``cad --help`` no longer lists
+    #: them, and a run says this line once on stderr.
+    deprecated: str = ""
     modules: tuple[str, ...] = ()
     distributions: tuple[str, ...] = ()
     #: The distributions that ARE it (its own and the other builds of its modules), of which one a resolution
@@ -260,7 +264,7 @@ _EXPORT_DOCUMENT = Operation("export", "write the document to other files, each 
                                        "--tolerance and --angle mesh a .glb, an .stl or a .3mf finer", _KERNEL,
                                        engine=True)
 _EXPORT_MESH = Operation("export", "write the mesh to the other mesh kinds (.glb, .stl, .3mf)", engine=True)
-_SNAPSHOT = Operation("snapshot", "draw it as the CAD Viewer does, into a PNG", _KERNEL, engine=True)
+_SNAPSHOT = Operation("snapshot", "draw it as the viewer does, into a PNG", _KERNEL, engine=True)
 _INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its build closure; with a ref, what one "
                                          "element or part is and what made it", _KERNEL, engine=True)
 _INSPECT_GLB = Operation("inspect", "its nodes, meshes and animations", _KERNEL, engine=True)
@@ -299,24 +303,26 @@ _RANGES = Operation("ranges", "each joint's stops found from the geometry: the j
                               "time each way, until its parts meet another part; the stops and which parts meet, "
                               "nothing written", _KERNEL)
 
-_DOCUMENT_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names", "mechanism",
-                     "configuration sequences")
+# What a STEP holds of a document, and what only the engine's own document holds beside it: the kernel reads
+# AP242's kinematics and has no writer for them, so a STEP, posed or not, is placements only.
+_STEP_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names")
+_DOCUMENT_CONTENT = (*_STEP_CONTENT, "mechanism", "configuration sequences")
 
 _TYPES = (
     DocumentTypeEntry(
         "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
                           "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
-        (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
+        (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
         (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True),
     DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
-        (*_DOCUMENT_CONTENT, "animations", "build closure"),
+        (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
         (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
-        "application/step", "document", _DOCUMENT_CONTENT,
+        "application/step", "document", _STEP_CONTENT,
         (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
@@ -343,16 +349,12 @@ _TYPES = (
         ("planning groups", "end effectors", "group states", "disabled collision pairs", "virtual joints"),
         (Operation("validate", "check it against its URDF: every name, chain, state and disabled pair"), _SNAPSHOT)),
     DocumentTypeEntry(
-        "sdf", "SDF", "an SDFormat world or model (Gazebo's Simulation Description Format)", (".sdf",),
-        "application/xml; charset=utf-8", "robot", ("worlds", "models", "links", "joints", "mesh references"),
-        (Operation("validate", "check it for conformance, and with gz sdf --check where it is installed"), _SNAPSHOT)),
-    DocumentTypeEntry(
         "kicad_pcb", "KiCad PCB", "a KiCad printed circuit board, read with the .kicad_pro beside it", (".kicad_pcb",),
         "text/plain; charset=utf-8", "plot",
         ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"),
         (Operation("export", "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, "
                              "step, glb, odb, ipc2581, pdf or dxf", "kicad"),
-         Operation("snapshot", "draw it flat, as the CAD Viewer's board view does, into a PNG"),
+         Operation("snapshot", "draw it flat, as the viewer's board view does, into a PNG"),
          Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets"),
          Operation("drc", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
                    "kicad")), reader=True,
@@ -403,9 +405,9 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         identity=("kicode", "kicode-pcb", "kicode-sch"), commands=("kicad-cli",),
         holds="KiCad's kicad-cli", download_mb=100),
     "trimesh": Integration(
-        "trimesh", "trimesh, the triangle-mesh library: a 3D document's manufacturing check measures its mesh with "
-                   "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "
-                   "and support", extra="trimesh", process="in-process",
+        "trimesh", "trimesh, the triangle-mesh library: a mesh's manufacturing check measures it with trimesh for "
+                   "3D printing -- its walls, overhangs and support; every other process is judged on exact "
+                   "geometry", extra="trimesh", process="in-process",
         modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",),
         holds="trimesh", download_mb=40),
     "mujoco": Integration(
@@ -473,6 +475,8 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         # The person's own OrcaSlicer: our code never runs it (so no probe), and reads and writes its presets, JSON
         # files, with the standard library alone (so no extra), in the process that calls it.
         extra=None, process="in-process",
+        deprecated="OrcaSlicer's own command line slices a project saved from the app (File > Save Project) as it "
+                   "is, and from OrcaSlicer 2.5 the built-in presets are binary caches this command cannot read",
         operations=(Operation("presets", "list the presets of one kind a person can select (machine, process or "
                                          "filament), from their own OrcaSlicer folders and the app's profiles",
                               "orcaslicer"),
@@ -622,6 +626,49 @@ def as_data() -> dict[str, Any]:
     }
 
 
+def as_docs() -> dict[str, Any]:
+    """The table as data for the documentation site, which says of every type and integration what this
+    table says: each type's summary, the content it carries, its operations and what writes it, and each
+    integration's extra, its size and where it runs. Fuller than ``as_data``, which every page's build loads;
+    the site's copy (``--docs``) is held to this by the same parity test."""
+    def operations(entry: Any) -> list[dict[str, Any]]:
+        return [{"name": operation.name, "summary": operation.summary, "integration": operation.integration,
+                 "engine": operation.engine} for operation in entry.operations]
+
+    return {
+        "operations": list(OPERATIONS),
+        "integrationOperations": list(INTEGRATION_OPERATIONS),
+        "views": list(VIEWS),
+        "documentTypes": [
+            {"id": entry.id, "title": entry.title, "summary": entry.summary, "extensions": list(entry.extensions),
+             "mime": entry.mime, "view": entry.view, "content": list(entry.content),
+             "operations": operations(entry), "decorator": entry.decorator, "reader": entry.reader,
+             "readerIntegration": entry.reader_integration,
+             "edit": None if entry.edit is None else {
+                 "integration": entry.edit.integration, "noun": entry.edit.noun, "hands": entry.edit.hands,
+                 "changes": list(entry.edit.changes)},
+             "producers": [{"integration": producer.integration, "accepts": producer.accepts,
+                            "provides": list(producer.provides)} for producer in producers_for(entry.id)]}
+            for entry in _TYPES
+        ],
+        "integrations": [
+            {"name": entry.name, "summary": entry.summary, "extra": entry.extra, "process": entry.process,
+             "operations": operations(entry), "files": list(entry.files), "modules": list(entry.modules),
+             "distributions": list(entry.distributions), "commands": list(entry.commands), "holds": entry.holds,
+             "downloadMb": entry.download_mb, "alongside": list(entry.alongside), "python": entry.python,
+             "platforms": list(entry.platforms),
+             "program": None if entry.probe is None else {
+                 "name": entry.probe.program, "minimum": entry.probe.minimum, "override": entry.probe.override}}
+            for entry in INTEGRATIONS.values()
+        ],
+    }
+
+
+def as_docs_json() -> str:
+    """``as_docs`` as the file the documentation site reads, ``apps/docs/src/lib/docs/registry.generated.json``."""
+    return json.dumps(as_docs(), indent=2, ensure_ascii=False) + "\n"
+
+
 _JS_HEAD = ("// GENERATED from the library's document type registry (cad.registry): do not edit.\n"
             "// Regenerate with `python -m cad.registry --js > packages/core/src/lib/documentTypes.generated.js`;\n"
             "// tests/python/packages/cad/test_registry.py fails when this file and the registry differ.\n")
@@ -641,13 +688,16 @@ def main(argv: list[str] | None = None) -> int:
     if argv == ["--json"]:
         sys.stdout.write(json.dumps(as_data(), indent=2) + "\n")
         return 0
+    if argv == ["--docs"]:
+        sys.stdout.write(as_docs_json())
+        return 0
     if len(argv) == 1 and argv[0] in DOCUMENT_TYPES:
         sys.stdout.write(help_text(argv[0]) + "\n")
         return 0
     if len(argv) == 1 and argv[0] in INTEGRATIONS:
         sys.stdout.write(integration_help(argv[0]) + "\n")
         return 0
-    sys.stderr.write(f"usage: python -m cad.registry --js | --json | {{{','.join([*DOCUMENT_TYPES, *INTEGRATIONS])}}}\n")
+    sys.stderr.write(f"usage: python -m cad.registry --js | --json | --docs | {{{','.join([*DOCUMENT_TYPES, *INTEGRATIONS])}}}\n")
     return 2
 
 

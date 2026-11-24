@@ -538,13 +538,13 @@ class KindsTest(unittest.TestCase):
     def test_the_apps_each_kind_takes_in_the_menus_order(self) -> None:
         every = {app: f"/apps/{app}" for app in apps.APPS}
         ids = {kind: [entry["id"] for entry in apps.apps_for(kind, every)]
-               for kind in ("script", "step", "stl", "3mf", "glb", "dxf", "urdf", "sdf", "srdf", "xbf", "kicad_pcb", "kicad_sch")}
+               for kind in ("script", "step", "stl", "3mf", "glb", "dxf", "urdf", "srdf", "xbf", "kicad_pcb", "kicad_sch")}
         self.assertEqual(ids, {"script": ["vscode", "cursor", "zed", "pycharm", "sublime"],
                                "step": ["fusion", "solidworks", "solidedge", "rhino", "plasticity", "freecad", "bambu", "orca",
                                         "prusa"],
                                "stl": ["bambu", "orca", "prusa", "freecad", "blender"],
                                "3mf": ["bambu", "orca", "prusa", "freecad"],
-                               "glb": ["blender"], "dxf": [], "urdf": [], "sdf": [], "srdf": [], "xbf": [],
+                               "glb": ["blender"], "dxf": [], "urdf": [], "srdf": [], "xbf": [],
                                "kicad_pcb": ["kicad", "kicad-nightly"], "kicad_sch": ["kicad", "kicad-nightly"]})
         self.assertEqual(apps.apps_for("step", {"bambu": "/b", "vscode": "/v"}), [{"id": "bambu", "name": "Bambu Studio"}])
         self.assertEqual(apps.APPS, {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed",

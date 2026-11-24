@@ -39,7 +39,7 @@ export function ViewUpdateStatus({ status, onRetry, className }) {
   const updating = statusLine(status, t) || t('viewUpdate.updatingView');
   const label = status.error ? t('viewUpdate.failedWith', { error: status.error }) : updating;
   if (mobile) return <Popover>
-    <PopoverTrigger asChild><Button variant="ghost" size="icon-xs" className="pointer-events-auto size-6 shrink-0" aria-label={label}  data-view-update-status>
+    <PopoverTrigger asChild><Button variant="ghost" size="icon-xs" className="pointer-events-auto size-icon-button shrink-0" aria-label={label}  data-view-update-status>
       {status.error ? <RotateCcw className="size-3.5" /> : <LoaderCircle className="size-3.5 animate-spin" />}
     </Button></PopoverTrigger>
     <PopoverContent className="w-max max-w-64 px-3 py-2 text-tiny" align="start">

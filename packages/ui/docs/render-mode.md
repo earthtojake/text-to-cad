@@ -4,7 +4,8 @@ The Viewer and native snapshots share the sparse display contract. Core's
 `common/viewSettings.js` validates it and resolves the mode, or Preview's Render,
 into renderer groups.
 `common/sceneSettings.js` translates those groups into the scene recipe. The binding
-controls are in [settings-ui.md](settings-ui.md#display-settings-and-section-primitives).
+controls are in [viewer-ux.md](viewer-ux.md#the-display-card) (the Display card) and
+[design-system.md](design-system.md#components) (its rows and dropdowns).
 
 A file's display is a mode and the Grid switch. A mode is a look at its own defaults, with
 nothing to set. Render is no display mode: it is the photographic look Preview asks for
@@ -195,29 +196,29 @@ unchanged after a runtime replacement does not.
 
 ## Where the controls live
 
-Display is a dropdown from the Display tile at the strip's end (the current mode's sphere,
-between Projection and Preview: `kit/shell/DisplayPopover.jsx`), present for every 3D file:
-the offered modes (`DisplayModeOptions.js`), then the Grid switch. On a phone it is the
-More menu's Display submenu, the same list. Preview, a view of its own over the editor's,
+Display is a card opened by the navbar's Display button, left of Preview (`kit/shell/DisplaySettings.jsx`), present
+for every 3D file: its Projection, a hairline, then its Style the offered modes (`DisplayModeOptions.js`), the Background
+and the Grid switch. On a phone it is the same card. Preview, a view of its own over the editor's,
 draws the model in Render whatever the file's mode (the store's `renderScene()`, as
 `kit/viewport/previewViewScene.js` draws it), and the tools view never does. Preview's own
 settings are its settings panel (`kit/shell/PreviewSettings.jsx`: Orbit, then
-`PreviewRenderSettings.jsx`), its edits the file's Preview settings. A file's model tree and Position are
+`PreviewRenderSettings.jsx`), its edits the file's Preview settings. A file's model tree, Params and Joints are
 tabs of the view's panel (see
-[settings-ui.md](./settings-ui.md#the-views-panel-and-the-tool-stack)); nothing in them is
+[viewer-ux.md](./viewer-ux.md#the-panels-tabs)); nothing in them is
 a display setting.
 
-Display and Preview, the view's controls at the strip's end, are offered by a 3D view
-alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`):
+Display and Preview, the view's controls in the navbar, are offered by a 3D
+view, as its renderer declares to the shell (`useRendererShell`'s `previewable`); a board, a flat view shown in 3D,
+has Preview too, outside the shell, and every view has Display's card:
 
 | Renderer | Files | Display and Preview |
 | --- | --- | --- |
 | `xbf` | `.xbf`, STEP, STP | Yes |
 | `glb` | GLB | Yes |
 | `mesh` | STL, 3MF | Yes |
-| `robot` | URDF, SRDF, SDF | Yes |
-| `dxf` | DXF | No: a 2D drawing, on a surface of its own, without the shell |
-| `board` | KiCad board | No Preview: drawn flat; its Display is the board's own (mode, side, pours, layers, Dim, the zones' and tracks' opacities), drawn in the app's theme |
+| `robot` | URDF, SRDF | Yes |
+| `dxf` | DXF | Display, its card the Background alone; no Preview: a 2D drawing, on a surface of its own, without the shell |
+| `board` | KiCad board | Preview, outside the shell (`kit/shell/useFlatPreview.jsx`: the board in 3D as it is made, lit, with Render's settings less Part colours); Display, the same card with the board's rows (`BoardDisplay.jsx`: Side, Mode, in 3D Projection, then Style, its layer presets, and the Background), drawn flat or in 3D in the viewport's Background; its layers, Others, Pours and the zones' and tracks' opacities are its Layers tab's |
 
-A view without them has no Display or Preview control, not a disabled one, and a
+A view without Preview has no Preview control, not a disabled one, and a
 request for Preview leaves its normal view as it is.
