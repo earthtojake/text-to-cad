@@ -25,7 +25,7 @@ export interface ViewReporter {
 
 /**
  * One view: the shared viewer over this host — the model a launch names, by its absolute path,
- * or with none, the home (the library, and Open) — under the navbar (`chrome: "page"`): its logo and
+ * or with none, the home (the library, and Open) — under the navbar: its logo and
  * app menu, Back and Forward, the file's name and menus (its ⋯: Copy path, and Open in › Browser and
  * the file manager), and at the right the host's Full size. A view browses from its model's folder, shows what is opened in place, and adds what it
  * shows to the library. Everything differs by data — what a Quick Edit can do in the chat, whether
@@ -157,7 +157,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
 
   // Every view is under the navbar, the file handler's too: it carries the host's controls and the panels' toggles.
   // The file on screen joins the library every CAD view shares, with its picture.
-  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} chrome="page"
+  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate}
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
     library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory} whatsNew={whatsNew}
     fullSize={fullSize}

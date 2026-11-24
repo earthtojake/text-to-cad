@@ -288,13 +288,12 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   const { pane, dispose } = await open();
   await opened(pane);
   const tools = strip(pane);
-  expect([...tools.querySelectorAll(':scope button[aria-pressed]')].filter(button => !button.closest('[data-view-controls]'))
-    .map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Draw', 'Measure']);
+  expect([...tools.querySelectorAll(':scope button[aria-pressed]')].map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Draw', 'Measure']);
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   expect(within(tools).getByRole('button', { name: 'Filter: everything' })).toBeTruthy();
   // Its view settings are the navbar's, at its right end — Display, the plain cube, no chevron, a toggle whose card is
   // Side and Mode | Style and Background, with Reset — the navbar's 28px button; the corner holds the zoom alone, and
-  // nothing of the view is on the strip, which has no rule.
+  // the strip has no rule.
   expect([viewButtons(pane), displayButton(pane).querySelector('.lucide-chevron-down')]).toEqual([['Display', 'Preview'], null]);
   expect([viewValue(pane, 'side'), viewValue(pane, 'dimension'), viewValue(pane, 'display')]).toEqual(['top', '2d', 'board']);
   for (const button of cornerStack(pane)!.querySelectorAll('button')) expect(button.className.includes('size-control')).toBe(true);
@@ -307,7 +306,7 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
     .toEqual([[['Top', 'true', true], ['Bottom', 'false', true]], [['2D', 'true', false], ['3D', 'false', false]]]);
   expect(await presets(pane)).toEqual([['Board', 'true', true], ['Copper', 'false', true], ['Assembly', 'false', true], ['Placement', 'false', true]]);
   expect(await displayChoices(userEvent.setup({ skipHover: true, pointerEventsCheck: 0 }), pane)).toEqual([['Light', 'true', true], ['Dark', 'false', true]]);
-  expect(tools.querySelector('[data-strip-rule], [data-view-controls]')).toBeNull();
+  expect(tools.querySelector('[data-strip-rule]')).toBeNull();
   // The zoom: one control, "100%" and its chevron, not the strip's chrome; no − or +.
   const surface = FLOATING_CHROME_SURFACE_CLASS.split(' ');
   const pill = pane.querySelector<HTMLElement>('[data-zoom-pill]')!;
@@ -1114,7 +1113,6 @@ it("at 900px the panel pushes the board aside, and below 700px it starts collaps
   const phone = await open();
   await opened(phone.pane);
   expect([phone.pane.querySelector('[data-flat-panel]'), phone.pane.querySelector('[data-zoom-pill]')]).toEqual([null, null]);
-  expect(phone.pane.querySelector('[data-cad-toolbar] [data-view-controls]')).toBeNull();
   expect(within(phone.pane).queryByRole('button', { name: 'More tools' })).toBeNull();
   fireEvent.click(within(phone.pane.querySelector<HTMLElement>('[data-viewer-navbar]')!).getByRole('button', { name: 'Show panel' }));
   await waitFor(() => expect(document.querySelector('[data-panel-sheet] [data-flat-panel="page"]')).not.toBeNull());

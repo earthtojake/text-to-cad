@@ -6,13 +6,11 @@ import { VIEWPORT_BACKGROUNDS } from "@cad/core/lib/viewportTheme.js";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import { SettingsCard } from "../view-settings/SettingsCard.jsx";
-import { useStripButtonClass } from "../tools/stripTouch.js";
 import { NAVBAR_VIEW_BUTTON_CLASS } from "./NavbarViewControls.jsx";
 
 /**
  * The view's **Display** (`docs/viewer-ux.md`, "The Display card"): how the picture is looked at, one card for every
- * kind of file, opened by the navbar's Display button (the plain cube, left of Preview; with no
- * navbar the strip's last tile but Preview's, or a row of a phone's More). Its rows are the view's groups, in two
+ * kind of file, opened by the navbar's Display button (the plain cube, left of Preview). Its rows are the view's groups, in two
  * sections and ONE hairline between them: the camera's (a board's **Side** and **Mode**, then **Projection** where the
  * view has one) and the picture's (**Style**, the display mode or a board's preset, then the **Background** and a 3D
  * view's **Show grid**). A drawing's or a schematic's is its Background alone. **Reset** puts the file's own settings
@@ -94,15 +92,9 @@ export function displaySections(groups) {
   return [groups.filter(group => CAMERA_GROUPS.includes(group.id)).map(row), groups.filter(group => !CAMERA_GROUPS.includes(group.id)).map(row)];
 }
 
-// The strip's tile: the strip's own size, its tooltip over it.
-function DisplayTile(props) {
-  return <ToolbarButton {...props} className={useStripButtonClass()} tooltipSide="top" />;
-}
-
 /**
  * Display's button and its card, for a frame (`RendererShell.jsx`, `FlatViewFrame.jsx`): `navbarButton`, the navbar's;
- * `stripView`, the strip's tile and a phone's More row where there is no navbar; `card`, what the frame docks at the
- * view's right edge (`ViewFrame.jsx`'s `card`: `{ open, content }`). The button is a toggle (pressed while the card is
+ * `card`, what the frame docks at the view's right edge (`ViewFrame.jsx`'s `card`: `{ open, content }`). The button is a toggle (pressed while the card is
  * open). `closeKey`: another value (another file) closes it; `closed`: it is closed while true (Preview).
  * @param {{ groups: object[], onReset?: (() => void) | null, disabled?: boolean, closeKey?: unknown, closed?: boolean }} options
  */
@@ -152,8 +144,6 @@ export function useDisplaySettings({ groups, onReset = null, disabled = false, c
     navbarButton: groups.length ? <ToolbarButton {...buttonProps} tooltipSide="bottom" tooltip={!mobile} className={NAVBAR_VIEW_BUTTON_CLASS}>
       <Icon aria-hidden="true" />
     </ToolbarButton> : null,
-    stripView: groups.length ? { id: "display", label, icon: <Icon aria-hidden="true" />, disabled, active: shown, onSelect: toggle,
-      tile: <DisplayTile {...buttonProps}><Icon aria-hidden="true" /></DisplayTile> } : null,
     card: { open: shown, content: <SettingsCard ref={cardRef} id={id} title={label} closeLabel={t("display.close")} onClose={close} closeOnEscape
       sections={displaySections(groups)} data-display-settings-card=""
       {...(groups.some(group => group.reset !== undefined) ? { onReset, resetLabel: t("settings.reset"), resetDisabled: !displayChanged(groups),

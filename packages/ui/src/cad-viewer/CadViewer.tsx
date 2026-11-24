@@ -88,13 +88,11 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   /**
    * The host's Full size button, where it shows the view small (inline in a conversation) and can
    * show it full size: the navbar's host action, at its right end, over every file
-   * and on the home. Nothing where there is no navbar (`chrome: "bare"`). (A host's way to open what
+   * and on the home. (A host's way to open what
    * is shown in a page of its own, the CAD app's browser page, is a file action, `fileActions.perform.browser`:
    * the file menu's Open in › Browser.)
    */
   fullSize?: ReactNode;
-  /** The chrome around the view (`FileViewerProps.chrome`): the navbar (`"page"`, the default), or the view alone (`"bare"`). */
-  chrome?: "page" | "bare";
   /**
    * What's new (`@cad/ui/whats-new`'s `useWhatsNew`): the release whose notes to show, once something
    * is on screen -- the home, or a file's view, never its loading page -- and how they are dismissed.
@@ -118,7 +116,7 @@ const reportError = (error: Error) => console.error(error);
  * navigates: showing a file, or the home, is the host's `onShow`.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, name, onShow, onShown,
-  library, onThumbnail, colorScheme, language, appSettings, notice, fullSize, history, chrome, whatsNew, onError = reportError }: CadViewerProps<Model>) {
+  library, onThumbnail, colorScheme, language, appSettings, notice, fullSize, history, whatsNew, onError = reportError }: CadViewerProps<Model>) {
   // The language the host names: the pages drawn here (the home, a file that will not open) read in it.
   const locale = host.environment.locale;
   const t = translator(locale);
@@ -257,7 +255,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   return <I18nProvider locale={locale}>
     <ControlUsageProvider report={host.usage?.controls}>
     <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
-      colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
+      colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
     {whatsNew && onScreen ? <WhatsNewDialog entry={whatsNew.entry} onDismiss={whatsNew.onDismiss} /> : null}
     {drawing && !path ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}

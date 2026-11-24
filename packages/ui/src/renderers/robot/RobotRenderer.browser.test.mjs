@@ -101,8 +101,8 @@ async function open(t, file, { panel = true } = {}) {
   const robot = {
     page, pane, tools, errors,
     tool: name => tools.getByRole('button', { name, exact: true }),
-    // The strip's tools (its buttons pressed or not, before the view's controls), and what Select's chevron says it picks.
-    toolNames: () => tools.getByRole('button').evaluateAll(buttons => buttons.filter(button => button.hasAttribute('aria-pressed') && !button.closest('[data-view-controls]'))
+    // The strip's tools (its buttons pressed or not), and what Select's chevron says it picks.
+    toolNames: () => tools.getByRole('button').evaluateAll(buttons => buttons.filter(button => button.hasAttribute('aria-pressed'))
       .map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
     filter: () => tools.locator('[data-select-filter-trigger]').getAttribute('aria-label'),
     // Select's Filter ticked to `mode` ("all": Links and Position; "links" or "position" alone) from its chevron's
@@ -169,7 +169,7 @@ async function open(t, file, { panel = true } = {}) {
       if (await tab.getAttribute('aria-selected') !== 'true') await tab.click();
       await pane.locator('[data-flat-panel] [role=tab][aria-selected="true"]').filter({ hasText: name }).waitFor();
     },
-    // In and out of Preview, by Preview at the strip's end and Exit preview in Preview's bar, once its cover has lifted.
+    // In and out of Preview, by the navbar's Preview and Exit preview in Preview's bar, once its cover has lifted.
     // Exit preview is pressed as a person presses it, the bar it is on brought back (`harness/preview.mjs`).
     async preview(enter) {
       const press = pane.getByRole('button', { name: enter ? 'Preview' : 'Exit preview', exact: true });
@@ -281,7 +281,6 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   // The navbar's View and Preview, for a robot as for any 3D file; no rule.
   assert.deepEqual(await robot.viewControls(), ['Display', 'Preview']);
   assert.equal(await tools.locator('[data-strip-rule]').count(), 0, 'no rule');
-  assert.equal(await tools.locator('[data-view-controls]').count(), 0, 'the strip ends at Clip: the view\'s settings are the navbar\'s');
   // Display's menu is shut as the file opens: nothing is over the model.
   assert.equal(await robot.displayPanel().count(), 0, 'Display is never open over the model as a file opens');
   // The panel holds the structure (Links), then Joints, a tab after it.

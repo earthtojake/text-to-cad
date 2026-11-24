@@ -145,7 +145,7 @@ it('draws the navbar over every file, named by its name, and over the home with 
     navbarActions: <button type="button" aria-label="Full size" />,
     presentation: { home: <p>home</p> } } as any);
   await screen.findByText('home');
-  expect([labels(), document.querySelector('[data-file-name]'), document.querySelector('[data-view-controls]')])
+  expect([labels(), document.querySelector('[data-file-name]'), document.querySelector('[data-navbar-view]')])
     .toEqual([['Menu', 'Back', 'Forward', 'Full size'], null, null]);
   expect((screen.getByRole('button', { name: 'Forward' }) as HTMLButtonElement).disabled).toBe(true);
   await userEvent.setup().click(screen.getByRole('button', { name: 'Back' }));
@@ -255,24 +255,6 @@ it('heads the home and a document with the one C mark, in one button that never 
   expect(document.querySelector('.cad-navbar-wordmark, .cad-navbar-logo-box')).toBeNull();
 });
 
-it('draws no navbar where the host asks for the view alone (`chrome: "bare"`): over a file or the home, whatever it hands the navbar', async () => {
-  const homed = { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home() {} } };
-  const everything = { host: homed, chrome: 'bare', history: { canGoBack: true, canGoForward: false, back() {}, forward() {} },
-    navbarActions: <button type="button" aria-label="Full size" />, presentation: { home: <p>home</p> } };
-  open(everything);
-  await screen.findByText('shown');
-  expect([navbar(), document.querySelector('[data-file-name]'), screen.queryAllByRole('button').map(button => button.getAttribute('aria-label'))]).toEqual([null, null, []]);
-  cleanup();
-  open({ ...everything, file: null });
-  await screen.findByText('home');
-  expect([navbar(), screen.queryAllByRole('button')]).toEqual([null, []]);
-  cleanup();
-  // The default is the page's chrome: the same props draw the navbar.
-  open({ ...everything, chrome: undefined });
-  await screen.findByText('shown');
-  expect(labels()).toEqual(['Menu', 'Back', 'Forward', 'Full size']);
-});
-
 it('keeps the right of the navbar for the host\'s actions (Full size) alone, and hides the navbar while the renderer says its Preview is up', async () => {
   // A renderer whose Preview a test opens and closes, as the CAD shell reports it.
   let report: ((previewing: boolean) => void) | undefined;
@@ -287,7 +269,7 @@ it('keeps the right of the navbar for the host\'s actions (Full size) alone, and
   render(<FileViewer file={FILE} host={host as any} renderers={[previewed]} state={{}} onStateChange={() => {}}
     navbarActions={<button type="button" aria-label="Full size" />} />);
   await screen.findByText('shown');
-  expect([labels(), document.querySelector('[data-view-controls]')]).toEqual([['Full size'], null]);
+  expect([labels(), document.querySelector('[data-navbar-view-controls]')]).toEqual([['Full size'], null]);
   act(() => report!(true));
   expect([navbar(), screen.getByText('shown')]).toEqual([null, expect.anything()]);
   act(() => report!(false));

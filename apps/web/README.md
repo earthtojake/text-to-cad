@@ -342,7 +342,7 @@ person's home folder), one folder at a
 time, with "Filter files..." to find a file anywhere under it. It opens on Models over a model
 and on Files over a file. Below 600px of
 FileViewer width (a phone) the chrome is touch-sized (the phone's scale) and the panel is a sheet under the navbar.
-Preview is the navbar's button right of Display (with no navbar, the strip's last tile): it takes the whole page,
+Preview is the navbar's button right of Display: it takes the whole page,
 hiding the navbar, the tool strip and Quick Edit, opens still (Orbit, in its settings, is
 off at every entry), draws the model in Render — the one place it is drawn — and draws its
 own bar in the navbar's place, over the view's top edge on no surface: the file's name at
