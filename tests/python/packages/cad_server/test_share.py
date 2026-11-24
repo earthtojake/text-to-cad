@@ -423,9 +423,14 @@ class ShareTest(unittest.TestCase):
             self.assertNotIn(record[name], bare, name)
         self.assertNotIn(record["write"], text)
         # Nor in any file of the engine's, the state's (but the records) or the cache's: its logs, its telemetry.
+        # The engine's lock is the one file passed over: the running engine holds its first byte locked, which
+        # Windows will not let another process read, and it holds no byte of a share (``places.lock``).
+        from cad.engine import places
+
+        locked = Path(self.given["CAD_ENGINE_DIR"]) / f"{places.NAME}.lock"
         for folder in (self.given["CAD_ENGINE_DIR"], self.given["CAD_STATE_DIR"], self.given["CAD_CACHE_DIR"]):
             for path in Path(folder).rglob("*"):
-                if path.is_file() and path.name != "shares.json":
+                if path.is_file() and path.name != "shares.json" and path != locked:
                     data = path.read_bytes()
                     for name in ("key", "write", "delete"):
                         self.assertNotIn(record[name].encode(), data, f"{name} in {path}")
