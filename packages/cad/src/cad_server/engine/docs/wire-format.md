@@ -34,7 +34,7 @@ carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it).
 | `POST /api/v1/local/open` | `{"id", "target", "app"}`: one of those targets in one of its apps, or `"default"` (the system's own handler), started detached and never through a shell (a KiCad by its board or schematic editor, as the file's extension says; Blender, which opens only a `.blend` from its command line, with the package's import script, `--python`, and the file as the one argument after `--`): 204; 400 for a target the document lacks, an app not found for its kind, a KiCad that `refuses` the file or `"default"` on a `.kicad_*` file, 404 for a document or a file not there. Only the server's own paths and apps are opened |
 
 A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and its
-`faces|edges|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`,
+`faces|edges|vertices/<ordinal>`, `elements`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`,
 `POST mesh`, a model's `POST parameters` (**Parameters**) and a file's `source`; `dxf` -- `drawing`, `source`; `kicad_pcb` -- `plot` (the
 board's geometry per layer and its index, read from the file on each request: `viewer/plots.py`),
 `source`; `kicad_sch` -- `plot` (every sheet of the hierarchy a page, and the schematic's index;
@@ -99,6 +99,12 @@ vertex of the part. Ordinals are the part's `TopExp.MapShapes` ordinals, the
 same ones its element names use. Selecting a face reads a range of the index
 buffer, an edge a range of the polyline buffer, a vertex a row of the vertex
 table.
+
+`GET .../parts/<key>/elements` is the part's whole table, `{"faces", "edges", "vertices", "groups"}`:
+every element's facts by its ordinal, each what `faces|edges|vertices/<ordinal>` answers of the part's
+geometry -- without the two things those add of the document, a face's `meshed` and a model's `made_by`
+-- and `groups`' answer. A page asks for one element at a time; the table is what a view bundle holds of
+a part (**View bundle**), where no engine answers.
 
 `POST .../mesh?mode=inline|processes[&drop=1]` meshes every part not
 held yet (with `drop=1`, every part again), in parallel, and returns the time it

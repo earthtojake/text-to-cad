@@ -331,9 +331,9 @@ def _unit(vector: tuple[float, float, float]) -> tuple[float, float, float] | No
 
 class Topology:
     """A part's faces, edges and vertices by ordinal, and what the kernel measures of each
-    when asked (``face``, ``edge``, ``vertex``): nothing is measured ahead. It reads the
-    part as the mesher does, from its shape bytes, so continuity it encodes is written on
-    no one else's shape."""
+    when asked (``face``, ``edge``, ``vertex``): nothing is measured ahead, but by ``elements``,
+    every one's at once. It reads the part as the mesher does, from its shape bytes, so
+    continuity it encodes is written on no one else's shape."""
 
     def __init__(self, shape: Any) -> None:
         from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
@@ -520,6 +520,16 @@ class Topology:
         vertex = self._get("vertex", ordinal)
         return {"kind": "vertex", "ordinal": ordinal, "position": _point(BRep_Tool.Pnt_s(vertex)),
                 "tolerance": BRep_Tool.Tolerance_s(vertex)}
+
+    def elements(self) -> dict[str, Any]:
+        """The part's whole table: every face's, edge's and vertex's facts (``face``, ``edge``,
+        ``vertex``: each exactly what asking for that one answers), keyed by ordinal as text, and how
+        a pick grows (``groups``). A function of the part's shape bytes alone, as each of them is: what
+        a view bundle holds of a part, since no kernel answers its reader."""
+        return {**{plural: {str(ordinal): getattr(self, kind)(ordinal)
+                            for ordinal in range(1, self.maps[kind].Extent() + 1)}
+                   for plural, kind in (("faces", "face"), ("edges", "edge"), ("vertices", "vertex"))},
+                "groups": self.groups()}
 
 def measured(data: Any) -> dict[str, Any]:
     """What the kernel measures of a part as a whole, from its shape bytes (``shape_bytes``) read

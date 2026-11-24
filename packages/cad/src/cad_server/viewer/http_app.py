@@ -219,13 +219,13 @@ _FUNNEL_HINTS = {400: "fix the request as the error says", 404: "check the path 
                  500: "this is a bug in the CAD server: report it with the error"}
 # A part's elements, as their routes name them and as the engine's reads do.
 _ELEMENTS = {"faces": "face", "edges": "edge", "vertices": "vertex"}
-_ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure, "
+_ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /elements, /groups, /volume), measure, "
                   "kinematics, POST pose, POST mesh")
 # A model's own: its parameters set in its script, and a look at other values of them (a preview).
 _MODEL_ROUTES = _ENGINE_ROUTES + ", POST parameters, POST preview"
 # What a preview (``<id>~preview-<token>``, the engine's ``parameters.Previewing``) is read at: what a page draws
 # and measures of it, nothing else.
-_PREVIEW_ROUTES = "structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure"
+_PREVIEW_ROUTES = "structure, parts/<key> (/faces|edges|vertices/<ordinal>, /elements, /groups, /volume), measure"
 PREVIEW_MARK = "~preview-"
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
@@ -942,7 +942,7 @@ class CadApp:
             part = f"{doc}/part/{rest[1]}"
             if len(rest) == 2:
                 return self._methods(request, {"GET": lambda: self._relay(request, response, part, query)})
-            if len(rest) == 3 and rest[2] in ("groups", "volume"):
+            if len(rest) == 3 and rest[2] in ("groups", "elements", "volume"):
                 return self._methods(request, {"GET": lambda: self._relay(request, response, f"{part}/{rest[2]}")})
             if len(rest) == 4 and rest[2] in _ELEMENTS and rest[3].isascii() and rest[3].isdigit():
                 return self._methods(request, {"GET": lambda: self._relay(

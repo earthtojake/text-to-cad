@@ -24,7 +24,10 @@ that feature's call, asked of the worker that built the document (``provenance``
 from a file, so a document served cold, with no live worker that built it, answers null; a file's
 answers no ``made_by``, since a file names no model, whichever model's run wrote it;
 ``GET /api/doc/<id>/part/<key>/groups`` is how a pick of one face or edge grows (each face's
-tangent group, each edge's chain: ``mesh.Topology.groups``); ``.../volume`` the part's facts as a
+tangent group, each edge's chain: ``mesh.Topology.groups``); ``.../elements`` the part's whole table,
+every face's, edge's and vertex's facts by ordinal with its groups (``mesh.Topology.elements``: what
+the kernel measures of each, and nothing of the document -- no ``meshed``, no ``made_by``);
+``.../volume`` the part's facts as a
 whole -- its volume in cubic millimetres, what its mass is weighed from, its solids and its box in
 its own frame (``mesh.measured``) -- and ``GET /api/doc/<id>/volumes[?keys=K,...]`` every part's (or
 those named), by key: each measured once and kept by its geometry key (``FactCache``), a
@@ -803,7 +806,7 @@ class _RemoteTopology:
         self.mesher, self.key, self.data = mesher, key, data
 
     def __getattr__(self, method: str):
-        if method not in {"face", "edge", "vertex", "groups"}:
+        if method not in {"face", "edge", "vertex", "groups", "elements"}:
             raise AttributeError(method)
         return lambda *args: self.mesher.run(_topology_fact, self.key, self.data, method, args, priority=FACT).result()
 
@@ -2147,8 +2150,8 @@ class Server:
                         return self.part(handler, doc, key)
                     if len(parts) == 7 and parts[5] in ("face", "edge", "vertex") and parts[6].isdigit():
                         return self.fact(handler, doc, key, parts[5], int(parts[6]))
-                    if len(parts) == 6 and parts[5] == "groups":
-                        return self.json(handler, self.topology(key, self.shape_of(doc, key)).groups())
+                    if len(parts) == 6 and parts[5] in ("groups", "elements"):
+                        return self.json(handler, getattr(self.topology(key, self.shape_of(doc, key)), parts[5])())
                     if len(parts) == 6 and parts[5] == "volume":
                         return self.json(handler, self.measure(doc, [key])[key])
                 if len(parts) == 4 and parts[3] == "mesh" and method == "POST":
@@ -2169,7 +2172,7 @@ class Server:
             self.error(handler, 500, f"{type(error).__name__}: {error}")
 
     def _preview_route(self, handler: BaseHTTPRequestHandler, parts: list[str], query: dict) -> None:
-        """A read of a preview (``keep_preview``): its structure, a part's buffer, a part's groups, facts and
+        """A read of a preview (``keep_preview``): its structure, a part's buffer, a part's groups, table, facts and
         volume, and its parts' facts -- what a page draws and measures; never a version, a pose, a mesh run,
         an export or anything that changes what is held. One let go, or never made, is not found."""
         with self.load_lock:
@@ -2198,8 +2201,8 @@ class Server:
                 return self.part(handler, doc, key)
             if len(parts) == 7 and parts[5] in ("face", "edge", "vertex") and parts[6].isdigit():
                 return self.fact(handler, doc, key, parts[5], int(parts[6]))
-            if len(parts) == 6 and parts[5] == "groups":
-                return self.json(handler, self.topology(key, self.shape_of(doc, key)).groups())
+            if len(parts) == 6 and parts[5] in ("groups", "elements"):
+                return self.json(handler, getattr(self.topology(key, self.shape_of(doc, key)), parts[5])())
             if len(parts) == 6 and parts[5] == "volume":
                 return self.json(handler, self.measure(doc, [key])[key])
         return self.error(handler, 404, "not found")
