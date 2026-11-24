@@ -99,7 +99,8 @@ its operations and what writes it.
 **PURPOSE** — the engine and its command surface: models built in a warm worker whose memo
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the viewer (`cad viewer [FILE]`: a
-launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad mcp`: a stateless stdio peer of the engine’s
+launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); a document
+shared for anyone with its link to open (`cad share`: its view bundle uploaded to the share service); CAD beside an agent's chat (`cad mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF and SRDF checks; a MuJoCo model's
 check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
@@ -147,7 +148,7 @@ disagree, the engine's pages are right about what the code does.
 |---|---|---|
 | The server's README, `src/cad_server/README.md` | The server's shape, its commands, cad's own update and where it keeps things | changing a command, the server's folders or the update |
 | The transport's README, `src/cad_mcp/README.md` | What `cad mcp` does between an agent app and the server | changing how an agent app reaches the server |
-| The engine's README, `src/cad_server/engine/README.md`, and the pages it indexes in `docs/` beside it | The engine, a page per mechanism: models, the server and its workers, the door, document lifetime, progress, the viewer and the snapshot, exports, kinematics, materials, imports, the mesh, the wire format, the view bundle, element names, references, the memo, the build closure and a model's parameters. Read the index, then the one page | changing anything a build, an export, a snapshot or a served document does |
+| The engine's README, `src/cad_server/engine/README.md`, and the pages it indexes in `docs/` beside it | The engine, a page per mechanism: models, the server and its workers, the door, document lifetime, progress, the viewer and the snapshot, exports, kinematics, materials, imports, the mesh, the wire format, the view bundle, sharing, element names, references, the memo, the build closure and a model's parameters. Read the index, then the one page | changing anything a build, an export, a snapshot or a served document does |
 
 ## The design laws
 
@@ -174,8 +175,8 @@ renumbers the list and every citation in the same change.
    declares, the exports a command or a person asks for, and a model's own script only where a person or an
    agent asks to set a parameter it declares (law 30), and nothing beside a model or an input: no
    sidecar, index, memo, mesh or record of a build. What it keeps for itself lives in three folders of
-   the user's own, the same whatever release runs: state (settings and the records of documents, never
-   geometry or source), cache (each document's bytes as last built, a file document's views keyed by
+   the user's own, the same whatever release runs: state (settings and the records of documents and of
+   shares, never geometry or source), cache (each document's bytes as last built, a file document's views keyed by
    its bytes, bytecode and the environments it installs, every one regenerable) and the engine's folder
    (its door and lock). The code stays the only source of truth: a document is what its last run made,
    and nothing reruns (the server's **Folders**; `cad.engine.places`).
@@ -275,8 +276,10 @@ renumbers the list and every citation in the same change.
     build, snapshot, server and page. Its own requests are telemetry and the hourly version check;
     both run in the background and fail silently, and no start, command, build or tool call waits on
     them. The waits are the ones a person asks for by name (`cad update`; `cad plugin install`, which
-    runs each agent app's own command and fetches the plugin from GitHub; `cad telemetry off`) and the
-    first fetch of an integration's environment, which says so in a line. The
+    runs each agent app's own command and fetches the plugin from GitHub; `cad telemetry off`; `cad
+    share`, which uploads a document to the share service and fails loudly, in one line, where the
+    network does not reach it) and the first fetch of an integration's environment, which says so in a
+    line. The
     pages load nothing from the internet (the server's **cad's own update** and **Telemetry**).
     *Pressure-test*: with every integration's environment made, and every request refused, then
     hanging, start a server, open a view, call each tool, and run a build, a snapshot and each

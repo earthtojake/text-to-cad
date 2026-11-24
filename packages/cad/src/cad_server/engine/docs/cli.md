@@ -109,6 +109,14 @@ cad kicad_sch inspect SCHEMATIC [REF] [--json]
 cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display JSON] [...]
                                              one sheet drawn flat (the root unless --sheet names another)
 cad server start [--port N] [--foreground] | stop [--json] | status [--json]; cad server --rotate-token [--yes]
+cad share TARGET [--yes] [--json]          TARGET's view bundle (a document id the engine holds, or a file the
+                                             viewer opens) uploaded by this process for anyone with its link to
+                                             open, 7 days from its last share; the first share on a computer is
+                                             refused without --yes, the person's yes (Sharing)
+cad share status|on|off [--json]             whether sharing is on and agreed, and the live shares; on, off
+cad share delete TARGET|LINK [--yes] [--json]
+                                             the share of a TARGET this computer shared, or of a delete link,
+                                             deleted from the service; asked first
 cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]
                                              each document deleted: its record, its document in the engine's
                                              cache and what the engine holds of it (**Delete**); never a
@@ -149,12 +157,13 @@ the help on stdout and exits 0, and does nothing else: it moves no earlier relea
 and says no telemetry notice. Nor does a command whose answer is JSON say the notice: it waits for a run a
 person reads, and nothing is sent by default until it is said.
 
-**Consent.** A command that destroys -- `cad delete`, `cad server --rotate-token` -- says its plan first, what it removes and how many (`cad delete --dry-run`
+**Consent.** A command that destroys -- `cad delete`, `cad server --rotate-token`, `cad share delete` -- says its plan first, what it removes and how many (`cad delete --dry-run`
 says it alone), and then asks: at a terminal, `... (y/N)` on stderr, anything but `y` or `yes` changing
 nothing (`declined`, exit 1); where no one can be asked (no terminal, `--json`, CI), it changes nothing
 without `-y`/`--yes`, failing `confirmation_required` (exit 2) with the exact command with `--yes`
 (`cad_server._internal.consent`). `--yes` answers that question and no other. `cad setup` asks nothing:
-installing is what was asked.
+installing is what was asked. `cad share`'s first share asks for its own yes, once a computer, by the same
+`--yes` (**Sharing**).
 
 **The failure contract**, every command's alike (`cad_server._internal.cli_errors`). A failure's class
 sets the exit status, the same with `--json` and without: 2 for the command line and its input -- a
@@ -175,7 +184,7 @@ a command takes it, puts one on stderr):
 option or argument the command line got wrong), `invalid_argument` (a value refused by name before
 anything ran: out of range, a pose the document lacks), `wrong_type`, `not_found` (a file that is not
 there, a document the engine has no record of or does not hold), `confirmation_required` (with
-`"userActionRequired": true` and `"next"`, the command with `--yes`), exit 2; `declined`, `not_running`,
+`"userActionRequired": true` and `"next"`, the command with `--yes`), exit 2; `declined` (a no to a question, or kept: sharing turned off), `not_running`,
 `other_release`, `engine_unavailable`, `failed`, `internal_error`, exit 1; `canceled`, exit 130. Without `--json` a
 failure is its words on stderr. A
 command line no parser can read is the parser's own usage error (`cli_parser`: every command's options are

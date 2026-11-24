@@ -50,6 +50,9 @@ cad_server/
   analytics.py           # telemetry: usage counts and crash reports, on by default once
                          #   a command has said so, never after a no
   settings.py            # the person's settings: settings.json in the data folder
+  sharing.py             # `cad share`'s client of the share service: a share's names and links, the cad-share/1
+                         #   archive of a view bundle, the service's API (urllib, in the command's own process),
+                         #   and the agreement, the setting and the records kept
   language.py            # the language the person chose for the CAD views
   whats_new.py           # the releases whose What's new the person has seen
   updates.py             # the hourly read of the version feed, and PyPI asked for `cad update`
@@ -146,6 +149,14 @@ cad_server/
   release), as 0.11.12 and 0.11.13 read it too. `cad plugin` is the one command that reaches `plugin/`, and that package the
   one place in cad that names an agent app, a plugin or a skill.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
+- **`cad share TARGET [--yes]`**: a document (an id the engine holds, or a file the viewer opens) shared for anyone
+  with its link to open in the hosted viewer, for 7 days after its last share: the server writes its view bundle into
+  a temporary folder, and the command packs it and uploads it itself, so an agent app's sandbox sees the connection.
+  The first share on a computer is refused without `--yes`, the person's yes, in lines that say what goes, where,
+  who can open it, for how long and how to delete it. **`cad share status|on|off`**: whether sharing is on and
+  agreed, and this computer's live shares; `off` refuses every share until `on`. **`cad share delete
+  TARGET|LINK`**: a share deleted, asked first. The agreement, the setting and the records are written by the server
+  that runs, as `cad update auto`'s switch is, else by the command (the engine's **Sharing**).
 
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
 One command can install it with uv where a computer has none: `cad mcp` run from uv's cache, which
@@ -287,7 +298,8 @@ says so and updates nothing.
 
 The data folder (the state folder, `cad.engine.places.state_dir`) is `cad` in the platform's place for state (`~/Library/Application Support/cad` on macOS,
 `~/.local/state/cad` on Linux and Windows) or the folder `CAD_STATE_DIR` names: settings, Recents, the
-documents' records, the page token and port, the telemetry spool and the feed's last answer. The cache
+documents' records, the page token and port, the telemetry spool, the feed's last answer and the shares' records
+(`shares.json`, which this user alone may read). The cache
 folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: the documents' bytes, the
 environments, bytecode and the integrations' private homes, all made again on demand. On Windows neither
 is in the local application data, which Windows virtualizes for every process an app package (the Claude

@@ -25,6 +25,9 @@ options (`--tolerance`, `--angle`, `--zero`). It is the one export of a DXF and 
 The row it answers (`Written`, `--json`'s `files`) is the folder, with `view`: its `document`, how many
 `files` it holds, and the paths this export `written` and `removed`.
 
+`cad share` uploads one, packed as one archive, for anyone with its link to open in the hosted viewer
+(**Sharing**).
+
 A KiCad board or schematic has no view bundle yet: its `export` is KiCad's own (`--to`, into a folder, run
 by the kicad integration) and names no such destination. What one waits on is said under **Writing one**.
 
