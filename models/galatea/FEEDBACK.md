@@ -584,7 +584,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
   check saying which brackets no longer fitted. A parametric model in a real language is
   what made a change of that size affordable in an afternoon.
 - A maker's STEP into the model: `cad step export RS04.stp RS04.xbf` once, then
-  `xbf.read` in the build, and `cad step inspect` and `cad step snapshot` to find a
+  `model.read` in the build, and `cad step inspect` and `cad step snapshot` to find a
   mounting face and a bolt circle on it. Five drives were in the robot, aligned and
   mirrored, in an afternoon, and their real shapes found five interferences my cans
   drawn from the datasheet had hidden.

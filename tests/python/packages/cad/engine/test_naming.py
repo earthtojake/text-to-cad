@@ -27,14 +27,14 @@ PARITY = Path(__file__).resolve().parents[5] / "packages/core/src/lib/cadRefs.pa
 
 BLOCK = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
 def peg(z):
     return bd.Pos(0, 0, z) * bd.Cylinder(1, 30)
 
 
-@xbf("XBF/block.xbf")
+@model(xbf="XBF/block.xbf")
 def block():
     body = bd.Box(30, 20, 10)
 {insert}    {relief} = body - bd.Pos(8, 0, 0) * bd.Cylinder(3, 30)
@@ -47,10 +47,10 @@ def block():
 
 PAIR = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/pair.xbf")
+@model(xbf="XBF/pair.xbf")
 def pair():
     fork = bd.Box(20, 10, 10)
     trial = bd.fillet(fork.edges().filter_by(bd.Axis.X), 1)  # an attempt the model throws away
@@ -65,14 +65,14 @@ def pair():
 # A reassignment chain, a helper returning what it makes unassigned among its steps.
 CHAIN = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
 def _bore(radius, x):
     return bd.Pos(x, 0, 0) * bd.Cylinder(radius, 30)
 
 
-@xbf("XBF/chain.xbf")
+@model(xbf="XBF/chain.xbf")
 def chain():
     plate = bd.Box(40, 20, 10)
     plate = plate - _bore(2, -12)
@@ -85,7 +85,7 @@ def chain():
 BAKED = """
 import build123d as bd
 from build123d.topology.shape_core import downcast
-from cad.engine import xbf
+from cad.engine import model
 
 OFFSET = {offset}
 
@@ -106,13 +106,13 @@ def bake(shape, kind):
     return bd.Solid(downcast(made.Shape()))
 
 
-@xbf("XBF/wheel.xbf")
+@model(xbf="XBF/wheel.xbf")
 def wheel():
     hub = bd.Cylinder(10, 5) - bd.Cylinder(3, 10)
     return bake(bd.Pos(30, 0, 0) * hub, "transform")
 
 
-@xbf("XBF/baked.xbf")
+@model(xbf="XBF/baked.xbf")
 def baked():
     hub = bd.Cylinder(10, 5) - bd.Cylinder(4, 10)
     copied = bake(hub, "copy")
@@ -126,10 +126,10 @@ def baked():
 # writes, a sibling's included.
 SOURCE = """
 import build123d as bd
-from cad.engine import step, xbf
+from cad.engine import step, model
 
 
-@xbf("XBF/source.xbf")
+@model(xbf="XBF/source.xbf")
 @step("source.step")
 def source():
     plate = bd.Box(20, 10, 2) - bd.Cylinder(2, 10)
@@ -144,12 +144,12 @@ IMPORTS = """
 from pathlib import Path
 
 import build123d as bd
-from cad.engine import read_step, xbf
+from cad.engine import read_step, model
 
 HERE = Path(__file__).parent
 
 
-@xbf("XBF/imported.xbf")
+@model(xbf="XBF/imported.xbf")
 def imported():
     bought = read_step(HERE / "{file}")
     return bd.Compound(children=[child.moved(bd.Location((0, 0, {lift}))) for child in bought.children])
@@ -256,15 +256,15 @@ class AssignedNamesTest(NamingCase):
         # is named in the child, as when it is built alone.
         child = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/peg.xbf")
+@model(xbf="XBF/peg.xbf")
 def peg():
     return bd.Cylinder(2, 10)
 
 
-@xbf("XBF/stand.xbf")
+@model(xbf="XBF/stand.xbf")
 def stand():
     post = peg().shape
     return bd.Compound(children=[post, bd.Pos(10, 0, 0) * bd.Box(2, 2, 2)])
@@ -365,10 +365,10 @@ class RawMakerTest(NamingCase):
 PLACED = """
 import build123d as bd
 from build123d.topology.shape_core import downcast
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/placed.xbf")
+@model(xbf="XBF/placed.xbf")
 def placed():
     plate = bd.Box(10, 6, 2) - bd.Cylinder(1, 5)
     plate.label = "plate"
@@ -386,7 +386,7 @@ def placed():
     return bd.Compound(children=kids, label="rebuilt")
 
 
-@xbf("XBF/unified.xbf")
+@model(xbf="XBF/unified.xbf")
 def unified():
     from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain
 
@@ -506,12 +506,12 @@ class VertexNamesTest(NamingCase):
 # PYTHONHASHSEED sets, stands in for the heap, which orders a boolean's or a text's pieces.
 SHUFFLED = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 SPOTS = sorted([(0, 0), (3, 0), (6, 1), (9, 0), (12, 2)], key=lambda spot: hash(str(spot)))
 
 
-@xbf("XBF/grid.xbf")
+@model(xbf="XBF/grid.xbf")
 def grid():
     cell = bd.Rectangle(1, 2)
     sk = bd.Sketch() + [bd.Pos(*spot) * cell for spot in SPOTS]

@@ -23,11 +23,11 @@ from tests.python.support import engine_cache
 KIT = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import paint, step, xbf
+from cad.engine import paint, step, model
 from bd_materials import metals
 
 
-@xbf("XBF/kit.xbf")
+@model(xbf="XBF/kit.xbf")
 @step("kit.step")
 def kit():
     base = bd.Box(10, 10, 5)
@@ -39,7 +39,7 @@ def kit():
     return bd.Compound(children=[base, peg, other], label="kit")
 
 
-@xbf("XBF/hinge.xbf")
+@model(xbf="XBF/hinge.xbf")
 def hinge():
     base, arm = bd.Box(100, 60, 20), bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
     base.label, arm.label = "base", "arm"
@@ -53,22 +53,22 @@ def hinge():
 USE = """
 from pathlib import Path
 
-from cad.engine import read_step, read_xbf, xbf
+from cad.engine import read_step, read_xbf, model
 
 HERE = Path(__file__).resolve().parent
 
 
-@xbf("XBF/from_step.xbf")
+@model(xbf="XBF/from_step.xbf")
 def from_step():
     return read_step(HERE / "kit.step")
 
 
-@xbf("XBF/from_xbf.xbf")
+@model(xbf="XBF/from_xbf.xbf")
 def from_xbf():
     return read_xbf(HERE / "XBF/converted.xbf")
 
 
-@xbf("XBF/twice.xbf")
+@model(xbf="XBF/twice.xbf")
 def twice():
     first = read_step(HERE / "kit.step")
     second = read_step(HERE / "kit.step").moved(__import__("build123d").Location((0, 0, 50)))
@@ -76,7 +76,7 @@ def twice():
     return __import__("build123d").Compound(children=[first, second, third], label="twice")
 
 
-@xbf("XBF/hinge_copy.xbf")
+@model(xbf="XBF/hinge_copy.xbf")
 def hinge_copy():
     return read_xbf(HERE / "XBF/hinge.xbf")
 """
@@ -168,23 +168,23 @@ from OCP.BRepTools import BRepTools
 from OCP.gp import gp_Pnt
 from OCP.Poly import Poly_Triangle, Poly_Triangulation
 from OCP.TopoDS import TopoDS_Face, TopoDS_Shape
-from cad.engine import model, read_mesh, xbf
+from cad.engine import model, read_mesh
 
 HERE = Path(__file__).resolve().parent
 
 
-@xbf("XBF/enclosure.xbf")
+@model(xbf="XBF/enclosure.xbf")
 def enclosure():
     pcb = read_mesh(HERE / "scans" / "pcb.stl").bounding_box()
     return bd.Box(pcb.size.X + 6, pcb.size.Y + 6, pcb.size.Z + 4)
 
 
-@xbf("XBF/by_import_stl.xbf")
+@model(xbf="XBF/by_import_stl.xbf")
 def by_import_stl():
     return bd.Box(*bd.import_stl(HERE / "scans" / "pcb.stl").bounding_box().size)
 
 
-@xbf("XBF/by_import_step.xbf")
+@model(xbf="XBF/by_import_step.xbf")
 def by_import_step():
     return bd.import_step(HERE / "part.step")
 
@@ -194,14 +194,14 @@ def by_import_brep():
     return bd.import_brep(HERE / "part.brep")
 
 
-@xbf("XBF/by_occt.xbf")
+@model(xbf="XBF/by_occt.xbf")
 def by_occt():
     shape = TopoDS_Shape()
     BRepTools.Read_s(shape, str(HERE / "part.brep"), BRep_Builder())
     return bd.Solid(shape)
 
 
-@xbf("XBF/mesh_face.xbf")
+@model(xbf="XBF/mesh_face.xbf")
 def mesh_face():
     mesh = read_mesh(HERE / "scans" / "pcb.stl")
     triangulation = Poly_Triangulation(len(mesh.vertices), len(mesh.triangles), False)
@@ -223,12 +223,12 @@ SIZED = """
 from pathlib import Path
 
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 HERE = Path(__file__).resolve().parent
 
 
-@xbf("XBF/sized.xbf")
+@model(xbf="XBF/sized.xbf")
 def sized():
     scan = bd.import_stl(HERE / "cube.stl")
     return bd.Box(*scan.bounding_box().size)
@@ -351,7 +351,7 @@ class ReadsTest(unittest.TestCase):
                 if status == "loaded":
                     break
                 self.assertEqual(report["retention"]["fallbacks"], {f"reads.py::{name}": [
-                    f"reads {path} through {call}: its body is never retained (any edit runs it whole); use step.read/xbf.read/stl.read"]})
+                    f"reads {path} through {call}: its body is never retained (any edit runs it whole); use step.read/model.read/stl.read"]})
                 # The report is the build's, its memo tally whole: `python model.py` prints it.
                 self.assertIn("misses", report["memo"], name)
                 self.assertTrue(said.describe(report, 1.0, None).startswith(f"built reads.py::{name} in"), name)

@@ -51,11 +51,11 @@ MIRRORS: dict[str, tuple[str, str]] = {
     "kicad_sch erc": ("cad.kicad_sch", "erc"),
     # A 3D type's manufacturing check, and a DXF's as a sheet's cut file: one signature for every type.
     **{f"{document_type} dfm": (f"cad.{document_type}", "dfm")
-       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf")},
+       for document_type in ("model", "step", "stl", "glb", "threemf", "dxf")},
     # A B-rep type's stress study: the calculix integration's, one signature for every B-rep type.
-    **{f"{document_type} solve": (f"cad.{document_type}", "solve") for document_type in ("model", "xbf", "step")},
+    **{f"{document_type} solve": (f"cad.{document_type}", "solve") for document_type in ("model", "step")},
     # The joint stops of a document with a mechanism: the kernel's, one signature for every B-rep type.
-    **{f"{document_type} ranges": (f"cad.{document_type}", "ranges") for document_type in ("model", "xbf", "step")},
+    **{f"{document_type} ranges": (f"cad.{document_type}", "ranges") for document_type in ("model", "step")},
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
@@ -78,18 +78,18 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # the hidden --refresh the updater of 0.11.10 runs, which does nothing.
     "plugin": frozenset({"command", "install", "update", "refresh"}),
     # The engine's verbs (cad_server.engine.cli): each type's operations, and its process control.
-    # A document's export (a model's, an xbf's, a STEP's) meshes a GLB, an STL or a 3MF to a tolerance and an
+    # A document's export (a model's, a STEP's) meshes a GLB, an STL or a 3MF to a tolerance and an
     # angle, and takes a robot description's joints from a zero state; a mesh's, to the other mesh kinds, does
     # neither.
     **{f"{document_type} export": frozenset({"source", "destinations", "tolerance", "angle", "zero", "json"})
-       for document_type in ("model", "xbf", "step")},
+       for document_type in ("model", "step")},
     **{f"{document_type} export": frozenset({"source", "destinations", "json"})
        for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
-       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf")},
+       for document_type in ("model", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf")},
     # A B-rep type's interference check: its poses and fits repeat, lists no signature derives.
     **{f"{document_type} interference": frozenset({"document", "pose", "fit", "min_volume"})
-       for document_type in ("model", "xbf", "step")},
+       for document_type in ("model", "step")},
     # A KiCad board's still: the engine's snapshot with the box of the board to frame.
     "kicad_pcb snapshot": SNAPSHOT | {"window"},
     # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
@@ -101,7 +101,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "kicad_sch inspect": frozenset({"schematic", "ref"}),
     "kicad_sch snapshot": SNAPSHOT | {"sheet", "border"},
     **{f"{document_type} inspect": frozenset({"document", "ref", "query", "json"})
-       for document_type in ("model", "xbf", "step", "glb")},
+       for document_type in ("model", "step", "glb")},
     "serve": frozenset({"document", "port"}),
     "status": frozenset({"json"}),
     "stop": frozenset({"json"}),
@@ -262,14 +262,14 @@ class Manifest(unittest.TestCase):
 
     def test_the_engines_verbs_are_commands_of_their_own(self):
         # One parser per verb, the engine's (cad_server.engine.cli), named by the command that runs it.
-        for verb in ("xbf export", "stl snapshot", "serve", "step inspect", "status", "stop", "delete", "server"):
+        for verb in ("step export", "stl snapshot", "serve", "step inspect", "status", "stop", "delete", "server"):
             with self.subTest(verb=verb):
                 self.assertEqual(cli.build_parser_for(verb).prog, f"cad {verb}")
 
     def test_every_verb_goes_through_the_engine(self):
         # No command runs a build or a verb in its own process: --no-daemon is an unrecognized argument like any
         # other. daemon=False is the Python functions' seam for tests and debugging alone.
-        for argv in (("xbf", "export", "a.xbf", "a.stl", "--no-daemon"), ("xbf", "snapshot", "a.xbf", "a.png", "--no-daemon")):
+        for argv in (("model", "export", "a.xbf", "a.stl", "--no-daemon"), ("model", "snapshot", "a.xbf", "a.png", "--no-daemon")):
             with self.subTest(argv=argv):
                 err = io.StringIO()
                 with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()), \

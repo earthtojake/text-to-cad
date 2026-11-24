@@ -2,11 +2,11 @@
 declare.
 
 The root holds ``__version__``, ``CadDeprecationWarning`` and the document types, one object each
-(``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file), ``xbf``,
+(``cad.registry``): ``model`` (a model built from code, held in the engine's memory or saved as its ``.xbf``),
 ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``srdf``, ``kicad_pcb`` and
 ``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step("arm.step")``), its edit where
 its files are changed in place (``with kicad_pcb.edit("board.kicad_pcb") as board:``), its reader where it
-has one (``step.read``) and its
+has one (``step.read``, ``model.read``) and its
 operations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,
 ``.inspect``, and those named for what they do (``.dfm``, ``.solve``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's
@@ -59,8 +59,11 @@ del _install_font_guard
 # cad.engine.api.observers, which the server's commands fill (``cad_server._internal.engine_telemetry``),
 # and a process the server did not start -- a model's own, in the CAD kernel environment -- counts nothing.
 
-# The document types (``cad.registry.DOCUMENT_TYPES``), each a subpackage that is a ``DocumentType``.
-_TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch")
+# The document types as the library spells them (``cad.registry.spelling``), each a subpackage that is a
+# ``DocumentType``.
+_TYPES = ("model", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch")
+# The older spelling of ``cad.model`` for the file a model is saved as, answered and not listed (``cad/xbf``).
+_OLDER = ("xbf",)
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
 _INTEGRATIONS = ("build123d", "kicad", "trimesh", "mujoco", "coacd", "netgen", "calculix", "blender", "orcaslicer")
@@ -79,7 +82,7 @@ del _install_aliases
 
 
 def __getattr__(name: str):
-    if name in _TYPES or name in _INTEGRATIONS:
+    if name in _TYPES or name in _OLDER or name in _INTEGRATIONS:
         import importlib
 
         return importlib.import_module(f"{__name__}.{name}")

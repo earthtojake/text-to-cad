@@ -31,10 +31,10 @@ from cad.engine import document
 ARM = """
 import build123d as bd
 from cad.build123d import configuration_sequence, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/arm.xbf")
+@model(xbf="XBF/arm.xbf")
 def arm():
     def part(label, shape):
         shape.label = label
@@ -63,10 +63,10 @@ def arm():
 
 CASE = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/case.xbf")
+@model(xbf="XBF/case.xbf")
 def case():
     def part(label, shape):
         shape.label = label

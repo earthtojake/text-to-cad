@@ -1,4 +1,4 @@
-"""The interference check a B-rep type shares (``cad.model.interference``, ``cad.xbf.interference``,
+"""The interference check a B-rep type shares (``cad.model.interference``, of a model held or saved,
 ``cad.step.interference``): which parts of a document share volume.
 
 The engine measures it, in one of its checks processes (``cad.engine.api.check``, by
@@ -165,9 +165,9 @@ def interference_for(document_type: str) -> Any:
         from cad._internal.document_type import refuse_other
         from cad.engine import api
 
-        refuse_other(document_type, source)
+        of = refuse_other(document_type, source)  # the file a model is saved as, given to cad.model, is that file's
         resolved = options(poses=poses, fits=fits, min_volume=min_volume)
-        checked = api.check(source, {"type": document_type, "process": "interference", "resolved": resolved,
+        checked = api.check(source, {"type": of, "process": "interference", "resolved": resolved,
                                      "candidates": False, "given": {}})
         return finish(_label(source), checked, resolved)
 

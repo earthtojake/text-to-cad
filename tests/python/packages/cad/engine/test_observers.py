@@ -14,10 +14,10 @@ from unittest import mock
 
 SCRIPT = """
 import build123d as bd
-from cad.engine import stl, xbf
+from cad.engine import stl, model
 
 
-@xbf("XBF/secret_plate.xbf")
+@model(xbf="XBF/secret_plate.xbf")
 @stl("secret_plate.stl")
 def secret_plate():
     plate = bd.Box(10, 10, 2)
@@ -27,7 +27,7 @@ def secret_plate():
     return bd.Compound(children=[plate, peg], label="secret_plate")
 
 
-@xbf("XBF/secret_broken.xbf")
+@model(xbf="XBF/secret_broken.xbf")
 def secret_broken():
     raise ValueError("the secret part did not fit")
 """

@@ -95,14 +95,14 @@ def solve_for(document_type: str) -> Any:
         options(study=study, out=out, occurrence=occurrence, deck=deck)
         from cad._internal.document_type import refuse_other
 
-        refuse_other(document_type, source)
+        of = refuse_other(document_type, source)  # the file a model is saved as, given to cad.model, is that file's
         try:
             from cad._internal.fea import run
             from cad._internal.fea.mesh import require_fea_stack
         except ModuleNotFoundError as error:
             _missing(error)
             raise
-        with _readable(document_type, source) as (target, label):
+        with _readable(of, source) as (target, label):
             if study is None:
                 return run.setup(target, occurrence=occurrence, verbose=verbose, label=label)
             try:

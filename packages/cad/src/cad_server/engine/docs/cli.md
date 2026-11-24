@@ -124,16 +124,17 @@ names that is not there (`--urdf robot.urdf: no such file`; `--annotation`, `--m
 schematic's `--display`; the snapshot refuses one as `snapshot.NoSuchFile`, a `SnapshotRefused`). A model's document
 is a type of its own, `model`, with no file: `cad model export ID ...` takes its id, a file's type refuses
 one (`ID is a model's document id, not a .step file: use cad model export`), and `cad model` refuses a file
-the same way, but one: the `.xbf`, a model saved as a file. `cad model <operation> arm.xbf` is the xbf type's
-operation of that name, given the same command line (`document_types._or_saved`): the file read as the file it
-is, never as the model the engine holds, so its `inspect` says the file's state, lists its parameters read-only
-and names no `made_by`. An argument is that file where its suffix is the xbf's as the registry reads one
-(`.xbf`, in any case), which no document id ends in; an operation `model` has and the xbf type has not would
-refuse it, exit 2 (`usage`), naming the operations an `.xbf` takes. So on the command line a model is one word,
-held or saved, and every refusal that sends an `.xbf` on names `cad model`; the registry, the library
-(`cad.xbf`) and the server keep the two types. `cad xbf <operation> FILE` still answers, unlisted, for the
-skill text of releases up to 0.11.17, which says it, and goes 30 days after the release whose skills stop
-(law 14's first tier). The commands are the server's
+the same way, but one: the `.xbf`, a model saved as a file, which is `model`'s in the command as in the
+library (`cad.registry.SAVED`, `spelling`: that file's type has no command of its own). `cad model <operation>
+arm.xbf` reads the file as the file it is, never as the model the engine holds, so its `inspect` says the
+file's state, lists its parameters read-only and names no `made_by`; the engine's verbs and the library's
+functions tell an id from the file themselves (`cad._internal.document_type.refuse_other`). An argument is
+that file where its suffix is the xbf's as the registry reads one (`.xbf`, in any case), which no document id
+ends in; an operation `model` has and the file's type has not would refuse it, exit 2 (`usage`), naming the
+operations an `.xbf` takes. Every refusal that sends an `.xbf` on names `cad model`. `cad xbf <operation>
+FILE`, the older spelling, still answers, unlisted, as `cad model` under that name (`cad_server.cli.xbf`),
+for the skill text of releases up to 0.11.17, which says it, and goes 30 days after the release whose skills
+stop (law 14's first tier). The commands are the server's
 (`cad_server.cli.document_types`), each type's its own module (`python -m cad_server.cli.step export ...`);
 `python -m cad_server.engine VERB ...` takes the engine's verbs, its own entry.
 

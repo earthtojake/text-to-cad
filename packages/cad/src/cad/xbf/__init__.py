@@ -1,15 +1,10 @@
-"""``cad.xbf``: the XBF document type, the engine's own document saved as a file (``cad.registry``).
+"""``cad.xbf``: the older spelling of ``cad.model`` for the file a model is saved as, its ``.xbf``
+(``cad.registry.SAVED``), kept for the scripts that say it and listed nowhere.
 
-``@xbf("XBF/arm.xbf")`` declares a model's XBF file;
-``xbf.read(path)`` reads one into a model;
-its operations (``xbf.export("arm.xbf", *destinations)``, ...) are the commands' ``cad model <operation>``
-runs for an ``.xbf`` file (``cad model export arm.xbf ...``), each of an ``.xbf`` file: a model the engine holds,
-by its handle or id, is ``cad.model``'s.
-``xbf.dfm(source, process="cnc")`` (or ``"sheet"``, ``"molding"``, ``"printing"``) checks it for manufacturing
-on its exact geometry, with the build123d integration (``cad._internal.manufacturing``).
-``xbf.solve(source, study=..., out="results/")`` runs a stress study on its part or bonded assembly, writing
-its results into that folder (with no study, it lists the parts, pairs and faces a study names), with the
-kernel, netgen and calculix integrations (``cad._internal.fea.operation``).
+Each name is what ``cad.model`` runs for that file: ``@xbf("XBF/arm.xbf")`` is ``@model(xbf="XBF/arm.xbf")``,
+``xbf.read`` is ``model.read`` (one function), and ``xbf.export("arm.xbf", ...)``, ``xbf.inspect``,
+``xbf.snapshot``, ``xbf.dfm``, ``xbf.interference``, ``xbf.solve`` and ``xbf.ranges`` are ``model``'s given an
+``.xbf`` path, each of a file alone. Nothing of the library's or the server's imports this module.
 Everything loads on first use: ``import cad.xbf`` imports no CAD kernel (``cad._internal.document_type``).
 """
 

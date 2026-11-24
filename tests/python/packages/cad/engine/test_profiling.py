@@ -61,12 +61,12 @@ class ProfilingTest(unittest.TestCase):
         script.write_text(textwrap.dedent('''
             import json
             import build123d as bd
-            from cad import xbf
+            from cad import model
 
             def make_block():
                 return bd.Box(3, 4, 5)
 
-            @xbf("part.xbf")
+            @model(xbf="part.xbf")
             def part():
                 return make_block()
 

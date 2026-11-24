@@ -2,11 +2,13 @@
 
 A model is a parameterless function that returns a build123d shape. It becomes a document
 through exactly one of two declarations: bare ``@model`` (a document with no file), or one or
-more file decorators -- ``@xbf``, ``@step``, ``@glb``, ``@stl``, ``@threemf`` and ``@dxf`` (the
+more file declarations -- ``@model(xbf="XBF/part.xbf")``, the ``.xbf`` the model is saved as, and the
+file decorators ``@step``, ``@glb``, ``@stl``, ``@threemf`` and ``@dxf`` (the
 drawing of a planar result: a sketch, a face, wires or edges) -- a document with those files;
-``@model`` stacked with a file decorator is refused. By default its id uses ``script.py::function``.
-An explicit ``name=`` uses the script folder and that name instead, independent of the declaring file. Every file decorator
-requires its output path: ``@xbf("XBF/part.xbf")`` or ``@step(out="part.step")``. Relative paths
+bare ``@model`` stacked with a file declaration is refused. ``@xbf(path)`` is the older spelling of
+``@model(xbf=path)``, the same declaration (``_declare``). By default its id uses ``script.py::function``.
+An explicit ``name=`` uses the script folder and that name instead, independent of the declaring file. Every file declaration
+requires its output path: ``@model(xbf="XBF/part.xbf")`` or ``@step(out="part.step")``. Relative paths
 are relative to the script. Everything else is the model's code: its material, colours, joints,
 the pose its joints are connected at (the pose every file shows), its mechanism states, couplings
 and configuration sequences (``mechanism_state``, ``gear_pair`` and its siblings,
@@ -49,7 +51,7 @@ from typing import Any, Callable
 from cad.engine.ids import canonical, check_name, model_id
 
 __all__ = ["KINDS", "Memo", "Model", "Output", "Target", "configuration_sequence", "dxf", "glb", "mechanism_state", "memo",
-           "model", "paint", "read_step", "read_xbf", "step", "stl", "threemf", "xbf", "models_in"]
+           "model", "paint", "read_step", "read_xbf", "step", "stl", "threemf", "models_in"]
 
 # The suffix each output kind writes, and the default file name's.
 SUFFIXES = {"xbf": ".xbf", "step": ".step", "glb": ".glb", "stl": ".stl", "threemf": ".3mf", "dxf": ".dxf"}
@@ -194,12 +196,15 @@ class Model:
 
     def declared(self, by: str) -> "Model":
         """One declaration more on this function: ``model`` (bare ``@model``) or a file kind. A
-        function becomes a document through ``@model`` or through its file decorators, never both."""
+        function becomes a document through bare ``@model`` or through its file declarations, never both."""
         kinds = [output.kind for output in self.outputs] if by == "model" else [by] if self._bare else []
         if kinds:
-            raise TypeError(f"model {self.name!r} is declared by @model and @{kinds[0]}: a function becomes a "
-                            "document through @model (a document with no file) or through its file decorators "
-                            f"(a document with those files), never both; drop @model")
+            # Its own .xbf is @model's to name; any other file is its decorator's, which declares the model too.
+            other, fix = (("its .xbf", "declare both in one, @model(xbf=...)") if kinds[0] == "xbf" else
+                          (f"@{kinds[0]}", "drop @model"))
+            raise TypeError(f"model {self.name!r} is declared by @model and {other}: a function becomes a "
+                            "document through @model (a document with no file) or through its file declarations "
+                            f"(a document with those files: @model(xbf=...), @step, ...), never both; {fix}")
         if by == "model":
             self._bare = True
         return self
@@ -399,17 +404,27 @@ def _no_animations(animations: Any) -> None:
                         "(animation(...)); animations= goes with a shape handed over, model(shape, name=...)")
 
 
-def model(target: Any = None, /, *, name: str | None = None, animations: Any = None) -> Any:
-    """Declare a model, optionally named within its script folder, or hand over a named shape."""
+def model(target: Any = None, /, *, name: str | None = None, xbf: Any = None, animations: Any = None) -> Any:
+    """Declare a model, optionally named within its script folder (``name=``) and saved as the ``.xbf`` each
+    run writes at ``xbf=`` (relative to the script: ``@model(xbf="XBF/arm.xbf")``); or hand over a named shape
+    (``model(shape, name=...)``, which declares no file)."""
     if target is None:
         _no_animations(animations)
+        if xbf is not None:
+            return _declare("xbf", xbf, name)  # a file declaration: what ``@xbf(path)`` spells too
         if name is not None:
             check_name(name)
         return lambda function: model(function, name=name)
     if isinstance(target, Model) or inspect.isfunction(target):
         _no_animations(animations)
+        if xbf is not None:
+            return _declare("xbf", xbf, name)(target)
         found = target if isinstance(target, Model) else Model(target)
         return found.declared("model").named(name)
+    if xbf is not None:
+        raise TypeError("model(shape, name=...) takes no xbf=: a shape handed over is no function a run calls again, "
+                        "so no run writes its file; export the document it returns, "
+                        "model(shape, name=...).export(\"arm.xbf\")")
     from cad.engine import api
 
     caller = sys._getframe(1)
@@ -420,36 +435,48 @@ def model(target: Any = None, /, *, name: str | None = None, animations: Any = N
     return api.hand_over(target, name, animations=animations, frame=caller)
 
 
+def _said(kind: str) -> str:
+    """A file declaration as a script spells it: a model's own ``.xbf`` is ``@model``'s (``@model(xbf=...)``),
+    every other file its decorator's."""
+    return "@model(xbf=...)" if kind == "xbf" else f"@{kind}"
+
+
+def _declare(kind: str, out: Any, name: str | None, tolerance: float | None = None, angle: float | None = None) -> Any:
+    """One file a model declares, of ``kind`` at ``out``: the decorator a file declaration is -- ``@step(out)``,
+    and ``@model(xbf=out)`` for the ``.xbf`` (``@xbf(out)``, its older spelling) -- which records the output on
+    the function's ``Model`` (``Model.plan`` is what a build writes)."""
+    from cad.engine.export import angle_of, tolerance_of
+
+    if out is None:
+        raise TypeError(f"{_said(kind)} requires an output path")
+    check_output(kind, out, "@model(xbf=...)" if kind == "xbf" else f"@{kind}(out=...)")
+    if name is not None:
+        check_name(name)
+    tolerance, angle = tolerance_of(tolerance, [out]), angle_of(angle, [out])
+
+    def apply(target: Any) -> Model:
+        model = target if isinstance(target, Model) else Model(target)
+        model.declared(kind)
+        if any(output.kind == kind for output in model.outputs):
+            raise TypeError(f"model {model.name!r} declares {_said(kind)} twice")
+        model.outputs.insert(0, Output(kind, os.fspath(out), tolerance, angle))
+        return model.named(name)
+
+    return apply
+
+
 def _decorator(kind: str) -> Callable[..., Any]:
-    from cad.engine.export import TOLERANT, angle_of, tolerance_of
-
-    def declare(out: Any, name: str | None, tolerance: float | None = None, angle: float | None = None) -> Any:
-        if out is None:
-            raise TypeError(f"@{kind} requires an output path")
-        check_output(kind, out, f"@{kind}(out=...)")
-        if name is not None:
-            check_name(name)
-        tolerance, angle = tolerance_of(tolerance, [out]), angle_of(angle, [out])
-
-        def apply(target: Any) -> Model:
-            model = target if isinstance(target, Model) else Model(target)
-            model.declared(kind)
-            if any(output.kind == kind for output in model.outputs):
-                raise TypeError(f"model {model.name!r} declares @{kind} twice")
-            model.outputs.insert(0, Output(kind, os.fspath(out), tolerance, angle))
-            return model.named(name)
-
-        return apply
+    from cad.engine.export import TOLERANT
 
     # A GLB, an STL and a 3MF take their own mesh tolerance and angle (``export/__init__.py``); no other
     # kind is meshed.
     if kind in TOLERANT:
         def decorate(out: Any, *, name: str | None = None, tolerance: float | None = None,
                      angle: float | None = None) -> Any:
-            return declare(out, name, tolerance, angle)
+            return _declare(kind, out, name, tolerance, angle)
     else:
         def decorate(out: Any, *, name: str | None = None) -> Any:
-            return declare(out, name)
+            return _declare(kind, out, name)
 
     decorate.__name__ = kind
     decorate.__qualname__ = kind
@@ -460,6 +487,7 @@ def _decorator(kind: str) -> Callable[..., Any]:
     return decorate
 
 
+# The older spelling of ``@model(xbf=path)``, kept for the scripts that say it: the same declaration.
 xbf = _decorator("xbf")
 step = _decorator("step")
 glb = _decorator("glb")
@@ -691,13 +719,14 @@ _READ_XBF: Callable[[Any], Any] | None = None
 
 
 def read_xbf(path: Any) -> Any:
-    """An engine document (``.xbf``) as a build123d shape: a copy of its geometry, as
-    ``read_step`` gives a STEP's -- a compound tree of its assembly, every part and group
+    """``model.read(path)``: a model saved as a file (``.xbf``) as a build123d shape: a copy of its
+    geometry, as ``read_step`` gives a STEP's -- a compound tree of its assembly, every part and group
     named, coloured and given its materials (painted faces too) as the document has them,
     each element named as the document names it. Its mechanism and configurations are not
     imported: a part is a part. Read once per worker and held, keyed by the file's bytes, as
-    ``read_step`` is. The fast way to bring a vendor STEP in: convert it once (``cadgen
-    export vendor.step vendor.xbf``) and read the xbf."""
+    ``read_step`` is. The fast way to bring a vendor STEP in: convert it once (``cad step
+    export vendor.step vendor.xbf``) and read the xbf. Any other file is refused by name, with
+    the reader that takes it (``step.read``, ``stl.read``)."""
     global _READ_XBF
     if _READ_XBF is None:
         from cad.engine.kernel.memo import wrap_function
@@ -705,9 +734,10 @@ def read_xbf(path: Any) -> Any:
         _READ_XBF = wrap_function("read_xbf", _read_xbf)
     import os
 
-    from cad.engine.reader import refuse_written
+    from cad.engine.reader import refuse_other_file, refuse_written
 
-    refuse_written(path, "xbf.read")  # before the memo, as read_step's
+    refuse_other_file(path, "model.read", ".xbf")  # before the memo too
+    refuse_written(path, "model.read")  # before the memo, as read_step's
     return _READ_XBF(os.fspath(path))
 
 

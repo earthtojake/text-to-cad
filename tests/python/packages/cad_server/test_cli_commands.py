@@ -1,7 +1,8 @@
 """The ``cad`` command's table, pinned: every document type's operations and every other command.
 
 The shape is ``cad <document_type> <operation> <file>``, one id per type everywhere (the registry,
-``cad.registry``), one set of operation names every type shares; the commands that are no
+``cad.registry``; the file a model is saved as is ``model``'s, with no command of its own), one set of
+operation names every type shares; the commands that are no
 document's are the engine's process control, ``run`` and the installation's. A command added,
 renamed or taken out is a change to what every agent reads, made here on purpose. The old
 spellings are gone, a hard cutover: each answers as a command that never existed does.
@@ -28,7 +29,6 @@ from cad_server.cli.document_types import operations_of, type_main  # noqa: E402
 
 TYPES = {
     "model": ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges"),
-    "xbf": ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges"),
     "step": ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges"),
     "stl": ("export", "snapshot", "dfm"),
     "glb": ("export", "snapshot", "inspect", "dfm"),
@@ -42,8 +42,8 @@ TYPES = {
 COMMANDS = ("serve", "status", "stop", "delete", "server", "mcp", "run", "requirement", "doctor", "cache", "setup",
             "viewer", "telemetry", "update", "plugin")
 # Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's skill text and updaters), the commands for
-# programs rather than people, and `xbf`, which the skill text of releases up to 0.11.17 says where `cad model` takes
-# the .xbf file now.
+# programs rather than people, and `xbf`, the older spelling of `cad model` for an .xbf file, which the skill text
+# of releases up to 0.11.17 says (``test_older_xbf_spellings.py``).
 UNLISTED = ("status", "stop", "setup", "serve", "requirement", "xbf")
 
 
@@ -61,8 +61,11 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
 
 class TheCommandTable(unittest.TestCase):
     def test_the_table_is_pinned(self) -> None:
-        self.assertEqual(TYPES, {name: operations_of(name) for name in DOCUMENT_TYPES})
-        self.assertEqual(sorted(TYPES), sorted(cli.TYPE_COMMANDS))
+        from cad.registry import spelling
+
+        # Each type by the name it is spelled by: the file a model is saved as is `cad model`'s.
+        self.assertEqual(TYPES, {name: operations_of(name) for name in DOCUMENT_TYPES if spelling(name) == name})
+        self.assertEqual(sorted(TYPES), sorted(set(cli.TYPE_COMMANDS) - set(UNLISTED)))
         self.assertEqual(sorted(COMMANDS), sorted(cli._COMMANDS))  # noqa: SLF001 - the table IS the subject
         for name, module in cli.TYPE_COMMANDS.items():
             self.assertEqual(f"cad_server.cli.{name}", module)
@@ -112,16 +115,12 @@ class TheCommandTable(unittest.TestCase):
         self.assertRegex(said, r"\n  srdf +snapshot, validate +SRDF: \.srdf\n")
         self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm, interference, solve, ranges +model: a document id, "
                                r"held in memory, or an \.xbf file\n")
-        # The xbf type's own command is run and never listed (the 30 days a command the skills used is kept).
         types = said.split("document types, the files cad shows", 1)[1].split("\n\n", 1)[0]
-        self.assertEqual([line.split()[0] for line in types.splitlines()[1:]],
-                         [name for name in TYPES if name not in UNLISTED])
-        code, said, _ = _run(["xbf", "--help"])
-        self.assertEqual((code, said.splitlines()[0]), (0, "usage: cad xbf <operation> FILE [options]"))
+        self.assertEqual([line.split()[0] for line in types.splitlines()[1:]], list(TYPES))
         code, said, _ = _run(["model", "--help"])
         self.assertEqual((code, said.splitlines()[0]), (0, "usage: cad model <operation> ID|FILE.xbf [options]"))
         self.assertIn("cad model <operation> FILE.xbf takes a model saved as a file, read as the file it is, never as "
-                      "the model the engine holds (export, snapshot, inspect, dfm, interference, solve, ranges).", said)
+                      "the model the engine holds.", said)
         code, said, _ = _run(["step", "--help"])
         self.assertEqual(0, code)
         self.assertIn("operations:\n  export ", said)
@@ -243,50 +242,38 @@ class TheCommandTable(unittest.TestCase):
             self.assertEqual(2, refused.exception.code)
             self.assertIn(f"unrecognized arguments: {flag}", err.getvalue())
 
-    def test_cad_model_runs_the_xbf_s_operation_for_a_model_saved_as_a_file(self) -> None:
-        """``cad model <operation> FILE.xbf`` is the xbf type's operation of that name, given the same command line
-        (``document_types._or_saved``), for every operation an xbf has: so it writes, says and exits as ``cad xbf
-        <operation> FILE.xbf`` does, which still answers. The file is told from a document id by its suffix, as
-        the registry reads one, wherever the operation's parser reads its source."""
-        from unittest import mock
+    def test_cad_model_takes_a_model_by_its_id_or_saved_as_a_file(self) -> None:
+        """``cad model <operation>`` takes the ``.xbf`` a model is saved as beside a document id, for every
+        operation: the file is told by its suffix, as the registry reads one, where the operation's parser reads
+        its source, and its help says so. A file that is not there is refused before anything runs, as every
+        type's is; a destination is no source."""
+        from cad_server.cli.document_types import _refuse_other_type, build_parser
 
-        from cad_server.cli.document_types import OPERATIONS
-
-        rest = {"export": ["out.xbf"], "snapshot": ["out.png"], "inspect": ["--query", "structure"],
-                "dfm": ["--pull", "-z"]}
-        for operation in TYPES["xbf"]:
-            ran: list[tuple[list[str], str]] = []
-
-            def saved(argv: list[str], prog: str) -> int:
-                ran.append((argv, prog))
-                return 7
-
-            for source in ("share/arm.xbf", "ARM.XBF", "share/arm.xbf#arm/face 1"):
-                # Its options before the file too: the file is the parser's source, never the first word.
-                argv = [*rest.get(operation, []), source] if operation in ("inspect", "dfm") else \
-                    [source, *rest.get(operation, [])]
-                with self.subTest(operation=operation, source=source), \
-                        mock.patch.dict(OPERATIONS, {("xbf", operation): saved}):
-                    self.assertEqual([_run(["model", operation, *argv])[0], _run(["xbf", operation, *argv])[0]], [7, 7])
-                    self.assertEqual(ran, [(argv, f"cad model {operation}"), (argv, f"cad xbf {operation}")])
-                    ran.clear()
-            # And unpatched, the real operation's own refusal of a file that is not there: the same words, status
-            # and JSON by either name.
-            for flags in ([], ["--json"]):
-                with self.subTest(operation=operation, flags=flags):
-                    argv = ["no-such-file.xbf", *rest.get(operation, []), *flags]
-                    code, out, err = _run(["model", operation, *argv])
-                    self.assertEqual(code, 2)
-                    self.assertEqual((code, out, err.replace(f"cad model {operation}", f"cad xbf {operation}")),
-                                     _run(["xbf", operation, *argv]))
-                    self.assertIn("no such file: no-such-file.xbf", out + err)
+        ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
+        rest = {"export": ["out.glb"], "snapshot": ["out.png"]}
+        with tempfile.TemporaryDirectory() as folder:
+            saved = Path(folder) / "Arm.XBF"
+            saved.write_bytes(b"")
+            for operation in TYPES["model"]:
+                with self.subTest(operation=operation):
+                    for source in (ident, str(saved), f"{saved}#arm/face 1"):
+                        _refuse_other_type("model", operation, source)  # taken: no refusal
+                    said = " ".join(build_parser("model", operation).format_help().split())
+                    self.assertTrue("the .xbf file a model is saved as" in said or "a .step or .xbf" in said, said)
+                    for flags in ([], ["--json"]):
+                        code, out, err = _run(["model", operation, "no-such-file.xbf", *rest.get(operation, []), *flags])
+                        state = {"status": "usage"} if operation == "dfm" else {}
+                        self.assertEqual(code, 2)
+                        if flags:
+                            self.assertEqual((json.loads(out), err), ({"ok": False, "error": "no such file: "
+                                             "no-such-file.xbf", "reason": "not_found", **state}, ""))
+                        else:
+                            self.assertEqual((out, err), ("", f"cad model {operation}: no such file: no-such-file.xbf\n"))
 
     def test_cad_model_reads_only_its_source_as_a_file_and_an_id_stays_the_model_s(self) -> None:
-        """A destination is no source: ``cad model export ID out.xbf`` is the model's own export, of what the
-        engine holds, however its destinations are spelled."""
+        """A destination is no source: ``cad model export ID out.xbf`` is the export of what the engine holds,
+        however its destinations are spelled; and a file is handed on as the path it is."""
         from unittest import mock
-
-        from cad_server.cli.document_types import OPERATIONS
 
         ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
         asked: list[tuple[str, list[str], str]] = []
@@ -295,23 +282,28 @@ class TheCommandTable(unittest.TestCase):
             asked.append((args.source, args.destinations, prog))  # type: ignore[attr-defined]
             return 0
 
-        with mock.patch("cad_server.engine.cli.answered", answered), \
-                mock.patch.dict(OPERATIONS, {("xbf", "export"): lambda argv, prog: self.fail("the xbf's export ran")}):
+        with tempfile.TemporaryDirectory() as folder, mock.patch("cad_server.engine.cli.answered", answered):
+            saved = str(Path(folder) / "arm.xbf")
+            Path(saved).write_bytes(b"")
             self.assertEqual(_run(["model", "export", ident, "share/arm.xbf"])[0], 0)
-        self.assertEqual(asked, [(ident, ["share/arm.xbf"], "cad model export")])
+            self.assertEqual(_run(["model", "export", saved, "arm.glb"])[0], 0)
+        self.assertEqual(asked, [(ident, ["share/arm.xbf"], "cad model export"), (saved, ["arm.glb"], "cad model export")])
 
     def test_an_operation_an_xbf_lacks_refuses_the_file_and_says_what_takes_it(self) -> None:
-        """An operation ``model`` has and the xbf type has not (none today: the registry gives both the same) refuses
-        an ``.xbf``, the command line's failure, naming the operations the file takes and what this one does."""
+        """An operation ``model`` has and the file's type has not (none today: the registry gives both the same)
+        refuses an ``.xbf``, the command line's failure, naming the operations the file takes and what this one
+        does."""
+        import dataclasses
         from unittest import mock
 
-        from cad_server.cli.document_types import OPERATIONS
+        from cad import registry
 
         said = ("arm.xbf is an .xbf file, which has no ranges: cad model takes an .xbf file for export, snapshot, "
                 "inspect, dfm, interference, solve, and cad model ranges a model's document id, which cad run "
                 "SCRIPT.py prints")
-        with mock.patch.dict(OPERATIONS):
-            del OPERATIONS[("xbf", "ranges")]
+        saved = registry.DOCUMENT_TYPES["xbf"]
+        without = dataclasses.replace(saved, operations=tuple(op for op in saved.operations if op.name != "ranges"))
+        with mock.patch.object(registry, "_BY_EXTENSION", {**registry._BY_EXTENSION, ".xbf": without}):  # noqa: SLF001
             code, out, err = _run(["model", "ranges", "arm.xbf"])
             self.assertEqual((code, out), (2, ""))
             self.assertEqual(err.splitlines()[-1], f"cad model ranges: error: {said}")

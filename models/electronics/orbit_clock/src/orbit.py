@@ -23,7 +23,7 @@ from pathlib import Path
 
 import build123d as bd
 from bd_materials import plastics
-from cad import kicad_pcb, model, xbf
+from cad import kicad_pcb, model
 from cad.build123d import animation
 
 HERE = Path(__file__).resolve().parent
@@ -112,7 +112,7 @@ def placed_children(parts):
 
 def board_parts(g: Board):
     """The board's STEP, as built: the PCB and each part, in the local frame."""
-    tree = xbf.read(str(BOARD_XBF))
+    tree = model.read(str(BOARD_XBF))
     return g.step_to_local() * tree
 
 

@@ -32,10 +32,10 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 MODEL = """
 import build123d as bd
-from cad.engine import paint, xbf
+from cad.engine import paint, model
 
 
-@xbf("XBF/stand.xbf")
+@model(xbf="XBF/stand.xbf")
 def stand():
     plate = bd.Box(40, 20, 4) - bd.Cylinder(4, 10)
     plate = paint(plate, plate.faces().sort_by(bd.Axis.Z)[-1], "#ffa500")
@@ -45,7 +45,7 @@ def stand():
     return bd.Compound(children=[plate, bd.Pos(12, 0, 8) * peg, bd.Pos(-12, 0, 8) * peg], label="stand")
 
 
-@xbf("XBF/peg.xbf")
+@model(xbf="XBF/peg.xbf")
 def peg():
     return bd.Cylinder(3, 12)
 """
@@ -640,10 +640,10 @@ class SnapshotTest(unittest.TestCase):
         folder = Path(tempfile.mkdtemp(prefix="engine-drawn-")).resolve()
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         script = folder / "stand.py"
-        # No @xbf: the picture is drawn from the document the worker holds. The build writes what the
+        # No .xbf declared: the picture is drawn from the document the worker holds. The build writes what the
         # model declares (law 10), its GLB; the snapshot, no file but the picture.
-        script.write_text(textwrap.dedent(MODEL).replace("@xbf(\"XBF/stand.xbf\")\ndef stand", "@glb(\"stand.glb\")\ndef stand")
-                          .replace("import paint, xbf", "import glb, paint, xbf"), encoding="utf-8")
+        script.write_text(textwrap.dedent(MODEL).replace("@model(xbf=\"XBF/stand.xbf\")\ndef stand", "@glb(\"stand.glb\")\ndef stand")
+                          .replace("import paint, model", "import glb, paint, model"), encoding="utf-8")
         drawn = api.snapshot(_model(script, "stand"), folder / "stand.png", display="xray", camera="iso", width=200,
                              height=150, daemon=False)
         self.assertEqual((drawn.width, drawn.height), (200, 150))

@@ -19,7 +19,10 @@ step`` is one object that is
 Everything loads on first use: ``import cad`` imports no CAD kernel. A source of another type is
 refused by name before anything runs: a file of another type (``cad.stl.export("part.glb", ...)``: that's
 a glb's), a model's handle or document id given to a file's type (that's ``cad.model``'s), and a file
-given to ``cad.model``.
+given to ``cad.model`` but the one a model is saved as, its ``.xbf`` (``cad.registry.SAVED``): ``cad.model``
+is a model the engine holds or that file, and its operations run on the file as the file it is
+(``refuse_other`` says which of the two a source is). ``cad.xbf`` is the older spelling of ``cad.model``
+for that file: the same decorator, reader and operations.
 """
 
 from __future__ import annotations
@@ -34,9 +37,16 @@ __all__ = ["DocumentType", "ModelType", "bind", "refuse_other"]
 
 # An operation a type does not implement, read as one that needs no integration.
 _NONE = types.SimpleNamespace(integration=None, family=None)
-# A type's reader, by id: the function that reads a file of it into a model.
-_READERS = {"step": "cad.engine.model.read_step", "xbf": "cad.engine.model.read_xbf",
+# A type's reader, by the name the type is spelled by (``cad.registry.spelling``): the function that reads a file
+# of it into a model. ``model``'s reads the file a model is saved as.
+_READERS = {"step": "cad.engine.model.read_step", "model": "cad.engine.model.read_xbf",
             "stl": "cad.engine.reader.read_mesh"}
+
+
+def _spelled(document_type: str) -> str:
+    from cad.registry import spelling
+
+    return spelling(document_type)
 
 
 class DocumentType(types.ModuleType):
@@ -68,12 +78,12 @@ class DocumentType(types.ModuleType):
 
     def __getattr__(self, name: str) -> Any:
         entry = self.entry
-        if name == "read" and entry.id in _READERS:
-            value = _resolve(_READERS[entry.id])
+        if name == "read" and _spelled(entry.id) in _READERS:
+            value = _resolve(_READERS[_spelled(entry.id)])
             self.__dict__[name] = value  # one object, every lookup: cad.read_step is cad.step.read
             return value
         if name in ("export", "snapshot", "inspect") and name in entry.operation_names:
-            value = _operation(self, name)
+            value = _operation(entry.id, name)
             self.__dict__[name] = value
             return value
         if name == "dfm" and (entry.operation("dfm") or _NONE).family == "manufacturing":
@@ -127,19 +137,16 @@ class DocumentType(types.ModuleType):
         entry = self.entry
         return f"<document type {entry.id!r}: {', '.join(entry.extensions) or 'no file, held in memory'}>"
 
-    def _own(self, source: Any) -> None:
-        """Refuse a source of another type, naming it (``refuse_other``)."""
-        refuse_other(self.entry.id, source)
-
-
-def refuse_other(document_type: str, source: Any) -> None:
-    """A source of another type than ``document_type``, refused by name before anything runs: a file of
-    another type (``cad.stl.export("part.glb")`` is a glb's: use cad.glb), a model's handle or document id
-    given to a file's type (``cad.model.export(<id>)``: use cad.model), a file given to ``cad.model``. None
-    (no source: a snapshot's job names its own) passes."""
+def refuse_other(document_type: str, source: Any) -> str:
+    """The type ``source`` is of, for an operation of ``document_type``: that type, or, for ``model`` given the
+    file a model is saved as, that file's (``cad.registry.SAVED``), whose operation the caller then runs. A
+    source of any other type is refused by name before anything runs: a file of another type
+    (``cad.stl.export("part.glb")`` is a glb's: use cad.glb), a model's handle or document id given to a file's
+    type (use cad.model), any other file given to ``cad.model``. None (no source: a snapshot's job names its
+    own) passes."""
     if source is None:
-        return
-    from cad.registry import DOCUMENT_TYPES, type_of
+        return document_type
+    from cad.registry import DOCUMENT_TYPES, SAVED, spelling, type_of
 
     entry = DOCUMENT_TYPES[document_type]
     if isinstance(source, (str, os.PathLike)):
@@ -151,16 +158,19 @@ def refuse_other(document_type: str, source: Any) -> None:
         if is_id(named):
             if entry.has_file:
                 raise ValueError(f"{text} is a model's document id, not a {entry.suffix} file: use cad.model")
-            return
+            return document_type
         found = type_of(named)
+        if found is not None and found.id == SAVED and not entry.has_file:
+            return SAVED
         if found is not None and found.id != entry.id:
-            raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{found.id}")
+            raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{spelling(found.id)}")
         if found is None and not entry.has_file:
-            raise ValueError(f"cad.model takes a model's handle or its document id (cad run SCRIPT.py prints it), "
-                             f"not {text!r}")
-        return
+            raise ValueError(f"cad.model takes a model's handle, its document id (cad run SCRIPT.py prints it) or "
+                             f"an {DOCUMENT_TYPES[SAVED].suffix} file, not {text!r}")
+        return document_type
     if entry.has_file:
         raise ValueError(f"cad.{entry.id} takes a {entry.suffix} file; {_what(source)} is a model's: use cad.model")
+    return document_type
 
 
 def _what(source: Any) -> str:
@@ -185,37 +195,41 @@ class ModelType(DocumentType):
             return param
         return super().__getattr__(name)
 
-    def __call__(self, target: Any = None, /, *, name: str | None = None, animations: Any = None) -> Any:  # type: ignore[override]
-        """``@model`` or ``@model(name=...)``: declare a model; ``model(shape, name=...)``: hand a shape over as
-        a named model (``cad.engine.model.model``)."""
+    def __call__(self, target: Any = None, /, *, name: str | None = None, xbf: Any = None,  # type: ignore[override]
+                 animations: Any = None) -> Any:
+        """``@model``, ``@model(name=...)`` or ``@model(xbf="XBF/arm.xbf")``: declare a model, and with ``xbf=``
+        the ``.xbf`` each run saves it as, relative to the script; ``model(shape, name=...)``: hand a shape over
+        as a named model (``cad.engine.model.model``)."""
         from cad.engine import model
 
-        return model.model(target, name=name, animations=animations)
+        return model.model(target, name=name, xbf=xbf, animations=animations)
 
 
-def _operation(owner: DocumentType, name: str) -> Any:
-    """``owner.<name>``: the engine's operation of that name (``cad.engine.api``), for a source of this type.
-    An export of a mesh to the other mesh kinds takes no ``tolerance``, ``angle`` or ``zero``: only a document is
-    meshed or described as a robot."""
+def _operation(document_type: str, name: str) -> Any:
+    """``cad.<document_type>.<name>``: the engine's operation of that name (``cad.engine.api``), which takes any
+    source, for a source of this type alone (``refuse_other``). An export of a mesh to the other mesh kinds takes
+    no ``tolerance``, ``angle`` or ``zero``: only a document is meshed or described as a robot."""
     from cad.engine import api
+    from cad.registry import DOCUMENT_TYPES
 
+    entry = DOCUMENT_TYPES[document_type]
     verb = getattr(api, name)
-    meshed = name == "export" and owner.entry.view == "document"
+    meshed = name == "export" and entry.view == "document"
 
     if name == "export" and not meshed:
         def operation(source: Any, *destinations: Any, **options: Any) -> Any:
             for option in ("tolerance", "angle", "zero"):  # a document's alone: a mesh is meshed by none, nor described
                 if option in options:
-                    raise TypeError(f"cad.{owner.entry.id}.export() got an unexpected keyword argument '{option}'")
-            owner._own(source)
+                    raise TypeError(f"cad.{document_type}.export() got an unexpected keyword argument '{option}'")
+            refuse_other(document_type, source)
             return verb(source, *destinations, **options)
     else:
         def operation(source: Any = None, *args: Any, **options: Any) -> Any:
-            owner._own(source)
+            refuse_other(document_type, source)
             return verb(source, *args, **options)
 
     operation.__name__ = operation.__qualname__ = name
-    operation.__module__ = owner.__name__
+    operation.__module__ = f"cad.{document_type}"
     # Its signature is the verb's, as ``help()`` and the library's reference say it: a mesh's export without
     # the options it refuses.
     import inspect
@@ -228,7 +242,7 @@ def _operation(owner: DocumentType, name: str) -> Any:
     # The verb's docstring without its indentation, which Python strips by itself only from 3.13: the same words on
     # every Python the library runs on.
     described = inspect.cleandoc(verb.__doc__ or "")
-    operation.__doc__ = f"cad.{owner.entry.id}.{name}: {owner.entry.operation(name).summary}.\n\n{described}"
+    operation.__doc__ = f"cad.{document_type}.{name}: {entry.operation(name).summary}.\n\n{described}"
     return operation
 
 

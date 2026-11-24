@@ -98,7 +98,7 @@ class IdsTest(unittest.TestCase):
 
         def load(path: Path, function: str, decorator: str = "@model"):
             path.parent.mkdir(exist_ok=True)
-            path.write_text(f"from cad.engine import model, xbf\n{decorator}\ndef {function}():\n    return None\n", encoding="utf-8")
+            path.write_text(f"from cad.engine import model\n{decorator}\ndef {function}():\n    return None\n", encoding="utf-8")
             spec = importlib.util.spec_from_file_location(f"ids_{path.stem}", path)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
@@ -108,10 +108,10 @@ class IdsTest(unittest.TestCase):
         left = load(self.folder / "left.py", "left", "@model(name='arm')")
         self.assertEqual(left.id, derived_id(self.folder, "arm"))
         with self.assertRaises(ValueError) as collision:
-            load(self.folder / "right.py", "right", "@xbf('r.xbf', name='arm')")
+            load(self.folder / "right.py", "right", "@model(xbf='r.xbf', name='arm')")
         self.assertIn(f"{canonical(self.folder / 'left.py')}:2", str(collision.exception))
         self.assertIn(f"{canonical(self.folder / 'right.py')}:2", str(collision.exception))
-        another = load(self.folder / "other" / "right.py", "right", "@xbf('r.xbf', name='arm')")
+        another = load(self.folder / "other" / "right.py", "right", "@model(xbf='r.xbf', name='arm')")
         self.assertNotEqual(another.id, left.id)
         a = load(self.folder / "a.py", "duplicate")
         b = load(self.folder / "b.py", "duplicate")
@@ -119,7 +119,7 @@ class IdsTest(unittest.TestCase):
         for bad in ("", " arm", "arm\n", 7, "x::y"):
             with self.subTest(name=bad), self.assertRaises(ValueError):
                 declaring.model(name=bad)
-        for decorate in (declaring.model, lambda **kw: declaring.xbf("a.xbf", **kw)):
+        for decorate in (declaring.model, lambda **kw: declaring.model(xbf="a.xbf", **kw)):
             with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'key'"):
                 decorate(key="removed")
 

@@ -211,14 +211,14 @@ the bake's: juno 108.7 MB to 6.9, tom 98.5 to 18.7, w16 83.2 to 38.5, radial 78.
 samplers shared, above). A sparsely keyed eased bake (a small model's) can take more LINEAR keys
 than it had CUBICSPLINE ones, each a third the bytes.
 
-**File decorators require `out`.** `@xbf("XBF/arm.xbf")` declares the native document;
-`@step("arm.step")`, `@glb("arm.glb")`, `@stl("arm.stl")`, `@threemf("arm.3mf")`
+**File decorators require `out`.** `@model(xbf="XBF/arm.xbf")` declares the native document, the `.xbf`
+the model is saved as; `@step("arm.step")`, `@glb("arm.glb")`, `@stl("arm.stl")`, `@threemf("arm.3mf")`
 and `@dxf("arm.dxf")` declare translations. Relative paths are relative to the script.
 There is no default decorator path. Beyond its path and optional `name=`, no file decorator
 takes anything else: a model's material, colours, joints, the pose its joints connect its parts at, its
 configurations, its motions and its animations are written in its body. Every declared file shows the model as
 built: where its joints' `connect_to` placed the parts. A model that wants a second pose on
-every build is a second model function with other joint values. A model with no `@xbf` writes
+every build is a second model function with other joint values. A model that names no `.xbf` writes
 its derived files and nothing else.
 
 **Every model that runs writes its files** (law 10). A child model -- one another model's body
@@ -253,7 +253,8 @@ measured in the engine's checks processes (**Document types and integrations**);
 the document holds and its build closure (`query="summary"`; `"structure"` the same with nothing measured, and with no
 query the closure alone), `inspect(doc, ref)` an element's facts. Each takes a handle (what a model call
 returns), a document id or a file path; `export` and `snapshot` take the decorated function too,
-building it first. A type's function takes its own sources alone: `cad.model.*` a handle, an id or a
-decorated function, every other type's a file of it (`cad.xbf.export("arm.xbf", ...)`). A handle exports and draws its document the same way (`.export()`,
+building it first. A type's function takes its own sources alone: `cad.model.*` a handle, an id, a
+decorated function or the `.xbf` a model is saved as (`cad.model.export("arm.xbf", ...)`: the file's own
+operation, the file read as the file it is), every other type's a file of it. A handle exports and draws its document the same way (`.export()`,
 `.snapshot()`); a `Model`'s `.build(verify=, profile=, daemon=)` is the debug seam, a `Report`: it
 and its children, as declared.

@@ -24,12 +24,12 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 MODEL = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 SIZE = {size}
 
 
-@xbf("XBF/block.xbf")
+@model(xbf="XBF/block.xbf")
 def block():
     return bd.fillet(bd.Box(SIZE, 4, 2).edges().filter_by(bd.Axis.Z), 0.5)
 

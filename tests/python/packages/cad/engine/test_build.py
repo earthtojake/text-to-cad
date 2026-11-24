@@ -18,16 +18,16 @@ from cad.engine import build as engine_build
 from cad.engine import document
 from bd_materials import metals
 from cad.engine.colors import linear
-from cad.engine.model import Model, step, stl, xbf
+from cad.engine.model import Model, step, stl, model
 
 MODEL = """
 import build123d as bd
-from cad.engine import xbf, step, paint
+from cad.engine import model, step, paint
 
 WIDTH = {width}
 
 
-@xbf("XBF/bracket.xbf")
+@model(xbf="XBF/bracket.xbf")
 def bracket():
     plate = bd.Box(WIDTH, 10, 2)
     plate = bd.fillet(plate.edges().filter_by(bd.Axis.Z), 1)
@@ -36,7 +36,7 @@ def bracket():
     return plate
 
 
-@xbf(out="out/frame.xbf")
+@model(xbf="out/frame.xbf")
 @step(out="out/frame.step")
 def frame():
     left = bracket().shape
@@ -71,11 +71,11 @@ class EngineCase(unittest.TestCase):
 
 class DecoratorTest(unittest.TestCase):
     def test_required_out_and_stacked_in_source_order(self) -> None:
-        @xbf("XBF/one.xbf")
+        @model(xbf="XBF/one.xbf")
         def one():
             return None
 
-        @xbf(out="a/b.xbf")
+        @model(xbf="a/b.xbf")
         @stl(out="b.stl")
         @step("two.step")
         def two():
@@ -87,15 +87,15 @@ class DecoratorTest(unittest.TestCase):
         self.assertEqual(two.targets(), [("xbf", here / "a/b.xbf"), ("stl", here / "b.stl"), ("step", here / "two.step")])
         self.assertEqual(two.identity, "test_build.py::two")
         with self.assertRaises(ValueError):
-            xbf(out="x.step")
+            model(xbf="x.step")
         with self.assertRaises(TypeError):
-            @xbf("XBF/takes.xbf")
+            @model(xbf="XBF/takes.xbf")
             def takes(value):
                 return value
 
     def test_every_file_decorator_requires_an_explicit_path(self) -> None:
         from cad import dxf, glb, threemf
-        for decorator in (xbf, step, glb, stl, threemf, dxf):
+        for decorator in (step, glb, stl, threemf, dxf):
             with self.subTest(kind=decorator.__name__):
                 with self.assertRaises(TypeError):
                     decorator()
@@ -103,6 +103,10 @@ class DecoratorTest(unittest.TestCase):
                     decorator(None)
                 with self.assertRaises(TypeError):
                     decorator(lambda: None)
+        # A model's own .xbf is @model's to name: a path, ending in .xbf.
+        for path in (7, "", lambda: None):
+            with self.subTest(xbf=path), self.assertRaisesRegex(TypeError, r"@model\(xbf=\.\.\.\) takes a path"):
+                model(xbf=path)
 
     def test_model_only_declares_and_file_decorators_imply_it(self) -> None:
         from cad import model
@@ -298,17 +302,17 @@ class BuildTest(EngineCase):
             from pathlib import Path
 
             import build123d as bd
-            from cad.engine import xbf, read_step
+            from cad.engine import model, read_step
 
             BOUGHT = Path(__file__).parent / "bought.step"
 
 
-            @xbf("XBF/holder.xbf")
+            @model(xbf="XBF/holder.xbf")
             def holder():
                 return read_step(BOUGHT) - bd.Cylinder(1, 20)
 
 
-            @xbf("XBF/stand.xbf")
+            @model(xbf="XBF/stand.xbf")
             def stand():
                 part = read_step(BOUGHT).moved(bd.Location((10, 0, 0)))
                 return bd.Compound(children=[holder().shape, part])
@@ -339,10 +343,10 @@ class BuildTest(EngineCase):
 
 BRACKET = """
 import build123d as bd
-from cad.engine import stl, xbf
+from cad.engine import stl, model
 
 
-@xbf("XBF/bracket.xbf")
+@model(xbf="XBF/bracket.xbf")
 @stl("bracket.stl")
 def bracket():
     return bd.Box(10, 4, 2) - bd.Cylinder(1, 5)
@@ -350,7 +354,7 @@ def bracket():
 
 RIG = """
 import build123d as bd
-from cad.engine import stl, xbf
+from cad.engine import stl, model
 from bracket import bracket
 
 
@@ -359,7 +363,7 @@ def peg():
     return bd.Cylinder(1, 6)
 
 
-@xbf("XBF/rig.xbf")
+@model(xbf="XBF/rig.xbf")
 def rig():
     left = bracket().shape
     right = bracket().shape.moved(bd.Location((0, 20, 0)))
@@ -438,7 +442,7 @@ class ChildFilesTest(EngineCase):
 
 KIT = """
 import build123d as bd
-from cad.engine import paint, step, xbf
+from cad.engine import paint, step, model
 from bd_materials import FinishedMaterial, metals
 
 LEFT = {left}
@@ -448,7 +452,7 @@ TOP = bd.Color({top})
 PINS = {pins}
 
 
-@xbf("XBF/left.xbf")
+@model(xbf="XBF/left.xbf")
 def left():
     plate = bd.Box(LEFT, 8, 3) - bd.Cylinder(1.5, 10)
     plate.label = "plate"
@@ -463,7 +467,7 @@ def left():
     return bd.Compound(children=[plate, pin, peg][:PINS + 1], label="left")
 
 
-@xbf("XBF/right.xbf")
+@model(xbf="XBF/right.xbf")
 def right():
     block = bd.Box(RIGHT, 4, 4)
     block.label = "block"
@@ -477,7 +481,7 @@ def right():
     return bd.Compound(children=[block, cap], label="right")
 
 
-@xbf("XBF/kit.xbf")
+@model(xbf="XBF/kit.xbf")
 @step(out="kit.step")
 def kit():
     one = right().shape.moved(bd.Location((30, 0, 0)))
@@ -593,10 +597,10 @@ class PatchTest(EngineCase):
 
 BLOCK = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/block.xbf")
+@model(xbf="XBF/block.xbf")
 def block():
     return bd.Box(3, 2, 1) - bd.Cylinder(0.5, 2)
 """

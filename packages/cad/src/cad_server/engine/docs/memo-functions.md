@@ -45,7 +45,7 @@ replayed function avoids, 0.1–0.4 ms per hit, so mark a function only when it 
 kernel work an edit elsewhere leaves untouched: roughly a thousand kernel calls or more. Never
 per part, never on a helper called many times; whole sub-assembly stages are the usual
 candidates (tom's six stages, movement's three layers: 1.3–3 s each, and twice as fast on an
-edit), while per-part markers measured under 0.1 s. Nested `@xbf` is never needed for caching:
+edit), while per-part markers measured under 0.1 s. Nested `@model(xbf=...)` is never needed for caching:
 the operation-level memo handles every kernel call in any model, markers or not. The one other
 case is a builder several models call with the same arguments (nine posed copies of one
 assembly): an operation's entry is keyed by the body that ran it, so two models never share one,

@@ -137,7 +137,9 @@ def _flag(name: str) -> str:
 
 def _give_process(document_type: str, why: str = "") -> ArgumentRefused:
     named = processes_for(document_type)
-    return ArgumentRefused(f"cad.{document_type}.dfm measures for a process{why}: give --process "
+    from cad.registry import spelling
+
+    return ArgumentRefused(f"cad.{spelling(document_type)}.dfm measures for a process{why}: give --process "
                            + (f"{', '.join(named[:-1])} or {named[-1]}" if len(named) > 1 else named[0]))
 
 
@@ -778,6 +780,9 @@ def through_engine(document_type: str, source: Any, process: str | None, given: 
     """A B-rep's check asked of the engine by a command that holds no kernel: its result, or None where the
     engine measured nothing (none to reach, another release's), which the command runs in the environment of
     the integration (``cad_server.cli.document_types``), never here."""
+    from cad._internal.document_type import refuse_other
+
+    document_type = refuse_other(document_type, source)  # ``cad model`` given the file a model is saved as: that file's
     label = _label(source)
     if isinstance(source, (str, os.PathLike)) and label.is_absolute() and not label.is_file():
         return _failed(label, "file not found", "invalid_target")
@@ -924,7 +929,8 @@ def _kind_of(document_type: str) -> str:
 
 def _source_help(document_type: str) -> str:
     if document_type == "model":
-        return "a model's document id the engine holds (cad run SCRIPT.py prints it), or the handle its call returns."
+        return ("a model's document id the engine holds (cad run SCRIPT.py prints it), or the handle its call "
+                "returns; or the .xbf file a model is saved as, checked as the file it is.")
     from cad.registry import DOCUMENT_TYPES
 
     extensions = " or ".join(DOCUMENT_TYPES[document_type].extensions)
@@ -1018,7 +1024,8 @@ def called(document_type: str, signature: inspect.Signature, args: tuple[Any, ..
         process = processes_for(document_type)[0]
     from cad._internal.document_type import refuse_other
 
-    refuse_other(document_type, source)
+    # The type the source is of: a model's operation given the file a model is saved as is that file's.
+    document_type = refuse_other(document_type, source)
     try:
         return measure(document_type, source, process, resolved, candidates, given, strict)
     except ModuleNotFoundError as error:

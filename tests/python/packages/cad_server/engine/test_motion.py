@@ -30,10 +30,10 @@ ARM = """
 import math
 import build123d as bd
 from cad.build123d import configuration_sequence, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/arm.xbf")
+@model(xbf="XBF/arm.xbf")
 def arm():
     base = bd.Box(100, 60, 20)
     link = bd.Pos(40, 0, 25) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
@@ -251,11 +251,11 @@ def table(t):
 HINGE = """
 import build123d as bd
 from cad.build123d import configuration_sequence
-from cad.engine import xbf
+from cad.engine import model
 import moves
 
 
-@xbf("XBF/hinge.xbf")
+@model(xbf="XBF/hinge.xbf")
 def hinge():
     base = bd.Box(100, 60, 20)
     arm = bd.Pos(40, 0, 25) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
@@ -351,13 +351,13 @@ def unused():
 
 KEPT = """
 import build123d as bd
-from cad import glb, xbf
+from cad import glb, model
 from cad.build123d import configuration_sequence
 from cad.build123d import animation
 import moves
 
 
-@xbf("XBF/hinge.xbf")
+@model(xbf="XBF/hinge.xbf")
 @glb("GLB/hinge.glb")
 def hinge():
     base = bd.Box(100, 60, 20)

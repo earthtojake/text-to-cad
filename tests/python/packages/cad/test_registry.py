@@ -119,7 +119,7 @@ class TheTableIsTheSource(unittest.TestCase):
                                            if registry.DOCUMENT_TYPES["step"].operation(name).integration == "calculix"))
         self.assertEqual("calculix", integrations.for_command("ccx"))
         # A mechanism's joint stops are the kernel's, run in the caller: a script that calls them needs build123d.
-        self.assertEqual("build123d", integrations.for_name("cad.xbf.ranges"))
+        self.assertEqual("build123d", integrations.for_name("cad.model.ranges"))
         self.assertEqual({"model", "xbf", "step"},
                          {entry.id for entry in registry.DOCUMENT_TYPES.values() if "ranges" in entry.operation_names})
         self.assertEqual("cad.calculix._command", integrations.INTEGRATIONS["calculix"].runner)

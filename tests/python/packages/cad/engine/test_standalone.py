@@ -94,9 +94,9 @@ class StandaloneTest(unittest.TestCase):
             script = Path(folder) / "part.py"
             script.write_text(textwrap.dedent("""
                 import build123d as bd
-                from cad.engine import xbf, step, stl
+                from cad.engine import model, step, stl
 
-                @xbf("XBF/part.xbf")
+                @model(xbf="XBF/part.xbf")
                 @step("part.step")
                 @stl("part.stl")
                 def part():

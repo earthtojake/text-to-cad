@@ -37,12 +37,12 @@ VARIANTS = {name: f"materials.{name}()" for name in materials.__all__} | {
 SCRIPT = '''
 import build123d as bd
 from bd_materials import metals
-from cad import glb, xbf
+from cad import glb, model
 from cad.build123d import materials
 
 VARIANTS = {variants!r}
 
-@xbf("looks.xbf")
+@model(xbf="looks.xbf")
 @glb("looks.glb")
 def looks():
     parts = []

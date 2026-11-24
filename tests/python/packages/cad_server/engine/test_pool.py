@@ -480,12 +480,12 @@ class ConnectedPoolTest(unittest.TestCase):
 GATED = """
 import pathlib, time
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 GATE = pathlib.Path(__file__).with_suffix(".go")
 
 
-@xbf("XBF/{name}.xbf")
+@model(xbf="XBF/{name}.xbf")
 def {name}():
     while {gated} and not GATE.exists():
         time.sleep(0.01)

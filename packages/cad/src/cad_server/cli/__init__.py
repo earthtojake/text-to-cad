@@ -31,7 +31,7 @@ import importlib
 import os
 import sys
 
-from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
+from cad.registry import DOCUMENT_TYPES, INTEGRATIONS, spelling
 
 # name -> (module, "one-line help"). The module must expose ``main(argv)`` returning an
 # exit code. Keep this list grouped as below and the help text under ~60 chars so
@@ -69,14 +69,17 @@ _COMMANDS: dict[str, tuple[str, str]] = {
 }
 # Run, never listed. Only for releases 0.10.0 to 0.11.11 -- their skill text (`cad status`, `cad stop`) and their
 # updaters (`cad setup`) -- and gone with the bridge. And commands for programs, not people: `serve` (a document served
-# over HTTP, its URL printed) and `requirement` (the cad requirement a Python of a program's own installs). And a
-# document type's command, `xbf`: only for the skill text of releases up to 0.11.17, which says `cad xbf export`,
-# `cad xbf inspect` and `cad xbf interference`, where `cad model` takes the .xbf file now
-# (``cad_server.cli.document_types``); gone 30 days after the release whose skills stop saying it.
+# over HTTP, its URL printed) and `requirement` (the cad requirement a Python of a program's own installs). And
+# `xbf`, the older spelling of `cad model` for the file a model is saved as (``cad_server.cli.xbf``): only for the
+# skill text of releases up to 0.11.17, which says `cad xbf export`, `cad xbf inspect` and `cad xbf interference`;
+# gone 30 days after the release whose skills stop saying it, with this entry and that module.
 _UNLISTED = frozenset({"status", "stop", "setup", "serve", "requirement", "xbf"})
 
-# Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``).
-TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES}
+# Each document type's command, by the name the type is spelled by: ``cad <type> <operation>``
+# (``cad_server.cli.document_types``; the file a model is saved as is ``cad model``'s, ``cad.registry.spelling``),
+# and a type's older spelling while it is unlisted.
+TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES
+                                 if spelling(document_type) == document_type or document_type in _UNLISTED}
 
 # Each integration's command, by its name, for those with operations of their own on their tool's files:
 # ``cad <integration> <operation>`` (``cad_server.cli.integrations``). A name is a type's or an integration's,
@@ -100,10 +103,11 @@ def _command_lines(names) -> str:
 
 def _type_lines() -> str:
     """The document types, grouped: each with its operations and what it is (``cad.registry``); ``model`` with
-    the file a model is saved as, which it takes too, and that file's own type not listed (``_UNLISTED``)."""
-    from cad_server.cli.document_types import SAVED, operations_of
+    the file a model is saved as, which is its own too (``spelling``)."""
+    from cad.registry import SAVED
+    from cad_server.cli.document_types import operations_of
 
-    listed = {name: entry for name, entry in DOCUMENT_TYPES.items() if name not in _UNLISTED}
+    listed = {name: entry for name, entry in DOCUMENT_TYPES.items() if spelling(name) == name}
     width = max(len(name) for name in listed)
     ops = {name: ", ".join(operations_of(name)) for name in listed}
     ops_width = max(len(text) for text in ops.values())
@@ -143,8 +147,8 @@ def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
     if argv[:1] and argv[0] in TYPE_COMMANDS:
         from cad_server.cli.document_types import OPERATIONS
 
-        if len(argv) > 1 and (argv[0], argv[1]) in OPERATIONS:
-            return f"{argv[0]} {argv[1]}", argv[2:]
+        if len(argv) > 1 and (spelling(argv[0]), argv[1]) in OPERATIONS:
+            return f"{spelling(argv[0])} {argv[1]}", argv[2:]  # an older spelling as the command it is
         return None
     if argv[:1] and argv[0] in INTEGRATION_COMMANDS:
         from cad_server.cli.integrations import OPERATIONS as INTEGRATION_OPERATIONS

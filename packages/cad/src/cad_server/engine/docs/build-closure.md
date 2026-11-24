@@ -37,7 +37,7 @@ functions' code objects with no line tables or docstrings, its classes, the valu
 hold (a path value inside the script's folder relative to it), and, for a module that falls back
 to its bytes (**Body retention**), each file of its import closure by its bytes. A comment or a
 blank line changes no digest; a module the model loads and does not reach holds the empty one.
-`inputs` lists every file a body read -- through the engine (`file`: `step.read`, `xbf.read`,
+`inputs` lists every file a body read -- through the engine (`file`: `step.read`, `model.read`,
 `stl.read`, build123d's importers), itself (`read`, a `null` digest for one it found missing;
 a motion's function's reads too, **Configuration sequences**), or a text's font (`font`) -- by its digest; a file read past the engine's readers leaves the key
 null (**Body retention**). `cad model inspect DOC` prints the closure, `cad.inspect(doc)` and

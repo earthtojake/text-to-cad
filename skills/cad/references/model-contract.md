@@ -25,9 +25,9 @@ files into a model, or working out why a run ran what it ran.
   pays nothing for it. In a plain script (a check, a drawing) it is the tree a calling
   body reads, every part placed, named, coloured and given its material, without its
   joints. Verbs take the handle (`model.export(handle, ...)`, `posed(handle, state)`).
-- **A file decorator takes `@model`'s place, never beside it**: `@step("part.step")`,
-  and `@xbf`, `@glb`, `@stl`, `@threemf` and `@dxf` likewise with a path, declare a model
-  whose run also writes those files
+- **A file decorator takes bare `@model`'s place, never beside it**: `@step("part.step")`,
+  and `@glb`, `@stl`, `@threemf` and `@dxf` likewise with a path, declare a model
+  whose run also writes those files; its `.xbf` is `@model(xbf="part.xbf")`'s, alone or with them
   ([model page or file page](exports.md#model-page-or-file-page)).
 - **Kernel objects belong in bodies.** `import build123d as bd` loads no kernel until an
   attribute is read from `bd`, which in a body happens in the server. Read at module
@@ -206,14 +206,14 @@ from any working folder:
 from pathlib import Path
 
 import build123d as bd
-from cad import model, stl, xbf
+from cad import model, stl
 
 HERE = Path(__file__).resolve().parent
 
 
 @model
 def rig():
-    motor = xbf.read(HERE / "../vendor/motor.xbf")
+    motor = model.read(HERE / "../vendor/motor.xbf")
     motor.label = "motor"
     pcb = stl.read(HERE / "../scans/pcb.stl").bounding_box()   # an input, by the scan's bytes
     tray = bd.Box(pcb.size.X + 6, pcb.size.Y + 6, 6)
@@ -221,7 +221,7 @@ def rig():
     return bd.Compound(children=[tray, bd.Pos(0, 0, 20) * motor], label="rig")
 ```
 
-- **`step.read(path)` and `xbf.read(path)`** copy a document's geometry into the model as
+- **`step.read(path)` and `model.read(path)`** copy a document's geometry into the model as
   a build123d compound tree: each assembly a `Compound`, each part named, coloured and
   given its material as the file has them, each element keeping the name the file gives
   it. An xbf's joints, mechanism states, sequences and animations are not imported: a
@@ -229,7 +229,7 @@ def rig():
   never `located` or `moved` on a node of it, which copies the whole assembly
   ([opening geometry](inspection-and-validation.md#opening-geometry)).
 - **A vendor STEP is converted once**: `cad step export vendor.step vendor.xbf` writes an
-  xbf of it, which `xbf.read` reads many times faster than `step.read` parses the STEP
+  xbf of it, which `model.read` reads many times faster than `step.read` parses the STEP
   (seconds against most of a minute for a large assembly), with the same names. Keep the
   xbf beside the STEP and read the xbf.
 - **A STEP that names other files as its parts** (an external reference, written by a
@@ -242,7 +242,7 @@ def rig():
   `json.load`, `Path.read_text`, `np.loadtxt`. A file opened only for writing is not.
 - **build123d's `import_step`, `import_brep` and `import_stl`** are inputs by the file's
   bytes as the server's readers are. Prefer `step.read` (names, colours, materials, the
-  assembly tree) and `xbf.read` (fastest); `import_stl` makes a mesh, which no model
+  assembly tree) and `model.read` (fastest); `import_stl` makes a mesh, which no model
   holds.
 - **A read past the server runs the body on every run**: OCCT's readers driven directly
   (`BRepTools.Read_s`, `STEPControl_Reader`, ...) read files where the server cannot hear

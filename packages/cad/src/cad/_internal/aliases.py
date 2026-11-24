@@ -39,7 +39,7 @@ class CadDeprecationWarning(FutureWarning):
 NAME_ALIASES: dict[str, dict[str, str]] = {
     "cad": {
         "read_step": "cad.step.read",
-        "read_xbf": "cad.xbf.read",
+        "read_xbf": "cad.model.read",
         "read_mesh": "cad.stl.read",
         "memo": "cad.build123d.memo",
         "paint": "cad.build123d.paint",

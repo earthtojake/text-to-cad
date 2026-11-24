@@ -47,8 +47,8 @@ def _refuse_other_file(integration: str, operation: str, source: str) -> None:
     """A file that is not the tool's own, refused by name before anything runs: a document type's file
     (``wrong_type``, naming its own command), any other file, and one that is not there (``not_found``)."""
     from cad_server._internal.cli_errors import Failure
+    from cad.registry import spelling
     from cad_server.cli.document_types import OPERATIONS as TYPE_OPERATIONS
-    from cad_server.cli.document_types import command_of
     from cad_server.cli.document_types import operations_of as type_operations
 
     entry = INTEGRATIONS[integration]
@@ -56,10 +56,10 @@ def _refuse_other_file(integration: str, operation: str, source: str) -> None:
     if suffix not in entry.files:
         found = by_extension(suffix) if suffix else None
         if found is not None:
-            checks = [name for name in type_operations(found.id) if name in ("validate", "drc", "erc", "dfm")]
-            named = command_of(found.id)  # an .xbf's is `cad model`
-            use = (f": use cad {named} {checks[0]}" if checks and (found.id, checks[0]) in TYPE_OPERATIONS
-                   else f"; cad {named} takes {', '.join(type_operations(found.id))}")
+            named = spelling(found.id)  # the command that takes the file: an .xbf's is `cad model`
+            checks = [name for name in type_operations(named) if name in ("validate", "drc", "erc", "dfm")]
+            use = (f": use cad {named} {checks[0]}" if checks and (named, checks[0]) in TYPE_OPERATIONS
+                   else f"; cad {named} takes {', '.join(type_operations(named))}")
             raise Failure(f"{source} is a {found.id}, not a file cad {integration} {operation} takes "
                           f"({' or '.join(entry.files)}){use}", "wrong_type")
         raise Failure(f"{source} is not a file cad {integration} {operation} takes: it takes "

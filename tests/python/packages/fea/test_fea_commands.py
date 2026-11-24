@@ -1,4 +1,4 @@
-"""``cad step solve``, ``cad xbf solve`` and ``cad model solve`` are the library's operation, run where its integrations
+"""``cad step solve``, ``cad model solve`` and ``cad model solve`` are the library's operation, run where its integrations
 are: in the command's own process when its environment holds the kernel, netgen and ccx, else by the library's runner
 of one operation (``cad._internal.operation``) in the environment of ``cad[build123d,calculix,netgen]`` the engine
 makes. Here this Python

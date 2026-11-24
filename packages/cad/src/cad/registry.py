@@ -16,10 +16,11 @@ shared by every type that has them, ``inspect`` where a type has it, and the res
 ``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check, ``validate`` a robot
 description's conformance check.
 
-``model`` is the one type with no file: a model built from code and held in the engine's memory,
-addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
-``.xbf`` file the engine writes of one, and the one type the ``cad`` command runs by another's name: ``cad model
-<operation>`` takes the file (``cad_server.cli.document_types``).
+``model`` is a model built from code: held in the engine's memory, addressed by its document id or the handle
+its call returns (``@model`` declares one), or saved as a file, the ``.xbf`` the engine writes of one
+(``@model(xbf="arm.xbf")`` declares that too). ``xbf`` is that file's own type (``SAVED``), which the server and
+the viewer open; everywhere a type is named to a person or a program it is ``model``'s (``spelling``):
+``cad.model``'s decorator, reader (``model.read``) and operations, and ``cad model``, take the file.
 
 Kernel-free, the standard library alone: the server imports this module, and so does every page's
 build through the generated JavaScript. A producer's matcher reads a value's type names and modules,
@@ -36,11 +37,11 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
-__all__ = ["DOCUMENT_TYPES", "FILE_OPERATIONS", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
+__all__ = ["DOCUMENT_TYPES", "FILE_OPERATIONS", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "SAVED", "VIEWS", "DocumentTypeEntry",
            "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integration_help",
            "integrations_of",
            "interference_check", "manufacturing_check", "platform_of", "producer_for", "producers_for",
-           "type_of"]
+           "spelling", "type_of"]
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
@@ -311,10 +312,13 @@ _DOCUMENT_CONTENT = (*_STEP_CONTENT, "mechanism", "configuration sequences")
 
 _TYPES = (
     DocumentTypeEntry(
-        "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
-                          "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
+        "model", "model", "a model built from code: held in the engine's memory, addressed by its document id "
+                          "(cad run SCRIPT.py prints it) or the handle its call returns, or saved as a file, "
+                          "its .xbf",
         (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True,
+        # ``model.read``: the reader of the file a model is saved as (``SAVED``).
+        reader=True, reader_integration=_KERNEL),
     DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
@@ -377,6 +381,16 @@ _TYPES = (
 
 #: Every document type, by id, in the table's order.
 DOCUMENT_TYPES: Mapping[str, DocumentTypeEntry] = MappingProxyType({entry.id: entry for entry in _TYPES})
+
+#: The type of the file a model is saved as: a kind of file the server and the viewer open, and no name of its
+#: own in the library or the ``cad`` command, where that file is ``model``'s (``spelling``).
+SAVED = "xbf"
+
+
+def spelling(document_type: str) -> str:
+    """The name a type's decorator, reader, operations and command are spelled by: its id, but for the file a
+    model is saved as (``SAVED``), which is ``model``'s (``cad.model.read``, ``cad model export arm.xbf``)."""
+    return "model" if document_type == SAVED else document_type
 
 #: Every integration, by name.
 INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
@@ -590,8 +604,10 @@ def help_text(document_type: str) -> str:
                          f"({producer.integration}: {', '.join(producer.provides)})")
     elif producers:
         lines.append("written by:")
+        # The file a model is saved as is declared by @model itself; any other, by its type's decorator.
+        declared = f"@model({entry.id}=\"out{entry.suffix}\")" if entry.id == SAVED else f"@{entry.id}(\"out{entry.suffix}\")"
         for producer in producers:
-            lines.append(f"  @{entry.id}(\"out{entry.suffix}\") of {producer.accepts} "
+            lines.append(f"  {declared} of {producer.accepts} "
                          f"({producer.integration}: {', '.join(producer.provides)})")
     else:
         lines.append("written by: no producer; a file of it is authored")

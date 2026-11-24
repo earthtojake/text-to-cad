@@ -34,10 +34,10 @@ from cad.engine.export import mjcf
 # inner corner, 5 mm clear of both arms.
 BRACKET = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/bracket.xbf")
+@model(xbf="XBF/bracket.xbf")
 def bracket():
     block = bd.Pos(25, 25, 5) * bd.Box(20, 20, 10)
     block.label = "block"

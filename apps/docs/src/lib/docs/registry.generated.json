@@ -27,7 +27,7 @@
     {
       "id": "model",
       "title": "model",
-      "summary": "a model built from code and held in the engine's memory, with no file behind it: addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
+      "summary": "a model built from code: held in the engine's memory, addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns, or saved as a file, its .xbf",
       "extensions": [],
       "mime": "",
       "view": "document",
@@ -89,8 +89,8 @@
         }
       ],
       "decorator": true,
-      "reader": false,
-      "readerIntegration": null,
+      "reader": true,
+      "readerIntegration": "build123d",
       "edit": null,
       "producers": [
         {

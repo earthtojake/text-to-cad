@@ -1749,7 +1749,7 @@ class PythonCallTest(unittest.TestCase):
 
         import cad
 
-        for document_type in ("step", "xbf", "model", "threemf", "glb"):
+        for document_type in ("step", "model", "threemf", "glb"):
             self.assertNotIn("units", inspect.signature(getattr(cad, document_type).dfm).parameters, document_type)
             with self.assertRaises(TypeError):
                 getattr(cad, document_type).dfm("part", units="in")

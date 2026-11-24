@@ -33,7 +33,7 @@ from cad_server.engine.registry import Registry  # noqa: E402
 
 PARTS = """
 import build123d as bd
-from cad import model, xbf
+from cad import model
 
 
 @model
@@ -41,7 +41,7 @@ def peg():
     return bd.Cylinder(2, 10)
 
 
-@xbf("XBF/base.xbf")
+@model(xbf="XBF/base.xbf")
 def base():
     first, second = peg(), peg()
     # A child's call is its handle, inside the body too: its id, no page yet, its result here.

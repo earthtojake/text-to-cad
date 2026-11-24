@@ -31,18 +31,18 @@ from cad.engine.export import ExportRefused, Source, translate
 BOARD = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import glb, paint, step, stl, threemf, xbf
+from cad.engine import glb, paint, step, stl, threemf, model
 from bd_materials import metals
 
 
-@xbf("XBF/peg.xbf")
+@model(xbf="XBF/peg.xbf")
 def peg():
     peg = bd.Cylinder(2, 10)
     peg.color = bd.Color(0.9, 0.2, 0.1)
     return peg
 
 
-@xbf("XBF/board.xbf")
+@model(xbf="XBF/board.xbf")
 @step("board.step")
 @glb("board.glb")
 @stl("board.stl")
@@ -75,11 +75,11 @@ def board():
 # seventh: a colour presentation per styled shape, which OCCT's writer keeps in a map.
 KIT = """
 import build123d as bd
-from cad.engine import paint, xbf
+from cad.engine import paint, model
 from bd_materials import metals
 
 
-@xbf("XBF/kit.xbf")
+@model(xbf="XBF/kit.xbf")
 def kit():
     looks = [(0.9, 0.2, 0.1), (0.1, 0.8, 0.2), (0.2, 0.3, 0.9), (0.7, 0.7, 0.1), (0.5, 0.1, 0.6), (0.1, 0.5, 0.5)]
     parts = []
@@ -109,7 +109,7 @@ translate(Path(sys.argv[1]), None, Path(sys.argv[2]))
 HINGES = """
 import build123d as bd
 from cad.build123d import mechanism_state, posed
-from cad.engine import xbf
+from cad.engine import model
 
 PLATE = bd.Box(10, 10, 2)
 PLATE.color = bd.Color(0.2, 0.3, 0.9)
@@ -128,14 +128,14 @@ def hinge(index):
     return bd.Compound(children=[base, lid], label="hinge")
 
 
-@xbf("XBF/hinges.xbf")
+@model(xbf="XBF/hinges.xbf")
 def hinges():
     row = bd.Compound(children=[hinge(0), hinge(1), hinge(2)], label="hinges")
     mechanism_state(row, "open", flap0=30, flap1=60, flap2=90)
     return row
 
 
-@xbf("XBF/hinges_open.xbf")
+@model(xbf="XBF/hinges_open.xbf")
 def hinges_open():
     return posed(hinges().shape, "open")
 """
@@ -147,10 +147,10 @@ def hinges_open():
 # the body and not what it makes.
 ROWS = """
 import build123d as bd
-from cad.engine import step, xbf
+from cad.engine import step, model
 
 
-@xbf("XBF/rows.xbf")
+@model(xbf="XBF/rows.xbf")
 @step("rows.step")
 def rows():
     noop = {noop}  # noqa: F841
@@ -407,10 +407,10 @@ TWO = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import free, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/two.xbf")
+@model(xbf="XBF/two.xbf")
 def two():
     plate = bd.Box(100, 60, 20)
     plate.label = "plate"
@@ -522,10 +522,10 @@ class BuildFilesTest(unittest.TestCase):
     def test_a_read_only_folder_takes_its_unchanged_files_and_refuses_a_change_in_one_line(self) -> None:
         text = """
             import build123d as bd
-            from cad.engine import step, xbf
+            from cad.engine import step, model
 
 
-            @xbf("out/plate.xbf")
+            @model(xbf="out/plate.xbf")
             @step("out/plate.step")
             def plate():
                 return bd.Box(4, 5, {height})
@@ -564,10 +564,10 @@ class BuildFilesTest(unittest.TestCase):
 
         script = self.write("plate.py", """
             import build123d as bd
-            from cad.engine import xbf
+            from cad.engine import model
 
 
-            @xbf("out/plate.xbf")
+            @model(xbf="out/plate.xbf")
             def plate():
                 return bd.Box(4, 5, 6)
         """)
@@ -605,14 +605,14 @@ class BuildFilesTest(unittest.TestCase):
     def test_a_decorator_takes_out_alone_and_a_file_shows_the_joints_pose(self) -> None:
         import cad.engine
         from cad.engine import model
-        from cad.engine.model import glb, step, xbf
+        from cad.engine.model import glb, step
 
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*material"):
             step("a.step", material="steel")
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*pose"):
             step("a.step", pose="open")
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*out2"):
-            xbf(out2="a.xbf")
+            model(xbf="a.xbf", out2="b.xbf")
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*animate"):
             glb("a.glb", animate={"flap": (0, 90)})
         self.assertFalse(hasattr(model, "snapshot"), "a picture is the snapshot verb's, never a declaration")

@@ -45,7 +45,7 @@ KERNEL = ("OCP", "build123d", "bd_materials", "threejs_materials", "matplotlib",
 MODEL_ENTRY_POINTS = ("cadgen", "cad", "cad.engine", "cad.engine.api", "cad.engine.model", "cad.engine.build",
                       "cad.engine.worker", "cad.engine.client", "cad.engine.serve", "cad.engine.reader",
                       "cad.engine.render.service", "cad.engine.snapshot", "cad.build123d", "cad.registry",
-                      "cad.step", "cad.xbf",
+                      "cad.step", "cad.model",
                       "cad.build123d._geometry", "cad.build123d._flatten", "cad.eng_drawing", "cad.urdf",
                       "cad.srdf")
 
@@ -208,11 +208,17 @@ class IntegrationsTest(unittest.TestCase):
                     self.assertEqual(marker.count("sys_platform == "), 3, "macOS, Linux and Windows, each once")
         root = LIBRARY / "src" / "cad"
         packages = {path.parent.name for path in root.glob("*/__init__.py")}
-        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *INTEGRATIONS}))
-        self.assertEqual(sorted(path.stem for path in root.glob("*.py") if path.stem != "__init__"), sorted(MODULES))
         import cad
+        from cad.registry import spelling
 
-        self.assertEqual(sorted(cad._TYPES), sorted(DOCUMENT_TYPES))
+        # A type's package is named as the library spells the type: the file a model is saved as is cad.model's,
+        # and its older spelling's package (cad.xbf), while there is one, is the root's ``_OLDER``.
+        spelled = {name for name in DOCUMENT_TYPES if spelling(name) == name}
+        older = set(getattr(cad, "_OLDER", ()))
+        self.assertLessEqual(older, set(DOCUMENT_TYPES) - spelled)
+        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*spelled, *older, *INTEGRATIONS}))
+        self.assertEqual(sorted(path.stem for path in root.glob("*.py") if path.stem != "__init__"), sorted(MODULES))
+        self.assertEqual(sorted(cad._TYPES), sorted(spelled))
         self.assertEqual(sorted(cad._INTEGRATIONS), sorted(INTEGRATIONS))
 
     def test_each_integration_imports_its_own_extras_dependencies_alone(self) -> None:
@@ -230,7 +236,11 @@ class IntegrationsTest(unittest.TestCase):
         from cad.registry import DOCUMENT_TYPES
 
         library = modules("cad")
-        for document_type in DOCUMENT_TYPES:
+        import cad
+        from cad.registry import spelling
+
+        # Each type's package, as the library spells the type, and an older spelling's while there is one.
+        for document_type in sorted({*map(spelling, DOCUMENT_TYPES), *getattr(cad, "_OLDER", ())}):
             for name, path in library.items():
                 if of(f"cad.{document_type}", name):
                     with self.subTest(module=name):

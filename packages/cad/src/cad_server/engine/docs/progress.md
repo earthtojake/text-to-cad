@@ -64,7 +64,7 @@ through `Progress.entering` and `leaving`):
 @memo
 def finger(name): ...                                     # "Building geometry  finger"
 
-@xbf("XBF/hand.xbf")
+@model(xbf="XBF/hand.xbf")
 def hand():
     fingers = [finger(name) for name in FINGERS]
     return bd.Compound(children=[palm(), *fingers], label="hand")

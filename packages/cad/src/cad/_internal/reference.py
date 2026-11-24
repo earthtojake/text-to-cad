@@ -6,7 +6,8 @@ the site's copy to it, so the reference cannot drift from the code. What is publ
 declares, never a guess:
 
 * the root's ``__all__`` (``__version__``, ``CadDeprecationWarning``) and its document types, one object each
-  (``cad.registry.DOCUMENT_TYPES``);
+  (``cad.registry.DOCUMENT_TYPES``, each by the name it is spelled by: the file a model is saved as is
+  ``cad.model``'s, and its older spelling is left out as the root's ``__all__`` leaves it out);
 * of each document type, what its registry entry gives it -- its decorator, its reader, its operations and its
   edit -- and whatever else its package's own ``__all__`` names (``cad._internal.document_type``);
 * each integration's namespace (``cad.registry.INTEGRATIONS``, in its order, a deprecated one left out as
@@ -379,7 +380,7 @@ def as_docs() -> dict[str, Any]:
     """The library's public API: the root's names, each document type's and each integration's; every
     docstring an index into ``texts``."""
     import cad
-    from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
+    from cad.registry import DOCUMENT_TYPES, INTEGRATIONS, spelling
 
     names = []
     for name in cad.__all__:
@@ -395,7 +396,7 @@ def as_docs() -> dict[str, Any]:
                       "doc": _doc(value.__doc__)})
     document_types = [{"name": entry.id, "module": f"cad.{entry.id}", "title": entry.title,
                        "doc": _doc(getattr(cad, entry.id).__doc__), "members": _type_members(entry)}
-                      for entry in DOCUMENT_TYPES.values()]
+                      for entry in DOCUMENT_TYPES.values() if spelling(entry.id) == entry.id]
     integrations = []
     for name, entry in INTEGRATIONS.items():
         if entry.deprecated:  # as `cad --help` leaves it out

@@ -28,10 +28,10 @@ from cad.engine.mesh_format import ANGULAR
 # The issue's own part: a 85 mm tube, 47 segments round at the engine's tolerance, its facets 0.095 mm deep.
 SCRIPT = """
 import build123d as bd
-from cad import glb, threemf, xbf
+from cad import glb, threemf, model
 
 
-@xbf("XBF/tube.xbf")
+@model(xbf="XBF/tube.xbf")
 @threemf("fine.3mf", tolerance=0.01)
 @glb("fine.glb", tolerance=0.05, angle=5)
 def tube():

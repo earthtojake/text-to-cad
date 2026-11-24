@@ -15,7 +15,7 @@ class ViewerExportsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder).resolve()
             script = root / "part.py"
-            script.write_text('from cad import xbf\nimport build123d as bd\n@xbf("part.xbf")\ndef part():\n    return bd.Box(2, 3, 4)\n', encoding="utf-8")
+            script.write_text('from cad import model\nimport build123d as bd\n@model(xbf="part.xbf")\ndef part():\n    return bd.Box(2, 3, 4)\n', encoding="utf-8")
             reports = building.build(script, ["part"], cwd=root)
             self.assertTrue(reports[0]["ok"], reports)
             source = Source.read(root / "part.xbf")
@@ -41,7 +41,7 @@ class ViewerExportsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder).resolve()
             script = root / "plate.py"
-            script.write_text('from cad import xbf\nimport build123d as bd\n@xbf("plate.xbf")\ndef plate():\n    return bd.Rectangle(4, 3)\n', encoding="utf-8")
+            script.write_text('from cad import model\nimport build123d as bd\n@model(xbf="plate.xbf")\ndef plate():\n    return bd.Rectangle(4, 3)\n', encoding="utf-8")
             reports = building.build(script, ["plate"], cwd=root)
             self.assertTrue(reports[0]["ok"], reports)
             source = Source.read(root / "plate.xbf")

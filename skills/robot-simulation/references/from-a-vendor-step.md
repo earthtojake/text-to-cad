@@ -22,7 +22,7 @@ cad step inspect vendor/arm.step --query structure  # counts the parts
 cad step snapshot vendor/arm.step tmp/as-drawn.png --camera right
 ```
 
-In the model's body, `leaves(xbf.read(path), paths=True)` gives each part placed where it stands,
+In the model's body, `leaves(model.read(path), paths=True)` gives each part placed where it stands,
 with its path of labels (the `cad` skill's inspection reference, Opening geometry): `path[1]` is the
 top-level component (`Forearm v4:1`, `Servo v2:3`). Print each leaf's path, volume, face count and
 bounds once from a throwaway `cad run` script: it maps the STEP faster than the inspect output does.

@@ -1,4 +1,4 @@
-"""``cad xbf inspect DOC`` without a ref: what the document holds, on one screen, before its build
+"""``cad model inspect DOC`` without a ref: what the document holds, on one screen, before its build
 closure -- its state, parts, bounds, volume, materials, joints, states, sequences and declared
 files -- read from the document the engine holds, and nothing built; ``--json`` the same as data;
 ``--query structure`` the same lists with nothing measured. Measuring is lazy: a build no inspection
@@ -345,10 +345,10 @@ WEIGHED = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import mass, point_mass
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/robot.xbf")
+@model(xbf="XBF/robot.xbf")
 def robot():
     base = bd.Box(100, 60, 20, align=bd.Align.MIN)
     base.label, base.material = "base", metals.aluminum()

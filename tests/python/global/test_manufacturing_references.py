@@ -28,7 +28,7 @@ PAGES = (*REFERENCES, Path(repo_path("skills/cad/SKILL.md")),
          Path(repo_path("packages/cad/README.md")),
          Path(repo_path("packages/cad/src/cad/_internal/dfm/README.md")))
 #: The types that answer ``dfm``: a B-rep's, a mesh's, a cut file's.
-TYPES = ("model", "step", "xbf", "stl", "threemf", "glb", "dxf")
+TYPES = ("model", "step", "stl", "threemf", "glb", "dxf")
 
 FLAG = re.compile(r"(?<![\w-])--[a-z][a-z0-9-]*")
 #: ``cnc.hole_depth`` in code: a whole backticked name, or one of several a backticked run lists.

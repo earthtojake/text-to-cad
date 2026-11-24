@@ -35,10 +35,10 @@ from tests.python.support import opengl
 HINGE = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import step, xbf
+from cad.engine import step, model
 
 
-@xbf("XBF/hinge.xbf")
+@model(xbf="XBF/hinge.xbf")
 @step(out="hinge.step")
 def hinge():
     base = bd.Box(100, 60, 20)
@@ -59,10 +59,10 @@ CONNECT = 'base.joints["elbow"].connect_to(arm.joints["mount"], angle=30)'
 CHAIN = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/lift.xbf")
+@model(xbf="XBF/lift.xbf")
 def lift():
     base = bd.Box(80, 80, 10)
     base.label = "base"
@@ -91,10 +91,10 @@ def lift():
 CAR = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/car.xbf")
+@model(xbf="XBF/car.xbf")
 def car():
     body = bd.Box(400, 200, 50)
     body.label = "body"
@@ -111,10 +111,10 @@ def car():
 # A base built 300 mm out and a rotor on its joint's axis, given in world coordinates ({axis}).
 ROTOR = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/rotor.xbf")
+@model(xbf="XBF/rotor.xbf")
 def rotor():
     base = bd.Pos(300, 0, 0) * bd.Box(40, 40, 10)
     base.label = "base"
@@ -131,10 +131,10 @@ def rotor():
 # crosses the tube's far end, 162 mm from the servo; in the forearm's own, it lands by the origin.
 WRIST = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/forearm.xbf")
+@model(xbf="XBF/forearm.xbf")
 def forearm():
     at = bd.Pos(500, 0, 300)
     tube = at * bd.Box(200, 30, 30, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
@@ -198,11 +198,11 @@ def _sampled(path: Path, pose: Any) -> list:
 # A posed file is a model of its own: the hinge at a state, never an export's option.
 POSED = """
 from cad.build123d import posed
-from cad.engine import step, xbf
+from cad.engine import step, model
 from hinge import hinge
 
 
-@xbf("XBF/{name}.xbf")
+@model(xbf="XBF/{name}.xbf")
 @step(out="{name}.step")
 def {name}():
     return posed(hinge().shape, {state})
@@ -450,9 +450,9 @@ class JointMemoTest(_Folder):
         # A joint unconnected keys too.
         lone = """
             import build123d as bd
-            from cad.engine import xbf
+            from cad.engine import model
 
-            @xbf("XBF/lone.xbf")
+            @model(xbf="XBF/lone.xbf")
             def lone():
                 a = bd.Box(10, 10, 10)
                 bd.RigidJoint("top", a, bd.Location((0, 0, 5)))
@@ -476,19 +476,19 @@ class JointMemoTest(_Folder):
     def test_each_placement_of_a_child_holds_its_own_joints(self) -> None:
         self.build("pegs", """
             import build123d as bd
-            from cad.engine import xbf
+            from cad.engine import model
 
             SEEN = {}
 
 
-            @xbf("XBF/peg.xbf")
+            @model(xbf="XBF/peg.xbf")
             def peg():
                 peg = bd.Box(2, 2, 6)
                 bd.RigidJoint("base", peg, bd.Location((0, 0, -3)))
                 return peg
 
 
-            @xbf("XBF/pegs.xbf")
+            @model(xbf="XBF/pegs.xbf")
             def pegs():
                 first, second, third = peg().shape, bd.Pos(10, 0, 0) * peg().shape, peg().shape
                 bd.RigidJoint("front", first, bd.Location())
@@ -507,10 +507,10 @@ class JointMemoTest(_Folder):
 
 NESTED = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/nested.xbf")
+@model(xbf="XBF/nested.xbf")
 def nested():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -537,10 +537,10 @@ SPARE = """spare = bd.Pos(0, 0, -40) * bd.Box(5, 5, 5)
 
 MOUNTED = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/mounted.xbf")
+@model(xbf="XBF/mounted.xbf")
 def mounted():
     base = bd.Box(60, 60, 4)
     base.label = "base"
@@ -588,11 +588,11 @@ class NestedTest(_Folder):
         # ``posed`` moves the sub-assembly and the plate inside it once, as the sampler does.
         self.build("mounted_up", """
 from cad.build123d import posed
-from cad.engine import xbf
+from cad.engine import model
 from mounted import mounted
 
 
-@xbf("XBF/mounted_up.xbf")
+@model(xbf="XBF/mounted_up.xbf")
 def mounted_up():
     return posed(mounted().shape, {"mount": 90})
 """)
@@ -623,10 +623,10 @@ def mounted_up():
 
 PIVOT = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/bike.xbf")
+@model(xbf="XBF/bike.xbf")
 def bike():
     # Two parts placed where they stand, a revolute pair between them by label: no connect_to.
     frame = bd.Box(200, 40, 20)
@@ -653,10 +653,10 @@ SHOCK = """shock = bd.Pos(100, 0, -10) * bd.Box(10, 10, 30)
 
 TURNED = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/bike.xbf")
+@model(xbf="XBF/bike.xbf")
 def bike():
     # The pivot's part is turned: build123d makes the revolute's frame of the axis in that part's
     # frame, so its X is not the X a plane of the world datum has.
@@ -675,10 +675,10 @@ def bike():
 # RigidJoint on a Plane of the axis takes its X from the world's Z, the hinge's frame from the link's own.
 ZERO = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/elbow.xbf")
+@model(xbf="XBF/elbow.xbf")
 def elbow():
     turn = bd.Rot(30, 40, 50)
     upper = turn * bd.Box(100, 20, 20)
@@ -697,10 +697,10 @@ def elbow():
 # an arm connected twice: each a placement build123d's joints make, which the zero check leaves alone.
 PLACED = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/placed.xbf")
+@model(xbf="XBF/placed.xbf")
 def placed():
     base = bd.Box(10, 40, 40)
     base.label = "base"
@@ -850,10 +850,10 @@ import math
 
 import build123d as bd
 from cad.build123d import configuration_sequence, gear_pair, mechanism_state, rack_and_pinion_pair, screw_pair
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/bench.xbf")
+@model(xbf="XBF/bench.xbf")
 def bench():
     plate = bd.Box(300, 200, 10, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX))
     plate.label = "plate"

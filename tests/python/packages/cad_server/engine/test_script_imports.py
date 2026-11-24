@@ -31,7 +31,7 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 MODEL = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 import helper                       # beside the script, by its own name
 import proj.common.dims as dims     # the package, by its name
@@ -39,7 +39,7 @@ from .lib import WIDTH              # one level: its own package
 from ..common.dims import HEIGHT    # two levels: its package's parent
 
 
-@xbf("XBF/bracket.xbf")
+@model(xbf="XBF/bracket.xbf")
 def bracket():
     return bd.Box(WIDTH, 10, HEIGHT) - bd.Cylinder(helper.RADIUS, dims.HEIGHT * 2)
 
@@ -98,12 +98,12 @@ class PackageScriptTest(unittest.TestCase):
         # process, and the closure keys them by their paths.
         write(self.root, {"craft/lib/empennage.py": "SPAN = 4\n", "craft/f14.py": """
             import build123d as bd
-            from cad.engine import xbf
+            from cad.engine import model
 
             from lib import empennage
 
 
-            @xbf("XBF/f14.xbf")
+            @model(xbf="XBF/f14.xbf")
             def f14():
                 return bd.Box(10, empennage.SPAN, 2)
         """})
@@ -122,12 +122,12 @@ class PackageScriptTest(unittest.TestCase):
         # In the package's tree, but its own folder holds no __init__.py.
         write(self.root, {"proj/tools/holes.py": "RADIUS = 1\n", "proj/tools/plate.py": """
             import build123d as bd
-            from cad.engine import xbf
+            from cad.engine import model
 
             import holes
 
 
-            @xbf("XBF/plate.xbf")
+            @model(xbf="XBF/plate.xbf")
             def plate():
                 return bd.Box(10, 10, 2) - bd.Cylinder(holes.RADIUS, 4)
         """})
@@ -161,10 +161,10 @@ class PackageScriptTest(unittest.TestCase):
         # A loose script is compiled from its source too.
         write(self.root, {"proj/tools/plate.py": """
             import build123d as bd
-            from cad.engine import xbf
+            from cad.engine import model
 
 
-            @xbf("XBF/plate.xbf")
+            @model(xbf="XBF/plate.xbf")
             def plate():
                 return bd.Box(10, 10, 2)
         """})
@@ -183,7 +183,7 @@ class PackageScriptTest(unittest.TestCase):
         helper.write_text("WIDTH=1\n", encoding="utf-8")
         editable.write_text("HEIGHT=1\n", encoding="utf-8")
         script, xbf = self.root / "body.py", self.root / "XBF" / "body.xbf"
-        script.write_text("import build123d as bd\nfrom cad import xbf\n@xbf('XBF/body.xbf')\n"
+        script.write_text("import build123d as bd\nfrom cad import model\n@model(xbf='XBF/body.xbf')\n"
                           "def body():\n    from body_helper import WIDTH\n    from body_editable import HEIGHT\n"
                           "    return bd.Box(WIDTH,HEIGHT,1)\n", encoding="utf-8")
 

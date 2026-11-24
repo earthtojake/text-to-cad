@@ -25,7 +25,7 @@ import cad  # noqa: E402
 from cad._internal import aliases  # noqa: E402
 
 NAMES = {
-    "cad": {"read_step": "cad.step.read", "read_xbf": "cad.xbf.read", "read_mesh": "cad.stl.read",
+    "cad": {"read_step": "cad.step.read", "read_xbf": "cad.model.read", "read_mesh": "cad.stl.read",
             "memo": "cad.build123d.memo", "paint": "cad.build123d.paint", "export": "cad.engine.api.export",
             "snapshot": "cad.engine.api.snapshot", "inspect": "cad.engine.api.inspect"},
     "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},

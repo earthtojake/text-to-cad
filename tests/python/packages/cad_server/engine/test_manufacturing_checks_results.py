@@ -69,14 +69,16 @@ class SameResultTest(unittest.TestCase):
         bd.export_step(bd.Box(30, 20, 6) - bd.Pos(5, 0, 0) * bd.Cylinder(2, 6), str(step))
         xbf = fixture.folder / f"{fixture.ids[1]}.xbf"
         # A file's reader is what differs from a model's, not its process (every process was compared above):
-        # each file type by two processes, each process by one file.
-        for document_type, path, processes in (("step", step, ("cnc", "molding")), ("xbf", xbf, ("sheet", "printing"))):
+        # each file type by two processes, each process by one file. The .xbf a model is saved as is cad.model's,
+        # checked as the file it is.
+        for document_type, of, path, processes in (("step", cad.step, step, ("cnc", "molding")),
+                                                   ("xbf", cad.model, xbf, ("sheet", "printing"))):
             for process in processes:
                 with self.subTest(file=path.name, process=process):
-                    held = getattr(cad, document_type).dfm(path, process=process)
+                    held = of.dfm(path, process=process)
                     self.assertEqual(_plain(held), _plain(_today(document_type, path, path.resolve(), process)))
                     for finding in [f for f in held.findings if f.location and "face " in f.location][:1]:
-                        self.assertEqual(getattr(cad, document_type).inspect(path, finding.location)["kind"], "face")
+                        self.assertEqual(of.inspect(path, finding.location)["kind"], "face")
 
     def test_a_declared_process_and_material_read_as_the_file_reads_them(self) -> None:
         """No process given: the part's declared process and material, read from the engine's document as from
@@ -96,7 +98,7 @@ class SameResultTest(unittest.TestCase):
         self.assertEqual(_plain(held), _plain(today))
         self.assertEqual(held.measurements["process"], "cnc")
         self.assertTrue({"process_declared", "material_declared"} <= {f.code for f in held.findings})
-        self.assertEqual(_plain(cad.xbf.dfm(exported)), _plain(_today("xbf", exported, exported.resolve(), None)))
+        self.assertEqual(_plain(cad.model.dfm(exported)), _plain(_today("xbf", exported, exported.resolve(), None)))
         before = _restarted()  # its worker gone: the restarted engine answers from the result it kept on disk
         self.assertEqual(_plain(cad.model.dfm(block)), _plain(today))
         self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"], before["restored"] + 1))

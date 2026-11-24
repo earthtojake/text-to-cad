@@ -2,9 +2,11 @@
 
 A page of [the engine's documentation](../README.md). A name in bold in parentheses, such as (**Kinematics**), is another page or a named paragraph of one: the index says which.
 
-`@model` declares a model with no files; `@step`, `@xbf` and the other file decorators declare a
-model with those files. A function is declared by one or the other, never both: `@model` stacked
-with a file decorator is refused, saying to drop `@model`. A declaration does no work. Call the
+`@model` declares a model with no files; `@model(xbf=...)` (its `.xbf`) and the file decorators (`@step`
+and the others) declare a model with those files. A function is declared by one or the other, never both:
+bare `@model` stacked with a file decorator is refused, saying to drop `@model`, and with its own `.xbf`'s
+declaration, saying to declare both in one. `@xbf(path)`, the older spelling of `@model(xbf=path)`, is the
+same declaration (`model._declare`), kept for the scripts that say it. A declaration does no work. Call the
 function explicitly to build it:
 
 ```python

@@ -33,7 +33,7 @@ pays that once.
 
 ## Opening geometry
 
-A model's `.shape`, `step.read(path)` and `xbf.read(path)` are build123d trees. Each node's
+A model's `.shape`, `step.read(path)` and `model.read(path)` are build123d trees. Each node's
 `location` is relative to its parent, and `.children`, `.descendants` and `.leaves` give nodes
 without their ancestors' placements. `leaves(tree)` (`cad.build123d`) gives every leaf placed where
 it stands in the tree's frame: a new shape with the leaf's label, colour and material, no parent,
@@ -57,7 +57,7 @@ repeated label: take repeated parts by their path, which they share, and tell th
 they stand.
 
 ```python
-doc = kit().shape                                # or step.read("kit.step"), xbf.read("kit.xbf")
+doc = kit().shape                                # or step.read("kit.step"), model.read("kit.xbf")
 palm = find_part(doc, "palm")
 top = palm.faces().sort_by(bd.Axis.Z)[-1]        # the world-Z top: a leaf is placed
 fingers = [part for path, part in leaves(doc, paths=True) if path[-2:] == ("hand", "finger")]

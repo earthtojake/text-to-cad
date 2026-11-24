@@ -28,12 +28,12 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 PAIR = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 SIZE = {size}
 
 
-@xbf("XBF/pair.xbf")
+@model(xbf="XBF/pair.xbf")
 def pair():
     block = bd.Box(SIZE, 4, 2)
     block.label = "block"

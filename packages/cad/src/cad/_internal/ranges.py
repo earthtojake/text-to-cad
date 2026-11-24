@@ -106,7 +106,7 @@ def ranges_for(document_type: str) -> Any:
         options(step=step, clearance=clearance, joint=joints)
         from cad._internal.document_type import refuse_other
 
-        refuse_other(document_type, source)
+        of = refuse_other(document_type, source)  # the file a model is saved as, given to cad.model, is that file's
         try:
             from cad.engine.describe import describe
             from cad.engine.export import Source
@@ -120,7 +120,7 @@ def ranges_for(document_type: str) -> Any:
         started = time.perf_counter()
         if verbose:
             say(f"reading {source} and meshing its parts")
-        with _readable(document_type, source) as (target, label):
+        with _readable(of, source) as (target, label):
             description = describe(Source.read(target).view())
         try:
             unknown(description, joints)

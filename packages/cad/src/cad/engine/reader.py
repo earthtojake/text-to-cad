@@ -509,6 +509,20 @@ def written_by_build(path: Any) -> str | None:
     return None
 
 
+# The reader of each kind of file a model reads, as a refusal names the one to use instead.
+_READERS = {".xbf": "a model saved as a file with model.read", ".step": "a STEP with step.read",
+            ".stp": "a STEP with step.read", ".stl": "an STL with stl.read"}
+
+
+def refuse_other_file(path: Any, verb: str, *suffixes: str) -> None:
+    """Refuse a read of a file whose suffix is none of ``suffixes``, by name, with the reader that takes it."""
+    name = os.path.basename(os.fspath(path))
+    suffix = os.path.splitext(name)[1].lower()
+    if suffix not in suffixes:
+        raise ValueError(f"{verb} reads {' or '.join(f'an {item}' for item in suffixes)}, not {name}"
+                         + (f": read {_READERS[suffix]}" if suffix in _READERS else ""))
+
+
 def refuse_written(path: Any, verb: str) -> None:
     """Refuse a read, by a model of the build running on this thread, of a file the build writes
     (``written_by_build``): see the module."""
@@ -545,9 +559,8 @@ def read_xbf(path: Any) -> Any:
     from cad.engine.document import _read
 
     path = Path(os.fspath(path))
-    if path.suffix.lower() != ".xbf":
-        raise ValueError(f"xbf.read reads an .xbf, not {path.name}: read a STEP with step.read")
-    refuse_written(path, "xbf.read")
+    refuse_other_file(path, "model.read", ".xbf")
+    refuse_written(path, "model.read")
     if not path.is_file():
         raise FileNotFoundError(f"no document {path}")
     doc = _read(path)
@@ -645,11 +658,7 @@ def read_mesh(path: Any) -> Mesh:
     global _READ_MESH
     from pathlib import Path
 
-    suffix = Path(os.fspath(path)).suffix.lower()
-    if suffix not in MESH_SUFFIXES:
-        other = {".step": "a STEP with step.read", ".stp": "a STEP with step.read", ".xbf": "an xbf with xbf.read"}
-        raise ValueError(f"stl.read reads an .stl, not {Path(os.fspath(path)).name}"
-                         + (f": read {other[suffix]}" if suffix in other else ""))
+    refuse_other_file(path, "stl.read", *MESH_SUFFIXES)
     refuse_written(path, "stl.read")  # before the memo, as read_step's
     if _READ_MESH is None:
         from cad.engine.kernel.memo import wrap_function
