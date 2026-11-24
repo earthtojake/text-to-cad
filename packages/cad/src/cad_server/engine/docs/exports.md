@@ -160,6 +160,10 @@ changed or new one fails in one line naming the folder and its mode.
   zero-length or duplicate entity, every cut profile closed, something drawn; open geometry
   only on a layer its name's whole tokens make a bend, engrave or reference one -- and an
   error refuses the file, saying which. `export.dxf.validate_dxf_file` runs them on any DXF.
+- **A view bundle** (a destination ending `.view`, a folder) is no translation: it is what the
+  document's page reads, written ahead by the server that answers the page, in an export of its
+  own (**View bundle**). A mesh file has one too, and it is the one export of a DXF and of a
+  robot description.
 - **No option selects a part or a state**: a file of one part is that part's own
   model (a function returning it), and a posed file a model returning the assembly posed
   (`posed(arm(), "folded")`, `cad.build123d`). Snapshot's `--pose` is the picture's: ad

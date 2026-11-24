@@ -34,7 +34,7 @@
      "name": "export",
      "kind": "function",
      "operation": true,
-     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer; a folder ending .view is its view bundle, what its page reads, made ahead",
      "signature": "(source: Any, *destinations: Any, tolerance: float | None = None, angle: float | None = None, zero: str | None = None, log: Callable[[str], None] | None = None, daemon: bool = True, progress: Callable[[dict], None] | None = None) -> list[Written]",
      "doc": 5
     },
@@ -110,7 +110,7 @@
      "name": "export",
      "kind": "function",
      "operation": true,
-     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer; a folder ending .view is its view bundle, what its page reads, made ahead",
      "signature": "(source: Any, *destinations: Any, tolerance: float | None = None, angle: float | None = None, zero: str | None = None, log: Callable[[str], None] | None = None, daemon: bool = True, progress: Callable[[dict], None] | None = None) -> list[Written]",
      "doc": 5
     },
@@ -186,7 +186,7 @@
      "name": "export",
      "kind": "function",
      "operation": true,
-     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer; a folder ending .view is its view bundle, what its page reads, made ahead",
      "signature": "(source: Any, *destinations: Any, tolerance: float | None = None, angle: float | None = None, zero: str | None = None, log: Callable[[str], None] | None = None, daemon: bool = True, progress: Callable[[dict], None] | None = None) -> list[Written]",
      "doc": 5
     },
@@ -262,7 +262,7 @@
      "name": "export",
      "kind": "function",
      "operation": true,
-     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf); a folder ending .view is its view bundle, what its page reads",
      "signature": "(source: Any, *destinations: Any, log: Callable[[str], None] | None = None, daemon: bool = True, progress: Callable[[dict], None] | None = None) -> list[Written]",
      "doc": 5
     },
@@ -300,7 +300,7 @@
      "name": "export",
      "kind": "function",
      "operation": true,
-     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf); a folder ending .view is its view bundle, what its page reads",
      "signature": "(source: Any, *destinations: Any, log: Callable[[str], None] | None = None, daemon: bool = True, progress: Callable[[dict], None] | None = None) -> list[Written]",
      "doc": 5
     },
@@ -346,7 +346,7 @@
      "name": "export",
      "kind": "function",
      "operation": true,
-     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf); a folder ending .view is its view bundle, what its page reads",
      "signature": "(source: Any, *destinations: Any, log: Callable[[str], None] | None = None, daemon: bool = True, progress: Callable[[dict], None] | None = None) -> list[Written]",
      "doc": 5
     },
@@ -381,6 +381,14 @@
      "doc": 33
     },
     {
+     "name": "export",
+     "kind": "function",
+     "operation": true,
+     "summary": "write its view bundle, a folder ending .view: what its page reads, made ahead so a page shows it with no engine",
+     "signature": "(source: Any, *destinations: Any, log: Callable[[str], None] | None = None, daemon: bool = True, progress: Callable[[dict], None] | None = None) -> list[Written]",
+     "doc": 5
+    },
+    {
      "name": "snapshot",
      "kind": "function",
      "operation": true,
@@ -405,6 +413,14 @@
    "doc": 35,
    "members": [
     {
+     "name": "export",
+     "kind": "function",
+     "operation": true,
+     "summary": "write its view bundle, a folder ending .view: what its page reads, made ahead so a page shows it with no engine",
+     "signature": "(source: Any, *destinations: Any, log: Callable[[str], None] | None = None, daemon: bool = True, progress: Callable[[dict], None] | None = None) -> list[Written]",
+     "doc": 5
+    },
+    {
      "name": "snapshot",
      "kind": "function",
      "operation": true,
@@ -428,6 +444,14 @@
    "title": "SRDF",
    "doc": 37,
    "members": [
+    {
+     "name": "export",
+     "kind": "function",
+     "operation": true,
+     "summary": "write its view bundle, a folder ending .view: what its page reads, made ahead so a page shows it with no engine",
+     "signature": "(source: Any, *destinations: Any, log: Callable[[str], None] | None = None, daemon: bool = True, progress: Callable[[dict], None] | None = None) -> list[Written]",
+     "doc": 5
+    },
     {
      "name": "snapshot",
      "kind": "function",
@@ -1078,7 +1102,7 @@
   "A spelling the library still answers, under the name it has now. A ``FutureWarning``, so Python\nshows it by default: the people who read it are a model's authors, not a library's developers.",
   "``cad.model``: the model document type, a model built from code and held in the engine's memory\n(``cad.registry``).\n\nA model has no file behind it: it is addressed by its document id (``cad run SCRIPT.py`` prints it) or\nthe handle its call returns. ``@model`` declares one (``@model(name=...)``; ``model(shape, name=...)`` hands\na shape over), with no file of its own; the files it declares are the other types' decorators\n(``@xbf(\"XBF/arm.xbf\")``, ``@step(\"arm.step\")``). Its operations are the ``cad model <operation>`` commands':\n``model.export(handle_or_id, *destinations, tolerance=None, angle=None)``, ``model.snapshot(...)``,\n``model.inspect(...)`` and ``model.dfm(handle_or_id, process=\"cnc\")`` (or ``\"sheet\"``, ``\"molding\"``,\n``\"printing\"``), which checks it for manufacturing on its exact geometry, measured by the engine with the build123d\nintegration (``cad._internal.manufacturing``), and\n``model.solve(handle_or_id, study=..., out=\"results/\")``, a stress study of it (``cad._internal.fea.operation``),\nwhich reads an ``.xbf`` the engine writes of it in a temporary folder. Its script declares its parameters with\nit at a module's top level, ``WALL = model.param(\"wall\", 2.0, min=1, max=5)`` (``cad.engine.parameters.param``,\nthe standard library alone); a value changes in the script, by an edit and a run or the CAD Viewer's Save. A\nfile is refused by name: ``arm.xbf`` is an xbf's (``cad.xbf``). Everything loads on first use: ``import cad.model``\nimports no CAD kernel (``cad._internal.document_type``).",
   "``@model`` or ``@model(name=...)``: declare a model; ``model(shape, name=...)``: hand a shape over as\na named model (``cad.engine.model.model``).",
-  "Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,\n``.glb``, ``.stl``, ``.3mf``, ``.dxf`` of a planar document, and ``.xml`` or ``.mjcf``: an MJCF, the\ndocument's robot description as MuJoCo reads one, its meshes in an ``assets`` folder beside it,\n``export/mjcf.py``; ``.urdf``: the same description as ROS reads one, its meshes in a ``meshes``\nfolder beside it, ``export/urdf.py``): the document of an\n``.xbf``, of a ``.step`` read into one, of a handle (``Document``) or a document id (the one the\nengine holds, never built), or of a ``Model`` (called first, as this program's own call of it builds it); or a mesh file (``.glb``,\n``.stl``, ``.3mf``) to the other two mesh kinds, each file holding what its format carries,\nwith no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP, DXF, MJCF or URDF is made from one). Several\ndestinations read the document once. The file holds what the code built: no option selects a part or a state\n(``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB\ncarries every configuration sequence the document defines, as a clip. A GLB, an STL and a 3MF are\nmeshed at the engine's one tolerance, the viewer's (a quarter per cent of each part and 28.5\ndegrees), unless ``tolerance`` gives an absolute ceiling in millimetres (at least\n``export.MIN_TOLERANCE``), for a print whose fits are finer or a picture whose curves are, or\n``angle`` a ceiling in degrees (``export.MIN_ANGLE`` to ``export.MAX_ANGLE``): each part is then\nmeshed again at the finer of each for these files, and each file says it; every destination is\nthen a GLB, an STL or a 3MF. An MJCF and a URDF are the robot description at the as-built state,\nunless ``zero`` names a mechanism state to take every joint's zero at (``describe``'s **The zero**:\nthe bodies posed there, each joint's value there its zero, its limits and the other states around\nit); every destination is then an MJCF or a URDF. Each robot file's ``Written.robot`` says what it\nholds, and the program's own call says it on stderr after the file's line (``said.robot``). A call\nthe program's own\ncode makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is\ngoes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each\ndestination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a\nterminal and nowhere when it is not, ``False`` nowhere, a callable each frame.",
+  "Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,\n``.glb``, ``.stl``, ``.3mf``, ``.dxf`` of a planar document, ``.view``: a view bundle, the folder of\nwhat the document's page reads, made ahead so a page shows it with no engine, in an export of its own\n(``_bundled``); and ``.xml`` or ``.mjcf``: an MJCF, the\ndocument's robot description as MuJoCo reads one, its meshes in an ``assets`` folder beside it,\n``export/mjcf.py``; ``.urdf``: the same description as ROS reads one, its meshes in a ``meshes``\nfolder beside it, ``export/urdf.py``): the document of an\n``.xbf``, of a ``.step`` read into one, of a handle (``Document``) or a document id (the one the\nengine holds, never built), or of a ``Model`` (called first, as this program's own call of it builds it); or a mesh file (``.glb``,\n``.stl``, ``.3mf``) to the other two mesh kinds, each file holding what its format carries,\nwith no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP, DXF, MJCF or URDF is made from one). Several\ndestinations read the document once. The file holds what the code built: no option selects a part or a state\n(``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB\ncarries every configuration sequence the document defines, as a clip. A GLB, an STL and a 3MF are\nmeshed at the engine's one tolerance, the viewer's (a quarter per cent of each part and 28.5\ndegrees), unless ``tolerance`` gives an absolute ceiling in millimetres (at least\n``export.MIN_TOLERANCE``), for a print whose fits are finer or a picture whose curves are, or\n``angle`` a ceiling in degrees (``export.MIN_ANGLE`` to ``export.MAX_ANGLE``): each part is then\nmeshed again at the finer of each for these files, and each file says it; every destination is\nthen a GLB, an STL or a 3MF. An MJCF and a URDF are the robot description at the as-built state,\nunless ``zero`` names a mechanism state to take every joint's zero at (``describe``'s **The zero**:\nthe bodies posed there, each joint's value there its zero, its limits and the other states around\nit); every destination is then an MJCF or a URDF. Each robot file's ``Written.robot`` says what it\nholds, and the program's own call says it on stderr after the file's line (``said.robot``). A call\nthe program's own\ncode makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is\ngoes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each\ndestination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a\nterminal and nowhere when it is not, ``False`` nowhere, a callable each frame.",
   "Draw a document (``.xbf``, ``.step``, or a document id: the one the engine holds) or a mesh\nfile (``.glb``, ``.stl``, ``.3mf``) into ``out`` (a ``.png``) as the viewer draws it: one\npicture, a ``Drawn``. A ``Model`` is called first, as the program's own call of it builds it:\nthe document drawn is the one the engine then holds, whether or not an xbf of it is on disk. ``annotation`` (the viewer's\nannotation: its file's path, its object, or the Quick Edit packet that carries it) and\n``measurements`` are drawn over the model; ``camera=\"authored\"`` draws it from the view the\nannotation's ink was drawn in, which the packet holds. ``out`` a folder (a path ending in a\nseparator, or one that is there) is given a name inside it, the source's stem and the time\n(``snapshot.picture_path``). A snapshot refused or failed leaves the file at ``out`` as it\nwas (``snapshot.write_png``). ``preview`` draws the viewer's Preview in place of a display mode: the\nmodel lit in a studio, in its materials, on a floor with its shadow, in perspective.\n\n``job`` in place of ``out`` is every picture a job names (``cad <type> snapshot --job``), a list of\n``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its\nobject), a job or a list of jobs, each job a view drawn as it was -- its camera, display, hidden\nand isolated parts, pose, the packet's ink and dimensions -- at its output settings, into each\nof its outputs (``snapshot.job_pictures``). ``source`` is then drawn in place of every job's\ninput; a flag given overrides every job. Every request is checked before anything renders, and\na picture that fails writes none of the job's, leaving every output as it was.\n\nWhere each picture is goes, frame by frame, to ``progress`` (``progress.py``: ``scene`` while the\ndocument is served, meshed and its scene made, ``draw`` while the frame is drawn, ``write`` as\nthe picture is written), as ``export`` takes it: by default a bar on stderr when it is a\nterminal and nowhere when it is not, ``False`` nowhere, a callable each frame.",
   "What a ref names in a document (``refs``: ``hand/finger.2/face 7``, ``base/f:...``, a\ncopied ``/abs/kit.xbf#...`` line) and what made it. An element answers what the kernel\nmeasures of it -- its points placed where its occurrence stands, in the document's frame --\nwith its canonical ``ref``, its occurrence's ``path`` and, of a model's document, ``made_by``\n(a file names no model); a part or an assembly\nits volume and its mass: each part's volume times its material's density, summed\n(``cli.weighed``), its world bounds and a part's placement (``_placed``). One answer per selector (a list for several). Without ``ref``, the build\nclosure the xbf holds (``previous``): its engine, libraries, source, modules, inputs and\nkey, read from the file alone. A ref that names nothing, or several things, is refused by\nname (``refs.RefError``). No query builds a missing model or writes its declared\noutputs. ``query=\"build\"`` returns file metadata/closure or live build metadata;\n``query=\"geometry\"`` requires a ref, and ``query=\"closure\"`` accepts none.\n``query=\"summary\"`` (``cad xbf inspect DOC`` with no ref) is ``{\"summary\", \"closure\"}``:\nwhat the document holds at a glance (``_summary``), and its closure, as the engine holds it; of\na GLB, ``{\"mesh\"}``: its nodes, meshes and animations, from its JSON alone (``_mesh``).\n``query=\"structure\"`` is the summary without bounds, volume or mass and requests no measurements.\nNo form meshes anything. A part's volume and box are cached by geometry key and measured in\nbatches. The summary's measurement goes, frame by frame, to ``progress`` (``progress.py``:\n``inspect-measure``, ``measure``, counted as the engine tells each part's facts in), as ``export``\ntakes it -- by default a bar on stderr when it is a terminal and nowhere when it is not,\n``False`` nowhere, a callable each frame.",
   "Check a part for a manufacturing process: CNC machining, sheet metal, injection molding or 3D printing. Exit 0: OK. Exit 1: FAILED, a finding is an error (with --strict, a warning too). Exit 3: NOT CHECKED, something was not judged: never a pass. Exit 2: the command line's mistake.\n\nA STEP, an xbf or a model's document is measured on its exact geometry, each finding at a face ref\n(cad xbf inspect DOC REF resolves it). The measurements are facts; the verdicts are general rules, each\nfrom a published design guide and no shop's limit, each finding coded by its rule, with the limit, the source\nand what to change. A rule's feasibility limit broken is an error; a recommendation is a warning. For a named\nshop, compare the measurements with its own published limits. --json carries every measurement, every rule's\noutcome and each verdict as data (value, limit, unit, refs).\nThe last line and the exit status are the check's state. OK, exit 0: everything was measured and no\nfinding is an error. FAILED, exit 1: a finding is an error (with --strict, a warning too): the part cannot be\nmade by this process as drawn. NOT CHECKED, exit 3: the check did not judge what it was asked to -- a source\nthat does not read or holds no solid, a family that could not be measured, an engine that stopped -- which\nis no verdict and never a pass. Exit 2: the command line's mistake.\n\nsource: a model's document id the engine holds (cad run SCRIPT.py prints it), or the handle its call returns.\nprocess: cnc, sheet, molding or printing; default, for a STEP, an xbf or a model, the process the parts declare (part.material = metals.aluminum(process=machined()): machined is cnc, molded molding, fdm, sls, mjf, slm and vat printing with technology fdm, sls, mjf, pbf and sla), when every part agrees.\nmaterial: the part's material (aluminum, steel, stainless, abs, pc, nylon, ...): picks the material's limits; default the material the part declares (part.material = metals.aluminum()), when every part agrees.\naxes: cnc: the milling machine's axes, 3, 4 or 5; default 3.\nturning: cnc: the part is turned on a lathe (its axis found), not milled.\ntools: cnc: the end mill diameters available, in mm, comma separated (3,6,10); default none: a corner is held to the smallest tool that can exist (0.05 mm across, cad's own floor) and to how deep a tool of its size reaches; a radius of 1.25 mm or more (a 2.5 mm end mill's) is recommended.\nstock: cnc: the stock's size in mm (100x60x25); default the part's box.\nthickness: sheet: the stock's thickness in mm; default measured.\nk_factor: sheet: the neutral axis's place in the thickness, for the flat pattern (the shop's bend table's); default a K-factor chart's, by the material and each bend's radius.\nbend_radius: sheet: the shop's inside bend radius in mm, compared with the part's.\nkerf: sheet: the cutting kerf in mm, for small features.\nsheet_size: sheet: the shop's largest sheet in mm (1219x2438); default a standard 5 x 10 ft sheet (3048x1524), assumed.\npull: molding: the pull direction, an axis (z, -y) or x,y,z components; default z.\nwall_limit: molding: faces at or above this many degrees from the pull are not walls; default 45.\nzero_tol: molding: draft under this many degrees is zero draft; default 0.05.\ncavities: molding: cavities in the mold, for the clamp force; default 1.\ntechnology: printing: fdm, sls, sla, mjf or pbf (metal powder bed); default fdm.\nbuild_volume: printing: the printer's build volume in mm (256x256x256); default a typical machine of the technology's, assumed.\nangle_limit: printing: down-facing faces under this many degrees from horizontal need support; default the technology's.\nsamples: printing: rays cast for the wall-thickness field on a mesh; default 2000.\nlayer_height: printing: the layer height in mm, for stair-stepping; default the technology's.\nnozzle: printing: fdm's nozzle diameter in mm; default 0.4.\nprinter: printing: a file of the printer's settings -- a 3MF OrcaSlicer or Bambu Studio saved, or a complete machine preset JSON -- for its build volume and nozzle; --build-volume and --nozzle win.\ncandidates: rank the candidates instead: molding the pulls (x, y, z and the part's principal axes), printing the orientations.\nstrict: a warning fails the check too (exit 1): a gate that takes no recommendation broken.",

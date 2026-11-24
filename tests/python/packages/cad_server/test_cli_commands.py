@@ -33,9 +33,9 @@ TYPES = {
     "stl": ("export", "snapshot", "dfm"),
     "glb": ("export", "snapshot", "inspect", "dfm"),
     "threemf": ("export", "snapshot", "dfm"),
-    "dxf": ("snapshot", "dfm"),
-    "urdf": ("snapshot", "validate"),
-    "srdf": ("snapshot", "validate"),
+    "dxf": ("export", "snapshot", "dfm"),
+    "urdf": ("export", "snapshot", "validate"),
+    "srdf": ("export", "snapshot", "validate"),
     "kicad_pcb": ("export", "snapshot", "inspect", "drc"),
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
 }
@@ -108,7 +108,7 @@ class TheCommandTable(unittest.TestCase):
         code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
         self.assertIn("document types, the files cad shows (cad <type> <operation> FILE):", said)
-        self.assertRegex(said, r"\n  srdf +snapshot, validate +SRDF: \.srdf\n")
+        self.assertRegex(said, r"\n  srdf +export, snapshot, validate +SRDF: \.srdf\n")
         self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm, interference, solve, ranges +model: a document id, "
                                r"held in memory\n")
         code, said, _ = _run(["step", "--help"])
@@ -258,7 +258,7 @@ class TheCommandTable(unittest.TestCase):
             "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm, interference, "
             "solve, ranges; "
             "'cad step --help' says what each does")})
-        self.assertEqual(2, type_main("dxf", ["export", "a.dxf"]))
+        self.assertEqual(2, type_main("dxf", ["inspect", "a.dxf"]))
         code, out, err = _run(["stl"])
         self.assertEqual((code, out), (2, ""))
         self.assertTrue(err.startswith("cad stl: cad stl needs an operation\n\nusage: cad stl <operation> FILE"), err)

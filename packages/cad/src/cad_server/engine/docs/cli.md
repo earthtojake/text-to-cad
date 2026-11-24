@@ -28,6 +28,10 @@ cad xbf|step export FILE DST [DST ...] [--tolerance MM] [--angle DEG] [--zero ST
                                              what each holds said on stderr (--json: its row's robot)
 cad glb|stl|threemf export SRC DST [DST ...] [--json]
                                              a mesh to the other two mesh kinds
+cad model|xbf|step|glb|stl|threemf|dxf|urdf|srdf export SRC DST.view [--json]
+                                             the document's view bundle, a folder: what its page reads, made
+                                             ahead so a page shows it with no engine (View bundle); in a
+                                             command of its own, with none of the options above
 cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
                 [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]

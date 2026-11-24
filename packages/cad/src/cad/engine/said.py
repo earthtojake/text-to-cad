@@ -258,6 +258,13 @@ def written(rows: Any, typed: Any) -> None:
     named as ``typed`` names it (``given``): ``cad <type> export``'s, and a program's own ``export()`` call's;
     after a robot description's, what it holds on stderr (``robot``)."""
     for row in rows:
+        view = getattr(row, "view", None)
+        if view:
+            # A view bundle: its folder, the files it holds, and how many of them this export wrote or removed.
+            changed = ", ".join(f"{len(view[key])} {key}" for key in ("written", "removed") if view[key])
+            print(f"{'wrote' if row.written else 'unchanged'} {given(row.path, typed)} ({view['files']} files, "
+                  f"{size(row.bytes)}{'; ' + changed if changed else ''}) in {row.seconds:.2f}s")
+            continue
         if row.written:
             print(f"wrote {given(row.path, typed)} ({size(row.bytes)}) in {row.seconds:.2f}s")
         else:

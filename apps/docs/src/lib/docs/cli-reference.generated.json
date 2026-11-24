@@ -8,7 +8,7 @@
    "operations": [
     {
      "command": "cad model export",
-     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer; a folder ending .view is its view bundle, what its page reads, made ahead",
      "usage": "cad model export [--tolerance MM] [--angle DEG] [--zero STATE] [--json] SRC DST [DST ...]",
      "arguments": [
       {
@@ -549,7 +549,7 @@
    "operations": [
     {
      "command": "cad xbf export",
-     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer; a folder ending .view is its view bundle, what its page reads, made ahead",
      "usage": "cad xbf export [--tolerance MM] [--angle DEG] [--zero STATE] [--json] SRC DST [DST ...]",
      "arguments": [
       {
@@ -1090,7 +1090,7 @@
    "operations": [
     {
      "command": "cad step export",
-     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer; a folder ending .view is its view bundle, what its page reads, made ahead",
      "usage": "cad step export [--tolerance MM] [--angle DEG] [--zero STATE] [--json] SRC DST [DST ...]",
      "arguments": [
       {
@@ -1631,7 +1631,7 @@
    "operations": [
     {
      "command": "cad stl export",
-     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf); a folder ending .view is its view bundle, what its page reads",
      "usage": "cad stl export [--json] SRC DST [DST ...]",
      "arguments": [
       {
@@ -1893,7 +1893,7 @@
    "operations": [
     {
      "command": "cad glb export",
-     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf); a folder ending .view is its view bundle, what its page reads",
      "usage": "cad glb export [--json] SRC DST [DST ...]",
      "arguments": [
       {
@@ -2179,7 +2179,7 @@
    "operations": [
     {
      "command": "cad threemf export",
-     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf); a folder ending .view is its view bundle, what its page reads",
      "usage": "cad threemf export [--json] SRC DST [DST ...]",
      "arguments": [
       {
@@ -2426,13 +2426,37 @@
    "usage": "cad dxf <operation> FILE [options]",
    "operations": [
     {
+     "command": "cad dxf export",
+     "summary": "write its view bundle, a folder ending .view: what its page reads, made ahead so a page shows it with no engine",
+     "usage": "cad dxf export [--json] SRC DST [DST ...]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 87
+      },
+      {
+       "name": "DST",
+       "help": 88,
+       "repeatable": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 74
+      }
+     ]
+    },
+    {
      "command": "cad dxf snapshot",
      "summary": "draw it as the viewer does, into a PNG",
      "usage": "cad dxf snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
      "arguments": [
       {
        "name": "SRC",
-       "help": 87,
+       "help": 89,
        "optional": true
       },
       {
@@ -2537,11 +2561,11 @@
      "command": "cad dxf dfm",
      "summary": "check it as a sheet's cut file (--process sheet): closed contours, nothing cut twice, features against the kerf and the thickness, the sheet's size",
      "usage": "cad dxf dfm [--process {sheet}] [--material MATERIAL] [--units {mm,cm,m,in,ft}] [--thickness THICKNESS] [--k-factor FACTOR] [--bend-radius RADIUS] [--kerf KERF] [--sheet-size SIZE] [--strict] [--json] SOURCE",
-     "description": 88,
+     "description": 90,
      "arguments": [
       {
        "name": "SOURCE",
-       "help": 89
+       "help": 91
       }
      ],
      "options": [
@@ -2550,7 +2574,7 @@
         "--process"
        ],
        "metavar": "{sheet}",
-       "help": 90,
+       "help": 92,
        "choices": [
         "sheet"
        ],
@@ -2634,13 +2658,37 @@
    "usage": "cad urdf <operation> FILE [options]",
    "operations": [
     {
+     "command": "cad urdf export",
+     "summary": "write its view bundle, a folder ending .view: what its page reads, made ahead so a page shows it with no engine",
+     "usage": "cad urdf export [--json] SRC DST [DST ...]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 93
+      },
+      {
+       "name": "DST",
+       "help": 88,
+       "repeatable": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 74
+      }
+     ]
+    },
+    {
      "command": "cad urdf snapshot",
      "summary": "draw it as the viewer does, into a PNG",
      "usage": "cad urdf snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
      "arguments": [
       {
        "name": "SRC",
-       "help": 91,
+       "help": 94,
        "optional": true
       },
       {
@@ -2745,11 +2793,11 @@
      "command": "cad urdf validate",
      "summary": "check it for conformance: structure, joints, inertials, mesh references",
      "usage": "cad urdf validate [--strict] [--packages NAME=PATH] [--verbose] [--json] PATH",
-     "description": 92,
+     "description": 95,
      "arguments": [
       {
        "name": "PATH",
-       "help": 93
+       "help": 96
       }
      ],
      "options": [
@@ -2757,21 +2805,21 @@
        "flags": [
         "--strict"
        ],
-       "help": 94
+       "help": 97
       },
       {
        "flags": [
         "--packages"
        ],
        "metavar": "NAME=PATH",
-       "help": 95,
+       "help": 98,
        "repeatable": true
       },
       {
        "flags": [
         "--verbose"
        ],
-       "help": 96
+       "help": 99
       },
       {
        "flags": [
@@ -2789,13 +2837,37 @@
    "usage": "cad srdf <operation> FILE [options]",
    "operations": [
     {
+     "command": "cad srdf export",
+     "summary": "write its view bundle, a folder ending .view: what its page reads, made ahead so a page shows it with no engine",
+     "usage": "cad srdf export [--json] SRC DST [DST ...]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 100
+      },
+      {
+       "name": "DST",
+       "help": 88,
+       "repeatable": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 74
+      }
+     ]
+    },
+    {
      "command": "cad srdf snapshot",
      "summary": "draw it as the viewer does, into a PNG",
      "usage": "cad srdf snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
      "arguments": [
       {
        "name": "SRC",
-       "help": 97,
+       "help": 101,
        "optional": true
       },
       {
@@ -2900,11 +2972,11 @@
      "command": "cad srdf validate",
      "summary": "check it against its URDF: every name, chain, state and disabled pair",
      "usage": "cad srdf validate [--strict] [--urdf URDF] [--verbose] [--json] PATH",
-     "description": 98,
+     "description": 102,
      "arguments": [
       {
        "name": "PATH",
-       "help": 99
+       "help": 103
       }
      ],
      "options": [
@@ -2912,20 +2984,20 @@
        "flags": [
         "--strict"
        ],
-       "help": 100
+       "help": 104
       },
       {
        "flags": [
         "--urdf"
        ],
        "metavar": "URDF",
-       "help": 101
+       "help": 105
       },
       {
        "flags": [
         "--verbose"
        ],
-       "help": 102
+       "help": 106
       },
       {
        "flags": [
@@ -2946,11 +3018,11 @@
      "command": "cad kicad_pcb export",
      "summary": "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, step, glb, odb, ipc2581, pdf or dxf",
      "usage": "cad kicad_pcb export --to {gerbers,drill,pos,bom,step,glb,odb,ipc2581,pdf,dxf} --out DIR [--json] BOARD",
-     "description": 103,
+     "description": 107,
      "arguments": [
       {
        "name": "BOARD",
-       "help": 104
+       "help": 108
       }
      ],
      "options": [
@@ -2959,7 +3031,7 @@
         "--to"
        ],
        "metavar": "{gerbers,drill,pos,bom,step,glb,odb,ipc2581,pdf,dxf}",
-       "help": 105,
+       "help": 109,
        "choices": [
         "gerbers",
         "drill",
@@ -2980,14 +3052,14 @@
         "--out"
        ],
        "metavar": "DIR",
-       "help": 106,
+       "help": 110,
        "required": true
       },
       {
        "flags": [
         "--json"
        ],
-       "help": 107
+       "help": 111
       }
      ]
     },
@@ -2998,7 +3070,7 @@
      "arguments": [
       {
        "name": "SRC",
-       "help": 108,
+       "help": 112,
        "optional": true
       },
       {
@@ -3102,7 +3174,7 @@
         "--window"
        ],
        "metavar": "X0,Y0,X1,Y1",
-       "help": 109
+       "help": 113
       }
      ]
     },
@@ -3110,11 +3182,11 @@
      "command": "cad kicad_pcb inspect",
      "summary": "what the board holds: its format, thickness, size, layers, parts and nets",
      "usage": "cad kicad_pcb inspect [--json] BOARD",
-     "description": 110,
+     "description": 114,
      "arguments": [
       {
        "name": "BOARD",
-       "help": 104
+       "help": 108
       }
      ],
      "options": [
@@ -3122,7 +3194,7 @@
        "flags": [
         "--json"
        ],
-       "help": 107
+       "help": 111
       }
      ]
     },
@@ -3130,11 +3202,11 @@
      "command": "cad kicad_pcb drc",
      "summary": "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
      "usage": "cad kicad_pcb drc [--json] BOARD",
-     "description": 111,
+     "description": 115,
      "arguments": [
       {
        "name": "BOARD",
-       "help": 112
+       "help": 116
       }
      ],
      "options": [
@@ -3157,11 +3229,11 @@
      "command": "cad kicad_sch export",
      "summary": "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder",
      "usage": "cad kicad_sch export --to {pdf,svg,netlist,bom} --out DIR [--json] SCHEMATIC",
-     "description": 113,
+     "description": 117,
      "arguments": [
       {
        "name": "SCHEMATIC",
-       "help": 114
+       "help": 118
       }
      ],
      "options": [
@@ -3170,7 +3242,7 @@
         "--to"
        ],
        "metavar": "{pdf,svg,netlist,bom}",
-       "help": 115,
+       "help": 119,
        "choices": [
         "pdf",
         "svg",
@@ -3185,14 +3257,14 @@
         "--out"
        ],
        "metavar": "DIR",
-       "help": 106,
+       "help": 110,
        "required": true
       },
       {
        "flags": [
         "--json"
        ],
-       "help": 107
+       "help": 111
       }
      ]
     },
@@ -3200,11 +3272,11 @@
      "command": "cad kicad_sch snapshot",
      "summary": "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG",
      "usage": "cad kicad_sch snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
-     "description": 116,
+     "description": 120,
      "arguments": [
       {
        "name": "SRC",
-       "help": 117,
+       "help": 121,
        "optional": true
       },
       {
@@ -3308,13 +3380,13 @@
         "--sheet"
        ],
        "metavar": "PATH",
-       "help": 118
+       "help": 122
       },
       {
        "flags": [
         "--border"
        ],
-       "help": 119
+       "help": 123
       }
      ]
     },
@@ -3322,15 +3394,15 @@
      "command": "cad kicad_sch inspect",
      "summary": "what the schematic holds: its sheets, parts and nets; with a ref, what that names",
      "usage": "cad kicad_sch inspect [--json] SCHEMATIC [REF]",
-     "description": 120,
+     "description": 124,
      "arguments": [
       {
        "name": "SCHEMATIC",
-       "help": 114
+       "help": 118
       },
       {
        "name": "REF",
-       "help": 121,
+       "help": 125,
        "optional": true
       }
      ],
@@ -3339,7 +3411,7 @@
        "flags": [
         "--json"
        ],
-       "help": 107
+       "help": 111
       }
      ]
     },
@@ -3347,11 +3419,11 @@
      "command": "cad kicad_sch erc",
      "summary": "KiCad's electrical rules check: errors fail it, warnings are said",
      "usage": "cad kicad_sch erc [--json] SCHEMATIC",
-     "description": 122,
+     "description": 126,
      "arguments": [
       {
        "name": "SCHEMATIC",
-       "help": 123
+       "help": 127
       }
      ],
      "options": [
@@ -3376,11 +3448,11 @@
      "command": "cad mujoco check",
      "summary": "compile a MuJoCo model (an MJCF) with MuJoCo and check it: what MuJoCo refuses or warns of, the model-health checks, what collides as what, and the contact excludes",
      "usage": "cad mujoco check [--strict] [--verbose] [--json] PATH",
-     "description": 124,
+     "description": 128,
      "arguments": [
       {
        "name": "PATH",
-       "help": 125
+       "help": 129
       }
      ],
      "options": [
@@ -3388,13 +3460,13 @@
        "flags": [
         "--strict"
        ],
-       "help": 100
+       "help": 104
       },
       {
        "flags": [
         "--verbose"
        ],
-       "help": 102
+       "help": 106
       },
       {
        "flags": [
@@ -3412,7 +3484,7 @@
    "command": "cad cache",
    "summary": "cad's cache: dir, prune (what this release cannot use), clean (all of it)",
    "usage": "cad cache {dir,prune,clean} ...",
-   "description": 126,
+   "description": 130,
    "arguments": [
     {
      "name": "{dir,prune,clean} ...",
@@ -3428,29 +3500,29 @@
    "command": "cad cache dir",
    "summary": "print where cad's cache is",
    "usage": "cad cache dir",
-   "description": 127
+   "description": 131
   },
   {
    "command": "cad cache prune",
    "summary": "remove what this release of cad cannot use",
    "usage": "cad cache prune",
-   "description": 128
+   "description": 132
   },
   {
    "command": "cad cache clean",
    "summary": "remove all of cad's cache; cad makes it again as it needs it",
    "usage": "cad cache clean",
-   "description": 129
+   "description": 133
   },
   {
    "command": "cad delete",
    "summary": "delete documents: record, cached document, the engine's copy",
    "usage": "cad delete [--dry-run] [--yes] [--json] DOC [DOC ...]",
-   "description": 130,
+   "description": 134,
    "arguments": [
     {
      "name": "DOC",
-     "help": 131,
+     "help": 135,
      "repeatable": true
     }
    ],
@@ -3459,20 +3531,20 @@
      "flags": [
       "--dry-run"
      ],
-     "help": 132
+     "help": 136
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 133
+     "help": 137
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 134
+     "help": 138
     }
    ]
   },
@@ -3480,19 +3552,19 @@
    "command": "cad doctor",
    "summary": "report this cad, its folders, its kernel and the server; it changes nothing",
    "usage": "cad doctor [--check] [--json]",
-   "description": 135,
+   "description": 139,
    "options": [
     {
      "flags": [
       "--check"
      ],
-     "help": 136
+     "help": 140
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 137
+     "help": 141
     }
    ]
   },
@@ -3500,13 +3572,13 @@
    "command": "cad mcp",
    "summary": "serve the CAD app to the agent app that starts it, over MCP on stdin and stdout",
    "usage": "cad mcp",
-   "description": 138
+   "description": 142
   },
   {
    "command": "cad plugin",
    "summary": "the plugin in your agent apps: `install` puts it in or updates it; `update auto`: whether cad's updates update it too",
    "usage": "cad plugin {install} ...",
-   "description": 139,
+   "description": 143,
    "arguments": [
     {
      "name": "{install} ...",
@@ -3521,7 +3593,7 @@
    "command": "cad plugin install",
    "summary": "install the plugin in every agent app found on this computer, or update it there",
    "usage": "cad plugin install",
-   "description": 140
+   "description": 144
   },
   {
    "command": "cad plugin update",
@@ -3540,7 +3612,7 @@
    "command": "cad plugin update auto",
    "summary": "show or change whether cad's updates update the plugin too",
    "usage": "cad plugin update auto [{status,on,off}]",
-   "description": 141,
+   "description": 145,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3557,13 +3629,13 @@
    "command": "cad run",
    "summary": "run a script (or -m, -c) as uv run does, cad pinned at this device's release with the integrations its imports use",
    "usage": "cad run [uv run's options] SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE [ARGS...] | COMMAND [ARGS...]",
-   "description": 142
+   "description": 146
   },
   {
    "command": "cad server",
    "summary": "the cad server: start, stop, status",
    "usage": "cad server [--rotate-token] [--yes] {start,stop,status} ...",
-   "description": 143,
+   "description": 147,
    "arguments": [
     {
      "name": "{start,stop,status} ...",
@@ -3579,14 +3651,14 @@
      "flags": [
       "--rotate-token"
      ],
-     "help": 144
+     "help": 148
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 145
+     "help": 149
     }
    ]
   },
@@ -3594,20 +3666,20 @@
    "command": "cad server start",
    "summary": "start the cad server where it is not running",
    "usage": "cad server start [--port PORT] [--foreground]",
-   "description": 146,
+   "description": 150,
    "options": [
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 147
+     "help": 151
     },
     {
      "flags": [
       "--foreground"
      ],
-     "help": 148
+     "help": 152
     }
    ]
   },
@@ -3620,7 +3692,7 @@
      "flags": [
       "--json"
      ],
-     "help": 149
+     "help": 153
     }
    ]
   },
@@ -3633,7 +3705,7 @@
      "flags": [
       "--json"
      ],
-     "help": 150
+     "help": 154
     }
    ]
   },
@@ -3641,7 +3713,7 @@
    "command": "cad telemetry",
    "summary": "show or change the usage stats and crash reports CAD sends: status, on, off",
    "usage": "cad telemetry [{status,on,off}]",
-   "description": 151,
+   "description": 155,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3658,7 +3730,7 @@
    "command": "cad update",
    "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
    "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
-   "description": 152,
+   "description": 156,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -3672,7 +3744,7 @@
      "flags": [
       "--major"
      ],
-     "help": 153
+     "help": 157
     }
    ]
   },
@@ -3680,7 +3752,7 @@
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 154,
+   "description": 158,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3697,11 +3769,11 @@
    "command": "cad viewer",
    "summary": "open a viewer page on the running cad server",
    "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 155,
+   "description": 159,
    "arguments": [
     {
      "name": "FILE",
-     "help": 156,
+     "help": 160,
      "optional": true,
      "repeatable": true
     }
@@ -3712,46 +3784,46 @@
       "--host"
      ],
      "metavar": "HOST",
-     "help": 157
+     "help": 161
     },
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 158
+     "help": 162
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 159
+     "help": 163
     },
     {
      "flags": [
       "--no-open"
      ],
-     "help": 160
+     "help": 164
     },
     {
      "flags": [
       "--dist"
      ],
      "metavar": "DIST",
-     "help": 161
+     "help": 165
     },
     {
      "flags": [
       "--api-only"
      ],
-     "help": 162
+     "help": 166
     }
    ]
   }
  ],
  "texts": [
   "a model's document id, which cad run SCRIPT.py prints: the document the engine holds of it, never built",
-  ".xbf (from a STEP), .step, .glb, .stl, .3mf, .dxf (of a planar document), .xml (MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ beside it): the document as its code built it. Every one is checked, a DXF's drawing too, before any is written: a refused export writes none",
+  ".xbf (from a STEP), .step, .glb, .stl, .3mf, .dxf (of a planar document), .xml (MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ beside it): the document as its code built it. Every one is checked, a DXF's drawing too, before any is written: a refused export writes none. Or, in a command of its own, a folder ending .view: the document's view bundle, what its page reads (its structure, each part's mesh and facts), made ahead so a page shows it with no engine",
   "mesh a .glb, an .stl or a .3mf to within this absolute tolerance, in mm (at least 0.001), where it is finer than the viewer's quarter per cent of a part: for a print whose fits are finer, or a picture whose curves are. Every destination is then a .glb, an .stl or a .3mf: export a .step or any other file in a command of its own",
   "mesh a .glb, an .stl or a .3mf to within this angular deflection, in degrees (1 to 28.5, the viewer's own): small radii drawn in more segments. Every destination is then a .glb, an .stl or a .3mf",
   "take an .xml (MJCF) or a .urdf at this mechanism state: every body posed there and each joint's value there its zero, its limits and the other states around it (as built without it)",
@@ -3823,7 +3895,7 @@
   "cnc, sheet, molding or printing; default, for a STEP, an xbf or a model, none: a STEP keeps no process.",
   "the .step file",
   "the .stl file",
-  "the other mesh kinds (.glb, .stl, .3mf), each holding what its format carries",
+  "the other mesh kinds (.glb, .stl, .3mf), each holding what its format carries; or, in a command of its own, a folder ending .view: its view bundle, what its page reads, made ahead so a page shows it with no engine",
   "print what was written as JSON",
   "the .stl file; with --job, drawn in place of every job's input",
   "Check a mesh for 3D printing. Exit 0: OK. Exit 1: FAILED, a finding is an error (with --strict, a warning too). Exit 3: NOT CHECKED, something was not judged: never a pass. Exit 2: the command line's mistake.",
@@ -3837,16 +3909,20 @@
   "the .3mf file",
   "the .3mf file; with --job, drawn in place of every job's input",
   "the .3mf file to check.",
+  "the .dxf file",
+  "a folder ending .view: its view bundle, what its page reads, made ahead so a page shows it with no engine",
   "the .dxf file; with --job, drawn in place of every job's input",
   "Check a sheet's cut file (a DXF) for laser, waterjet or router cutting: the sheet process. Exit 0: OK. Exit 1: FAILED, a finding is an error (with --strict, a warning too). Exit 3: NOT CHECKED, something was not judged: never a pass. Exit 2: the command line's mistake.",
   "the .dxf cut file to check.",
   "sheet, the one process a DXF is checked for (the default).",
+  "the .urdf file",
   "the .urdf file; with --job, drawn in place of every job's input",
   "Check one URDF robot description for conformance.",
   "The .urdf file to validate.",
   "Treat warnings as blocking.",
   "Resolve package://NAME/... mesh URIs against PATH. Repeatable.",
   "Narrate the target on stderr.",
+  "the .srdf file",
   "the .srdf file; with --job, drawn in place of every job's input",
   "Check one SRDF against its paired URDF.",
   "the .srdf file to check.",

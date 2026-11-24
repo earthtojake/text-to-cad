@@ -3,7 +3,7 @@ ordinary Python scripts call decorated models explicitly.
 
     cad run SCRIPT.py                                the models the script explicitly calls
     cad <type> export SRC DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]   (the options: a
-        model's, an xbf's, a STEP's)
+        model's, an xbf's, a STEP's; a DST ending .view is a view bundle's folder, in a command of its own)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
@@ -64,20 +64,40 @@ def _meshes(document_type: str | None) -> bool:
     return DOCUMENT_TYPES[document_type].view == "mesh"
 
 
+def _bundled_alone(document_type: str | None) -> bool:
+    """Whether a type's one export is its view bundle (a drawing's, a robot description's: nothing translates
+    it)."""
+    if document_type is None:
+        return False
+    from cad.registry import DOCUMENT_TYPES
+
+    return DOCUMENT_TYPES[document_type].view not in ("document", "mesh")
+
+
 def _export_arguments(export: argparse.ArgumentParser, document_type: str | None = None) -> None:
     export.add_argument("source", metavar="SRC", help=_source_help(
         document_type, "an .xbf, a .step, a document id (a model's, which cad run SCRIPT.py prints), or a mesh "
                        "file (.glb, .stl, .3mf), which exports to the other two mesh kinds"))
+    if _bundled_alone(document_type):
+        export.add_argument("destinations", nargs="+", metavar="DST",
+                            help="a folder ending .view: its view bundle, what its page reads, made ahead so a "
+                                 "page shows it with no engine")
+        export.add_argument("--json", action="store_true", help="print what was written as JSON")
+        return
     if _meshes(document_type):
         export.add_argument("destinations", nargs="+", metavar="DST",
-                            help="the other mesh kinds (.glb, .stl, .3mf), each holding what its format carries")
+                            help="the other mesh kinds (.glb, .stl, .3mf), each holding what its format carries; or, "
+                                 "in a command of its own, a folder ending .view: its view bundle, what its page "
+                                 "reads, made ahead so a page shows it with no engine")
         export.add_argument("--json", action="store_true", help="print what was written as JSON")
         return
     export.add_argument("destinations", nargs="+", metavar="DST",
                         help=".xbf (from a STEP), .step, .glb, .stl, .3mf, .dxf (of a planar document), .xml "
                              "(MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ "
                              "beside it): the document as its code built it. Every one is checked, a DXF's drawing "
-                             "too, before any is written: a refused export writes none")
+                             "too, before any is written: a refused export writes none. Or, in a command of its own, "
+                             "a folder ending .view: the document's view bundle, what its page reads (its structure, "
+                             "each part's mesh and facts), made ahead so a page shows it with no engine")
     from cad.engine.export import MAX_ANGLE, MIN_ANGLE, MIN_TOLERANCE
 
     export.add_argument("--tolerance", type=float, metavar="MM",
@@ -485,7 +505,8 @@ def _export(args: argparse.Namespace, prog: str) -> int:
     if args.json:
         print(json.dumps({"ok": True, "source": str(key(args.source)),
                           "files": [{"path": str(row.path), "kind": row.kind, "bytes": row.bytes, "seconds": row.seconds,
-                                     "written": row.written, **({"robot": row.robot} if row.robot else {})}
+                                     "written": row.written, **({"robot": row.robot} if row.robot else {}),
+                                     **({"view": row.view} if row.view else {})}
                                     for row in written]}))
         return 0
     _said.written(written, args.destinations)
@@ -1045,7 +1066,8 @@ def status_text(answer: dict[str, Any]) -> str:
 
 # Each verb: its help, the function adding its arguments to a parser, and the function running it.
 VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, str], int]]] = {
-    "export": ("write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF, xbf, MJCF or URDF files, by suffix; a GLB "
+    "export": ("write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF, xbf, MJCF or URDF files, or its view bundle "
+               "(a .view folder), by suffix; a GLB "
                "carries the document's motions as clips, a DXF draws a planar one, an MJCF and a URDF are its robot "
                "description",
                _export_arguments, _export),

@@ -140,6 +140,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "mime": "application/dxf",
       "view": "drawing",
       "operations": [
+        "export",
         "snapshot",
         "dfm"
       ],
@@ -155,6 +156,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "mime": "application/xml; charset=utf-8",
       "view": "robot",
       "operations": [
+        "export",
         "snapshot",
         "validate"
       ],
@@ -170,6 +172,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "mime": "application/xml; charset=utf-8",
       "view": "robot",
       "operations": [
+        "export",
         "snapshot",
         "validate"
       ],
