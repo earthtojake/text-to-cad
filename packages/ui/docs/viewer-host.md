@@ -84,7 +84,7 @@ are for reading and maintaining the contracts.
 | `ViewerHost`, `ClipboardPort`, `PromptFiles` (a Quick Edit's views and annotations, saved as JSON), `usage` | [Host types](../src/host/types.ts) | `@cad/ui/host` |
 | `FileSource` (`stat`, and `list` and `search` where the host has them), `FileActions`, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@cad/ui/file-viewer` |
 | `PromptContextPort` (`deliver`, `send`), bundles, references, delivery receipts and `formatPromptMessage` (the one message a Quick Edit is) | [Prompt types](../../core/src/prompt/types.ts) | `@cad/core/prompt` |
-| `CadWorkspaceService` (the catalog of the files on screen, `folder`, `search`; `setModelParameters`, the Params tab's Save, and `previewModelParameters`, the model drawn at its drafts before a Save, each optional: a host that cannot carry one leaves it out, and the tab shows values without Save, or a value only once it is saved), `createCadClient` (`{ origin, fetch, … }`), `isMissingFileError`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@cad/core/client` |
+| `CadWorkspaceService` (the catalog of the files on screen, and what a renderer reads of a document; `setModelParameters`, the Params tab's Save, and `previewModelParameters`, the model drawn at its drafts before a Save, each optional: a host that cannot carry one leaves it out, and the tab shows values without Save, or a value only once it is saved), `CadClient` (the HTTP one, `createCadClient` (`{ origin, fetch, … }`), with what only a server and its engine answer: `folder`, `search`, the library, the person's settings), `openViewBundle` (the same service over a view bundle: [below](#a-view-bundles-host)), `isMissingFileError`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@cad/core/client` |
 | `createHttpPromptFiles` (the viewer server's `PromptFiles`: `POST /api/v1/local/prompt-files`, writes JSON and returns paths) | [Prompt files](../../core/src/client/promptFiles.js) | `@cad/core/client` |
 | `XbfRendererOptions` (an `.xbf` and a STEP), `LiveViewBinding`, `LiveViewController` | [Engine document registration](../src/renderers/xbf/index.ts) | `@cad/ui/renderers/xbf` |
 | `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, the view of the file on screen, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@cad/ui/tab-store` |
@@ -241,6 +241,30 @@ and `/` is the home), and the CAD app, which
 renders in Codex (the sidebar, a tab beside each thread and a file handler) and inline in
 Claude Desktop and other MCP Apps hosts, shows it in the view that asked or, from the
 home, launches it.
+
+## A view bundle's host
+
+A view bundle (`cad <type> export SRC DST.view`) is one document's answers, written down: a host shows it
+with no engine behind the page, through `openViewBundle(source)` (`@cad/core/client`), the second
+implementation of `CadWorkspaceService`, whose source is a folder's URL on a static file server or the
+files held in the page. The view is `CadViewer` with no `library`: one document and nothing else. Every
+tool computed in the page works as over an engine (the display styles, Explode, Clip, Select and selection by
+name, Measure, whose exact values are the part's table of facts, the joints, poses and motions, Draw and
+Preview). What needs an engine is left out where it is read, by the capability each already rests on, so a
+tool the document cannot use is absent, never drawn disabled:
+
+- **Parameters** are read only, as an `.xbf` opened as a file shows them ("Edit these in the script."): the
+  bundle's engine document is read as the document written down, and the service has no
+  `setModelParameters` or `previewModelParameters`.
+- **No next version**: its engine document is `final`, so the view reads it once and waits on nothing.
+- **No Export**: the service has no `exports` and the host no `downloads`.
+- **No home, Recents, explorer, Open, Open in, Reveal, Copy path or Copy link**: no `library`, a file source
+  that only reads its one document (`createCadFileSource` gives it no `list` or `search`), and no
+  `fileActions`, so the navbar draws no ⋯.
+- **Quick Edit** keeps Copy alone (the clipboard is the destination; no composer, no `send`); with no
+  `promptFiles`, its message names no saved file.
+- **The person's settings** are the host's to keep where it can: the web keeps the language in the
+  browser ([storage](../../../apps/web/docs/storage.md)); there is no Telemetry and no What's new.
 
 ## Adding a shared feature
 

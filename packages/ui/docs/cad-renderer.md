@@ -739,6 +739,11 @@ pairs (core's `lib/xbf/xbfKinematics.js`), a geared pair written through its gea
 a STEP's are (`xbfJointHandles.js`). A pair the engine could not keep a value for is said in the
 tab, under the rows.
 
+A document its client serves as `final` (a view bundle's, [the host's side](viewer-host.md#a-view-bundles-host))
+is read once and waits on no next version: there is no engine to build one. Everything else is the same: its
+structure, parts, look and mechanism are the document's, and a chip's facts and Select tangent faces' groups are
+asked of the same routes, which its client answers from each part's one table.
+
 A document with motions plays them from the shell's routine transport, named by its runtime's
 `noun`, over `useXbfMotion.js`: the top of its Joints tab (`kit/tools/playbar/AnimationSection.jsx`'s
 `AnimationControls`: a Sequence dropdown row of the motions by name, Play or Pause and the scrubber (its start the
