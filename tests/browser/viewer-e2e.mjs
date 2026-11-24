@@ -829,6 +829,21 @@ const CSP_VIOLATIONS_SCRIPT = () => {
     directive: event.effectiveDirective, blocked: event.blockedURI, source: event.sourceFile, line: event.lineNumber, sample: event.sample }));
 };
 
+// What the page copies, kept where the gate can read it: the clipboard's text, however it is written (a pending
+// prompt goes as a clipboard item whose text is still on its way).
+const CLIPBOARD_SCRIPT = () => {
+  window.__copied = [];
+  const keep = (text) => { window.__copied.push(String(text)); };
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
+    writeText: async (text) => keep(text),
+    write: async (items) => {
+      for (const item of items) for (const type of item.types) if (type === "text/plain") keep(await (await item.getType(type)).text());
+    },
+    readText: async () => window.__copied.at(-1) ?? "",
+    read: async () => [],
+  } });
+};
+
 async function shareGate() {
   // A model shared as a person's agent shares one: `cad share --yes` (the runner's), against this checkout's
   // share service run locally (`apps/share/serve.mjs`, the Worker itself over Node's http), which also serves
@@ -889,6 +904,7 @@ async function shareGate() {
     });
     await page.addInitScript(MODEL_BOUNDS_SCRIPT);
     await page.addInitScript(CSP_VIOLATIONS_SCRIPT);
+    await page.addInitScript(CLIPBOARD_SCRIPT);
     const answer = await page.goto(`${origin}${address}`, { waitUntil: "domcontentloaded" });
     page.historyAtOpen = await page.evaluate(() => history.length);
     page.policy = answer?.headers()["content-security-policy"] || "";
@@ -922,8 +938,18 @@ async function shareGate() {
       failures.push(`share: the page's content security policy is not the service's: ${JSON.stringify(view.policy)}`);
     }
     if (await view.getByTestId("file-actions").count()) failures.push("share: a file menu over a shared model");
-    // The files that made it, offered as a plain download of the zip, never fetched until asked for.
-    if (await view.locator(`a[download][href$="/${id}.zip"]`).count() !== 1) failures.push("share: no link to download the files that made it");
+    // A prompt copied from the shared view names the share's link, never this computer's model, and tells the
+    // agent how to get the files that made it.
+    await view.locator("[data-quick-edit-note]").click();
+    await view.keyboard.type("Make the plate thicker.");
+    await view.locator('[data-quick-edit-action="copy"]').click();
+    await view.waitForFunction(() => window.__copied.length > 0, null, { timeout: 30_000 });
+    const prompt = await view.evaluate(() => window.__copied.at(-1));
+    const link = `${origin}/${id}`;
+    if (!prompt.startsWith("Make the plate thicker.") || !prompt.includes(`File: ${link}`) || !prompt.includes(`\`cad fork ${link}\``)
+      || prompt.includes(shared.document.id)) {
+      failures.push(`share: the copied prompt does not name the share and how to fork it: ${JSON.stringify(prompt.replaceAll(id, "<id>"))}`);
+    }
     // The id stays where the address holds it: in no storage, and in no other history entry.
     const kept = await view.evaluate(() => ({ history: history.length, href: location.href,
       storage: JSON.stringify({ ...sessionStorage }) + JSON.stringify({ ...localStorage }) }));

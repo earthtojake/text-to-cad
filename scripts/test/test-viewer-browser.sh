@@ -290,13 +290,23 @@ if [ -z "$only_gate" ] || [ "$only_gate" = share ]; then
     sed 's/^/    /' "$project/share-again.json" "$log" >&2
     exit 1
   fi
-  # The files that made it, as anyone with the link takes them: `cad fork` downloads the zip the service makes
-  # of them and writes them into a folder, the same bytes as the script that built the model.
+  # The files that made it, as an agent on another computer takes them from the link (a state and a cache of
+  # their own: no record of this share): `cad fork` downloads the zip the service makes of them and writes them
+  # into a folder, the same bytes as the script that built the model. On this computer, which shared it, the same
+  # command downloads nothing and says where its files already are.
   view_link="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["view"])' "$project/share.json")"
-  if ! (cd "$project" && CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli fork "$view_link" "$project/forked" --json) \
+  if ! (cd "$project" && CAD_STATE_DIR="$project/elsewhere/state" CAD_CACHE_DIR="$project/elsewhere/cache" \
+          CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli fork "$view_link" "$project/forked" --json) \
        >"$project/fork.json" 2>"$log" || ! cmp -s "$project/.bundles/plate.py" "$project/forked/plate.py"; then
     echo "FAIL: cad fork did not write the shared model's files" >&2
     sed 's/^/    /' "$project/fork.json" "$log" >&2
+    exit 1
+  fi
+  if ! (cd "$project" && CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli fork "$view_link" --json) \
+       >"$project/fork-here.json" 2>"$log" \
+     || ! "$PYTHON" -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])).get("local") is not True)' "$project/fork-here.json"; then
+    echo "FAIL: cad fork of this computer's own share did not say where its files are" >&2
+    sed 's/^/    /' "$project/fork-here.json" "$log" >&2
     exit 1
   fi
   share_args=(--share "$project/share.json" --share-again "$project/share-again.json")

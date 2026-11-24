@@ -172,9 +172,9 @@ where those files ship, so these scripts are what produces them.
   from a plain static file server) and the share gate (the same model shared by `cad share --yes`, then
   shared again unchanged and forked by `cad fork`, against the share service's own Worker, run by
   `apps/share/serve.mjs`, which serves the bundled client too: the same link and no file sent again, the
-  script that built it forked byte for byte, viewed under the service's content security policy with a link
-  to download its files, an unknown id said to be gone, deleted from its delete link): exactly what
-  `test.yml` runs.
+  script that built it forked byte for byte as another computer would, viewed under the service's content
+  security policy, a copied prompt naming the share's link and `cad fork`, an unknown id said to be gone,
+  deleted from its delete link): exactly what `test.yml` runs.
   `--only NAME` selects a gate; `--out DIR` retains screenshots.
 - `check-dependencies.mjs`, `check-kit-boundaries.mjs`, `check-ui-strings.mjs` (each with its
   `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness (and that
