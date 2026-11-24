@@ -760,7 +760,7 @@ class ShareTest(unittest.TestCase):
         self.assertTrue(lines[2].endswith(f"Next: cad run {os.path.join('copy', 'plate.py')}"), lines[2])
 
         # Edited and not run again: refused, naming the file and the run, with nothing uploaded.
-        (project / "lib" / "sizes.py").write_text("WIDTH = 44.0\n", encoding="utf-8")
+        (project / "lib" / "sizes.py").write_bytes(b"WIDTH = 44.0\n")  # bytes: Windows writes text with \r\n
         seen = len(self.service.seen)
         stale = self.cad(ident, "--json", cwd=project)
         self.assertEqual(stale.returncode, 1, stale.stdout + stale.stderr)
