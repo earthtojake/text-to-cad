@@ -12,7 +12,9 @@ The file is one JSON object with a section per feature, each owned by the module
 whether the
 server runs the install command once where cad is newer than the release it is up to date for,
 ``{"auto_update": true|false}``, off where it is absent, the same module and ``plugin_catch_up.py``, which keeps that
-release in a record of its own). A change reads,
+release in a record of its own; ``share``: the person's agreement to sharing and whether it is off,
+``{"agreed": "<ISO time>", "on": false}``, on where ``on`` is absent, ``cad_server/sharing.py``, which keeps each share's
+record in a file of its own). A change reads,
 changes and writes its own section under the state folder's one lock (``update_section``,
 ``file_lock.state``), so two apps changing settings at once never undo each other, whichever
 sections they touch.
