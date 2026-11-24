@@ -1032,6 +1032,9 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   face's edges were cut too: its pieces on in one line are one.
   A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
   rim, the flat's the hole under it (a plate countersunk from both sides has one whichever side unfolds).
+  A countersink cut across by a layer is merged as a break is (its faces that meet at a curve; its halves,
+  split at a line through its axis, are laid each): laid a layer at a time, a ring 0.008 mm across closed
+  its hole and the flat held 104% of the part's material.
   A rim that runs off the outline, into a cutout or into another rim is no whole circle of the skin's, and
   the cone no whole turn there: the edges between two passes of its seam are laid as one outline, less the
   hole, which is read from the cone's small end; the wire that rim is part of is no hole of its own and is
