@@ -134,8 +134,7 @@ it('opens on the root sheet, read with the index, drawn in the theme, its panel 
   await waitFor(() => expect(drawn.includes('light')).toBe(true));
   const tools = within(pane).getByRole('group', { name: 'Interaction tools' });
   expect([...tools.querySelectorAll(':scope button[aria-pressed]')].map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Draw', 'Measure']);
-  // No view controls on the strip: its zoom is the corner's pill.
-  expect(tools.querySelector('[data-view-controls]')).toBeNull();
+  // Its zoom is the corner's pill.
   expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
   // The panel: one search over every tab, its icon at the head row's right end (its box in its place once pressed),
   // the Parts open first.

@@ -23,11 +23,10 @@ import { prefersCoarsePointer } from "../../lib/coarsePointer.js";
 const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", "copy-link": "file_copy_link", reveal: "file_reveal", app: "file_open_app" });
 
 /**
- * The row above a file and above the host's home in a page's chrome (`FileViewer`'s `chrome: "page"`,
- * the web viewer's): the same row whatever is open, so a person finds each control in the same place.
- * Over the home it has only the logo, the panel's toggle, Back and Forward and the host's
- * actions. A host that shows the view alone (`chrome: "bare"`: the CAD app's file
- * handler) has no navbar, and Preview hides it in every host, drawing its own bar in its place.
+ * The row above a file and above the host's home, in every host: the same row whatever is open, so a
+ * person finds each control in the same place. Over the home it has only the logo, the panel's toggle,
+ * Back and Forward and the host's actions. Preview hides it, drawing its own bar in its place, and a
+ * compact view (an offscreen picture) has none.
  *
  * Left, in this order: the text-to-cad logo (the C mark, over the home and over a document alike), always first, so the
  * way home stands in one place on every page: where the host has a home (`onHome`) a link to it (Recents; a real link
@@ -52,8 +51,8 @@ const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", "cop
  *
  * Right, only what a host or a file adds, in this order: the file's own actions (the viewer's
  * one: a dismissed alert's icon, which brings its card back); the view's own controls, Display (the plain cube) then,
- * where the view has it, Preview, which the view on screen portals into the row's view slot (`../navbarSlots.js`; with
- * no navbar they end its tool strip); last, outermost, the host's own actions (`actions`: the CAD app's Full size, inline).
+ * where the view has it, Preview, which the view on screen portals into the row's view slot (`../navbarSlots.js`);
+ * last, outermost, the host's own actions (`actions`: the CAD app's Full size, inline).
  * The colour scheme is the app menu's.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.

@@ -8,7 +8,6 @@ import { cn } from "@cad/ui/utils";
 import { useI18n } from "@cad/ui/i18n";
 import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
 import { useControlUsage } from "../../../usage/controls.js";
-import { useStripButtonClass } from "../tools/FloatingToolBar.js";
 import { backdropScheme, relativeLuminance, usePreviewIdle } from "../tools/PreviewChrome.jsx";
 import { PreviewIcon } from "./PreviewIcon.jsx";
 import { DisplayIcon } from "./DisplaySettings.jsx";
@@ -31,12 +30,6 @@ function BarControl({ label, active = undefined, disabled = false, onClick, chil
   </TooltipHint>;
 }
 
-function ViewControl({ label, disabled = false, tooltipSide = "top", onClick, children }) {
-  return <ToolbarButton label={label} tooltipSide={tooltipSide} disabled={disabled} onClick={onClick} className={useStripButtonClass()}>
-    {children}
-  </ToolbarButton>;
-}
-
 /**
  * Preview's frame, for whichever frame offers Preview (`RendererShell.jsx`, a 3D view's; `FlatViewFrame.jsx`, a flat
  * view's whose picture can be shown in 3D): everything of Preview that is the same in every view, over the one
@@ -56,8 +49,7 @@ function ViewControl({ label, disabled = false, tooltipSide = "top", onClick, ch
  * - **Preview's view**, the frame's underlay: `View` (`PreviewView.jsx`, or a view's own around it) mounted while
  *   Preview is up, handed `view`, the scene to draw (`desired`), `viewRef` and the Orbit.
  * - **The Preview button**, a play triangle drawn to pair with Display's cube (`PreviewIcon.jsx`): the navbar's
- *   (`navbarButton`, after Display) and the strip's last entry where there is no navbar (`stripView`: its tile, and its
- *   row of a phone's More).
+ *   (`navbarButton`, after Display).
  *
  * @param {object} options
  * @param {boolean} options.previewing  The one presentation state.
@@ -201,16 +193,14 @@ export function usePreviewFrame({ previewing, setPreviewing, modelKey, fileView,
     {/* The one indicator (`loading/LoadingStep.jsx`) on Preview's own backdrop. */}
     {covered ? <LoadingStep label={t("preview.preparing")} className="mx-4" /> : null}
   </div>;
-  // The button, a play triangle: the navbar's, after Display, or the strip's last entry (its tile, and its row of a phone's More).
+  // The button, a play triangle: the navbar's, after Display.
   const navbarButton = <ToolbarButton label={t("preview.label")} tooltipSide="bottom" tooltip={!mobile} disabled={disabled} onClick={enter} className={NAVBAR_VIEW_PLACE.className} data-view-preview="">
     <PreviewIcon />
   </ToolbarButton>;
-  const stripView = { id: "preview", label: t("preview.label"), icon: <PreviewIcon />, disabled, onSelect: enter,
-    tile: <ViewControl label={t("preview.label")} disabled={disabled} onClick={enter}><PreviewIcon /></ViewControl> };
   return {
     previewing, enter, leave, idle, scheme,
     // `ViewFrame.jsx`'s props.
     frame: { previewing, preview, underlay, overlays },
-    navbarButton, stripView
+    navbarButton
   };
 }

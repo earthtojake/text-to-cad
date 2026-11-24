@@ -2,7 +2,7 @@
   "name": "@cad/web",
   "private": true,
   "type": "module",
-  "version": "0.11.16",
+  "version": "0.11.17",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -13,7 +13,7 @@
     "@cad/core": "*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.74.0",
+    "lucide-react": "^1.76.0",
     "meshoptimizer": "^1.3.0",
     "radix-ui": "^1.8.1",
     "react": "19.3.1",

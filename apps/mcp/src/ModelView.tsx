@@ -30,7 +30,7 @@ export interface ViewReporter {
 
 /**
  * One view: the shared viewer over this host — the model a launch names, by its absolute path,
- * or with none, the home (the library, and Open) — under the navbar (`chrome: "page"`): its logo (the way home: a
+ * or with none, the home (the library, and Open) — under the navbar: its logo (the way home: a
  * button, as a page in an app's frame has no address), the panel's toggle, Back and Forward, the file's name and menus
  * (its ⋯: Copy path, and Open in › Browser and the file manager), and at the right the host's Full size. The links
  * (GitHub, Discord, X, Send feedback) and Settings (Language, Telemetry, Theme) are the foot of the sidebar, on the home
@@ -186,7 +186,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
 
   // Every view is under the navbar, the file handler's too: it carries the host's controls and the panels' toggles.
   // The file on screen joins the library every CAD view shares, with its picture.
-  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} place={place} chrome="page"
+  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} place={place}
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
     library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory} whatsNew={whatsNew}
     fullSize={fullSize}

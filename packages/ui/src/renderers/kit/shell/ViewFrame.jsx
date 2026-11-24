@@ -35,7 +35,7 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   closed each time: a tap outside it, a swipe back to the left or Escape put it away. Preview keeps the
  *   docked panel mounted, out of sight, so a tree keeps its state.
  * - **The strip's column** at the top centre of the WHOLE view, always: no panel moves it, and where it meets one it
- *   stands over it (a layer of its own over the panels, `data-view-top-layer`); on a phone, the same. In it the strip (`tools`, and its view controls `views`),
+ *   stands over it (a layer of its own over the panels, `data-view-top-layer`); on a phone, the same. In it the strip (`tools`),
  *   the tool in hand's row (`toolRow`), the view catching up (`status`), and the tool stack
  *   (`toolStack`).
  * - **The update status** (`status`: what the view says while it catches up, `ViewUpdateStatus`'s
@@ -97,13 +97,12 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * @param {boolean} [props.selecting]  Select is the tool in hand (or the view has no tools).
  * @param {{ update?: object | null, onRetry?: (() => void) | null, preview?: boolean } | null} [props.status]
  * @param {object[]} props.tools
- * @param {object[]} [props.views]
  * @param {{ kind: string, label: string, searchLabel: string, tabs?: object[], sections?: import("react").ReactNode } | null} [props.panel]
  * @param {import("../inspector/inspect.js").Inspect | null} [props.inspect]
  */
 export default function ViewFrame({ rootRef = null, surface = null, className = "", rootHandlers = null, stageColor = undefined,
   canvasBoxRef = null, busy = undefined, children, underlay = null, overlays = null, file, mobile, compact, chromeHidden, failed = undefined, previewing = false, selecting = false,
-  preview = null, tools, views = [], toolRow = null, toolStack = null, status = null, panel = null, panelControl = null,
+  preview = null, tools, toolRow = null, toolStack = null, status = null, panel = null, panelControl = null,
   layout, onLayoutChange, corner = null, navbar = null, card = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
   contextMenu = null, onCanvasPress = null, inspect = null, viewport = null }) {
   // The viewport's theme (`look/useViewportTheme.js`): what stands on the picture — the canvas box (labels, chips,
@@ -304,7 +303,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
             style={TOOLBAR_POSITION} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
             <StripTouchProvider value={mobile}>
               <div ref={topControls} className="relative flex max-w-full shrink-0 flex-col items-center gap-2" data-cad-top-controls="">
-                <FloatingToolBar tools={tools} views={views} touch={mobile} />
+                <FloatingToolBar tools={tools} touch={mobile} />
                 {previewing ? null : toolRow}
                 {previewing ? null : statusNode}
               </div>

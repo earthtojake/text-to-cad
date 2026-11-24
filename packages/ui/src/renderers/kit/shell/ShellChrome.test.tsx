@@ -39,17 +39,21 @@ import { TOOL_PANEL_WIDTH } from '../../../../dist/renderers/kit/tools/toolStack
 import { FLOATING_CHROME_SURFACE_CLASS } from '../../../../dist/lib/floatingSurface.js';
 import { ControlUsageProvider } from '../../../../dist/usage/controls.js';
 import { PanelTogglesContext } from '../../../../dist/file-viewer/panelToggles.js';
+import { NavbarViewSlotContext } from '../../../../dist/file-viewer/navbarSlots.js';
 import { FilePanelContext } from '../../../../dist/file-viewer/filePanel.js';
 import { ProjectKeysContext } from '../../../../dist/file-viewer/projectKeys.js';
 import { PANEL_PEEK_DELAY_MS, PANEL_PEEK_EXIT_FALLBACK_MS } from '../../../../dist/renderers/kit/shell/usePanelPeek.js';
 
-// The panel's toggle, as the navbar draws it (`file-viewer/panelToggles.js`): what the frame says, as a button.
+// The navbar as the frame sees it: the panel's toggle (`file-viewer/panelToggles.js`), what the frame says, as a button,
+// and the view slot the view's Display and Preview stand in (`file-viewer/navbarSlots.js`).
 function NavbarToggles({ children }: { children: React.ReactNode }) {
   const [toggles, setToggles] = React.useState<any>(null);
+  const [slot, setSlot] = React.useState<HTMLElement | null>(null);
   return <PanelTogglesContext.Provider value={setToggles}>
     {toggles?.left ? <button type="button" aria-label={toggles.left.label} aria-expanded={toggles.left.open}
       data-navbar-panel="left" onClick={toggles.left.toggle} {...(toggles.left.hover ?? null)} /> : null}
-    {children}
+    <div ref={setSlot} data-navbar-view="" />
+    <NavbarViewSlotContext.Provider value={slot}>{children}</NavbarViewSlotContext.Provider>
   </PanelTogglesContext.Provider>;
 }
 import { PANEL_PEEK_IN_RIGHT_CLASS, PANEL_PEEK_OUT_RIGHT_CLASS } from '../../../../dist/file-viewer/panelPeek.js';
@@ -393,7 +397,7 @@ it("on a phone the panel is a sheet from the left behind the navbar's toggle, cl
 });
 
 // The view's settings: Display (`DisplaySettings.jsx`), a toggle whose card docks under the navbar at the view's right
-// edge: the navbar's button, or the strip's end with none.
+// edge: the navbar's button.
 const displayButton = () => screen.getByRole('button', { name: 'Display' });
 // The card while it is open (one closed slides out, inert, until it is gone).
 const displayCard = () => document.querySelector<HTMLElement>('[data-settings-card-slide="in"] [data-display-settings-card]');
@@ -420,14 +424,13 @@ const cardSections = (card: HTMLElement) => {
 const gridSwitch = () => within(displayCard()!).getByRole('switch', { name: 'Show grid' });
 // A control by its name, whatever it says it is set to.
 const named = (button: Element) => button.getAttribute('aria-label')!.split(':')[0];
-// The view's controls, View then Preview: the navbar's right end, or the strip's end where there is no navbar.
-const barButtons = () => [...document.querySelectorAll('[data-navbar-view-controls] button'),
-  ...document.querySelectorAll('[role=group][aria-label="Interaction tools"] [data-view-controls] button')].map(named);
+// The view's controls, View then Preview: the navbar's right end.
+const barButtons = () => [...document.querySelectorAll('[data-navbar-view-controls] button')].map(named);
 // Preview's own bar, over the view's top edge: its name, and its controls at its right.
 const previewBar = () => document.querySelector<HTMLElement>('[data-preview-bar]');
 const cornerButtons = () => [...previewBar()?.querySelectorAll('button') ?? []].map(named);
-// The strip's tools, before the view's controls.
-const strip = () => [...screen.getByRole('group', { name: 'Interaction tools' }).querySelectorAll('button')].filter(button => !button.closest('[data-view-controls]')).map(button => button.getAttribute('aria-label'));
+// The strip's tools.
+const strip = () => [...screen.getByRole('group', { name: 'Interaction tools' }).querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
 
 it('while the model loads the viewer shows none of its own chrome, and all of it returns with the model', () => {
   frame();
@@ -544,7 +547,7 @@ it("a 3D view's Display is the navbar's toggle, left of Preview: its card Projec
 
 it("a dismissed alert's own icon, at the navbar's right, brings its card back; it goes with the card's return, and when the alert clears", async () => {
   // The harness under the real FileViewer, whose navbar's right holds nothing of its own but a
-  // dismissed alert's icon: the view's controls (Projection, Display and Preview) end the strip.
+  // dismissed alert's icon and the view's controls (Display and Preview).
   const host = testHost({ links: viewerLinks({ version: '0.7.5' }), environment: { colorScheme: 'light', platform: 'darwin' },
     files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop()!, kind: 'file', extension: 'harness', size: 1 }) } });
   render(<FileViewer file="/models/one.harness" host={host as any} renderers={[createHarnessRenderer({ preferences: tabSettings() })]}
@@ -553,12 +556,9 @@ it("a dismissed alert's own icon, at the navbar's right, brings its card back; i
   const right = () => [...document.querySelector('[data-viewer-navbar] > div')!.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'));
   const card = () => screen.queryByRole('alert');
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
-  // View then Preview at the row's right (its panel's toggle at its left, after the logo); the strip holds
-  // neither.
+  // View then Preview at the row's right (its panel's toggle at its left, after the logo).
   const view = ['Display', 'Preview'];
-  expect([right(), barButtons(), document.querySelector('[role=group][aria-label="Interaction tools"] [data-view-controls]')])
-    .toEqual([view, ['Display', 'Preview'], null]);
-  expect(document.querySelectorAll('[data-viewer-navbar] [data-view-controls] button')).toHaveLength(0);
+  expect([right(), barButtons()]).toEqual([view, ['Display', 'Preview']]);
   stage('failed');
   expect(card()!.textContent).toContain('Harness update failed');
   expect(right()).toEqual(view, 'the card is up: no icon');
@@ -614,7 +614,7 @@ it('a host showing the view small gets the model alone: no tools, no view action
   expect(viewportProps.current.viewCube).toBe(false);
 });
 
-it("with no navbar Display and Preview end the strip and the corner is the cube alone; Display is the plain cube, its card stays open while a tool is taken up, and Preview and another file close it", async () => {
+it("the strip is the tools alone, Display and Preview the navbar's, and the corner the cube alone; Display is the plain cube, its card stays open while a tool is taken up, and Preview and another file close it", async () => {
   const user = userEvent.setup({ skipHover: true });
   const { remount } = frame();
   expect([strip(), barButtons()]).toEqual([['Select', 'Draw', 'Keep', 'Pose'], ['Display', 'Preview']]);
@@ -622,10 +622,10 @@ it("with no navbar Display and Preview end the strip and the corner is the cube 
   expect(document.querySelector('[data-strip-rule]')).toBeNull();
   // The corner is the cube alone: nothing of the frame's stands beside or under it.
   expect([viewportProps.current.viewCube, document.querySelector('[data-view-corner]')!.childElementCount]).toEqual([true, 0]);
-  // Display: the plain cube, whatever the projection, no chevron, the strip's own tile, a toggle.
+  // Display: the plain cube, whatever the projection, no chevron, the navbar's own tile, a toggle.
   const glyph = () => displayButton().querySelector('svg')!.innerHTML;
   const cube = glyph();
-  expect([displayButton().querySelector('.lucide-chevron-down'), Boolean(displayButton().closest('[data-view-controls]')), displayButton().getAttribute('aria-pressed')])
+  expect([displayButton().querySelector('.lucide-chevron-down'), Boolean(displayButton().closest('[data-navbar-view-controls]')), displayButton().getAttribute('aria-pressed')])
     .toEqual([null, true, 'false']);
   const card = await openDisplay(user);
   await choose(user, card, 'Projection', 'Perspective');
@@ -651,7 +651,7 @@ it("with no navbar Display and Preview end the strip and the corner is the cube 
   expect([barButtons(), displayCard()]).toEqual([['Display', 'Preview'], null]);
 });
 
-// Preview, entered as its tile enters it: the view covered first, then Preview under the cover.
+// Preview, entered as its button enters it: the view covered first, then Preview under the cover.
 async function enterPreview(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Preview' }));
   await screen.findByRole('button', { name: 'Exit preview' });
@@ -812,14 +812,17 @@ it("Preview's bar is its name and its two controls alone; it and the playbar go 
     fireEvent.click(within(previewBar()!).getByRole('button', { name: 'Display' }));
     await wait(2100);
     expect(hidden()).toBe(true);
-    // The focus a press leaves on one of its controls does not hold it (jsdom's focus is no keyboard's) ...
+    // The focus a press leaves on one of its controls does not hold it (jsdom's focus is no keyboard's: from jsdom 31 it
+    // matches `:focus-visible` for any focus(), so say that it is the keyboard's only once it is) ...
+    let keyboard = false;
+    const matches = Element.prototype.matches;
+    override(Element.prototype, 'matches', { value(this: Element, selector: string) { return selector === ':focus-visible' ? keyboard && this === document.activeElement : matches.call(this, selector); } });
     act(() => { within(previewBar()!).getByRole('button', { name: 'Exit preview' }).focus(); });
     await wait(2100);
     expect(hidden()).toBe(true);
     act(() => { within(previewBar()!).getByRole('button', { name: 'Exit preview' }).blur(); });
     // ... the keyboard's does: it brings it back, the playbar's as well as the bar's.
-    const matches = Element.prototype.matches;
-    override(Element.prototype, 'matches', { value(this: Element, selector: string) { return selector === ':focus-visible' ? this === document.activeElement : matches.call(this, selector); } });
+    keyboard = true;
     act(() => { within(previewBar()!).getByRole('button', { name: 'Exit preview' }).focus(); });
     expect(hidden()).toBe(false);
     await wait(5000);

@@ -247,7 +247,7 @@ it('an inline host gets the whole viewer in a card of a height it is told, with 
   expect(sized(bridge.notify)).toEqual([['ui/notifications/size-changed', { height: expect.any(Number) }]]);
   // On the home too: the navbar's, before the host's other actions.
   const fullSize = () => container.querySelector<HTMLButtonElement>('[aria-label="Full size"]');
-  expect([viewer.props!.chrome, fullSize()!.closest('[data-card-corner]')]).toEqual(['page', null]);
+  expect(fullSize()!.closest('[data-card-corner]')).toBeNull();
   expect(fullSize()!.querySelector('svg.lucide-maximize-2')).not.toBeNull();
   act(() => fullSize()!.click());
   expect(bridge.request).toHaveBeenCalledWith('ui/request-display-mode', { mode: 'fullscreen' });
@@ -260,13 +260,12 @@ it('an inline host gets the whole viewer in a card of a height it is told, with 
   expect(viewer.mounts).toBe(1);
 });
 
-it('every view has the navbar, the file handler\'s too: the sidebar\'s home, a thread\'s tab, an agent\'s tab, an inline card and the file handler are page chrome, with the host\'s controls in it', () => {
+it('every view has the navbar, the file handler\'s too: the sidebar\'s home, a thread\'s tab, an agent\'s tab, an inline card and the file handler, with the host\'s controls in it', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
   const page = 'http://127.0.0.1:3245/id-p?token=t';
   // The inline card: the navbar, with Full size at its right and Open in › Browser in the file menu, and no corner.
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"
     launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'inline', view: 'cad-1-c', order: { createdAt: 1, seq: 1 }, browser: page }} />);
-  expect(viewer.props!.chrome).toBe('page');
   expect([viewer.props!.fullSize, viewer.props!.notice]).toEqual([expect.anything(), undefined]);
   expect(browser()).toEqual(expect.any(Function));
   expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
@@ -277,7 +276,7 @@ it('every view has the navbar, the file handler\'s too: the sidebar\'s home, a t
     { protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'agent', browser: page }] satisfies Launch[]) {
     cleanup();
     render(<App bridge={bridge as any} server={server as any} launch={launch} />);
-    expect([viewer.props!.chrome, viewer.props!.notice, document.querySelector('[data-card-corner]')]).toEqual(['page', undefined, null]);
+    expect([viewer.props!.notice, document.querySelector('[data-card-corner]')]).toEqual([undefined, null]);
     expect(browser()).toEqual(expect.any(Function));
     expect(screen.queryByRole('button', { name: 'Full size' })).toBeNull();
   }
@@ -285,14 +284,14 @@ it('every view has the navbar, the file handler\'s too: the sidebar\'s home, a t
   // where a page is known.
   cleanup();
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'file', browser: page }} />);
-  expect([viewer.props!.chrome, viewer.props!.notice, browser()]).toEqual(['page', undefined, undefined]);
+  expect([viewer.props!.notice, browser()]).toEqual([undefined, undefined]);
 });
 
 it('the file handler\'s Full size is the navbar\'s, where an inline host offers it: no corner over the model', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"
     launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'file' }} />);
-  expect([viewer.props!.chrome, viewer.props!.fullSize, container.querySelector('[data-card-corner]')]).toEqual(['page', expect.anything(), null]);
+  expect([viewer.props!.fullSize, container.querySelector('[data-card-corner]')]).toEqual([expect.anything(), null]);
 });
 
 it("Open in › Browser is the file menu's where a launch carried the page: the server opens it from this computer, and only where it cannot is the launch's page opened through the host", async () => {

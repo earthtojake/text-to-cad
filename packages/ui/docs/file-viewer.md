@@ -1,7 +1,7 @@
 # FileViewer
 
 `@cad/ui/file-viewer` exports the complete file view: one file by its
-absolute path, under the navbar (or alone, `chrome: "bare"`), with the project it is in (its name
+absolute path, under the navbar, with the project it is in (its name
 in the navbar, and `[` and `]` through its documents), renderer loading, and the
 loading and error pages.
 It imports no concrete renderer. Applications compose registrations from the
@@ -55,7 +55,7 @@ file's controls are its own, over the viewport: its tool strip and the tool in h
 sub-toolbar, with its panel docked beside it
 ([the panel](viewer-ux.md#the-panel)); the view's
 controls (Display, whose card holds a 3D view's Projection, and Preview) stand at the navbar's right end, portalled
-into its view slot (with no navbar they end its strip), and in Preview its own bar holds
+into its view slot, and in Preview its own bar holds
 Preview's, the navbar hidden.
 
 Below 600px of its own width FileViewer is mobile (`useViewerMobile`). The width is a
@@ -84,9 +84,7 @@ The navbar is drawn over every file from the moment one is asked for, and over t
 host's home — there the logo, the home's sidebar's toggle, Back and Forward where the
 host keeps the view's history, and the host's actions, where they stand over
 a file — never for a `compact` view (a
-picture: the home's thumbnails), never where the host asks for the view alone
-(`chrome: "bare"`, `FileViewerProps.chrome`; the default is `"page"`: the CAD app hands
-`"bare"` to its file handler alone, whose host's file tree is its navigation), and not while a renderer says its
+picture: the home's thumbnails), and not while a renderer says its
 Preview is up (`RendererViewProps.onPreviewChange`): the viewer's Preview draws its own
 bar in its place and gives it back as it closes. Over a file, left to right:
 

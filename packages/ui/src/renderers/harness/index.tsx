@@ -35,8 +35,6 @@ const requested = new URLSearchParams(location.search).get('file') || 'part.stl'
 const file = requested.startsWith('/') ? requested : `/models/${requested}`;
 // The host's theme: dark, as the viewer opens, unless `?scheme=light` asks for the light one.
 const colorScheme = new URLSearchParams(location.search).get('scheme') === 'light' ? 'light' as const : 'dark' as const;
-// The first pane as a host that shows the view alone, with no navbar (`chrome: "bare"`), where `?chrome=bare` asks for it.
-const chrome = new URLSearchParams(location.search).get('chrome') === 'bare' ? 'bare' as const : 'page' as const;
 // The language the panes read in (`?locale=ja`): English unless asked.
 const locale = new URLSearchParams(location.search).get('locale') || undefined;
 const promptMessages: string[] = [];
@@ -138,7 +136,7 @@ function App() {
   Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, tabStore, record: tabStore.getSnapshot(), captures, promptMessages, opened, exportViews, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted } });
   return <div className="dark" style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={showHome ? null : file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} chrome={chrome} presentation={homePresentation} /></ExportContext.Provider>}
+      {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={showHome ? null : file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} presentation={homePresentation} /></ExportContext.Provider>}
     </section>
     {second && <section data-testid="two" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <FileViewer file={file} host={b.host} renderers={b.renderers} state={otherState} onStateChange={onOtherStateChange} />

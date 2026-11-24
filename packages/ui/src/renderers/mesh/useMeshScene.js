@@ -22,14 +22,15 @@ const LOADING = Object.freeze({ phase: "geometry", label: "Loading geometry", do
  *
  * @param {{ entry: object, resources: object, name?: string }} options  `name`: the file's.
  * @returns {{ scene: object | null, revision: string, busy: boolean, progress: object | null,
- *   error: unknown, empty: boolean, split: boolean }}  `empty`: the file loaded and holds no triangles. `split`: the
- *   scene is an STL's bodies, after its first.
+ *   error: unknown, empty: boolean, sliced: boolean, split: boolean }}  `empty`: the file loaded and holds no triangles;
+ *   `sliced`: it is empty because it is a slicer's print file (a 3MF of G-code, `buildMeshDataFrom3MfBuffer`). `split`:
+ *   the scene is an STL's bodies, after its first.
  */
 export function useMeshScene({ entry, resources, name = "" }) {
   const url = entryMeshAssetUrl(entry);
   const revision = entryMeshAssetHash(entry);
   const format = meshAssetKeyForEntry(entry);
-  const [state, setState] = useState({ scene: null, revision: "", busy: true, progress: READING, error: null, empty: false, split: false });
+  const [state, setState] = useState({ scene: null, revision: "", busy: true, progress: READING, error: null, empty: false, sliced: false, split: false });
   const nameRef = useRef(name);
   nameRef.current = name;
   const resourcesRef = useRef(resources);
@@ -45,18 +46,19 @@ export function useMeshScene({ entry, resources, name = "" }) {
     if (!url) {
       adopt(null);
       const label = format.toUpperCase();
-      setState({ scene: null, revision, busy: false, progress: null, empty: false, split: false,
+      setState({ scene: null, revision, busy: false, progress: null, empty: false, sliced: false, split: false,
         error: new Error(`${label} entry is missing ${label} asset: ${entry?.file || "(unknown)"}`) });
       return undefined;
     }
     const controller = new AbortController();
-    setState(current => ({ ...current, busy: true, progress: current.scene ? current.progress : LOADING, error: null, empty: false }));
+    setState(current => ({ ...current, busy: true, progress: current.scene ? current.progress : LOADING, error: null, empty: false, sliced: false }));
     const { signal } = controller;
     loadRenderMeshByUrl(url, { resources: resourcesRef.current, signal, fallback: format }).then((meshData) => {
       if (signal.aborted) return;
       const scene = buildMeshScene(THREE, meshData, { name: nameRef.current });
       adopt(scene);
-      setState({ scene, revision, busy: false, progress: null, error: null, empty: !scene, split: false });
+      setState({ scene, revision, busy: false, progress: null, error: null, empty: !scene,
+        sliced: !scene && Boolean(meshData.sliced), split: false });
       if (!scene || format !== "stl" || meshData.parts?.length) return;
       // The model is on screen: now its bodies. One body is the scene already shown; a split that fails keeps it.
       loadStlBodies(meshData, { signal }).then((bodies) => {
@@ -68,7 +70,7 @@ export function useMeshScene({ entry, resources, name = "" }) {
     }, (error) => {
       if (signal.aborted || isAbortError(error)) return;
       adopt(null);
-      setState({ scene: null, revision, busy: false, progress: null, error, empty: false, split: false });
+      setState({ scene: null, revision, busy: false, progress: null, error, empty: false, sliced: false, split: false });
     });
     return () => controller.abort();
   }, [url, revision, format]);

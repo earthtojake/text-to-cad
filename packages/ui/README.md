@@ -284,7 +284,7 @@ No rule parts the strip, at Figma's toolbar's proportions (a 40px bar of 28px ti
 for every kind of file: **Display** (the plain cube, no chevron; a toggle whose card, `kit/shell/DisplaySettings.jsx`,
 docks under the navbar at the view's right edge, the sidebar's peek card mirrored), then a 3D view's Preview, and a
 board's. The corner at the top-right keeps only the camera's own control: a 3D view's cube, or a flat view's one "100%"
-zoom dropdown. Without a navbar Display and Preview end the strip. A phone's picture has no corner control. The bottom row is Quick Edit's alone. The tool in hand's
+zoom dropdown. The strip holds tools only, and a phone's More only the tools that do not fit it. A phone's picture has no corner control. The bottom row is Quick Edit's alone. The tool in hand's
 controls hang under the strip, its sub-toolbar (`kit/tools/SubToolbar.jsx`):
 Draw's two rows of seven (the tools that put ink down; then the Eraser, Colour, Stroke width, Placement, Undo, Redo
 and Clear); Measure's chips. Explode's and
@@ -365,8 +365,8 @@ Import its folder as a project; a model's Copy path and file manager act on its 
 pointer is on them or their menu is open, with no tooltip but the logo's "Home". At the right is only what a host
 or a file adds: a dismissed alert's icon, the host's actions (the
 CAD app's Full size), after the view's own, which it portals into the navbar's view slot (Display, then a 3D view's
-or a board's Preview). A host whose own frame is its navigation shows
-the view alone (`chrome: "bare"`, the CAD app's file handler), with no navbar at all. With no
+or a board's Preview). The navbar is there in every host; only Preview, which draws its own bar, and a compact view
+are without it. With no
 file a view shows the host's home under the same navbar (the logo, which goes to Recents, its sidebar's toggle,
 Back and Forward where the host keeps the view's history, and the host's
 actions, and the home's own Home, search and Import: a file, or a folder opened as a project): a

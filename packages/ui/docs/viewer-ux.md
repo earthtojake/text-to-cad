@@ -63,8 +63,9 @@ chrome that floats over the picture. The home is the navbar over the library: it
   Quick Edit and Preview's chrome. A renderer brings its canvas, tools, tool rows, tabs and document state, and the
   frame never looks inside a format ([cad-renderer.md](cad-renderer.md#kit)).
 - A pick or a tool never opens the panel, and never closes the pinned panel.
-- A host shows a file under the navbar (`chrome: "page"`, every host today) or alone (`"bare"`). A compact view (the
-  home's thumbnails, a small inline view) draws the model alone: no navbar, panel, tools, corner or Quick Edit.
+- The navbar is always there, over a file and over the home, in every host. Only Preview (which draws its own bar) and
+  a compact view are without it: a compact view (the home's thumbnails, a small inline view) draws the model alone, with
+  no navbar, panel, tools, corner or Quick Edit.
 - An open Display card stands over the strip and covers the cube; menus, tooltips and dialogs stand over everything
   ([Layering](design-system.md#layering)).
 
@@ -318,8 +319,7 @@ rule below holds on both pages; "the view" is the page it stands beside, "the mo
   ([What each file shows](#what-each-file-shows)). One row, no rules; on a desktop it wraps before it would overflow.
 - A tool the file cannot use is left out, never drawn disabled: a greyed tile says "not now" where the file will never
   offer it. Explode appears once the loaded model reports parts to separate.
-- It holds no view controls: Display and Preview are the navbar's. Only where a host shows the view without the navbar
-  do they end the strip (on a phone, More's last rows).
+- It holds tools only: Display and Preview are the navbar's, always.
 - There is no strip with nothing to hold, while the file first loads, after it failed, in a compact view or in Preview.
 - The row of the tool in hand hangs 8px under the strip, centred, while the tool is in hand (Draw's tools, Measure's
   measurements, Explode's or Clip's slider), one width from tool to tool so the column holds still.
@@ -419,7 +419,8 @@ The bar where a person writes a note to their agent about what is on screen (`Qu
   - A press on a row of a board's or schematic's tree closes it and frames what was chosen.
   - The focus goes into it as it opens and back to the toggle as it closes.
 - **The strip** is one row of 36px tiles that never wraps. Tools that do not fit go, from the end, into More (an
-  ellipsis, last), where a tool is a row ticked while it is in hand. A slider row is 20rem, and Draw's row wraps.
+  ellipsis, last, there only while a tool does not fit), where a tool is a row ticked while it is in hand. A slider row
+  is 20rem, and Draw's row wraps.
 - **There is no corner.** A pinch zooms, and a long press opens the view's menu, with Zoom to fit and Zoom to selection.
 - **The Display card** is at least 320px wide (less on a narrower screen), and a tap outside closes it.
 - **Quick Edit** spans the view less 8px a side, above the safe area, and never takes the keyboard by itself.

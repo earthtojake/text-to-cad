@@ -340,7 +340,7 @@ A project is a folder a person opened as one (Import's Folder on the home, a sta
 document's Import its folder as a project, or `cad viewer <folder>`); its page on the home lists its
 models and its CAD files, the document just left ringed. Below 600px of
 FileViewer width (a phone) the chrome is touch-sized (the phone's scale) and the panel is a sheet under the navbar.
-Preview is the navbar's button right of Display (with no navbar, the strip's last tile): it takes the whole page,
+Preview is the navbar's button right of Display: it takes the whole page,
 hiding the navbar, the tool strip and Quick Edit, opens still (Orbit, in its settings, is
 off at every entry), draws the model in Render — the one place it is drawn — and draws its
 own bar in the navbar's place, over the view's top edge on no surface: the file's name at
