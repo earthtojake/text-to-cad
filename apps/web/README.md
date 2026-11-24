@@ -429,12 +429,14 @@ one segmented control), the kinds' chips under it (All, then 3D models, Drawings
 the place holds, with its count: a model built from code and the STEP, STL or GLB exported from it are all 3D models),
 then its documents, all of them. The grid's tiles are framed cards, at least 232px wide: the
 picture (the light viewport's, on the model area's light gradient in both themes, its format's badge at its
-top-left: "Model" for a model built from code and for an `.xbf` file, the engine's own document saved as a file, so a
-model too, though still a file in everything else; "STEP", "KiCad PCB"), then, in a compact caption, its name over one line: its project's name in Recents and Pinned, then its last activity with its verb ("Edited now",
+top-left: for a model built from code and for an `.xbf` file, the engine's own document saved as a file, so a
+model too, though still a file in everything else, "Part" when its document holds one part and "Assembly" when it holds
+more, as desktop CAD names its documents (the row's `parts`), and "Model" where the server does not know the count yet;
+every other file its format, "STEP", "KiCad PCB"), then, in a compact caption, its name over one line: its project's name in Recents and Pinned, then its last activity with its verb ("Edited now",
 "Viewed 5m ago", "Edited 2h ago", "Viewed 3d ago", then the short date: Edited when it changed after it was last
 opened, Viewed when it was opened after it last changed). The list is a table: Name, Project (or, in a project's page,
 Where), Kind, Size, Updated and Created
-over 44px rows, each a document's small picture and name, its format ("Model" for a model or an `.xbf` file), its size and those two ages with no verb. Every model is a tile and a row of
+over 44px rows, each a document's small picture and name, its format (as the badge: "Part", "Assembly" or "Model" for a model or an `.xbf` file), its size and those two ages with no verb. Every model is a tile and a row of
 its own, nothing folded: a model shows its
 name and its age. The pin and the ⋯ appear on hover (at a tile's picture's corner, at a row's end); a
 pinned one keeps its pin. The ⋯ menu holds Open, Open in new tab, a file's Copy path and Reveal (a model has
@@ -485,7 +487,10 @@ The home reads the projects over `GET /api/v1/projects` and the library over `GE
 with the project it is in (`project`) and three times, `updated` (a
 file's time on disk, a model's run), `opened` (when a page last opened it) and `created` (when the
 engine first made its record: a model's first run, a file's first open; null for a record from before
-it was kept), which the home orders by the person's Sort (by default the later of the first two, newest first); it pins, unpins, removes a file's record (`remove`) and
+it was kept), which the home orders by the person's Sort (by default the later of the first two, newest first), and
+`parts`, how many part occurrences its document holds where the server knows it (a model's or a shape's last build;
+an `.xbf` the engine wrote, from the document it wrote; another file the engine read for a page; a file's only while it
+is that version; null where it does not), which names a model's card Part or Assembly; it pins, unpins, removes a file's record (`remove`) and
 deletes a model's document (`delete`) over `PATCH /api/v1/documents`, and draws each card's picture
 from `GET /api/v1/documents/<id>/thumbnail`. A model's script is never read for any of it. The document on
 screen says it was opened once the catalog has it (`{action: "open"}`: a file joins the

@@ -210,6 +210,31 @@ class RecentStoreTest(unittest.TestCase):
         self.assertIn("a shape handed over", entry["shown"])
         self.assertIn("no script to rerun", entry["shown"])
 
+    def test_a_row_lists_its_documents_parts_where_its_record_counts_them_and_none_where_not(self) -> None:
+        store = RecentStore(self.tmp / "state")
+        script = self.tmp / "parts.py"
+        script.write_text("", encoding="utf-8")
+        for name, facts in (("plate", {"parts": 1, "bounds": [1, 1, 1]}), ("gearbox", {"parts": 7}), ("old", None)):
+            store.registry.put({"id": model_id(script, name), "kind": "model", "root": str(self.tmp), "home": "parts.py",
+                                "entry": name, "name": name, "revision": "r1", "built": 1_700_000_000.0,
+                                **({"facts": facts} if facts is not None else {})})
+        kit = self.tmp / "kit.xbf"
+        kit.write_bytes(b"not read here")
+        store.opened(str(kit))
+        parts = lambda: {row["name"]: row["parts"] for row in (recent.public() for recent in store.list())}
+        self.assertEqual(parts(), {"plate": 1, "gearbox": 7, "old": None, "kit.xbf": None},
+                         "a model's from its build; one whose record has none, and a file the engine has not read, none")
+        status = kit.stat()
+        store.counted(store._ident(str(kit)), {"version": f"{status.st_mtime_ns}-{status.st_size}", "instances": [{}, {}, {}]})
+        self.assertEqual(parts()["kit.xbf"], 3, "the engine's read of it, while the file is that version")
+        later = time.time_ns() + 5_000_000_000
+        os.utime(kit, ns=(later, later))
+        self.assertIsNone(parts()["kit.xbf"], "written since: its count is of another version")
+        # A file no page opened or pictured has no record, and is given none for its count.
+        loose = self.tmp / "loose.xbf"
+        store.counted(store._ident(str(loose)), {"version": "1-1", "instances": [{}]})
+        self.assertIsNone(store.registry.get(store._ident(str(loose))))
+
     def test_a_record_of_a_file_no_type_reads_is_kept_unlisted_and_removable(self) -> None:
         # A state folder as a release that read SDFormat left it: records of .sdf files a page opened (one pinned,
         # with its picture; one since deleted), beside a URDF's and one of a suffix no release read. An .sdf is

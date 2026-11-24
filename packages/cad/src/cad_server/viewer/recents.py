@@ -15,6 +15,14 @@ is given a record to keep its picture on, with no ``opened`` and no ``created``,
 open it gives it: Recents lists a file only once a page opened it (``RecentStore.list``), and a project
 lists its files whatever their records (``RecentStore.entries``).
 
+A row says how many part occurrences its document holds (``parts``: what ``cad model inspect`` counts as its
+parts' occurrences) where its record says, and null where it does not: a model's and a shape's from its last build
+(the record's ``facts``, which the engine writes when it registers the build or the hand-over); an ``.xbf`` the
+engine wrote (a build's declared file, an export) from the document it wrote it from, as it wrote it
+(``Models.written``); any other file the engine read because a page opened it (an ``.xbf``, a STEP) from that read
+(``RecentStore.counted``) -- a file's only while the file is the version counted. A listing reads records alone:
+nothing is read to count them, a model's script never, a file's bytes never.
+
 The pictures are bounded however often a document is edited: a record names one, a new picture
 replaces it at once (``RecentStore.thumbnail``: the old one goes as the new is named), only
 the ``LIMIT`` records the home lists first keep theirs, within ``THUMBNAIL_BYTES`` in all (the rest,
@@ -46,7 +54,7 @@ from typing import Any
 
 from cad.engine.places import cache_dir, state_dir
 from cad_server.engine.registry import PICTURES as THUMBNAILS
-from cad_server.engine.registry import pictures
+from cad_server.engine.registry import file_record, pictures
 
 LIMIT = 200
 MAX_THUMBNAIL_BYTES = 512 * 1024
@@ -100,6 +108,8 @@ class Recent:
     # A shape handed over: its home is the script or the folder it was handed over from, nothing
     # builds it again, and ``shown`` says so, from the program that handed it over.
     shown: str | None = None
+    # How many part occurrences its document holds, where its record says (the module): None where it does not.
+    parts: int | None = None
 
     @property
     def activity(self) -> float:
@@ -152,6 +162,7 @@ class Recent:
             "thumbnail": self.thumbnail,
             "pictured": self.pictured,
             "size": self.size,
+            "parts": self.parts,
         }
         found["kind"] = self.kind
         if self.kind != "file":
@@ -161,13 +172,28 @@ class Recent:
         return found
 
 
-def _on_disk(path: str) -> tuple[float | None, int | None]:
-    """A CAD file's time and size on disk, from one stat; None for both once it is gone (or is no file)."""
+def _on_disk(path: str) -> tuple[float | None, int | None, str | None]:
+    """A CAD file's time and size on disk, and its version as the engine names the file state it read
+    (``mtime_ns-size``, a served structure's ``version``: ``registry.file_version``), from one stat; None for
+    each once it is gone (or is no file)."""
     try:
         status = os.stat(path)
     except OSError:
-        return None, None
-    return (status.st_mtime, status.st_size) if stat.S_ISREG(status.st_mode) else (None, None)
+        return None, None, None
+    if not stat.S_ISREG(status.st_mode):
+        return None, None, None
+    return status.st_mtime, status.st_size, f"{status.st_mtime_ns}-{status.st_size}"
+
+
+def _parts(facts: Any, version: str | None = None) -> int | None:
+    """How many part occurrences a record's ``facts`` say its document holds: a model's or a shape's as they
+    are, a file's (``version`` its version on disk now) only where they are of that version; None for none."""
+    if not isinstance(facts, dict):
+        return None
+    if version is not None and facts.get("version") != version:
+        return None
+    found = facts.get("parts")
+    return found if type(found) is int and found >= 0 else None
 
 
 class RecentStore:
@@ -198,12 +224,19 @@ class RecentStore:
             # Where it is now, as its record says it (``root``, ``home``): one an earlier release wrote is
             # said again as this one says it. Made now (``created``) where no page opened it before: a new
             # record, or one the home's picture made. A record from before ``created`` was kept stays without.
-            made = _file_record(found)
+            made = file_record(found)
             first = record is None or not record.get("opened")
             return {**made, **({"created": now} if first else {}), **(record or {}),
                     **{key: made[key] for key in ("root", "home", "namespace", "name")}, "opened": now}
 
         return self.registry.update(file_id(found), change)
+
+    def counted(self, ident: str, structure: dict[str, Any]) -> None:
+        """What the engine read of the CAD file of id ``ident`` (``structure``, the document it serves of an
+        ``.xbf`` or a STEP, read because a page opened it): how many part occurrences it holds and the file's
+        version they are of, on its record (``Registry.counted``) where it has one -- a file no page opened or
+        pictured has none, and is given none for it."""
+        self.registry.counted(ident, len(structure.get("instances") or []), str(structure.get("version") or ""))
 
     def pin(self, path: str, pinned: bool) -> None:
         self._change(path, lambda record: {**record, "pinned": bool(pinned)})
@@ -228,7 +261,7 @@ class RecentStore:
             if record is None:
                 if not make or is_id(path) or not _cad_file(path):
                     return None
-                record = _file_record(path)
+                record = file_record(path)
             before.update(pictures(record))
             if not (self.thumbnails / name).exists():
                 self.state.write(f"{THUMBNAILS}/{name}", png)
@@ -272,10 +305,11 @@ class RecentStore:
                       "pictured": preview.get("pictured"), "created": record.get("created")}
             if record.get("kind") == "file":
                 path = str(registering.home(self.registry, record))
-                updated, size = _on_disk(path)
+                updated, size, version = _on_disk(path)
                 opened = record.get("opened")
                 entries.append(Recent(path=path, opened=float(opened) if isinstance(opened, (int, float)) and opened else None,
-                                      updated=updated, size=size, **common))
+                                      updated=updated, size=size, parts=_parts(record.get("facts"), version)
+                                      if version else None, **common))
             elif record.get("kind") in ("model", "shape"):
                 program = registering.program(self.registry, record)
                 entries.append(Recent(path=record["id"], kind=record["kind"], name=record.get("name") or record.get("entry"),
@@ -284,7 +318,7 @@ class RecentStore:
                                       rebuild=registering.command(self.registry, record),
                                       shown=Models.shown(str(program) if program else None)
                                       if record["kind"] == "shape" else None, updated=record.get("built"),
-                                      opened=record.get("opened"), **common))
+                                      opened=record.get("opened"), parts=_parts(record.get("facts")), **common))
         return entries
 
     def _sweep_thumbnails(self, replaced: set[str] | frozenset[str] = frozenset()) -> None:
@@ -333,15 +367,6 @@ def _cad_file(path: str) -> bool:
     from .scanner import VIEWER_EXTENSIONS, extension_of
 
     return extension_of(path) in VIEWER_EXTENSIONS and os.path.isfile(path)
-
-
-def _file_record(path: str) -> dict[str, Any]:
-    """A new record of the CAD file at the canonical path ``path``: where it is, and no time (a page's open
-    gives it ``created`` and ``opened``)."""
-    from cad.engine.ids import file_id
-
-    folder, name = os.path.dirname(path), os.path.basename(path)
-    return {"id": file_id(path), "kind": "file", "root": folder, "home": name, "namespace": folder, "name": name}
 
 
 def _picture_name(ident: str, png: bytes) -> str:

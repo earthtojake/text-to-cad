@@ -11,7 +11,7 @@ import type { NavigationTarget, ViewerHost } from "../host/types.js";
 import { useI18n } from "../i18n/index.js";
 import { FLOATING_SURFACE_CLASS } from "../lib/floatingSurface.js";
 import { cn } from "../lib/utils.js";
-import { deletes, formatLabel, type LibraryModel, type ModelLibrarySource } from "../library/ModelLibrary.js";
+import { deletes, formatLabel, type LibraryModel, type ModelLabels, type ModelLibrarySource } from "../library/ModelLibrary.js";
 import { useControlUsage } from "../usage/controls.js";
 import { searchShortcut, isSearchKey } from "./searchKey.js";
 import { searchGroups, searchRows, type SearchGroup, type SearchRow } from "./searchRows.js";
@@ -259,10 +259,11 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
     return () => observer.disconnect();
   }, [mobile, open, viewerElement]);
 
+  const labels: ModelLabels = { model: t("search.kindModel"), part: t("search.kindPart"), assembly: t("search.kindAssembly") };
   const heading = (group: SearchGroup<Model>) => group.id === "here" ? t("search.inProject", { name: project?.name ?? "" })
     : group.id === "other" ? t("search.otherProjects") : group.id === "recent" ? t("search.recent") : null;
   const detail = (row: SearchRow<Model>, group: SearchGroup<Model>["id"]) => onScreen(row) ? t("search.current")
-    : group === "here" ? formatLabel(row.model, t("search.kindModel")) : row.project?.name ?? t("search.standalone");
+    : group === "here" ? formatLabel(row.model, labels) : row.project?.name ?? t("search.standalone");
   const listed = read.status === "ready" && drawn > 0;
   const status = read.status === "reading" ? t("search.reading") : read.status === "failed" ? t("search.failed")
     : drawn === 0 ? (query.trim() ? t("search.nothingFound", { query: query.trim() }) : t("search.empty")) : null;

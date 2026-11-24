@@ -334,10 +334,14 @@ class HandleTest(unittest.TestCase):
         record = Registry(self.state).get(ident)
         self.assertEqual((record["kind"], record["entry"], record["program"]), ("shape", "crate", "hand.py"))
         self.assertEqual(set(record) - {"cache"}, {"schema", "id", "kind", "root", "home", "entry", "program",
-                                                   "revision", "built", "created", "namespace", "name"}, "a model's shape, and the program that showed it")
+                                                   "revision", "built", "created", "namespace", "name", "facts"},
+                         "a model's shape, and the program that showed it")
         from cad_server.viewer.recents import RecentStore
 
-        [shown] = [entry.public() for entry in RecentStore(self.state).list() if entry.path == ident]
+        listed = {entry.path: entry.public() for entry in RecentStore(self.state).list()}
+        shown = listed[ident]
+        # Its parts' occurrences, counted from the structure handed over: the crate and its lid; the tag is one part.
+        self.assertEqual((record["facts"], shown["parts"], listed[found["tag"]]["parts"]), ({"parts": 2}, 2, 1))
         self.assertIn(f"a shape handed over by {project / 'hand.py'}, a program the engine did not run", shown["shown"],
                       "its words, from its program")
         # From a REPL: the working folder is its scope.

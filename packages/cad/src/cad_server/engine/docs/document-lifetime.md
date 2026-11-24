@@ -67,7 +67,13 @@ its home), `shape` (a shape handed over:
 `program`, where there was one, names the program that showed it, and nothing builds it again) or
 `file` (a CAD file a page opened: its path, `opened` and `pinned`, never a revision or bytes). A
 model's and a shape's hold their revision and when they were built, their name and a build's facts
-(what the delta says against); any record its Recents picture (`preview`, UI state: the PNG under
+(what the delta says against; a shape's, its parts' occurrences alone, counted from the structure handed over); a
+file's its parts' occurrences and the file's version they are of (`facts`: `{parts, version}`, `Registry.counted`),
+written only where the engine already holds the document: an `.xbf` it writes (a build's declared file, an export),
+from the document it writes it from, as it writes it (`Models.written`; a file with no record is given one, with no
+`opened`, which no list shows until a page opens it); any other `.xbf` or STEP from the read the engine made because a
+page opened it. Nothing is ever read to count. Recents lists that count as a row's `parts`, a file's only while the
+file is that version (`cad_server.viewer.recents`); any record its Recents picture (`preview`, UI state: the PNG under
 `recents/thumbnails`), and a model's or a shape's `cache` once the cache holds it (**The cache**).
 `created` is when the record was first made -- a model's first run, a shape's first hand-over, a
 file's first open on a page -- kept through every rebuild and reopen (the home's Created column);

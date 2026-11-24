@@ -836,7 +836,18 @@ class CadApp:
                 raise ApiError(status, str(body.get("error") or "the engine would not serve it"),
                                "check that the file is whole, then open it again")
             ident = body["doc"]
+            if "path" in payload:
+                self._counted(ident)
         send_json(response, 201, {"id": ident, "kind": kind, "api": document_api(kind, ident)})
+
+    def _counted(self, ident) -> None:
+        """How many part occurrences the file of id ``ident`` holds, on its record where it has one
+        (``RecentStore.counted``), from the read the engine holds of it now (an ``.xbf``'s, a STEP's): a row
+        lists it from then on, while the file is the version that read was of. Nothing is read for it."""
+        server = self.engine_documents.server
+        served = server.served.get(ident) if server is not None else None
+        if served is not None and not isinstance(served.path, str):  # a file's read, not a model's document
+            self.recents.counted(ident, served.structure)
 
     def _patch_documents(self, request, response) -> None:
         """``PATCH /api/v1/documents``: a change to Recents (``_change_recents``), answered with Recents
@@ -1373,6 +1384,7 @@ class CadApp:
             if extension_of(path) not in VIEWER_EXTENSIONS or not os.path.isfile(path):
                 raise ValueError(f"no CAD file at {path}")
             self.recents.opened(key)
+            self._counted(file_id(key))  # a file the engine read before its record was made
             if self.analytics is not None:
                 self.analytics.opened(path)
         elif action in ("pin", "unpin"):
@@ -1382,6 +1394,7 @@ class CadApp:
         elif action == "thumbnail":
             # A project's file is pictured before any page opens it; any other file only once it has a record.
             self.recents.thumbnail(key, thumbnail_png(payload.get("png")), make=self.projects.of(key) is not None)
+            self._counted(file_id(key))  # the read it was pictured from, on the record the picture may have made
         else:
             raise ValueError(f"unknown recents action {action!r}")
 

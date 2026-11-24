@@ -212,7 +212,7 @@ class Projects:
         for path in paths:
             entry = recorded.pop(_key(path), None)
             if entry is None:
-                updated, size = _on_disk(path)
+                updated, size, _version = _on_disk(path)
                 entry = Recent(path=path, opened=None, updated=updated, size=size)
             files.append(entry)
         # Opened by a page, so listed: no document a person opened goes missing for its folder being a project.

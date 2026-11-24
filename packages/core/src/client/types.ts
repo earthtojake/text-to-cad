@@ -82,6 +82,12 @@ export interface CadRecent {
   thumbnail: string | null; pictured: number | null;
   /** A file's size on disk, in bytes; null once it is gone, and for a document built from code (its script is never read). */
   size?: number | null;
+  /**
+   * How many part occurrences its document holds, where the engine knows: a model's or a shape's from its last build,
+   * an `.xbf` the engine wrote from the document it wrote, another file from the engine's read of it for a page; a
+   * file's while the file is that version; null where it does not.
+   */
+  parts?: number | null;
   /** A CAD file on disk, or a document built from code: a model's, or a shape a program handed over. */
   kind: 'file' | 'model' | 'shape';
   /** A model's or a shape's: the script it was built from (a shape's home). */

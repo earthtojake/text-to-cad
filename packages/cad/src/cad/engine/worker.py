@@ -605,8 +605,12 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
                                           [row.name for row in destinations[index + 1:]], error) from error
         seconds = drew + time.perf_counter() - clock
         # A file that held these bytes already is left as it was (``atomic_replace.put``): unchanged.
-        files.append({"path": str(target), "kind": export.kind_of(target), "bytes": size,
+        kind = export.kind_of(target)
+        files.append({"path": str(target), "kind": kind, "bytes": size,
                       "seconds": round(seconds, 4), "written": before is None or _stat(target) != before,
+                      # An xbf's parts' occurrences, of the document it was written from: the engine records them for
+                      # the file, which it then never reads to count (``Models.written``).
+                      **({"parts": len((getattr(source, "structure", None) or {}).get("instances") or [])} if kind == "xbf" else {}),
                       **({"tolerance": tolerance} if tolerance is not None else {}),
                       **({"angle": angle} if angle is not None else {}),
                       **({"zero": zero} if zero is not None else {}),

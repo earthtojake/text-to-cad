@@ -63,6 +63,20 @@ if __name__ == "__main__":
     pair()
 """
 
+# A model with no file of its own, which an export writes as an xbf.
+TRIO = """
+import build123d as bd
+from cad import model
+
+
+@model
+def trio():
+    return bd.Compound(children=[bd.Pos(20 * at, 0, 0) * bd.Box(5, 5, 5) for at in range(3)], label="trio")
+
+if __name__ == "__main__":
+    trio()
+"""
+
 
 class XbfRouteTest(unittest.TestCase):
     @classmethod
@@ -73,7 +87,7 @@ class XbfRouteTest(unittest.TestCase):
         # The daemon this test starts is its own: its own socket folder, one part meshed at a time.
         os.environ.update({"CAD_ENGINE_DIR": str(cls.state), "CAD_ENGINE_MESH": "inline"})
         (cls.base / "models.py").write_text(textwrap.dedent(MODEL), encoding="utf-8")
-        env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC)}, cls.addClassCleanup)
+        env = cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC)}, cls.addClassCleanup)
         # Built as a script runs: through this test's own engine daemon.
         done = engine_daemon.run([sys.executable, "models.py"], cwd=cls.base, env=env)
         assert done.returncode == 0, done.stderr
@@ -264,6 +278,71 @@ finally:
         self.assertEqual(again["read"], first["read"], "the same bytes are not parsed again")
         self.assertEqual([p["key"] for p in again["prototypes"]], [p["key"] for p in first["prototypes"]],
                          "nor meshed again: a part's key is made from the file's bytes")
+
+    def test_a_row_says_how_many_parts_its_document_holds_once_the_engine_knows(self) -> None:
+        # A model's, from its build: one part, and a pair of two.
+        rows = {row["name"]: row for row in self.get("/api/v1/documents")[1]["documents"]}
+        self.assertEqual((rows["block"]["parts"], rows["pair"]["parts"]), (1, 2))
+        # An xbf the engine wrote -- a build's declared file, an export -- from the document it wrote it from: never
+        # read for it, and no page has opened it.
+        (self.base / "trio.py").write_text(textwrap.dedent(TRIO), encoding="utf-8")
+        done = engine_daemon.run([sys.executable, "trio.py"], cwd=self.base, env=self.env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [trio] = [row["id"] for row in self.get("/api/v1/documents")[1]["documents"] if row["name"] == "trio"]
+        exported = self.base / "out" / "trio.xbf"
+        exported.parent.mkdir()
+        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "model", "export", trio, str(exported)],
+                                 cwd=self.base, env=self.env)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        for folder, name, parts in ((self.base / "XBF", "pair.xbf", 2), (exported.parent, "trio.xbf", 3)):
+            status, project = self.send("POST", "/api/v1/projects", {"path": str(folder)})
+            self.assertEqual(status, 201, project)
+            [row] = [row for row in self.get(f"/api/v1/projects/{project['project']['id']}")[1]["documents"]
+                     if row["name"] == name]
+            self.assertEqual((row["parts"], row["opened"]), (parts, None), folder)
+            self.assertFalse(self.held(folder / name), "the engine never read it")
+        self.assertNotIn(str(exported).replace(os.sep, "/"), [row["path"] for row in self.get("/api/v1/documents")[1]["documents"]],
+                         "counted, not opened: not in Recents")
+        # Any other xbf, once the engine has read it for a page: one a page opened, its record made before the read.
+        folder = self.base / "counted"
+        folder.mkdir()
+        opened, pictured = folder / "opened.xbf", folder / "pictured.xbf"
+        for copy in (opened, pictured):
+            shutil.copyfile(self.base / "XBF" / "pair.xbf", copy)
+        self.assertEqual(self.send("PATCH", "/api/v1/documents", {"action": "open", "path": str(opened)})[0], 200)
+        self.assertIsNone(self.row(opened)["parts"], "not read yet: no count")
+        self.open(opened)
+        self.assertEqual(self.row(opened)["parts"], 2)
+        # A project's file, read by the engine before the home's picture of it made its record.
+        status, project = self.send("POST", "/api/v1/projects", {"path": str(folder)})
+        self.assertEqual(status, 201, project)
+        listed = lambda: {row["name"]: row for row in self.get(f"/api/v1/projects/{project['project']['id']}")[1]["documents"]}
+        self.assertIsNone(listed()["pictured.xbf"]["parts"], "no record, no read: no count")
+        self.open(pictured)
+        self.assertIsNone(listed()["pictured.xbf"]["parts"], "read, but no record to keep its count on")
+        png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16).decode("ascii")
+        self.send("PATCH", "/api/v1/documents", {"action": "thumbnail", "path": str(pictured), "png": png})
+        self.assertEqual((listed()["pictured.xbf"]["parts"], listed()["opened.xbf"]["parts"]), (2, 2))
+        # Written since: its count is of another version, so none until the engine reads it again.
+        later = time.time_ns() + 5_000_000_000
+        os.utime(pictured, ns=(later, later))
+        self.assertIsNone(listed()["pictured.xbf"]["parts"])
+
+    def row(self, path: Path) -> dict:
+        """Recents' row of the file at ``path``."""
+        [found] = [row for row in self.get("/api/v1/documents")[1]["documents"] if row["path"] == str(path).replace(os.sep, "/")
+                   or row["path"] == str(path)]
+        return found
+
+    def send(self, method: str, target: str, payload: dict) -> tuple[int, dict]:
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=300)
+        try:
+            connection.request(method, target, body=json.dumps(payload).encode(),
+                               headers={"Authorization": "Bearer " + self.token, "x-cad-viewer": "1"})
+            response = connection.getresponse()
+            return response.status, json.loads(response.read())
+        finally:
+            connection.close()
 
     def test_document_routes_keep_authentication_and_do_not_relay(self):
         served = self.open(self.document)

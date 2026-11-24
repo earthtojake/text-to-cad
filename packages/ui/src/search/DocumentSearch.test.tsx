@@ -76,11 +76,22 @@ it("opens as a dialog with the keyboard in its input, reads the library as it op
   expect([source.thumbnail.mock.calls.length, options()[1].querySelector('[data-search-picture] img')]).toEqual([1, null]);
 });
 
-it("says a document built from code is a Model, and a file its format, in the project on screen", async () => {
+it("says a document built from code is a Model where its parts are not known, and a file its format, in the project on screen", async () => {
   const user = userEvent.setup();
   render(<Page source={library()} current={{ id: GEAR.id, path: GEAR.path, project: { id: 'p1', name: 'drive' } }} />);
   await openSearch(user);
   expect(groups()).toEqual([['In drive', [['actuator', 'Model'], ['gear.step', 'On screen'], ['shaft.stl', 'STL']]]]);
+});
+
+it("says a model is a Part when its document holds one part and an Assembly when it holds more, an xbf too; a file of another format keeps its format", async () => {
+  const user = userEvent.setup();
+  const documents = [doc('m2', { id: 'm2', name: 'bracket', kind: 'model', parts: 1 }), doc('m3', { id: 'm3', name: 'gearbox', kind: 'model', parts: 4 }),
+    doc('/w/drive/hinge.xbf', { parts: 2 }), doc('/w/drive/pin.xbf', { parts: 1 }), doc('/w/drive/unread.xbf'), doc('/w/drive/pair.step', { parts: 2 }), GEAR];
+  const projects = [{ ...PROJECTS[0], documents }, PROJECTS[1]];
+  render(<Page source={library({ projects: vi.fn(async () => projects) })} current={{ id: GEAR.id, path: GEAR.path, project: { id: 'p1', name: 'drive' } }} />);
+  await openSearch(user);
+  expect(groups()).toEqual([['In drive', [['bracket', 'Part'], ['gearbox', 'Assembly'], ['hinge.xbf', 'Assembly'], ['pin.xbf', 'Part'],
+    ['unread.xbf', 'Model'], ['gear.step', 'On screen'], ['pair.step', 'STEP']]]]);
 });
 
 it("finds as the home does, the project on screen's first; elsewhere a row says its project, or Standalone, and the words found are lit", async () => {

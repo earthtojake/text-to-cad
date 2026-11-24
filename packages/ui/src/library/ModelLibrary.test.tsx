@@ -12,7 +12,7 @@ import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 import { PANEL_PEEK_DELAY_MS, PANEL_PEEK_EXIT_FALLBACK_MS, PANEL_PEEK_LEAVE_MS } from '../../dist/file-viewer/panelPeek.js';
 import { testHost } from '../../dist/host/testing/host.js';
 import { ViewerMobileContext } from '../../dist/file-viewer/responsive.js';
-import { DOCUMENT_KINDS, PLACE_ROWS, below, documentKind, kindChips, sortDocuments } from '../../dist/library/ModelLibrary.js';
+import { DOCUMENT_KINDS, PLACE_ROWS, below, documentKind, formatLabel, kindChips, sortDocuments } from '../../dist/library/ModelLibrary.js';
 import { DOCUMENT_TYPE_REGISTRY } from '@cad/core/lib/documentTypes.generated.js';
 import type { LibraryModel, LibraryNavigation, LibraryProject, ModelLibrarySource } from './ModelLibrary.js';
 
@@ -601,6 +601,33 @@ it("shows every card's light picture in both themes, never turned, and badges it
   expect(thumbnail.mock.calls.every(call => call.length === 1)).toBe(true);
   expect(['video.kicad_pcb', 'plate.dxf'].map(name => [picture(name).hasAttribute('data-drawing'), picture(name).hasAttribute('data-thumbnail-variant')])).toEqual([[false, false], [false, false]]);
   expect(['video.kicad_pcb', 'plate.dxf', 'arm'].map(name => picture(name).querySelector('.cad-library-format')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'Model']);
+});
+
+// A model is named as desktop CAD names its own documents: a Part when its document holds one part, an Assembly when it
+// holds more, and a Model where the host does not know how many. A file of another format keeps its format's name.
+it('calls a model a Part or an Assembly by its parts, a Model where they are not known, and every other file by its format', async () => {
+  const id = (at: number) => `8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f1${at}`;
+  const documents = [model('bracket', { path: id(1), kind: 'model', parts: 1 }), model('gearbox', { path: id(2), kind: 'model', parts: 12 }),
+    model('sketch', { path: id(3), kind: 'model' }), model('crate', { path: id(4), kind: 'shape', parts: 2 }),
+    model('empty', { path: id(5), kind: 'model', parts: 0 }),
+    model('hinge.xbf', { parts: 1 }), model('rig.xbf', { parts: 3 }), model('unread.xbf', { parts: null }),
+    model('pair.step', { parts: 2 }), model('plate.stl', { parts: 1 })];
+  const names = documents.map(item => item.name);
+  const said = ['Part', 'Assembly', 'Model', 'Assembly', 'Model', 'Part', 'Assembly', 'Model', 'STEP', 'STL'];
+  // On a card, its badge.
+  render(<ModelLibrary library={library(documents)} />);
+  await screen.findByRole('button', { name: 'Open bracket' });
+  const badge = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).closest('.cad-library-card')!.querySelector('.cad-library-format')?.textContent;
+  expect(names.map(badge)).toEqual(said);
+  cleanup();
+  // In the list, its Kind.
+  render(<ModelLibrary library={library(documents)} layout="list" onLayoutChange={() => {}} />);
+  await screen.findByRole('button', { name: 'Open bracket' });
+  expect(names.map(name => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-column="kind"]')?.textContent)).toEqual(said);
+  // Sorted by Kind, the models stay first, those built from code before the xbf files, each by what it is called.
+  const labels = { model: 'Model', part: 'Part', assembly: 'Assembly' };
+  expect(sortDocuments(documents, 'kind', item => formatLabel(item, labels)).map(item => item.name))
+    .toEqual(['crate', 'gearbox', 'empty', 'sketch', 'bracket', 'rig.xbf', 'unread.xbf', 'hinge.xbf', 'pair.step', 'plate.stl']);
 });
 
 // A card's line is the age alone, a file's as a model's: a file's size, the server's, is the list's column.

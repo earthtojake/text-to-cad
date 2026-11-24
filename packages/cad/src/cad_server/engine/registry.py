@@ -8,7 +8,9 @@ script and the function it points at; the command that builds it again is always
 of its home); ``shape``, a shape a program handed over (``home``: the script that handed it over,
 or the folder it was handed over in; ``program``: that program, where there is one; nothing builds
 it again); or ``file``, an on-disk CAD file the person opened (``home`` and ``opened`` alone, and
-``pinned`` and ``preview``: never a ``revision``, never bytes). The registry POINTS: no geometry, no
+``pinned``, ``preview`` and, where the engine wrote it from a document or read it for a page, ``facts``: its
+parts' occurrences and the file's version they are of, ``{parts, version}`` (``Registry.counted``); never a
+``revision``, never bytes). The registry POINTS: no geometry, no
 mesh, no xbf and no memo is ever written here. A model's record may say that the engine's cache
 holds its document (``cache``: ``{revision, bytes, read}``), whose bytes live in the
 cache folder, not here (``Registry.cache``: ``<cache>/documents/<id>/document.xbf``, the engine's
@@ -58,7 +60,7 @@ from cad.engine.ids import is_id
 from cad.engine.records import (DOCUMENTS, RECORD, SCHEMA, command, detached, home, parse, program, relative, rerun)
 
 __all__ = ["DOCUMENTS", "ENGINES", "ENGINE_FIELDS", "ENGINE_SCHEMA", "FACTORY", "FORGOTTEN", "Folder", "OBSERVERS", "PICTURES", "RECORD", "Registry", "SCHEMA", "TOKEN",
-           "command", "current", "detached", "home", "pictures", "program", "relative"]
+           "command", "current", "detached", "file_record", "file_version", "home", "pictures", "program", "relative"]
 
 ENGINES = "engines"
 # The engine records' own schema: 3 holds, while the default port is another's, the port the
@@ -72,6 +74,25 @@ TOKEN = f"{ENGINES}/token"
 # Where a record's Recents picture is (its ``preview``'s ``thumbnail``: a file name).
 PICTURES = "recents/thumbnails"
 _PICTURE = re.compile(r"[0-9a-f]{32}\.png")
+
+
+def file_record(path: str) -> dict[str, Any]:
+    """A new record of the CAD file at the canonical path ``path``: where it is, and no time (a page's open
+    gives it ``created`` and ``opened``)."""
+    from cad.engine.ids import file_id
+
+    folder, name = os.path.dirname(path), os.path.basename(path)
+    return {"id": file_id(path), "kind": "file", "root": folder, "home": name, "namespace": folder, "name": name}
+
+
+def file_version(path: str | os.PathLike) -> str | None:
+    """The version of the file at ``path`` as the engine names a file state it read (``mtime_ns-size``, a served
+    structure's ``version``), from one stat; None for none there (or no file)."""
+    try:
+        found = os.stat(path)
+    except OSError:
+        return None
+    return f"{found.st_mtime_ns}-{found.st_size}" if stat.S_ISREG(found.st_mode) else None
 
 
 def pictures(record: dict[str, Any] | None) -> set[str]:
@@ -238,6 +259,23 @@ class Registry:
             if found is not None:
                 self.put(found)
             return self.get(ident)
+
+    def counted(self, ident: str, parts: int, version: str, make: str | None = None) -> None:
+        """How many part occurrences the CAD file of id ``ident`` holds, and the file's ``version`` they are of,
+        on its record (``facts``: ``{parts, version}``), written only when it differs; with ``make`` (the file's
+        canonical path), on a record made for it (``file_record``: no ``opened``, so Recents does not list it)
+        where it has none. The count is always one the engine had in hand: the document it wrote the file from,
+        or its read of the file. Nothing is read for it here."""
+        facts = {"parts": int(parts), "version": str(version)}
+
+        def change(record: dict[str, Any] | None) -> dict[str, Any] | None:
+            if record is None and make is not None:
+                record = file_record(make)
+            if record is None or record.get("kind") != "file" or record.get("facts") == facts:
+                return None
+            return {**record, "facts": facts}
+
+        self.update(ident, change)
 
     def list(self) -> list[dict[str, Any]]:
         """Every record the registry holds, in no order."""

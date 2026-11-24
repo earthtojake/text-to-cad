@@ -206,12 +206,19 @@ class Models:
                     from cad.engine.delta import delta
 
                     report["delta"] = delta(facts, before)
+                    # Its declared .xbf files, written (or kept, the same bytes) from this very document.
+                    self.written([(path, facts.get("parts")) for path, row in (report.get("files") or {}).items()
+                                  if isinstance(row, dict) and row.get("kind") == "xbf"])
                 self.daemon.builders[ident] = worker
                 server = self.register_page(ident)
                 report["url"] = self.url(server, ident)
                 if (report.get("cache") or {}).get("unreadable"):
                     self.cache.remove(ident)  # this build found its cache file broken: the idle save writes it again
                 self.cache.touch(ident)
+        if isinstance(done, dict):
+            # An export's files (``worker._export``): each .xbf it wrote says its document's parts' occurrences.
+            self.written([(row.get("path"), row.get("parts")) for row in done.get("files") or []
+                          if isinstance(row, dict) and row.get("kind") == "xbf"])
         held = self.registry() if declared else None
         if held is not None:
             from cad.engine.identity import claims, released
@@ -274,6 +281,30 @@ class Models:
         if now is None and at == recorded:
             now = kept
         return now, kept
+
+    def written(self, files: list[tuple[Any, Any]]) -> None:
+        """Each ``.xbf`` file the engine wrote from a document (``files``: its path and the part occurrences of
+        the document it was written from, which the engine had in hand), counted on the file's record
+        (``Registry.counted``) with the file's version as it now is: its row says Part or Assembly without the file
+        ever being read. A file with no record is given one, which no list shows until a page opens it
+        (``file_record``: no ``opened``). Nothing with no registry; a file gone, or a count that is none, is
+        skipped."""
+        held = self.registry()
+        if held is None:
+            return
+        from cad.engine.ids import canonical, file_id
+        from cad_server.engine.registry import file_version
+
+        for path, parts in files:
+            if not isinstance(path, str) or type(parts) is not int:
+                continue
+            try:
+                found = canonical(path)
+            except (OSError, ValueError):
+                continue
+            version = file_version(found)
+            if version is not None:
+                held.counted(file_id(found), parts, version, make=found)
 
     # --- the registry ------------------------------------------------------------------------
 
@@ -389,6 +420,9 @@ class Models:
                 "id": ident, "kind": "shape", "root": root,
                 "home": registering.relative(scope, root), "entry": name, "namespace": root, "name": name,
                 "revision": recorded,
+                # What its document holds at a glance, as a build's facts say it (``delta.facts``): its parts'
+                # occurrences, which its row lists (``recents``), counted from the structure in hand.
+                "facts": {"parts": len(structure.get("instances") or [])},
                 "built": previous["built"] if previous.get("revision") == recorded and previous.get("built")
                 else time.time()}
             if not previous:  # first handed over now; an older record keeps what it has (``record``)

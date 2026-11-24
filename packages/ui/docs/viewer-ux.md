@@ -139,7 +139,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
   documents on the home or for a standalone one); typing finds as the home's search does, every word in a name or a
   file's path, "In <project>" first, then "Other projects", at most 50 rows and a line saying how many more there are.
 - A row: the document's picture (the kind's glyph until it loads), its name, and at its right its format in the project
-  on screen ("Model" for one built from code or an `.xbf` file), else its project's name, "Standalone" for one in none. The document on screen's row is marked and opens
+  on screen ("Part" or "Assembly" for one built from code or an `.xbf` file, "Model" where its parts are not known, as
+  on a card), else its project's name, "Standalone" for one in none. The document on screen's row is marked and opens
   nothing. While it reads, placeholder rows; a read that fails or finds nothing says so.
 - Up and Down move, Home and End go to the ends, Enter opens the row here and ⌘Enter (Ctrl+Enter) in a new tab; typing
   always goes to the input. A click opens a row here; where the host gives a document an address the row is a real
@@ -186,7 +187,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
   place's name, the page's one larger text (a project's after its folder glyph, with its folder from `~` and its ⋯:
   Open in new tab, Copy path, Reveal, Remove from CAD, which says nothing on disk changed and goes to Recents); at the
   right Sort (Last activity, the default; Name; Kind: by the chips' kinds in their order, then the
-  models (those built from code, then `.xbf` files), then format, then name) and grid or list, one segmented control. Sort and the layout are the tab's
+  models (those built from code, then `.xbf` files), then format (a model's Part, Assembly or Model among them), then
+  name) and grid or list, one segmented control. Sort and the layout are the tab's
   ([Settings memory](#settings-memory)).
 - **The kinds**, a row of chips of its own under the heading row: All, then 3D models, Drawings, Boards, Schematics and
   Robots, each only where the place holds one, always in that order, each with its count. One is on at a time (All at
@@ -198,15 +200,19 @@ chrome that floats over the picture. The home is the navbar over the library: it
   or a GLB a model too; "built from code" against "a file on disk" was the implementation showing. A model and the
   files exported from it stay cards of their own.
 - **Its documents**, all of them: the first 120, then "Show N more". Cards in columns at least 232px wide (the picture
-  on the light gradient with its format's badge, "Model" for a document built from code or an `.xbf` file, then the
-  name and one line), or 44px rows. Why an xbf says Model: it is the engine's own document saved as
-  a file, the same thing a model's page shows, so it is a model; STEP, STL, 3MF, GLB and the rest are other formats and
-  keep their format's name. Only the label: an xbf is still a file (its menu, its size and path, what
-  Delete and Pin do).
+  on the light gradient with its format's badge, then the name and one line), or 44px rows. A document built from
+  code or an `.xbf` file is badged "Part" when its document holds one part and "Assembly" when it holds more (the
+  row's `parts`: its parts' occurrences, as `cad model inspect` counts them and the Model tree shows them), and "Model"
+  where the engine does not know (an `.xbf` it neither wrote nor read for a page since it changed, a model last built
+  before the count was kept): never a guess, and never a read to find out. Why: desktop CAD names its own documents that way, a part or an assembly, and a person
+  reads a card the same way; an xbf is the engine's own document saved as a file, the same thing a model's page
+  shows, so it is named as a model is. STEP, STL, 3MF, GLB and the rest are other formats and keep their format's
+  name, whatever they hold. Only the label: an xbf is still a file (its menu, its size and path, what Delete and Pin
+  do).
   - A card's line is its last activity ("Edited now", "Viewed 7h ago"), after its project's name in Recents and
     Pinned ("Standalone" for one in none). A card has no glyph, script or size. Why: the picture and its badge say
     what it is, and a script's path and a size are for the list, where they are columns to read down. A list's columns are Name, then the same as a column (Project, or in a project's page
-    Where: a model's script, a file's folder), Kind (its format, as the badge: "Model", "STEP", "KiCad PCB"), Size,
+    Where: a model's script, a file's folder), Kind (its format, as the badge: "Part", "Assembly", "STEP", "KiCad PCB"), Size,
     Updated and Created.
   - Each has a pin and a ⋯ (Open, Open in new tab, Copy path, Copy link, Reveal, Pin, Delete, which asks first), shown
     on hover or focus and always on touch; a project's file, listed for being in its folder, has no Delete, and a Pin
