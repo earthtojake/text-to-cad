@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # One self-contained browser gate for the viewer's format and camera
-# contracts, and for a view bundle opened with no engine running. It runs exactly
+# contracts, and for a view bundle opened with no engine running, from a static
+# file server and as a share service serves a shared one. It runs exactly
 # what CI runs. The project, the engine daemon, the Viewer, the static file
 # server and the browser are all owned by this process.
 set -euo pipefail
@@ -39,7 +40,7 @@ while [ "$#" -ne 0 ]; do
       fi
       if [ "$1" = "--out" ]; then out_dir="$2"; else only_gate="$2"; fi
       shift 2 ;;
-    # --only: one gate while working on it: format, camera, bundle.
+    # --only: one gate while working on it: format, camera, bundle, share.
     *) echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE]" >&2; exit 2 ;;
   esac
 done
@@ -224,7 +225,7 @@ cat > "$project/smoke.urdf" <<'URDF'
 </robot>
 URDF
 
-# A view bundle, for the bundle gate: a model of one part whose width is a parameter, exported by the
+# A view bundle, for the bundle and share gates: a model of one part whose width is a parameter, exported by the
 # engine into a dot-directory the explorer skips; its script goes once it is built.
 mkdir -p "$project/.bundles"
 cat > "$project/.bundles/plate.py" <<'PLATE'
@@ -259,11 +260,12 @@ bundle_args=(--bundle "$project/.bundles")
 [ -n "$out_dir" ] && e2e_args+=(--out "$out_dir") && bundle_args+=(--out "$out_dir")
 [ -n "$only_gate" ] && e2e_args+=(--only "$only_gate") && bundle_args+=(--only "$only_gate")
 echo "  [setup] $(( $(date +%s) - started_at ))s to fixtures, viewer and port"
-if [ "$only_gate" != bundle ]; then
+if [ "$only_gate" != bundle ] && [ "$only_gate" != share ]; then
   node "$REPO_ROOT/tests/browser/viewer-e2e.mjs" "${e2e_args[@]}"
 fi
-# The bundle gate runs with no engine: the server is stopped first, and the page has only a static file server.
-if [ -z "$only_gate" ] || [ "$only_gate" = bundle ]; then
+# The bundle and share gates run with no engine: the server is stopped first, and the page has only a static
+# file server, or a stand-in for the share service.
+if [ -z "$only_gate" ] || [ "$only_gate" = bundle ] || [ "$only_gate" = share ]; then
   "$PYTHON" -m cad_server.engine stop >/dev/null 2>&1 || true
   node "$REPO_ROOT/tests/browser/viewer-e2e.mjs" "${bundle_args[@]}"
 fi

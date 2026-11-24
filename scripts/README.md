@@ -166,7 +166,9 @@ where those files ship, so these scripts are what produces them.
   engine daemon and viewer. Requires a bundled viewer and npm Playwright Chromium
   (`npx --no-install playwright install chromium`). Runs the format and camera
   gates, then stops the engine and runs the bundle gate (a view bundle the engine exported, opened
-  from a plain static file server): exactly what `test.yml` runs.
+  from a plain static file server) and the share gate (the same bundle shared: archived and encrypted
+  by the test, served by a stand-in for the share service under its content security policy, viewed,
+  refused with another key, deleted): exactly what `test.yml` runs.
   `--only NAME` selects a gate; `--out DIR` retains screenshots.
 - `check-dependencies.mjs`, `check-kit-boundaries.mjs`, `check-ui-strings.mjs` (each with its
   `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness (and that
