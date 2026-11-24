@@ -544,7 +544,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
                 import build123d as bd
                 from cad.engine import stl, model
 
-                @model(out="XBF/{name}.xbf")
+                @model("XBF/{name}.xbf")
                 @stl("{name}.stl")
                 def {name}():
                     {{body}}

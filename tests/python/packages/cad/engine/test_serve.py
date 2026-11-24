@@ -34,12 +34,12 @@ from cad.engine import model
 SIZE = {size}
 
 
-@model(out="XBF/post.xbf")
+@model("XBF/post.xbf")
 def post():
     return bd.fillet((bd.Box(SIZE, 4, 10) - bd.Cylinder(1, 20)).edges().filter_by(bd.Axis.Z), 0.5)
 
 
-@model(out="XBF/rack.xbf")
+@model("XBF/rack.xbf")
 def rack():
     left = post().shape
     right = post().shape.moved(bd.Location((20, 0, 0)))
@@ -158,7 +158,7 @@ from cad.engine import paint, step, model
 SIZE = {size}
 
 
-@model(out="XBF/shelf.xbf")
+@model("XBF/shelf.xbf")
 @step("shelf.step")
 def shelf():
     post = bd.fillet(bd.Box(SIZE, 4, 10).edges().filter_by(bd.Axis.Z), 0.5)

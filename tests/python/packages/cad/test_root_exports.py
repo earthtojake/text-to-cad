@@ -53,7 +53,7 @@ class RootExports(unittest.TestCase):
         self.assertEqual(sorted(cad.engine.__all__), sorted(ENGINE))
         # ``model`` is a type with no file: its decorator is the engine's model, its operations a model's.
         self.assertEqual(cad.model.__call__.__doc__.split(":")[0],
-                         '``@model``, ``@model(name=...)`` or ``@model(out="XBF/arm.xbf")``')
+                         '``@model``, ``@model(name=...)`` or ``@model("XBF/arm.xbf")``')
         for name in ("Material", "materials"):
             self.assertFalse(hasattr(cad.engine, name), f"materials come from bd_materials: {name}")
         for name in TYPES:
@@ -211,7 +211,7 @@ class RootExports(unittest.TestCase):
                              ("bpy comes with cad's blender integration: add `cad[blender]` to the script's header", "bpy"))
 
     def test_model_declares_a_function_or_hands_a_shape_over_and_a_decorator_takes_its_path(self):
-        """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``, ``@model(out=)``:
+        """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``, ``@model('….xbf')``:
         the ``.xbf`` each run saves it as) and the shape form (``model(shape, name=, animations=)``, which
         declares no file); a file decorator takes its path and its
         name, and an STL's or a 3MF's its mesh tolerance. No ``id=``: an id is derived; no
@@ -223,7 +223,7 @@ class RootExports(unittest.TestCase):
             self.assertEqual([(name, p.kind) for name, p in parameters.items()], [
                 ("target", inspect.Parameter.POSITIONAL_ONLY), ("name", inspect.Parameter.KEYWORD_ONLY),
                 ("out", inspect.Parameter.KEYWORD_ONLY), ("animations", inspect.Parameter.KEYWORD_ONLY)])
-            with self.assertRaisesRegex(TypeError, r"model\(shape, name=\.\.\.\) takes no out=: .* export the document "
+            with self.assertRaisesRegex(TypeError, r"model\(shape, name=\.\.\.\) takes no path: .* export the document "
                                                    r"it returns"):
                 declare(object(), name="arm", out="arm.xbf")
         for kind in ("step", "glb", "stl", "threemf", "dxf"):
@@ -246,7 +246,7 @@ class RootExports(unittest.TestCase):
         def plate():
             return None
 
-        built = model(out="XBF/arm.xbf")(step(out="arm.step", name="arm_named")(arm))
+        built = model("XBF/arm.xbf")(step(out="arm.step", name="arm_named")(arm))
         self.assertEqual(sorted(output.kind for output in built.outputs), ["step", "xbf"])
         self.assertEqual("plate", step("plate.step")(plate).name)
         for call in (lambda: step(), lambda: step("a.step", "b"), lambda: step(path="a.step")):

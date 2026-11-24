@@ -485,7 +485,7 @@ from cad.engine import model
 GATE = pathlib.Path(__file__).with_suffix(".go")
 
 
-@model(out="XBF/{name}.xbf")
+@model("XBF/{name}.xbf")
 def {name}():
     while {gated} and not GATE.exists():
         time.sleep(0.01)

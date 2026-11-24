@@ -38,7 +38,7 @@ from cad.build123d import mechanism_state
 from cad.engine import step, model
 
 
-@model(out="XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 @step(out="hinge.step")
 def hinge():
     base = bd.Box(100, 60, 20)
@@ -62,7 +62,7 @@ from cad.build123d import mechanism_state
 from cad.engine import model
 
 
-@model(out="XBF/lift.xbf")
+@model("XBF/lift.xbf")
 def lift():
     base = bd.Box(80, 80, 10)
     base.label = "base"
@@ -94,7 +94,7 @@ from cad.build123d import mechanism_state
 from cad.engine import model
 
 
-@model(out="XBF/car.xbf")
+@model("XBF/car.xbf")
 def car():
     body = bd.Box(400, 200, 50)
     body.label = "body"
@@ -114,7 +114,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/rotor.xbf")
+@model("XBF/rotor.xbf")
 def rotor():
     base = bd.Pos(300, 0, 0) * bd.Box(40, 40, 10)
     base.label = "base"
@@ -134,7 +134,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/forearm.xbf")
+@model("XBF/forearm.xbf")
 def forearm():
     at = bd.Pos(500, 0, 300)
     tube = at * bd.Box(200, 30, 30, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
@@ -202,7 +202,7 @@ from cad.engine import step, model
 from hinge import hinge
 
 
-@model(out="XBF/{name}.xbf")
+@model("XBF/{name}.xbf")
 @step(out="{name}.step")
 def {name}():
     return posed(hinge().shape, {state})
@@ -452,7 +452,7 @@ class JointMemoTest(_Folder):
             import build123d as bd
             from cad.engine import model
 
-            @model(out="XBF/lone.xbf")
+            @model("XBF/lone.xbf")
             def lone():
                 a = bd.Box(10, 10, 10)
                 bd.RigidJoint("top", a, bd.Location((0, 0, 5)))
@@ -481,14 +481,14 @@ class JointMemoTest(_Folder):
             SEEN = {}
 
 
-            @model(out="XBF/peg.xbf")
+            @model("XBF/peg.xbf")
             def peg():
                 peg = bd.Box(2, 2, 6)
                 bd.RigidJoint("base", peg, bd.Location((0, 0, -3)))
                 return peg
 
 
-            @model(out="XBF/pegs.xbf")
+            @model("XBF/pegs.xbf")
             def pegs():
                 first, second, third = peg().shape, bd.Pos(10, 0, 0) * peg().shape, peg().shape
                 bd.RigidJoint("front", first, bd.Location())
@@ -510,7 +510,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/nested.xbf")
+@model("XBF/nested.xbf")
 def nested():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -540,7 +540,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/mounted.xbf")
+@model("XBF/mounted.xbf")
 def mounted():
     base = bd.Box(60, 60, 4)
     base.label = "base"
@@ -592,7 +592,7 @@ from cad.engine import model
 from mounted import mounted
 
 
-@model(out="XBF/mounted_up.xbf")
+@model("XBF/mounted_up.xbf")
 def mounted_up():
     return posed(mounted().shape, {"mount": 90})
 """)
@@ -626,7 +626,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/bike.xbf")
+@model("XBF/bike.xbf")
 def bike():
     # Two parts placed where they stand, a revolute pair between them by label: no connect_to.
     frame = bd.Box(200, 40, 20)
@@ -656,7 +656,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/bike.xbf")
+@model("XBF/bike.xbf")
 def bike():
     # The pivot's part is turned: build123d makes the revolute's frame of the axis in that part's
     # frame, so its X is not the X a plane of the world datum has.
@@ -678,7 +678,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/elbow.xbf")
+@model("XBF/elbow.xbf")
 def elbow():
     turn = bd.Rot(30, 40, 50)
     upper = turn * bd.Box(100, 20, 20)
@@ -700,7 +700,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/placed.xbf")
+@model("XBF/placed.xbf")
 def placed():
     base = bd.Box(10, 40, 40)
     base.label = "base"
@@ -853,7 +853,7 @@ from cad.build123d import configuration_sequence, gear_pair, mechanism_state, ra
 from cad.engine import model
 
 
-@model(out="XBF/bench.xbf")
+@model("XBF/bench.xbf")
 def bench():
     plate = bd.Box(300, 200, 10, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX))
     plate.label = "plate"

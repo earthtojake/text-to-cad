@@ -66,7 +66,7 @@ class ProfilingTest(unittest.TestCase):
             def make_block():
                 return bd.Box(3, 4, 5)
 
-            @model(out="part.xbf")
+            @model("part.xbf")
             def part():
                 return make_block()
 

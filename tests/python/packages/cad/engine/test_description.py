@@ -45,7 +45,7 @@ from cad.build123d import frame, mechanism_state
 from cad.engine import model
 
 
-@model(out="XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 def hinge():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -70,7 +70,7 @@ from cad.build123d import mechanism_state
 from cad.engine import model
 
 
-@model(out="XBF/backwards.xbf")
+@model("XBF/backwards.xbf")
 def backwards():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -91,7 +91,7 @@ from cad.build123d import mechanism_state
 from cad.engine import model
 
 
-@model(out="XBF/lift.xbf")
+@model("XBF/lift.xbf")
 def lift():
     base = bd.Box(80, 80, 10)
     base.label = "base"
@@ -124,7 +124,7 @@ from cad.engine import model
 CURL = {"knuckle": 90, "middle": 100, "tip": 70}
 
 
-@model(out="XBF/finger.xbf")
+@model("XBF/finger.xbf")
 def finger():
     bones, x = [], 0
     for name, length in (("palm", 30), ("proximal", 40), ("medial", 25), ("distal", 20)):
@@ -149,7 +149,7 @@ from bd_materials import metals
 from cad.engine import model
 
 
-@model(out="XBF/pair.xbf")
+@model("XBF/pair.xbf")
 def pair():
     left = bd.Box(10, 20, 30)
     left.label = "left"
@@ -165,7 +165,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/loop.xbf")
+@model("XBF/loop.xbf")
 def loop():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -210,7 +210,7 @@ def hinge(name, holder, child, at, connect=True):
         joint.connect_to(child.joints[name], angle=0)
 
 
-@model(out="XBF/four_bar.xbf")
+@model("XBF/four_bar.xbf")
 def four_bar():
     base = bd.Pos(40, -20, -10) * bd.Box(100, 10, 10)
     base.label = "base"
@@ -231,7 +231,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/cylinder.xbf")
+@model("XBF/cylinder.xbf")
 def cylinder():
     base = bd.Box(140, 10, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MAX))
     base.label = "base"
@@ -259,7 +259,7 @@ from cad.build123d import mechanism_state, rack_and_pinion_pair
 from cad.engine import model
 
 
-@model(out="XBF/gripper.xbf")
+@model("XBF/gripper.xbf")
 def gripper():
     palm = bd.Box(80, 20, 20)
     palm.label = "palm"
@@ -286,7 +286,7 @@ from threejs_materials import PbrProperties
 from cad.engine import model
 
 
-@model(out="XBF/foam.xbf")
+@model("XBF/foam.xbf")
 def foam():
     block = bd.Box(10, 10, 10)
     block.label = "block"
@@ -537,7 +537,7 @@ from cad.build123d import body, limits
 from cad.engine import model
 
 
-@model(out="XBF/bodies.xbf")
+@model("XBF/bodies.xbf")
 def bodies():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -625,7 +625,7 @@ from cad.build123d import limits
 from cad.engine import model
 
 
-@model(out="XBF/linked.xbf")
+@model("XBF/linked.xbf")
 def linked():
     base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
@@ -666,7 +666,7 @@ from cad.build123d import mass, point_mass
 from cad.engine import model
 
 
-@model(out="XBF/masses.xbf")
+@model("XBF/masses.xbf")
 def masses():
     housing = bd.Box(40, 20, 10)
     housing.label = "housing"
@@ -774,7 +774,7 @@ from bd_materials import metals
 from cad.engine import model
 
 
-@model(out="XBF/turned.xbf")
+@model("XBF/turned.xbf")
 def turned():
     anchor = bd.Location((5, -10, 20), (0, 0, 1), 90) * bd.Box(4, 4, 4)
     anchor.label = "anchor"
@@ -841,7 +841,7 @@ from cad.build123d import body, frame, free, link, mass
 from cad.engine import model
 
 
-@model(out="XBF/moved.xbf")
+@model("XBF/moved.xbf")
 def moved():
     block = bd.Box(10, 20, 30)
     block.label = "block"
@@ -956,7 +956,7 @@ from cad.build123d import free, link, mechanism_state
 from cad.engine import model
 
 
-@model(out="XBF/two.xbf")
+@model("XBF/two.xbf")
 def two():
     plate = bd.Box(100, 60, 20)
     plate.label = "plate"

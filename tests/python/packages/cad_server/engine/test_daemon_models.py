@@ -156,7 +156,7 @@ import build123d as bd
 def bare(): return bd.Box(1, 2, 3)
 @step('saved.step')
 def saved(): return bd.Box(2, 2, 3)
-@model(out="XBF/document.xbf")
+@model("XBF/document.xbf")
 def document(): return bd.Box(3, 2, 3)
 if __name__ == '__main__':
     print('before', sys.argv[1:])
@@ -212,7 +212,7 @@ if __name__ == '__main__':
                          ["XBF/block.xbf", "block.py"])
 
     def test_a_failing_body_answers_with_its_error(self) -> None:
-        self.script.write_text("from cad.engine import model\n\n@model(out='XBF/block.xbf')\ndef block():\n    raise RuntimeError('no')\nif __name__ == '__main__':\n    block()\n", encoding="utf-8")
+        self.script.write_text("from cad.engine import model\n\n@model('XBF/block.xbf')\ndef block():\n    raise RuntimeError('no')\nif __name__ == '__main__':\n    block()\n", encoding="utf-8")
         done = self.run_script("block.py")
         self.assertEqual(done.returncode, 1)
         self.assertIn("RuntimeError: no", done.stderr)
@@ -259,7 +259,7 @@ if __name__ == '__main__':
             def unused():
                 raise AssertionError("uncalled model ran")
 
-            @model(out="XBF/block.xbf")
+            @model("XBF/block.xbf")
             def block():
                 import build123d as bd
                 return bd.Box(1, 2, 3)

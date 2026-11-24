@@ -22,7 +22,7 @@ and builds B-rep from its numbers. Its read is keyed by the file's bytes as the 
 the same object again for the same bytes, and the file is one of the closure's inputs:
 
 ```python
-@model(out="XBF/enclosure.xbf")
+@model("XBF/enclosure.xbf")
 def enclosure():
     pcb = stl.read(HERE / "scans/pcb.stl").bounding_box()   # keyed by the scan's bytes
     return bd.Box(pcb.size.X + 6, pcb.size.Y + 6, pcb.size.Z + 4)

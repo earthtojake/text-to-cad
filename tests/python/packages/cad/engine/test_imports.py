@@ -27,7 +27,7 @@ from cad.engine import paint, step, model
 from bd_materials import metals
 
 
-@model(out="XBF/kit.xbf")
+@model("XBF/kit.xbf")
 @step("kit.step")
 def kit():
     base = bd.Box(10, 10, 5)
@@ -39,7 +39,7 @@ def kit():
     return bd.Compound(children=[base, peg, other], label="kit")
 
 
-@model(out="XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 def hinge():
     base, arm = bd.Box(100, 60, 20), bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
     base.label, arm.label = "base", "arm"
@@ -58,17 +58,17 @@ from cad.engine import read_step, read_xbf, model
 HERE = Path(__file__).resolve().parent
 
 
-@model(out="XBF/from_step.xbf")
+@model("XBF/from_step.xbf")
 def from_step():
     return read_step(HERE / "kit.step")
 
 
-@model(out="XBF/from_xbf.xbf")
+@model("XBF/from_xbf.xbf")
 def from_xbf():
     return read_xbf(HERE / "XBF/converted.xbf")
 
 
-@model(out="XBF/twice.xbf")
+@model("XBF/twice.xbf")
 def twice():
     first = read_step(HERE / "kit.step")
     second = read_step(HERE / "kit.step").moved(__import__("build123d").Location((0, 0, 50)))
@@ -76,7 +76,7 @@ def twice():
     return __import__("build123d").Compound(children=[first, second, third], label="twice")
 
 
-@model(out="XBF/hinge_copy.xbf")
+@model("XBF/hinge_copy.xbf")
 def hinge_copy():
     return read_xbf(HERE / "XBF/hinge.xbf")
 """
@@ -173,18 +173,18 @@ from cad.engine import model, read_mesh
 HERE = Path(__file__).resolve().parent
 
 
-@model(out="XBF/enclosure.xbf")
+@model("XBF/enclosure.xbf")
 def enclosure():
     pcb = read_mesh(HERE / "scans" / "pcb.stl").bounding_box()
     return bd.Box(pcb.size.X + 6, pcb.size.Y + 6, pcb.size.Z + 4)
 
 
-@model(out="XBF/by_import_stl.xbf")
+@model("XBF/by_import_stl.xbf")
 def by_import_stl():
     return bd.Box(*bd.import_stl(HERE / "scans" / "pcb.stl").bounding_box().size)
 
 
-@model(out="XBF/by_import_step.xbf")
+@model("XBF/by_import_step.xbf")
 def by_import_step():
     return bd.import_step(HERE / "part.step")
 
@@ -194,14 +194,14 @@ def by_import_brep():
     return bd.import_brep(HERE / "part.brep")
 
 
-@model(out="XBF/by_occt.xbf")
+@model("XBF/by_occt.xbf")
 def by_occt():
     shape = TopoDS_Shape()
     BRepTools.Read_s(shape, str(HERE / "part.brep"), BRep_Builder())
     return bd.Solid(shape)
 
 
-@model(out="XBF/mesh_face.xbf")
+@model("XBF/mesh_face.xbf")
 def mesh_face():
     mesh = read_mesh(HERE / "scans" / "pcb.stl")
     triangulation = Poly_Triangulation(len(mesh.vertices), len(mesh.triangles), False)
@@ -228,7 +228,7 @@ from cad.engine import model
 HERE = Path(__file__).resolve().parent
 
 
-@model(out="XBF/sized.xbf")
+@model("XBF/sized.xbf")
 def sized():
     scan = bd.import_stl(HERE / "cube.stl")
     return bd.Box(*scan.bounding_box().size)

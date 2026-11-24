@@ -35,14 +35,14 @@ from cad.engine import glb, paint, step, stl, threemf, model
 from bd_materials import metals
 
 
-@model(out="XBF/peg.xbf")
+@model("XBF/peg.xbf")
 def peg():
     peg = bd.Cylinder(2, 10)
     peg.color = bd.Color(0.9, 0.2, 0.1)
     return peg
 
 
-@model(out="XBF/board.xbf")
+@model("XBF/board.xbf")
 @step("board.step")
 @glb("board.glb")
 @stl("board.stl")
@@ -79,7 +79,7 @@ from cad.engine import paint, model
 from bd_materials import metals
 
 
-@model(out="XBF/kit.xbf")
+@model("XBF/kit.xbf")
 def kit():
     looks = [(0.9, 0.2, 0.1), (0.1, 0.8, 0.2), (0.2, 0.3, 0.9), (0.7, 0.7, 0.1), (0.5, 0.1, 0.6), (0.1, 0.5, 0.5)]
     parts = []
@@ -128,14 +128,14 @@ def hinge(index):
     return bd.Compound(children=[base, lid], label="hinge")
 
 
-@model(out="XBF/hinges.xbf")
+@model("XBF/hinges.xbf")
 def hinges():
     row = bd.Compound(children=[hinge(0), hinge(1), hinge(2)], label="hinges")
     mechanism_state(row, "open", flap0=30, flap1=60, flap2=90)
     return row
 
 
-@model(out="XBF/hinges_open.xbf")
+@model("XBF/hinges_open.xbf")
 def hinges_open():
     return posed(hinges().shape, "open")
 """
@@ -150,7 +150,7 @@ import build123d as bd
 from cad.engine import step, model
 
 
-@model(out="XBF/rows.xbf")
+@model("XBF/rows.xbf")
 @step("rows.step")
 def rows():
     noop = {noop}  # noqa: F841
@@ -410,7 +410,7 @@ from cad.build123d import free, mechanism_state
 from cad.engine import model
 
 
-@model(out="XBF/two.xbf")
+@model("XBF/two.xbf")
 def two():
     plate = bd.Box(100, 60, 20)
     plate.label = "plate"
@@ -525,7 +525,7 @@ class BuildFilesTest(unittest.TestCase):
             from cad.engine import step, model
 
 
-            @model(out="out/plate.xbf")
+            @model("out/plate.xbf")
             @step("out/plate.step")
             def plate():
                 return bd.Box(4, 5, {height})
@@ -567,7 +567,7 @@ class BuildFilesTest(unittest.TestCase):
             from cad.engine import model
 
 
-            @model(out="out/plate.xbf")
+            @model("out/plate.xbf")
             def plate():
                 return bd.Box(4, 5, 6)
         """)
@@ -612,7 +612,7 @@ class BuildFilesTest(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*pose"):
             step("a.step", pose="open")
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*out2"):
-            model(out="a.xbf", out2="b.xbf")
+            model("a.xbf", out2="b.xbf")
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*animate"):
             glb("a.glb", animate={"flap": (0, 90)})
         self.assertFalse(hasattr(model, "snapshot"), "a picture is the snapshot verb's, never a declaration")

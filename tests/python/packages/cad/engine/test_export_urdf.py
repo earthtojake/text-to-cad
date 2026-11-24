@@ -182,7 +182,7 @@ from cad.build123d import free, mechanism_state
 from cad.engine import model
 
 
-@model(out="XBF/two.xbf")
+@model("XBF/two.xbf")
 def two():
     plate = bd.Box(100, 60, 20)
     plate.label = "plate"
@@ -379,7 +379,7 @@ from cad.build123d import mechanism_state
 from cad.engine import model
 
 
-@model(out="XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 def hinge():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -403,7 +403,7 @@ from bd_materials import metals
 from cad.engine import model
 
 
-@model(out="XBF/turned.xbf")
+@model("XBF/turned.xbf")
 def turned():
     base = bd.Pos(0, 38, 0) * bd.Rot(90, 0, 0) * bd.Box(100, 20, 60)
     base.label = "base"
@@ -426,7 +426,7 @@ from cad.build123d import frame, limits, mass
 from cad.engine import model
 
 
-@model(out="XBF/plain.xbf")
+@model("XBF/plain.xbf")
 def plain():
     base = bd.Box(100, 60, 20)
     base.label = "base"

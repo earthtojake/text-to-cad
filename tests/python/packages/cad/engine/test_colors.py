@@ -80,7 +80,7 @@ from cad.engine import paint, model
 ORANGE, BLUE = "#e68019", "#2469ac"
 
 
-@model(out="XBF/by_color.xbf")
+@model("XBF/by_color.xbf")
 def by_color():
     cone = bd.Cone(10, 0, 20)                                    # two faces: the side and the base
     cone.color = bd.Color(ORANGE)
@@ -90,7 +90,7 @@ def by_color():
     return cone
 
 
-@model(out="XBF/by_paint.xbf")
+@model("XBF/by_paint.xbf")
 def by_paint():
     cone = bd.Cone(10, 0, 20)
     side, base = cone.faces().sort_by(bd.Axis.Z)[-1], cone.faces().sort_by(bd.Axis.Z)[0]
@@ -100,7 +100,7 @@ def by_paint():
     return cone
 
 
-@model(out="XBF/by_hex.xbf")
+@model("XBF/by_hex.xbf")
 def by_hex():
     cone = bd.Cone(10, 0, 20)
     cone.color = ORANGE

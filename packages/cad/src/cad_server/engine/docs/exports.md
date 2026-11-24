@@ -211,7 +211,7 @@ the bake's: juno 108.7 MB to 6.9, tom 98.5 to 18.7, w16 83.2 to 38.5, radial 78.
 samplers shared, above). A sparsely keyed eased bake (a small model's) can take more LINEAR keys
 than it had CUBICSPLINE ones, each a third the bytes.
 
-**File decorators require `out`.** `@model(out="XBF/arm.xbf")` declares the native document, the `.xbf`
+**File decorators require `out`.** `@model("XBF/arm.xbf")` declares the native document, the `.xbf`
 the model is saved as; `@step("arm.step")`, `@glb("arm.glb")`, `@stl("arm.stl")`, `@threemf("arm.3mf")`
 and `@dxf("arm.dxf")` declare translations. Relative paths are relative to the script.
 There is no default decorator path. Beyond its path and optional `name=`, no file decorator

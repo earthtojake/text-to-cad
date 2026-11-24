@@ -12,7 +12,7 @@ wrote, are no model's code. A document's state (`models.STATES`, what `cad serve
 - `live`: a live worker holds it, with its memo and its trace.
 - `held`: no worker holds it and the engine answers it all the same: in memory, on disk (**The
   cache**), or both (`Models.where`). In memory the daemon holds it whole: its served structure and shape bytes,
-  and the document as the xbf bytes `@model(out=...)` would write of it, mechanism and every assembly's
+  and the document as the xbf bytes `@model("….xbf")` would write of it, mechanism and every assembly's
   placement included, and its build records with it -- the closure and the compiled animations
   (**Animations**) -- so a GLB of it is the build's own. A page and `cad <type> inspect` read the
   served structure; an export or a
@@ -140,7 +140,7 @@ file -- the engine keeps `documents/<id>/document.xbf` in the cache folder its h
 `$XDG_CACHE_HOME/cad`, else `~/.cache/cad`, on Windows too, where 0.10.0 kept it in
 `%LOCALAPPDATA%\cad`; releases before 0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
 folder. The bytes are the hold's (`document.to_bytes`: the document, its closure record and its
-compiled animations), the engine's own file always: a declared `@model(out=...)` or an exported xbf is the
+compiled animations), the engine's own file always: a declared `@model("….xbf")` or an exported xbf is the
 author's, never used as the cache nor pointed at by it. A file's document has no bytes there, but the views
 derived from its bytes go under it, keyed by them: a KiCad board's plot, refilled pours, DRC and kept exports,
 `documents/<id>/kicad/<key>/` (`formats/kicad/poured.folder`), regenerable, and removed with the document
@@ -234,7 +234,7 @@ another environment, retired for memory -- the daemon asks it
 (the `result` request with `whole`, nothing meshed) for every document of it the server
 does not hold whole at its version (`Models.drain`), out of the supervisor, then closes its stdin. The
 worker serializes the document in memory (`document.to_bytes`: `TDocStd_Application.SaveAs` to a
-stream, the bytes `@model(out=...)` writes), and the documents worker reads them in memory too
+stream, the bytes `@model("….xbf")` writes), and the documents worker reads them in memory too
 (`document.read_bytes`: the application's stream read, overwriting into a document of its own).
 Nothing is written to disk. A worker over its
 memory cap no longer exits on its own: it answers, is drained, and is stopped. A worker that died

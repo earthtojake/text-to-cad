@@ -4,9 +4,9 @@ A page of [the engine's documentation](../README.md). A name in bold in parenthe
 
 A model is a parameterless function that returns a build123d shape, declared
 with `@model` (a document with no file) or by the files it declares (a document with those
-files: `@model(out=...)`, the `.xbf` it is saved as, and a file decorator for any other) -- never both:
+files: `@model("….xbf")`, the `.xbf` it is saved as, and a file decorator for any other) -- never both:
 bare `@model` stacked with a file declaration is refused. The engine runs it in a warm
-worker, holds the result as an XCAF document in memory (`@model(out=...)` explicitly writes its BinXCAF file),
+worker, holds the result as an XCAF document in memory (`@model("….xbf")` explicitly writes its BinXCAF file),
 and writes the derived files the model declares, each a translation of that document. A drawing is
 a model like any other: its body returns 2D geometry (a sketch, a face, wires or edges), and `@dxf`
 declares its DXF.
@@ -15,7 +15,7 @@ declares its DXF.
 from cad import step, model
 import build123d as bd
 
-@model(out="XBF/arm.xbf")  # each run saves it as XBF/arm.xbf beside the script; alone or with file decorators
+@model("XBF/arm.xbf")  # each run saves it as XBF/arm.xbf beside the script; alone or with file decorators
 @step("arm.step")         # also @glb, @stl, @threemf, @dxf; stacked or alone; out= is required; name= optionally names the model
 def arm():
     return bd.Box(10, 20, 30)
@@ -43,7 +43,7 @@ node's placement in its parent (`export.Source.locals`), never pushed down into 
 def peg():
     return bd.Cylinder(2, 10)
 
-@model(out="XBF/base.xbf")
+@model("XBF/base.xbf")
 def base():
     return bd.Compound(children=[bd.Box(20, 20, 3), peg().shape.moved(bd.Pos(5, 0, 6))])
 
@@ -76,7 +76,7 @@ from cad.build123d import memo
 def wheel(radius, spokes=5):     # replayed, not run, while what it is made of is unchanged
     ...
 
-@model(out="XBF/bike.xbf")
+@model("XBF/bike.xbf")
 def bike():
     return bd.Compound(children=[wheel(300), wheel(300).moved(bd.Pos(1200, 0, 0))], label="bike")
 ```
@@ -109,7 +109,7 @@ where the parts stand.
 from cad.build123d import mechanism_state
 from cad import model
 
-@model(out="XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 def hinge():
     base, arm = bd.Box(100, 60, 20), bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
     base.label, arm.label = "base", "arm"

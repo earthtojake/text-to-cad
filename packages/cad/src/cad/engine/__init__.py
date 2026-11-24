@@ -4,7 +4,7 @@ A model is a parameterless function returning a build123d shape::
 
     from cad.engine import model, step
 
-    @model(out="XBF/arm.xbf")
+    @model("XBF/arm.xbf")
     @step("arm.step")
     def arm():
         ...
@@ -41,7 +41,7 @@ from typing import Any
 
 __all__ = ["dxf", "glb", "memo", "model", "paint", "read_mesh", "read_step", "read_xbf", "step",
            "stl", "threemf"]
-# ``@xbf(path)``, the older spelling of ``@model(out=path)``: answered, not listed.
+# ``@xbf(path)``, the older spelling of ``@model(path)``: answered, not listed.
 _OLDER = ("xbf",)
 
 

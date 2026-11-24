@@ -35,7 +35,7 @@ import build123d as bd
 from cad.engine import paint, model
 
 
-@model(out="XBF/stand.xbf")
+@model("XBF/stand.xbf")
 def stand():
     plate = bd.Box(40, 20, 4) - bd.Cylinder(4, 10)
     plate = paint(plate, plate.faces().sort_by(bd.Axis.Z)[-1], "#ffa500")
@@ -45,7 +45,7 @@ def stand():
     return bd.Compound(children=[plate, bd.Pos(12, 0, 8) * peg, bd.Pos(-12, 0, 8) * peg], label="stand")
 
 
-@model(out="XBF/peg.xbf")
+@model("XBF/peg.xbf")
 def peg():
     return bd.Cylinder(3, 12)
 """
@@ -642,7 +642,7 @@ class SnapshotTest(unittest.TestCase):
         script = folder / "stand.py"
         # No .xbf declared: the picture is drawn from the document the worker holds. The build writes what the
         # model declares (law 10), its GLB; the snapshot, no file but the picture.
-        script.write_text(textwrap.dedent(MODEL).replace("@model(out=\"XBF/stand.xbf\")\ndef stand", "@glb(\"stand.glb\")\ndef stand")
+        script.write_text(textwrap.dedent(MODEL).replace("@model(\"XBF/stand.xbf\")\ndef stand", "@glb(\"stand.glb\")\ndef stand")
                           .replace("import paint, model", "import glb, paint, model"), encoding="utf-8")
         drawn = api.snapshot(_model(script, "stand"), folder / "stand.png", display="xray", camera="iso", width=200,
                              height=150, daemon=False)

@@ -45,7 +45,7 @@ FINISH.pbr = FINISH.pbr.override(roughness=ROUGHNESS, anisotropy=0.4,
 def block():
     return bd.Box(20, 10, 4)
 
-@model(out="assembly.xbf")
+@model("assembly.xbf")
 @glb("assembly.glb")
 @step("assembly.step")
 def assembly():
@@ -366,7 +366,7 @@ class MaterialsTest(unittest.TestCase):
                     part.color = bd.Color(*color)  # after the material: the colour's alpha set by hand
                 return part
 
-            @model(out="panes.xbf")
+            @model("panes.xbf")
             @glb("panes.glb")
             def panes():
                 faded = plastics.pmma(opacity=0.4)
@@ -398,7 +398,7 @@ class MaterialsTest(unittest.TestCase):
             from cad import glb, model
             from cad.build123d import paint
 
-            @model(out="painted.xbf")
+            @model("painted.xbf")
             @glb("painted.glb")
             def painted():
                 glass = bd.Box(10, 10, 2)
@@ -458,7 +458,7 @@ class MaterialsTest(unittest.TestCase):
             from bd_materials import plastics
             from cad import glb, model
 
-            @model(out="pane.xbf")
+            @model("pane.xbf")
             @glb("pane.glb")
             def pane():
                 part = bd.Box(20, 10, 2)

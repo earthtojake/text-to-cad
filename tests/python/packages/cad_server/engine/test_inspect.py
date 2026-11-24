@@ -348,7 +348,7 @@ from cad.build123d import mass, point_mass
 from cad.engine import model
 
 
-@model(out="XBF/robot.xbf")
+@model("XBF/robot.xbf")
 def robot():
     base = bd.Box(100, 60, 20, align=bd.Align.MIN)
     base.label, base.material = "base", metals.aluminum()

@@ -40,7 +40,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/plate.xbf")
+@model("XBF/plate.xbf")
 def plate():
     return bd.Box(4, 3, 1)
 

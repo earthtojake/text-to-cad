@@ -28,7 +28,7 @@ from cad.engine import model
 SIZE = {size}
 
 
-@model(out="XBF/cut.xbf")
+@model("XBF/cut.xbf")
 def cut():
     peg = bd.Cylinder(2, 10)
     plate = bd.Box(10, 10, 4) - bd.Pos(SIZE / 10, 0, 0) * peg
@@ -51,12 +51,12 @@ with open("loads.txt", "a", encoding="utf-8") as handle:  # one line per load of
     handle.write("load\\n")
 
 
-@model(out="XBF/block.xbf")
+@model("XBF/block.xbf")
 def block():
     return bd.Box(3, 2, 1)
 
 
-@model(out="XBF/peg.xbf")
+@model("XBF/peg.xbf")
 def peg():
     return bd.Cylinder(1, 3)
 """

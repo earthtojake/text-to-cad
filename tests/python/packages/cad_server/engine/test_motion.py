@@ -33,7 +33,7 @@ from cad.build123d import configuration_sequence, mechanism_state
 from cad.engine import model
 
 
-@model(out="XBF/arm.xbf")
+@model("XBF/arm.xbf")
 def arm():
     base = bd.Box(100, 60, 20)
     link = bd.Pos(40, 0, 25) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
@@ -255,7 +255,7 @@ from cad.engine import model
 import moves
 
 
-@model(out="XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 def hinge():
     base = bd.Box(100, 60, 20)
     arm = bd.Pos(40, 0, 25) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
@@ -357,7 +357,7 @@ from cad.build123d import animation
 import moves
 
 
-@model(out="XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 @glb("GLB/hinge.glb")
 def hinge():
     base = bd.Box(100, 60, 20)

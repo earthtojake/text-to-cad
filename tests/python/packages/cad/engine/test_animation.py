@@ -49,7 +49,7 @@ from cad.build123d import animation
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
 
-@model(out="XBF/channels.xbf")
+@model("XBF/channels.xbf")
 @glb("channels.glb")
 def channels():
     body = bd.Box(80, 50, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -89,7 +89,7 @@ from cad.build123d import configuration_sequence, mechanism_state
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
 
-@model(out="XBF/motion.xbf")
+@model("XBF/motion.xbf")
 @glb("motion.glb")
 def motion_box():
     body = bd.Box(80, 50, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -115,7 +115,7 @@ from cad.build123d import animation
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
 
-@model(out="XBF/fidelity.xbf")
+@model("XBF/fidelity.xbf")
 @glb("fidelity.glb")
 def fidelity():
     body = bd.Box(80, 50, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -149,7 +149,7 @@ from cad import glb, model
 from cad.build123d import animation, configuration_sequence, mechanism_state
 
 
-@model(out="XBF/nested.xbf")
+@model("XBF/nested.xbf")
 @glb("nested.glb")
 def nested():
     base = bd.Box(80, 40, 10, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX))
@@ -182,7 +182,7 @@ from cad import glb, model
 from cad.build123d import animation, configuration_sequence, mechanism_state
 
 
-@model(out="XBF/turned.xbf")
+@model("XBF/turned.xbf")
 @glb("turned.glb")
 def turned():
     base = bd.Box(80, 40, 10)
@@ -390,7 +390,7 @@ class HarvestTest(_Folder):
             from cad.engine import model
 
 
-            @model(out="XBF/bot.xbf")
+            @model("XBF/bot.xbf")
             def bot():
                 def part(label, x):
                     solid = bd.Pos(x, 0, 0) * bd.Box(10, 10, 10)
@@ -529,7 +529,7 @@ class GlbTest(_Folder):
             from cad.build123d import animation
 
 
-            @model(out="XBF/pair.xbf")
+            @model("XBF/pair.xbf")
             @glb("pair.glb")
             def pair():
                 base, arm = bd.Box(10, 10, 10), bd.Pos(20, 0, 0) * bd.Box(5, 5, 5)

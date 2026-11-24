@@ -33,7 +33,7 @@ from bd_materials import FinishedMaterial, metals
 from cad.engine import model, paint
 from threejs_materials import PbrProperties
 
-@model(out="XBF/sample.xbf")
+@model("XBF/sample.xbf")
 def sample():
     physical = metals.aluminum().material
     metal = FinishedMaterial(physical, pbr=PbrProperties.create(

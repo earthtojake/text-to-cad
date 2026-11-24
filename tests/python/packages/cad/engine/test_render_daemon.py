@@ -33,7 +33,7 @@ from cad.engine import model
 SIZE = {size}
 
 
-@model(out="XBF/pair.xbf")
+@model("XBF/pair.xbf")
 def pair():
     block = bd.Box(SIZE, 4, 2)
     block.label = "block"

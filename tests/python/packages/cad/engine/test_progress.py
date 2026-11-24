@@ -128,7 +128,7 @@ class BodiesTest(unittest.TestCase):
             def palm():
                 return bd.Box(12, 8, 2)
 
-            @model(out="XBF/hand.xbf")
+            @model("XBF/hand.xbf")
             def hand():
                 return bd.Compound(children=[palm().shape, finger(0), finger(1)], label="hand")
         """), encoding="utf-8")
@@ -157,11 +157,11 @@ class StagesTest(unittest.TestCase):
             import build123d as bd
             from cad.engine import step, model
 
-            @model(out="XBF/peg.xbf")
+            @model("XBF/peg.xbf")
             def peg():
                 return bd.Cylinder(1, 4)
 
-            @model(out="XBF/kit.xbf")
+            @model("XBF/kit.xbf")
             @step("kit.step")
             def kit():
                 return bd.Compound(children=[bd.Box(4, 4, 1), bd.Pos(0, 0, 2) * peg().shape], label="kit")
@@ -363,7 +363,7 @@ def {last}(size):
     return bd.Pos(9, 0, 0) * bd.Box(1, 1, size)
 
 
-@model(out="XBF/slow.xbf")
+@model("XBF/slow.xbf")
 def slow():
     parts = [one({size}), two({size}), three({size}), {last}({size})]
     return bd.Compound(children=parts, label="slow")

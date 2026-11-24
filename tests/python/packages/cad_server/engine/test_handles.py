@@ -41,7 +41,7 @@ def peg():
     return bd.Cylinder(2, 10)
 
 
-@model(out="XBF/base.xbf")
+@model("XBF/base.xbf")
 def base():
     first, second = peg(), peg()
     # A child's call is its handle, inside the body too: its id, no page yet, its result here.

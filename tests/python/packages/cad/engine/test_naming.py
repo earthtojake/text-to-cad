@@ -34,7 +34,7 @@ def peg(z):
     return bd.Pos(0, 0, z) * bd.Cylinder(1, 30)
 
 
-@model(out="XBF/block.xbf")
+@model("XBF/block.xbf")
 def block():
     body = bd.Box(30, 20, 10)
 {insert}    {relief} = body - bd.Pos(8, 0, 0) * bd.Cylinder(3, 30)
@@ -50,7 +50,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/pair.xbf")
+@model("XBF/pair.xbf")
 def pair():
     fork = bd.Box(20, 10, 10)
     trial = bd.fillet(fork.edges().filter_by(bd.Axis.X), 1)  # an attempt the model throws away
@@ -72,7 +72,7 @@ def _bore(radius, x):
     return bd.Pos(x, 0, 0) * bd.Cylinder(radius, 30)
 
 
-@model(out="XBF/chain.xbf")
+@model("XBF/chain.xbf")
 def chain():
     plate = bd.Box(40, 20, 10)
     plate = plate - _bore(2, -12)
@@ -106,13 +106,13 @@ def bake(shape, kind):
     return bd.Solid(downcast(made.Shape()))
 
 
-@model(out="XBF/wheel.xbf")
+@model("XBF/wheel.xbf")
 def wheel():
     hub = bd.Cylinder(10, 5) - bd.Cylinder(3, 10)
     return bake(bd.Pos(30, 0, 0) * hub, "transform")
 
 
-@model(out="XBF/baked.xbf")
+@model("XBF/baked.xbf")
 def baked():
     hub = bd.Cylinder(10, 5) - bd.Cylinder(4, 10)
     copied = bake(hub, "copy")
@@ -129,7 +129,7 @@ import build123d as bd
 from cad.engine import step, model
 
 
-@model(out="XBF/source.xbf")
+@model("XBF/source.xbf")
 @step("source.step")
 def source():
     plate = bd.Box(20, 10, 2) - bd.Cylinder(2, 10)
@@ -149,7 +149,7 @@ from cad.engine import read_step, model
 HERE = Path(__file__).parent
 
 
-@model(out="XBF/imported.xbf")
+@model("XBF/imported.xbf")
 def imported():
     bought = read_step(HERE / "{file}")
     return bd.Compound(children=[child.moved(bd.Location((0, 0, {lift}))) for child in bought.children])
@@ -259,12 +259,12 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/peg.xbf")
+@model("XBF/peg.xbf")
 def peg():
     return bd.Cylinder(2, 10)
 
 
-@model(out="XBF/stand.xbf")
+@model("XBF/stand.xbf")
 def stand():
     post = peg().shape
     return bd.Compound(children=[post, bd.Pos(10, 0, 0) * bd.Box(2, 2, 2)])
@@ -368,7 +368,7 @@ from build123d.topology.shape_core import downcast
 from cad.engine import model
 
 
-@model(out="XBF/placed.xbf")
+@model("XBF/placed.xbf")
 def placed():
     plate = bd.Box(10, 6, 2) - bd.Cylinder(1, 5)
     plate.label = "plate"
@@ -386,7 +386,7 @@ def placed():
     return bd.Compound(children=kids, label="rebuilt")
 
 
-@model(out="XBF/unified.xbf")
+@model("XBF/unified.xbf")
 def unified():
     from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain
 
@@ -511,7 +511,7 @@ from cad.engine import model
 SPOTS = sorted([(0, 0), (3, 0), (6, 1), (9, 0), (12, 2)], key=lambda spot: hash(str(spot)))
 
 
-@model(out="XBF/grid.xbf")
+@model("XBF/grid.xbf")
 def grid():
     cell = bd.Rectangle(1, 2)
     sk = bd.Sketch() + [bd.Pos(*spot) * cell for spot in SPOTS]

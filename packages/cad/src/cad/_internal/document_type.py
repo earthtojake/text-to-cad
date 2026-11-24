@@ -197,7 +197,7 @@ class ModelType(DocumentType):
 
     def __call__(self, target: Any = None, /, *, name: str | None = None, out: Any = None,  # type: ignore[override]
                  animations: Any = None) -> Any:
-        """``@model``, ``@model(name=...)`` or ``@model(out="XBF/arm.xbf")``: declare a model, and with ``out=``
+        """``@model``, ``@model(name=...)`` or ``@model("XBF/arm.xbf")``: declare a model, and with a path
         the ``.xbf`` each run saves it as, relative to the script; ``model(shape, name=...)``: hand a shape over
         as a named model (``cad.engine.model.model``)."""
         from cad.engine import model

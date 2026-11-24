@@ -31,7 +31,7 @@ from cad.build123d import mechanism_state
 from cad.engine import step, model
 
 
-@model(out="XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 @step(out="hinge.step")
 def hinge():
     base = bd.Box(100, 60, 20)

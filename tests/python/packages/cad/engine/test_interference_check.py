@@ -34,7 +34,7 @@ from cad.build123d import configuration_sequence, mechanism_state
 from cad.engine import model
 
 
-@model(out="XBF/arm.xbf")
+@model("XBF/arm.xbf")
 def arm():
     def part(label, shape):
         shape.label = label
@@ -66,7 +66,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(out="XBF/case.xbf")
+@model("XBF/case.xbf")
 def case():
     def part(label, shape):
         shape.label = label

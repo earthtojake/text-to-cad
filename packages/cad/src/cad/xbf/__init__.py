@@ -1,7 +1,7 @@
 """``cad.xbf``: the older spelling of ``cad.model`` for the file a model is saved as, its ``.xbf``
 (``cad.registry.SAVED``), kept for the scripts that say it and listed nowhere.
 
-Each name is what ``cad.model`` runs for that file: ``@xbf("XBF/arm.xbf")`` is ``@model(out="XBF/arm.xbf")``,
+Each name is what ``cad.model`` runs for that file: ``@xbf("XBF/arm.xbf")`` is ``@model("XBF/arm.xbf")``,
 ``xbf.read`` is ``model.read`` (one function), and ``xbf.export("arm.xbf", ...)``, ``xbf.inspect``,
 ``xbf.snapshot``, ``xbf.dfm``, ``xbf.interference``, ``xbf.solve`` and ``xbf.ranges`` are ``model``'s given an
 ``.xbf`` path, each of a file alone. Nothing of the library's or the server's imports this module.

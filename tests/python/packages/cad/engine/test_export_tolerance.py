@@ -31,7 +31,7 @@ import build123d as bd
 from cad import glb, threemf, model
 
 
-@model(out="XBF/tube.xbf")
+@model("XBF/tube.xbf")
 @threemf("fine.3mf", tolerance=0.01)
 @glb("fine.glb", tolerance=0.05, angle=5)
 def tube():
