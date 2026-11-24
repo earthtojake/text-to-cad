@@ -44,9 +44,7 @@ version is answered at once rather than held: the page asks again a second later
 from __future__ import annotations
 
 import base64
-import email.utils
 import gzip
-import io
 import re
 import threading
 import time
@@ -54,7 +52,7 @@ from collections import OrderedDict
 from typing import Any
 
 from cad_server.viewer import url_norm
-from cad_server.viewer.response import Request, Response
+from cad_server.viewer.response import Captured, Request, Response
 
 MAX_REQUEST_BODY_BYTES = 256 * 1024 * 1024
 _ALLOWED_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"})
@@ -85,32 +83,6 @@ DRAWING_RETRY_MS = 750
 ENGINE_HOLD_SECONDS = 0.25
 ENGINE_RETRY_MS = 750
 _CONTENT_RANGE = re.compile(r"bytes [0-9]+-([0-9]+)/([0-9]+)")
-
-
-class _CapturedHandler:
-    """The slice of ``BaseHTTPRequestHandler`` a viewer Response writes to."""
-
-    def __init__(self) -> None:
-        self.status = 500
-        self.headers: dict[str, str] = {}
-        self.wfile = io.BytesIO()
-        self.close_connection = False
-        self.connection = self
-
-    def send_response_only(self, status: int, message: str | None = None) -> None:
-        self.status = status
-
-    def send_header(self, name: str, value: str) -> None:
-        self.headers[name.lower()] = value
-
-    def date_time_string(self) -> str:
-        return email.utils.formatdate(usegmt=True)
-
-    def end_headers(self) -> None:
-        pass
-
-    def shutdown(self, how: int) -> None:
-        pass
 
 
 def _result(status: int, headers: dict[str, str], body: bytes) -> dict[str, Any]:
@@ -197,7 +169,7 @@ class ViewerTunnel:
             if part is not None:
                 return part
         request = Request(raw_method=method, path=path, query=query, headers=lowered, read_body=lambda: body)
-        handler = _CapturedHandler()
+        handler = Captured()
         response = Response(handler, head_only=request.is_head, byte_range=byte_range, on_parts=self._keep)
         try:
             self.app.handle(request, response)
@@ -239,7 +211,7 @@ class ViewerTunnel:
         if kept is None:
             return None
         data, content_type, extra_headers, _when = kept
-        handler = _CapturedHandler()
+        handler = Captured()
         Response(handler, byte_range=byte_range).send_bytes(200, data, content_type, extra_headers, etag=etag)
         sent = _CONTENT_RANGE.fullmatch(handler.headers.get("content-range", ""))
         if sent is None or int(sent.group(1)) + 1 == int(sent.group(2)):

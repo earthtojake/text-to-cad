@@ -45,10 +45,9 @@ def _flags(parser) -> list[str]:
 
 def _ask(app, path: str) -> tuple[int, str, bytes]:
     """``app``'s answer to ``GET path``, in process: its status, its content type and its body."""
-    from cad_server.mcp.tunnel import _CapturedHandler
-    from cad_server.viewer.response import Request, Response
+    from cad_server.viewer.response import Captured, Request, Response
 
-    handler = _CapturedHandler()
+    handler = Captured()
     app.handle(Request(raw_method="GET", path=path, query=[], headers={}, read_body=lambda: b""), Response(handler))
     return handler.status, handler.headers.get("content-type", ""), handler.wfile.getvalue()
 
