@@ -307,13 +307,13 @@
 .cad-library-format { position: absolute; left: 8px; top: 8px; z-index: 1; height: 16px; padding: 0 5px; border-radius: 4px;
   font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); font-weight: 500; white-space: nowrap; color: #3d4247;
   background: rgba(255, 255, 255, .82); box-shadow: 0 0 0 1px rgba(0, 0, 0, .06); }
-/* The caption, 8px by 12px: the kind's glyph, 8px before the name (12/16, 500) over where it is, its size and its age (11/16, muted). */
+/* The caption, 8px by 12px: the name (12/16, 500) over one line, its project's name where projects are listed and its age (11/16, muted). */
 .cad-library-body { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 8px 12px; }
 .cad-library-text { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
 .cad-library-card .cad-library-label { font-size: var(--cad-text-xs); line-height: var(--cad-leading-xs); font-weight: 500; color: var(--foreground); }
 .cad-library-name { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--foreground); }
 .cad-library-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A card's kind, 16px: a model's cube or a file's plain File; a project's folder before its name. */
+/* A project's folder before its name in its page's heading, 16px. */
 .cad-library-glyph { flex: none; width: 16px; height: 16px; color: var(--muted-foreground); }
 .cad-library-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); color: var(--muted-foreground); }
 .cad-library-card[data-missing] .cad-library-thumbnail, [data-missing] .cad-library-name, .cad-library-card[data-missing] .cad-library-body { opacity: .55; }

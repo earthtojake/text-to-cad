@@ -13,7 +13,6 @@ import { Spinner } from "../primitives/spinner.jsx";
 import { TooltipHint } from "../primitives/tooltip.jsx";
 import { useI18n } from "../i18n/index.js";
 import type { LibraryLayout, LibrarySort } from "../tab-store/tabRecord.js";
-import { DocumentGlyph } from "../file-viewer/navigation/DocumentGlyph.jsx";
 import { entryMenu } from "../file-viewer/navigation/entry-menu.js";
 import type { EntryAction } from "../file-viewer/navigation/index.js";
 import type { FileActions } from "../file-viewer/types.js";
@@ -372,9 +371,9 @@ export interface LibraryOrigin {
  * on disk), then Sort (Last activity, Name, Kind) and grid or list, one segmented control. Under it the kinds'
  * chips (`kindChips`: All, 3D models, Drawings, Boards, Schematics, Robots, each the place holds, with its count under the
  * search), where it holds more than one. Then the place's documents, every one of them (`PLACE_ROWS` until Show more),
- * each a card (a picture badged with its format, "Model" for one built from code or an `.xbf` file, over the kind's glyph, the name, and a
- * line: its project's name in Recents and Pinned, a model's script in its project's page, a file's size, then its last
- * activity with its verb) or a row (Name, Where or Project, Kind: its format, Size, Updated, Created).
+ * each a card (a picture badged with its format, "Model" for one built from code or an `.xbf` file, over the name and a
+ * line: its project's name in Recents and Pinned, then its last activity with its verb; no glyph, script or size, which
+ * the list has) or a row (Name, Where or Project, Kind: its format, Size, Updated, Created).
  * A card's or a row's main press is a link where the host gives the document an address
  * (it is named by its `id`; a row with none by its `path`), a button otherwise. Each has a pin and one ⋯ menu: Open, Open in new tab (or Open in browser: `navigation.openBeside`),
  * a file's Copy path and Reveal where the host can (a model has neither), Pin or Unpin, then Delete, which asks first
@@ -737,10 +736,10 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const where = (item: Model) => shownProject ? below(deletes(item) ? item.script ?? "" : item.folder ?? "", shownProject.root)
     : across ? known.get(item.project ?? "")?.name ?? t("home.standalone") : "";
   const whereColumn = shownProject ? t("home.columnWhere") : across ? t("home.columnProject") : null;
-  // A tile's line: where it is (a project's page says a model's script, its files' folders being the list's), a file's
-  // size, then its last activity with its verb, Edited or Viewed, whichever came last.
-  const status = (item: Model) => [shownProject && !deletes(item) ? "" : where(item), ...(item.missing ? [t("home.fileUnavailable")]
-    : [sizeLabel(item.size, locale), activityLabel(item, now, t, locale)])].filter(Boolean).join(" · ");
+  // A tile's line: its project's name where projects are listed (Recents and Pinned), then its last activity with its
+  // verb, Edited or Viewed, whichever came last. A model's script, a file's folder and its size are the list's columns.
+  const status = (item: Model) => [across ? where(item) : "", item.missing ? t("home.fileUnavailable") : activityLabel(item, now, t, locale)]
+    .filter(Boolean).join(" · ");
   // A row's picture is small, 40 by 28, its spinner over it while it is being opened.
   const name = (item: Model) => <span className="cad-library-name">
     <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} />
@@ -769,9 +768,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       {list.map(item => entry(item, "cad-library-row", <>{name(item)}{columns(item)}</>))}</ul></div>
     : <ul className="cad-library-grid" aria-label={t("home.filesAria")}>{list.map(item => entry(item, "cad-library-card", <>
       <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} badge={format(item)} />
-      {/* The caption: the kind's glyph at the left of the name over where it is, its size and its age. */}
+      {/* The caption: the name over its one line. No glyph: the picture and its badge say what it is. */}
       <span className="cad-library-body">
-        <DocumentGlyph model={deletes(item)} path={item.path} className="cad-library-glyph" />
         <span className="cad-library-text">
           <span className="cad-library-label">{item.name}</span>
           <span className="cad-library-status">{status(item)}</span>

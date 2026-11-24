@@ -198,13 +198,13 @@ chrome that floats over the picture. The home is the navbar over the library: it
   files exported from it stay cards of their own.
 - **Its documents**, all of them: the first 120, then "Show N more". Cards in columns at least 232px wide (the picture
   on the light gradient with its format's badge, "Model" for a document built from code or an `.xbf` file, then the
-  kind's glyph, the name and one line), or 44px rows. Why an xbf says Model: it is the engine's own document saved as
+  name and one line), or 44px rows. Why an xbf says Model: it is the engine's own document saved as
   a file, the same thing a model's page shows, so it is a model; STEP, STL, 3MF, GLB and the rest are other formats and
-  keep their format's name. Only the label: an xbf is still a file (its glyph, its menu, its size and path, what
+  keep their format's name. Only the label: an xbf is still a file (its menu, its size and path, what
   Delete and Pin do).
-  - A card's line says where the document is, where that is not plain: in Recents and Pinned its project's name
-    ("Standalone" for one in none); in a project's page a model's script under the project's folder. Then a file's
-    size, and its last activity. A list's columns are Name, then the same as a column (Project, or in a project's page
+  - A card's line is its last activity ("Edited now", "Viewed 7h ago"), after its project's name in Recents and
+    Pinned ("Standalone" for one in none). A card has no glyph, script or size. Why: the picture and its badge say
+    what it is, and a script's path and a size are for the list, where they are columns to read down. A list's columns are Name, then the same as a column (Project, or in a project's page
     Where: a model's script, a file's folder), Kind (its format, as the badge: "Model", "STEP", "KiCad PCB"), Size,
     Updated and Created.
   - Each has a pin and a ⋯ (Open, Open in new tab, Copy path, Copy link, Reveal, Pin, Delete, which asks first), shown

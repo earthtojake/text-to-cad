@@ -245,7 +245,7 @@ it('gives each card one menu: Open, a file\'s Copy path and Reveal where the hos
   expect(items(await menu('bracket.step'))).toEqual(['Open', 'Pin', 'Delete']);
 });
 
-it('marks each card with its kind\'s glyph, and narrows the place to one kind with a chip: All first, then each kind it holds, with its count', async () => {
+it('gives a card no glyph, and narrows the place to one kind with a chip: All first, then each kind it holds, with its count', async () => {
   const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
   const source = library([model('bracket.step'), model('arm', { path: id, kind: 'model', script: '/work/parts/arm.py' }), model('plate.dxf'),
     model('blinky.kicad_pcb'), model('arm.stl')]);
@@ -254,8 +254,8 @@ it('marks each card with its kind\'s glyph, and narrows the place to one kind wi
     .map(chip => [chip.getAttribute('aria-label'), chip.getAttribute('aria-pressed')]);
   render(<ModelLibrary library={source} onSortChange={() => {}} />);
   const arm = await screen.findByRole('button', { name: 'Open arm' });
-  expect(arm.querySelector('[data-glyph]')?.getAttribute('data-glyph')).toBe('model');
-  expect(screen.getByRole('button', { name: 'Open bracket.step' }).querySelector('[data-glyph]')?.getAttribute('data-glyph')).toBe('file');
+  // The picture and its badge say what a card is: no glyph beside its name.
+  expect([arm.querySelector('[data-glyph]'), screen.getByRole('button', { name: 'Open bracket.step' }).querySelector('[data-glyph]')]).toEqual([null, null]);
   // A row of pills of its own, under the heading row: a model and the files exported from it are 3D models alike.
   const row = screen.getByRole('group', { name: 'Show' });
   expect([row.previousElementSibling?.classList.contains('cad-library-toolbar'), row.closest('.cad-library-toolbar')]).toEqual([true, null]);
@@ -603,14 +603,14 @@ it("shows every card's light picture in both themes, never turned, and badges it
   expect(['video.kicad_pcb', 'plate.dxf', 'arm'].map(name => picture(name).querySelector('.cad-library-format')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'Model']);
 });
 
-// A file's size, the server's, goes before its age; a model has none.
-it("says a file's size before its age, and a model's age alone", async () => {
+// A card's line is the age alone, a file's as a model's: a file's size, the server's, is the list's column.
+it("says a card's age alone, a file's size being the list's", async () => {
   const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
   const now = Date.now() / 1000;
   render(<ModelLibrary library={library([model('plate.step', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 1_700_000 }),
     model('tiny.stl', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 900 }), model('arm', { path: id, kind: 'model', opened: null, updated: now - 2 * 3600 })])} />);
   const status = async (name: string) => (await screen.findByRole('button', { name: `Open ${name}` })).querySelector('.cad-library-status')!.textContent;
-  expect([await status('plate.step'), await status('tiny.stl'), await status('arm')]).toEqual(['1.6 MB · Viewed 5h ago', '900 B · Viewed 5h ago', 'Edited 2h ago']);
+  expect([await status('plate.step'), await status('tiny.stl'), await status('arm')]).toEqual(['Viewed 5h ago', 'Viewed 5h ago', 'Edited 2h ago']);
   expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Home');
 });
 
@@ -705,9 +705,9 @@ it("gives a project a page of its own: its name, its folder from the home folder
   // All eleven, with no Show all: its models by last activity among its files.
   expect(opens()).toHaveLength(11);
   expect(screen.queryByRole('button', { name: /^Show \d/ })).toBeNull();
-  // A card's second line: a model's script under the project's folder; a file's size and age (its folder is the list's).
+  // A card's second line is its last activity alone: a model's script and a file's folder and size are the list's.
   const second = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('.cad-library-status')?.textContent;
-  expect([second('heart-tag_model_0'), second('part_0.stl')]).toEqual(['src/heart-tag.py · Edited 16h ago', 'Edited 16h ago']);
+  expect([second('heart-tag_model_0'), second('part_0.stl')]).toEqual(['Edited 16h ago', 'Edited 16h ago']);
   // A file of the project's that no page opened: no pin, and no Delete (its folder lists it).
   expect(within(screen.getByRole('button', { name: 'Open part_0.stl' }).closest('li')!).queryByRole('button', { name: 'Pin' })).toBeNull();
   expect(items(await menu('part_0.stl'))).toEqual(['Open']);
@@ -744,11 +744,11 @@ it("leads a card's second line with its project's name in Recents and Pinned, wh
   const view = render(home({ view: 'recents' }));
   await waitFor(() => expect(place('project:p1')).toBeTruthy());
   const second = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('.cad-library-status')?.textContent;
-  expect([second('heart-tag_model_0'), second('loose.step')]).toEqual(['heart-tag · Edited 16h ago', 'Standalone · 2 KB · Edited 16h ago']);
+  expect([second('heart-tag_model_0'), second('loose.step')]).toEqual(['heart-tag · Edited 16h ago', 'Standalone · Edited 16h ago']);
   view.rerender(home({ view: 'pinned' }));
-  expect([second('heart-tag_model_0'), second('loose.step')]).toEqual(['heart-tag · Edited 16h ago', 'Standalone · 2 KB · Edited 16h ago']);
+  expect([second('heart-tag_model_0'), second('loose.step')]).toEqual(['heart-tag · Edited 16h ago', 'Standalone · Edited 16h ago']);
   view.rerender(home({ view: 'standalone' }));
-  expect(second('loose.step')).toBe('2 KB · Edited 16h ago');
+  expect(second('loose.step')).toBe('Edited 16h ago');
 });
 
 it('shows the first of a long place, and the rest once its Show more is pressed', async () => {
