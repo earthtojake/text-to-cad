@@ -197,7 +197,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   useEffect(() => {
     if (!homed) return undefined;
     const controller = new AbortController();
-    void Promise.resolve().then(() => client.serverInfo({ signal: controller.signal })).then(info => { if (typeof info.home === 'string' && info.home) setHomeFolder(info.home); }, () => {});
+    void Promise.resolve().then(() => client.serverInfo?.({ signal: controller.signal })).then(info => { if (typeof info?.home === 'string' && info.home) setHomeFolder(info.home); }, () => {});
     return () => controller.abort();
   }, [client, homed]);
   const explorerFolder = settings.explorer.folder ?? homeFolder;

@@ -126,7 +126,8 @@ protocol relationship never imports Python or discovers an interpreter.
 
 ```
 src/
-  client/          # CAD service/resource contracts, HTTP adapter and worker tickets
+  client/          # CAD service/resource contracts, HTTP adapter and worker tickets, and
+                   #   bundle.js: the same service over a view bundle, with no engine
   prompt/          # typed context bundles, identity/targets and pure serialization
   common/          # rendering + runtime entries shared by every consumer:
                    #   renderModel/renderOptions (interactive canvases, the docs
@@ -228,6 +229,17 @@ consume domain results and resource tickets. See [workspace services and resourc
 transport](docs/workspace-resources.md) for worker transfer, nested dependencies,
 cache generations and the standalone static-HTTP default. No client reads model
 source or starts a source build.
+
+`openViewBundle(source)` (`client/bundle.js`) is the same service over a view bundle (`cad <type>
+export SRC DST.view`): the answers a page reads of one document, as files, read with no engine
+behind the page from a `ViewBundleSource` -- `viewBundleUrlSource(url)`, a folder on a plain static
+file server, or `viewBundleMemorySource(files)`, the files held in the page -- each the bytes of a
+path of the bundle. It checks the manifest (`view-bundle/1`; a file not its listed size fails), and
+answers the catalog (the one document: a model by its id, a file by `/<name>`), an engine document
+(its API URL under `http://view-bundle.invalid`, answered by a fetch of its own that maps each route
+to its file: one element's facts and a part's groups out of the part's one `elements.json`; served
+`final`, so nothing waits on a next version), a drawing, a robot and the resources their loaders
+read. What needs an engine it leaves out ([workspace resources](docs/workspace-resources.md)).
 
 `createHttpPromptFiles({ origin, fetch })` is the viewer server's maker of a Quick
 Edit's files: `create(request)` posts its views and annotation to `POST /api/v1/local/prompt-files`,

@@ -1,4 +1,4 @@
-import type { CadEntry, CadWorkspaceService } from '@cad/core/client';
+import type { CadClient, CadEntry, CadWorkspaceService } from '@cad/core/client';
 import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import type { ClipboardPort } from '../host/types.js';
 import type { FileActions, FileMetadata, FileSource } from '../file-viewer/types.js';
@@ -42,10 +42,12 @@ export function contentRevision(entry: CadEntry): string {
  * The files a view reads, through a CAD client: a file's metadata from its catalog entry, one
  * folder's subfolders and CAD files, and a bounded search under a folder. A file's revision is its
  * content's (`contentRevision`), never compiler progress. (A renderer follows its file's updates
- * through the client itself.)
+ * through the client itself.) A service with no folders to browse (a view bundle's, one document)
+ * gives the source no `list` or `search`, so the view has no explorer.
  */
-export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEntry' | 'folder' | 'search'>,
+export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEntry'> & Partial<Pick<CadClient, 'folder' | 'search'>>,
   { id = 'local' }: { id?: string } = {}): FileSource {
+  const { folder: readFolder, search: searchFolder } = client;
   return {
     id,
     async stat(path, { signal }): Promise<FileMetadata> {
@@ -65,14 +67,16 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEn
         extension: byId ? 'xbf' : name.split('.').pop()?.toLowerCase() || '', mediaType: byId ? 'cad-document' : 'cad',
         revision: contentRevision(entry) };
     },
-    async list(directory, { signal }) {
-      const folder = await client.folder(directory, { signal });
-      return folder.entries.map(entry => ({ path: joinPath(folder.path, entry.name), name: entry.name, kind: entry.kind }));
-    },
-    async search(directory, query, { signal }) {
-      const found = await client.search(directory, query, { signal });
-      return { paths: found.results.map(normalizePath), truncated: found.truncated };
-    },
+    ...(readFolder && searchFolder ? {
+      async list(directory: string, { signal }: { signal: AbortSignal }) {
+        const folder = await readFolder.call(client, directory, { signal });
+        return folder.entries.map(entry => ({ path: joinPath(folder.path, entry.name), name: entry.name, kind: entry.kind }));
+      },
+      async search(directory: string, query: string, { signal }: { signal: AbortSignal }) {
+        const found = await searchFolder.call(client, directory, query, { signal });
+        return { paths: found.results.map(normalizePath), truncated: found.truncated };
+      },
+    } : {}),
   };
 }
 
@@ -88,12 +92,12 @@ export function createCadFileActions({ platform, clipboard, reveal, openIn, link
    * file's document (`entryOf`). The link copied is `<origin>/<document id>?token=<fresh link>`, the
    * page's own address. Without it, no Copy link.
    */
-  link?: { origin: string | (() => string); client: Pick<CadWorkspaceService, 'link' | 'entryOf'> };
+  link?: { origin: string | (() => string); client: Pick<CadClient, 'link' | 'entryOf'> };
   /**
    * Open in's apps, through a CAD client (`openInApps`, `openIn`): a document is asked for by its id,
    * a file's from the client's row of it (`entryOf`).
    */
-  openIn?: Pick<CadWorkspaceService, 'openInApps' | 'openIn' | 'entryOf'>;
+  openIn?: Pick<CadClient, 'openInApps' | 'openIn' | 'entryOf'>;
 }): FileActions {
   const clientOf = openIn?.entryOf ? openIn : link?.client;
   const idOf = (path: string, given?: string) => given || (isDocumentId(path) ? path : String(clientOf?.entryOf?.(normalizePath(path))?.id || '') || null);

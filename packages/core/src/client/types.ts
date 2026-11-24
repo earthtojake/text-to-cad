@@ -156,6 +156,8 @@ export interface CadEngineDocument {
   kind: string;
   url: string;
   fetch: typeof fetch;
+  /** The document as it stood, with no engine to wait on for a next version (a view bundle's): the page reads it once. */
+  final?: boolean;
 }
 /**
  * What a save of a model's parameters answers (`POST /api/v1/documents/model/<id>/parameters`): each
@@ -229,7 +231,11 @@ export interface CadRenderSession {
   signal: AbortSignal;
   dispose(): void;
 }
-/** Domain service consumed by renderers; HTTP metadata stays on its adapter. */
+/**
+ * Domain service consumed by renderers; HTTP metadata stays on its adapter. What only a host with an
+ * engine can answer (the library, the explorer, the person's settings, this computer's apps) is the HTTP
+ * client's (`CadClient`); a service without an engine (a view bundle's) leaves out what needs one too.
+ */
 export interface CadWorkspaceService {
   exports?: ExportService;
   getSnapshot(): CadCatalogSnapshot;
@@ -239,49 +245,14 @@ export interface CadWorkspaceService {
   resolveEntry(path: string, options?: CadRequestOptions): Promise<CadEntry>;
   /** The row the catalog has of a document (its path, or its id), joined by the document's id; null when it has none. */
   entryOf?(path: string): CadEntry | null;
-  serverInfo(options?: CadRequestOptions & { fresh?: boolean }): Promise<CadServerInfo>;
-  folder(path: string, options?: CadRequestOptions): Promise<CadFolder>;
-  search(path: string, query: string, options?: CadRequestOptions): Promise<CadSearch>;
-  /** The home's library, newest first. */
-  recents(options?: CadRequestOptions): Promise<CadRecent[]>;
-  /**
-   * A change to the library (`open`, `pin`, `unpin`, `thumbnail`; `remove` a file's entry, its file
-   * untouched; `delete` a model, its entry and the engine's copy): the library as it now is.
-   */
-  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
-  /** Keep a model's picture in the library: the light viewport's, which the home shows in both themes. */
-  keepThumbnail(png: Blob, path: string): Promise<CadRecent[]>;
-  /** A library picture, of the row it is of (its document's id, the picture's name), as a data URL; null when there is none. */
-  thumbnail(model: { id?: string; thumbnail?: string | null }, options?: CadRequestOptions): Promise<string | null>;
-  /** The URL of a library picture (`GET /api/v1/documents/<id>/thumbnail`), versioned by the picture's name. */
-  thumbnailUrl(model: { id?: string; thumbnail?: string | null }): string;
-  /** Open: the model the person picks with the desktop's chooser, by its absolute path, or null. */
-  pick(): Promise<string | null>;
-  /** Show a file, by its absolute path, in the desktop's file manager. */
-  reveal(path: string): Promise<void>;
-  /** Open in: the document's files and the apps this computer has for each (`GET /api/v1/local/open-in?id=`). */
-  openInApps(id: string, options?: CadRequestOptions): Promise<CadOpenInApps>;
-  /** Open one of the document's files (`target`, from `openInApps`) in one of its apps, or `"default"`, the OS's own (`POST /api/v1/local/open`). */
-  openIn(id: string, target: string, app: string): Promise<void>;
-  /** Whether the person's usage stats are sent; with `share`, their answer (the app menu's toggle). */
-  consent(share?: boolean): Promise<CadConsent>;
-  /** The language the person chose for every CAD view, or null (Automatic); with `locale`, their choice (null clears it). */
-  language(locale?: string | null): Promise<{ locale: string | null }>;
-  /** What's new: the releases whose notes the person has seen and the one the engine runs (null from a server before it); with `seen`, releases to add to them. */
-  whatsNew(seen?: readonly string[]): Promise<CadWhatsNew | null>;
-  /** A fresh link (`<expires>.<mac>`) for the page's own address, and when it expires (Unix seconds). */
-  link(): Promise<{ link: string; expires: number }>;
-  /**
-   * What the page did -- a person touched it, sent a Quick Edit, used its controls, or the page crashed (`crashOf`) --
-   * noted by the server and sent only with consent. Never fails.
-   */
-  reportActivity(activity: CadActivity): void;
+  /** The server's description; a service with no server has none. */
+  serverInfo?(options?: CadRequestOptions & { fresh?: boolean }): Promise<CadServerInfo>;
   /**
    * A `.kicad_pcb` drawn on the server as geometry per layer (its document's `plot`); the client never parses KiCad's files.
    * A `.kicad_sch`'s: `sheet` (a sheet's path, `/` the root) draws that sheet's page alone, `index: false` leaves the
    * hierarchy's index out (the viewer reads it with the first sheet it shows).
    */
-  plotPayload(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
+  plotPayload?(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
   /**
    * A board's 3D models table (`GET <board>/models`): each model name its footprints write, a STEP the engine
    * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path.
@@ -319,9 +290,71 @@ export interface CadWorkspaceService {
   createRenderSession(options?: { file?: string }): CadRenderSession;
   dispose(): void;
 }
-/** Reusable HTTP implementation, also used by existing catalog adapters. */
+/** Reusable HTTP implementation, also used by existing catalog adapters: a viewer's server, with its engine. */
 export interface CadClient extends CadWorkspaceService {
   readonly origin: string;
+  serverInfo(options?: CadRequestOptions & { fresh?: boolean }): Promise<CadServerInfo>;
+  plotPayload(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
+  folder(path: string, options?: CadRequestOptions): Promise<CadFolder>;
+  search(path: string, query: string, options?: CadRequestOptions): Promise<CadSearch>;
+  /** The home's library, newest first. */
+  recents(options?: CadRequestOptions): Promise<CadRecent[]>;
+  /**
+   * A change to the library (`open`, `pin`, `unpin`, `thumbnail`; `remove` a file's entry, its file
+   * untouched; `delete` a model, its entry and the engine's copy): the library as it now is.
+   */
+  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
+  /** Keep a model's picture in the library: the light viewport's, which the home shows in both themes. */
+  keepThumbnail(png: Blob, path: string): Promise<CadRecent[]>;
+  /** A library picture, of the row it is of (its document's id, the picture's name), as a data URL; null when there is none. */
+  thumbnail(model: { id?: string; thumbnail?: string | null }, options?: CadRequestOptions): Promise<string | null>;
+  /** The URL of a library picture (`GET /api/v1/documents/<id>/thumbnail`), versioned by the picture's name. */
+  thumbnailUrl(model: { id?: string; thumbnail?: string | null }): string;
+  /** Open: the model the person picks with the desktop's chooser, by its absolute path, or null. */
+  pick(): Promise<string | null>;
+  /** Show a file, by its absolute path, in the desktop's file manager. */
+  reveal(path: string): Promise<void>;
+  /** Open in: the document's files and the apps this computer has for each (`GET /api/v1/local/open-in?id=`). */
+  openInApps(id: string, options?: CadRequestOptions): Promise<CadOpenInApps>;
+  /** Open one of the document's files (`target`, from `openInApps`) in one of its apps, or `"default"`, the OS's own (`POST /api/v1/local/open`). */
+  openIn(id: string, target: string, app: string): Promise<void>;
+  /** Whether the person's usage stats are sent; with `share`, their answer (the app menu's toggle). */
+  consent(share?: boolean): Promise<CadConsent>;
+  /** The language the person chose for every CAD view, or null (Automatic); with `locale`, their choice (null clears it). */
+  language(locale?: string | null): Promise<{ locale: string | null }>;
+  /** What's new: the releases whose notes the person has seen and the one the engine runs (null from a server before it); with `seen`, releases to add to them. */
+  whatsNew(seen?: readonly string[]): Promise<CadWhatsNew | null>;
+  /** A fresh link (`<expires>.<mac>`) for the page's own address, and when it expires (Unix seconds). */
+  link(): Promise<{ link: string; expires: number }>;
+  /**
+   * What the page did -- a person touched it, sent a Quick Edit, used its controls, or the page crashed (`crashOf`) --
+   * noted by the server and sent only with consent. Never fails.
+   */
+  reportActivity(activity: CadActivity): void;
+}
+/**
+ * Where a view bundle's files are read (`viewBundleUrlSource`, `viewBundleMemorySource`): the bytes of one
+ * path of the bundle (`manifest.json`, `parts/<key>/<tessellation>.xbm`…), or an error whose `status` is 404
+ * for a path it does not hold.
+ */
+export interface ViewBundleSource {
+  /** The folder's URL, for a bundle read from a file server. */
+  readonly url?: string;
+  read(path: string, options?: CadRequestOptions): Promise<ArrayBuffer>;
+}
+/** A view bundle's `manifest.json` (the engine's documentation, "View bundle"). */
+export interface ViewBundleManifest {
+  format: 'view-bundle/1';
+  document: { id: string; kind: string; name: string; version: string };
+  made?: { tool?: string; release?: string };
+  files: Record<string, { bytes: number; sha256?: string; type?: string }>;
+}
+/** The viewer's CAD service over one view bundle (`openViewBundle`): its one document, read from the bundle alone. */
+export interface CadViewBundleClient extends CadWorkspaceService {
+  readonly manifest: ViewBundleManifest;
+  /** What the viewer shows it by: a model's id, a file's `/<name>`. */
+  readonly file: string;
+  engineDocument(file: string, options?: CadRequestOptions): Promise<CadEngineDocument>;
 }
 export interface CadClientOptions {
   resources?: CadResourceProvider;
