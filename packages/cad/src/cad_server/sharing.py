@@ -85,7 +85,8 @@ def _token(size: int) -> str:
 
 
 def digest(secret: str) -> str:
-    """A secret as the service keeps it: the lowercase hex SHA-256 of its text."""
+    """A secret as the service keeps it: the lowercase hex SHA-256 of its 43-character text (its ASCII bytes), never
+    of the bytes it decodes to; the service hashes an ``Authorization`` bearer's text the same way."""
     return hashlib.sha256(secret.encode("ascii")).hexdigest()
 
 
@@ -242,7 +243,8 @@ def _refused(status: int, found: dict[str, Any] | None) -> Refused:
 def upload(share: Share, body: bytes) -> dict[str, Any]:
     """``PUT /v1/shares/<id>``: the archive uploaded, or uploaded again over the share of the same id and write
     secret. The service's answer, ``{"id", "expires", "bytes", "made"}`` (``made``: 201, a new share; 200, one
-    replaced); ``Refused`` for its refusal (a 403: a share of that id another write secret made)."""
+    replaced); ``Refused`` for its refusal (a 403: a share of that id another write secret made; a 409: its create lost
+    a race, worth one more try)."""
     status, found = _call("PUT", share, {"Authorization": f"Bearer {share.write}", "Cad-Share-Key": share.key,
                                           "Cad-Delete-Hash": digest(share.delete), "Content-Type": "application/gzip",
                                           "Content-Length": str(len(body))}, body)
