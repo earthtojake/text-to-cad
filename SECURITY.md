@@ -269,6 +269,9 @@ computer inside its major before one ships.
 - `api.texttocad.dev`: anything beyond its documented behaviour (version feed,
   consented analytics), including a way to make the feed name a release it should
   not.
+- The share service (`cad.fun`, [apps/share](apps/share/README.md)): a way to read a
+  share without its key, to replace or delete one without its secrets, to make it keep
+  or log a key or a secret, or to make its page fetch from another origin.
 
 Out of scope: what someone who already has your token, a link or
 your session cookie, or already runs code as you, can do; and effects on your

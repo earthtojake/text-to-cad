@@ -6,7 +6,7 @@
 #
 # The tiers:
 #   static     every change, nothing installed: the version and tree checks, the light contracts,
-#              the API's tests.
+#              the API's and the share service's tests.
 #   unit       the packages' suites on Linux (packages), the JS workspaces (js-*), docs, skills.
 #   platform   the packages' suites on Windows; the router's unit files on macOS.
 #   integration  fea, kicad, blender, packaging, viewer-e2e: each with what it drives installed.
@@ -134,7 +134,7 @@ jobs:
   # a release, only a branch of this repository may carry one, and only to a version past the
   # target's and the latest tag: scripts/release/check-pr-version.sh); the tracked tree's rules;
   # the light contracts -- the policy tests and skill suites that read only the repository's
-  # text, where one that needs more fails; and the API's tests, which install nothing.
+  # text, where one that needs more fails; and the API's and the share service's tests, which install nothing.
   static:
     name: static
     runs-on: ubuntu-latest

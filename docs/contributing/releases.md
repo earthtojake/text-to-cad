@@ -525,6 +525,10 @@ gh workflow run deploy-docs.yml --ref my-branch -f ref=my-branch -f preview=true
 `apps/api` on `main`, and redeploys `main` on dispatch (`gh workflow run deploy-api.yml`). It follows
 no release.
 
+`Deploy Share` (`.github/workflows/deploy-share.yml`) deploys the share service (`apps/share`) on
+dispatch alone (`gh workflow run deploy-share.yml --ref main`). It follows no release either; its
+one-time set-up is in its [README](../../apps/share/README.md#set-up-once).
+
 ## The install branches
 
 Installers clone a branch and take its tree as the plugin. On `main` that tree is the monorepo: 1 GB

@@ -17,6 +17,7 @@ before a change. Keep it that short. Detail belongs in the document a row below 
 | `apps/web/` | The viewer's React client, which the server serves |
 | `apps/mcp/` | The CAD app the Codex app shows as tabs |
 | `apps/docs/`, `apps/api/` | The site, texttocad.dev (the homepage, and the documentation under `/docs`: a page per skill, the references generated from the code, and `docs/`'s install and migration guides shown as they are), and `api.texttocad.dev` (the version feed, analytics and a failed install's one report) |
+| `apps/share/` | `cad.fun`, the share service: a Cloudflare Worker that keeps a shared model's view bundle, encrypted, for 7 days, and serves the viewer that opens it |
 | `models/` | Sample models, built by hand; no test reads them |
 | `scripts/` | Durable repo commands, by purpose: `test/`, `bundle/`, `release/`, `install/`, `bench/` |
 | `tests/` | Every test suite, grouped by what it tests; `tests/python/global/` holds the policy tests |
@@ -36,6 +37,7 @@ Read the one document for what you are changing, then the link it gives you. Not
 | The viewer or shared JS | [apps/web](apps/web/README.md), [packages/ui](packages/ui/README.md) (its [design system](packages/ui/docs/design-system.md) binds the tokens, the two scales, the components and touch; its [viewer layout](packages/ui/docs/viewer-ux.md), what goes where and why, and the patterns), [packages/core](packages/core/README.md) |
 | The CAD app | [apps/mcp](apps/mcp/README.md) |
 | The docs site or the API | [apps/docs](apps/docs/README.md), [apps/api](apps/api/README.md) |
+| The share service | [apps/share](apps/share/README.md) |
 | A test or a CI job | [Testing](docs/contributing/testing.md) |
 | Install, update or plugin distribution, an agent app's row | [Decisions](docs/contributing/decisions.md), [docs/install.md](docs/install.md); for an app, [Test In Agent Apps](CONTRIBUTING.md#test-in-agent-apps) |
 | A release, a version, the install branches | [Releases](docs/contributing/releases.md) |
@@ -130,8 +132,8 @@ Run the smallest check that covers the change, then the broader one before hand-
 | Python | `scripts/test/test-python.sh <test files>`; `--select cadgen\|viewer\|skills\|all` for a suite |
 | Shared JS or the viewer | `npm run build:packages`, then `scripts/test/test-js.sh --select core\|ui\|web\|mcp\|all` |
 | What the bundlers consume | `scripts/bundle/bundle.sh --check` |
-| The docs site, the API | `npm --prefix apps/docs run check`, `npm --prefix apps/api test` |
+| The docs site, the API, the share service | `npm --prefix apps/docs run check`, `npm --prefix apps/api test`, `npm --prefix apps/share test` |
 | A skill's behaviour | `scripts/bench/skill_ab.py` ([Writing a skill](docs/contributing/writing-a-skill.md#test-a-large-change-ab)) |
-| The JS, API, Python and policy suites in one run | `scripts/test/test.sh` (CI runs more: [Testing](docs/contributing/testing.md#ci)) |
+| The JS, API, share, Python and policy suites in one run | `scripts/test/test.sh` (CI runs more: [Testing](docs/contributing/testing.md#ci)) |
 
 CI runs one job per concern, only where a change reaches it; `main` requires the single check `CI`.
