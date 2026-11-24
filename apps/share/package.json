@@ -1,0 +1,11 @@
+{
+  "name": "cad-share",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test src/*.test.mjs",
+    "build": "node build.mjs",
+    "serve": "node serve.mjs"
+  }
+}

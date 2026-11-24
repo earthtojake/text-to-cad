@@ -1,0 +1,44 @@
+// The share service's Worker (README.md). No route or custom domain is attached here: the owner
+// attaches the domain to the deployed Worker (README.md, "Set-up, once"), and its workers.dev
+// address stays on beside it.
+{
+  "name": "cad-share",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "preview_urls": false,
+
+  // The viewer's built client, copied here by `npm --prefix apps/share run build` (build.mjs) and
+  // never committed. A path that is a file is served as it is, with no Worker, but for HTML, which
+  // the Worker answers so that it carries the page's security headers. Every path that is no file,
+  // `/` and a share's page `/<id>` among them, reaches the Worker, as does the API.
+  "assets": {
+    "directory": "./viewer",
+    "binding": "ASSETS",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "run_worker_first": ["/v1/*", "/*.html"]
+  },
+
+  // The shares: IV || ciphertext-and-tag under each share's id, its hashes and expiry beside it.
+  "r2_buckets": [
+    { "binding": "SHARES", "bucket_name": "cad-shares" }
+  ],
+
+  // Uploads and deletes, per client address and Cloudflare location: 10 a minute.
+  "ratelimits": [
+    { "name": "LIMITER", "namespace_id": "47201", "simple": { "limit": 10, "period": 60 } }
+  ],
+
+  "vars": {
+    "MAX_SHARE_BYTES": "26214400",
+    "EXPIRY_DAYS": "7"
+  },
+
+  // The Worker logs nothing of a request; Cloudflare's own record of each one is off too, so
+  // nothing keeps who fetched which share.
+  "observability": {
+    "enabled": true,
+    "logs": { "invocation_logs": false }
+  }
+}

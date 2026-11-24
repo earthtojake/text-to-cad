@@ -1,0 +1,7 @@
+# The viewer's built client, copied in by build.mjs before a deploy; Wrangler's local state; and
+# any local secrets file Wrangler reads. None is committed.
+/viewer/
+.wrangler
+.dev.vars
+.dev.vars.*
+node_modules
