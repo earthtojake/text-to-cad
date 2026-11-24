@@ -13,7 +13,9 @@ use [backend.md](./backend.md) for that interface.
 ## The URL
 
 The URL's path names the document, `/<id>` (`src/client/workbench/fileParam.js`); the bare
-path is the home. No query parameter names a file: a developer's default file
+path is the home. One query parameter chooses what the page is, once, as it starts: `?bundle=<folder>`
+makes it a view bundle's page (`src/client/workbench/bundleParam.js`), whose path names nothing. No
+query parameter names a file: a developer's default file
 (`VIEWER_DEFAULT_FILE`, an absolute path set at build time) is resolved to its id through
 the catalog, and `writeDocumentId` keeps whatever query the page carries.
 
@@ -76,7 +78,11 @@ never written again.
 ## localStorage
 
 Nothing goes in localStorage: a value that depends on a file, a tab or a person's
-choice belongs in the tab record.
+choice belongs in the tab record. One exception: a view bundle's page has no server to keep
+the person's own settings (`settings.json`, the same for every CAD view where there is an
+engine), so it keeps the one it has, the language chosen in the app menu, in this browser's
+localStorage, under `text-to-cad:language` (`src/host/browserLanguage.js`): the same for every
+bundle this browser opens, as the server's is for every view.
 
 ## The library's pictures
 

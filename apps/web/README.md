@@ -6,7 +6,8 @@ The built client ships inside the same wheel. `cad viewer [FILE ...]` opens the
 engine's one page and exits. The page addresses every document by path, `/<uuid>`: a
 model's id, or a file's id once a launcher (or the page itself) registers it, derived from
 the file's canonical path. `/` is the home: the library alone, the documents opened or built
-before. Python scripts are never documents. There is no hosted deployment.
+before. Python scripts are never documents. The same client also shows one view bundle with no
+engine behind it, from any plain static file server ([A view bundle](#a-view-bundle)).
 
 This app is the browser host of `@cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
@@ -31,7 +32,8 @@ this app. The Python wheel consumes only the production build.
 ```text
 src/
   App.tsx               the CadViewer's browser host: URL, history, title, appearance, the file menu and the library
-  main.tsx              host/client bootstrap and cleanup
+  BundleApp.tsx         the host of one view bundle: its document alone, with no engine
+  main.tsx              host/client bootstrap and cleanup, and the choice between the two (`?bundle=`)
   StartingView.tsx      the page while it asks its server what it is: the app's own frame, inert
   host/                 browser clipboard, prompt delivery, the app menu's links, reload under a new server
   persistence/          the tab record in sessionStorage
@@ -163,6 +165,28 @@ A page closing never stops the engine, and no timer does: it runs until `cad ser
 until cad's own update restarts it on a newer release while nothing uses it.
 Code changes in a checkout require
 restarting an engine you own, then rerunning the launcher. Vite handles client HMR.
+
+## A view bundle
+
+A page whose address carries `?bundle=<folder>` shows that view bundle (`cad <type> export SRC DST.view`)
+and nothing else: `main.tsx` reads the parameter once, at start-up (`src/client/workbench/bundleParam.js`),
+and an address without it is the engine's page, exactly as above. The folder is a URL resolved against the
+page's own and on its origin, so the built client and the bundle are served side by side by any static
+file server, at any path (the build's asset URLs are relative):
+
+```text
+https://example.org/viewer/index.html?bundle=bundles/arm.view/
+```
+
+The page reads the bundle's `manifest.json`, then `BundleApp.tsx` hands `CadViewer` the bundle's
+service (`openViewBundle(viewBundleUrlSource(folder))`, `@cad/core/client`) and only the host ports that
+need no engine: the clipboard, this build's links, the tab's appearance and the person's language, which
+this browser keeps (`src/host/browserLanguage.js`, [storage](docs/storage.md#localstorage)). It asks
+nothing of `/api/`: no server description, address link, library, Recents, telemetry, What's new, crash
+report or version to wait on, and no Export, Open in, Reveal or Copy path; parameters read as an `.xbf`'s
+do ("Edit these in the script."), and Quick Edit copies. What a bundle-backed view leaves out, and why, is
+[the host contract's](../../packages/ui/docs/viewer-host.md#a-view-bundles-host). A bundle the page
+cannot open (none named, another origin's, no manifest, another format) says why, on a page of its own.
 
 ## Behaviours worth knowing before concluding something is broken
 
