@@ -876,6 +876,46 @@ class SlotBesideAHoleTest(unittest.TestCase):
         self.assertTrue(analysis.holes[0].in_bend)
 
 
+class EqualSidesTest(unittest.TestCase):
+    """A sheet's two skins are as large wherever nothing is cut into one alone, and come out of the kernel some
+    1e-14 mm2 apart, another way in each placement. Here one is larger by a known amount, either way."""
+
+    E = 1e-9
+
+    def read(self, part: bd.Shape, e: float) -> dict:
+        classify = sheet._Analysis.classify
+
+        def nudged(analysis: sheet._Analysis) -> None:
+            classify(analysis)
+            for a in analysis.skins:  # the top skin a hair larger, or smaller
+                if analysis.surfaces[a - 1].normal[2] > 0.5:
+                    analysis.areas[a - 1] += e
+
+        part.label = "part"
+        with mock.patch.object(sheet._Analysis, "classify", nudged):
+            return measured(part)
+
+    def test_a_hole_sunk_from_either_side_is_measured_at_its_rim_whichever_skin_is_larger(self) -> None:
+        def sunk(x: float, top: bool) -> bd.Part:
+            cone = bd.Pos(x, 10, 0.5) * bd.Cone(2, 3, 1) if top else bd.Pos(x, 10, -0.5) * bd.Cone(3, 2, 1)
+            return bd.Pos(x, 10, 0) * bd.Cylinder(2, 4) + cone
+
+        # each countersink's rim 1.6 from the edge, its hole 2.6: one sunk from the top, one from the bottom
+        part = bd.Box(90, 50, 2) - sunk(-40.4, True) - sunk(40.4, False)
+        for e in (self.E, -self.E):
+            with self.subTest(top_larger=e > 0):
+                holes = items(self.read(part, e), "holes")
+                self.assertEqual(sorted(hole["edge_distance_mm"] for hole in holes), [1.6, 1.6])
+
+    def test_a_pocket_stepped_into_either_skin_is_read_whichever_skin_is_larger(self) -> None:
+        # a pocket's floor is a hole of the skin it is stepped into alone: one 1 mm from the edge, one far
+        part = bd.Box(90, 50, 2) - bd.Pos(-40, 10, 1) * bd.Box(8, 8, 1) - bd.Pos(20, 0, -1) * bd.Box(8, 8, 1)
+        for e in (self.E, -self.E):
+            with self.subTest(top_larger=e > 0):
+                holes = items(self.read(part, e), "holes")
+                self.assertEqual(sorted(hole["edge_distance_mm"] for hole in holes), [1.0, 21.0])
+
+
 class TypeSideTest(unittest.TestCase):
     def test_k_factor_defaults(self) -> None:
         self.assertEqual(sheet_rules.k_factor("aluminum", 0.5, 1.0)[0], 0.33)
