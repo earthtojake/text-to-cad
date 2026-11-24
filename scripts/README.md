@@ -169,10 +169,10 @@ where those files ship, so these scripts are what produces them.
   engine daemon and viewer. Requires a bundled viewer and npm Playwright Chromium
   (`npx --no-install playwright install chromium`). Runs the format and camera
   gates, then stops the engine and runs the bundle gate (a view bundle the engine exported, opened
-  from a plain static file server) and the share gate (the same model shared by `cad share --yes`
-  against the share service's own Worker, run by `apps/share/serve.mjs`, which serves the bundled client
-  too: viewed under the service's content security policy, refused with another key, deleted from its
-  delete link): exactly what `test.yml` runs.
+  from a plain static file server) and the share gate (the same model shared by `cad share --yes`, then
+  shared again unchanged, against the share service's own Worker, run by `apps/share/serve.mjs`, which
+  serves the bundled client too: the same link and no file sent again, viewed under the service's content
+  security policy, an unknown id said to be gone, deleted from its delete link): exactly what `test.yml` runs.
   `--only NAME` selects a gate; `--out DIR` retains screenshots.
 - `check-dependencies.mjs`, `check-kit-boundaries.mjs`, `check-ui-strings.mjs` (each with its
   `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness (and that

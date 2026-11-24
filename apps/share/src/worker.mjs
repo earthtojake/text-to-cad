@@ -100,7 +100,9 @@ async function api(request, env, path, now) {
   const [, id, pack] = match;
   if (!ID.test(id)) return refuse(400, "bad_id", "A share id is 22 characters of base64url.");
   if (pack !== undefined) {
-    if (!HEX_SHA256.test(pack)) return refuse(400, "bad_pack_id", "A pack id is the lowercase hex SHA-256 of the pack's bytes.");
+    if (!HEX_SHA256.test(pack)) {
+      return refuse(400, "bad_pack_id", "A pack id is the lowercase hex SHA-256 of the pack's bytes.");
+    }
     switch (request.method) {
       case "PUT": return putPack(request, env, id, pack, settingsOf(env));
       case "GET": case "HEAD": return readPack(request, env, id, pack, now);
@@ -173,7 +175,8 @@ async function commit(request, env, id, settings, now) {
   }
   const missing = [...manifest.packs.keys()].filter((pack) => !stored.has(pack)).sort();
   if (missing.length) {
-    return json(409, { error: "missing_packs", hint: "This share holds no pack of these ids: upload them, then commit again.", missing });
+    const hint = "This share holds no pack of these ids: upload them, then commit again.";
+    return json(409, { error: "missing_packs", hint, missing });
   }
   let bytes = 0;
   for (const [pack, end] of manifest.packs) {
@@ -182,7 +185,8 @@ async function commit(request, env, id, settings, now) {
     bytes += size;
   }
   if (bytes > settings.maxShareBytes) {
-    return refuse(413, "share_too_large", `The packs this manifest names hold ${bytes} bytes; a share holds at most ${settings.maxShareBytes}.`);
+    return refuse(413, "share_too_large",
+                  `The packs this manifest names hold ${bytes} bytes; a share holds at most ${settings.maxShareBytes}.`);
   }
 
   const until = now() + settings.expiryDays * DAY_MS;
@@ -193,7 +197,9 @@ async function commit(request, env, id, settings, now) {
     httpMetadata: { contentType: "application/octet-stream" },
     customMetadata: { format: FORMAT, expires, bytes: String(bytes), files: String(manifest.files) },
   });
-  if (!put) return refuse(409, "conflict", "Another commit replaced this share's manifest while this one was checked. Commit again.");
+  if (!put) {
+    return refuse(409, "conflict", "Another commit replaced this share's manifest while this one was checked. Commit again.");
+  }
 
   const unnamed = [...stored.keys()].filter((pack) => !manifest.packs.has(pack) && !kept.has(pack));
   await removeKeys(env, unnamed.map((pack) => `${place.packs}${pack}`));
@@ -313,7 +319,8 @@ async function keepFromBackstop(env, place, owner, packs, until) {
     await Promise.all(old.slice(at, at + AT_ONCE).map(async ({ key }) => {
       const object = await env.SHARES.get(key);
       if (!object) return;
-      await env.SHARES.put(key, await object.arrayBuffer(), { onlyIf: { etagMatches: object.etag }, httpMetadata: object.httpMetadata });
+      await env.SHARES.put(key, await object.arrayBuffer(),
+                           { onlyIf: { etagMatches: object.etag }, httpMetadata: object.httpMetadata });
     }));
   }
 }
@@ -366,7 +373,9 @@ function checkManifest(body) {
   if (!isObject(manifest.files)) return { problem: "A share manifest's files are an object: each file by its path." };
   const paths = Object.keys(manifest.files);
   if (paths.length > MAX_FILES) return { problem: `A share manifest lists at most ${MAX_FILES} files.` };
-  if (!Object.hasOwn(manifest.files, "manifest.json")) return { problem: "A share manifest lists the bundle's manifest.json." };
+  if (!Object.hasOwn(manifest.files, "manifest.json")) {
+    return { problem: "A share manifest lists the bundle's manifest.json." };
+  }
   const packs = new Map();
   for (const path of paths) {
     const problem = pathProblem(path) ?? entryProblem(manifest.files[path], packs);
@@ -441,7 +450,8 @@ async function keyOf(id) {
 /** `IV || AES-256-GCM(key, IV, plaintext, aad)`, the tag at the end. The IV is 12 fresh random bytes; the
  * tests give their own, for the protocol's test vectors. */
 export async function seal(key, plaintext, aad, iv = crypto.getRandomValues(new Uint8Array(IV_BYTES))) {
-  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: UTF8.encode(aad) }, key, plaintext));
+  const params = { name: "AES-GCM", iv, additionalData: UTF8.encode(aad) };
+  const sealed = new Uint8Array(await crypto.subtle.encrypt(params, key, plaintext));
   const stored = new Uint8Array(IV_BYTES + sealed.byteLength);
   stored.set(iv, 0);
   stored.set(sealed, IV_BYTES);
@@ -451,8 +461,8 @@ export async function seal(key, plaintext, aad, iv = crypto.getRandomValues(new 
 /** What `seal` sealed, or empty bytes where it does not open. */
 async function open(key, stored, aad) {
   try {
-    const sealed = stored.subarray(IV_BYTES);
-    return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: stored.subarray(0, IV_BYTES), additionalData: UTF8.encode(aad) }, key, sealed));
+    const params = { name: "AES-GCM", iv: stored.subarray(0, IV_BYTES), additionalData: UTF8.encode(aad) };
+    return new Uint8Array(await crypto.subtle.decrypt(params, key, stored.subarray(IV_BYTES)));
   } catch {
     return new Uint8Array(0);
   }
@@ -504,7 +514,9 @@ async function allowed(limiter, request) {
 /** The secret a request is made with (`Authorization: Bearer`), or the refusal of one without it. */
 function bearerOf(request, which) {
   const match = BEARER.exec(request.headers.get("Authorization") ?? "");
-  if (!match) return { refusal: refuse(401, "unauthorized", `Send Authorization: Bearer <${which}>.`, { "WWW-Authenticate": "Bearer" }) };
+  if (!match) {
+    return { refusal: refuse(401, "unauthorized", `Send Authorization: Bearer <${which}>.`, { "WWW-Authenticate": "Bearer" }) };
+  }
   if (!SECRET.test(match[1])) return { refusal: refuse(400, "bad_secret", "A secret is 43 characters of base64url.") };
   return { secret: match[1] };
 }

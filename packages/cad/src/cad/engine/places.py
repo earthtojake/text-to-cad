@@ -232,7 +232,8 @@ def _said_no(settings: Path) -> dict[str, Any] | None:
 
 def cache_dir() -> Path:
     """Where cad caches what it can make again -- documents' bytes (``documents/<id>/document.xbf``), hulls,
-    MJCF assets, integrations' homes, the kernel environments, the engine's bytecode --: the platform's cache
+    MJCF assets, integrations' homes, the kernel environments, the engine's bytecode, each shared document's last
+    view bundle (``shares/<id>/``) --: the platform's cache
     location, which the system and the person treat as disposable -- wiping it loses no state, the records
     stay in ``state_dir``. ``CAD_CACHE_DIR`` when set (a relative one made absolute once, and written back, so
     a worker after a ``chdir`` names the same folder), else ``$XDG_CACHE_HOME/cad`` when set, else
