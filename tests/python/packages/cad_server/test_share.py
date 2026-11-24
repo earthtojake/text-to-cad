@@ -641,7 +641,7 @@ class ShareTest(unittest.TestCase):
         self.assertEqual(status["shares"], [{"document": found["document"], "view": found["view"],
                                              "delete": found["delete"], "expires": found["expires"]}])
 
-    def test_no_secret_in_a_request_an_error_or_a_file_and_the_view_link_only_in_the_output_and_the_record(self) -> None:
+    def test_no_secret_in_a_request_an_error_or_a_file_and_the_view_link_only_in_output_and_record(self) -> None:
         said = []
         for args in (("tetra.stl", "--yes"), ("tetra.stl", "--yes", "--json"), ("status",), ("status", "--json")):
             done = self.cad(*args)
@@ -794,7 +794,8 @@ class SendTest(unittest.TestCase):
             self.assertEqual(data, (folder / path).read_bytes(), path)
             first = committed[path]["at"][0]
             head = packs[first[0]][first[1]:first[1] + 10]
-            self.assertEqual((head[:4], head[4:8]), (b"\x1f\x8b\x08\x00", b"\x00\x00\x00\x00"), path)  # no name, mtime 0
+            # One gzip member: deflate, no flags (no file name), mtime 0.
+            self.assertEqual((head[:4], head[4:8]), (b"\x1f\x8b\x08\x00", b"\x00\x00\x00\x00"), path)
         self.assertEqual(sent.travelled, {"files": 8, "packs": 2, "bytes": sum(len(packs[name]) for name in named)})
         self.assertEqual((sent.answer["files"], sent.answer["made"]), (8, True))
         self.assertEqual(sent.stored, {"share": _sha(share.id), "files": {

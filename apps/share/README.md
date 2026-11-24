@@ -131,7 +131,7 @@ Every file of the bundle by its path; `sha256` and `bytes` the file's own bytes,
 the ranges of packs, `[pack id, offset, length]` into a pack's bytes before sealing, whose bytes,
 joined in order, are the file's gzip member. A commit refuses (`400`) a manifest that is not:
 
-- a JSON object, in UTF-8, of `format` (`"cad-share/2"`) and `files` alone, at most `MAX_MANIFEST_BYTES`;
+- a JSON object, in UTF-8, of `format` (`"cad-share/2"`) and `files` alone;
 - `files` an object of at most 200,000 files, `manifest.json` among them, and not `thumbnail.png`,
   which is left out of a share (it may show an earlier version of the document);
 - each path relative and `/` separated: no empty, `.` or `..` segment, no leading `/`, no `\`, no
@@ -172,8 +172,9 @@ whole share (every object under `s/<name>/`, the manifest first and the owner la
 time R2 keeps of an object ([Set-up](#set-up-once)): what a share leaves behind is gone by then,
 read or not. A commit keeps its owner and the packs its manifest names from earlier uploads, so it
 stores again, unchanged, each of those the rule would delete before the share expires, by a put
-conditional on its etag (nothing deleted meanwhile comes back). That is no store at all within the
-day the rule's 8 days leave past the share's 7; `BACKSTOP_DAYS` (`src/worker.mjs`) is the rule's age.
+conditional on its etag (nothing deleted meanwhile comes back). An object uploaded less than a day
+before the commit (the rule's 8 days less the share's 7) is not stored again. `BACKSTOP_DAYS`
+(`src/worker.mjs`) is the rule's age.
 
 ## Limits
 
@@ -297,8 +298,10 @@ Checked against Cloudflare's documentation on 2026-11-24:
   [Workers API reference](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/).
   Writes, deletes and lists are strongly consistent, a condition is evaluated against the bucket's
   committed state, and of puts with `If-None-Match: *` to an absent key at most one succeeds
-  ([consistency](https://developers.cloudflare.com/r2/reference/consistency/)); wildcard etags in
-  conditional headers ([release notes, 2023-06-16](https://developers.cloudflare.com/r2/platform/release-notes/)).
+  ([consistency](https://developers.cloudflare.com/r2/reference/consistency/)); an etag to match
+  fails where the key holds nothing, and `If-None-Match: *` succeeds only there
+  ([conditional operations](https://developers.cloudflare.com/r2/api/s3/conditional-operations/));
+  wildcard etags in conditional headers ([release notes, 2023-06-16](https://developers.cloudflare.com/r2/platform/release-notes/)).
 - Lifecycle rules: a prefix, and objects deleted once they reach an age, typically within 24 hours
   of it ([object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)).
 - Rate limiting: the `ratelimits` binding (`name`, `namespace_id`, `simple: { limit, period }`,

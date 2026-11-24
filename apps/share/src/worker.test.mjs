@@ -640,6 +640,7 @@ describe("a pack's read", () => {
     assert.equal((await svc.call("GET", `/v1/shares/${share.id}/packs/${pack.id}`)).status, 200);
     await refusal(await svc.call("GET", `/v1/shares/${share.id}/packs/${sha256("no such pack")}`), 404, "not_found");
     await refusal(await svc.call("GET", `/v1/shares/${share.id}/packs/${pack.id.slice(2)}`), 400, "bad_pack_id");
+    await refusal(await svc.call("GET", `/v1/shares/${share.id.slice(1)}/packs/${pack.id}`), 400, "bad_id");
     svc.time.at += 7 * DAY;
     await refusal(await svc.call("GET", `/v1/shares/${share.id}/packs/${pack.id}`), 404, "not_found");
     assert.deepEqual(await svc.bucket.keys(), []);
@@ -857,6 +858,8 @@ describe("the pages", () => {
     assert.equal(head.body, null);
     assertPageHeaders(head);
     await refusal(await svc.call("PUT", `/${newShare().id}`), 405, "method_not_allowed");
+    const bare = service({ ASSETS: localAssets(join(assetsDir, "assets")) }); // a folder with no index.html
+    await refusal(await bare.call("GET", `/${newShare().id}`), 404, "not_found");
   });
 
   test("the viewer's own files are served, HTML with the page's headers, and anything else is 404", async () => {

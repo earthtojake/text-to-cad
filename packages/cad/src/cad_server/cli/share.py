@@ -214,7 +214,13 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
             raise Failure(f"could not keep the person's agreement, so nothing was uploaded: {error}") from None
     ident = source if path is None else file_id(path)
     with _locked(ident, target, prog) as folder:
-        earlier = next((row for row in _records() if row["service"] == service and row["document"]["id"] == ident
+        try:
+            rows = sharing.records()
+        except OSError as error:  # what cannot be read is none (a sandbox may refuse it): a new share, said
+            rows = []
+            print(f"{prog}: warning: could not read this computer's shares ({error.strerror or error}), so this is "
+                  "a new share", file=sys.stderr, flush=True)
+        earlier = next((row for row in rows if row["service"] == service and row["document"]["id"] == ident
                         and not sharing.expired(row)), None)
         try:
             manifest = sharing.bundle(source, folder / sharing.BUNDLE)

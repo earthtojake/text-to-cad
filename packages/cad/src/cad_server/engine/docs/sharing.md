@@ -136,7 +136,8 @@ manifest, each file by its path with its bytes' SHA-256 and size and `at`, the r
 in order, are its member:
 
 ```json
-{"format": "cad-share/2", "files": {"manifest.json": {"sha256": "<64 hex>", "bytes": 1234, "at": [["<pack id>", 0, 456]]}}}
+{"format": "cad-share/2", "files": {
+  "manifest.json": {"sha256": "<64 hex>", "bytes": 1234, "at": [["<pack id>", 0, 456]]}}}
 ```
 
 `201` (made) or `200` (replaced), `{"id", "expires", "bytes", "files"}`; the service then deletes the packs that

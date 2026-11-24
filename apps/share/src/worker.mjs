@@ -274,11 +274,10 @@ async function placeOf(id) {
 /** The share's owner, made by this write where it has none: put only if absent, and a create that loses
  * the race reads the one that won. Null where another write secret holds the share. */
 async function claim(env, place, writeHash, deleteHash) {
-  const made = await env.SHARES.put(place.owner, null, {
-    onlyIf: new Headers({ "If-None-Match": "*" }),
-    customMetadata: { format: FORMAT, write: writeHash, delete: deleteHash },
-  });
-  const owner = made ?? await env.SHARES.head(place.owner);
+  const customMetadata = { format: FORMAT, write: writeHash, delete: deleteHash };
+  const made = await env.SHARES.put(place.owner, null, { onlyIf: new Headers({ "If-None-Match": "*" }), customMetadata });
+  if (made) return { etag: made.etag, uploaded: made.uploaded, customMetadata };
+  const owner = await env.SHARES.head(place.owner);
   return owner && ownedBy(owner, writeHash) ? owner : null;
 }
 
