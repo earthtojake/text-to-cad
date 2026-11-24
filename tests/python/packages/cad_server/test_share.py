@@ -496,7 +496,7 @@ class ShareTest(unittest.TestCase):
         patch = mock.patch.dict(os.environ, NO_PROXY)
         patch.start()
         cls.addClassCleanup(patch.stop)
-        (cls.base / "other.stl").write_text(STL.replace("tetra", "other"), encoding="utf-8")
+        (cls.base / "other.stl").write_bytes(STL.replace("tetra", "other").encode())
         (cls.base / "board.kicad_pcb").write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
         (cls.base / "parts").mkdir()
         cls.state = Path(cls.given["CAD_STATE_DIR"])
@@ -505,7 +505,7 @@ class ShareTest(unittest.TestCase):
     def setUp(self) -> None:
         from cad_server.settings import write_section
 
-        (self.base / "tetra.stl").write_text(STL, encoding="utf-8")
+        (self.base / "tetra.stl").write_bytes(STL.encode())  # bytes: Windows writes text with \r\n
         (self.state / "shares.json").unlink(missing_ok=True)
         write_section("share", None, path=self.state / "settings.json")
         shutil.rmtree(self.cache / "shares", ignore_errors=True)
@@ -653,7 +653,7 @@ class ShareTest(unittest.TestCase):
 
         # An edit of the file: its new bytes travel, once for the view's copy and the file itself, and the bundle's
         # manifest that lists them; nothing else.
-        (self.base / "tetra.stl").write_text(STL.replace("vertex 10 0 0", "vertex 12 0 0"), encoding="utf-8")
+        (self.base / "tetra.stl").write_bytes(STL.replace("vertex 10 0 0", "vertex 12 0 0").encode())
         before = set(self.service.shares[first["id"]]["packs"])
         edited = self.cad("tetra.stl", "--yes")
         self.assertEqual(edited.returncode, 0, edited.stdout + edited.stderr)

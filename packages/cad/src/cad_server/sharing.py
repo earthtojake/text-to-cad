@@ -1004,7 +1004,10 @@ def zip_entries(archive: zipfile.ZipFile) -> tuple[str, list[tuple[str, zipfile.
 
 
 def _place(stage: Path, folder: Path) -> None:
-    """``stage``'s files moved into ``folder``: renamed as it, where it is not there; else, into it, an empty folder."""
+    """``stage``'s files moved into ``folder``: renamed as it, where it is not there; else, into it, an empty folder,
+    each entry by ``replace_atomic`` (a bare rename loses to a file an SMB share still holds)."""
+    from cad._internal.atomic_replace import replace_atomic
+
     try:
         os.rename(stage, folder)
         return
@@ -1012,7 +1015,7 @@ def _place(stage: Path, folder: Path) -> None:
         if not folder.is_dir() or any(folder.iterdir()):
             raise
     for entry in os.listdir(stage):
-        os.replace(stage / entry, folder / entry)
+        replace_atomic(stage / entry, folder / entry)
     stage.rmdir()
 
 
