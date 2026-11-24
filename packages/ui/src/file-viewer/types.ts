@@ -246,12 +246,6 @@ export interface FileViewerProps {
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */
   notice?: ReactNode;
   /**
-   * The chrome around the view: `"page"` (the default) draws the navbar over every file and over the
-   * home; `"bare"` draws none, the view alone, for a host whose own frame is the navigation (the CAD
-   * app's file handler). The renderer's own controls over the viewport are the same either way.
-   */
-  chrome?: "page" | "bare";
-  /**
    * The viewer's layout pinned, for a viewer that is not the page's own (a picture drawn out of sight,
    * `OffscreenPicture.tsx`): neither measured nor said to the page, so its size never changes the page's.
    * Unset (the page's viewer): measured from its own width (`responsive.js`), and its root carries

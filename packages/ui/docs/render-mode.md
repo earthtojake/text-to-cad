@@ -207,7 +207,7 @@ tabs of the view's panel (see
 [viewer-ux.md](./viewer-ux.md#the-panels-tabs)); nothing in them is
 a display setting.
 
-Display and Preview, the view's controls in the navbar (at the strip's end where there is none), are offered by a 3D
+Display and Preview, the view's controls in the navbar, are offered by a 3D
 view, as its renderer declares to the shell (`useRendererShell`'s `previewable`); a board, a flat view shown in 3D,
 has Preview too, outside the shell, and every view has Display's card:
 

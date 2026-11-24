@@ -3,8 +3,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 /**
  * Where a phone's sidebar sheet stands (`ViewFrame.jsx`): under the viewer's navbar, so the navbar (the panel's toggle,
  * the file's name, Display, Preview) stays in sight above it, its top the navbar's bottom edge, measured while the sheet
- * is open and again as the viewer or the navbar resizes (the page scrolled, the keyboard shown). With no navbar (a
- * host that shows the view alone) it stands from the window's top, as the stock Sheet does.
+ * is open and again as the viewer or the navbar resizes (the page scrolled, the keyboard shown).
  * And where its focus goes back on close: the navbar's panel toggle, which opened it (Radix's Dialog returns focus
  * to its own Trigger, and the toggle is not one). A press on that toggle is not a press outside: the toggle shuts the
  * sheet itself (a dismissal first would have the toggle open it again); a press anywhere else outside closes it, and a

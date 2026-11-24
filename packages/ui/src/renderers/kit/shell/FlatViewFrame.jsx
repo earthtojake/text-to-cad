@@ -1,4 +1,4 @@
-import { english, useI18n } from "@cad/ui/i18n";
+import { english } from "@cad/ui/i18n";
 import { MousePointer2 } from "lucide-react";
 import { AnnotationToolbar, drawStripTool } from "../../../annotation/toolbar.jsx";
 import { MeasureIcon } from "../tools/measure/SceneMeasure.jsx";
@@ -8,20 +8,19 @@ import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
 import { TOOL_SHORTCUTS } from "../tools/toolShortcuts.js";
 import { FLAT_TOOL } from "./useFlatView.js";
 import ViewFrame from "./ViewFrame.jsx";
-import ZoomPill, { zoomViewControl } from "./ZoomControl.jsx";
-import NavbarViewControls, { useNavbarViewControls } from "./NavbarViewControls.jsx";
+import ZoomPill from "./ZoomControl.jsx";
+import NavbarViewControls from "./NavbarViewControls.jsx";
 import { useDisplaySettings } from "./DisplaySettings.jsx";
 
 /**
  * A FLAT view's frame — a picture on a canvas, head on (a board, a schematic, a drawing) — which is
- * every view's (`ViewFrame.jsx`) with what a flat view puts in it: its strip (`flatViewTools`), ended
- * where the host has no navbar by Display (`viewGroups`), its update under the strip, Quick Edit (`useFlatHandover`'s
- * `quickEdit`), its panel's tabs (`panel`), and its corner, at the top-right: the zoom (`ZoomControl.jsx`) alone, the
- * same corner while the picture is shown in 3D, whose zoom it then is. On a phone with no navbar Display and the zoom are
- * rows of the strip's More. The renderer brings the picture (its canvases and layers, `children`, in the box the canvas
- * view measures: `containerRef`). A flat view whose picture can be shown in 3D, lit, offers Preview (`preview`,
- * `usePreviewFrame.jsx`'s result, through `useFlatPreview.jsx`): its button after Display, in the navbar or at the strip's
- * end, and while it is up the frame's Preview chrome, view and cover, exactly a 3D view's.
+ * every view's (`ViewFrame.jsx`) with what a flat view puts in it: its strip (`flatViewTools`), Display in the
+ * navbar (`viewGroups`), its update under the strip, Quick Edit (`useFlatHandover`'s `quickEdit`), its panel's tabs
+ * (`panel`), and its corner, at the top-right: the zoom (`ZoomControl.jsx`) alone, the same corner while the picture is
+ * shown in 3D, whose zoom it then is. The renderer brings the picture (its canvases and layers, `children`, in the box
+ * the canvas view measures: `containerRef`). A flat view whose picture can be shown in 3D, lit, offers Preview
+ * (`preview`, `usePreviewFrame.jsx`'s result, through `useFlatPreview.jsx`): its button after Display, in the navbar,
+ * and while it is up the frame's Preview chrome, view and cover, exactly a 3D view's.
  *
  * The panel, the strip at the view's centre, the measure, the loading cover and the card are the
  * frame's, the same as a 3D view's: see `ViewFrame.jsx`. ⌘\ (Ctrl+\) shows and hides the panel,
@@ -77,34 +76,29 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, se
  *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's one control, at the top-right where a 3D view's cube
  *   stands, and the zoom's keys either way; while the picture is shown in 3D, the 3D view's (`viewportZoom`).
  *   `viewGroups`: the view's settings as Display's card draws them (`DisplaySettings.jsx`: a board's Side, Mode, in 3D
- *   Projection, then Style and Background; a drawing's Background): the navbar's Display, or, with no navbar, Display
- *   at the strip's end (a row of a phone's More). `onResetDisplay`: the card's Reset, where the view has settings of its
- *   own to put back (a board's).
+ *   Projection, then Style and Background; a drawing's Background): the navbar's Display. `onResetDisplay`: the card's
+ *   Reset, where the view has settings of its own to put back (a board's).
  *   `contextMenuItems`: the view's menu on a secondary tap over its canvas (`canvasRef`), every view's
  *   (`ViewportContextMenu.jsx`, its entries `viewMenu.js`'s); a right drag still pans.
  *   `preview`: Preview, for a view that can offer it (`useFlatPreview.jsx`'s result: `offered`, whether this file does;
- *   `frame`, what `ViewFrame` takes while it is up; `navbarButton` and `stripView`, its button; `rootRef`, the frame's
+ *   `frame`, what `ViewFrame` takes while it is up; `navbarButton`, its button; `rootRef`, the frame's
  *   root, where its chrome watches the pointer); null or omitted, or not `offered`, the view has no Preview at all.
  */
 export default function FlatViewFrame({ surface, containerRef, busy, children, file, mobile, compact, chromeHidden, failed = undefined, loading, loadingLabel,
   updating, updateStatus, tools, toolRow = null, panel = null, panelControl = null, toolStack, onToolStackChange, notice = null, quickEdit,
   alert, cardAlert, alertDismissal, shown, onReload, canvasRef = null, contextMenuItems = null, zoom = null, inspect = null, viewport = null,
   viewGroups = null, onResetDisplay = null, preview = null }) {
-  const { t } = useI18n();
   // The picture catching up: said as every view says it (`ViewFrame.jsx`'s status). A flat view's update
   // has nothing of its own to retry: one that fails is the card's, whose Retry reloads the file.
   const status = { update: updating ? updateStatus : null };
   // The view's settings are Display's (`DisplaySettings.jsx`): the navbar's button and its card, docked at the view's
-  // right edge, the same on a desktop and a phone. With no navbar Display ends the strip (a row of a phone's More, with
-  // the zoom). The corner holds the zoom alone, the same whether the picture is drawn flat or in 3D (a phone's none).
-  const inNavbar = useNavbarViewControls() && Boolean(viewGroups);
+  // right edge, the same on a desktop and a phone. The corner holds the zoom alone, the same whether the picture is
+  // drawn flat or in 3D (a phone's none).
   const previewing = Boolean(preview?.previewing);
   const display = useDisplaySettings({ groups: shown && viewGroups ? viewGroups : [], onReset: onResetDisplay, closeKey: file, closed: previewing });
-  // Preview, where the view offers it, after Display: the navbar's, or the strip's last (a phone's More's last row).
+  // Preview, where the view offers it, after Display.
   const previewOffered = Boolean(preview?.offered);
-  const stripViews = inNavbar ? [] : [display.stripView, ...(mobile && zoom && shown ? [zoomViewControl(zoom, { t })] : []),
-    ...(previewOffered ? [preview.stripView] : [])].filter(Boolean);
-  const navbarNode = shown && inNavbar ? <NavbarViewControls>
+  const navbarNode = shown && viewGroups ? <NavbarViewControls>
     {display.navbarButton}
     {previewOffered ? preview.navbarButton : null}
   </NavbarViewControls> : null;
@@ -112,7 +106,7 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
   return (
     <ViewFrame rootRef={preview?.rootRef ?? null} surface={surface} viewport={viewport} canvasBoxRef={containerRef} busy={busy} file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed}
       selecting={!preview?.previewing && (!tools.length || tools.some(tool => tool.id === FLAT_TOOL.SELECT && tool.active))} inspect={inspect} {...preview?.frame}
-      tools={tools} views={stripViews} toolRow={toolRow} status={status}
+      tools={tools} toolRow={toolRow} status={status}
       panel={panel?.tabs.length ? panel : null} panelControl={panelControl} layout={toolStack} onLayoutChange={onToolStackChange}
       corner={cornerNode} navbar={navbarNode} card={display.card} notice={notice}
       quickEdit={quickEdit ? <QuickEdit key={file} className="self-stretch" hidden={chromeHidden} docked={mobile} {...quickEdit} /> : null}

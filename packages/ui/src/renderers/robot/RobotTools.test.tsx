@@ -143,7 +143,7 @@ async function openRobot({ phone = false } = {}) {
     },
     tool: (name: string) => within(tools()).getByRole('button', { name }),
     // The strip's tools (its buttons pressed or not, before the view's controls), and what Select's chevron says it picks.
-    toolNames: () => within(tools()).getAllByRole('button').filter(button => button.hasAttribute('aria-pressed') && !button.closest('[data-view-controls]'))
+    toolNames: () => within(tools()).getAllByRole('button').filter(button => button.hasAttribute('aria-pressed'))
       .map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`),
     filter: () => tools().querySelector('[data-select-filter-trigger]')!.getAttribute('aria-label'),
     /** Open Select's Filter submenu from its chevron: its boxes on screen, the row it opened from returned. */
@@ -275,8 +275,8 @@ it('a robot\'s Display leaves Select the tool, and a pose set by hand stays when
 it("a robot is a 3D view: Display and Preview the navbar's, the corner the cube alone, the strip ending at Clip, no rule", async () => {
   const robot = await openRobot();
   const strip = within(robot.pane).getByRole('group', { name: 'Interaction tools' });
-  // One row, no rule: the tools, Clip last; nothing of the view on it.
-  expect([strip.querySelectorAll('[data-strip-rule]').length, strip.querySelector('[data-view-controls]'), [...strip.querySelectorAll('button')].at(-1)?.getAttribute('aria-label')]).toEqual([0, null, 'Clip']);
+  // One row, no rule: the tools, Clip last.
+  expect([strip.querySelectorAll('[data-strip-rule]').length, [...strip.querySelectorAll('button')].at(-1)?.getAttribute('aria-label')]).toEqual([0, 'Clip']);
   // The view's settings are the navbar's, Display then Preview; the corner holds nothing beside the cube.
   expect([...robot.pane.querySelectorAll('[data-viewer-navbar] [data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display', 'Preview']);
   expect(robot.pane.querySelector('[data-view-corner]')!.childElementCount).toBe(0);

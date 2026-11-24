@@ -3,7 +3,7 @@ import { useI18n } from "@cad/ui/i18n";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import { alertDismissible, useAlertDismissal } from "../status/ViewerAlertCard.jsx";
 import { modelUpdateStatus } from "../status/ViewUpdateStatus.jsx";
-import { viewportZoom, zoomViewControl } from "./ZoomControl.jsx";
+import { viewportZoom } from "./ZoomControl.jsx";
 import { withGroups } from "../../../annotation/geometry.js";
 import { BoxSelectGesture } from "../tools/select/useBoxSelectGesture.js";
 import { takeInkInBox } from "../tools/select/boxTake.js";
@@ -11,7 +11,7 @@ import { AnnotationToolbar } from "../../../annotation/toolbar.jsx";
 import ToolStack from "../tools/ToolStack.jsx";
 import PreviewPlaybar from "../tools/playbar/PreviewPlaybar.jsx";
 import AnimationSection, { JointsMotionContext } from "../tools/playbar/AnimationSection.jsx";
-import NavbarViewControls, { useNavbarViewControls } from "./NavbarViewControls.jsx";
+import NavbarViewControls from "./NavbarViewControls.jsx";
 import { useDisplaySettings, viewGroups3d } from "./DisplaySettings.jsx";
 import { DISPLAY_DEFAULTS } from "../view-settings/viewerDisplaySettings.js";
 import { animationControlsHaveContent } from "../tools/playbar/AnimationTimeControl.js";
@@ -294,12 +294,12 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   [frame.annotateToolActive, frame.annotation.hasAnnotation, forgetAnnotation]);
   // The renderer's overlay and the shell's own layers share one viewport context.
   // The view's zoom (`ZoomControl.jsx`'s `ViewZoom`): the viewport's zoom against the authored box, read live,
-  // for the keys and a phone's More.
+  // for the keys.
   const viewerRef = frame.viewerRef;
   // A model's viewport, once it is up: its camera is the one the readout follows.
   const zoomBase = useMemo(() => viewportZoom(viewerRef), [viewerRef, scene, viewerLoading]);
   const zoom = { ...zoomBase, zoomToSelection: zoomToSelection?.run || null, selectionAvailable: Boolean(zoomToSelection?.available) };
-  // What the zoom's keys reach (`useRendererShell`'s `zoom`): the zoom as the strip has it now.
+  // What the zoom's keys reach (`useRendererShell`'s `zoom`): the zoom as it is now.
   frame.zoomKeys.current = zoom;
   // Box select's box: the ink it touches, as it takes the model (`annotationsInBox`), then
   // the renderer's own. Shift adds; otherwise the ink picked is what the box took, none if nothing.
@@ -333,17 +333,15 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt}
     notes={promptNotes} onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
   // The view's own controls: **Display** (`DisplaySettings.jsx`: its button, and its card docked at the view's right edge)
-  // and **Preview**, a play triangle, in that order: the file's navbar's right end, a phone's too; in a host's inline card
-  // (no navbar) the strip's end, and on a phone rows of its More with the zoom. The picture's corner is the cube alone.
-  const inNavbar = useNavbarViewControls();
+  // and **Preview**, a play triangle, in that order: the file's navbar's right end, a phone's too. The picture's corner
+  // is the cube alone.
   const viewControls = shell.previewable && !previewing;
   const display = useDisplaySettings({ groups: viewControls ? viewGroups : [], onReset: frame.resetDisplay, disabled: shell.idle,
     closeKey: frame.modelKey, closed: previewing });
-  const viewSettings = viewControls && inNavbar ? <NavbarViewControls>
+  const viewSettings = viewControls ? <NavbarViewControls>
     {display.navbarButton}
     {previewFrame.navbarButton}
   </NavbarViewControls> : null;
-  const views = viewControls && !inNavbar ? [display.stripView, ...(mobile ? [zoomViewControl(zoom, { t, disabled: shell.idle })] : []), previewFrame.stripView] : [];
   // Under Select a press on the canvas picks, front to back: the renderer's own overlays (a
   // measurement), then the annotation's mark (and the marks drawn with it), then a part. Shift adds or
   // takes away; a press that picks one kind lets go of the others, unless Shift keeps them.
@@ -394,7 +392,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     <ViewFrame rootRef={frame.hostRef} className={pointing ? "cursor-pointer" : ""} rootHandlers={rootHandlers} onCanvasPress={pressCanvas} selecting={frame.selecting}
       inspect={inspect}
       stageColor={frame.stageColor} viewport={frame.viewport} file={frame.modelKey} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} {...previewFrame.frame}
-      tools={tools} views={views} toolRow={toolRow} status={updateStatus}
+      tools={tools} toolRow={toolRow} status={updateStatus}
       toolStack={<ToolStack hidden={previewing} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{toolPanels}</ToolStack>}
       panel={panel} panelControl={frame.panelControl} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}
       notice={view.notice} quickEdit={quickEdit} navbar={viewSettings} card={display.card}

@@ -149,12 +149,11 @@ const STL_TOOLS = ['Select:true', 'Draw:false', 'Clip:false'];
 const THREE_MF_TOOLS = ['Select:true', 'Draw:false', 'Measure:false', 'Clip:false'];
 const meshTools = async (pane, expected) => {
   assert.deepEqual(await pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button')
-    .evaluateAll(buttons => buttons.filter(button => button.hasAttribute('aria-pressed') && !button.closest('[data-view-controls]')).map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
+    .evaluateAll(buttons => buttons.filter(button => button.hasAttribute('aria-pressed')).map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
   expected);
   const strip = pane.getByRole('group', { name: 'Interaction tools' });
   // The strip is the tools alone, Clip last, no rule; the view's settings are the navbar's, Display left of Preview, and
   // the corner is the cube alone.
-  assert.equal(await strip.locator('[data-view-controls]').count(), 0, 'nothing of the view on the strip');
   assert.equal(await strip.locator('[data-strip-rule]').count(), 0, 'no rule');
   assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label').split(':')[0])),
     ['Display', 'Preview'], 'the navbar\'s: Display, then Preview');
@@ -241,7 +240,7 @@ const differingPixels = (left, right) => {
   return count;
 };
 const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-// Render is Preview's: in by Preview at the strip's end and out by Exit preview in Preview's bar, each once the view has
+// Render is Preview's: in by the navbar's Preview and out by Exit preview in Preview's bar, each once the view has
 // come together under its cover.
 async function togglePreview(page, pane, enter) {
   const press = pane.getByRole('button', { name: enter ? 'Preview' : 'Exit preview', exact: true });
