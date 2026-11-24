@@ -18,7 +18,8 @@ description's conformance check.
 
 ``model`` is the one type with no file: a model built from code and held in the engine's memory,
 addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
-``.xbf`` file the engine writes of one.
+``.xbf`` file the engine writes of one, and the one type the ``cad`` command runs by another's name: ``cad model
+<operation>`` takes the file (``cad_server.cli.document_types``).
 
 Kernel-free, the standard library alone: the server imports this module, and so does every page's
 build through the generated JavaScript. A producer's matcher reads a value's type names and modules,

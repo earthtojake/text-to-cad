@@ -16,7 +16,7 @@ module of ``cad._internal.dfm`` (its options, rules, findings and summary):
 
 **Two layers.** The measurement is an integration's: a STEP, an xbf and a model's document are
 measured on their B-rep, exactly, by the build123d integration (``cad.build123d._dfm_check``), each
-finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
+finding at a ref ``cad model inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
 processes (``_held``, ``cad.engine.api.check``), a file by this caller only where no engine can be reached;
 an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), by this caller, each finding at
 ``x, y, z``. What a caller measures itself it measures in a process of its own that it holds to a check's
@@ -895,7 +895,7 @@ that does not read or holds no solid, a family that could not be measured, an en
 is no verdict and never a pass. Exit 2: the command line's mistake."""
 _ABOUT = {
     "brep": """A STEP, an xbf or a model's document is measured on its exact geometry, each finding at a face ref
-(cad xbf inspect DOC REF resolves it). The measurements are facts; the verdicts are general rules, each
+(cad <type> inspect DOC REF resolves it). The measurements are facts; the verdicts are general rules, each
 from a published design guide and no shop's limit, each finding coded by its rule, with the limit, the source
 and what to change. A rule's feasibility limit broken is an error; a recommendation is a warning. For a named
 shop, compare the measurements with its own published limits. --json carries every measurement, every rule's

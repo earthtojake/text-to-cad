@@ -147,7 +147,7 @@ def hypercar():
     return mechanism_state(car, "open", **SWEEP)                      # shut is as built
 ```
 
-`cad xbf snapshot XBF/index_finger.xbf c.png --pose '{"index_curl": 0.6}'` draws the
+`cad model snapshot XBF/index_finger.xbf c.png --pose '{"index_curl": 0.6}'` draws the
 knuckles at 54, 60 and 42 degrees: the picture of the same finger with no coupling at
 `--pose '{"index_mcp_flexion": 54, "index_pip": 60, "index_dip": 42}'`; its range, `[0, 1]`, is
 where every knuckle stays within its own. A model returning `posed(car().shape, {"left": -35,

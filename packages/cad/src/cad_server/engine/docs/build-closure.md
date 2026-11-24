@@ -40,7 +40,7 @@ blank line changes no digest; a module the model loads and does not reach holds 
 `inputs` lists every file a body read -- through the engine (`file`: `step.read`, `xbf.read`,
 `stl.read`, build123d's importers), itself (`read`, a `null` digest for one it found missing;
 a motion's function's reads too, **Configuration sequences**), or a text's font (`font`) -- by its digest; a file read past the engine's readers leaves the key
-null (**Body retention**). `cad xbf inspect DOC` prints the closure, `cad.inspect(doc)` and
+null (**Body retention**). `cad model inspect DOC` prints the closure, `cad.inspect(doc)` and
 `document.Loaded.closure` read it.
 
 **When the toolchain or the format moves.** The key covers the document format
@@ -83,7 +83,7 @@ An unsupported or failed conversion preserves the original bytes and cache recor
 To keep an upgraded file, explicitly export the converted document to a different XBF path:
 
 ```bash
-cad xbf export saved-v8.xbf upgraded-v9.xbf
+cad model export saved-v8.xbf upgraded-v9.xbf
 ```
 
 This serializes the complete upgraded XCAF document, including its separate migration record,

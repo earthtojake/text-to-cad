@@ -67,6 +67,24 @@ class RootExports(unittest.TestCase):
 
         self.assertTrue(cad.xbf.export.__doc__.endswith(inspect.cleandoc(api.export.__doc__)))
 
+    def test_a_types_operations_take_its_own_sources_alone(self):
+        """In Python a source of another type is refused by name before anything runs (law 23), the ``.xbf`` a
+        model is saved as too: ``cad.model`` takes a handle, an id or a model function, and the file is
+        ``cad.xbf``'s. Only the ``cad model`` command takes that file, by running the xbf's operation."""
+        ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
+        for call, said in (
+                (lambda: cad.model.export("share/arm.xbf", "arm.glb"), "share/arm.xbf is a xbf, not a model: use cad.xbf"),
+                (lambda: cad.model.inspect("ARM.XBF"), "ARM.XBF is a xbf, not a model: use cad.xbf"),
+                (lambda: cad.model.dfm("arm.xbf", process="cnc"), "arm.xbf is a xbf, not a model: use cad.xbf"),
+                (lambda: cad.model.interference("arm.xbf"), "arm.xbf is a xbf, not a model: use cad.xbf"),
+                (lambda: cad.xbf.export(ident, "arm.glb"), f"{ident} is a model's document id, not a .xbf file: use "
+                                                           "cad.model"),
+                (lambda: cad.stl.export("part.glb", "part.3mf"), "part.glb is a glb, not a stl: use cad.glb")):
+            with self.subTest(said=said):
+                with self.assertRaises(ValueError) as refused:
+                    call()
+                self.assertEqual(str(refused.exception), said)
+
     def test_what_the_root_says_of_its_types_is_what_it_has(self):
         """Every type is in the root's docstring and in the imports type checkers read, and no type that
         has a decorator says it has none."""

@@ -4,7 +4,7 @@ on the B-rep (OCP), never on a mesh.
 **The parts.** A STEP or an xbf is read by the engine's own loader (``cad.engine.document.Loaded``), so a
 part, its faces and their ordinals are the ones ``cad <type> inspect`` names: a finding's location is a ref
 in its grammar (``plate/face 7``; ``bracket/face 3`` in a document of one part, under its name), which
-``cad xbf inspect DOC REF`` resolves to the very face. A check the engine runs is measured in one of its
+``cad model inspect DOC REF`` resolves to the very face. A check the engine runs is measured in one of its
 checks processes (``of_source``): a STEP's or an xbf's file, or the bytes of a document the engine holds (a
 model's), each as its reader read it -- nothing exported or written. A live shape
 (``cad.build123d.cnc(shape)``) is read by its labels, as the engine would name its document.

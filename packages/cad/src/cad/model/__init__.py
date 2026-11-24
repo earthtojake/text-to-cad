@@ -13,8 +13,9 @@ integration (``cad._internal.manufacturing``), and
 which reads an ``.xbf`` the engine writes of it in a temporary folder. Its script declares its parameters with
 it at a module's top level, ``WALL = model.param("wall", 2.0, min=1, max=5)`` (``cad.engine.parameters.param``,
 the standard library alone); a value changes in the script, by an edit and a run or the CAD Viewer's Save. A
-file is refused by name: ``arm.xbf`` is an xbf's (``cad.xbf``). Everything loads on first use: ``import cad.model``
-imports no CAD kernel (``cad._internal.document_type``).
+file is refused by name, the ``.xbf`` a model is saved as too: ``model.export("arm.xbf", ...)`` is
+``xbf.export``'s (``cad.xbf``). Only the ``cad model`` command takes that file, and runs the xbf's operation for
+it. Everything loads on first use: ``import cad.model`` imports no CAD kernel (``cad._internal.document_type``).
 """
 
 from cad._internal.document_type import bind as _bind

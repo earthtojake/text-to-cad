@@ -269,9 +269,9 @@ of its item in its family's `items`, and its `limit` is there where it is the it
 findings count them -- those past the eight shown too, a failure another finding implies left out: the one
 count a summary says.
 
-- **Locations.** On exact geometry an item's `location` is a ref in `cad xbf inspect`'s grammar -- the
+- **Locations.** On exact geometry an item's `location` is a ref in `cad model inspect`'s grammar -- the
   part's canonical owner and the face's ordinal (`plate/face 7`, `kit/pin.2/face 3`) -- read with the
-  engine's own loader, so `cad step inspect FILE REF` and `cad xbf inspect DOC REF` resolve it to the very
+  engine's own loader, so `cad step inspect FILE REF` and `cad model inspect DOC REF` resolve it to the very
   face; a feature of several faces lists them in `faces`. On a mesh it is `x, y, z` in millimetres.
 - **Every part, every way it stands.** An assembly's every part is measured, and a part used several times
   -- one geometry, several occurrences: a document's instances of one prototype, a live shape's leaves that
@@ -1457,7 +1457,7 @@ metal powder bed fusion (`pbf`) prints a metal, the others a plastic (`--materia
 `pbf`), as molding refuses a metal.
 
 A STEP, an xbf or a document id is measured on its exact geometry (B-rep), every item at a face ref
-(`bracket/face 7`, resolved by `cad xbf inspect`); an STL, a 3MF or a GLB as triangles, every item at `x, y, z`.
+(`bracket/face 7`, resolved by `cad model inspect`); an STL, a 3MF or a GLB as triangles, every item at `x, y, z`.
 The powder processes (SLS, MJF) need no support: their overhangs are facts, never verdicts, and trapped powder is.
 
 ### Families (`measurements.<family>`)

@@ -45,7 +45,7 @@ of this grammar (`cadRefs` in the bundled runtime) are held to this module's, ca
 fixture both suites assert.
 
 A ref resolves inside the engine, for `inspect` and the viewer, never in a model:
-`cad xbf inspect DOC REF` (`cad.inspect(source, ref)`) answers what it names, placed where its
+`cad model inspect DOC REF` (`cad.inspect(source, ref)`) answers what it names, placed where its
 occurrence stands -- an element's kind, ordinal, name and canonical ref, the kernel's facts of it,
 and, of a model's document, `made_by`, the feature and the function, file and line of the call that made it; a part's or
 an assembly's volume and mass, and its world `bounds` (each part's measured box placed where it

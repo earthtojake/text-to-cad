@@ -2,8 +2,9 @@
 
 ``@xbf("XBF/arm.xbf")`` declares a model's XBF file;
 ``xbf.read(path)`` reads one into a model;
-its operations (``xbf.export("arm.xbf", *destinations)``, ...) are the ``cad xbf <operation>`` commands',
-each of an ``.xbf`` file: a model the engine holds, by its handle or id, is ``cad.model``'s.
+its operations (``xbf.export("arm.xbf", *destinations)``, ...) are the commands' ``cad model <operation>``
+runs for an ``.xbf`` file (``cad model export arm.xbf ...``), each of an ``.xbf`` file: a model the engine holds,
+by its handle or id, is ``cad.model``'s.
 ``xbf.dfm(source, process="cnc")`` (or ``"sheet"``, ``"molding"``, ``"printing"``) checks it for manufacturing
 on its exact geometry, with the build123d integration (``cad._internal.manufacturing``).
 ``xbf.solve(source, study=..., out="results/")`` runs a stress study on its part or bonded assembly, writing

@@ -1,5 +1,6 @@
 """``cad xbf <operation>``: the XBF document type's commands (export, snapshot, inspect, dfm, interference, solve,
-ranges).
+ranges). Unlisted (``cad_server.cli._UNLISTED``): ``cad model <operation> FILE.xbf`` runs the same operations, and
+this spelling stays only for the skill text of releases up to 0.11.17.
 
 The operations and their options are ``cad_server.cli.document_types``', from the registry
 (``cad.registry``); ``python -m cad_server.cli.xbf <operation> ...`` runs what the ``cad`` command does.

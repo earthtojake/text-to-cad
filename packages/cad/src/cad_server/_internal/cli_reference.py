@@ -131,7 +131,7 @@ def _choices(action: argparse.Action) -> list[str] | None:
 
 
 def command_reference(parser: argparse.ArgumentParser, command: str, summary: str | None = None) -> dict[str, Any]:
-    """One command's entry, read off its parser: ``command`` (``cad xbf export``), the ``summary`` it is listed
+    """One command's entry, read off its parser: ``command`` (``cad step export``), the ``summary`` it is listed
     by, its ``usage`` line, ``description`` and ``epilog``, its positional ``arguments`` and its ``options``."""
     arguments: list[dict[str, Any]] = []
     options: list[dict[str, Any]] = []
@@ -207,10 +207,10 @@ def as_docs() -> dict[str, Any]:
 
     types = [{
         "name": entry.id, "summary": entry.title,
-        "usage": f"cad {entry.id} <operation> {'FILE' if entry.has_file else 'ID'} [options]",
+        "usage": f"cad {entry.id} <operation> {document_types.source_word(entry.id)} [options]",
         "operations": [operation(entry, name, document_types.build_parser(entry.id, name), entry.id)
                        for name in document_types.operations_of(entry.id)],
-    } for entry in DOCUMENT_TYPES.values()]
+    } for entry in DOCUMENT_TYPES.values() if entry.id not in cli._UNLISTED]  # noqa: SLF001 - as `cad --help` lists
     tools = [{
         "name": name, "summary": INTEGRATIONS[name].summary,
         "usage": f"cad {name} <operation> FILE [options]",

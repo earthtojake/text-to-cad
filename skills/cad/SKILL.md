@@ -119,8 +119,8 @@ every command, and give the person the page once ([Show the model](#show-the-mod
 
 ## Commands
 
-Each acts on the document as the last run left it. `$ID` is a model's id; a file takes the
-operations its own type lists (`cad step|xbf|stl|threemf|glb|dxf --help`).
+Each acts on the document as the last run left it. `$ID` is a model's id, or an `.xbf` file; any other
+file takes the operations its own type lists (`cad step|stl|threemf|glb|dxf --help`).
 
 | Command | Gives |
 | --- | --- |

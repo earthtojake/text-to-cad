@@ -41,9 +41,10 @@ TYPES = {
 }
 COMMANDS = ("serve", "status", "stop", "delete", "server", "mcp", "run", "requirement", "doctor", "cache", "setup",
             "viewer", "telemetry", "update", "plugin")
-# Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's skill text and updaters), and the commands for
-# programs rather than people.
-UNLISTED = ("status", "stop", "setup", "serve", "requirement")
+# Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's skill text and updaters), the commands for
+# programs rather than people, and `xbf`, which the skill text of releases up to 0.11.17 says where `cad model` takes
+# the .xbf file now.
+UNLISTED = ("status", "stop", "setup", "serve", "requirement", "xbf")
 
 
 def _run(argv: list[str]) -> tuple[int, str, str]:
@@ -110,7 +111,17 @@ class TheCommandTable(unittest.TestCase):
         self.assertIn("document types, the files cad shows (cad <type> <operation> FILE):", said)
         self.assertRegex(said, r"\n  srdf +snapshot, validate +SRDF: \.srdf\n")
         self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm, interference, solve, ranges +model: a document id, "
-                               r"held in memory\n")
+                               r"held in memory, or an \.xbf file\n")
+        # The xbf type's own command is run and never listed (the 30 days a command the skills used is kept).
+        types = said.split("document types, the files cad shows", 1)[1].split("\n\n", 1)[0]
+        self.assertEqual([line.split()[0] for line in types.splitlines()[1:]],
+                         [name for name in TYPES if name not in UNLISTED])
+        code, said, _ = _run(["xbf", "--help"])
+        self.assertEqual((code, said.splitlines()[0]), (0, "usage: cad xbf <operation> FILE [options]"))
+        code, said, _ = _run(["model", "--help"])
+        self.assertEqual((code, said.splitlines()[0]), (0, "usage: cad model <operation> ID|FILE.xbf [options]"))
+        self.assertIn("cad model <operation> FILE.xbf takes a model saved as a file, read as the file it is, never as "
+                      "the model the engine holds (export, snapshot, inspect, dfm, interference, solve, ranges).", said)
         code, said, _ = _run(["step", "--help"])
         self.assertEqual(0, code)
         self.assertIn("operations:\n  export ", said)
@@ -206,17 +217,24 @@ class TheCommandTable(unittest.TestCase):
                       " ".join(build_parser("model", "export").format_help().split()))
 
     def test_a_model_is_its_id_and_a_file_is_its_types(self) -> None:
-        """``cad model`` takes a model's document id and no file; a file's type takes its file and no id."""
+        """``cad model`` takes a model's document id and, of files, only the one a model is saved as; a file's type
+        takes its file and no id."""
         ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
-        code, _, err = _run(["xbf", "export", ident, "arm.step"])
+        code, _, err = _run(["step", "export", ident, "arm.glb"])
         self.assertEqual(2, code)
-        self.assertIn(f"{ident} is a model's document id, not a .xbf file: use cad model export", err)
-        code, _, err = _run(["model", "snapshot", "arm.xbf", "arm.png"])
+        self.assertIn(f"{ident} is a model's document id, not a .step file: use cad model export", err)
+        code, _, err = _run(["model", "snapshot", "arm.step", "arm.png"])
         self.assertEqual(2, code)
-        self.assertIn("arm.xbf is a xbf, not a model: use cad xbf snapshot", err)
+        self.assertIn("arm.step is a step, not a model: use cad step snapshot", err)
         code, _, err = _run(["model", "inspect", "arm"])
-        self.assertEqual(2, code)
-        self.assertIn("cad model takes a model's document id", err)
+        self.assertEqual((code, err), (2, "cad model inspect: cad model takes a model's document id (cad run SCRIPT.py "
+                                          "prints it) or an .xbf file, not 'arm'\n"))
+        # An .xbf given to another type's command is sent to the one that takes it, which is `cad model`.
+        code, _, err = _run(["step", "export", "arm.xbf", "arm.glb"])
+        self.assertEqual((code, err), (2, "cad step export: arm.xbf is a xbf, not a step: use cad model export\n"))
+        code, _, err = _run(["mujoco", "check", "arm.xbf"])
+        self.assertEqual((code, err), (2, "cad mujoco check: arm.xbf is a xbf, not a file cad mujoco check takes (.xml "
+                                          "or .mjcf): use cad model dfm\n"))
         # A mesh's export meshes nothing: its parser has no --tolerance or --angle.
         for flag, value in (("--tolerance", "0.01"), ("--angle", "5")):
             err = io.StringIO()
@@ -224,6 +242,81 @@ class TheCommandTable(unittest.TestCase):
                 cli.main(["stl", "export", "part.stl", "part.glb", flag, value])
             self.assertEqual(2, refused.exception.code)
             self.assertIn(f"unrecognized arguments: {flag}", err.getvalue())
+
+    def test_cad_model_runs_the_xbf_s_operation_for_a_model_saved_as_a_file(self) -> None:
+        """``cad model <operation> FILE.xbf`` is the xbf type's operation of that name, given the same command line
+        (``document_types._or_saved``), for every operation an xbf has: so it writes, says and exits as ``cad xbf
+        <operation> FILE.xbf`` does, which still answers. The file is told from a document id by its suffix, as
+        the registry reads one, wherever the operation's parser reads its source."""
+        from unittest import mock
+
+        from cad_server.cli.document_types import OPERATIONS
+
+        rest = {"export": ["out.xbf"], "snapshot": ["out.png"], "inspect": ["--query", "structure"],
+                "dfm": ["--pull", "-z"]}
+        for operation in TYPES["xbf"]:
+            ran: list[tuple[list[str], str]] = []
+
+            def saved(argv: list[str], prog: str) -> int:
+                ran.append((argv, prog))
+                return 7
+
+            for source in ("share/arm.xbf", "ARM.XBF", "share/arm.xbf#arm/face 1"):
+                # Its options before the file too: the file is the parser's source, never the first word.
+                argv = [*rest.get(operation, []), source] if operation in ("inspect", "dfm") else \
+                    [source, *rest.get(operation, [])]
+                with self.subTest(operation=operation, source=source), \
+                        mock.patch.dict(OPERATIONS, {("xbf", operation): saved}):
+                    self.assertEqual([_run(["model", operation, *argv])[0], _run(["xbf", operation, *argv])[0]], [7, 7])
+                    self.assertEqual(ran, [(argv, f"cad model {operation}"), (argv, f"cad xbf {operation}")])
+                    ran.clear()
+            # And unpatched, the real operation's own refusal of a file that is not there: the same words, status
+            # and JSON by either name.
+            for flags in ([], ["--json"]):
+                with self.subTest(operation=operation, flags=flags):
+                    argv = ["no-such-file.xbf", *rest.get(operation, []), *flags]
+                    code, out, err = _run(["model", operation, *argv])
+                    self.assertEqual(code, 2)
+                    self.assertEqual((code, out, err.replace(f"cad model {operation}", f"cad xbf {operation}")),
+                                     _run(["xbf", operation, *argv]))
+                    self.assertIn("no such file: no-such-file.xbf", out + err)
+
+    def test_cad_model_reads_only_its_source_as_a_file_and_an_id_stays_the_model_s(self) -> None:
+        """A destination is no source: ``cad model export ID out.xbf`` is the model's own export, of what the
+        engine holds, however its destinations are spelled."""
+        from unittest import mock
+
+        from cad_server.cli.document_types import OPERATIONS
+
+        ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
+        asked: list[tuple[str, list[str], str]] = []
+
+        def answered(runner: object, args: object, prog: str) -> int:
+            asked.append((args.source, args.destinations, prog))  # type: ignore[attr-defined]
+            return 0
+
+        with mock.patch("cad_server.engine.cli.answered", answered), \
+                mock.patch.dict(OPERATIONS, {("xbf", "export"): lambda argv, prog: self.fail("the xbf's export ran")}):
+            self.assertEqual(_run(["model", "export", ident, "share/arm.xbf"])[0], 0)
+        self.assertEqual(asked, [(ident, ["share/arm.xbf"], "cad model export")])
+
+    def test_an_operation_an_xbf_lacks_refuses_the_file_and_says_what_takes_it(self) -> None:
+        """An operation ``model`` has and the xbf type has not (none today: the registry gives both the same) refuses
+        an ``.xbf``, the command line's failure, naming the operations the file takes and what this one does."""
+        from unittest import mock
+
+        from cad_server.cli.document_types import OPERATIONS
+
+        said = ("arm.xbf is an .xbf file, which has no ranges: cad model takes an .xbf file for export, snapshot, "
+                "inspect, dfm, interference, solve, and cad model ranges a model's document id, which cad run "
+                "SCRIPT.py prints")
+        with mock.patch.dict(OPERATIONS):
+            del OPERATIONS[("xbf", "ranges")]
+            code, out, err = _run(["model", "ranges", "arm.xbf"])
+            self.assertEqual((code, out), (2, ""))
+            self.assertEqual(err.splitlines()[-1], f"cad model ranges: error: {said}")
+            code, out, err = _run(["model", "ranges", "arm.xbf", "--json"])
+            self.assertEqual((code, err, json.loads(out)), (2, "", {"ok": False, "error": said, "reason": "usage"}))
 
     def test_a_types_own_option_before_its_file_is_no_file(self) -> None:
         """``--urdf robot.urdf`` is srdf validate's own option, wherever it stands: the file it validates is

@@ -88,7 +88,7 @@ worker that built it (for example, after a daemon restart), answers
 that worker's last build. The line is the call's in the run that named the part. A file's
 element -- a model's declared xbf among them -- answers no `made_by`: a file names no model,
 whichever run wrote it.
-`cad xbf inspect DOC REF` serves the document on demand and resolves `REF` (**References**):
+`cad model inspect DOC REF` serves the document on demand and resolves `REF` (**References**):
 an element answers its facts and, of a model's document, `made_by`, with its canonical `ref`, its occurrence's `path`
 (`hand/finger.2`), its part, key, kind, ordinal and name, its points (centroid, position,
 endpoints, box) placed where that occurrence stands; a part or an assembly answers what it

@@ -245,7 +245,7 @@ the joint out. The export's log says each.
 
 ## Joint stops
 
-Where a joint's travel is limited by its parts meeting, `cad <type> ranges` (`model`, `xbf`, `step`)
+Where a joint's travel is limited by its parts meeting, `cad <type> ranges` (`model`, `step`)
 finds the stops from the geometry: it moves each joint alone from the as-built pose, the others as
 built, a degree or a millimetre at a time each way, until the parts meet. It writes nothing: write
 the stops into the joint's `angular_range` or `linear_range` in the body, rounded towards zero, and

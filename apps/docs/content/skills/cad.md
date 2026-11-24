@@ -150,7 +150,7 @@ The rules are general practice from published design guides, plus text-to-cad's 
 | Injection molding | Draft, undercuts, wall thickness, ribs, bosses, projected area, clamp force |
 | 3D printing | Walls, overhangs, bridges, clearances, trapped volume, build-volume fit |
 
-It checks a model by its id, or a file: `cad step dfm`, `cad xbf dfm`, `cad stl dfm`, `cad threemf dfm` and `cad glb dfm`. A mesh is checked for printing only. A cut file is checked with `cad dxf dfm` ([DXF profiles](/docs/cad#dxf-profiles-and-flat-patterns)).
+It checks a model by its id or its `.xbf` (`cad model dfm`), or another file: `cad step dfm`, `cad stl dfm`, `cad threemf dfm` and `cad glb dfm`. A mesh is checked for printing only. A cut file is checked with `cad dxf dfm` ([DXF profiles](/docs/cad#dxf-profiles-and-flat-patterns)).
 
 ### How the check runs
 

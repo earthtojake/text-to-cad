@@ -66,7 +66,9 @@ parser's usage error, naming the flag; a value the function itself refuses by na
 (`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
 reads (`srdf.validate`'s `urdf`): one that is not there is refused before it runs (`not_found`), as
 its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
-...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser. An
+...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser. `model`'s
+runs take one file too, the `.xbf` a model is saved as: where an operation's parser reads one as its source,
+the xbf type's run of that operation is given the same command line (`_or_saved`; **CLI**). An
 integration's operations on its tool's own files are made the same way, by `cad_server.cli.integrations`
 (`INTEGRATION_COMMANDS`, `cad_server.cli.<integration>`): each generated from its function's signature,
 its file refused by name where it is a document type's (which names that type's own check), any other

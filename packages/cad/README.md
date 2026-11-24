@@ -42,10 +42,10 @@ if __name__ == "__main__":
 ```bash
 cad run arm.py                                 # builds it in the engine's warm worker, printing its id
 cad model export <id> arm.3mf --tolerance 0.01 # the model as the engine holds it, by that id
-cad xbf export XBF/arm.xbf arm.glb arm.stl     # more translations of the document it wrote
-cad xbf snapshot XBF/arm.xbf arm.png           # a still of it, drawn by OCCT
+cad model export XBF/arm.xbf arm.glb arm.stl   # more translations of the document it wrote, read from the file
+cad model snapshot XBF/arm.xbf arm.png         # a still of it, drawn by OCCT
 cad viewer XBF/arm.xbf                         # the document on the running server's page
-cad xbf inspect XBF/arm.xbf                    # what it holds, then its build closure
+cad model inspect XBF/arm.xbf                  # what it holds, then its build closure
 ```
 
 The same operations are functions of each type: `xbf.export("XBF/arm.xbf", "arm.glb")`,
@@ -62,10 +62,11 @@ These words mean one thing each, in the code, the commands and every document.
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
   and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
   engine's memory, addressed by its document id or the handle its call returns (`@model` declares one);
-  `xbf` is the `.xbf` file the engine writes of one, and takes files alone. A document type is a file cad
-  shows: each has a view. A file cad writes or checks and never shows is none, whatever cad does with it: an
-  MJCF, MuJoCo's own model file, is an export's destination and the mujoco integration's to check, and
-  MuJoCo Studio shows it.
+  `xbf` is the `.xbf` file the engine writes of one, and takes files alone. On the command line the two are
+  one word: `cad model` takes a model's id, or its `.xbf`, read as the file it is (law 26). A document type is
+  a file cad shows: each has a view. A file cad writes or checks and never shows is none, whatever cad does
+  with it: an MJCF, MuJoCo's own model file, is an export's destination and the mujoco integration's to check,
+  and MuJoCo Studio shows it.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
   `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`), never for a capability. It is
@@ -295,7 +296,8 @@ renumbers the list and every citation in the same change.
 20. **Operations on documents are Python functions the CLI exposes; process control is the CLI's
     alone.** *Every document.* A type's operations are functions of that type (`cad.model.export`,
     `cad.kicad_pcb.drc`, `cad.urdf.validate`), one to one with the commands that call them (`cad model
-    export`, `cad kicad_pcb drc`, `cad urdf validate`). Serving, the engine's status, stopping it and
+    export`, `cad kicad_pcb drc`, `cad urdf validate`; an xbf's, `cad.xbf.export`, with `cad model export`
+    given the `.xbf`: law 26). Serving, the engine's status, stopping it and
     deleting a document are commands only, with no function of the library. Every successful
     server-backed build reports its id and its page.
 21. **Push, not pull: a model is what its last run told the engine.** *Models.* The engine's knowledge
@@ -318,7 +320,8 @@ renumbers the list and every citation in the same change.
 23. **A document type is one object.** *The package.* `cad.<type>` holds the type's decorator where it
     has one, its reader where it has one, and its operations one to one with the CLI's. Its attributes
     load on first use, so `import cad` imports no kernel. A file of another type is refused by name
-    before anything runs. A type's package is neutral about producers: it imports no third-party
+    before anything runs: an `.xbf` given to `cad.model` too, which is `cad.xbf`'s in Python whatever the
+    `cad model` command takes (law 26). A type's package is neutral about producers: it imports no third-party
     library.
 24. **An integration is named for its tool and holds only our code for it.** *The package.*
     `cad.<integration>` holds the helpers we define that take that tool's objects and the producers it
@@ -335,7 +338,11 @@ renumbers the list and every citation in the same change.
 26. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot`
     are shared by every type that has them (`inspect` and `read` where a type has them); every other
     operation is named for what it does and means one thing: `dfm`, `interference`, `solve`, `ranges`,
-    `drc`, `erc`, `validate`. One result shape per operation: a check returns findings, each with
+    `drc`, `erc`, `validate`. `model` is the one command that takes two types: a model the engine holds, by
+    its id, and a model saved as a file, its `.xbf`, whose operation is then the xbf type's, the file read as
+    the file it is. A person and an agent learn one word for a model; the registry, the library and the
+    server keep the two types, since a held model and a file differ in what they can answer (what made an
+    element: law 7). One result shape per operation: a check returns findings, each with
     a severity, a code and a location (`cad.results.CheckResult`), and `export` says the files it wrote.
     A new shared operation must be code-free, frequently needed and meaningful across types. A file cad
     checks and never shows has no document type, and its check is its tool's integration's (`cad mujoco
@@ -690,7 +697,7 @@ document): an option refused by name, a file of another type or not there, a doc
   contact and warping, stair-stepping, support; `--candidates` ranks orientations.
 
 **Facts, then verdicts.** A STEP, an xbf or a model's document is measured exactly on its B-rep (the
-`build123d` integration), each finding at a face ref that `cad xbf inspect DOC REF` resolves
+`build123d` integration), each finding at a face ref that `cad model inspect DOC REF` resolves
 (`plate/face 7`) -- in one of the engine's checks processes: a file read once, a model from the bytes the engine
 holds of it, the same check of an unchanged document answered from the result the engine kept; a mesh by the `trimesh` integration (`cad[trimesh]`), by its caller, each at `x, y, z` in
 millimetres.
@@ -772,9 +779,9 @@ script or a prompt written for an earlier release meets now:
 ## Stress studies
 
 A B-rep document's `solve` is a linear static stress study of a part or of an assembly bonded where its
-parts touch: `cad.model.solve`, `cad.xbf.solve` and `cad.step.solve`, one to one with `cad model solve`,
-`cad xbf solve` and `cad step solve` (a mesh has no faces a study can hold or load by, so the mesh types
-have none). It is a check (law 26): its answer is a `cad.results.FeaResult`, a `CheckResult` whose
+parts touch: `cad.model.solve`, `cad.xbf.solve` and `cad.step.solve`, one to one with `cad model solve`
+(of an id, and of an `.xbf`) and `cad step solve` (a mesh has no faces a study can hold or load by, so the
+mesh types have none). It is a check (law 26): its answer is a `cad.results.FeaResult`, a `CheckResult` whose
 findings carry a severity, a code and a location, with two uses of one signature:
 
 ```python
@@ -831,9 +838,9 @@ without one says so in one line.
 ## Joint stops
 
 A document with a mechanism -- a model, an xbf, a STEP -- answers `ranges`: `cad.model.ranges`,
-`cad.xbf.ranges` and `cad.step.ranges`, one to one with `cad model|xbf|step ranges`. It is a check (law
-27): a `CheckResult` whose finding per joint (`joint_stops`, at the joint) says where it stops each way and
-which two parts meet past each, every number in `measurements["joints"]`. The document is read in the
+`cad.xbf.ranges` and `cad.step.ranges`, one to one with `cad model|step ranges` (`cad model`: an id's, and an
+`.xbf`'s). It is a check (law 27): a `CheckResult` whose finding per joint (`joint_stops`, at the joint) says
+where it stops each way and which two parts meet past each, every number in `measurements["joints"]`. The document is read in the
 calling process, as a study reads one (a model exported by the engine to an `.xbf` in a temporary folder
 first), described as a robot (`engine.describe`) and each joint swept alone against its parts' surfaces
 (`engine.ranges`: surfaces sampled to a fixed resolution and measured gap by gap, the other joints as

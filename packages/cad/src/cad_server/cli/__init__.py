@@ -2,7 +2,8 @@
 
 Three kinds of command. A document type's: ``cad <document_type> <operation> <file>``, one per type in
 the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
-(``cad_server.cli.document_types``: ``cad xbf export``, ``cad stl snapshot``, ``cad urdf validate``). An
+(``cad_server.cli.document_types``: ``cad step export``, ``cad stl snapshot``, ``cad urdf validate``; ``cad model``
+takes a model's document id, or the ``.xbf`` file a model is saved as). An
 integration's, for its tool's own files, which are no document type, which cad checks or writes and never
 shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
 ``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the server's (``server``: ``start``,
@@ -68,8 +69,11 @@ _COMMANDS: dict[str, tuple[str, str]] = {
 }
 # Run, never listed. Only for releases 0.10.0 to 0.11.11 -- their skill text (`cad status`, `cad stop`) and their
 # updaters (`cad setup`) -- and gone with the bridge. And commands for programs, not people: `serve` (a document served
-# over HTTP, its URL printed) and `requirement` (the cad requirement a Python of a program's own installs).
-_UNLISTED = frozenset({"status", "stop", "setup", "serve", "requirement"})
+# over HTTP, its URL printed) and `requirement` (the cad requirement a Python of a program's own installs). And a
+# document type's command, `xbf`: only for the skill text of releases up to 0.11.17, which says `cad xbf export`,
+# `cad xbf inspect` and `cad xbf interference`, where `cad model` takes the .xbf file now
+# (``cad_server.cli.document_types``); gone 30 days after the release whose skills stop saying it.
+_UNLISTED = frozenset({"status", "stop", "setup", "serve", "requirement", "xbf"})
 
 # Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``).
 TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES}
@@ -95,15 +99,18 @@ def _command_lines(names) -> str:
 
 
 def _type_lines() -> str:
-    """The document types, grouped: each with its operations and what it is (``cad.registry``)."""
-    from cad_server.cli.document_types import operations_of
+    """The document types, grouped: each with its operations and what it is (``cad.registry``); ``model`` with
+    the file a model is saved as, which it takes too, and that file's own type not listed (``_UNLISTED``)."""
+    from cad_server.cli.document_types import SAVED, operations_of
 
-    width = max(len(name) for name in DOCUMENT_TYPES)
-    ops = {name: ", ".join(operations_of(name)) for name in DOCUMENT_TYPES}
+    listed = {name: entry for name, entry in DOCUMENT_TYPES.items() if name not in _UNLISTED}
+    width = max(len(name) for name in listed)
+    ops = {name: ", ".join(operations_of(name)) for name in listed}
     ops_width = max(len(text) for text in ops.values())
+    held = f"a document id, held in memory, or an {DOCUMENT_TYPES[SAVED].suffix} file"
     return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {entry.title}: "
-                     f"{', '.join(entry.extensions) or 'a document id, held in memory'}"
-                     for name, entry in DOCUMENT_TYPES.items()) + "\n"
+                     f"{', '.join(entry.extensions) or held}"
+                     for name, entry in listed.items()) + "\n"
 
 
 def _integration_lines() -> str:
@@ -131,7 +138,7 @@ def _usage() -> str:
 
 
 def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
-    """The command a command line names, as ``main`` dispatches it, and its arguments: ``("xbf export",
+    """The command a command line names, as ``main`` dispatches it, and its arguments: ``("step export",
     [...])`` for a document type's operation, ``("status", [...])`` for a command; None for neither."""
     if argv[:1] and argv[0] in TYPE_COMMANDS:
         from cad_server.cli.document_types import OPERATIONS
@@ -152,7 +159,7 @@ def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
 
 def build_parser_for(name: str):
     """The parser a resolved command (``resolve``) parses with, or None for one that builds its own."""
-    if name not in _COMMANDS:  # a document type's operation (``xbf export``), or an integration's (``mujoco check``)
+    if name not in _COMMANDS:  # a document type's operation (``step export``), or an integration's (``mujoco check``)
         document_type, operation = name.split(" ", 1)
         if document_type in INTEGRATION_COMMANDS:
             from cad_server.cli.integrations import build_parser as integration_parser

@@ -31,13 +31,17 @@ class TheCopyIsTheCommand(unittest.TestCase):
         docs = reference.as_docs()
         listed = {command["command"] for group in (*docs["documentTypes"], *docs["integrations"])
                   for command in group["operations"]} | {command["command"] for command in docs["commands"]}
-        # A deprecated integration still answers, and `cad --help` no longer lists it: nor does the reference.
-        deprecated = {name for name, entry in INTEGRATIONS.items() if entry.deprecated}
+        # A deprecated integration still answers, and `cad --help` no longer lists it: nor does the reference. Nor
+        # the one document type whose command is run and unlisted, the xbf's, which `cad model` takes the file of.
+        unlisted = {name for name, entry in INTEGRATIONS.items() if entry.deprecated} | (
+            cli._UNLISTED & set(cli.TYPE_COMMANDS))  # noqa: SLF001
+        self.assertEqual(next(group["usage"] for group in docs["documentTypes"] if group["name"] == "model"),
+                         "cad model <operation> ID|FILE.xbf [options]")
         answered = {f"cad {name}" for name in set(cli._COMMANDS) - cli._UNLISTED} | {
             f"cad {owner} {operation}" for owner, operation in (*OPERATIONS, *INTEGRATION_OPERATIONS)
-            if owner not in deprecated}
+            if owner not in unlisted}
         self.assertLessEqual(answered, listed)
-        self.assertFalse({command for command in listed if command.split()[1] in deprecated})
+        self.assertFalse({command for command in listed if command.split()[1] in unlisted})
         # What else is there is a command's subcommand, after it: `cad server start` follows `cad server`.
         for command in sorted(listed - answered):
             self.assertIn(command.rsplit(" ", 1)[0], listed, command)

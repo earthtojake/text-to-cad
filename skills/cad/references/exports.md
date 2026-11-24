@@ -25,13 +25,13 @@ downloads.
 cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
-A file the server reads as a document (an `.xbf`, a `.step`) is a source by its own type, and a
-mesh file (`.stl`, `.glb`, `.3mf`) converts to either of the other two mesh formats, keeping what
-the target can hold:
+A file the server reads as a document is a source too (an `.xbf` by `cad model`, a `.step` by its
+own type), and a mesh file (`.stl`, `.glb`, `.3mf`) converts to either of the other two mesh
+formats, keeping what the target can hold:
 
 ```bash
 cad step export vendor/motor.step vendor/motor.xbf   # a vendor STEP as an xbf, which xbf.read loads many times faster
-cad xbf export share/arm.xbf GLB/arm.glb
+cad model export share/arm.xbf GLB/arm.glb
 cad stl export scan.stl scan.3mf
 ```
 

@@ -181,6 +181,17 @@ class WhereTest(unittest.TestCase):
             self.assertEqual(refused.returncode, 2, refused.stdout)
             self.assertIn(said, refused.stderr)
 
+    def test_cad_model_reads_the_saved_file_as_cad_xbf_does(self) -> None:
+        # `cad model inspect FILE.xbf` is the xbf type's inspect of that file, not of a model the engine holds:
+        # the same answer and status as `cad xbf inspect`, of a ref it resolves and of one it refuses.
+        for ref, status in (("hand/finger.2/face 1", 0), ("hand/finger.2/face 99", 2)):
+            with self.subTest(ref=ref):
+                filed = self.where(ref)
+                modelled = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "model", "inspect",
+                                              "XBF/hand.xbf", ref], cwd=self.folder, env=self.env)
+                self.assertEqual((modelled.returncode, modelled.stdout, modelled.stderr),
+                                 (status, filed.stdout, filed.stderr.replace("cad xbf inspect", "cad model inspect")))
+
     def test_the_command_reads_a_ref_without_loading_the_kernel(self) -> None:
         # The engine measures; the command only parses and places: a ref costs it no kernel load.
         code = ("import runpy, sys\n"

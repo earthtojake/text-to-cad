@@ -29,4 +29,4 @@ Why that holds, checked:
   (**Memo functions**): a verification reports it `same`, never `differs`.
 
 The snapshot's part listing (0.7's `--mode list`) is gone by decision: `xbf.read` and `step.read`
-(a document's tree) and `cad xbf inspect DOC REF` (what a ref names) are the facts route.
+(a document's tree) and `cad model inspect DOC REF` (what a ref names) are the facts route.

@@ -22,7 +22,7 @@ The page offers what the file's kind writes, and nothing is inspected first: an 
 (a STEP, an xbf, a held model) as STEP, STL, 3MF, GLB and xbf. An opened XBF file's XBF
 download returns its original bytes (`original`), including an `xbf/8` file converted in
 memory for viewing. Use
-`cad xbf export old.xbf upgraded.xbf` to save that conversion to a different path
+`cad model export old.xbf upgraded.xbf` to save that conversion to a different path
 (**Document compatibility**). DXF is offered where the page draws it flat on z=0; a mesh
 file offers the other two mesh kinds and nothing else. A KiCad board offers KiCad's files of it, each `cad kicad_pcb export
 --to <kind>` (Gerbers, Drill, Position, BOM, STEP, GLB, ODB++, IPC-2581, PDF, DXF), run by the job on its
@@ -155,7 +155,7 @@ changed or new one fails in one line naming the folder and its mode.
   off z=0, by its element name. Layers are written in name order and edges in an order of
   their content (curve kind, sampled points, length), never the kernel's traversal, and
   ezdxf's provenance is pinned and its classes sorted: the same geometry is the same bytes in
-  any process on any day, so a declared DXF is the bytes `cad xbf export flat.xbf flat.dxf`
+  any process on any day, so a declared DXF is the bytes `cad model export flat.xbf flat.dxf`
   writes. The drawing checks run on the document before it is written -- units set, no
   zero-length or duplicate entity, every cut profile closed, something drawn; open geometry
   only on a layer its name's whole tokens make a bend, engrave or reference one -- and an

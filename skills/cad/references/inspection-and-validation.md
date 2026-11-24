@@ -173,7 +173,7 @@ def bracket():
 ## Which code made it
 
 `cad model inspect "$ID" REF` answers what a ref names, placed where its occurrence stands
-(`cad xbf inspect FILE REF` or `cad step inspect FILE REF` for a file):
+(`cad model inspect FILE.xbf REF` or `cad step inspect FILE REF` for a file):
 
 - an element: its kind, number, name and canonical ref; the kernel's facts (a face's area,
   centroid, surface type, exact box and radius; an edge's length, curve type, class and endpoints;
@@ -293,7 +293,7 @@ cancel, so check signed volume per solid; no free edges means closed, not manifo
 
 ## Interference
 
-`cad model interference "$ID"` (`cad xbf interference FILE`, `cad step interference FILE`) says which
+`cad model interference "$ID"` (`cad model interference FILE.xbf`, `cad step interference FILE`) says which
 parts of a document share volume. The verdict is the kernel's, exact, on the parts' own solids, so a
 plate through a 2.6 mm skin is found and a part 0.3 mm from another is not; meshes only rule out
 the pairs with air between them.
