@@ -32,7 +32,7 @@ from cad import glb, model
 from cad.build123d import configuration_sequence, mechanism_state
 from cad.build123d import animation
 
-@model(xbf="XBF/box.xbf")
+@model(out="XBF/box.xbf")
 @glb("XBF/box.glb")
 def box():
     ...                                                              # a hinged lid, a latch, feet

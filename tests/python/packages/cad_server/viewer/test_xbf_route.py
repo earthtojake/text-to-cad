@@ -44,12 +44,12 @@ from cad.engine import step, model
 from bd_materials import metals
 
 
-@model(xbf="XBF/block.xbf")
+@model(out="XBF/block.xbf")
 def block():
     return bd.Box(10, 6, 4) - bd.Cylinder(1, 10)
 
 
-@model(xbf="XBF/pair.xbf")
+@model(out="XBF/pair.xbf")
 @step(out="pair.step")
 def pair():
     plate = bd.Box(10, 6, 4) - bd.Cylinder(1, 10)

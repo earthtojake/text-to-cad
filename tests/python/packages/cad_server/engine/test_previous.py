@@ -46,7 +46,7 @@ HERE = Path(__file__).resolve().parent
 NAMES = {{"peg", "pin", "dowel", "stud", "post", "spigot"}}
 
 
-@model(xbf="XBF/peg.xbf")
+@model(out="XBF/peg.xbf")
 def peg():
     size = json.loads((HERE / "peg.json").read_text())["size"]
     peg = bd.Box(size, size, {peg})
@@ -54,14 +54,14 @@ def peg():
     return peg
 
 
-@model(xbf="XBF/cap.xbf")
+@model(out="XBF/cap.xbf")
 def cap():
     cap = read_step(HERE / "inputs" / "cap.step")
     cap.label = "cap"
     return cap
 
 
-@model(xbf="XBF/kit.xbf")
+@model(out="XBF/kit.xbf")
 def kit():
     left = peg().shape.moved(bd.Location((10, 0, 0)))
     right = peg().shape.moved(bd.Location((-10, 0, 0)))
@@ -448,7 +448,7 @@ import dims
 HERE = Path(__file__).resolve().parent
 
 
-@model(xbf="XBF/plate.xbf")
+@model(out="XBF/plate.xbf")
 def plate():
     try:
         depth = json.loads((HERE / "depth.json").read_text())["depth"]
@@ -804,7 +804,7 @@ from cad.engine import model
 WIDTH = float(os.environ.get("ENGINE_TEST_WIDTH", "10"))
 
 
-@model(xbf="XBF/strip.xbf")
+@model(out="XBF/strip.xbf")
 def strip():
     return bd.Box(WIDTH, 4, 1)
 """

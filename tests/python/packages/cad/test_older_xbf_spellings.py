@@ -47,9 +47,9 @@ class TheOlderSpellingsAreTheModelOnes(unittest.TestCase):
             found = decorate(arm)
             return found.id, found.plan(), found.explicit_name, [(o.kind, o.out, o.tolerance, o.angle) for o in found.outputs]
 
-        for older, now in ((cad.xbf("XBF/arm.xbf"), cad.model(xbf="XBF/arm.xbf")),
-                           (cad.engine.xbf(out="XBF/arm.xbf"), cad.engine.model(xbf="XBF/arm.xbf")),
-                           (cad.xbf("a.xbf", name="older-arm"), cad.model(xbf="a.xbf", name="older-arm"))):
+        for older, now in ((cad.xbf("XBF/arm.xbf"), cad.model(out="XBF/arm.xbf")),
+                           (cad.engine.xbf(out="XBF/arm.xbf"), cad.engine.model(out="XBF/arm.xbf")),
+                           (cad.xbf("a.xbf", name="older-arm"), cad.model(out="a.xbf", name="older-arm"))):
             self.addCleanup(cad.engine.model._NAMES.clear)
             self.assertEqual(declared(older), declared(now))
             cad.engine.model._NAMES.clear()
@@ -82,7 +82,7 @@ class TheOlderSpellingsAreTheModelOnes(unittest.TestCase):
 
 class TheOlderDecoratorBuildsTheSameDocument(unittest.TestCase):
     def test_either_spelling_makes_one_document_one_file_and_one_closure(self) -> None:
-        """A script that says ``@xbf(path)`` and the same script saying ``@model(xbf=path)`` are one model: the
+        """A script that says ``@xbf(path)`` and the same script saying ``@model(out=path)`` are one model: the
         same id, the same file at the path relative to the script, byte for byte (the closure in it too), and a
         run of one after the other is a run that changed nothing, which leaves the file as it is."""
         from cad.engine import build as engine_build
@@ -99,7 +99,7 @@ class TheOlderDecoratorBuildsTheSameDocument(unittest.TestCase):
             self.assertTrue(report["ok"], report)
             return report
 
-        now = built("from cad import model", '@model(xbf="../share/arm.xbf")')
+        now = built("from cad import model", '@model(out="../share/arm.xbf")')
         self.assertEqual({path: row["written"] for path, row in now["files"].items()}, {str(saved): True})
         first, written = saved.read_bytes(), saved.stat().st_mtime_ns
         older = built("from cad import xbf", '@xbf("../share/arm.xbf")')

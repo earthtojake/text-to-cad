@@ -3,7 +3,7 @@ as a file, its ``.xbf`` (``cad.registry``).
 
 A model the engine holds is addressed by its document id (``cad run SCRIPT.py`` prints it) or the handle its
 call returns; a saved one by its file's path. ``@model`` declares one (``@model(name=...)``;
-``model(shape, name=...)`` hands a shape over), with no file; ``@model(xbf="XBF/arm.xbf")`` has each run save it
+``model(shape, name=...)`` hands a shape over), with no file; ``@model(out="XBF/arm.xbf")`` has each run save it
 as that ``.xbf`` too, relative to the script, and its other files are the other types' decorators
 (``@step("arm.step")``). ``model.read("vendor/motor.xbf")`` reads a saved model into a body as a build123d shape,
 keyed by the file's bytes; any other file is refused with the reader that takes it (``step.read``, ``stl.read``).

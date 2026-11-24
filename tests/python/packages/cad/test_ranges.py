@@ -33,7 +33,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/rig.xbf")
+@model(out="XBF/rig.xbf")
 def rig():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -66,7 +66,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/near.xbf")
+@model(out="XBF/near.xbf")
 def near():
     tilt = math.degrees(math.atan(0.05 / 43))
     plate = bd.Pos(0, 0, -0.4) * bd.Rot(X=tilt) * bd.Pos(0, 0, -2.5) * bd.Box(120, 120, 5)
@@ -97,7 +97,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/overlap.xbf")
+@model(out="XBF/overlap.xbf")
 def overlap():
     rail = bd.Box(100, 60, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
     rail.label = "rail"
@@ -132,7 +132,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/motor.xbf")
+@model(out="XBF/motor.xbf")
 def motor():
     holes = [bd.Pos(9 * math.cos(math.radians(at)), 9 * math.sin(math.radians(at)), 29)
              * bd.Cylinder(2.5, 8, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)) for at in range(0, 360, 60)]
@@ -166,7 +166,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/hinge.xbf")
+@model(out="XBF/hinge.xbf")
 def hinge():
     base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
@@ -187,7 +187,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/clevis.xbf")
+@model(out="XBF/clevis.xbf")
 def clevis():
     floor = bd.Pos(0, 0, 5) * bd.Box(140, 40, 10)
     floor.label = "floor"
@@ -225,12 +225,12 @@ def box(lift):
     return bd.Compound(children=[tray, lid], label="box")
 
 
-@model(xbf="XBF/lid.xbf")
+@model(out="XBF/lid.xbf")
 def lid():
     return box(0)
 
 
-@model(xbf="XBF/raised.xbf")
+@model(out="XBF/raised.xbf")
 def raised():
     return box(1)
 """
@@ -244,7 +244,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/door.xbf")
+@model(out="XBF/door.xbf")
 def door():
     wall = bd.Box(60, 5, 50, align=(bd.Align.MIN, bd.Align.MAX, bd.Align.MIN))
     wall.label = "wall"
@@ -268,7 +268,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/flap.xbf")
+@model(out="XBF/flap.xbf")
 def flap():
     base = bd.Box(10, 30, 20, align=(bd.Align.CENTER, bd.Align.MAX, bd.Align.MIN))
     leaf = bd.Pos(0, 0, 20) * bd.Box(3, 30, 3, align=(bd.Align.CENTER, bd.Align.MAX, bd.Align.MIN))
@@ -288,7 +288,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/tab.xbf")
+@model(out="XBF/tab.xbf")
 def tab():
     plate = bd.Box(30, 30, 3, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX))
     plate.label = "plate"

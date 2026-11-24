@@ -166,7 +166,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/turned.xbf")
+@model(out="XBF/turned.xbf")
 def turned():
     return bd.Rot(0, 0, 33) * bd.Box(4, 3, 2) + bd.Rot(17, 29, 41) * bd.Cylinder(1, 3)
 """
@@ -198,7 +198,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/plate.xbf")
+@model(out="XBF/plate.xbf")
 def plate():
     from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakePolygon
     from OCP.gp import gp_Pnt
@@ -283,7 +283,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/solids.xbf")
+@model(out="XBF/solids.xbf")
 def solids():
     parts = []
     for at, (label, shape) in enumerate((("cylinder", bd.Cylinder(1, 2)), ("sphere", bd.Sphere(2)),

@@ -156,7 +156,7 @@ class StoreTest(unittest.TestCase):
             with self.subTest(file=nowhere), self.assertRaisesRegex(ValueError, r"model\(shape, name='cell'\)"):
                 self.define(source, nowhere)
         # store= is gone: an unexpected keyword argument, as any name that never was (law 14).
-        for given in ("@model(store='memory')", "@model(xbf='XBF/cell.xbf', store='memory')"):
+        for given in ("@model(store='memory')", "@model(out='XBF/cell.xbf', store='memory')"):
             with self.subTest(given=given), self.assertRaisesRegex(
                     TypeError, r"^(model|xbf)\(\) got an unexpected keyword argument 'store'$"):
                 self.define(source.replace("@model", given), str(saved))
@@ -173,15 +173,15 @@ class StoreTest(unittest.TestCase):
                 self.define(f"from cad.engine import model, step, glb, stl\n\n{stack}\ndef cell():\n"
                             "    return None\n", str(saved))
         # Its own .xbf is @model's to name: bare @model beside the declaration of it is the same refusal, with that fix.
-        for stack in ("@model\n@model(xbf='XBF/cell.xbf')", "@model(xbf='XBF/cell.xbf')\n@model"):
+        for stack in ("@model\n@model(out='XBF/cell.xbf')", "@model(out='XBF/cell.xbf')\n@model"):
             with self.subTest(stack=stack), self.assertRaisesRegex(
                     TypeError, r"model 'cell' is declared by @model and its \.xbf: .* never both; declare both in one, "
-                               r"@model\(xbf=\.\.\.\)$"):
+                               r"@model\(out=\.\.\.\)$"):
                 self.define(f"from cad.engine import model\n\n{stack}\ndef cell():\n    return None\n", str(saved))
-        with self.assertRaisesRegex(TypeError, r"model 'cell' declares @model\(xbf=\.\.\.\) twice"):
-            self.define("from cad.engine import model\n\n@model(xbf='a.xbf')\n@model(xbf='b.xbf')\ndef cell():\n"
+        with self.assertRaisesRegex(TypeError, r"model 'cell' declares @model\(out=\.\.\.\) twice"):
+            self.define("from cad.engine import model\n\n@model(out='a.xbf')\n@model(out='b.xbf')\ndef cell():\n"
                         "    return None\n", str(saved))
-        both = self.define("from cad.engine import model, step\n\n@model(xbf='XBF/cell.xbf')\n@step('cell.step')\n"
+        both = self.define("from cad.engine import model, step\n\n@model(out='XBF/cell.xbf')\n@step('cell.step')\n"
                            "def cell():\n    return None\n", str(saved))
         self.assertEqual([kind for kind, _path in both.targets()], ["xbf", "step"], "file decorators stack")
 

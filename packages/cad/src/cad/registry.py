@@ -18,7 +18,7 @@ description's conformance check.
 
 ``model`` is a model built from code: held in the engine's memory, addressed by its document id or the handle
 its call returns (``@model`` declares one), or saved as a file, the ``.xbf`` the engine writes of one
-(``@model(xbf="arm.xbf")`` declares that too). ``xbf`` is that file's own type (``SAVED``), which the server and
+(``@model(out="arm.xbf")`` declares that too). ``xbf`` is that file's own type (``SAVED``), which the server and
 the viewer open; everywhere a type is named to a person or a program it is ``model``'s (``spelling``):
 ``cad.model``'s decorator, reader (``model.read``) and operations, and ``cad model``, take the file.
 

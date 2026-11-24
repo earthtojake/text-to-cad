@@ -38,7 +38,7 @@ CURL = {{"index_mcp_flexion": 90, "index_pip": 100, "index_dip": 70}}  # degrees
 BONES = {{"base": 30, "proximal": 40, "middle": 25, "distal": 20}}  # lengths along +X
 
 
-@model(xbf="XBF/index_finger.xbf")
+@model(out="XBF/index_finger.xbf")
 def index_finger():
     bones, x = [], -BONES["base"]
     for name, length in BONES.items():
@@ -73,7 +73,7 @@ SWEEP = {"left": -70, "right": 70}  # each door's turn when open, degrees
 TRAVEL = 40  # and its travel along the hinge, mm
 
 
-@model(xbf="XBF/hypercar.xbf")
+@model(out="XBF/hypercar.xbf")
 def hypercar():
     chassis = bd.Box(4400, 900, 400, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     chassis.label = "chassis"
@@ -102,7 +102,7 @@ from cad.engine import model
 RATIOS = {{"sun": 1.0, "idler": -2.0, "ring": 0.5}}
 
 
-@model(xbf="XBF/train.xbf")
+@model(out="XBF/train.xbf")
 def train():
     plate = bd.Box(200, 60, 5, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MAX))
     plate.label = "plate"
@@ -145,7 +145,7 @@ def finger(name):
     return gear_pair(found, "curl", pip=100, dip=70)
 
 
-@model(xbf="XBF/hand.xbf")
+@model(out="XBF/hand.xbf")
 def hand():
     palm = bd.Box(10, 60, 12, align=(bd.Align.MAX, bd.Align.CENTER, bd.Align.CENTER))
     palm.label = "palm"
@@ -204,7 +204,7 @@ from cad.build123d import mechanism_state, rack_and_pinion_pair
 from cad.engine import model
 
 
-@model(xbf="XBF/gripper.xbf")
+@model(out="XBF/gripper.xbf")
 def gripper():
     palm = bd.Box(80, 20, 20)
     palm.label = "palm"
@@ -229,7 +229,7 @@ from cad.engine import model
 from index_finger import index_finger
 
 
-@model(xbf="XBF/posed_finger.xbf")
+@model(out="XBF/posed_finger.xbf")
 def posed_finger():
     return posed(index_finger().shape, {pose})
 """

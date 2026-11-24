@@ -27,7 +27,7 @@ from cad.engine import model, step, paint
 WIDTH = {width}
 
 
-@model(xbf="XBF/bracket.xbf")
+@model(out="XBF/bracket.xbf")
 def bracket():
     plate = bd.Box(WIDTH, 10, 2)
     plate = bd.fillet(plate.edges().filter_by(bd.Axis.Z), 1)
@@ -36,7 +36,7 @@ def bracket():
     return plate
 
 
-@model(xbf="out/frame.xbf")
+@model(out="out/frame.xbf")
 @step(out="out/frame.step")
 def frame():
     left = bracket().shape
@@ -71,11 +71,11 @@ class EngineCase(unittest.TestCase):
 
 class DecoratorTest(unittest.TestCase):
     def test_required_out_and_stacked_in_source_order(self) -> None:
-        @model(xbf="XBF/one.xbf")
+        @model(out="XBF/one.xbf")
         def one():
             return None
 
-        @model(xbf="a/b.xbf")
+        @model(out="a/b.xbf")
         @stl(out="b.stl")
         @step("two.step")
         def two():
@@ -87,9 +87,9 @@ class DecoratorTest(unittest.TestCase):
         self.assertEqual(two.targets(), [("xbf", here / "a/b.xbf"), ("stl", here / "b.stl"), ("step", here / "two.step")])
         self.assertEqual(two.identity, "test_build.py::two")
         with self.assertRaises(ValueError):
-            model(xbf="x.step")
+            model(out="x.step")
         with self.assertRaises(TypeError):
-            @model(xbf="XBF/takes.xbf")
+            @model(out="XBF/takes.xbf")
             def takes(value):
                 return value
 
@@ -105,8 +105,12 @@ class DecoratorTest(unittest.TestCase):
                     decorator(lambda: None)
         # A model's own .xbf is @model's to name: a path, ending in .xbf.
         for path in (7, "", lambda: None):
-            with self.subTest(xbf=path), self.assertRaisesRegex(TypeError, r"@model\(xbf=\.\.\.\) takes a path"):
-                model(xbf=path)
+            with self.subTest(out=path), self.assertRaisesRegex(TypeError, r"@model\(out=\.\.\.\) takes a path"):
+                model(out=path)
+        # Another file a decorator writes is that decorator's, said by name.
+        with self.assertRaisesRegex(ValueError, r"@model\(out=\.\.\.\) writes the model's \.xbf, not 'arm\.step': "
+                                                r"declare that file with @step\('arm\.step'\)"):
+            model(out="arm.step")
 
     def test_model_only_declares_and_file_decorators_imply_it(self) -> None:
         from cad import model
@@ -307,12 +311,12 @@ class BuildTest(EngineCase):
             BOUGHT = Path(__file__).parent / "bought.step"
 
 
-            @model(xbf="XBF/holder.xbf")
+            @model(out="XBF/holder.xbf")
             def holder():
                 return read_step(BOUGHT) - bd.Cylinder(1, 20)
 
 
-            @model(xbf="XBF/stand.xbf")
+            @model(out="XBF/stand.xbf")
             def stand():
                 part = read_step(BOUGHT).moved(bd.Location((10, 0, 0)))
                 return bd.Compound(children=[holder().shape, part])
@@ -346,7 +350,7 @@ import build123d as bd
 from cad.engine import stl, model
 
 
-@model(xbf="XBF/bracket.xbf")
+@model(out="XBF/bracket.xbf")
 @stl("bracket.stl")
 def bracket():
     return bd.Box(10, 4, 2) - bd.Cylinder(1, 5)
@@ -363,7 +367,7 @@ def peg():
     return bd.Cylinder(1, 6)
 
 
-@model(xbf="XBF/rig.xbf")
+@model(out="XBF/rig.xbf")
 def rig():
     left = bracket().shape
     right = bracket().shape.moved(bd.Location((0, 20, 0)))
@@ -452,7 +456,7 @@ TOP = bd.Color({top})
 PINS = {pins}
 
 
-@model(xbf="XBF/left.xbf")
+@model(out="XBF/left.xbf")
 def left():
     plate = bd.Box(LEFT, 8, 3) - bd.Cylinder(1.5, 10)
     plate.label = "plate"
@@ -467,7 +471,7 @@ def left():
     return bd.Compound(children=[plate, pin, peg][:PINS + 1], label="left")
 
 
-@model(xbf="XBF/right.xbf")
+@model(out="XBF/right.xbf")
 def right():
     block = bd.Box(RIGHT, 4, 4)
     block.label = "block"
@@ -481,7 +485,7 @@ def right():
     return bd.Compound(children=[block, cap], label="right")
 
 
-@model(xbf="XBF/kit.xbf")
+@model(out="XBF/kit.xbf")
 @step(out="kit.step")
 def kit():
     one = right().shape.moved(bd.Location((30, 0, 0)))
@@ -600,7 +604,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/block.xbf")
+@model(out="XBF/block.xbf")
 def block():
     return bd.Box(3, 2, 1) - bd.Cylinder(0.5, 2)
 """

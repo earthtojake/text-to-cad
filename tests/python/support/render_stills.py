@@ -47,7 +47,7 @@ STAINLESS = FinishedMaterial(metals.stainless().material,
     pbr=PbrProperties.create("stainless", color="#d6d4d1", metalness=1, roughness=0.3, anisotropy=0.3))
 
 
-@model(xbf="XBF/bench.xbf")
+@model(out="XBF/bench.xbf")
 def bench():
     block = bd.Box(30, 30, 30)
     block.label, block.material = "block", STEEL

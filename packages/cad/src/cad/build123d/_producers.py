@@ -1,7 +1,7 @@
 """The build123d integration's producers: a build123d shape made into each document type it writes.
 
 The document every model makes (``model``, held in the engine's memory) and one producer per document
-type a declaration writes (``@model(xbf=...)``, ``@step``, ``@glb``, ``@stl``, ``@threemf``, ``@dxf``), each registered
+type a declaration writes (``@model(out=...)``, ``@step``, ``@glb``, ``@stl``, ``@threemf``, ``@dxf``), each registered
 in ``cad.registry``. A
 producer's matcher reads the returned value's type names and modules alone -- ``build123d``'s
 ``Shape`` anywhere in its class's ancestry -- so asking which producer takes a value imports no

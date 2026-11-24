@@ -27,7 +27,7 @@ files into a model, or working out why a run ran what it ran.
   joints. Verbs take the handle (`model.export(handle, ...)`, `posed(handle, state)`).
 - **A file decorator takes bare `@model`'s place, never beside it**: `@step("part.step")`,
   and `@glb`, `@stl`, `@threemf` and `@dxf` likewise with a path, declare a model
-  whose run also writes those files; its `.xbf` is `@model(xbf="part.xbf")`'s, alone or with them
+  whose run also writes those files; its `.xbf` is `@model(out="part.xbf")`'s, alone or with them
   ([model page or file page](exports.md#model-page-or-file-page)).
 - **Kernel objects belong in bodies.** `import build123d as bd` loads no kernel until an
   attribute is read from `bd`, which in a body happens in the server. Read at module

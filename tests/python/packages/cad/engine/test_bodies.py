@@ -30,7 +30,7 @@ from cad.engine import model
 from shared import WIDTH
 
 
-@model(xbf="XBF/left.xbf")
+@model(out="XBF/left.xbf")
 def left():
     plate = bd.fillet(bd.Box(WIDTH, 8, 3).edges().filter_by(bd.Axis.Z), 1)
     plate = plate - bd.Cylinder(1.5, 10)
@@ -44,7 +44,7 @@ from cad.engine import model
 from shared import WIDTH
 
 
-@model(xbf="XBF/right.xbf")
+@model(out="XBF/right.xbf")
 def right():
     return bd.Box(WIDTH, 4, 4) - bd.Pos(1, 0, 0) * bd.Box(2, 2, 10)
 """
@@ -56,7 +56,7 @@ import build123d as bd
 from cad.engine import model, read_step
 
 
-@model(xbf="XBF/bought.xbf")
+@model(out="XBF/bought.xbf")
 def bought():
     return read_step(Path(__file__).parent / "bought.step")
 """
@@ -71,7 +71,7 @@ from bought import bought
 HOLE = {hole}
 
 
-@model(xbf="XBF/root.xbf")
+@model(out="XBF/root.xbf")
 def root():
     before = bd.Box(1, 1, 1)
     one = left().shape
@@ -252,7 +252,7 @@ from dimensions import WIDTH
 from helpers import holed
 
 
-@model(xbf="XBF/bracket.xbf")
+@model(out="XBF/bracket.xbf")
 def bracket():
     return holed(WIDTH)
 """
@@ -263,7 +263,7 @@ from cad.engine import model
 import dimensions
 
 
-@model(xbf="XBF/spacer.xbf")
+@model(out="XBF/spacer.xbf")
 def spacer():
     return bd.Box(dimensions.HEIGHT, 2, 2)
 """
@@ -276,7 +276,7 @@ import dimensions
 WHICH = "HEI" + "GHT"
 
 
-@model(xbf="XBF/probe.xbf")
+@model(out="XBF/probe.xbf")
 def probe():
     return bd.Box(getattr(dimensions, WHICH), 3, 3)
 """
@@ -288,7 +288,7 @@ from bracket import bracket
 from spacer import spacer
 
 
-@model(xbf="XBF/assembly.xbf")
+@model(out="XBF/assembly.xbf")
 def assembly():
     return bd.Compound(children=[bracket().shape, spacer().shape.moved(bd.Location((30, 0, 0)))], label="assembly")
 """
@@ -346,7 +346,7 @@ class SymbolsTest(SymbolsCase):
 
     def test_a_document_type_a_body_reads_keeps_its_module_s_docstring_out_of_its_key(self) -> None:
         reader = '"""Reads a file."""\nimport build123d as bd\nfrom cad import step, model\n\n\n' + (
-            '@model(xbf="XBF/reader.xbf")\ndef reader():\n    assert callable(step.read)\n    return bd.Box(2, 2, 2)\n')
+            '@model(out="XBF/reader.xbf")\ndef reader():\n    assert callable(step.read)\n    return bd.Box(2, 2, 2)\n')
         self.write("reader.py", reader)
         engine_build.build(self.folder / "reader.py", ["reader"], cwd=self.folder)
         self.write("reader.py", reader.replace("Reads a file.", "Reads a file, and says so."))
@@ -396,24 +396,24 @@ def config():
         return {{"width": 2}}
 
 
-@model(xbf="XBF/reader.xbf")
+@model(out="XBF/reader.xbf")
 def reader():
     return bd.Box(config()["width"], 1, 1)
 
 
-@model(xbf="XBF/holder.xbf")
+@model(out="XBF/holder.xbf")
 def holder():
     return bd.Compound(children=[reader().shape, bd.Pos(GAP, 0, 0) * bd.Box(1, 1, 1)])
 
 
-@model(xbf="XBF/writer.xbf")
+@model(out="XBF/writer.xbf")
 def writer():
     with open(HERE / "note.txt", "w", encoding="utf-8") as handle:
         handle.write("built")
     return bd.Box(1, 1, 1)
 
 
-@model(xbf="XBF/piped.xbf")
+@model(out="XBF/piped.xbf")
 def piped():
     handle = os.open(HERE / "pipe", os.O_RDONLY | os.O_NONBLOCK)
     try:
@@ -432,7 +432,7 @@ from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt
 from cad.engine import model
 
 
-@model(xbf="XBF/raw.xbf")
+@model(out="XBF/raw.xbf")
 def raw():
     peg = BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), 2.0, 5.0).Shape()
     return bd.Compound(children=[bd.Solid(downcast(peg)), bd.Box(3, 3, 3)])

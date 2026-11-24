@@ -29,7 +29,7 @@ The laws below say how they are made, named, kept and served.
 from cad import model, step
 import build123d as bd
 
-@model(xbf="XBF/arm.xbf")                # each run saves it as XBF/arm.xbf beside the script
+@model(out="XBF/arm.xbf")                # each run saves it as XBF/arm.xbf beside the script
 @step("arm.step")         # and its STEP, a translation of that document
 def arm():
     return bd.Box(10, 20, 30)
@@ -62,7 +62,7 @@ These words mean one thing each, in the code, the commands and every document.
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
   and `.stp` are `step`). `model` is a model built from code: held in the engine's memory, addressed by its
   document id or the handle its call returns (`@model` declares one), or saved as a file, its `.xbf`
-  (`@model(xbf="arm.xbf")` has each run write it; `model.read` reads one). `xbf` is that file's kind in the
+  (`@model(out="arm.xbf")` has each run write it; `model.read` reads one). `xbf` is that file's kind in the
   registry, the server and the viewer, which open it; in Python and the CLI it is `model`'s, with no name of
   its own (law 26). A document type is a file cad shows: each has a view. A file cad writes or checks and never
   shows is none, whatever cad does with it: an MJCF, MuJoCo's own model file, is an export's destination and
@@ -207,7 +207,7 @@ renumbers the list and every citation in the same change.
    returns its handle, never a bare shape. Every id is one formula over a scope and a name
    (`ids.derived_id`): a model's script and function, an opened file's path, a handed-over shape's
    calling script and name; the same in every process, worked out without asking the engine. A function
-   is declared by `@model` alone, with no file, or by the files it declares (`@model(xbf=...)`, its `.xbf`;
+   is declared by `@model` alone, with no file, or by the files it declares (`@model(out=...)`, its `.xbf`;
    a file decorator, any other), never both. A document lives until a person
    deletes it: neither its worker retiring nor memory ends it, and one that is not held names the
    command that builds it again (the engine's **Document lifetime**).
@@ -222,7 +222,7 @@ renumbers the list and every citation in the same change.
    that made its feature and the author's name for that feature, never from a line or a file: moving
    code renames nothing, and the file holds no line to go stale.
 10. **A file decorator requires an explicit output path.** *Models.* `out` is required; an omitted
-    path or `None` is refused, and `@model(xbf=...)` names the `.xbf` a model is saved as the same way.
+    path or `None` is refused, and `@model(out=...)` names the `.xbf` a model is saved as the same way.
     Whenever its model runs in a build, or is taken from its key, the file
     is written once, from the model's own document, exactly as an export writes it, and only where it
     differs or is missing. A model that declares no file writes nothing.
@@ -341,7 +341,7 @@ renumbers the list and every citation in the same change.
     `drc`, `erc`, `validate`. `model` is the one type that is two things, in the library and the command
     alike: a model the engine holds, by its id or its handle, and a model saved as a file, its `.xbf`, which
     is read as the file it is (it names no `made_by`: law 7). A person and an agent learn one word for a
-    model: `@model(xbf=...)` writes the file, `model.read` reads it, `cad.model.*` and `cad model` take it.
+    model: `@model(out=...)` writes the file, `model.read` reads it, `cad.model.*` and `cad model` take it.
     The registry keeps the file's kind, `xbf`, for the server and the viewer, which open it. One result shape
     per operation: a check returns findings, each with
     a severity, a code and a location (`cad.results.CheckResult`), and `export` says the files it wrote.
@@ -423,7 +423,7 @@ src/cad/
                          #   kernel and the earlier spellings' aliases, first
   registry.py            # the document types and the integrations: the one table every layer
                          #   reads, kernel-free (`python -m cad.registry --js` writes the JS)
-  model/                 # the model, held or saved: @model (xbf= the .xbf a run saves it as), its
+  model/                 # the model, held or saved: @model (out= the .xbf a run saves it as), its
                          #   parameters (param, declared in the script), model.read, and a model's
                          #   operations, by its handle, its document id or its .xbf (a ModelType)
   step/, stl/,           # the document types, each a DocumentType (`cad.<type>`): its decorator,

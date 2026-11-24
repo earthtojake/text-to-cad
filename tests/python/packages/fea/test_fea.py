@@ -1345,7 +1345,7 @@ class ModelMaterial(unittest.TestCase):
             from cad.engine import model
 
 
-            @model(xbf="XBF/bar.xbf")
+            @model(out="XBF/bar.xbf")
             def bar():
                 part = bd.Box(40, 10, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
                 part.material = metals.aluminum()

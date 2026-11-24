@@ -36,7 +36,7 @@ from cad.engine import dxf, model
 HOLE = {hole}
 
 
-@model(xbf="XBF/plate.xbf")
+@model(out="XBF/plate.xbf")
 @dxf("plate.dxf")
 def plate():
     with bd.BuildSketch() as cut:
@@ -81,7 +81,7 @@ import build123d as bd
 from cad.engine import dxf, model
 
 
-@model(xbf="XBF/solid.xbf")
+@model(out="XBF/solid.xbf")
 @dxf("solid.dxf")
 def solid():
     return bd.Box(1, 2, 3)
@@ -116,7 +116,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/bracket.xbf")
+@model(out="XBF/bracket.xbf")
 def bracket():
     return bd.Box(40, 20, 3, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)) - bd.Cylinder(3, 10)
 """

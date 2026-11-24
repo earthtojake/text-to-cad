@@ -108,7 +108,7 @@ from cad import model
 CURL = {"index_mcp_flexion": 90, "index_pip": 100, "index_dip": 70}  # degrees at a full curl
 BONES = {"base": 30, "proximal": 40, "middle": 25, "distal": 20}     # lengths along +X
 
-@model(xbf="XBF/index_finger.xbf")
+@model(out="XBF/index_finger.xbf")
 def index_finger():
     bones, x = [], -BONES["base"]
     for name, length in BONES.items():
@@ -127,7 +127,7 @@ def index_finger():
 
 SWEEP, TRAVEL = {"left": -70, "right": 70}, 40                       # a door's turn and travel when open
 
-@model(xbf="XBF/hypercar.xbf")
+@model(out="XBF/hypercar.xbf")
 def hypercar():
     chassis = bd.Box(4400, 900, 400, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     chassis.label = "chassis"

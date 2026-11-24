@@ -273,7 +273,7 @@ def bracket():
     return bd.Compound(children=[plate, peg], label="bracket")
 
 
-@model(xbf="XBF/placed.xbf")
+@model(out="XBF/placed.xbf")
 def placed():
     held = bracket()
     left = held.moved(bd.Location((0, 20, 0)))
@@ -283,7 +283,7 @@ def placed():
     return bd.Compound(children=[held, left, right], label="placed")
 
 
-@model(xbf="XBF/painted.xbf")
+@model(out="XBF/painted.xbf")
 def painted():
     plate = bd.Box(10, 6, 2)
     plate.label = "plate"
@@ -299,7 +299,7 @@ def painted():
     return bd.Compound(children=[plate, red, blue, again], label="painted")
 
 
-@model(xbf="XBF/labelled.xbf")
+@model(out="XBF/labelled.xbf")
 def labelled():
     held = bracket()
     left = held.moved(bd.Location((0, 20, 0)))
@@ -312,7 +312,7 @@ def labelled():
     return bd.Compound(children=[held, stand, grown], label="labelled")
 
 
-@model(xbf="XBF/kit.xbf")
+@model(out="XBF/kit.xbf")
 def kit():
     bought = read_step(PAIR)
     first, second = bought.children
@@ -326,7 +326,7 @@ def peg():
     return bd.Cylinder(2, 6) - bd.Pos(0, 0, 3) * bd.Box(1, 1, 1)
 
 
-@model(xbf="XBF/built.xbf")
+@model(out="XBF/built.xbf")
 def built():
     placed = []
     for x in (0, 10):
@@ -336,7 +336,7 @@ def built():
     return bd.Compound(children=[*placed, other.moved(bd.Location((20, 0, 0)))], label="built")
 
 
-@model(xbf="XBF/screws.xbf")
+@model(out="XBF/screws.xbf")
 def screws():
     placed = []
     for x in (0, 10):

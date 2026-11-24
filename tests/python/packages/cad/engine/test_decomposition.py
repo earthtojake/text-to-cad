@@ -37,7 +37,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/bracket.xbf")
+@model(out="XBF/bracket.xbf")
 def bracket():
     block = bd.Pos(25, 25, 5) * bd.Box(20, 20, 10)
     block.label = "block"

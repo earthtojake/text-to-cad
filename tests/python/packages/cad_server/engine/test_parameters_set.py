@@ -39,7 +39,7 @@ HOLES = model.param("holes", 6, min=3, max=12)
 TWICE = model.param("twice", WALL * 2)
 
 
-@model(xbf="XBF/bracket.xbf")
+@model(out="XBF/bracket.xbf")
 def bracket():
     if WALL > 4.5:
         raise ValueError(f"a wall of {WALL} leaves no room for the holes")

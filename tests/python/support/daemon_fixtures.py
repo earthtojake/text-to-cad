@@ -29,7 +29,7 @@ from cad.engine import model
 SIZE = {size}
 
 
-@model(xbf="XBF/block.xbf")
+@model(out="XBF/block.xbf")
 def block():
     return bd.fillet(bd.Box(SIZE, 4, 2).edges().filter_by(bd.Axis.Z), 0.5)
 

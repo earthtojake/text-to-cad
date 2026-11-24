@@ -62,7 +62,7 @@ The model's page is the default. A project can instead revolve around its export
 the person asks to iterate on the file or the project already works that way (an `exports.py`, a
 consumer reading the files, a 0.7-era layout). Each run then writes the file too, by a file
 decorator in place of `@model` (`@step("../STEP/bracket.step")`, relative to the script; `@glb`,
-`@stl`, `@threemf` and `@dxf` alike; an `.xbf` by `@model(xbf="...")`), by `exports.py` or by
+`@stl`, `@threemf` and `@dxf` alike; an `.xbf` by `@model(out="...")`), by `exports.py` or by
 `cad <type> export` after the run; the person looks at the file's page; and checks read the file
 (`cad <type> snapshot` or `inspect` with its path, or `step.read` in a check).
 

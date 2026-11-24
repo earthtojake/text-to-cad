@@ -133,7 +133,7 @@ from cad.build123d import free, mechanism_state
 from cad.engine import model
 
 
-@model(xbf="XBF/two.xbf")
+@model(out="XBF/two.xbf")
 def two():
     plate = bd.Box(100, 60, 20)
     plate.label = "plate"
@@ -334,7 +334,7 @@ from cad.build123d import mechanism_state
 from cad.engine import model
 
 
-@model(xbf="XBF/hinge.xbf")
+@model(out="XBF/hinge.xbf")
 def hinge():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -379,7 +379,7 @@ def hinge(name, holder, child, at, connect=True):
         joint.connect_to(child.joints[name], angle=0)
 
 
-@model(xbf="XBF/four_bar.xbf")
+@model(out="XBF/four_bar.xbf")
 def four_bar():
     base = bd.Pos(40, -20, -10) * bd.Box(100, 10, 10)
     base.label = "base"
@@ -400,7 +400,7 @@ from cad.build123d import mechanism_state, rack_and_pinion_pair
 from cad.engine import model
 
 
-@model(xbf="XBF/gripper.xbf")
+@model(out="XBF/gripper.xbf")
 def gripper():
     palm = bd.Box(80, 20, 20)
     palm.label = "palm"
@@ -446,7 +446,7 @@ from cad import model
 from cad.build123d import leaves
 
 
-@model(xbf="XBF/painted.xbf")
+@model(out="XBF/painted.xbf")
 def painted():
     parts = leaves(model.read(Path(__file__).parent / "vendor.xbf"))
     for part in parts:
@@ -462,7 +462,7 @@ import build123d as bd
 from cad.engine import paint, model
 
 
-@model(xbf="XBF/wire.xbf")
+@model(out="XBF/wire.xbf")
 def wire():
     block = bd.Box(40, 40, 40)
     block.label = "block"

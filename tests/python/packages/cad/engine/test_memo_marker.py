@@ -92,7 +92,7 @@ from parts import faces, jitter, offset, plate, tagged, through
 HOLE = {hole}
 
 
-@model(xbf="XBF/root.xbf")
+@model(out="XBF/root.xbf")
 def root():
     a = plate({length})
     a.label = "a"
@@ -131,7 +131,7 @@ def stage_two(base, depth):
     return cut
 
 
-@model(xbf="XBF/staged.xbf")
+@model(out="XBF/staged.xbf")
 def staged():
     one = stage_one(12)
     two = stage_two(one, 4).moved(bd.Location((20, 0, 0)))
@@ -294,14 +294,14 @@ class MemoTest(MemoCase):
         self.addCleanup(os.chdir, here)
         # A model calling the model: a verifying build of it runs the called model's bodies again too.
         self.write("caller.py", "from cad.engine import model\nfrom root import root\n\n\n"
-                                "@model(xbf=\"XBF/caller.xbf\")\ndef caller():\n    return root().shape\n")
+                                "@model(out=\"XBF/caller.xbf\")\ndef caller():\n    return root().shape\n")
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             report = api.build_script(self.folder / "caller.py", ["caller"], verify=True, daemon=False)
         self.assertTrue(report.ok, report.models)
         found = report.models[0]["verify"]
         self.assertEqual(found["mismatches"], ["parts.py::jitter"], found)
 
-        @model(xbf="XBF/probe.xbf")
+        @model(out="XBF/probe.xbf")
         def probe():
             return None
 

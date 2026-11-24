@@ -39,7 +39,7 @@ from .lib import WIDTH              # one level: its own package
 from ..common.dims import HEIGHT    # two levels: its package's parent
 
 
-@model(xbf="XBF/bracket.xbf")
+@model(out="XBF/bracket.xbf")
 def bracket():
     return bd.Box(WIDTH, 10, HEIGHT) - bd.Cylinder(helper.RADIUS, dims.HEIGHT * 2)
 
@@ -103,7 +103,7 @@ class PackageScriptTest(unittest.TestCase):
             from lib import empennage
 
 
-            @model(xbf="XBF/f14.xbf")
+            @model(out="XBF/f14.xbf")
             def f14():
                 return bd.Box(10, empennage.SPAN, 2)
         """})
@@ -127,7 +127,7 @@ class PackageScriptTest(unittest.TestCase):
             import holes
 
 
-            @model(xbf="XBF/plate.xbf")
+            @model(out="XBF/plate.xbf")
             def plate():
                 return bd.Box(10, 10, 2) - bd.Cylinder(holes.RADIUS, 4)
         """})
@@ -164,7 +164,7 @@ class PackageScriptTest(unittest.TestCase):
             from cad.engine import model
 
 
-            @model(xbf="XBF/plate.xbf")
+            @model(out="XBF/plate.xbf")
             def plate():
                 return bd.Box(10, 10, 2)
         """})
@@ -183,7 +183,7 @@ class PackageScriptTest(unittest.TestCase):
         helper.write_text("WIDTH=1\n", encoding="utf-8")
         editable.write_text("HEIGHT=1\n", encoding="utf-8")
         script, xbf = self.root / "body.py", self.root / "XBF" / "body.xbf"
-        script.write_text("import build123d as bd\nfrom cad import model\n@model(xbf='XBF/body.xbf')\n"
+        script.write_text("import build123d as bd\nfrom cad import model\n@model(out='XBF/body.xbf')\n"
                           "def body():\n    from body_helper import WIDTH\n    from body_editable import HEIGHT\n"
                           "    return bd.Box(WIDTH,HEIGHT,1)\n", encoding="utf-8")
 

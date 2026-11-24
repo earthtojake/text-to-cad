@@ -26,7 +26,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="XBF/hand.xbf")
+@model(out="XBF/hand.xbf")
 def hand():
     palm = bd.Box(30, 20, 5)
     palm.label = "palm"
@@ -79,7 +79,7 @@ class ReadAndPlaceTest(_Folder):
             from cad.engine import step, model
 
 
-            @model(xbf="XBF/plate.xbf")
+            @model(out="XBF/plate.xbf")
             @step("plate.step")
             def plate():
                 return bd.Box(30, 20, 4)
@@ -92,12 +92,12 @@ class ReadAndPlaceTest(_Folder):
             HERE = Path(__file__).resolve().parent
             {plate}
 
-            @model(xbf="XBF/from_xbf.xbf")
+            @model(out="XBF/from_xbf.xbf")
             def from_xbf():
                 return read_xbf(HERE / "XBF/plate.xbf"){tail}
 
 
-            @model(xbf="XBF/from_step.xbf")
+            @model(out="XBF/from_step.xbf")
             def from_step():
                 return read_step(HERE / "plate.step"){tail}
         """
@@ -118,12 +118,12 @@ class ReadAndPlaceTest(_Folder):
             from cad.engine import model
 
 
-            @model(xbf="XBF/peg.xbf")
+            @model(out="XBF/peg.xbf")
             def peg():
                 return bd.Cylinder(2, 10)
 
 
-            @model(xbf="XBF/rack.xbf")
+            @model(out="XBF/rack.xbf")
             def rack():
                 first, second = peg().shape, peg().shape.moved(bd.Location((10, 0, 0)))
                 if abs(second.volume - first.volume) > 1e-6:

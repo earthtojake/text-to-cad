@@ -42,7 +42,7 @@ from cad.build123d import materials
 
 VARIANTS = {variants!r}
 
-@model(xbf="looks.xbf")
+@model(out="looks.xbf")
 @glb("looks.glb")
 def looks():
     parts = []

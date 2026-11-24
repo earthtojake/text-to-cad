@@ -96,7 +96,7 @@ class StandaloneTest(unittest.TestCase):
                 import build123d as bd
                 from cad.engine import model, step, stl
 
-                @model(xbf="XBF/part.xbf")
+                @model(out="XBF/part.xbf")
                 @step("part.step")
                 @stl("part.stl")
                 def part():

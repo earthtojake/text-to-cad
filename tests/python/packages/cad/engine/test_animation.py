@@ -49,7 +49,7 @@ from cad.build123d import animation
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
 
-@model(xbf="XBF/channels.xbf")
+@model(out="XBF/channels.xbf")
 @glb("channels.glb")
 def channels():
     body = bd.Box(80, 50, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -89,7 +89,7 @@ from cad.build123d import configuration_sequence, mechanism_state
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
 
-@model(xbf="XBF/motion.xbf")
+@model(out="XBF/motion.xbf")
 @glb("motion.glb")
 def motion_box():
     body = bd.Box(80, 50, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -115,7 +115,7 @@ from cad.build123d import animation
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
 
-@model(xbf="XBF/fidelity.xbf")
+@model(out="XBF/fidelity.xbf")
 @glb("fidelity.glb")
 def fidelity():
     body = bd.Box(80, 50, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -149,7 +149,7 @@ from cad import glb, model
 from cad.build123d import animation, configuration_sequence, mechanism_state
 
 
-@model(xbf="XBF/nested.xbf")
+@model(out="XBF/nested.xbf")
 @glb("nested.glb")
 def nested():
     base = bd.Box(80, 40, 10, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX))
@@ -182,7 +182,7 @@ from cad import glb, model
 from cad.build123d import animation, configuration_sequence, mechanism_state
 
 
-@model(xbf="XBF/turned.xbf")
+@model(out="XBF/turned.xbf")
 @glb("turned.glb")
 def turned():
     base = bd.Box(80, 40, 10)
@@ -390,7 +390,7 @@ class HarvestTest(_Folder):
             from cad.engine import model
 
 
-            @model(xbf="XBF/bot.xbf")
+            @model(out="XBF/bot.xbf")
             def bot():
                 def part(label, x):
                     solid = bd.Pos(x, 0, 0) * bd.Box(10, 10, 10)
@@ -529,7 +529,7 @@ class GlbTest(_Folder):
             from cad.build123d import animation
 
 
-            @model(xbf="XBF/pair.xbf")
+            @model(out="XBF/pair.xbf")
             @glb("pair.glb")
             def pair():
                 base, arm = bd.Box(10, 10, 10), bd.Pos(20, 0, 0) * bd.Box(5, 5, 5)

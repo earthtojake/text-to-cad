@@ -36,7 +36,7 @@ import build123d as bd
 from cad import model
 
 
-@model(xbf="XBF/part.xbf")
+@model(out="XBF/part.xbf")
 def part():
     Path(__file__).with_name("worker.txt").write_text(sys.prefix, encoding="utf-8")
     return bd.Box(4, 5, 6)
