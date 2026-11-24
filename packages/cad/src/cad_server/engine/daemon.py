@@ -215,10 +215,10 @@ def _note(said: str, denied: bool = False) -> None:
 SERVING = frozenset({"serve", "viewer", "http", "read", "warm", "bundle"})
 # The requests that are no command's, which the last command's time (``Daemon.worked``) never counts
 # (``Daemon.ended``): who answers, a page token read again, an app's hold, cad's own update or the plugin's switched,
-# or cad's update asked for (``cad update``, and its looks while it waits). Besides these, any request marked
+# cad's update asked for (``cad update``, and its looks while it waits), or what sharing keeps written for ``cad share``. Besides these, any request marked
 # ``internal`` (what one server asks another) and an ``http`` that names a port (an updater handing the pages' port on,
 # 0.11.10's among them) are not counted either.
-UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update", "plugin_auto_update", "update"})
+UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update", "plugin_auto_update", "update", "share"})
 # The type a worker answers bytes of a held document that do not read with (``build.Unreadable``),
 # as ``worker.refusal`` names it.
 UNREADABLE = "cad.engine.build:Unreadable"
@@ -1769,6 +1769,12 @@ class Daemon:
             send(switch_auto_update(request))
         elif op == "plugin_auto_update":
             send(switch_plugin(request))
+        elif op == "share":
+            # What ``cad share`` keeps -- the agreement, the setting, a share's record -- written for it, as a switch
+            # is (``switch_auto_update``): a sandboxed shell may not write the state folder.
+            from cad_server import sharing
+
+            send(sharing.answer(request))
         elif op == "update":
             send(self.update(request))
         elif op == "stop":

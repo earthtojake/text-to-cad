@@ -122,6 +122,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The viewer launcher: the launch contract (reuse, replace or start on its one port, the --json announce
     # line) is not a function signature to mirror.
     "viewer": frozenset({"files", "host", "port", "json", "no_open", "dist", "api_only"}),
+    # A document shared by its link, or the words status, on, off and delete with the TARGET or link it deletes: the
+    # person's agreement (--yes, which a delete asks too) and an upload this process makes mirror no function.
+    "share": frozenset({"target", "link", "yes", "json"}),
 }
 
 # Commands that own their command line outright and mirror no function.

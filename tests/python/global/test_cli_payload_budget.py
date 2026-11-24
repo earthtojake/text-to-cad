@@ -27,6 +27,8 @@ class CompactStdoutTests(unittest.TestCase):
         "packages/cad/src/cad_server/_internal/cli_errors.py",
         # The checks' Result dataclasses.
         "packages/cad/src/cad/results.py",
+        # `cad share --json`: a share's links and what travelled; `status`, `on`, `off` and `delete`'s answers.
+        "packages/cad/src/cad_server/cli/share.py",
         # A document type's operation refused before it ran (`cad stl export part.glb --json`).
         "packages/cad/src/cad_server/cli/document_types.py",
         # Every GENERATED CLI (`cadgen <format> <verb>`) serializes its Result
