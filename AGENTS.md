@@ -17,7 +17,7 @@ before a change. Keep it that short. Detail belongs in the document a row below 
 | `apps/web/` | The viewer's React client, which the server serves |
 | `apps/mcp/` | The CAD app the Codex app shows as tabs |
 | `apps/docs/`, `apps/api/` | The site, texttocad.dev (the homepage, and the documentation under `/docs`: a page per skill, the references generated from the code, and `docs/`'s install and migration guides shown as they are), and `api.texttocad.dev` (the version feed, analytics and a failed install's one report) |
-| `apps/share/` | `cad.fun`, the share service: a Cloudflare Worker that keeps a shared model's view bundle, encrypted, for 7 days, and serves the viewer that opens it |
+| `apps/share/` | `cad.fun`, the share service: a Cloudflare Worker that keeps a shared model's view bundle and the files that made it, encrypted, for 7 days, and serves the viewer that opens it and the files as a zip |
 | `models/` | Sample models, built by hand; no test reads them |
 | `scripts/` | Durable repo commands, by purpose: `test/`, `bundle/`, `release/`, `install/`, `bench/` |
 | `tests/` | Every test suite, grouped by what it tests; `tests/python/global/` holds the policy tests |
