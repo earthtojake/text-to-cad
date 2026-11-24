@@ -95,7 +95,7 @@ async function upload(request, env, id, settings, now) {
   if (Number(length) > settings.maxBytes) return tooLarge(settings);
   if (!(await allowed(request, env))) return limited();
 
-  const body = await readAtMost(request, settings.maxBytes);
+  const body = await readAtMost(request, Number(length), settings.maxBytes);
   if (body === null) return tooLarge(settings);
   if (body.byteLength < 2 || body[0] !== 0x1f || body[1] !== 0x8b) {
     return refuse(400, "not_gzip", "The body is the share's archive, gzip-compressed.");
@@ -197,29 +197,29 @@ function keyOf(header) {
   return bytes.byteLength === 32 ? bytes : null;
 }
 
-/** The body, or null where it runs past `limit` (whatever Content-Length claimed). */
-async function readAtMost(request, limit) {
+/** The body, or null where it runs past `limit` (whatever Content-Length claimed). It is read into
+ * one buffer of the length declared, so an upload near the cap is held once, not twice. */
+async function readAtMost(request, declared, limit) {
   if (!request.body) return new Uint8Array(0);
   const reader = request.body.getReader();
-  const chunks = [];
+  let body = new Uint8Array(declared);
   let total = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    total += value.byteLength;
-    if (total > limit) {
+    if (total + value.byteLength > limit) {
       await reader.cancel();
       return null;
     }
-    chunks.push(value);
+    if (total + value.byteLength > body.byteLength) {
+      const grown = new Uint8Array(total + value.byteLength);
+      grown.set(body.subarray(0, total));
+      body = grown;
+    }
+    body.set(value, total);
+    total += value.byteLength;
   }
-  const body = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return body;
+  return total === body.byteLength ? body : body.subarray(0, total);
 }
 
 /** `IV || ciphertext-and-tag`, AES-256-GCM under the upload's key and a fresh random IV. The key is
