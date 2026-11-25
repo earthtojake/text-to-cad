@@ -567,6 +567,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             # ...and what an installed cad reads as its Python starts, by which an update takes effect.
             "packages/cad/src/_cad_release.py": packages | jobs_on("installer"),
             "packages/cad/cad.pth": packages | jobs_on("installer"),
+            "packages/cad/cad.start": packages | jobs_on("installer"),
             # A runner runs what it feeds.
             "scripts/test/test-js.sh": jobs_on("core_js", "web_ui", "web_client", "mcp"),
             "scripts/test/test-floor.sh": jobs_on("floor"),

@@ -174,6 +174,8 @@ PTH="$scratch_sp/cad.pth"
 [ "$(cat "$PTH")" = "import _cad_release; import cad._internal.lazy_kernel" ] \
   || fail "cad.pth does not import _cad_release, then the finder"
 [ -f "$scratch_sp/_cad_release.py" ] || fail "_cad_release.py is not in $scratch_sp, beside cad.pth"
+[ "$(grep -v '^#' "$scratch_sp/cad.start")" = "$(printf '_cad_release:start\ncad._internal.lazy_kernel:install')" ] \
+  || fail "cad.start is not in $scratch_sp, naming _cad_release, then the finder"
 # It ran as the interpreter started, from the environment's own packages, and with no pointer left them in place.
 started="$(cd "$EMPTY" && "$VENV/bin/python" -c "import sys, _cad_release as r; print(r.STORED, r.HERE in sys.path)")"
 [ "$started" = "None True" ] || fail "_cad_release did not run from site-packages, or moved it ($started)"

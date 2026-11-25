@@ -194,6 +194,18 @@ class Bootstrap(unittest.TestCase):
                 self.assertOwn(self.env.probe(state=self.state), name)
                 self.assertSilent()
 
+    def test_each_python_reads_one_of_the_wheel_s_two_files_and_never_the_other(self) -> None:
+        # From Python 3.15 (PEP 829) an interpreter runs cad.start's entry points and ignores the import lines of the
+        # cad.pth beside it; an earlier one runs cad.pth's and never reads cad.start. The one not read is made one
+        # that would fail aloud: the stored release is taken all the same, and nothing is said.
+        read, unread = ("cad.start", "cad.pth") if sys.version_info >= (3, 15) else ("cad.pth", "cad.start")
+        target = self.env.packages / unread
+        target.write_text("import no_such_module_anywhere\n" if unread == "cad.pth" else "no_such_module_anywhere:nothing\n",
+                          encoding="utf-8")
+        self.env.point(self.state, self.stored)
+        self.assertTaken(self.env.probe(state=self.state))
+        self.assertSilent()
+
     def test_a_pointer_in_another_state_folder_is_not_this_one_s(self) -> None:
         self.env.point(self.state, self.stored)
         other = self.folder / "other-state"

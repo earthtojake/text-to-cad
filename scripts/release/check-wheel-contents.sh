@@ -51,6 +51,8 @@ REQUIRED=(
   # release it runs (the module at the root beside it, which reads the pointer to a release cad's update keeps), then
   # `import build123d` made lazy (the finder).
   "cad.pth"
+  # The same two steps for Python 3.15 and later, which ignore the .pth file's import lines where this is beside it.
+  "cad.start"
   "_cad_release.py"
   "cad/_internal/lazy_kernel.py"
   # The document types and their registry, and the robot checks' library: a packaging regression
@@ -273,7 +275,7 @@ check_alias cad-server cad_server "" "cad=cad_server.cli:main"
 check_alias cad-mcp cad_mcp "" "cad-mcp=cad_mcp.shim:main"
 check_alias cadgen cadgen "build123d kernel" ""
 # cad's last: the runtime checks below read its wheel and listing.
-check cad cad "cad|cadgen|cad_server|cad_mcp|cad\.pth|_cad_release\.py" "${REQUIRED[@]}"
+check cad cad "cad|cadgen|cad_server|cad_mcp|cad\.pth|cad\.start|_cad_release\.py" "${REQUIRED[@]}"
 
 # The server's runtime. A nested-glob failure usually loses MANY files at once rather than one, so
 # report the count too: it distinguishes "one file moved" from "package-data is not matching".

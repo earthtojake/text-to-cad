@@ -201,9 +201,11 @@ the agents running them reach for them, and nothing shipped later can change wha
    `store/pointer-<crc32 of the environment's folder, resolved and case-folded, 8 hex digits>.json`,
    and its six keys (`pointer` 1, `python` the interpreter's `cache_tag`, `prefix` that folder,
    `record` and `stamp` the installed cad's `RECORD` and its time and size, `path`); the marker,
-   `cad-store.json`; and that a stored release is one folder of the import path whose `.pth` files are
-   read. So every release keeps the wheel's `cad.pth` line, `import _cad_release; import
-   cad._internal.lazy_kernel`, keeps `cad_server.cli:main` as the `cad` command, and has
+   `cad-store.json`; that a stored release is one folder of the import path whose `.pth` and `.start` files
+   are read; and `_cad_release.start`, which a stored release's `cad.start` names. So every release keeps the
+   wheel's `cad.pth` line, `import _cad_release; import cad._internal.lazy_kernel`, and its `cad.start`, the same
+   two steps as entry points (`_cad_release:start`, `cad._internal.lazy_kernel:install`) for Python 3.15 and
+   later, which ignore the `.pth` file's import lines beside it (PEP 829; from 3.18, every `.pth` file's), keeps `cad_server.cli:main` as the `cad` command, and has
    `cad_server._internal.selftest`, run as `__main__` with its folder and the standard library alone on
    the path, print `cad <release>` last: the release being left checks the next one by that alone. A
    stored release is what `uv pip install --target` makes, so all it needs is found from that folder:

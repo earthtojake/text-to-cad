@@ -2,7 +2,8 @@
 
 cad's update never changes the files of a cad that is installed. It builds each newer release in a folder of its own
 (the store: ``cad_server._internal.store``) and then names that folder in one small file, the pointer. This module is
-the other half. The wheel's ``cad.pth`` imports it as the interpreter starts, before anything of cad's is imported,
+the other half. The wheel's ``cad.pth`` imports it as the interpreter starts (on Python 3.15 and later the wheel's
+``cad.start`` names ``start`` in it instead, PEP 829), before anything of cad's is imported,
 and where the pointer names a stored release it puts that folder on the import path in place of this environment's
 own packages. Every process of the environment -- the ``cad`` command, the server it starts, ``python -m`` -- then
 runs the stored release, on this environment's interpreter: ``sys.prefix``, the ``cad`` command and what its installer
@@ -36,8 +37,9 @@ The standard library alone, nothing of cad's, and never an error. This file is t
 update cannot replace -- it runs from the environment the installer made, at the release it installed -- so it knows
 as little as it can: no version is compared here, and nothing is decided but whether the pointer is this install's.
 What may be pointed at is the update's to decide (``cad_server._internal.auto_update``). What it reads never changes:
-where the state folder is, the pointer's name and its six keys above, the marker's name, and that a stored release
-is a folder that works as one entry of the import path, its ``.pth`` files read as an environment's are. It acts only
+where the state folder is, the pointer's name and its six keys above, the marker's name, that a stored release
+is a folder that works as one entry of the import path, its ``.pth`` and ``.start`` files read as an environment's
+are, and ``start``: a stored release's ``cad.start`` names it, and finds this module, the environment's. It acts only
 as the interpreter starts: imported later, under a cad that is already loaded, it changes nothing.
 """
 
@@ -158,6 +160,12 @@ def _take():
     import site
 
     site.addsitedir(path)  # its own .pth files, read as an environment's are
+
+
+def start():
+    """What ``cad.start`` names (Python 3.15 and later run it as the interpreter starts): nothing more, as importing
+    this module has done the work. Every release's ``cad.start`` names it, a stored release's too, which finds this
+    module, the environment's, already imported: it never changes name and never does anything."""
 
 
 try:

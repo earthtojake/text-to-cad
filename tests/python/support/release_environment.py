@@ -1,9 +1,9 @@
 """A Python environment of its own with a stand-in cad installed, and stand-in releases stored beside it.
 
 What ``_cad_release`` acts on, made small: a real virtual environment (the standard library's ``venv``, no pip) whose
-site-packages holds the wheel's own ``_cad_release.py`` and ``cad.pth``, a ``cad-1.0.0.dist-info`` with its ``RECORD``
+site-packages holds the wheel's own ``_cad_release.py``, ``cad.pth`` and ``cad.start``, a ``cad-1.0.0.dist-info`` with its ``RECORD``
 and ``METADATA``, and tiny ``cad`` and ``cad_server`` packages that say which copy they are (``WHO``); and stored
-releases, folders holding the same packages saying ``stored``, their own copy of the two files, a ``.pth`` of their own
+releases, folders holding the same packages saying ``stored``, their own copy of the three files, a ``.pth`` of their own
 and the marker. The pointer is written by hand, key by key, where the rule says it is: the file's format is the
 contract, and a test of the reader never borrows the writer.
 
@@ -27,6 +27,7 @@ from tests.python.support.paths import LIBRARY
 
 BOOTSTRAP = LIBRARY / "src" / "_cad_release.py"
 PTH = LIBRARY / "cad.pth"
+START = LIBRARY / "cad.start"
 INSTALLED, STORED = "1.0.0", "1.0.1"
 RECORD = f"cad-{INSTALLED}.dist-info/RECORD"
 MARKER = "cad-store.json"
@@ -88,7 +89,11 @@ def _packages(root: Path, who: str, release: str) -> None:
     ``release``."""
     write(root / "cad" / "__init__.py", f"WHO = {who!r}\n")
     write(root / "cad" / "_internal" / "__init__.py", "")
-    write(root / "cad" / "_internal" / "lazy_kernel.py", f"WHO = {who!r}\n")
+    # The finder's stand-in: which copy it is, and the ``install`` cad.start names, counted in ``sys.modules``.
+    write(root / "cad" / "_internal" / "lazy_kernel.py",
+          f"import sys, types\nWHO = {who!r}\n\n\ndef install():\n"
+          "    sys.modules.setdefault('lazy_kernel_installs', types.ModuleType('lazy_kernel_installs')).__dict__"
+          ".setdefault('count', []).append(WHO)\n\n\ninstall()\n")
     write(root / "cad_server" / "__init__.py",
           f"WHO = {who!r}\n__version__ = {release!r}\n\n\ndef main():\n    print('cad_server', WHO)\n    return 0\n")
     write(root / "cad_server" / "__main__.py", "import sys\n\nfrom cad_server import main\n\nsys.exit(main())\n")
@@ -96,9 +101,10 @@ def _packages(root: Path, who: str, release: str) -> None:
     info = root / f"cad-{release}.dist-info"
     write(info / "METADATA", f"Metadata-Version: 2.4\nName: cad\nVersion: {release}\n")
     write(info / "RECORD", "".join(f"{name},,\n" for name in (
-        "_cad_release.py", "cad.pth", "cad/__init__.py", "cad_server/__init__.py", f"cad-{release}.dist-info/RECORD")))
+        "_cad_release.py", "cad.pth", "cad.start", "cad/__init__.py", "cad_server/__init__.py", f"cad-{release}.dist-info/RECORD")))
     shutil.copyfile(BOOTSTRAP, root / "_cad_release.py")
     shutil.copyfile(PTH, root / "cad.pth")
+    shutil.copyfile(START, root / "cad.start")
 
 
 class _Builder(venv.EnvBuilder):

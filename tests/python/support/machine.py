@@ -24,7 +24,7 @@ from tests.python.support.paths import LIBRARY, REPO_ROOT
 # there, and its path in the project): cad, and cad-server, its alias, which the updaters of 0.10.0 to 0.11.11 install
 # a release by.
 DISTRIBUTIONS = {"cad": (LIBRARY, ("cad", "cadgen", "cad_server", "cad_mcp"),
-                         {"cad.pth": "cad.pth", "_cad_release.py": "src/_cad_release.py"}),
+                         {"cad.pth": "cad.pth", "cad.start": "cad.start", "_cad_release.py": "src/_cad_release.py"}),
                  "cad-server": (REPO_ROOT / "packages" / "aliases" / "cad-server", (), {})}
 
 

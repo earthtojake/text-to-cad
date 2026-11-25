@@ -195,7 +195,7 @@ environment: on Windows an environment lies under AppData, where a file made by 
 started (a server an agent app's shell started) lands in a copy only that app sees.
 
 **`_cad_release`**, the one module outside the packages, reads the pointer: the wheel's `cad.pth` imports it as
-each interpreter of the environment starts. Where the pointer was written for this very install of cad (the
+each interpreter of the environment starts (on Python 3.15 and later the wheel's `cad.start` does, PEP 829). Where the pointer was written for this very install of cad (the
 environment, the interpreter, and the time and size of the installed cad's `RECORD`), it puts the stored release
 on the import path in place of the environment's own packages, reads its `.pth` files and holds its marker open
 for the life of the process; else the environment runs its own packages. So a process keeps the release it

@@ -318,6 +318,13 @@ jobs:
           scripts/test/test-python.sh --keep-going --select cadgen --print-weights $TESTS
         shell: bash
 
+      # The release reader on the newest Python too: from 3.15 an interpreter starts it by the wheel's cad.start and
+      # ignores cad.pth's import lines beside it (PEP 829), where the suites above, on 3.14, read cad.pth. Its tests
+      # need the standard library alone.
+      - name: The release reader on Python 3.15
+        if: startsWith(matrix.shard, '1/')
+        run: uv run --no-project --python 3.15 python -m unittest tests.python.packages.cad.test_cad_release.Bootstrap
+
   # The router's copper is the same bits on every OS, or it is not deterministic: its unit files hold one
   # board's copper to a digest (test_kicad_routing_determinism.py). The packages jobs run them on Linux
   # (glibc) and Windows (the MSVC runtime); this job runs them on macOS, the third C library, with every
