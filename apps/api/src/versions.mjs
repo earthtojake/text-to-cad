@@ -6,9 +6,10 @@
  *
  * `/v1/releases` is what cad 0.11.12 and later reads (`cad_server/updates.py` in packages/cad): `latest`, the newest
  * release, and `lines`, the newest release of each major version that has one (its major as a string, the JSON key).
- * `lines` says when: a cad updates itself where `lines` names a newer release of its own major, to PyPI's newest of
- * that major (`uv tool install --upgrade "cad>=X,<N"`); where `lines` names none of its major and `latest` is of a
- * higher major, it runs that bounded upgrade all the same. A higher major never installs itself. The install command
+ * `lines` says when, and what: a cad updates itself where `lines` names a newer release of its own major, to exactly
+ * that release (0.11.12 to 0.11.17 take it for the signal alone, and install PyPI's newest of that major: `uv tool
+ * install --upgrade "cad>=X,<N"`); where `lines` names none of its major and `latest` is of a higher major, it
+ * installs the newest of its own major all the same. A higher major never installs itself. The install command
  * installs PyPI's newest, reading no feed.
  *
  * `/v1/versions` is frozen: the releases 0.7.12 to 0.11.11 read it, and nothing newer will. It names the newest
