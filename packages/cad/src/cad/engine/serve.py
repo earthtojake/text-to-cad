@@ -2064,9 +2064,8 @@ class Server:
             if len(parts) >= 3 and parts[:2] == ["api", "doc"] and "~preview-" in parts[2]:
                 return self._preview_route(handler, parts, query)
             ident, pose = self.poses.get(parts[2], (parts[2], None)) if len(parts) >= 3 else ("", None)
-            if parts[:2] == ["api", "doc"] and ident in self.files and ident not in self.model_loaders \
-                    and not os.path.isfile(self.files[ident]):
-                self.forget_model(ident)  # its file is gone: the id names nothing
+            if parts[:2] == ["api", "doc"] and ident in self.files and not os.path.isfile(self.files[ident]):
+                self.forget_model(ident)  # its file is gone: the id names nothing, whatever a worker holds
             if parts[:2] == ["api", "doc"] and is_id(ident) and not self.holds(ident) and self.locate(ident) is None:
                 raise NotHeld(f"no document {ident} is held")
             if parts[:2] == ["api", "doc"] and self.holds(ident):

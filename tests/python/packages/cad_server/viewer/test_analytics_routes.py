@@ -148,7 +148,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
 
         saved = self.root / "cube.xbf"
         saved.write_bytes(b"its document")
-        ident, gone = file_id(saved), file_id(self.root / "gone.xbf")
+        ident, gone = self.app.remember(saved), file_id(self.root / "gone.xbf")  # its .xbf, as a run's page knows it
         self.request("PUT", "/api/v1/settings", {"telemetry": {"share": True}})
         held = mock.patch("cad_server.viewer.model_catalog.request", side_effect=lambda ask, start: (
             {"model": {"source": {"name": "cube"}}} if ask["id"] == ident else {"failed": "not held"}))

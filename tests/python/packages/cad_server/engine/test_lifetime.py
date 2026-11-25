@@ -170,7 +170,9 @@ class ListingTest(unittest.TestCase):
             script.write_text("", encoding="utf-8")
             ident = model_id(script, name)
             idents.append(ident)
-            engine.models.records[ident] = {"id": ident, "source": {"script": str(script), "name": name},
+            (folder / f"{name}.xbf").write_bytes(b"its document")  # a model's document is its .xbf, there
+            engine.models.records[ident] = {"id": ident, "source": {"script": str(script), "name": name,
+                                                                    "xbf": str(folder / f"{name}.xbf")},
                                             "worker": SimpleNamespace(alive=lambda: True, service=SimpleNamespace(name="worker"),
                                                                       key=str(script), retired=False),
                                             "program": str(script),

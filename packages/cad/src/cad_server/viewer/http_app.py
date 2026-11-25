@@ -1386,11 +1386,7 @@ class CadApp:
         elif action not in ("open", "pin", "unpin", "thumbnail"):
             raise ValueError(f"unknown recents action {action!r}")
         elif path is None:
-            # An id with no file: a model a live worker holds whose .xbf is gone has a page, and nothing to keep.
-            if action != "open" or not self._holds_model(ident):
-                raise ValueError(f"no document {ident} is held")
-            if self.analytics is not None:
-                self.analytics.opened_document(ident)
+            raise ValueError(f"no document {ident} is held")  # an id whose file is gone names nothing
         elif action == "unpin":
             self.library.pin(path, False)
         elif present(path) is None:

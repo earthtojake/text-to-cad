@@ -13,6 +13,8 @@ import sys
 import shutil
 import textwrap
 import unittest
+import urllib.error
+import urllib.request
 
 from tests.python.support import engine_daemon, opengl, store_fixtures
 from tests.python.support.store_fixtures import get
@@ -182,6 +184,48 @@ class XbfStoreTest(store_fixtures.StoreCase):
         self.assertEqual((refused.returncode, f"no document {file_id(dropped)} is held" in refused.stderr), (2, True))
         self.assertEqual(envelope(derived_id(self.project / "cube.py", "cube"))[0], 404,
                          "an id of an earlier release's formula names nothing")
+
+    def test_a_live_model_whose_xbf_is_gone_names_nothing_until_its_script_runs_again(self) -> None:
+        ident = self.write("cube")
+        self.run_script("cube")
+        self.assertEqual(self.ask({"op": "state", "id": ident}), {"ok": True, "state": "live"})
+        served = self.ask({"op": "http"})
+
+        def answer(method: str, route: str, body: dict | None = None) -> tuple[int, dict]:
+            request = urllib.request.Request(f"{served['url']}{route}", method=method,
+                                             data=json.dumps(body).encode() if body is not None else None,
+                                             headers={"Authorization": "Bearer " + served["token"],
+                                                      "x-cad-viewer": "1", "content-type": "application/json"})
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310
+                    return response.status, json.loads(response.read())
+            except urllib.error.HTTPError as error:
+                return error.code, json.loads(error.read())
+
+        missing = f"no document {ident} is held"
+        # Its worker holds its build still; its file is gone, so it is gone: the version first, which no read before
+        # it has looked at the file by.
+        self.xbf("cube").unlink()
+        self.assertEqual(answer("GET", f"/api/v1/documents/{ident}/version"),
+                         (404, {"error": missing, "hint": "check the path or id"}))
+        self.assertEqual(answer("GET", f"/api/v1/documents/{ident}"), (404, {
+            "error": missing, "hint": "run the model's script again, or open the file from where it is now"}))
+        self.assertEqual(self.page(ident)[0], 404)
+        self.assertEqual(answer("PATCH", "/api/v1/documents", {"action": "open", "path": ident}),
+                         (400, {"error": missing, "hint": "fix the request as the error says"}))
+        refused = self.cli("inspect", ident)
+        self.assertEqual((refused.returncode, missing in refused.stderr), (2, True))
+        self.assertEqual(self.ask({"op": "state", "id": ident}), {"ok": True, "state": None, "error": missing})
+        self.assertNotIn(ident, [row["id"] for row in self.ask({"op": "status"}).get("models") or []])
+        # Its script's next run writes the file again, and the document is back.
+        self.run_script("cube")
+        self.assertTrue(self.xbf("cube").is_file())
+        self.assertEqual(self.ask({"op": "state", "id": ident}), {"ok": True, "state": "live"})
+        self.assertEqual(answer("GET", f"/api/v1/documents/{ident}/version")[0], 200)
+        self.assertEqual(answer("GET", f"/api/v1/documents/{ident}")[0], 200)
+        self.assertEqual(self.page(ident)[0], 200)
+        self.assertEqual(answer("PATCH", "/api/v1/documents", {"action": "open", "path": ident})[0], 200)
+        self.assertEqual(self.cli("inspect", ident).returncode, 0)
 
     def test_two_unchanged_runs_leave_one_generation_and_the_page_idle(self) -> None:
         # A document is what its last run made: nothing ran, nothing changed, so a page has nothing to fetch.

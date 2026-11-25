@@ -246,7 +246,8 @@ class Models:
         with self.lock:
             record = self.records[ident]
             record["opened"] = True
-            version, name = record["version"], record["source"]["name"]
+            version, name, xbf = record["version"], record["source"]["name"], record["source"]["xbf"]
+        server.remember(xbf)  # its file, which the server's route looks at (a model whose .xbf is gone is not held)
         server.register_model(ident, name, lambda: self.load(ident), version)
         return server
 
@@ -258,11 +259,15 @@ class Models:
                     and (name is None or row["source"]["name"] == name)]
 
     def held(self, ident: str) -> dict[str, Any] | None:
-        """The row of the model document ``ident`` while a live worker holds it, else None: its file is the
-        document then (``locate``)."""
+        """The row of the model document ``ident`` while a live worker holds it and its ``.xbf`` is at its path,
+        else None: its file is the document then (``locate``), and a row whose file is gone is let go
+        (``release``): the id names nothing, whatever the worker holds."""
         with self.lock:
             record = self.records.get(ident)
-        return record if record is not None and self._working(record["worker"]) else None
+        if record is None or self._holds(record):
+            return record
+        self.release(ident, record["worker"])
+        return None
 
     def live(self, ident: str, version: Any = None) -> dict[str, Any] | None:
         """What the worker that built model document ``ident`` recorded of its parameters while it is live
@@ -282,9 +287,12 @@ class Models:
         return {"script": record["source"]["script"], "name": record["source"]["name"], "rows": record["parameters"],
                 "worker": worker}
 
-    def _working(self, worker: Any) -> bool:
-        """Whether ``worker`` holds its documents still: live in the supervisor, or out of it and alive."""
-        return worker is not None and (self.daemon.supervisor.holds(worker) or worker.alive())
+    def _holds(self, row: dict[str, Any]) -> bool:
+        """Whether ``row``'s worker holds its document still -- live in the supervisor, or out of it and alive --
+        and its ``.xbf`` is at its path: a document whose file is gone is gone, whoever holds its build."""
+        worker = row["worker"]
+        return (worker is not None and (self.daemon.supervisor.holds(worker) or worker.alive())
+                and os.path.isfile(row["source"]["xbf"]))
 
     def locate(self, ident: str) -> Path | None:
         """The file of document ``ident`` where it is now, with no record of it: the ``.xbf`` its row names
@@ -374,10 +382,10 @@ class Models:
         return structure, shapes
 
     def prune(self) -> None:
-        """Each row whose worker is gone is released: its document is its ``.xbf`` (``release``)."""
+        """Each row whose worker is gone, or whose ``.xbf`` is, is released: its document is its ``.xbf``
+        (``release``), or nothing."""
         with self.lock:
-            gone = [(ident, row["worker"]) for ident, row in self.records.items()
-                    if row["worker"] is None or not (row["worker"].alive() or self.daemon.supervisor.holds(row["worker"]))]
+            gone = [(ident, row["worker"]) for ident, row in self.records.items() if not self._holds(row)]
         for ident, worker in gone:
             self.release(ident, worker)
 
@@ -393,16 +401,17 @@ class Models:
 
     def state(self, ident: str) -> str | None:
         """``live`` (a live worker holds it), ``building``, ``failed`` (its last build), ``held`` (no worker: its
-        file is the document); None for an id that names nothing."""
+        file is the document); None for an id that names nothing: one whose file is gone, whatever its last build."""
+        live = self.held(ident) is not None
+        if not live and self.locate(ident) is None:
+            return None
         server = self.daemon.server
         build = server.build_of(ident) if server is not None else {}
         if build.get("building"):
             return "building"
         if build.get("failed"):
             return "failed"
-        if self.held(ident) is not None:
-            return "live"
-        return "held" if self.locate(ident) is not None else None
+        return "live" if live else "held"
 
     def row(self, ident: str) -> dict[str, Any] | None:
         """This process's book's row of document ``ident`` (a copy of it), else None."""

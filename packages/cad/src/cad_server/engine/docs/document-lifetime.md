@@ -19,7 +19,8 @@ path. A document's state (`models.STATES`, what `cad server status` lists):
 - `building`, `failed`: its build now, or its last one.
 
 An id whose file is gone names nothing: `no document <id> is held` (`serve.NotHeld`: a page's 404, a verb's
-exit 2), and running its script writes the file again. Nothing says which script: the file is not there to
+exit 2), whether or not a live worker still holds its build (`Models.held` lets go of that row, as `release` does),
+and running its script writes the file again. Nothing says which script: the file is not there to
 read it from.
 
 **Two kinds.** A function in a file is a model: its document is
