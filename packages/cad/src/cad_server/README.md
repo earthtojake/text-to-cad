@@ -190,21 +190,33 @@ The server reads the version feed (`updates.py`, at most once an hour, in the ba
 no `lines`). The releases before this design read `/v1/versions` and keep it in `versions.json` in the same
 folder, which they read while a computer is carried over; nothing here reads either, so no `latest` of 0.12.0 or
 later reaches them. It asks whether to update as it starts, and as it tends itself: the switch on, this cad a
-global install whose installer is found, no update underway (of any release, begun within the hour), no run of
+global install whose installer is found, no update underway (of any release: its helper writes the time into the
+record every minute as it runs, and one not heard from for 20 minutes is lost), no run of
 `cad plugin install` going (its lock held: an update would replace the environment's
 files under it), and the
 feed's newest release of this cad's major newer than this one. Where the feed names none of this major, its
 `latest` where that is of this major; where `latest` is of a higher major, the bounded upgrade runs all the same,
-tried at most twice for one `latest`. Then, once nothing is in flight (at a start, at once; otherwise once
-nothing has run for a minute), the update begins in one step across processes (under the state folder's lock:
-nothing underway, then the attempt kept as underway, so two servers that start at once begin one), and a
+its tries counted by that `latest`. Not where the environment on disk already holds that release or a newer one
+while an older server runs (another update, or one by hand, replaced its files after it started): no update and no
+try, and `cad doctor`'s server line says `cad server start` replaces it. Then, once nothing is in flight (at a
+start, at once; otherwise once nothing has run for a minute), the update begins in one step across processes (under
+the state folder's lock: nothing underway, then the attempt kept as underway, so two servers that start at once
+begin one), and a
 detached helper that is neither the `cad` executable nor run from cad's environment
 (`_internal/auto_update_helper.py`) stops the server, runs the installer's upgrade inside the major, `uv tool
 install --upgrade "cad>=<this release>,<<its major + 1>"` (pipx: `pipx upgrade cad --pip-args=...`, the same
 range), worked out from the release that runs each time (no Python flags: the environment keeps its
 interpreter; tried again on failure, and the previous release put back where a failed install left no `cad`),
 and starts the server with whatever cad is there. uv keeps the range, so a person's own `uv tool upgrade cad`
-stays inside the major too. The helper takes the result only where it is of the same major and not older:
+stays inside the major too. The person's uv is run only where it is not older than the uv cad asks for (cad's own
+requirement on `uv`); else the one cad carries. Where uv ends 0 and keeps an older release though a newer one is
+wanted (`kept`), the helper tries again in the same run: with `--refresh`, then `cad==<that release>`, whose error
+names the real reason where it cannot be had (no such release, the Python, the platform), and, where that installs
+it, the upgrade again from it, so uv keeps a range; each with `--no-config` only where none of uv's settings that
+decide what it can reach or take (an index, find-links, TLS, offline, exclude-newer) is there, never past a
+person's mirror. No installer command runs on an environment with no `pyvenv.cfg`, which an install the disk filled
+under can leave: uv run on one acts on the Python it was made from and removes that Python's packages, so the
+attempt stops there (`half_made`). The helper takes the result only where it is of the same major and not older:
 newer is `installed`, the same release `current`; anything else is a failure. The record keeps the release the
 upgrade got and, where the attempt did not install what it was for, why in one word (`cause`, a closed list,
 `auto_update_helper.CAUSES`): told from the upgrade's last try (its exit status, all it printed, the system's error)
@@ -216,8 +228,13 @@ can stop an update: where either fails, the update runs and is recorded as witho
 `cause` reads the record as before. On
 Windows uv cannot remove a `cad.exe` that is running, but it can rename one, so the helper renames each
 `cad.exe` of the tool aside before uv runs and puts a copy back. For that to work, cad takes its launcher
-off `sys.path` as it starts (`__init__.py`), so it never holds the file open. One release is tried at most
-twice, never twice within an hour. `cad server start` asks too when the start fails, so a release whose
+off `sys.path` as it starts (`__init__.py`), so it never holds the file open. A release that does not install is
+tried again, and never given up on: after its first automatic try it waits an hour, then 2, 4, 8 and 16 hours,
+then a day after each, counted for that release in `auto-update-tried.json` in the data folder (the eight releases
+tried last), so a newer release starts afresh and a server of another release beside it never sets the count back;
+and no automatic update begins where four attempts, of any release, began in the last day. Releases before this
+schedule read the record as before, and stop trying a release once its count reaches their own limit.
+`cad server start` asks too when the start fails, so a release whose
 server cannot start still updates. Forward only: nothing moves to an older release, and a start joins a
 running server of a newer release rather than replacing it. With no answer from the feed, nothing happens.
 `CAD_UPDATE_CHECK=0` in a process's environment turns the check off for it.
@@ -271,9 +288,11 @@ that runs after it, at its start or a quiet tending, sends one `update` event fr
 before, how it ended, which step failed, where it did not install a newer cad why in the record's one word (`cause`:
 `already` where the environment held the release already, `none` where the record names none), the tries, the
 installer, whether it was typed, and how the server's run of `cad plugin install` for a newer cad went: a run begun
-since the attempt began) and marks the record `reported`. An attempt still underway past its hour, whose helper died,
-is counted `lost`. An automatic update that is due and cannot begin (its installer not found, no Python outside cad's
-environment) is counted `blocked`, with which, once for each release the feed calls for (`auto-update-blocked.json` in
+since the attempt began) and marks the record `reported`. An attempt still underway whose helper has not been heard
+from for 20 minutes (an hour, for a record of a release before the beat) is counted `lost`; should that helper end
+after all, it leaves the record to whatever began since. An automatic update that is due and cannot begin (its
+installer not found, no Python outside cad's environment) is counted `blocked`, with which, once for each release the
+feed calls for (`auto-update-blocked.json` in
 the data folder). Never the installer's words, a path or a setting's value. A
 failed update is counted by the next server of the old cad that runs, a successful one by the new cad's
 server; a new attempt counts the one before it first, whatever begins it (a server, or a typed `cad update`
@@ -284,7 +303,8 @@ it is still underway (`underway`).
 permission): it asks PyPI for the newest release of this cad's major that is not yanked (`updates.pypi`, 5 s
 at most; `CAD_PYPI_URL` names a stand-in), says `cad X is the newest release` where none is newer (`the newest
 0.x release` where a higher major is out), and otherwise begins the same update as soon as nothing is in
-flight, with the switch off too and past the limits on automatic tries (it counts as a try all the same), or
+flight, with the switch off too and whatever the schedule says (it spends no automatic try of its release, and
+counts among the day's four), or
 joins the one underway, another process's too. Where a release of a higher major is out it adds one line
 naming it and `cad update --major`, with the migration guides' address; `cad doctor` says the same, and `cad
 update auto` with no argument. `cad update --major` (`{"op": "update", "major": true}`) begins the update to

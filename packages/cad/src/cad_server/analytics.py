@@ -557,7 +557,7 @@ ARRIVAL_FAILURES = {"setup": frozenset({"uv", "network", "denied", "other"}),
 MAX_ATTEMPTS = 1000  # a hand-over's attempts, and an update's tries, past this many are counted as this many
 # How cad's own update of itself ended (``update``, schema 11's), as its record says (``auto_update.event``): a newer
 # cad installed, nothing newer to install, failed, or failed and the release before put back; from schema 13, its
-# helper gone without saying how it ended (``lost``: the record still underway past its hour), or none could begin
+# helper gone without saying how it ended (``lost``: the record still underway, its helper silent), or none could begin
 # (``blocked``: counted once for each release the feed calls for, ``tries`` 0); for a failure, which
 # step -- the installer's upgrade never ended well, or (``--major``) did not cross to the higher major asked for
 # (``upgrade``), ended well on a release it may not end on, older than the one that ran or of another major
@@ -573,9 +573,9 @@ UPDATE_FAILURES = {"failed": frozenset({"upgrade", "older", "put_back"}), "resto
 # server older than its own environment asked) --, or ``none`` where its record names none (a release before
 # ``cause``'s); one that never said how it ended (``lost``), whether its helper stopped with an error or without a word;
 # one that could not begin (``blocked``), why.
-UPDATE_ENDED = frozenset({"timeout", "no_program", "in_use", "denied", "disk_full", "network", "offline", "no_release",
-                          "python", "platform", "config_exclude", "config_index", "config_tls", "uv_old", "kept",
-                          "server_running", "helper_start", "packaged", "unknown", "none"})
+UPDATE_ENDED = frozenset({"timeout", "no_program", "in_use", "denied", "disk_full", "half_made", "network", "offline",
+                          "no_release", "python", "platform", "config_exclude", "config_index", "config_tls", "uv_old",
+                          "kept", "server_running", "helper_start", "packaged", "unknown", "none"})
 UPDATE_CAUSES = {"current": UPDATE_ENDED | {"already"}, "failed": UPDATE_ENDED, "restored": UPDATE_ENDED,
                  "lost": frozenset({"lost", "helper_crash"}), "blocked": frozenset({"no_installer", "no_python"})}
 UPDATE_INSTALLERS = frozenset({"uv", "pipx"})

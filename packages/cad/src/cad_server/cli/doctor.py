@@ -219,10 +219,11 @@ def _installer() -> dict:
 def _attempt() -> tuple[str, str]:
     """The last update attempt: from which release to which, when, its outcome and the installer's words for it
     (its ``detail``, whatever the outcome), and, where it did not install what it was for, why in plain words
-    (``auto_update.cause``, ``auto_update.in_words``); where the release the feed calls for has had its tries
-    (``auto_update.spent``), and where no update can begin (``auto_update.blocked``), that too; then where the
-    helper's log of it is (``auto_update.LOG``), where there is one. A WARNING where it failed, did not install what it
-    was for, or was lost, where the tries are spent, or where none can begin."""
+    (``auto_update.cause``, ``auto_update.in_words``); where the release the feed calls for has been tried by itself
+    (``auto_update.waiting``), how many times and when it is tried next, and where no update can begin
+    (``auto_update.blocked``), that too; then where the helper's log of it is (``auto_update.LOG``), where there is
+    one. A WARNING where it failed, did not install what it was for, or was lost, where that release has been tried
+    more than once, or where none can begin."""
     import time
 
     from cad.engine.places import state_dir
@@ -239,11 +240,14 @@ def _attempt() -> tuple[str, str]:
                 + (f": {auto.in_words(word, last.get('installer'))}" if word else "")
                 + restored.get(last.get("restored"), ""))
         warn = outcome == "failed" or word is not None
-        spent = auto.spent() if outcome != "underway" or word is not None else None
-        if spent is not None:
-            said += (f"; cad {spent} has been tried {auto.TRIES} times, and is not tried again by itself: "
-                     "`cad update` tries it")
-            warn = True
+        wait = auto.waiting() if outcome != "underway" or word is not None else None
+        if wait is not None:
+            wanted, entry, at = wait
+            count = entry["tries"]
+            said += (f"; cad {wanted} has been tried {count} {'time' if count == 1 else 'times'} by itself, and is "
+                     + (f"tried again from {time.strftime('%Y-%m-%d %H:%M', time.localtime(at))}" if at else
+                        "tried again at the next check") + ": `cad update` tries it now")
+            warn = warn or count > 1
     found = auto.global_install()
     blocked = auto.blocked(found) if found is not None else None
     if blocked is not None:

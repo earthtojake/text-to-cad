@@ -7,8 +7,9 @@ of ``from``, never below it; with ``major``, to the newest release of all), ``pu
 installed again) and ``launchers`` (prints the folder its launchers are in); ``installer`` (its name), ``wanted`` (the
 release the attempt is for), ``asked`` (a typed update) and ``major`` (``cad update --major``), which it keeps in the
 record for the server to count and judge; ``start``, whether it starts the server at the end (false where ``cad
-update`` found none running: it leaves none running); ``log``, the file it writes each command to (none: no log); and
-``uv_floor``, the oldest uv cad asks for.
+update`` found none running: it leaves none running); ``log``, the file it writes each command to (none: no log);
+``uv_floor``, the oldest uv cad asks for; and, where the installer has a second way, ``pin``, ``bounded``, ``refresh``
+and ``no_config`` (``escalate``).
 
 In order: the server stopped (``cad server stop``, which waits until it is gone); unless the environment already holds
 ``target`` or newer, or (but for ``major``) a release of a higher major than ``from``'s, which a bounded upgrade would
@@ -23,7 +24,15 @@ so; and the outcome written to ``record`` (``keep``: written beside it, then mov
 newer release, ``current`` for the one that ran (nothing newer it may take), ``failed`` for anything else, as every
 failure is -- and for ``major``, a release of ``from``'s major where ``target``, PyPI's newest, is of a higher one. The
 release the record names is the one installed after the upgrade, where it ended well; the one asked for where it did
-not. Where the attempt did not install what it was for, the record says why in one word (``cause``, one of ``CAUSES``,
+not. Where the upgrade ended 0 and kept a release below ``target`` (uv's ``kept``), it is tried again in the same run,
+another way each time (``escalate``: the index read afresh, then ``target`` asked for by name, whose error says why it
+cannot be had, then the upgrade from ``target`` so the installer keeps a range), where the trigger handed those ways
+(``pin``). No installer command runs on an environment that is half made (``whole``: a folder with no ``pyvenv.cfg``,
+which an install the disk filled under, or one stopped midway, leaves): uv run on one acts on the Python it was made
+from and removes that Python's packages; the attempt stops there, ``half_made``. As it runs, the helper writes the time
+into the record every ``BEAT_SECONDS`` (``Beat``), by which the server tells it is still underway; it writes no outcome
+over another attempt's record (one begun since, by a process that took this one for lost). Where the attempt did not
+install what it was for, the record says why in one word (``cause``, one of ``CAUSES``,
 told by ``cause_of`` from the upgrade's last try: its exit status, all it printed, the system's error, and which of
 the installer's settings are there, by name alone); each command it ran, with its exit status, how long it took and
 the end of what it printed, is in the log (``Log``), which stays on the computer. Telling the cause and writing the
@@ -50,6 +59,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -61,6 +71,10 @@ NO_WINDOW = 0x08000000 if WINDOWS else 0  # CREATE_NO_WINDOW: no console flashes
 ASIDE = ".cad.exe.{stamp}.{n}.old"
 # How long an install may run.
 INSTALL_SECONDS = 900
+# How often the helper marks its attempt as still underway (``Beat``): well inside ``auto_update.LOST_SECONDS``.
+BEAT_SECONDS = 60
+# The detail of an attempt that found cad's environment half made (``whole``), and ran nothing more in it.
+HALF_MADE = "cad's environment has no pyvenv.cfg: nothing more was run in it"
 
 
 def release(text):
@@ -80,6 +94,14 @@ def installed(prefix):
              ("lib/python*/site-packages/cad-*.dist-info", "Lib/site-packages/cad-*.dist-info")
              for path in Path(prefix).glob(pattern)]
     return max((held for held in found if held is not None), default=None)
+
+
+def whole(prefix):
+    """Whether an installer may act on the environment at ``prefix``: there is none (the installer makes it afresh), or
+    it holds its ``pyvenv.cfg``. A folder without one is half made, and uv run on it acts on the Python it was made
+    from."""
+    path = Path(prefix)
+    return not path.exists() or (path / "pyvenv.cfg").is_file()
 
 
 def run(command, timeout):
@@ -147,16 +169,19 @@ def accepted(held, before, major):
 
 
 def install(told, command, wanted, run, sleep, folder=None, accept=lambda held: held is not None, settle=False,
-            enough=lambda held: False):
-    """``command`` run, tried at each of ``WAITS``, each ``cad.exe`` set aside first where ``folder`` (the launchers'
+            enough=lambda held: False, waits=WAITS, early=False):
+    """``command`` run, tried at each of ``waits``, each ``cad.exe`` set aside first where ``folder`` (the launchers'
     folder, on Windows) is given, until it ends 0 with a release of cad installed that ``accept`` takes, ``wanted`` or
     newer where it is given, or one ``enough`` takes (``major``: a higher major than ``from``'s): ``(the release
     installed, or None, the installer's last line, (the last try's exit status, all it printed, the release it left))``.
     With ``settle``, where the last try ended 0 on a release ``accept`` takes, below ``wanted``, that release: nothing
-    newer is to be had."""
+    newer is to be had; with ``early`` too, at the first such try, which another way follows (``escalate``). None, and
+    nothing more run, where the environment is half made (``whole``): the last line of the try that left it so."""
     detail, settled, last = "not tried", None, (None, "", None)
-    for wait in WAITS:
+    for wait in waits:
         sleep(wait)
+        if not whole(told["prefix"]):
+            return None, detail if last[1] else HALF_MADE, last  # the words of the try that left it so, where one did
         if folder is not None:
             set_aside(told, folder)
         code, said = run(command, INSTALL_SECONDS)
@@ -169,7 +194,39 @@ def install(told, command, wanted, run, sleep, folder=None, accept=lambda held: 
         if code == 0:
             detail = (f"it installed {named(held)}, not {named(wanted)}" if accept(held) else
                       f"it installed {named(held) if held else 'no cad'}, which it may not end on")
+        if early and settled is not None:
+            break
     return settled, detail, last
+
+
+def escalate(told, target, run, sleep, folder, accept, environ=None):
+    """The upgrade, which ended 0 and kept a release below ``target``, tried again in the same run, once each way: with
+    ``refresh`` (uv's ``--refresh``: the index read afresh, not from its cache), then ``pin`` (``cad==<target>``,
+    whose error names why where it cannot be had: no such release, the Python, the platform) and, where that installed
+    it, ``bounded`` (the upgrade from ``target``, ``cad>=<target>,<N>``: never below it), so the installer keeps a
+    range for a person's own upgrade. Each with ``no_config`` too (uv's ``--no-config``: its settings' files not read)
+    only where none of the installer's settings that decide what it can reach or take is there (``settings``): never
+    past an index, a TLS setting, offline or exclude-newer the person set, so the cause stays theirs. ``(the release
+    the environment holds where ``accept`` takes it, else None, the last line that says why, the try that says why)``,
+    as ``install`` gives."""
+    flags = [*told.get("refresh", ()), *(() if settings(told.get("installer", "uv"), environ) else
+                                         told.get("no_config", ()))]
+    upgrade, pin, bounded = ([*command[:-1], *flags, command[-1]]
+                             for command in (told["upgrade"], told["pin"], told["bounded"]))
+    detail, last = "not tried", (None, "", None)
+    for command in (upgrade, pin):
+        got, detail, last = install(told, command, target, run, sleep, folder, accept=accept, settle=True,
+                                    waits=(0,))
+        if last[0] != 0:
+            break
+        if got is not None and got >= target:
+            if command is pin:
+                again = install(told, bounded, target, run, sleep, folder, accept=accept, settle=True, waits=(0,))
+                if again[2][0] != 0:
+                    detail, last = again[1], again[2]
+            break
+    held = installed(told["prefix"])
+    return (held if accept(held) and whole(told["prefix"]) else None), detail, last
 
 
 def update(told, run=run, sleep=time.sleep, windows=WINDOWS, environ=None):
@@ -187,17 +244,22 @@ def update(told, run=run, sleep=time.sleep, windows=WINDOWS, environ=None):
     held = installed(told["prefix"])
     above = held is not None and before is not None and not major and held[0] > before[0]
     last = None
-    if held is not None and ((target is not None and held >= target) or above):
+    accept = lambda found: accepted(found, before, major)  # noqa: E731
+    if not whole(told["prefix"]):
+        outcome, detail, got = "failed", HALF_MADE, None
+    elif held is not None and ((target is not None and held >= target) or above):
         outcome, detail, got = "current", f"cad {named(held)} is installed", held
     else:
         # ``major``: crossing to a higher major is what was asked, whatever release of it the upgrade got; where no
         # higher major was the target (none is out, or PyPI could not say), it ends as a bounded update does.
         crossed = lambda found: major and found is not None and before is not None and found[0] > before[0]  # noqa: E731
-        got, detail, last = install(told, told["upgrade"], target, run, sleep, folder,
-                                    accept=lambda found: accepted(found, before, major), enough=crossed,
-                                    settle=not (major and crossed(target)))
+        second = "pin" in told and target is not None and not major
+        got, detail, last = install(told, told["upgrade"], target, run, sleep, folder, accept=accept, enough=crossed,
+                                    settle=not (major and crossed(target)), early=second)
+        if second and got is not None and got < target:
+            got, detail, last = escalate(told, target, run, sleep, folder, accept, environ)
         outcome = "failed" if got is None else "installed" if before is None or got > before else "current"
-        if got is None and run([told["cad"], "--version"], 60)[0] != 0:
+        if got is None and whole(told["prefix"]) and run([told["cad"], "--version"], 60)[0] != 0:
             restored = install(told, told["put_back"], before, run, sleep, folder)[0] is not None
     cause = None
     try:
@@ -223,11 +285,11 @@ def update(told, run=run, sleep=time.sleep, windows=WINDOWS, environ=None):
 
 # Every word a record's ``cause`` holds, a closed list. The helper tells most of them from the upgrade's last try
 # (``cause_of``); ``helper_start`` is the trigger's (its helper could not start), ``lost`` a reader's (an attempt still
-# underway past its hour, its helper gone without a word), ``no_installer`` and ``no_python`` the reasons none begins
+# underway and silent, its helper gone without a word), ``no_installer`` and ``no_python`` the reasons none begins
 # (``auto_update.blocked``); ``packaged`` (cad inside a Windows app's private copy of AppData) is kept for the check
 # that tells it. Each word is said in plain words by ``auto_update.SAID``.
-CAUSES = ("timeout", "no_program", "in_use", "denied", "disk_full", "network", "offline", "no_release", "python",
-          "platform", "config_exclude", "config_index", "config_tls", "uv_old", "kept", "server_running",
+CAUSES = ("timeout", "no_program", "in_use", "denied", "disk_full", "half_made", "network", "offline", "no_release",
+          "python", "platform", "config_exclude", "config_index", "config_tls", "uv_old", "kept", "server_running",
           "helper_start", "helper_crash", "lost", "no_installer", "no_python", "packaged", "unknown")
 
 # What an installer's output says, tried in order, the first match winning: uv's and pip's own words (pipx prints
@@ -392,10 +454,13 @@ def uv_release(text):
 
 def cause_of(told, outcome, got, last, stopped, run, environ=None, log=None):
     """Why the attempt did not install what it was for, one of ``CAUSES``, or None where it did (or nothing newer was
-    asked: the environment already held it). Ended 0 on the release that ran, though a newer one was wanted,
-    ``kept``; else what the upgrade's last try said (``classify``), where ``cad server stop`` did not end 0 and the try
-    was refused a file, ``server_running``; where uv's words say nothing known and uv is older than cad asks
-    (``told["uv_floor"]``), ``uv_old``; then what the installer's settings explain (``refine``)."""
+    asked: the environment already held it). The environment half made (``whole``), ``half_made``, whatever came
+    before; ended 0 on the release that ran, though a newer one was wanted, ``kept``; else what the upgrade's last try
+    said (``classify``), where ``cad server stop`` did not end 0 and the try was refused a file, ``server_running``;
+    where uv's words say nothing known and uv is older than cad asks (``told["uv_floor"]``), ``uv_old``; then what the
+    installer's settings explain (``refine``)."""
+    if outcome != "installed" and not whole(told["prefix"]):
+        return "half_made"
     if last is None or outcome == "installed":
         return None
     code, output, held = last
@@ -529,6 +594,51 @@ def keep(path, record, replace=os.replace, sleep=time.sleep):
         pass
 
 
+def ours(told):
+    """Whether the record is still this attempt's (its ``at``), or there is none to read: an attempt begun since, by a
+    process that took this one for lost, keeps it, and this one was counted ``lost`` as that began."""
+    try:
+        with open(told["record"], encoding="utf-8") as handle:
+            found = json.load(handle)
+    except (OSError, ValueError):
+        return True
+    return not isinstance(found, dict) or found.get("at") == told.get("at")
+
+
+class Beat:
+    """The attempt marked as still underway every ``BEAT_SECONDS`` as the helper runs (its record's ``beat``), from a
+    thread of its own, so a command that runs for minutes beats too; only while the record is this attempt's and
+    underway. ``stop()``: no beat after it, so the outcome is the record's last word. Never raises."""
+
+    def __init__(self, told, every=BEAT_SECONDS):
+        self.told, self.every, self.done = told, every, threading.Event()
+        self.thread = threading.Thread(target=self.run, name="cad-update-beat", daemon=True)
+        try:
+            self.thread.start()
+        except RuntimeError:  # no thread to be had: the update runs all the same, lost should it outlast the wait
+            pass
+
+    def run(self):
+        while not self.done.wait(self.every):
+            self.mark()
+
+    def mark(self):
+        """One beat: the record's ``beat`` now, where the record is this attempt's and underway."""
+        try:
+            with open(self.told["record"], encoding="utf-8") as handle:
+                found = json.load(handle)
+            if isinstance(found, dict) and found.get("at") == self.told.get("at") \
+                    and found.get("outcome") == "underway":
+                keep(self.told["record"], {**found, "beat": time.time()})
+        except Exception:  # noqa: BLE001 - a beat missed is one minute nearer lost, nothing more
+            pass
+
+    def stop(self):
+        self.done.set()
+        if self.thread.ident is not None:
+            self.thread.join(30)
+
+
 def crashed(told, error):
     """The record of an attempt whose helper raised: the attempt the trigger kept, still ``underway`` (so it holds and
     ends as an attempt whose helper died always has), with ``cause`` ``helper_crash`` and the error as its ``detail``;
@@ -544,8 +654,10 @@ def crashed(told, error):
 
 
 def main(told):
-    """The update ``told`` asks for, its record kept; where the helper itself raises, the attempt kept as it was,
-    marked ``helper_crash`` (``crashed``), and the error written to the log."""
+    """The update ``told`` asks for, beating as it runs (``Beat``), its record kept where it is still this attempt's
+    (``ours``); where the helper itself raises, the attempt kept as it was, marked ``helper_crash`` (``crashed``), and
+    the error written to the log."""
+    beat = Beat(told)
     try:
         found = update(told)
     except Exception as error:  # noqa: BLE001 - said in the record, never a silent end
@@ -556,9 +668,9 @@ def main(told):
             found = crashed(told, error)
         except Exception:  # noqa: BLE001 - nothing more to say: the attempt stays as the trigger kept it
             found = None
-        if found is None:
-            return
-    keep(told["record"], found)
+    beat.stop()
+    if found is not None and ours(told):
+        keep(told["record"], found)
 
 
 if __name__ == "__main__":

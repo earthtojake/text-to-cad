@@ -280,8 +280,8 @@ const UPDATE_PLUGIN = new Set(['none', 'ok', 'failed', 'underway']);
 // environment held the release already), `none` where its record names none; a lost one, whether its helper stopped
 // with an error; a blocked one, no installer or no Python to run the update with.
 const UPDATE_OUTCOMES_13 = new Set([...UPDATE_OUTCOMES, 'lost', 'blocked']);
-const UPDATE_ENDED = new Set(['timeout', 'no_program', 'in_use', 'denied', 'disk_full', 'network', 'offline', 'no_release',
-  'python', 'platform', 'config_exclude', 'config_index', 'config_tls', 'uv_old', 'kept', 'server_running',
+const UPDATE_ENDED = new Set(['timeout', 'no_program', 'in_use', 'denied', 'disk_full', 'half_made', 'network', 'offline',
+  'no_release', 'python', 'platform', 'config_exclude', 'config_index', 'config_tls', 'uv_old', 'kept', 'server_running',
   'helper_start', 'packaged', 'unknown', 'none']);
 const UPDATE_CAUSES = { current: new Set([...UPDATE_ENDED, 'already']), failed: UPDATE_ENDED, restored: UPDATE_ENDED,
   lost: new Set(['lost', 'helper_crash']), blocked: new Set(['no_installer', 'no_python']) };
