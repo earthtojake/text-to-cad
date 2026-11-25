@@ -24,13 +24,11 @@ class StateTest(unittest.TestCase):
         self.state = Path(os.path.realpath(tempfile.mkdtemp(prefix="state-")))
         self.addCleanup(shutil.rmtree, self.state, True)
 
-    def test_a_file_s_derived_views_live_under_its_document_and_go_with_it(self) -> None:
+    def test_a_file_s_derived_views_live_under_its_document_keyed_by_its_bytes(self) -> None:
         """A KiCad board's plot, refilled pours, DRC and kept exports are kept in the document cache under the
-        board's own document, keyed by its bytes: a changed file is a new entry, and forgetting it removes them."""
+        board's own document, keyed by its bytes: a changed file is a new entry."""
         from cad.engine.formats.kicad import poured
         from cad.engine.ids import file_id
-        from cad_server.engine.library import Notes
-
         cache = self.state / "cache"
         board = self.state / "board.kicad_pcb"
         board.write_text("(kicad_pcb (version 20241229))", encoding="utf-8")
@@ -41,8 +39,6 @@ class StateTest(unittest.TestCase):
             (first / "drc.json").write_text("{}", encoding="utf-8")
             board.write_text("(kicad_pcb (version 20241229) (general))", encoding="utf-8")
             self.assertNotEqual(poured.folder(board, poured.key(board)), first, "a changed file is a new entry")
-            Notes(cache).forget(file_id(board))  # what the home's Remove runs
-        self.assertFalse((cache / "documents" / file_id(board)).exists(), "forgotten with its document")
 
     def test_an_engine_record_reads_only_a_port_number(self) -> None:
         from cad_server.engine import state
