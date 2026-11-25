@@ -14,7 +14,7 @@ project (``Projects.add`` answers it and makes no record: projects do not nest b
 project opened around another leaves the inner one its own, with its documents.
 
 A project's documents (``Projects.documents``) are its models -- the registry's, whose script is in
-it -- then its CAD files (but a model's saved ``.xbf``, which the model's card stands for: ``recents.fold``),
+it -- then its CAD files (but an ``.xbf`` that is one of those models, which its card stands for: ``recents.fold``),
 found by a walk of its folder that no folder can hold up: it stops at ``WALK_LIMIT`` files, ``WALK_DEPTH``
 folders down and ``WALK_SECONDS``, says when it stopped early (``truncated``), skips hidden and build folders
 and the folders of the projects inside it, and never walks a folder twice (a link back into one is how a walk
@@ -190,7 +190,7 @@ class Projects:
         (``entries``, Recents' ``Recent``s, whose script or home is in it and in no project inside it),
         by name, then its CAD files, by folder then name (each Recents' entry where it has one), then the
         files in it a page opened that the walk did not list (the module docstring), by path, as Recents' rows
-        with their ``project``, but a model's saved ``.xbf`` where the model is one of them (``recents.fold``);
+        with their ``project``, but an ``.xbf`` that is one of those models (``recents.fold``);
         ``truncated`` where the walk stopped early."""
         records = self.list() if records is None else records
         ident = record["id"]
@@ -220,7 +220,7 @@ class Projects:
         files += sorted((entry for entry in recorded.values() if entry.opened is not None and mine(entry.path)),
                         key=lambda entry: collation_key(_key(entry.path)))
         rows = [{**row, "project": ident} for row in (entry.row() for entry in [*models, *files]) if row is not None]
-        # A model's saved .xbf, unchanged since its build wrote it, is the model's card (``recents.fold``).
+        # An .xbf the engine wrote from one of these models, unchanged since, is that model's card (``recents.fold``).
         return {**public(record), "documents": fold(rows), "truncated": truncated}
 
     def _walk(self, root: str, nested: tuple[str, ...]) -> tuple[list[str], bool]:

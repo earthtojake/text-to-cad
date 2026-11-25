@@ -73,15 +73,17 @@ written only where the engine already holds the document: an `.xbf` it writes (a
 from the document it writes it from, as it writes it (`Models.written`; a file with no record is given one, with no
 `opened`, which no list shows until a page opens it); any other `.xbf` or STEP from the read the engine made because a
 page opened it. Nothing is ever read to count. Recents lists that count as a row's `parts`, a file's only while the
-file is that version (`cad_server.viewer.recents`). A model's declared `.xbf` is the model saved (**The model
-saved**): its record names the file (`saved`, its path), and the file's names the model (`of`: `{id, version}`, the
-model's id and the file's version as the build wrote or kept it), which an export's `.xbf` never gets; any record its Recents picture (`preview`, UI state: the PNG under
+file is that version (`cad_server.viewer.recents`). An `.xbf` the engine wrote from a model's document is that
+model (**A model's xbf**): the file's record names it (`of`: `{id, version, revision}`, the model's id, the file's
+version as written or kept and the document's revision), and a model's record names its declared one (`saved`, its
+path); any record its Recents picture (`preview`, UI state: the PNG under
 `recents/thumbnails`), and a model's or a shape's `cache` once the cache holds it (**The cache**).
 `created` is when the record was first made -- a model's first run, a shape's first hand-over, a
 file's first open on a page -- kept through every rebuild and reopen (the home's Created column);
 a record from before the engine kept it has none, and every reader takes that as null.
-Its closure is its document's own (**Build closure**): it is not copied here. Of the files a model declared, its
-`.xbf` alone is recorded (`saved`, `of`); every other declared file is an export, a plain file to every surface. Every path in it is relative to its one `root`, so a record moves by one field. It is written synchronously
+Its closure is its document's own (**Build closure**): it is not copied here. Of the files written from a model, its
+`.xbf` files alone are recorded (`of`, and the declared one's `saved`); every other file is an export, a plain file
+to every surface. Every path in it is relative to its one `root`, so a record moves by one field. It is written synchronously
 as a build registers, and only when a field differs: an unchanged build rewrites
 nothing; each write is then told to `registry.OBSERVERS`, never waited on. After the independent
 startup identity migration below, it is read on demand: an id the engine does not hold (after a
@@ -195,7 +197,7 @@ whether it is there or as its build left it plays no part. A model taken writes 
 all the same, as exports of the document it took (**Exports**): each translated, compared with
 the file, and written only where it differs or is missing, so a declared file someone deleted or
 edited is written again from the document with nothing run. Nothing is recorded of what was
-written but a declared `.xbf`'s `of` and its model's `saved` (**The model saved**), which a listing alone reads:
+written but an `.xbf`'s `of` and its model's `saved` (**A model's xbf**), which a listing alone reads:
 an exported or declared file on disk is a plain file to every other surface. A verb given its path reads the file, in the documents worker, never
 the document of the model whose build wrote it (`Daemon._routed`), and the engine lists a model that
 declares files like any other. A page given its path serves it as it serves any file: its version
@@ -203,19 +205,26 @@ is the file's, it is read again when the file's bytes change (**The page's route
 model -- no `made_by`, no worker kept warm, and nothing of a run sent to it, its progress and its
 failure among them.
 
-**The model saved.** A model's declared `.xbf` (`@xbf("arm.xbf")`) is the model itself, saved: every run that
-reaches it writes it, or keeps it where it holds the document's bytes already. As the daemon registers the build
-(`Models.written`, from the build's report), the model's record gains `saved` (the file's canonical path, relative to
-its `root`; a build that declares no `.xbf` drops it) and the file's record gains `of`, `{id, version}`: the model's
-id and the file's version (`mtime_ns-size`, `registry.file_version`) as written, with its parts' count (a file with
-no record is given one, with no `opened`). An export's `.xbf` (`cad model export`, the viewer's export) is counted and
-never given `of`. A listing -- Recents, a project's documents, and so every place of the home and its search, which
-read them -- shows the two as one card (`cad_server.viewer.recents.fold`): it leaves the file's row out where its
-`of` is of the version on disk now, the model's record still names the file, the model's own row is in that list, in
-the same project, its script there, and the file is not pinned. Anything else, and the file is listed as any file is:
-written or touched since, the model deleted or built since with no `.xbf`, a copy, an export. Records alone are read,
-no file's bytes and no script, and nothing is deleted: the file, its record and the model's stay as they are, and
-the model's row says where the file is (`saved`).
+**A model's xbf.** An `.xbf` the engine writes from a model's (or a shape's) document is that document saved: a
+build's declared one (`@xbf("arm.xbf")`), which every run that reaches it writes or keeps where it holds the
+document's bytes already, and one exported of the model's id (`cad model export ID x.xbf`, a
+handle's `.export`). As it is written, its file's record gains `of`, `{id, version, revision}` -- the model's id, the
+file's version (`mtime_ns-size`, `registry.file_version`) as written or kept, and the revision of the document it was
+written from, the one the model's record carries -- with its parts' count (a file with no record is given one, with
+no `opened`): the build's from its report as the daemon registers it (`Models.written`), an export's from its answer
+(`Models.exported`), the revision read as the export began and the file given no `of` if the model was built into
+another one meanwhile. The model's record names its declared `.xbf` too (`saved`, its canonical path relative to its
+`root`; a build that declares none drops it). The viewer's export writes a download, which the browser saves where the
+engine never sees it: nothing is recorded of it. A listing -- Recents, a project's documents, and so every place of the
+home and its search, which read them -- shows the model and its `.xbf` files as one card
+(`cad_server.viewer.recents.fold`): it leaves a file's row out where its `of` is of the version on disk now and of the
+revision the model's record has now, the model's own row is in that list, in the same project, its script there, and
+the file is not pinned. Anything else, and the file is listed as any file is: edited or touched since, a copy, the
+model deleted, or built into another revision since -- its declared `.xbf` is written or kept by that build, at that
+revision, and stays its card; an export no one wrote again holds an older document, and is a file of its own. A STEP,
+a GLB and every other export are files of their own. Records alone are read, no file's bytes and no script, and
+nothing is deleted: the files, their records and the model's stay as they are. While its declared `.xbf` is the model
+so, the model's row says where it is (`saved`) and the file's row, in a list that has it, whose it is (`of`).
 
 **The last run.** A document is what its model's last run made, and that is all the engine knows
 of the code: it never compares a script, a module or an input file on disk with what a build read,

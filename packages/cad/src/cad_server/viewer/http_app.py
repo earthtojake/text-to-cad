@@ -718,7 +718,7 @@ class CadApp:
         built (``recents.py``), each its row with its document's ``id``, ``kind`` and ``api`` (the
         record's own kind, ``file``, ``model`` or ``shape``, is ``record``) and the id of the project it is
         in (``project``: ``projects.py``; null for a standalone one) -- of one ``kind``, whose
-        name or path holds ``q``, at most ``limit``, a model's saved ``.xbf`` left out where the model is listed
+        name or path holds ``q``, at most ``limit``, an ``.xbf`` that is a model's document left out where the model is listed
         (``recents.fold``). With ``path``, the file at that absolute path
         alone, as its envelope (``envelope``), known by its id from then on; none for a file no page
         reads."""
@@ -745,7 +745,7 @@ class CadApp:
             rows.append({**row, "project": found["id"] if found else None})
         from .recents import fold
 
-        # A model's saved .xbf is the model's own card wherever that card is listed (``recents.fold``).
+        # An .xbf the engine wrote from a model, unchanged since, is the model's card where it is listed (``recents.fold``).
         rows = fold(rows)
         return {"documents": rows[:int(limit)] if limit is not None else rows}
 

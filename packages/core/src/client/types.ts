@@ -88,12 +88,12 @@ export interface CadRecent {
    * file's while the file is that version; null where it does not.
    */
   parts?: number | null;
-  /**
-   * A model's: the path of the `.xbf` its build saved it as, while that file is the version the build wrote. A list
-   * that holds the model leaves that file out: the model's card stands for both.
-   */
+  /** A model's: the path of its declared `.xbf`, while that file is the model (unchanged, of its revision now). */
   saved?: string;
-  /** A file's: the id of the model whose saved `.xbf` it is, unchanged since its build wrote it. */
+  /**
+   * A file's: the id of the model whose document it is, an `.xbf` the engine wrote from it, while the file is unchanged
+   * and the model the revision written. A list that holds the model's row leaves such a file out: one card.
+   */
   of?: string;
   /** A CAD file on disk, or a document built from code: a model's, or a shape a program handed over. */
   kind: 'file' | 'model' | 'shape';

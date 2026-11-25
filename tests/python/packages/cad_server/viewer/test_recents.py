@@ -235,56 +235,64 @@ class RecentStoreTest(unittest.TestCase):
         store.counted(store._ident(str(loose)), {"version": "1-1", "instances": [{}]})
         self.assertIsNone(store.registry.get(store._ident(str(loose))))
 
-    def test_a_model_and_the_xbf_its_build_saved_are_one_row_while_both_records_say_so(self) -> None:
+    def test_an_xbf_written_from_a_model_is_the_models_row_while_unchanged_and_the_model_that_revision(self) -> None:
         from cad.engine.ids import file_id
         from cad_server.viewer.recents import fold
 
         store = RecentStore(self.tmp / "state")
-        script, arm = self.tmp / "arm.py", self.tmp / "arm.xbf"
+        script, arm, copy = self.tmp / "arm.py", self.tmp / "arm.xbf", self.tmp / "out.xbf"
         script.write_text("", encoding="utf-8")
-        arm.write_bytes(b"not read here")
         ident = model_id(script, "arm")
         store.registry.put({"id": ident, "kind": "model", "root": str(self.tmp), "home": "arm.py", "entry": "arm",
                             "name": "arm", "revision": "r1", "built": 1_700_000_000.0, "saved": "arm.xbf"})
-        status = arm.stat()
-        store.registry.counted(file_id(str(arm)), 1, f"{status.st_mtime_ns}-{status.st_size}", make=str(arm), of=ident)
-        store.opened(str(arm))
+
+        def write(path, revision, of=ident):
+            """The engine's write of ``path`` from the model's document at ``revision`` (``Models.written``)."""
+            path.write_bytes(b"not read here")
+            status = path.stat()
+            store.registry.counted(file_id(str(path)), 1, f"{status.st_mtime_ns}-{status.st_size}", make=str(path),
+                                   of=of, revision=revision)
+
+        write(arm, "r1")  # its build's declared file
+        write(copy, "r1")  # an export of its id
+        for path in (arm, copy):
+            store.opened(str(path))
 
         def rows(project=None):
             return [{**recent.row(), "project": project} for recent in store.list()]
 
-        listed = lambda: [row["name"] for row in fold(rows())]
+        listed = lambda: sorted(row["name"] for row in fold(rows()))
         [model] = [row for row in rows() if row["record"] == "model"]
-        [saved] = [row for row in rows() if row["record"] == "file"]
-        self.assertEqual((model["saved"], saved["of"]), (str(arm).replace(os.sep, "/"), ident))
-        self.assertEqual(listed(), ["arm"], "the model's row stands for the file it is saved as")
+        self.assertEqual(model["saved"], str(arm).replace(os.sep, "/"), "where its declared .xbf is")
+        self.assertEqual({row["name"]: row["of"] for row in rows() if row["record"] == "file"},
+                         {"arm.xbf": ident, "out.xbf": ident})
+        self.assertEqual(listed(), ["arm"], "the model's row stands for every .xbf written from it")
         # Only where the model's row is in the same list, in the same place, and is there to open.
-        self.assertEqual([row["name"] for row in fold([row for row in rows() if row["record"] == "file"])], ["arm.xbf"])
+        self.assertEqual(sorted(row["name"] for row in fold([row for row in rows() if row["record"] == "file"])),
+                         ["arm.xbf", "out.xbf"])
         self.assertEqual(sorted(row["name"] for row in fold([{**row, "project": "p" if row["record"] == "file" else None}
-                                                             for row in rows()])), ["arm", "arm.xbf"])
-        self.assertEqual(listed(), ["arm"])
-        store.pin(str(arm), True)
-        self.assertEqual(sorted(listed()), ["arm", "arm.xbf"], "a file the person pinned is a card of their own")
-        store.pin(str(arm), False)
-        # Written since the build: a file of its own, and the model no longer says where it is saved.
+                                                             for row in rows()])), ["arm", "arm.xbf", "out.xbf"])
+        store.pin(str(copy), True)
+        self.assertEqual(listed(), ["arm", "out.xbf"], "a file the person pinned is a card of their own")
+        store.pin(str(copy), False)
+        # Edited since: a file of its own, and the model no longer says where it is saved.
         later = time.time_ns() + 5_000_000_000
         os.utime(arm, ns=(later, later))
-        self.assertEqual(sorted(listed()), ["arm", "arm.xbf"])
+        self.assertEqual(listed(), ["arm", "arm.xbf"])
         self.assertNotIn("saved", next(row for row in rows() if row["record"] == "model"))
-        self.assertNotIn("of", next(row for row in rows() if row["record"] == "file"))
-        status = arm.stat()
-        store.registry.counted(file_id(str(arm)), None, f"{status.st_mtime_ns}-{status.st_size}", of=ident)
-        self.assertEqual(listed(), ["arm"], "the next build wrote it, or kept it as it is")
-        # A model built since with no .xbf names none: the file is a copy of its build before.
-        store.registry.update(ident, lambda record: {key: value for key, value in record.items() if key != "saved"})
-        self.assertEqual(sorted(listed()), ["arm", "arm.xbf"])
-        store.registry.update(ident, lambda record: {**record, "saved": "arm.xbf"})
+        self.assertNotIn("of", next(row for row in rows() if row["name"] == "arm.xbf"))
+        # Built into another revision: its build writes its declared file again, the export is an older model.
+        store.registry.update(ident, lambda record: {**record, "revision": "r2"})
+        write(arm, "r2")
+        self.assertEqual(listed(), ["arm", "out.xbf"])
+        self.assertNotIn("of", next(row for row in rows() if row["name"] == "out.xbf"))
+        write(copy, "r2")  # exported again
         self.assertEqual(listed(), ["arm"])
-        script.unlink()  # its script gone: the model's card is missing, and the file is there to open
-        self.assertEqual(sorted(listed()), ["arm", "arm.xbf"])
+        script.unlink()  # its script gone: the model's card is missing, and the files are there to open
+        self.assertEqual(listed(), ["arm", "arm.xbf", "out.xbf"])
         script.write_text("", encoding="utf-8")
-        store.remove(ident)  # deleted: the file stays, a card of its own
-        self.assertEqual(listed(), ["arm.xbf"])
+        store.remove(ident)  # deleted: the files stay, cards of their own
+        self.assertEqual(listed(), ["arm.xbf", "out.xbf"])
         self.assertTrue(arm.is_file())
 
     def test_a_record_of_a_file_no_type_reads_is_kept_unlisted_and_removable(self) -> None:

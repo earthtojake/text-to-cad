@@ -9,9 +9,10 @@ of its home); ``shape``, a shape a program handed over (``home``: the script tha
 or the folder it was handed over in; ``program``: that program, where there is one; nothing builds
 it again); or ``file``, an on-disk CAD file the person opened (``home`` and ``opened`` alone, and
 ``pinned``, ``preview`` and, where the engine wrote it from a document or read it for a page, ``facts``: its
-parts' occurrences and the file's version they are of, ``{parts, version}`` (``Registry.counted``); where a build
-wrote it as the ``.xbf`` its model declares, ``of``: that model's id and the file's version as written, ``{id,
-version}``; never a ``revision``, never bytes). A model's record names that file too (``saved``: its path). The registry POINTS: no geometry, no
+parts' occurrences and the file's version they are of, ``{parts, version}`` (``Registry.counted``); where the engine
+wrote it as an ``.xbf`` from a model's document (the build's declared file, an export of the model's id), ``of``:
+that model's id, the file's version as written and the document's revision, ``{id, version, revision}``; never a
+``revision`` of its own, never bytes). A model's record names its declared ``.xbf`` (``saved``: its path). The registry POINTS: no geometry, no
 mesh, no xbf and no memo is ever written here. A model's record may say that the engine's cache
 holds its document (``cache``: ``{revision, bytes, read}``), whose bytes live in the
 cache folder, not here (``Registry.cache``: ``<cache>/documents/<id>/document.xbf``, the engine's
@@ -262,17 +263,19 @@ class Registry:
             return self.get(ident)
 
     def counted(self, ident: str, parts: int | None, version: str, make: str | None = None,
-                of: str | None = None) -> None:
+                of: str | None = None, revision: str | None = None) -> None:
         """How many part occurrences the CAD file of id ``ident`` holds, and the file's ``version`` they are of,
         on its record (``facts``: ``{parts, version}``; ``parts`` None: its facts left as they are), written only
         when it differs; with ``make`` (the file's canonical path), on a record made for it (``file_record``: no
         ``opened``, so Recents does not list it) where it has none. The count is always one the engine had in hand:
-        the document it wrote the file from, or its read of the file. Nothing is read for it here. With ``of`` (a
-        model's id: a build wrote, or kept, the ``.xbf`` that model declares), the file is that model's saved
-        document as of ``version`` (``of``: ``{id, version}``), which a listing folds into the model's row while the
-        file is that version (``cad_server.viewer.recents.fold``); without, any ``of`` it has is kept."""
+        the document it wrote the file from, or its read of the file. Nothing is read for it here. With ``of`` and
+        ``revision`` (a model's or a shape's id and its document's revision: the engine wrote the ``.xbf`` from that
+        document, a build's declared file or an export), the file is that document as of ``version`` (``of``:
+        ``{id, version, revision}``), which a listing folds into the model's row while the file is that version
+        and the model that revision (``cad_server.viewer.recents.fold``); without, any ``of`` it has is kept."""
         facts = {"parts": int(parts), "version": str(version)} if type(parts) is int else None
-        saved = {"id": str(of), "version": str(version)} if of is not None else None
+        saved = {"id": str(of), "version": str(version), "revision": str(revision)} \
+            if of is not None and revision is not None else None
 
         def change(record: dict[str, Any] | None) -> dict[str, Any] | None:
             if record is None and make is not None:

@@ -23,11 +23,13 @@ engine wrote (a build's declared file, an export) from the document it wrote it 
 (``RecentStore.counted``) -- a file's only while the file is the version counted. A listing reads records alone:
 nothing is read to count them, a model's script never, a file's bytes never.
 
-A model and the ``.xbf`` its build saves it as are one document, and a listing shows one card of them (``fold``):
-the build names the file on the model's record (``saved``) and the model on the file's (``of``, with the file's
-version as written: ``Models.written``), and while both say so and the file is still that version, a model's row
-says where the file is (``saved``), the file's row says whose it is (``of``), and the file's row is left out of any
-list that holds the model's (``fold``). An ``.xbf`` exported, copied or written since is a file of its own.
+An ``.xbf`` the engine wrote from a model's document -- the build's declared file, an export of the model's id, the
+viewer's export -- is that model, and a listing shows one card of them (``fold``): its record names the model, the
+file's version as written and the document's revision (``of``: ``Models.written``), and while the file is still
+that version and the model's record still that revision, the file's row says whose it is (``of``) and is left out of
+any list that holds the model's row (``fold``). A file edited or copied since, or one whose model was built into
+another revision since (an export the build did not write again: an older model now), is a file of its own. A
+model's row says where its declared ``.xbf`` is (``saved``) while that file is the model so.
 
 The pictures are bounded however often a document is edited: a record names one, a new picture
 replaces it at once (``RecentStore.thumbnail``: the old one goes as the new is named), only
@@ -116,10 +118,13 @@ class Recent:
     shown: str | None = None
     # How many part occurrences its document holds, where its record says (the module): None where it does not.
     parts: int | None = None
-    # A model and the .xbf its build saved it as (the module): a model's, that file's path (``saved``); the file's,
-    # that model's id (``of``). Each only while both records say so and the file is the version the build wrote.
-    saved: str | None = None
+    # A model and an .xbf the engine wrote from its document (the module): the file's, that model's id (``of``) and
+    # the revision written (``written``), while the file is the version written; a model's (and a shape's), its
+    # revision now (``revision``) and the path of its declared .xbf while that file is the model so (``saved``).
     of: str | None = None
+    written: str | None = None
+    revision: str | None = None
+    saved: str | None = None
 
     @property
     def activity(self) -> float:
@@ -326,7 +331,9 @@ class RecentStore:
                                       updated=updated, size=size, parts=_parts(record.get("facts"), version)
                                       if version else None,
                                       of=of.get("id") if version and of.get("version") == version
-                                      and isinstance(of.get("id"), str) else None, **common))
+                                      and isinstance(of.get("id"), str) else None,
+                                      written=of.get("revision") if isinstance(of.get("revision"), str) else None,
+                                      **common))
             elif record.get("kind") in ("model", "shape"):
                 program = registering.program(self.registry, record)
                 entries.append(Recent(path=record["id"], kind=record["kind"], name=record.get("name") or record.get("entry"),
@@ -338,7 +345,8 @@ class RecentStore:
                                       opened=record.get("opened"), parts=_parts(record.get("facts")),
                                       saved=os.path.normpath(self.registry.root(record) / record["saved"])
                                       if record["kind"] == "model" and isinstance(record.get("saved"), str) else None,
-                                      **common))
+                                      revision=record.get("revision") if isinstance(record.get("revision"), str)
+                                      else None, **common))
         return _linked(entries)
 
     def _sweep_thumbnails(self, replaced: set[str] | frozenset[str] = frozenset()) -> None:
@@ -383,32 +391,38 @@ class RecentStore:
 
 
 def _linked(entries: list[Recent]) -> list[Recent]:
-    """``entries`` with each model and the ``.xbf`` its build saved it as linked (``Recent.saved``, ``Recent.of``)
-    only where both records say so -- the model's names the file, the file's names the model at the version on disk
-    now -- and unlinked anywhere else: a file written since, a model deleted, or one built since with no ``.xbf``."""
+    """``entries`` with each ``.xbf`` the engine wrote from a model's document linked to that model (``Recent.of``)
+    only while the model's record is still the revision it was written from -- the file's version was checked as it
+    was read -- and each model's declared ``.xbf`` named (``Recent.saved``) only while that file is linked to it;
+    unlinked anywhere else: a model deleted, or built into another revision since."""
     def key(path: str) -> str:
         return os.path.normcase(os.path.normpath(path))
 
-    models = {entry.path: entry for entry in entries if entry.kind == "model" and entry.saved}
-    files = {key(entry.path): entry for entry in entries if entry.kind == "file" and entry.of}
+    models = {entry.path: entry for entry in entries if entry.kind in ("model", "shape")}
+    files: dict[str, Recent] = {}
+    for entry in entries:
+        if entry.kind != "file" or entry.of is None:
+            continue
+        model = models.get(entry.of)
+        if model is None or model.revision is None or model.revision != entry.written:
+            entry.of = None
+        else:
+            files[key(entry.path)] = entry
     for entry in models.values():
-        found = files.get(key(entry.saved or ""))
+        found = files.get(key(entry.saved)) if entry.saved else None
         if found is None or found.of != entry.path:
             entry.saved = None
-    for entry in files.values():
-        if entry.of not in models or models[entry.of].saved is None:
-            entry.of = None
     return entries
 
 
 def fold(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """A listing's ``rows`` (Recents', a project's) with each model's saved ``.xbf`` left out where the model's
-    own row stands for it: a file row the person has not pinned whose ``of`` (``Recent.of``: unchanged since its
-    model's build wrote it) names a model row of the same list, in the same project, whose script is there. Anything
-    else is listed as any file is: a file written since, a model deleted or not in this list, an
-    ``.xbf`` exported or copied. Records alone are read: no file's bytes, no script."""
-    models = {row["id"]: row for row in rows
-              if row.get("record") == "model" and row.get("saved") and not row.get("missing")}
+    """A listing's ``rows`` (Recents', a project's) with each ``.xbf`` that is a model's document left out where the
+    model's own row stands for it: a file row the person has not pinned whose ``of`` (``Recent.of``: unchanged since
+    the engine wrote it from the model's document, and the model still that revision) names a model's (or a shape's)
+    row of the same list, in the same project, whose script is there. Anything else is listed as any file is: a file
+    edited or copied, a model built into another revision since, deleted or not in this list. Records alone are
+    read: no file's bytes, no script."""
+    models = {row["id"]: row for row in rows if row.get("record") in ("model", "shape") and not row.get("missing")}
 
     def folded(row: dict[str, Any]) -> bool:
         model = models.get(row.get("of")) if row.get("record") == "file" else None

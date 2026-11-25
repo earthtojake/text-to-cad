@@ -358,7 +358,7 @@ finally:
         os.utime(pictured, ns=(later, later))
         self.assertIsNone(listed()["pictured.xbf"]["parts"])
 
-    def test_a_model_and_the_xbf_its_build_saves_it_as_are_one_card(self) -> None:
+    def test_an_xbf_the_engine_wrote_from_a_model_is_that_models_one_card(self) -> None:
         folder = self.base / "fold"
         folder.mkdir()
         (folder / "arm.py").write_text(textwrap.dedent(ARM), encoding="utf-8")
@@ -367,35 +367,46 @@ finally:
         for script in ("arm.py", "hub.py"):
             done = run(script)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        arm = folder / "arm.xbf"
-        # A copy of the model's .xbf, and an .xbf the person exports of a model (one with no file of its own: a model
-        # saved as an .xbf already is one, and is not exported as another): files of their own, whatever they hold.
+        arm, hub = folder / "arm.xbf", folder / "hub.xbf"
+        [ident] = [row["id"] for row in self.get("/api/v1/documents")[1]["documents"] if row["name"] == "hub"]
+        # The person's exports of a model, an .xbf and a STEP, and a copy of a model's declared .xbf.
+        for target in (hub, folder / "hub.step"):
+            done = run("-m", "cad_server.cli", "model", "export", ident, str(target))
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         shutil.copyfile(arm, folder / "arm-copy.xbf")
-        [hub] = [row["id"] for row in self.get("/api/v1/documents")[1]["documents"] if row["name"] == "hub"]
-        done = run("-m", "cad_server.cli", "model", "export", hub, str(folder / "hub.xbf"))
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         status, project = self.send("POST", "/api/v1/projects", {"path": str(folder)})
         self.assertEqual(status, 201, project)
         listed = lambda: {row["name"]: row for row in self.get(f"/api/v1/projects/{project['project']['id']}")[1]["documents"]}
         posix = lambda path: str(path).replace(os.sep, "/")
-        self.assertEqual(sorted(listed()), ["arm", "arm-copy.xbf", "hub", "hub.xbf"],
-                         "the model once, its saved .xbf not beside it")
-        model = listed()["arm"]
-        self.assertEqual((model["saved"], model["parts"]), (posix(arm), 1))
-        self.assertEqual(listed()["hub.xbf"]["parts"], 2, "counted as it was written, and no model's saved file")
-        self.assertNotIn("of", listed()["hub.xbf"])
-        self.assertNotIn("saved", listed()["hub"])
-        # Opened on a page, the file is in Recents, where the model is too: one card there as well.
-        self.assertEqual(self.send("PATCH", "/api/v1/documents", {"action": "open", "path": str(arm)})[0], 200)
+        self.assertEqual(sorted(listed()), ["arm", "arm-copy.xbf", "hub", "hub.step"],
+                         "each model once: the .xbf its build wrote and the .xbf exported of it are the model")
+        self.assertEqual((listed()["arm"]["saved"], listed()["arm"]["parts"]), (posix(arm), 1))
+        # Opened on a page, an .xbf is in Recents, where the model is too: one card there as well.
+        for path in (arm, hub):
+            self.assertEqual(self.send("PATCH", "/api/v1/documents", {"action": "open", "path": str(path)})[0], 200)
         recents = lambda: [row["path"] for row in self.get("/api/v1/documents")[1]["documents"]]
-        self.assertIn(model["id"], recents())
         self.assertNotIn(posix(arm), recents())
+        self.assertNotIn(posix(hub), recents())
+        # Rebuilt with a change: its build writes its declared .xbf again, which stays the model; the export it did
+        # not write again holds an older document, and is a card of its own.
+        for name, before, after in (("arm.py", "bd.Box(4, 4, 20)", "bd.Box(4, 4, 24)"),
+                                    ("hub.py", "bd.Box(6, 6, 2)", "bd.Box(8, 8, 2)")):
+            script = folder / name
+            script.write_text(script.read_text(encoding="utf-8").replace(before, after), encoding="utf-8")
+            self.assertEqual(run(name).returncode, 0)
+        self.assertEqual(sorted(listed()), ["arm", "arm-copy.xbf", "hub", "hub.step", "hub.xbf"])
+        self.assertNotIn("of", listed()["hub.xbf"])
+        self.assertIn(posix(hub), recents())
+        done = run("-m", "cad_server.cli", "model", "export", ident, str(hub))  # exported again: the model now
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(sorted(listed()), ["arm", "arm-copy.xbf", "hub", "hub.step"])
         # Touched by hand: no longer the file the build wrote, so a card of its own; the next run keeps it as it is
-        # (the same bytes), and it is the model saved again.
+        # (the same bytes), and it is the model again.
         later = time.time_ns() + 5_000_000_000
         os.utime(arm, ns=(later, later))
         self.assertIn("arm.xbf", listed())
         self.assertNotIn("of", listed()["arm.xbf"])
+        self.assertNotIn("saved", listed()["arm"])
         self.assertIn(posix(arm), recents())
         self.assertEqual(run("arm.py").returncode, 0)
         self.assertNotIn("arm.xbf", listed())
@@ -404,10 +415,10 @@ finally:
         self.assertIn("arm.xbf", listed())
         self.assertEqual(run("arm.py").returncode, 0)
         self.assertNotIn("arm.xbf", listed())
-        # The model deleted: its saved file stays on disk and is listed as any file is.
-        done = run("-m", "cad_server.cli", "delete", model["id"], "--yes")
+        # The model deleted: its .xbf stays on disk and is listed as any file is.
+        done = run("-m", "cad_server.cli", "delete", listed()["arm"]["id"], "--yes")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertEqual(sorted(listed()), ["arm-copy.xbf", "arm.xbf", "hub", "hub.xbf"])
+        self.assertEqual(sorted(listed()), ["arm-copy.xbf", "arm.xbf", "hub", "hub.step"])
         self.assertTrue(arm.is_file())
         self.assertIn(posix(arm), recents())
 

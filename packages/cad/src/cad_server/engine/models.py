@@ -213,21 +213,16 @@ class Models:
                     from cad.engine.delta import delta
 
                     report["delta"] = delta(facts, before)
-                # Its declared .xbf, written (or kept, the same bytes) from this very document: the model saved, which
-                # its record names (``saved``) and whose record says so (``of``), so a listing shows the two as one.
-                parts, xbf = (facts or {}).get("parts"), _declared(report)
-                self.written([(path, parts) for path in xbf[:1]], of=ident)
-                self.written([(path, parts) for path in xbf[1:]])
+                # Its declared .xbf, written (or kept, the same bytes) from this very document at this revision: the
+                # model, saved (``of``), which a listing shows as the model's one card; its record names the file too
+                # (``saved``).
+                self.written([(path, (facts or {}).get("parts")) for path in _declared(report)], of=(ident, recorded))
                 self.daemon.builders[ident] = worker
                 server = self.register_page(ident)
                 report["url"] = self.url(server, ident)
                 if (report.get("cache") or {}).get("unreadable"):
                     self.cache.remove(ident)  # this build found its cache file broken: the idle save writes it again
                 self.cache.touch(ident)
-        if isinstance(done, dict):
-            # An export's files (``worker._export``): each .xbf it wrote says its document's parts' occurrences.
-            self.written([(row.get("path"), row.get("parts")) for row in done.get("files") or []
-                          if isinstance(row, dict) and row.get("kind") == "xbf"])
         held = self.registry() if declared else None
         if held is not None:
             from cad.engine.identity import claims, released
@@ -291,14 +286,15 @@ class Models:
             now = kept
         return now, kept
 
-    def written(self, files: list[tuple[Any, Any]], of: str | None = None) -> None:
+    def written(self, files: list[tuple[Any, Any]], of: tuple[str, str] | None = None) -> None:
         """Each ``.xbf`` file the engine wrote from a document (``files``: its path and the part occurrences of
         the document it was written from, which the engine had in hand), counted on the file's record
         (``Registry.counted``) with the file's version as it now is: its row says Part or Assembly without the file
-        ever being read. With ``of``, the id of the model a build wrote it for (its declared ``.xbf``, never an
-        export): the file is that model saved, as of that version (the record's ``of``). A file with no record is
-        given one, which no list shows until a page opens it (``file_record``: no ``opened``). Nothing with no
-        registry; a file gone is skipped, and so is one with neither a count nor ``of``."""
+        ever being read. With ``of``, the id and the revision of the model document it was written from (a build's
+        declared ``.xbf``, an export of a model's id): the file is that model, as of that version and that
+        revision (the record's ``of``). A file with no record is given one, which no list shows until a page opens
+        it (``file_record``: no ``opened``). Nothing with no registry; a file gone is skipped, and so is one with
+        neither a count nor ``of``."""
         held = self.registry() if files else None
         if held is None:
             return
@@ -314,7 +310,35 @@ class Models:
                 continue
             version = file_version(found)
             if version is not None:
-                held.counted(file_id(found), parts if type(parts) is int else None, version, make=found, of=of)
+                held.counted(file_id(found), parts if type(parts) is int else None, version, make=found,
+                             of=of[0] if of else None, revision=of[1] if of else None)
+
+    def revision_of(self, ident: str) -> str | None:
+        """The revision of model (or shape) document ``ident`` as its record says it now: the engine's row of it,
+        else the registry's record (after a restart); None for an id that is no model's or shape's."""
+        with self.lock:
+            row = self.records.get(ident)
+        if row is not None and isinstance(row.get("revision"), str):
+            return row["revision"]
+        held = self.registry()
+        record = held.get(ident) if held is not None else None
+        if record is None or record.get("kind") not in ("model", "shape") or not isinstance(record.get("revision"), str):
+            return None
+        return record["revision"]
+
+    def exported(self, answer: dict[str, Any], model: tuple[str, str | None] | None = None) -> None:
+        """An export's answer (``worker._export``'s files): each .xbf it wrote is counted (its document's parts'
+        occurrences), and, written from model document ``model`` (its id and its revision as the export began),
+        is that model as of that revision (``of``) -- unless the model was built into another revision meanwhile,
+        when the file is a plain file: no document is said of it that the file may not hold."""
+        done = answer.get("done")
+        if not isinstance(done, dict):
+            return
+        files = [(row.get("path"), row.get("parts")) for row in done.get("files") or []
+                 if isinstance(row, dict) and row.get("kind") == "xbf"]
+        ident, revision = model if model is not None else (None, None)
+        same = ident is not None and revision is not None and self.revision_of(ident) == revision
+        self.written(files, of=(ident, revision) if same else None)
 
     # --- the registry ------------------------------------------------------------------------
 

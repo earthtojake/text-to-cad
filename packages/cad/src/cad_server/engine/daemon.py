@@ -1370,6 +1370,10 @@ class Daemon:
                     if held and answer.get("kind") == UNREADABLE:
                         # The bytes a held document was read from (its cache file's) do not read.
                         answer = refused(self.models.unreadable(str(held), str(answer.get("failed"))))
+                    if order.get("op") == "export" and not request.get("expected"):
+                        # Each .xbf it wrote: counted, and, of a model's document, that model. The viewer's export
+                        # (``expected``) writes a download, a file of its own wherever the browser saves it: never recorded.
+                        self.models.exported(answer, request.get("_from"))
                     returned = answer.pop("payload", b"")
                     if returned:
                         import base64
@@ -1503,6 +1507,9 @@ class Daemon:
                         from cad.engine.export import ExportRefused
 
                         raise ExportRefused("export to a different path; the engine's cached document is preserved")
+                # The revision of the model document it reads, as the export begins: each .xbf it writes is that
+                # model as of it (``Models.exported``).
+                revision = self.models.revision_of(ident)
                 source, payload = self.document(ident)
             except ValueError as error:
                 send(refused(error))
@@ -1520,7 +1527,7 @@ class Daemon:
                         or served.structure.get("exportRevision") != expected.get("digest")):
                     send({"failed": "The source changed. Open Export again to use the displayed revision."})
                     return
-            request = {**request, "source": source}
+            request = {**request, "source": source, "_from": (ident, revision) if revision is not None else None}
         if op == "export" and "script" in (request.get("source") or {}) and not request["source"].get("held") \
                 and not request.get("expected"):
             # A model is exported by its call's document (``api._called``): never built by an export.
