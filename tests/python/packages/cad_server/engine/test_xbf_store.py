@@ -9,7 +9,6 @@ class engine of the file's own (``store_fixtures.StoreCase``), with an engine, a
 from __future__ import annotations
 
 import json
-import os
 import sys
 import shutil
 import textwrap
@@ -160,13 +159,13 @@ class XbfStoreTest(store_fixtures.StoreCase):
             served = self.ask({"op": "http"})
             return get(f"{served['url']}/api/v1/documents/{ident}", served["token"])
 
-        # A model outside every project: the library knows its .xbf, for a verb before anything is served as for a
-        # page. A project's file nobody opened: its folder knows it.
+        # A project's file nobody opened: its folder knows it, for a verb before anything is served as for a page.
+        # A model outside every project: the library knows its .xbf.
+        dropped_id = file_id(self.folder / "work" / "parts" / "dropped.xbf")
+        self.assertEqual(self.cli("inspect", dropped_id).returncode, 0)
         self.assertEqual(self.cli("inspect", built).returncode, 0)
         status, found = envelope(built)
         self.assertEqual((status, found["source"]["path"], found["entry"]["project"]), (200, str(self.xbf("cube")), None))
-        dropped_id = file_id(self.folder / "work" / "parts" / "dropped.xbf")
-        self.assertEqual(self.cli("inspect", dropped_id).returncode, 0)
         status, found = envelope(dropped_id)
         self.assertEqual((status, found["source"]["path"], found["entry"]["project"]["folder"]), (200, str(dropped), "parts"))
         self.assertEqual(self.entry(dropped_id), None, "found, with no entry made for it")

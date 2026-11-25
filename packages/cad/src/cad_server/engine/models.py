@@ -289,14 +289,17 @@ class Models:
     def locate(self, ident: str) -> Path | None:
         """The file of document ``ident`` where it is now, with no record of it: the ``.xbf`` its row names
         (a model a live worker holds), else the one the server finds by its id (``serve.Server.locate``: a file it
-        was named since it started, the library's, a project folder's) -- the library's alone while nothing is
-        served yet. None for an id that names no file that is there."""
+        was named since it started, the library's, a project folder's). While nothing is served, the library's;
+        and where the library has none and holds a project, the server is started to look in its folder. None
+        for an id that names no file that is there."""
         with self.lock:
             row = self.records.get(ident)
         found = row["source"].get("xbf") if row is not None else None
         if not (found and os.path.isfile(found)):
             server = self.daemon.server
             found = server.locate(ident) if server is not None else self.library.path_of(ident)
+            if server is None and not (found and os.path.isfile(found)) and self.library.read()["projects"]:
+                found = self.daemon.serve({}).locate(ident)
         return Path(found) if found and os.path.isfile(found) else None
 
     @staticmethod

@@ -89,7 +89,8 @@ hand-over, a worker's retirement); the library's entry; then the project folders
 each by a bounded walk (**Wire format**: 1,000 files, 24 folders down, 1.5 seconds, kept 4 seconds). A path found
 is known from then on, so a folder is walked at most once for a file. A file in a project that nobody opened has
 no entry anywhere and still opens by `/<id>` after a restart; one past the walk's bounds does once its folder's
-page lists it. Before anything is served, a verb's id is found in the library alone.
+page lists it. The folders are the application's to walk, so a verb's id the library does not know starts the
+server's listener where none is bound yet.
 
 **Coming from an earlier release.** A release that kept a record per document
 (`documents/<id>/document.json` in the state folder) and per project (`projects/<id>.json`) is read once: the

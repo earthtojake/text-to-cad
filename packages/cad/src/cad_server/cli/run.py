@@ -87,7 +87,7 @@ PROJECT_OPTIONS = frozenset({"--no-extra", "--group", "--no-group", "--only-grou
                              "--no-editable-package"})
 # The no-ops: every environment ``cad run`` makes is its own, and never the project's ``.venv``.
 NO_OPS = frozenset({"--isolated", "--no-env-file"})
-# Each option's long spelling, for a run's options said as one word each (the rebuild command).
+# Each option's long spelling.
 LONG = {"-w": "--with", "-i": "--index-url", "-f": "--find-links", "-P": "--upgrade-package", "-C": "--config-setting",
         "-p": "--python", "-q": "--quiet", "-v": "--verbose", "-U": "--upgrade", "-n": "--no-cache"}
 

@@ -1599,8 +1599,7 @@ class Daemon:
             except Exception as error:  # noqa: BLE001
                 from cad.engine.serve import NotHeld
 
-                # A document id the engine does not hold is a refusal: its state and the command
-                # that builds it again travel with it, and the caller raises it as its type.
+                # A document id the engine does not hold is a refusal, which the caller raises as its type.
                 send(refused(error) if isinstance(error, NotHeld) else {"failed": f"cannot serve {named}: {error}"})
                 return
             app = getattr(server.http, "app", None)

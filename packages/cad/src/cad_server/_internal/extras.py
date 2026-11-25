@@ -81,7 +81,7 @@ from cad_server._internal import base
 __all__ = ["SKIPPED", "Making", "Project", "Refused", "Spec", "admits", "admits_line", "ensure", "fingerprint",
            "fingerprints", "header", "integration_spec", "integrations", "key", "last_with_kernel", "local_package",
            "locked_cad", "making", "normalized", "on", "pinned", "project", "python_line", "refusal", "split",
-           "supported", "tell", "uv_config", "uv_settings", "where"]
+           "supported", "uv_config", "uv_settings", "where"]
 # uv's settings that say how it reaches an index, never what it resolves: a run that differs from the base's
 # only by them still runs in the base, made with the engine's own.
 HOW = frozenset({"UV_NATIVE_TLS", "UV_SYSTEM_CERTS", "UV_HTTP_TIMEOUT", "UV_KEYRING_PROVIDER", "UV_INSECURE_HOST"})

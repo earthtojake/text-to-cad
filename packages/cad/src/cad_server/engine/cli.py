@@ -810,7 +810,7 @@ def status_text(answer: dict[str, Any]) -> str:
     the standby's line (its process and memory: no script), the making of
     the CAD kernel environment while the engine makes it, the builds waiting for a worker, the last
     retirements, what it serves and holds under its memory budget,
-    and each model document's state, with the command that builds again one not held."""
+    and each model document a worker holds, with its state."""
     import time
 
     workers = answer.get("workers") or []

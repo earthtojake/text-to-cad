@@ -33,7 +33,7 @@ run's (``standing``); then the worker loads the script with those values in plac
 script declares and builds that one model (``cad.engine.build.preview``). The answer is held in the server's
 memory for the page that asked (``serve.Server.keep_preview``, under an id of its own,
 ``<id>~preview-<token>``, which only that page is told) and is nothing else: not the document, its version,
-its record, its ``.xbf`` or the worker's last run, which ``set`` builds again. Per document one preview
+its ``.xbf`` or the worker's last run, which ``set`` builds again. Per document one preview
 builds at a time and one waits, the newest: a request that comes while one waits takes its place, and the one
 it replaces is answered ``superseded``, never built. A build or a ``set`` of the script comes first: a preview
 asked while one runs is refused ``busy``, and one waiting when one begins is answered ``busy``, never run
