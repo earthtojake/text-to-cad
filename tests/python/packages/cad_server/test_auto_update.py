@@ -62,7 +62,9 @@ class Case(unittest.TestCase):
                                                    "CAD_ENGINE_DIR": str(self.engine)}),
                       mock.patch.object(sys, "prefix", str(self.tool)),
                       mock.patch.object(cad_server, "__version__", "0.1.0"),
-                      mock.patch.object(updates, "checking", return_value=True)):
+                      mock.patch.object(updates, "checking", return_value=True),
+                      # The stand-in uv says no release (``update_uv``'s floor): a test that wants one says it.
+                      mock.patch.object(auto_update, "_uv_release", return_value=None)):
             patch.start()
             self.addCleanup(patch.stop)
 
@@ -412,6 +414,35 @@ class CarriedUvTest(Case):
         self.assertEqual(auto_update.carried_uv() is not None, __import__("importlib.util").util.find_spec("uv")
                          is not None, "cad's own dependency, where it is installed")
 
+    def test_a_person_s_uv_older_than_cad_asks_for_gives_way_to_the_carried_one(self) -> None:
+        """The person's uv is preferred, but never one older than cad's own floor (``uv_floor``): its commands may not
+        know what cad's update asks. One whose release cannot be told is taken as it is, and with none carried, theirs
+        all the same."""
+        carried = str(self.tool / "bin" / "uv")
+        floor = helper.release(auto_update.uv_floor())
+        self.assertIsNotNone(floor, "cad's own requirement on uv names its floor")
+        older, newer = (0, 1, 0), (floor[0] + 1, 0, 0)
+        for held, carries, chosen in ((older, carried, carried), (floor, carried, str(self.uv)),
+                                      (newer, carried, str(self.uv)), (None, carried, str(self.uv)),
+                                      (older, None, str(self.uv))):
+            with self.subTest(held=held, carries=carries), \
+                    mock.patch.object(auto_update, "carried_uv", return_value=carries), \
+                    mock.patch.object(auto_update, "_uv_release", return_value=held):
+                self.assertEqual(auto_update.update_uv(), [chosen])
+
+
+class UvReleaseTest(unittest.TestCase):
+    def test_a_uv_s_release_is_asked_once_for_each_file_as_it_stands_and_never_raises(self) -> None:
+        auto_update._uv_release.cache_clear()
+        self.addCleanup(auto_update._uv_release.cache_clear)
+        with mock.patch.object(auto_update, "_said", return_value="uv 0.9.2 (a1b2c3d 2025-10-01)") as said:
+            self.assertEqual([auto_update._uv_release("/u/uv", (1, 2)) for _ in range(2)], [(0, 9, 2)] * 2)
+            self.assertEqual(said.call_count, 1)
+            auto_update._uv_release("/u/uv", (3, 2))
+            self.assertEqual(said.call_count, 2, "the file replaced: asked again")
+        with mock.patch.object(auto_update, "_said", side_effect=ValueError("not enough values to unpack")):
+            self.assertIsNone(auto_update._uv_release("/u/uv", (4, 2)))
+
 
 class FindUvTest(Case):
     def test_path_first_then_the_installers_folders_and_never_this_environment_s(self) -> None:
@@ -719,7 +750,8 @@ class DueTest(Case):
             with self.subTest(version=version), mock.patch.object(cad_server, "__version__", version), \
                     mock.patch.object(auto_update.subprocess, "Popen") as popen, \
                     mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
-                (self.state / auto_update.RECORD).unlink(missing_ok=True)
+                for name in (auto_update.RECORD, auto_update.TRIED):
+                    (self.state / name).unlink(missing_ok=True)
                 self.assertTrue(auto_update.trigger(None, wanted="9.0.0"))
                 told = json.loads(popen.call_args.args[0][-1])
                 self.assertEqual((told["upgrade"][-1], told["major"], told["target"]), (upgrade, False, None))
@@ -729,7 +761,7 @@ class DueTest(Case):
             self.assertFalse(auto_update.trigger("0.2.0"), "no release to bound it by: none begins")
         popen.assert_not_called()
 
-    def test_the_feed_is_read_only_where_asked_and_a_failed_release_is_tried_once_more_never_in_a_loop(self) -> None:
+    def test_the_feed_is_read_only_where_asked_and_a_failed_release_waits_its_hour(self) -> None:
         with self.feed("0.2.0") as feed:
             auto_update.due()
             auto_update.due(fetch=True)
@@ -740,38 +772,15 @@ class DueTest(Case):
             self.assertTrue(auto_update.trigger("0.2.0"))
             now = auto_update.last()["at"]
             self.assertEqual((auto_update.last()["tries"], auto_update.due(now=now)), (1, None), "underway")
-            self.assertEqual(auto_update.due(now=now + auto_update.RETRY_SECONDS), self.Due("0.2.0", "0.2.0"),
-                             "a helper that died")
+            self.assertIsNone(auto_update.due(now=now + auto_update.LOST_SECONDS),
+                              "its helper silent: lost, and the release waits the hour after its first try")
+            self.assertEqual(auto_update.due(now=now + auto_update.HOUR), self.Due("0.2.0", "0.2.0"))
             auto_update._keep(record, {**auto_update.last(), "outcome": "failed"})
             self.assertIsNone(auto_update.due(now=now), "not by the server the failed update started")
-            self.assertEqual(auto_update.due(now=now + auto_update.RETRY_SECONDS), self.Due("0.2.0", "0.2.0"),
-                             "once more, later")
-            self.assertFalse(auto_update.trigger("0.2.0"), "a trigger asks again in the step that begins it")
-            auto_update._keep(record, {**auto_update.last(), "at": now - auto_update.RETRY_SECONDS})  # an hour on
-            self.assertTrue(auto_update.trigger("0.2.0"))
-            auto_update._keep(record, {**auto_update.last(), "outcome": "failed"})
-            self.assertEqual(auto_update.last()["tries"], 2)
-            self.assertIsNone(auto_update.due(now=now + 10 * auto_update.RETRY_SECONDS), "and never again")
+            self.assertEqual(auto_update.due(now=now + auto_update.HOUR), self.Due("0.2.0", "0.2.0"), "an hour on")
+            self.assertFalse(auto_update.trigger("0.2.0"), "a trigger asks the schedule again in the step that begins")
         with self.feed("0.2.1"):
-            self.assertEqual(auto_update.due(now=now), self.Due("0.2.1", "0.2.1"), "a newer release is no retry")
-
-    def test_with_no_release_of_this_major_named_the_tries_are_counted_by_latest_never_in_a_loop(self) -> None:
-        """A feed without ``lines`` and ``latest`` of a higher major: the bounded upgrade, whose record names the release
-        it got (``current``: nothing newer), counted by ``latest`` all the same, at most ``TRIES`` times."""
-        record = self.state / auto_update.RECORD
-        with self.feed("1.0.0"), mock.patch.object(auto_update.subprocess, "Popen"), \
-                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
-            for tries in (1, 2):
-                found = auto_update.due(now=time.time() + (tries - 1) * auto_update.RETRY_SECONDS)
-                self.assertEqual(found, self.Due(None, "1.0.0"))
-                self.assertTrue(auto_update.trigger(found.target, wanted=found.wanted))
-                begun = auto_update.last()
-                self.assertEqual((begun["release"], begun["wanted"], begun["tries"]), ("latest", "1.0.0", tries))
-                auto_update._keep(record, {**begun, "release": "0.1.0", "outcome": "current",
-                                           "at": begun["at"] - (2 - tries) * auto_update.RETRY_SECONDS})
-            self.assertIsNone(auto_update.due(now=time.time() + 10 * auto_update.RETRY_SECONDS), "never a third")
-        with self.feed("1.0.1"):
-            self.assertEqual(auto_update.due(), self.Due(None, "1.0.1"), "a newer latest: tried afresh")
+            self.assertEqual(auto_update.due(now=now), self.Due("0.2.1", "0.2.1"), "a newer release starts afresh")
 
     def test_an_update_underway_under_any_name_holds_every_automatic_trigger_while_it_is_believed(self) -> None:
         record = self.state / auto_update.RECORD
@@ -788,44 +797,311 @@ class DueTest(Case):
 
 
 class RecordTest(Case):
-    def test_a_tries_that_is_no_integer_counts_as_none_and_never_stops_an_update(self) -> None:
+    def test_a_tries_that_is_no_integer_counts_the_record_as_one_try_and_never_stops_an_update(self) -> None:
         """A record whose ``tries`` is null, a string, a float or a bool: never a check that raises (which would stop
-        every update for good, only a claim replacing the record); counted as 0, and the next claim writes 1."""
+        every update for good, only a claim replacing the record); the attempt it keeps is one try, and the next claim
+        writes 2."""
         for tries in (None, "2", 1.0, True):
             with self.subTest(tries=tries):
+                (self.state / auto_update.TRIED).unlink(missing_ok=True)
                 auto_update._keep(self.state / auto_update.RECORD, {
                     "release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 5.0, "tries": tries,
                     "outcome": "failed", "ended": 6.0, "reported": True})
-                self.assertEqual(auto_update._tries("0.2.0"), 0)
+                self.assertEqual(auto_update.tries(10_000.0)["tried"]["0.2.0"]["tries"], 1)
                 with self.feed("0.2.0", {"0": "0.2.0"}):
                     self.assertEqual(auto_update.due(now=10_000.0), auto_update.Due("0.2.0", "0.2.0"))
                 said, kept = auto_update._claim(release="0.2.0", wanted="0.2.0", version="0.1.0", installer="uv",
                                                 automatic=True, major=False)
-                self.assertEqual((said, kept["tries"], auto_update.last()["tries"]), (auto_update.BEGUN, 1, 1))
+                self.assertEqual((said, kept["tries"], auto_update.last()["tries"]), (auto_update.BEGUN, 2, 2))
+
+    def test_tries_that_no_release_wrote_are_read_as_none_and_never_raise(self) -> None:
+        self.state.mkdir(parents=True, exist_ok=True)
+        for kept in ("garbage", "[]", json.dumps({"tried": [], "recent": {}, "seen": True}),
+                     json.dumps({"tried": {"0.2.0": {"tries": "x", "at": "y", "first": None, "cause": 5}, "1": 7},
+                                 "recent": ["z", None, 5.0, True]})):
+            with self.subTest(kept=kept):
+                (self.state / auto_update.TRIED).write_text(kept, encoding="utf-8")
+                found = auto_update.tries(10.0)
+                self.assertEqual(set(found), {"tried", "recent", "seen"})
+                self.assertEqual(found["recent"], [5.0] if "z" in kept else [])
+                self.assertIsNone(auto_update.next_try("0.2.0", found, 10.0), "nothing it can read holds one back")
+                with self.feed("0.2.0", {"0": "0.2.0"}):
+                    self.assertEqual(auto_update.due(now=10.0), auto_update.Due("0.2.0", "0.2.0"))
+
+
+class ScheduleTest(Case):
+    """The automatic update's schedule, on a clock of the test's own (no waiting): each release tried again after
+    1, 2, 4, 8, 16, then 24 hours, never given up on; at most ``DAILY`` attempts in a day, of every release; kept by
+    release, so two servers of two releases never set each other's count back; a typed update spending no automatic
+    try. Each attempt's helper stands in as one that ended at once, failed."""
+
+    START = 1_000_000.0
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.clock = [self.START]
+        self.counted: list[dict] = []
+        for patch in (mock.patch.object(auto_update.time, "time", lambda: self.clock[0]),
+                      mock.patch.object(auto_update.subprocess, "Popen"),
+                      mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True),
+                      mock.patch("cad_server.analytics.update", side_effect=lambda **kw: self.counted.append(kw))):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def ended(self) -> None:
+        """The attempt just begun, ended by its helper at once: failed, the network down."""
+        auto_update._keep(self.state / auto_update.RECORD, {**auto_update.last(), "outcome": "failed",
+                                                            "cause": "network", "ended": self.clock[0]})
+
+    def tendings(self, hours: float, servers: tuple[str, ...] = ("0.1.0",), every: float = 600.0) -> list[tuple]:
+        """``hours`` of each server tending itself in turn every ``every`` seconds, nothing in flight: ``(the server's
+        release, the release its attempt was for, the hour it began since START, the try it was)`` for each begun."""
+        begun = []
+        until = self.clock[0] + hours * auto_update.HOUR
+        while self.clock[0] < until:
+            for version in servers:
+                with mock.patch.object(cad_server, "__version__", version):
+                    if auto_update.tend(working=False, ran=False, quiet_for=0.0):
+                        found = auto_update.last()
+                        begun.append((version, found["wanted"], (found["at"] - self.START) / auto_update.HOUR,
+                                      found["tries"]))
+                        self.ended()
+            self.clock[0] += every
+        return begun
+
+    def test_a_release_that_keeps_failing_waits_twice_as_long_each_time_up_to_a_day_and_is_never_given_up_on(self):
+        with self.feed("0.2.0", {"0": "0.2.0"}):
+            begun = self.tendings(100)
+        # 1, 2, 4 and 8 hours after the tries before; the fifth waits for the day's first to be a day old (4 a day),
+        # then 16 hours, then a day each.
+        self.assertEqual([(hour, tries) for _v, _w, hour, tries in begun],
+                         [(0, 1), (1, 2), (3, 3), (7, 4), (24, 5), (40, 6), (64, 7), (88, 8)])
+        entry = auto_update.tries()["tried"]["0.2.0"]
+        self.assertEqual((entry["tries"], entry["first"], entry["cause"]), (8, self.START, "network"))
+        self.assertEqual(len(self.counted), 7, "each attempt before counted once, as the next began")
+        with self.feed("0.2.1", {"0": "0.2.1"}):
+            again = self.tendings(1)
+        self.assertEqual([(wanted, tries) for _v, wanted, _h, tries in again], [("0.2.1", 1)],
+                         "a newer release starts at none of its own")
+        self.assertEqual(auto_update.tries()["tried"]["0.2.0"]["tries"], 8, "and leaves the one before as it was")
+
+    def test_the_wait_before_each_try_and_the_day_s_limit(self) -> None:
+        book = {"tried": {"0.2.0": {"tries": 3, "at": 100.0}}, "recent": [], "seen": None}
+        self.assertEqual(auto_update.next_try("0.2.0", book, 100.0 + 60), 100.0 + 4 * auto_update.HOUR)
+        self.assertIsNone(auto_update.next_try("0.2.0", book, 100.0 + 4 * auto_update.HOUR))
+        self.assertIsNone(auto_update.next_try("0.2.0", book, 50.0), "a clock set back counts as long ago")
+        self.assertIsNone(auto_update.next_try("0.3.0", book, 100.0), "another release: none of its own yet")
+        book["tried"]["0.2.0"]["tries"] = 10 ** 9  # no try count makes the wait more than a day, nor slow to work out
+        self.assertEqual(auto_update.next_try("0.2.0", book, 100.0), 100.0 + auto_update.DAY)
+        book = {"tried": {}, "recent": [10.0, 20.0, 30.0, 40.0], "seen": None}
+        self.assertEqual(auto_update.next_try("0.3.0", book, 50.0), 10.0 + auto_update.DAY,
+                         "four begun in the day: the next once the first of them is a day old")
+
+    def test_two_servers_of_two_releases_taking_turns_never_set_each_other_s_count_back(self) -> None:
+        """Two servers on one state folder, of two releases of two majors (one left running in an engine folder no
+        newer client reaches), each wanting its own major's newest, which fails every time: kept in the last attempt
+        alone, each attempt of one release set the other's count back, and each server began one at every tending,
+        taking turns, with no end. Kept by release: each waits its own schedule, and the day's limit is theirs
+        together."""
+        with self.feed("1.2.0", {"0": "0.3.0", "1": "1.2.0"}):
+            begun = self.tendings(96, servers=("0.1.0", "1.0.0"))
+        for version, wanted in (("0.1.0", "0.3.0"), ("1.0.0", "1.2.0")):
+            mine = [(hour, tries) for v, w, hour, tries in begun if v == version]
+            self.assertTrue(all(w == wanted for v, w, _h, _t in begun if v == version))
+            self.assertEqual([tries for _hour, tries in mine], list(range(1, len(mine) + 1)), "never set back")
+            for (before, tries), (after, _next) in zip(mine, mine[1:]):
+                self.assertGreaterEqual(after - before, min(2 ** (tries - 1), 24), (version, mine))
+            self.assertGreaterEqual(len(mine), 6, "never given up on, nor starved by the other")
+            self.assertEqual(auto_update.tries()["tried"][wanted]["tries"], len(mine))
+        hours = [hour for _v, _w, hour, _t in begun]
+        for hour in hours:
+            self.assertLessEqual(len([other for other in hours if hour - 24 < other <= hour]), auto_update.DAILY,
+                                 "at most four a day between them")
+
+    def test_a_typed_update_spends_no_automatic_try_and_counts_among_the_day_s_attempts(self) -> None:
+        with self.feed("0.2.0", {"0": "0.2.0"}):
+            self.assertEqual(self.tendings(0.1), [("0.1.0", "0.2.0", 0.0, 1)])
+            for typed in range(4):
+                self.clock[0] += auto_update.HOUR
+                found = auto_update.begin("0.2.0")
+                self.assertEqual((found["asked"], found["tries"]), (True, 2), "the try it would be, none spent")
+                self.ended()
+            self.assertEqual(auto_update.tries()["tried"]["0.2.0"]["tries"], 1)
+            self.assertEqual(len(auto_update.tries()["recent"]), 5)
+            self.assertEqual(self.tendings(5), [], "five begun in the day: no automatic one")
+            self.assertIsNotNone(auto_update.begin("0.2.0"), "a typed one always begins")
+            self.ended()
+            begun = self.tendings(24)
+        second_typed = 600 + 2 * auto_update.HOUR  # the first tending moved the clock on ten minutes
+        self.assertEqual(begun[0][2:], ((second_typed + auto_update.DAY) / auto_update.HOUR, 2),
+                         "its second try once fewer than four began in the day")
+
+
+class BeatTest(Case):
+    """An attempt is underway while its helper beats (``beat``, every ``BEAT_SECONDS``), however long it runs, and
+    lost once it has not for ``LOST_SECONDS``; a record a release before the beat kept is underway for its hour."""
+
+    def test_underway_while_it_beats_and_lost_once_it_has_not_for_twenty_minutes(self) -> None:
+        at = 1_000_000.0
+        base = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": at, "tries": 1, "outcome": "underway"}
+        for record, now, believed in (
+                ({**base, "beat": at + 2 * 3600}, at + 2 * 3600 + 60, True),  # two hours in, still beating
+                ({**base, "beat": at}, at + auto_update.LOST_SECONDS - 1, True),
+                ({**base, "beat": at}, at + auto_update.LOST_SECONDS, False),
+                ({**base, "beat": at + 10}, at, False),  # a clock set back counts as long ago
+                ({**base, "beat": at + auto_update.LONGEST_SECONDS}, at + auto_update.LONGEST_SECONDS + 1, False),
+                ({**base, "beat": "soon"}, at + 60, True),  # no beat it can read: a record of a release before it
+                (base, at + auto_update.RETRY_SECONDS - 1, True),
+                (base, at + auto_update.RETRY_SECONDS, False)):
+            with self.subTest(record=record, now=now - at):
+                auto_update._keep(self.state / auto_update.RECORD, record)
+                self.assertEqual(auto_update.underway(now) is not None, believed)
+                self.assertEqual(auto_update.cause(record, now), None if believed else "lost")
+        auto_update._keep(self.state / auto_update.RECORD, {**base, "beat": time.time() - auto_update.LOST_SECONDS})
+        self.assertEqual(auto_update.event(auto_update.last())["outcome"], "lost", "counted lost once silent")
+
+    def test_the_helper_beats_while_it_runs_and_never_over_another_attempt_s_record(self) -> None:
+        record = self.tmp / "auto-update.json"
+        kept = {"release": "0.2.0", "at": 5.0, "beat": 5.0, "outcome": "underway"}
+        record.write_text(json.dumps(kept), encoding="utf-8")
+        told = {"record": str(record), "at": 5.0}
+        beat = helper.Beat(told, every=0.01)
+        until = time.monotonic() + 30
+        while json.loads(record.read_text(encoding="utf-8")).get("beat") == 5.0 and time.monotonic() < until:
+            time.sleep(0.01)
+        beat.stop()
+        self.assertFalse(beat.thread.is_alive(), "no beat after stop: the outcome is the record's last word")
+        found = json.loads(record.read_text(encoding="utf-8"))
+        self.assertGreater(found["beat"], 5.0)
+        self.assertEqual({**found, "beat": 5.0}, kept, "the beat alone changed")
+        beat = helper.Beat(told, every=3600)  # beats by hand alone
+        self.addCleanup(beat.stop)
+        for other in ({**kept, "at": 6.0}, {**kept, "outcome": "failed"}):  # another attempt's, or this one ended
+            record.write_text(json.dumps(other), encoding="utf-8")
+            beat.mark()
+            self.assertEqual(json.loads(record.read_text(encoding="utf-8")), other, "left as it was")
+        record.write_text(json.dumps(kept), encoding="utf-8")
+        beat.mark()
+        self.assertGreater(json.loads(record.read_text(encoding="utf-8"))["beat"], 5.0)
+        record.write_text(json.dumps({**kept, "at": 6.0}), encoding="utf-8")
+        with mock.patch.object(helper, "update", return_value={"outcome": "failed", "at": 5.0}):
+            helper.main({**told, "log": None})
+        self.assertEqual(json.loads(record.read_text(encoding="utf-8"))["at"], 6.0,
+                         "an attempt begun since, the first taken for lost: its record is the newer one's")
+        record.write_text(json.dumps(kept), encoding="utf-8")
+        with mock.patch.object(helper, "update", return_value={"outcome": "failed", "at": 5.0}):
+            helper.main({**told, "log": None})
+        self.assertEqual(json.loads(record.read_text(encoding="utf-8")), {"outcome": "failed", "at": 5.0})
+
+    def test_the_trigger_keeps_the_first_beat_and_a_lost_attempt_is_counted_once_by_the_next(self) -> None:
+        counted: list[dict] = []
+        with self.feed("0.2.0"), mock.patch.object(auto_update.subprocess, "Popen"), \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True), \
+                mock.patch("cad_server.analytics.update", side_effect=lambda **kw: counted.append(kw)):
+            self.assertTrue(auto_update.trigger("0.2.0"))
+            first = auto_update.last()
+            self.assertEqual(first["beat"], first["at"])
+            auto_update._keep(self.state / auto_update.RECORD, {**first, "beat": first["at"] - auto_update.LOST_SECONDS,
+                                                                "at": first["at"] - auto_update.HOUR})
+            self.assertTrue(auto_update.begin("0.2.0") is not None)
+        self.assertEqual([(kw["outcome"], kw["cause"]) for kw in counted], [("lost", "lost")])
+
+
+class StaleServerTest(Case):
+    """A server older than its own environment, which holds the release wanted already (another update, or one by
+    hand, replaced its files after it started): no attempt, no try spent."""
+
+    def holds(self, release: str) -> None:
+        site = self.tool / "lib" / "python3.14" / "site-packages"
+        shutil.rmtree(site, ignore_errors=True)
+        (site / f"cad-{release}.dist-info").mkdir(parents=True)
+
+    def test_no_update_and_no_try_where_the_environment_holds_the_release_wanted_or_newer(self) -> None:
+        for held, latest, lines, due in (("0.2.0", "0.2.0", {"0": "0.2.0"}, None),
+                                         ("0.3.0", "0.2.0", {"0": "0.2.0"}, None),
+                                         ("1.0.2", "1.0.2", {"0": "0.2.0", "1": "1.0.2"}, None),  # --major by hand
+                                         ("0.1.5", "0.2.0", {"0": "0.2.0"}, ("0.2.0", "0.2.0")),  # newer, not wanted
+                                         ("0.1.0", "0.2.0", {"0": "0.2.0"}, ("0.2.0", "0.2.0"))):  # its own
+            with self.subTest(held=held, latest=latest), self.feed(latest, lines):
+                self.holds(held)
+                self.assertEqual(auto_update.due(), None if due is None else auto_update.Due(*due))
+        self.assertFalse((self.state / auto_update.RECORD).exists(), "nothing begun")
+        self.assertFalse((self.state / auto_update.TRIED).exists(), "no try spent")
+
+
+class OlderRecordTest(Case):
+    """Law 14, tier 3, both ways: an older release reads this one's record as it reads its own (``release``, ``at``,
+    ``wanted``, ``tries``, ``outcome``: its rule stops trying a release once ``tries`` reaches its limit, and an attempt
+    is underway for its hour); this release reads an older one's, which keeps no tries beside it and no beat."""
+
+    def test_an_older_release_s_record_is_counted_once_and_read_by_its_own_rule(self) -> None:
+        now = 1_000_000.0
+        older = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": now, "tries": 2,
+                 "outcome": "failed", "installer": "uv", "asked": False, "cause": "network"}
+        auto_update._keep(self.state / auto_update.RECORD, older)
+        book = auto_update.tries(now + 60)
+        self.assertEqual((book["tried"]["0.2.0"], book["recent"]),
+                         ({"tries": 2, "first": now, "at": now, "cause": "network"}, [now]))
+        self.assertEqual(auto_update.next_try("0.2.0", book, now + 60), now + 2 * auto_update.HOUR,
+                         "its two tries count: the third waits two hours")
+        auto_update._keep(self.state / auto_update.RECORD, {**older, "outcome": "underway", "at": now})
+        self.assertIsNotNone(auto_update.underway(now + auto_update.RETRY_SECONDS - 1), "no beat: its hour")
+        self.assertIsNone(auto_update.underway(now + auto_update.RETRY_SECONDS))
+        auto_update._keep(self.state / auto_update.RECORD, {**older, "asked": True, "tries": 3})
+        self.assertEqual(auto_update.tries(now + 60)["tried"], {}, "a typed one of its own: no automatic try")
+
+    def test_an_older_release_s_attempt_between_this_one_s_is_counted_and_never_sets_the_count_back(self) -> None:
+        """This release keeps its tries apart, which an older release never writes: its attempt in between (its
+        record whole, with its own count: the record's ``tries``, one more than this one kept) is counted from the
+        record, once, and every other release's count stays."""
+        with self.feed("0.2.0"), mock.patch.object(auto_update.subprocess, "Popen"), \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True), \
+                mock.patch("cad_server.analytics.update"):
+            self.assertTrue(auto_update.trigger("0.2.0"))
+            mine = auto_update.last()
+            self.assertLessEqual({"release", "wanted", "from", "at", "tries", "outcome"}, set(mine))
+            self.assertEqual((type(mine["at"]), mine["tries"], mine["outcome"]), (float, 1, "underway"))
+            book = json.loads((self.state / auto_update.TRIED).read_text(encoding="utf-8"))
+            book["tried"]["1.0.0"] = {"tries": 5, "first": 1.0, "at": 2.0}
+            auto_update._keep(self.state / auto_update.TRIED, book)
+            # The older release's attempt: its record whole, in place of this one's.
+            theirs = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": mine["at"] + 7200.0,
+                      "tries": mine["tries"] + 1, "outcome": "failed"}
+            auto_update._keep(self.state / auto_update.RECORD, theirs)
+            for _ in range(2):
+                found = auto_update.tries(theirs["at"] + 60)
+                self.assertEqual((found["tried"]["0.2.0"]["tries"], found["tried"]["0.2.0"]["first"],
+                                  found["tried"]["1.0.0"]["tries"], len(found["recent"])),
+                                 (2, mine["at"], 5, 2), "counted once, whoever reads it")
 
 
 class CauseOfARecordTest(Case):
     def test_a_record_s_cause_is_its_own_and_an_older_record_s_is_read_as_it_was_kept(self) -> None:
         """``cause`` is read where the record keeps one of the words; a record a release before it kept (no
         ``cause``) reads as it did -- its outcome and detail, and ``kept`` where the detail says the release that ran
-        stayed --; an attempt still underway past its hour is ``lost``. Older releases read ``outcome`` as ever."""
+        stayed --; an attempt still underway past its hour is ``lost``. Older releases read ``outcome`` as ever. Its
+        event says the cause (``already`` where the environment held the release already, ``none`` where the record
+        names none), and counts an attempt underway past its hour ``lost``."""
         base = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 1000.0, "tries": 1, "ended": 1010.0}
-        for record, cause in (({**base, "outcome": "failed", "detail": "uv said no", "cause": "network"}, "network"),
-                              ({**base, "outcome": "failed", "detail": "uv said no"}, None),
-                              ({**base, "outcome": "failed", "cause": "a word of a later release"}, None),
-                              ({**base, "outcome": "current", "detail": "it installed 0.1.0, not 0.2.0"}, "kept"),
-                              ({**base, "outcome": "current", "detail": "cad 0.2.0 is installed"}, None),
-                              ({**base, "outcome": "installed"}, None),
-                              ({**base, "outcome": "underway"}, None),
-                              ({**base, "outcome": "underway", "at": 1000.0 - auto_update.RETRY_SECONDS}, "lost"),
-                              ({**base, "outcome": "underway", "cause": "helper_crash"}, "helper_crash")):
+        for record, cause, sent in (
+                ({**base, "outcome": "failed", "detail": "uv said no", "cause": "network"}, "network", ("failed", "network")),
+                ({**base, "outcome": "failed", "detail": "uv said no"}, None, ("failed", "none")),
+                ({**base, "outcome": "failed", "cause": "a word of a later release"}, None, ("failed", "none")),
+                ({**base, "outcome": "current", "detail": "it installed 0.1.0, not 0.2.0"}, "kept", ("current", "kept")),
+                ({**base, "outcome": "current", "detail": "cad 0.2.0 is installed"}, None, ("current", "already")),
+                ({**base, "outcome": "current", "detail": "uv said"}, None, ("current", "none")),
+                ({**base, "outcome": "installed"}, None, ("installed", None)),
+                ({**base, "outcome": "underway"}, None, ("lost", "lost")),  # its hour long gone by the clock
+                ({**base, "outcome": "underway", "at": 1000.0 - auto_update.RETRY_SECONDS}, "lost", ("lost", "lost")),
+                ({**base, "outcome": "underway", "cause": "helper_crash"}, "helper_crash", ("lost", "helper_crash")),
+                ({**base, "outcome": "underway", "at": time.time()}, None, None)):  # underway: nothing to count yet
             with self.subTest(record=record):
                 auto_update._keep(self.state / auto_update.RECORD, record)
                 found = auto_update.last()
                 self.assertEqual(found, record, "read whole, a field it does not know included")
-                self.assertEqual(auto_update.cause(found, now=1020.0), cause)
-                self.assertEqual(auto_update.event(found) is None, record["outcome"] == "underway",
-                                 "counted as before: the cause is not sent")
+                self.assertEqual(auto_update.cause(found, now=1020.0 if record["at"] < 2000 else record["at"]), cause)
+                counted = auto_update.event(found)
+                self.assertEqual(None if counted is None else (counted["outcome"], counted["cause"]), sent)
 
 
 class SecondProcessTest(Case):
@@ -843,6 +1119,7 @@ from cad_server._internal import auto_update
 tool, go, out, automatic = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4] == "auto"
 with mock.patch.object(sys, "prefix", str(tool)), mock.patch.object(cad_server, "__version__", "0.1.0"), \\
         mock.patch.object(updates, "checking", return_value=True), \\
+        mock.patch.object(auto_update, "_uv_release", return_value=None), \\
         mock.patch.object(sys, "_base_executable", str(tool.parent / "python3"), create=True), \\
         mock.patch.object(auto_update.subprocess, "Popen") as popen:
     while not go.exists():
@@ -915,12 +1192,21 @@ class HelperCommandTest(Case):
                     "upgrade": ["/u/uv", "tool", "install", "--upgrade", "cad>=0.1.0,<1"],
                     "put_back": ["/u/uv", "tool", "install", "--managed-python", "--python", "3.14", "cad==0.1.0"],
                     "launchers": ["/u/uv", "tool", "dir", "--bin"], "installer": "uv", "wanted": "0.2.0",
-                    "asked": False, "major": False, "start": True})
+                    "asked": False, "major": False, "start": True,
+                    "pin": ["/u/uv", "tool", "install", "--upgrade", "cad==0.2.0"],
+                    "bounded": ["/u/uv", "tool", "install", "--upgrade", "cad>=0.2.0,<1"], "refresh": ["--refresh"],
+                    "no_config": ["--no-config"]})
         told = json.loads(auto_update.helper_command("1.0.0", now=5.0, version="0.1.0", uv="/u/uv", base="/py",
                                                      asked=True, major=True)[-1])
         self.assertEqual((told["upgrade"], told["major"], told["put_back"][-1]),
                          (["/u/uv", "tool", "install", "--upgrade", "cad>=0.1.0"], True, "cad==0.1.0"),
                          "`cad update --major`: the newest release of all; a failure puts back the release that ran")
+        self.assertNotIn("pin", told, "the major crossed is what was asked: no release to pin")
+        self.assertNotIn("pin", json.loads(auto_update.helper_command(None, now=5.0, version="0.1.0", uv="/u/uv",
+                                                                      base="/py")[-1]), "no release named")
+        pipx = auto_update.Global(auto_update.PIPX, self.tmp / "venvs" / "cad", ["/p/pipx"])
+        self.assertNotIn("pin", json.loads(auto_update.helper_command("0.2.0", now=5.0, version="0.1.0", base="/py",
+                                                                      install=pipx)[-1]), "pipx has no second way")
 
     def triggered(self, **options) -> tuple[list[str], dict]:
         """A trigger with nothing underway (the record of one before it, underway, is taken away first)."""
@@ -995,6 +1281,7 @@ class HelperTest(unittest.TestCase):
         self.site = self.tmp / "lib" / "python3.14" / "site-packages"
         self.site.mkdir(parents=True)
         (self.site / "cad-0.1.0.dist-info").mkdir()
+        (self.tmp / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")  # a whole environment
         self.told = {"cad": "cad", "target": "0.2.0", "prefix": str(self.tmp), "record": "r", "from": "0.1.0",
                      "at": 1.0, "upgrade": self.UPGRADE, "put_back": ["uv", "tool", "install", "cad==0.1.0"],
                      "launchers": ["uv", "tool", "dir", "--bin"], "installer": "uv", "asked": True}
@@ -1382,7 +1669,8 @@ class HelperTest(unittest.TestCase):
         refuses the move (another process has the record open), tried again briefly, then written in place. Never
         raises."""
         path = self.tmp / "auto-update.json"
-        files = lambda: sorted(found.name for found in self.tmp.iterdir() if found.is_file())  # noqa: E731
+        files = lambda: sorted(found.name for found in self.tmp.iterdir()  # noqa: E731
+                               if found.is_file() and found.name != "pyvenv.cfg")
         helper.keep(str(path), {"outcome": "installed"})
         self.assertEqual((json.loads(path.read_text(encoding="utf-8")), files()),
                          ({"outcome": "installed"}, ["auto-update.json"]))
@@ -1502,6 +1790,102 @@ class HelperTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)}):
             self.assertEqual(client.request({"op": "pid"}, start=False)["ok"], True, "a server answers")
 
+    # The second way the trigger hands for uv (``auto_update.helper_command``), for 0.2.0.
+    SECOND = {"pin": ["uv", "tool", "install", "--upgrade", "cad==0.2.0"],
+              "bounded": ["uv", "tool", "install", "--upgrade", "cad>=0.2.0,<1"], "refresh": ["--refresh"],
+              "no_config": ["--no-config"]}
+
+    def uv(self, answers: list[tuple[int, str, str | None]], whole_after: int | None = None):
+        """A stand-in for uv alone (cad's own commands end 0): each of its runs answers the next of ``answers``,
+        ``(exit status, what it printed, the release it leaves, None: as it was)``; after run ``whole_after`` the
+        environment loses its ``pyvenv.cfg``, as an install the disk filled under leaves it. What uv was run with."""
+        ran: list[list[str]] = []
+
+        def run(line, timeout):
+            if line[0] != "uv":
+                return 0, "done"
+            ran.append(line[3:])
+            code, said, leaves = answers.pop(0)
+            if leaves is not None:
+                for found in self.site.glob("cad-*.dist-info"):
+                    found.rmdir()
+                (self.site / f"cad-{leaves}.dist-info").mkdir()
+            if whole_after is not None and len(ran) == whole_after:
+                (self.tmp / "pyvenv.cfg").unlink()
+            return code, said
+        return ran, run
+
+    def test_an_upgrade_that_kept_the_release_that_ran_is_tried_with_refresh_then_pinned_then_bounded_again(self):
+        """uv ended 0 and kept 0.1.0, 0.2.0 wanted (``kept``): in the same run, the index read afresh; then 0.2.0 by
+        name, and the range written again from it, so a person's own ``uv tool upgrade cad`` keeps one. With none of
+        uv's settings there, each also reads none of uv's settings' files (``--no-config``)."""
+        told = {**self.told, **self.SECOND}
+        flags = ["--refresh", "--no-config"]
+        for name, answers, commands, outcome in (
+                ("pinned", [(0, "", None), (0, "", None), (0, "", "0.2.0"), (0, "", None)],
+                 [["--upgrade", BOUNDED], ["--upgrade", *flags, BOUNDED], ["--upgrade", *flags, "cad==0.2.0"],
+                  ["--upgrade", *flags, "cad>=0.2.0,<1"]], "installed"),
+                ("the index read afresh", [(0, "", None), (0, "", "0.2.0")],
+                 [["--upgrade", BOUNDED], ["--upgrade", *flags, BOUNDED]], "installed")):
+            with self.subTest(name):
+                for found in self.site.glob("cad-*.dist-info"):
+                    found.rename(self.site / "cad-0.1.0.dist-info")
+                ran, run = self.uv(answers)
+                found = helper.update(told, run=run, sleep=lambda _s: None, windows=False, environ=self.clean())
+                self.assertEqual(ran, commands)
+                self.assertEqual((found["outcome"], found["release"], found.get("cause")), (outcome, "0.2.0", None))
+
+    def test_a_pin_refused_says_why_and_a_setting_of_the_person_s_is_never_read_past(self) -> None:
+        """The pin's error names the real reason the release cannot be had (the platform, the Python, no such
+        release); the release that ran stays, ``current``, and is not put back. Where one of uv's settings that decides
+        what it can reach or take is there (an index, exclude-newer), uv reads it as ever (no ``--no-config``), and the
+        cause is that setting, for the person to see."""
+        told = {**self.told, **self.SECOND}
+        platform = ("  × No solution found when resolving tool dependencies:\n  ╰─▶ Because cad==0.2.0 has no wheels "
+                    "with a matching platform tag (e.g., `manylinux_2_17_x86_64`)\n")
+        missing = "  × No solution found when resolving tool dependencies:\n  ╰─▶ Because there is no version of cad==0.2.0\n"
+        (self.tmp / "uv").mkdir()
+        (self.tmp / "uv" / "uv.toml").write_text('exclude-newer = "2026-01-01T00:00:00Z"\n', encoding="utf-8")
+        for name, environ, said, cause, no_config in (
+                ("no setting: the platform", self.clean(), platform, "platform", True),
+                ("an index of the person's", self.clean(UV_INDEX_URL="https://mirror.example/simple"), missing,
+                 "config_index", False),
+                ("exclude-newer in uv's settings", self.clean(XDG_CONFIG_HOME=str(self.tmp)), missing,
+                 "config_exclude", False)):
+            with self.subTest(name):
+                ran, run = self.uv([(0, "", None), (0, "", None), (1, said, None)])
+                found = helper.update(told, run=run, sleep=lambda _s: None, windows=False, environ=environ)
+                self.assertEqual((found["outcome"], found["release"], found["cause"]), ("current", "0.1.0", cause))
+                self.assertEqual([line[-1] for line in ran], [BOUNDED, BOUNDED, "cad==0.2.0"], "no more after it")
+                self.assertEqual(all("--no-config" in line for line in ran[1:]), no_config)
+                self.assertTrue(all("--no-config" not in line for line in ran) or no_config)
+                self.assertNotIn("restored", found, "nothing was taken away")
+
+    def test_no_installer_command_runs_on_a_half_made_environment(self) -> None:
+        """An install the disk filled under can leave cad's environment without its ``pyvenv.cfg``; uv run on it again
+        acts on the Python it was made from and removes that Python's packages. The helper runs nothing more in it
+        -- no further try, no escalation, no put-back --, and says so (``half_made``)."""
+        full = "error: failed to write to file: No space left on device (os error 28)"
+        told = {**self.told, **self.SECOND}
+        for name, answers, after, commands in (
+                ("the upgrade's first try", [(1, full, None)] * len(helper.WAITS), 1, 1),
+                ("the pin", [(0, "", None), (0, "", None), (1, full, None)], 3, 3)):
+            with self.subTest(name):
+                (self.tmp / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
+                for found in self.site.glob("cad-*.dist-info"):
+                    found.rename(self.site / "cad-0.1.0.dist-info")
+                ran, run = self.uv(list(answers), whole_after=after)
+                found = helper.update(told, run=run, sleep=lambda _s: None, windows=False, environ=self.clean())
+                self.assertEqual(len(ran), commands, ran)
+                self.assertEqual((found["outcome"], found["cause"], found["detail"]), ("failed", "half_made", full),
+                                 "the words of the try that left it so")
+                self.assertNotIn("restored", found, "no put-back tried on it")
+        ran, run = self.uv([])
+        found = helper.update(told, run=run, sleep=lambda _s: None, windows=False, environ=self.clean())
+        self.assertEqual((ran, found["outcome"], found["cause"], found["detail"]),
+                         ([], "failed", "half_made", helper.HALF_MADE), "half made before it began")
+        self.assertTrue(helper.whole(self.tmp / "no such environment"), "none there: the installer makes it afresh")
+        self.assertFalse(helper.whole(self.tmp))
 
 class CauseTest(unittest.TestCase):
     """Why an attempt did not install what it was for, one word (``auto_update_helper.CAUSES``), told from the
@@ -1805,7 +2189,7 @@ class FailedStartTest(Case):
 
 class AskedTest(Case):
     """``cad update`` as the server judges it (``auto_update.asked``) and begins it (``begin``): PyPI asked now, and
-    none of the automatic limits -- the switch, ``TRIES``, ``RETRY_SECONDS`` -- applies."""
+    none of the automatic limits -- the switch, the schedule (``next_try``) -- applies."""
 
     def asked(self, newest: str | None, major: bool = False, **lines: str) -> dict:
         """``asked`` with PyPI's answer in the feed's shape: ``newest`` its newest of all (None: out of reach), and
@@ -1861,10 +2245,14 @@ class AskedTest(Case):
             self.assertEqual(popen.call_count, 1)
             auto_update._keep(self.state / auto_update.RECORD, {**first, "outcome": "failed"})
             again = auto_update.begin("0.2.0")
-            self.assertEqual((again["tries"], again["auto_tries"], popen.call_count), (2, 0, 2),
-                             "counted as an attempt, and none of the automatic tries spent")
-            auto_update._keep(self.state / auto_update.RECORD, {**again, "at": again["at"] - auto_update.RETRY_SECONDS})
-            self.assertEqual(auto_update.begin("0.2.0")["tries"], 3, "an underway record past the hour: a dead helper")
+            self.assertEqual((again["tries"], popen.call_count), (1, 2), "begun again at once: a typed one spends no "
+                                                                         "automatic try")
+            self.assertEqual((auto_update.tries()["tried"], len(auto_update.tries()["recent"])), ({}, 2),
+                             "counted among the day's attempts alone")
+            auto_update._keep(self.state / auto_update.RECORD, {**again, "beat": again["at"] - auto_update.LOST_SECONDS})
+            self.assertEqual(auto_update.begin("0.2.0")["outcome"], "underway", "its helper silent: lost, and begun "
+                                                                                "again")
+            self.assertEqual(popen.call_count, 3)
             auto_update._keep(self.state / auto_update.RECORD, {**again, "outcome": "failed"})
             unknown = auto_update.begin(None)
             self.assertEqual((unknown["release"], json.loads(popen.call_args.args[0][-1])["target"]), ("latest", None),
@@ -1874,53 +2262,14 @@ class AskedTest(Case):
             self.assertIsNone(auto_update.begin("0.2.0"))
 
 
-class AskedSpendsNoTriesTest(Case):
-    """A person's own update (``cad update``, the viewer's update button: ``asked``) spends none of the tries the
-    automatic update has for a release (``TRIES``): the record counts it as an attempt (``tries``) and carries the
-    automatic ones on (``auto_tries``), through the helper's own record of how it ended."""
-
-    def test_a_person_s_update_carries_the_automatic_tries_on_without_adding_to_them(self) -> None:
-        record = self.state / auto_update.RECORD
-        with self.feed("0.2.0"), mock.patch.object(auto_update.subprocess, "Popen") as popen, \
-                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
-            self.assertTrue(auto_update.trigger("0.2.0"))
-            first = auto_update.last()
-            self.assertEqual((first["tries"], first["auto_tries"], first["asked"]), (1, 1, False))
-            auto_update._keep(record, {**first, "outcome": "failed", "at": first["at"] - auto_update.RETRY_SECONDS})
-            asked = auto_update.begin("0.2.0")
-            self.assertEqual((asked["tries"], asked["auto_tries"], asked["asked"]), (2, 1, True))
-            told = json.loads(popen.call_args.args[0][-1])
-            self.assertEqual((told["tries"], told["auto_tries"], told["asked"]), (2, 1, True), "the helper is told")
-            ended = helper.update({**told, "cad": "cad", "prefix": str(self.tool)}, run=lambda command, _t: (1, "no"),
-                                  sleep=lambda _s: None, windows=False, environ={})
-            self.assertEqual((ended["tries"], ended["auto_tries"]), (2, 1), "and keeps it in its record")
-            auto_update._keep(record, {**ended, "at": asked["at"] - auto_update.RETRY_SECONDS})
-            self.assertEqual(auto_update.due(), auto_update.Due("0.2.0", "0.2.0"), "one automatic try is left")
-            self.assertTrue(auto_update.trigger("0.2.0"))
-            self.assertEqual((auto_update.last()["tries"], auto_update.last()["auto_tries"]), (3, 2))
-            auto_update._keep(record, {**auto_update.last(), "outcome": "failed",
-                                       "at": time.time() - auto_update.RETRY_SECONDS})
-            self.assertIsNone(auto_update.due(), "the automatic tries spent")
-            self.assertEqual(auto_update.spent(), "0.2.0")
-            self.assertEqual(auto_update.begin("0.2.0")["tries"], 4, "a person can always ask")
-
-    def test_a_record_kept_before_auto_tries_counts_its_tries_as_it_did(self) -> None:
-        auto_update._keep(self.state / auto_update.RECORD, {
-            "release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 5.0, "tries": 2, "outcome": "failed",
-            "ended": 6.0, "asked": True, "reported": True})
-        self.assertEqual(auto_update._automatic_tries("0.2.0"), 2)
-        with self.feed("0.2.0"):
-            self.assertIsNone(auto_update.due(now=10_000.0))
-
-
 class ButtonTest(Case):
     """What the viewer's update button shows (``auto_update.button``): only where cad can update itself; the release
     of its own major it is behind, never a higher major's; an attempt of this release underway; the last one's
     failure, said by its cause, until it is put away (``dismiss``) or another attempt begins."""
 
     def keep(self, **record) -> dict:
-        found = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 1000.0, "tries": 1, "auto_tries": 1,
-                 "installer": "uv", "asked": False, **record}
+        found = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 1000.0, "tries": 1, "installer": "uv",
+                 "asked": False, **record}
         auto_update._keep(self.state / auto_update.RECORD, found)
         return found
 
@@ -1935,7 +2284,7 @@ class ButtonTest(Case):
                 self.assertIsNone(auto_update.button())
             with mock.patch.object(cad_server, "__version__", "0.1.0-dev.1"):
                 self.assertIsNone(auto_update.button())
-            self.assertEqual(auto_update.button(waiting=True)["state"], "waiting")
+            self.assertEqual(auto_update.button(queued=True)["state"], "waiting")
         for latest, lines, offered in (("0.1.0", {"0": "0.1.0"}, None), ("1.0.0", {"0": "0.1.0", "1": "1.0.0"}, None),
                                        ("1.0.0", {"1": "1.0.0"}, None), ("1.0.0", {"0": "0.3.0", "1": "1.0.0"}, "0.3.0")):
             with self.subTest(lines=lines), self.feed(latest, lines):
@@ -1963,15 +2312,24 @@ class ButtonTest(Case):
             self.keep(outcome="current", ended=now, cause="kept", at=now, asked=True)
             self.assertEqual(auto_update.button(now=now + 5)["cause"], "kept", "the release that ran, kept")
             self.keep(outcome="underway", at=now - auto_update.RETRY_SECONDS)
-            self.assertEqual(auto_update.button(now=now)["cause"], "lost")
+            self.assertEqual(auto_update.button(now=now)["cause"], "lost", "a record a release before the beat kept")
+            self.keep(outcome="underway", at=now - 3 * auto_update.HOUR, beat=now - 60)
+            self.assertEqual(auto_update.button(now=now)["state"], "working", "past the hour, its helper beating")
+            self.keep(outcome="underway", at=now - 3 * auto_update.HOUR, beat=now - auto_update.LOST_SECONDS)
+            self.assertEqual(auto_update.button(now=now)["cause"], "lost", "its helper silent")
             self.keep(outcome="underway", at=now, cause="helper_crash")
             self.assertEqual(auto_update.button(now=now + 5)["state"], "failed", "a helper that raised")
             self.keep(outcome="installed", ended=now, release="0.2.0", at=now)
             self.assertEqual(auto_update.button(now=now + 5)["state"], "idle")
             self.keep(outcome="failed", ended=now, cause="network", at=now)
-            self.assertEqual(auto_update.button(waiting=True, now=now + 5)["state"], "waiting", "a new attempt asked")
+            self.assertEqual(auto_update.button(queued=True, now=now + 5)["state"], "waiting", "a new attempt asked")
         with self.feed("0.1.0", {"0": "0.1.0"}):
             self.assertEqual(auto_update.button(now=now + 5)["state"], "idle", "no longer behind: nothing to say")
+        with self.feed("0.2.0", {"0": "0.2.0"}), mock.patch.object(auto_update, "stale", return_value=True) as stale:
+            self.keep(outcome="failed", ended=now, cause="network", at=now)
+            self.assertEqual(auto_update.button(now=now + 5)["state"], "idle",
+                             "the environment holds the release already: a click restarts the server on it")
+        self.assertEqual(stale.call_args.args[1], "0.2.0")
 
     def test_a_failure_put_away_stays_away_until_another_attempt(self) -> None:
         now = time.time() - 100
@@ -2344,15 +2702,23 @@ class DoctorTest(Case):
         self.state.mkdir(parents=True, exist_ok=True)
         (self.state / updates.FILE).write_text(json.dumps({"checked": time.time(), "feed": {
             "latest": "0.2.0", "lines": {"0": "0.2.0"}}}), encoding="utf-8")
-        base = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 0.0, "outcome": "failed",
-                "detail": "uv said no", "cause": "unknown", "installer": "uv"}
-        auto_update._keep(self.state / auto_update.RECORD, {**base, "tries": 1})
-        self.assertNotIn("has been tried", doctor._attempt()[1], "a try left")
-        auto_update._keep(self.state / auto_update.RECORD, {**base, "tries": auto_update.TRIES})
+        now = time.time()
+        when = lambda at: time.strftime("%Y-%m-%d %H:%M", time.localtime(at))  # noqa: E731
+        base = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": now, "outcome": "failed",
+                "detail": "uv said no", "installer": "uv"}
+        auto_update._keep(self.state / auto_update.RECORD, {**base, "tries": 1, "outcome": "current",
+                                                            "detail": "cad 0.2.0 is installed"})
+        self.assertEqual(doctor._attempt(), (doctor.INFO, doctor._attempt()[1]), "one try: said, no warning")
+        self.assertTrue(doctor._attempt()[1].endswith(
+            f"; cad 0.2.0 has been tried 1 time by itself, and is tried again from {when(now + 3600)}: `cad update` "
+            "tries it now"))
+        auto_update._keep(self.state / auto_update.RECORD, {**base, "tries": 3, "cause": "unknown"})
         self.assertEqual(doctor._attempt(), (doctor.WARNING, doctor._attempt()[1]))
         self.assertTrue(doctor._attempt()[1].endswith(
-            ": uv's output names no cause cad knows; cad 0.2.0 has been tried 2 times, and is not tried again by "
-            "itself: `cad update` tries it"))
+            f": uv's output names no cause cad knows; cad 0.2.0 has been tried 3 times by itself, and is tried again "
+            f"from {when(now + 4 * 3600)}: `cad update` tries it now"), "never given up on, each wait twice the last")
+        auto_update._keep(self.state / auto_update.RECORD, {**base, "tries": 3, "at": now - 5 * 3600})
+        self.assertIn("tried 3 times by itself, and is tried again at the next check", doctor._attempt()[1])
         with mock.patch.object(auto_update, "find_uv", return_value=None), \
                 mock.patch.object(auto_update, "carried_uv", return_value=None):
             (self.state / auto_update.RECORD).unlink()
@@ -2963,25 +3329,37 @@ class UpdateCountTest(Case):
         return record
 
     def test_each_kind_of_record_is_the_event_it_makes(self) -> None:
-        base = {"earlier": "0.1.0", "reason": None, "tries": 1, "installer": "uv", "asked": False, "plugin": "none"}
+        base = {"earlier": "0.1.0", "reason": None, "tries": 1, "installer": "uv", "asked": False, "plugin": "none",
+                "cause": None}
         for fields, made in (
                 ({}, {"outcome": "installed"}),
-                ({"outcome": "current"}, {"outcome": "current"}),
-                ({"outcome": "failed", "detail": "uv said no", "tries": 2}, {"outcome": "failed", "reason": "upgrade",
-                                                                             "tries": 2}),
+                ({"outcome": "current"}, {"outcome": "current", "cause": "none"}),
+                ({"outcome": "current", "cause": "kept"}, {"outcome": "current", "cause": "kept"}),
+                ({"outcome": "current", "detail": "cad 0.2.0 is installed"}, {"outcome": "current", "cause": "already"}),
+                ({"outcome": "failed", "detail": "uv said no", "tries": 2, "cause": "disk_full"},
+                 {"outcome": "failed", "reason": "upgrade", "tries": 2, "cause": "disk_full"}),
                 ({"outcome": "failed", "detail": "it installed 0.0.9, which it may not end on"},
-                 {"outcome": "failed", "reason": "older"}),
+                 {"outcome": "failed", "reason": "older", "cause": "none"}),
                 # `--major` that did not cross: a newer release than the one that ran, never `older`
                 ({"outcome": "failed", "detail": "it installed 0.1.5, not 1.0.0", "major": True},
-                 {"outcome": "failed", "reason": "upgrade"}),
-                ({"outcome": "failed", "restored": True}, {"outcome": "restored", "reason": "upgrade"}),
-                ({"outcome": "failed", "restored": False}, {"outcome": "failed", "reason": "put_back"}),
+                 {"outcome": "failed", "reason": "upgrade", "cause": "none"}),
+                ({"outcome": "failed", "restored": True, "cause": "network"},
+                 {"outcome": "restored", "reason": "upgrade", "cause": "network"}),
+                ({"outcome": "failed", "restored": False}, {"outcome": "failed", "reason": "put_back", "cause": "none"}),
+                ({"outcome": "failed", "cause": "helper_start"}, {"outcome": "failed", "reason": "upgrade",
+                                                                  "cause": "helper_start"}),
                 ({"asked": True, "installer": "pipx"}, {"outcome": "installed", "asked": True, "installer": "pipx"}),
                 ({"installer": None, "asked": None}, {"outcome": "installed"}),  # kept before it named them: this cad's
+                # Still underway past its hour: its helper died, with a word or without one.
+                ({"outcome": "underway", "tries": 2, "asked": True}, {"outcome": "lost", "tries": 2, "asked": True,
+                                                                      "cause": "lost"}),
+                ({"outcome": "underway", "cause": "helper_crash"}, {"outcome": "lost", "cause": "helper_crash"}),
         ):
             with self.subTest(fields=fields):
                 self.assertEqual(auto_update.event(self.ended(**fields)), {**base, **made})
-        self.assertIsNone(auto_update.event({"release": "0.2.0", "at": 5.0, "outcome": "underway"}), "not ended")
+        self.assertIsNone(auto_update.event({"release": "0.2.0", "at": time.time(), "outcome": "underway"}), "not ended")
+        self.assertIsNone(auto_update.event({"release": "0.2.0", "at": time.time(), "outcome": "underway",
+                                             "cause": "helper_crash"}), "held for its hour as any attempt underway")
 
     def test_a_newer_cad_s_count_says_how_the_install_command_s_run_for_it_went_and_waits_while_it_runs(self) -> None:
         record = self.ended()
@@ -3019,12 +3397,37 @@ class UpdateCountTest(Case):
             counted.assert_not_called()
             self.assertTrue(auto_update.trigger("0.2.1", automatic=False))
         counted.assert_called_once_with(earlier="0.1.0", outcome="installed", reason=None, tries=1, installer="uv",
-                                        asked=False, plugin="underway")
+                                        asked=False, plugin="underway", cause=None)
         from cad_server import analytics
 
         self.assertEqual(analytics._update_event("0.1.0", "installed", None, 1, "uv", False, "underway")["plugin"],
                          "underway", "a word the sender keeps and sends")
         self.assertIsNone(analytics._update_event("0.1.0", "current", None, 1, "uv", False, "underway"))
+
+    def test_the_sender_keeps_every_cause_of_each_outcome_and_no_other_word(self) -> None:
+        """``cause`` (schema 13's) on every outcome but ``installed``, a word of that outcome's (``UPDATE_CAUSES``);
+        none given, ``none`` (an update a release before it kept). Every word an attempt's record keeps is sent for
+        one outcome or another."""
+        from cad_server import analytics
+
+        def made(outcome: str, cause: object) -> dict | None:
+            return analytics._update_event("0.1.0", outcome, "upgrade" if outcome in ("failed", "restored") else None,
+                                           0 if outcome == "blocked" else 1, "uv", False, "none", cause)
+
+        for outcome in sorted(analytics.UPDATE_OUTCOMES - {"installed"}):
+            for cause in sorted(set().union(*analytics.UPDATE_CAUSES.values())):
+                with self.subTest(outcome=outcome, cause=cause):
+                    found = made(outcome, cause)
+                    self.assertEqual(found is not None, cause in analytics.UPDATE_CAUSES[outcome])
+                    if found is not None:
+                        self.assertEqual(found["cause"], cause)
+            for word in ("eaccess", "Failed to fetch: https://pypi.org/simple/cad/", "", 7, True, "NETWORK"):
+                self.assertIsNone(made(outcome, word), (outcome, word))
+        self.assertEqual(made("failed", None)["cause"], "none")
+        self.assertIsNone(made("lost", None), "a lost attempt always says which")
+        self.assertNotIn("cause", made("installed", None))
+        self.assertIsNone(made("installed", "network"), "an update that installed a newer cad names none")
+        self.assertEqual(set().union(*analytics.UPDATE_CAUSES.values()) - {"already", "none"}, set(helper.CAUSES))
 
     def test_counted_once_and_marked_so(self) -> None:
         self.ended(outcome="failed", detail="uv said no", restored=True)
@@ -3032,9 +3435,9 @@ class UpdateCountTest(Case):
             self.assertTrue(auto_update.report())
             self.assertFalse(auto_update.report(), "once")
         counted.assert_called_once_with(earlier="0.1.0", outcome="restored", reason="upgrade", tries=1,
-                                        installer="uv", asked=False, plugin="none")
+                                        installer="uv", asked=False, plugin="none", cause="none")
         self.assertTrue(auto_update.last()["reported"])
-        auto_update._keep(self.state / auto_update.RECORD, {"release": "0.2.0", "at": 7.0, "outcome": "underway"})
+        auto_update._keep(self.state / auto_update.RECORD, {"release": "0.2.0", "at": time.time(), "outcome": "underway"})
         with mock.patch("cad_server.analytics.update") as counted:
             self.assertFalse(auto_update.report(), "underway: nothing ended yet")
         counted.assert_not_called()
@@ -3048,8 +3451,80 @@ class UpdateCountTest(Case):
                 mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
             self.assertTrue(auto_update.trigger("0.2.1", automatic=False))
         counted.assert_called_once_with(earlier="0.1.0", outcome="failed", reason="upgrade", tries=1,
-                                        installer="uv", asked=False, plugin="none")
+                                        installer="uv", asked=False, plugin="none", cause="none")
         self.assertEqual((auto_update.last()["release"], auto_update.last()["outcome"]), ("0.2.1", "underway"))
+
+    def test_an_attempt_that_never_said_how_it_ended_is_counted_lost_once_past_its_hour(self) -> None:
+        """Its helper died: the record stays underway. Held for its hour as any attempt underway, then counted once,
+        ``lost``, by the server or by the attempt that takes its place."""
+        now = time.time()
+        auto_update._keep(self.state / auto_update.RECORD, {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0",
+                                                            "at": now, "tries": 1, "outcome": "underway",
+                                                            "installer": "uv", "asked": False})
+        with mock.patch("cad_server.analytics.update") as counted:
+            self.assertFalse(auto_update.report(), "underway")
+            with mock.patch.object(auto_update.time, "time", return_value=now + auto_update.RETRY_SECONDS):
+                self.assertTrue(auto_update.report())
+                self.assertFalse(auto_update.report(), "once")
+        counted.assert_called_once_with(earlier="0.1.0", outcome="lost", reason=None, tries=1, installer="uv",
+                                        asked=False, plugin="none", cause="lost")
+        self.assertEqual(auto_update.last()["outcome"], "underway", "the record kept as it was, marked counted")
+        auto_update._keep(self.state / auto_update.RECORD, {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0",
+                                                            "at": now - auto_update.RETRY_SECONDS, "tries": 1,
+                                                            "outcome": "underway", "cause": "helper_crash",
+                                                            "installer": "uv"})
+        with mock.patch("cad_server.analytics.update") as counted, \
+                mock.patch.object(auto_update.subprocess, "Popen"), \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
+            self.assertTrue(auto_update.trigger("0.2.1", automatic=False))
+        counted.assert_called_once_with(earlier="0.1.0", outcome="lost", reason=None, tries=1, installer="uv",
+                                        asked=False, plugin="none", cause="helper_crash")
+
+
+class BlockedCountTest(Case):
+    """An automatic update that is due and cannot begin (``auto_update.blocked``) counted once for each release the
+    feed calls for, from the release that runs (``auto_update._blocked``): ``blocked``, its cause, no try made."""
+
+    def test_counted_once_for_each_release_and_never_where_none_is_due(self) -> None:
+        missing = (mock.patch.object(auto_update, "find_uv", return_value=None),
+                   mock.patch.object(auto_update, "carried_uv", return_value=None))
+        with missing[0], missing[1], mock.patch("cad_server.analytics.update") as counted:
+            with self.feed("0.1.0"):
+                self.assertIsNone(auto_update.due(), "nothing newer: none due, none counted")
+            counted.assert_not_called()
+            with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state)}):
+                auto_update.change(False)
+                with self.feed("0.2.0"):
+                    self.assertIsNone(auto_update.due(), "off: no update is due, so none is blocked")
+                auto_update.change(True)
+            counted.assert_not_called()
+            with self.feed("0.2.0"):
+                for _ in range(3):
+                    self.assertIsNone(auto_update.due())
+                    self.assertIsNone(auto_update.due(fetch=True))
+            counted.assert_called_once_with(earlier="0.1.0", outcome="blocked", tries=0, installer="uv", asked=False,
+                                            cause="no_installer")
+            kept = json.loads((self.state / auto_update.BLOCKED).read_text(encoding="utf-8"))
+            self.assertEqual((kept["from"], kept["wanted"], kept["cause"]), ("0.1.0", "0.2.0", "no_installer"))
+            with self.feed("0.2.1"):
+                self.assertIsNone(auto_update.due())
+                self.assertIsNone(auto_update.due())
+            self.assertEqual(counted.call_count, 2, "once more for a newer release")
+        self.assertFalse((self.state / auto_update.RECORD).exists(), "no attempt: nothing kept of one")
+        with mock.patch("cad_server.analytics.update") as counted, self.feed("0.2.2"), \
+                mock.patch.object(sys, "_base_executable", str(self.tool / "bin" / "python"), create=True):
+            self.assertIsNone(auto_update.due())
+        counted.assert_called_once_with(earlier="0.1.0", outcome="blocked", tries=0, installer="uv", asked=False,
+                                        cause="no_python")
+        with mock.patch("cad_server.analytics.update") as counted, self.feed("0.2.3"):
+            self.assertEqual(auto_update.due(), auto_update.Due("0.2.3", "0.2.3"), "one that can begin is due")
+        counted.assert_not_called()
+
+    def test_the_count_is_one_the_sender_keeps(self) -> None:
+        from cad_server import analytics
+
+        self.assertIsNotNone(analytics._update_event("0.1.0", "blocked", None, 0, "uv", False, "none", "no_python"))
+        self.assertIsNone(analytics._update_event("0.1.0", "blocked", None, 1, "uv", False, "none", "no_python"))
 
 
 def _end(pid: int) -> None:

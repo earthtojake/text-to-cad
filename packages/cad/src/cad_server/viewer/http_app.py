@@ -1377,7 +1377,7 @@ class CadApp:
 
         ask = getattr(getattr(self, "server", None), "update", None)
         waiting = bool(ask(False).get("waiting")) if callable(ask) else False
-        return {"release": __version__, "instance": INSTANCE, "cadUpdate": auto_update.button(waiting=waiting)}
+        return {"release": __version__, "instance": INSTANCE, "cadUpdate": auto_update.button(queued=waiting)}
 
     def _update(self, request) -> tuple[int, dict]:
         """``POST /api/v1/local/update``: the update button. ``{}``: a person's update of cad, as ``cad update`` asks it

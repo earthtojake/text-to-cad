@@ -84,7 +84,7 @@ class UpdateRouteTest(unittest.TestCase):
 
     def keep(self, **record) -> None:
         auto_update._keep(self.state / auto_update.RECORD, {
-            "release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": time.time() - 60, "tries": 1, "auto_tries": 1,
+            "release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": time.time() - 60, "tries": 1,
             "installer": "uv", "asked": False, **record})
 
     def test_the_server_says_what_the_button_shows(self) -> None:

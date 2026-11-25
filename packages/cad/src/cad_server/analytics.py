@@ -75,8 +75,10 @@ exits, each batch under an id of its own and stamped with the time it was made:
   itself) and from which version (``from``: the one installed before it, ``none`` where none was);
 - ``update`` (``update``): one attempt of cad's own update that ended, counted once by the server that runs after it
   (``cad_server._internal.auto_update.report``) -- the release before (``from``), how it ended (``UPDATE_OUTCOMES``:
-  installed, current, failed, or failed and the release before put back), for a failure which step failed
-  (``UPDATE_FAILURES``), its ``tries``, the ``installer`` that made the global install (``uv``, ``pipx``), whether it
+  installed, current, failed, or failed and the release before put back; lost, its helper gone without saying how it
+  ended; or blocked, none could begin, counted once for each release the feed called for), for a failure which step
+  failed (``UPDATE_FAILURES``), where it did not install a newer cad why, in one word of cad's (``cause``:
+  ``UPDATE_CAUSES``), its ``tries``, the ``installer`` that made the global install (``uv``, ``pipx``), whether it
   was typed (``asked``), and for a newer cad installed how the install command's run for it ended (``plugin``:
   ``UPDATE_PLUGIN``; ``underway`` where a new attempt began before it ended);
 - ``install`` (``install``): one run of ``cad plugin install`` (by either name) that ended, counted by the
@@ -201,6 +203,8 @@ LOG = logging.getLogger("cad_server.analytics")
 OWN = frozenset({"cad", "cadgen", "cad_server"})
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
+# 13: why an update did not install a newer cad (``update``'s ``cause``), and the updates that never said how they
+# ended (``lost``) or could not begin (``blocked``);
 # 12: each run of the plugin's install in the agent apps, which cad runs itself (``install``), and each app where one
 # failed (``install_failure``);
 # 11: where a batch comes from is one field, ``app`` (the agent app, detected), one batch per app; the channel of 10
@@ -214,7 +218,7 @@ PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
 # engine's documents (kind ``xbf``) and a command's sender (process ``cli``); 5: why builds and snapshots
 # failed, and each batch's id and time; 4: why tool calls failed; 3: the old build daemon's counts, and files as
 # numbers; 2: the install's channel replaced `source`
-SCHEMA = 12
+SCHEMA = 13
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
 # the answer: it lives in the state folder, which every release reads, not in its code. Neither schema 4, 5 nor 6 raised it
@@ -244,7 +248,12 @@ SCHEMA = 12
 # where it did not, in which of the agent apps cad puts the plugin in and why, in a word of ours -- an app named only
 # where its install failed, by cad's own key for it (the app running cad was named already, ``app``), never which
 # apps a computer has -- with a count of the apps found and failed, the run's seconds and what its terminal drew.
-# Never a path, a version of an app's, a message or anything typed, under the same ids.
+# Never a path, a version of an app's, a message or anything typed, under the same ids. Nor schema 13's ``cause``: why
+# one of cad's own updates did not install a newer cad, in a word of ours as its ``reason`` is (the installer could not
+# reach the index, the disk was full, a setting of the installer's hid the release -- told from which settings are
+# there, by name, never their values), and the updates whose helper died (``lost``) or that could not begin
+# (``blocked``: no installer, no Python to run the update with) -- cad working or not, as ``update`` said already;
+# never the installer's words, a path or a setting's value, under the same ids.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -547,14 +556,28 @@ ARRIVAL_FAILURES = {"setup": frozenset({"uv", "network", "denied", "other"}),
                     "handover": frozenset({"no_report", "setup", "app", "other"})}
 MAX_ATTEMPTS = 1000  # a hand-over's attempts, and an update's tries, past this many are counted as this many
 # How cad's own update of itself ended (``update``, schema 11's), as its record says (``auto_update.event``): a newer
-# cad installed, nothing newer to install, failed, or failed and the release before put back; for a failure, which
+# cad installed, nothing newer to install, failed, or failed and the release before put back; from schema 13, its
+# helper gone without saying how it ended (``lost``: the record still underway, its helper silent), or none could begin
+# (``blocked``: counted once for each release the feed calls for, ``tries`` 0); for a failure, which
 # step -- the installer's upgrade never ended well, or (``--major``) did not cross to the higher major asked for
 # (``upgrade``), ended well on a release it may not end on, older than the one that ran or of another major
 # (``older``), and for one not put back, putting back the release before failed too (``put_back``) --; the installer
 # that made the global install; and, for a newer cad installed, how the install command's run for it ended (``none``:
 # none ran for it).
-UPDATE_OUTCOMES = frozenset({"installed", "current", "failed", "restored"})
+UPDATE_OUTCOMES = frozenset({"installed", "current", "failed", "restored", "lost", "blocked"})
 UPDATE_FAILURES = {"failed": frozenset({"upgrade", "older", "put_back"}), "restored": frozenset({"upgrade", "older"})}
+# Why an update did not install a newer cad (``cause``, schema 13's; on every outcome but ``installed``): a word of the
+# attempt's record (``auto_update_helper.CAUSES``, which ``auto_update.SAID`` says in plain words), chosen where the
+# attempt ended, never the installer's words. An attempt that ended (``current``, ``failed``, ``restored``) names what
+# its helper told (``UPDATE_ENDED``) -- ``current`` also ``already``, the environment held the release already (a
+# server older than its own environment asked) --, or ``none`` where its record names none (a release before
+# ``cause``'s); one that never said how it ended (``lost``), whether its helper stopped with an error or without a word;
+# one that could not begin (``blocked``), why.
+UPDATE_ENDED = frozenset({"timeout", "no_program", "in_use", "denied", "disk_full", "half_made", "network", "offline",
+                          "no_release", "python", "platform", "config_exclude", "config_index", "config_tls", "uv_old",
+                          "kept", "server_running", "helper_start", "packaged", "unknown", "none"})
+UPDATE_CAUSES = {"current": UPDATE_ENDED | {"already"}, "failed": UPDATE_ENDED, "restored": UPDATE_ENDED,
+                 "lost": frozenset({"lost", "helper_crash"}), "blocked": frozenset({"no_installer", "no_python"})}
 UPDATE_INSTALLERS = frozenset({"uv", "pipx"})
 # The install command's run for the cad an update installed: none ran for it, it ended well or failed, or it was still
 # underway when a new attempt took the record's place (``auto_update.report``).
@@ -599,8 +622,8 @@ EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "control": (("control",), ("count", "seconds")),
     # ``reason`` only with ``failed``, ``attempts`` only for a hand-over: a name that is None is not sent.
     "arrival": (("step", "route", "from", "outcome", "reason", "attempts"), ("count",)),
-    # ``reason`` only with ``failed`` or ``restored``.
-    "update": (("from", "outcome", "reason", "tries", "installer", "asked", "plugin"), ("count",)),
+    # ``reason`` only with ``failed`` or ``restored``; ``cause`` (schema 13's) with every outcome but ``installed``.
+    "update": (("from", "outcome", "reason", "tries", "installer", "asked", "plugin", "cause"), ("count",)),
     # Whole seconds and numbers of apps are names here, not counts: runs alike in each are one row, counted.
     "install": (("by", "outcome", "logo", "colour", "seconds", "found", "failed"), ("count",)),
     # Only an app whose install failed: an app done well is counted in its run's ``found``, never named.
@@ -1579,16 +1602,18 @@ def _arrival(step: Any, route: Any, earlier: Any, outcome: Any, reason: Any = No
 
 
 def update(*, earlier: str | None, outcome: str, reason: str | None = None, tries: int = 1,
-           installer: str | None = None, asked: bool = False, plugin: str = "none") -> bool:
-    """Count one attempt of cad's own update that ended (``update``; ``auto_update.report`` calls it once per attempt):
-    from version ``earlier`` (None: ``none``), ended as ``outcome`` (``UPDATE_OUTCOMES``), a failure's ``reason``
-    (``UPDATE_FAILURES``), after ``tries`` (a whole number from 1, capped at ``MAX_ATTEMPTS``), by ``installer``
+           installer: str | None = None, asked: bool = False, plugin: str = "none", cause: str | None = None) -> bool:
+    """Count one attempt of cad's own update that ended (``update``; ``auto_update.report`` calls it once per attempt,
+    and ``auto_update.due`` once for each release no update could begin for): from version ``earlier`` (None:
+    ``none``), ended as ``outcome`` (``UPDATE_OUTCOMES``), a failure's ``reason`` (``UPDATE_FAILURES``), why it did not
+    install a newer cad (``cause``: ``UPDATE_CAUSES`` of its outcome; None, ``none``), after ``tries`` (a whole number
+    from 1, capped at ``MAX_ATTEMPTS``; 0 for an update that could not begin), by ``installer``
     (``UPDATE_INSTALLERS``), typed (``asked``) or not, and the install command's run for the cad it installed
     (``plugin``: ``UPDATE_PLUGIN``, ``none`` but where it installed one). A word outside these is not counted.
     Kept and sent as an arrival is (``arrival``): under the answer in force, only while sharing is on, a sender started
     at once. Never the network, never raises. Whether it was kept."""
     try:
-        found = _update_event(earlier, outcome, reason, tries, installer, asked, plugin)
+        found = _update_event(earlier, outcome, reason, tries, installer, asked, plugin, cause)
         if found is None or refused():
             return False
         path = settings_path()
@@ -1607,15 +1632,18 @@ def update(*, earlier: str | None, outcome: str, reason: str | None = None, trie
 
 
 def _update_event(earlier: Any, outcome: Any, reason: Any, tries: Any, installer: Any, asked: Any,
-                  plugin: Any) -> dict[str, Any] | None:
+                  plugin: Any, cause: Any = None) -> dict[str, Any] | None:
     """An update as it is kept and sent (``EVENTS``' names): ``reason`` only with ``failed`` or ``restored``, a
-    ``plugin`` other than ``none`` only with ``installed``; or None for one that is not counted."""
+    ``plugin`` other than ``none`` only with ``installed``, a ``cause`` with every other outcome (``UPDATE_CAUSES``;
+    None, as an update a release before schema 13 kept has, ``none``), ``tries`` 0 only for one that could not begin;
+    or None for one that is not counted."""
     came = "none" if earlier is None else earlier
     if outcome not in UPDATE_OUTCOMES or not (isinstance(came, str) and _EARLIER.fullmatch(came)):
         return None
     if installer not in UPDATE_INSTALLERS or type(asked) is not bool or plugin not in UPDATE_PLUGIN:
         return None
-    if type(tries) is not int or tries < 1 or (plugin != "none" and outcome != "installed"):
+    if type(tries) is not int or tries < 0 or (tries == 0) != (outcome == "blocked") \
+            or (plugin != "none" and outcome != "installed"):
         return None
     found: dict[str, Any] = {"from": came, "outcome": outcome}
     if outcome in UPDATE_FAILURES:
@@ -1623,6 +1651,12 @@ def _update_event(earlier: Any, outcome: Any, reason: Any, tries: Any, installer
             return None
         found["reason"] = reason
     found.update(tries=min(tries, MAX_ATTEMPTS), installer=installer, asked=asked, plugin=plugin)
+    if outcome == "installed":
+        return found if cause is None else None
+    word = "none" if cause is None else cause
+    if not (isinstance(word, str) and word in UPDATE_CAUSES[outcome]):
+        return None
+    found["cause"] = word
     return found
 
 

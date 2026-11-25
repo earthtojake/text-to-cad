@@ -177,6 +177,14 @@ it away or another attempt begins. A person's own update (the button, `cad updat
 tries the automatic update has for a release. A cad that is not a global install, such as one installed
 with pip into a project's own Python, never updates itself, and shows no button.
 
+An automatic update that does not install is tried again, and never given up on: an hour after a
+release's first try, then 2, 4, 8 and 16 hours, then once a day, and no more than four attempts in a
+day of any release, a typed `cad update` among them (it spends none of a release's tries). The tries
+are counted for each release apart from the record of the last attempt, so a newer release starts
+afresh, and a server of another release, an older one too, never sets the count back. Where uv ends
+well and keeps the release that ran, the same run asks again another way: the index read afresh,
+then the release by name, whose error says why it cannot be had.
+
 The plugin is `cad plugin install`'s, the one command that installs it: in every agent app it finds,
 the plugin installed or updated with that app's own command, then our older copies there removed, and
 nothing else. It never runs the hosted install command and never changes `cad plugin update auto`.
@@ -232,7 +240,10 @@ code of the installed cad, the release that was tested, and nothing is fetched f
 run it. Two runs can meet (the server that starts after the install command updated cad), hence the
 lock; cad's update replaces the files a run is reading, hence the hold; a run that hung for good
 would hold the lock for as long as its process lived, hence the hard stop. A run where one app failed
-keeps no release, or the server would not try that app again until the next release.
+keeps no release, or the server would not try that app again until the next release. cad's own update
+once tried a release twice and then waited for the next release, which left computers on an old cad
+for weeks over a failure that had passed (the network, a file in use); a wait that doubles keeps one
+that never passes to a run a day.
 
 **What it costs.** The plugin's install is only as new as the cad that runs it (the first decision).
 The button is a standing blue icon on every page of a computer that is behind, which a person may
@@ -242,7 +253,8 @@ Released 0.11.12 and 0.11.13 still download the hosted install command and run i
 [SECURITY.md](../../SECURITY.md) says so, and nothing shipped later can change them. A typed `cad
 update` during a run fails and has to be typed again. An app that fails for good costs up to three
 background runs a release, each running every app found again. The hard stop cannot end a process
-none of whose threads runs (one a signal stopped). A store's copy of the skills lags cad by however
+none of whose threads runs (one a signal stopped). A cad whose update fails for good runs its
+installer in the background once a day for as long as it stays on that release. A store's copy of the skills lags cad by however
 long its store takes.
 
 ## Forward only
