@@ -312,9 +312,10 @@ class Process:
             python, own = service.environment, False
         env = dict(environment) if service.env == "lease" else dict(os.environ)
         if own:
-            # The daemon's own environment: the engine it runs, its folder first on the path.
+            # The daemon's own environment: the engine it runs, its folder first on the path (but a stored release's,
+            # which the process takes by itself: ``places.handed``).
             root, path = places.engine_root(), env.get("PYTHONPATH", "")
-            if root not in path.split(os.pathsep):
+            if root not in path.split(os.pathsep) and places.handed(root):
                 env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
         if service.bytecode == "daemon":
             # The daemon's bytecode, whoever's lease starts the process: it serves every later one too.

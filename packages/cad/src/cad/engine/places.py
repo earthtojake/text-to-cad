@@ -38,8 +38,9 @@ from typing import Any, Callable
 __all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "XAUTHORITY", "Endpoint", "address",
            "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
            "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints",
-           "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "home", "installation", "kernel",
-           "lock", "lock_path", "make_engine_dir", "port_path", "registered", "run_with", "state_dir", "windowless"]
+           "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "handed", "home", "installation",
+           "kernel", "lock", "lock_path", "make_engine_dir", "port_path", "registered", "run_with", "state_dir",
+           "stored", "windowless"]
 
 WINDOWS = os.name == "nt"
 # The engine's name in its engine folder: its lock, door (on Windows its port file) and failure note
@@ -642,6 +643,26 @@ def _registered(state: str, prefix: str, release: str) -> str | None:
 def engine_root() -> str:
     """The folder ``cadgen`` is imported from: a process the engine starts there imports the same."""
     return str(Path(__file__).resolve().parent.parent.parent)
+
+
+def stored() -> str | None:
+    """The folder of the release cad's update keeps beside the installed one, where this process runs it: the
+    environment's pointer named it as this interpreter started (``_cad_release.STORED``). None where the process runs
+    its environment's own packages. Asked of ``sys.modules``, never imported: that module acts as an interpreter
+    starts, and only then."""
+    return getattr(sys.modules.get("_cad_release"), "STORED", None) or None
+
+
+def handed(root: str | None = None) -> bool:
+    """Whether a process this interpreter starts must be handed the engine's folder (``root``: ``engine_root``) on
+    ``PYTHONPATH`` to import this engine. Not where that folder is the stored release this process runs
+    (``stored``): every process of the environment takes it as it starts, by the same pointer, and one handed it on
+    ``PYTHONPATH`` would import it beside the environment's own packages and hold no mark of running it."""
+    kept = stored()
+    if kept is None:
+        return True
+    root = engine_root() if root is None else root
+    return os.path.normcase(os.path.realpath(root)) != os.path.normcase(os.path.realpath(kept))
 
 
 # Windows' process creation flags, by number: ``subprocess`` names them on Windows alone.

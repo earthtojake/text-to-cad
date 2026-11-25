@@ -229,11 +229,13 @@ def _spawn(port: int | None) -> subprocess.Popen:
     nothing of the command that started it, and that command, and on Windows its ``cad.exe``, exits as soon as
     the server answers. ``port``: the HTTP port it must take. The engine's folder is first on its ``PYTHONPATH``
     only where this environment would not find it -- a source tree --, so no process the daemon starts in the
-    base inherits it."""
+    base inherits it; never the stored release this process runs, which the server takes by itself as it starts
+    (``places.handed``)."""
     env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
     root, path = places.engine_root(), env.get("PYTHONPATH", "")
     inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
-    if not os.path.normcase(os.path.realpath(root)).startswith(inside) and root not in path.split(os.pathsep):
+    if not os.path.normcase(os.path.realpath(root)).startswith(inside) and root not in path.split(os.pathsep) \
+            and places.handed(root):
         env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
     places.bytecode(env)
     return subprocess.Popen([sys.executable, "-P", "-m", DAEMON_MODULE, *(["--port", str(port)] if port is not None
