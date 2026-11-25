@@ -2,8 +2,9 @@
 ``start`` (``cad server start``, ``cad mcp``): a client that finds none is told so in one line (``NotRunning``), and a
 ``cad`` command that finds one of another release is too (``OtherRelease``, ``RELEASE``) -- unless cad's own update is
 switching releases just then (``SWITCHING``): the server it starts is waited for. A start never replaces a server of
-its own release or a newer one, whenever it finds it: it joins it (forward only). cad's own update stops the server
-once nothing is in flight (``drain``)."""
+its own release or a newer one, whenever it finds it: it joins it (forward only), and while cad's own update switches
+away from its release it launches none of its own (``LEAVING``): the next server is the update's to start. cad's own
+update stops the server once nothing is in flight (``drain``)."""
 
 from __future__ import annotations
 
@@ -52,6 +53,10 @@ AT_LEAST: str | None = None
 # then finds no server, or one older than its own release, waits for the next ``SWITCH_SECONDS`` at most. None: never.
 SWITCHING: Callable[[], bool] | None = None
 SWITCH_SECONDS = 30.0
+# Whether cad's own update is switching away from this process's release right now
+# (``cad_server._internal.auto_update.leaving``, which the ``cad`` command sets): the next server is the update's to
+# start, so ``start`` launches none meanwhile and waits for the one that answers. None: never.
+LEAVING: Callable[[], bool] | None = None
 
 
 def newer(theirs: str | None, mine: str) -> bool:
@@ -94,6 +99,13 @@ def _joined(release: str | None) -> str:
     if release == version():
         return f"the {COMMAND} server ({COMMAND} {version()}) is already running"
     return f"the {COMMAND} server ({COMMAND} {release}, newer than this {COMMAND} {version()}) is already running"
+
+
+def _updated(release: str | None) -> str:
+    """What a start says that stood by while cad's own update switched releases (``LEAVING``), and whose server is
+    the next release's, which the update started."""
+    return (f"started the {COMMAND} server ({COMMAND} {release}): {COMMAND} updated itself from {version()} as the "
+            "server started")
 
 
 def _connect(address: Path | None = None, *, stopping: bool = False) -> Connection | None:
@@ -304,10 +316,15 @@ def start(port: int | None = None) -> str:
     """This release's server running: the one function that starts a server (``cad server start``, ``cad mcp``),
     once room is made for it (``make_way``) -- started (``_spawn``; ``port``, the HTTP port it must take) and waited
     for until its door answers. Starts at the same moment end with one server, by the daemon's lock, and none of them
-    stops the server another of them started (``make_way``): each says it ran or joined it. What was done, in one
-    line. ``ConnectionError`` in one line where it could not be: room
-    not made (``make_way``), a server that did not start (its note, ``places.failure_path``), and one of an older
-    release that a start at the same moment started (``OtherRelease``)."""
+    stops the server another of them started (``make_way``): each says it ran or joined it. While cad's own update
+    switches away from this release (``LEAVING``: the daemon launched stood aside for it, or this start became the
+    switch to a release that was ready) it launches nothing and takes no exit of what it launched for a failure: a
+    daemon launched then runs whichever release the pointer names at that instant, and one of a release whose server
+    does not start would fail this start a moment before the update goes back. It waits for the server the update
+    starts, the next release's or, gone back, this one's. What was done, in one line. ``ConnectionError`` in one line
+    where it could not be: room not made (``make_way``), a server that did not start (its note,
+    ``places.failure_path``), and one of an older release that a start at the same moment started
+    (``OtherRelease``)."""
     running = make_way()
     if running is not None:
         return running
@@ -325,21 +342,28 @@ def start(port: int | None = None) -> str:
     process = _spawn(port)
     began = time.monotonic()
     deadline = began + START_SECONDS
+    stood_by = waited = False  # ever stood by for the update's switch; the daemon launched last left during one
     while (answered := _connect()) is None:
         if time.monotonic() > deadline:
             raise ConnectionError("the engine server did not start")
         time.sleep(0.02)
         code = process.poll()
-        if code:  # it could not take its lock or listen: said now, not after the timeout
-            raise _not_started(code)
-        if code == 0 and time.monotonic() - began > 1.0:
-            # A daemon that is stopping still holds the lock, and the one just started left at once: started
-            # again once the lock is free.
-            process = _spawn(port)
+        if code is not None and _leaving():
+            # The next server is the update's to start: nothing is launched, how the daemon launched before left
+            # says nothing of now (it stood aside, or ran the release the pointer named at that instant), and the
+            # second a daemon is given before another is launched begins once the switch has ended.
+            stood_by = waited = True
             began = time.monotonic()
+            continue
+        if code and not waited:  # it could not take its lock or listen: said now, not after the timeout
+            raise _not_started(code)
+        if code is not None and time.monotonic() - began > 1.0:
+            # A daemon that is stopping still holds the lock, and the one just started left at once; or the update's
+            # switch has ended and left no server: started again once the lock is free.
+            process, began, waited = _spawn(port), time.monotonic(), False
     answered.close()
     if newer(answered.release, version()):
-        return _joined(answered.release)
+        return _updated(answered.release) if stood_by else _joined(answered.release)
     if answered.release != version():
         raise OtherRelease.met(answered.release, version())
     if _another_s(process):
@@ -391,6 +415,15 @@ def _switching() -> bool:
     """Whether cad's own update is switching releases now (``SWITCHING``); False where nothing says, or it cannot."""
     try:
         return SWITCHING is not None and SWITCHING() is True
+    except Exception:  # noqa: BLE001 - a hook that fails is no switch
+        return False
+
+
+def _leaving() -> bool:
+    """Whether cad's own update is switching away from this release now (``LEAVING``); False where nothing says, or
+    it cannot."""
+    try:
+        return LEAVING is not None and LEAVING() is True
     except Exception:  # noqa: BLE001 - a hook that fails is no switch
         return False
 

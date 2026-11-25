@@ -29,7 +29,8 @@ In order (``update``):
    short. Then the environment pointed at the release (``store.point``) and the release run: ``cad server start`` where
    a server ran or ``start`` asks for one, which must end 0 with a server whose greeting names the release; else ``cad
    --version``, which must say it.
-4. **Way back** (``phase``: ``restoring``). Where that fails, the pointer put back exactly as it was read
+4. **Way back** (``phase``: ``restoring``, kept once the pointer is back, so a start of the release before stands by
+   until then). Where that fails, the pointer put back exactly as it was read
    (``store.restore``), a server of another release that answers by then stopped (``clear``: the new release's, come
    up late), and the server of the release before started where one is wanted: outcome ``failed``, cause
    ``start_failed`` (the server) or ``broken`` (the command), ``restored`` whether the release before runs again.
@@ -257,8 +258,8 @@ def started(wanted, ok, said):
 
 def switch(told, run, path, built, log, mark=lambda phase: None):
     """Steps 3 and 4 (see the module): the environment switched to the stored release at ``path`` (``built``: its
-    ``release``), and back where it does not run (the record's phase ``restoring`` kept first, ``mark``: the release
-    before is the one to start again)."""
+    ``release``), and back where it does not run (the pointer put back, then the record's phase ``restoring`` kept,
+    ``mark``: the release before is the one to start again)."""
     from cad_server._internal import store
 
     kept = store.pointer()
@@ -276,9 +277,11 @@ def switch(told, run, path, built, log, mark=lambda phase: None):
     if ok:
         return {**built, "outcome": "installed", "detail": f"cad {built['release']} runs from {path}",
                 **started(wanted, True, said)}
-    mark("restoring")
     try:
         store.restore(kept)
+        # Kept once the pointer is back: until then a start of the release before stands by (``auto_update.leaving``,
+        # ``cad.engine.client.start``), so none launches a server of the release that did not start.
+        mark("restoring")
         clear(told["from"], log)
         back, again = runs(told, run, told["from"], wanted)
     except OSError as error:

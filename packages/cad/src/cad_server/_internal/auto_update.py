@@ -1081,14 +1081,15 @@ def believed(found: dict[str, Any], now: float) -> bool:
 
 
 def switching(now: float | None = None) -> bool:
-    """Whether an update is switching releases now: the attempt underway (``underway``) has stopped the server, or is
-    about to, and is starting the next (its ``phase``, ``switching``). A ``cad`` command that finds no server then
-    waits for the next (``cad.engine.client.SWITCHING``). Never raises."""
+    """Whether an update is between two servers now: the attempt underway (``underway``) has stopped the server, or
+    is about to, and is starting the next (its ``phase``, ``switching``), or is on its way back to the release before
+    (``restoring``). A ``cad`` command that finds no server then waits for the one the update starts
+    (``cad.engine.client.SWITCHING``). Never raises."""
     try:
         found = underway(now)
     except Exception:  # noqa: BLE001 - a record that cannot be read is no switch
         return False
-    return found is not None and found.get("phase") == "switching"
+    return found is not None and found.get("phase") in ("switching", "restoring")
 
 
 # How fresh the worker's beat must be for a server's start to stand aside for its switch (``leaving``). It beats every
@@ -1102,8 +1103,10 @@ def leaving(now: float | None = None) -> bool:
     ``LEAVING_SECONDS``. The server the update drained is gone or going, and the next to start is the next release's:
     a server of this release started in between (a ``cad server start`` at that moment) would take that place, be
     taken by the update for the one it is waiting to see gone, and be stopped as the next one starts. So it starts
-    none (``cad_server.engine.daemon.main``), and its starter waits for the server that answers. Not on the way back
-    (the worker's phase is ``restoring`` then: the release before is the one to start). Never raises."""
+    none (``cad_server.engine.daemon.main``), and its starter launches none meanwhile and waits for the server that
+    answers (``cad.engine.client.LEAVING``: a daemon launched then would run whichever release the pointer names at
+    that instant). Not on the way back (the worker's phase is ``restoring`` then, kept once the pointer is back: the
+    release before is the one to start). Never raises."""
     try:
         now = time.time() if now is None else now
         found = underway(now)

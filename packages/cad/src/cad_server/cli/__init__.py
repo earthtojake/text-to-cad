@@ -12,7 +12,8 @@ and the installation's (``requirement``, ``setup``, ``doctor``, ``cache``, ``vie
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
 release is refused in one line, but one that finds none, or an older one, while cad's own update switches releases
-waits for the next (``client.SWITCHING``). The server's own commands are not held to it (``_ANY_RELEASE``).
+waits for the next (``client.SWITCHING``). The server's own commands are not held to it (``_ANY_RELEASE``). Every
+command's client launches no server while cad's own update switches away from its release (``client.LEAVING``).
 
 A command whose words a person reads says, once, what CAD sends by default (``_tell``), and, after its own output and
 at most once a day, that this cad has stayed behind a release of its major though it updates itself (``_behind``):
@@ -279,10 +280,11 @@ def _main(argv: list[str]) -> int:
     told = command not in _UNTOLD and not helping and not wants_json(rest)
     if told:
         _tell()
-    if command not in _ANY_RELEASE:
-        from cad_server._internal.attach import when
+    from cad_server._internal.attach import when
 
-        when("cad.engine.client", _hold_to_release)  # as the client is imported, if it is: a command imports no more
+    when("cad.engine.client", _stand_by)  # as the client is imported, if it is: a command imports no more
+    if command not in _ANY_RELEASE:
+        when("cad.engine.client", _hold_to_release)
     behind = told and command not in _UNSAID_BEHIND
     try:
         code = _run(command, entry[0], rest)
@@ -304,6 +306,15 @@ def _main(argv: list[str]) -> int:
     if behind:
         _behind()
     return code
+
+
+def _stand_by(client) -> None:
+    """This command's client launches no server while cad's own update switches away from this release
+    (``cad.engine.client.LEAVING``: ``auto_update.leaving``): the next server is the update's to start. Every
+    command's, the server's own too (``cad server start``, ``cad mcp``), which are the ones that start one."""
+    from cad_server._internal.auto_update import leaving
+
+    client.LEAVING = leaving
 
 
 def _hold_to_release(client) -> None:

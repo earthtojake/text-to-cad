@@ -1482,6 +1482,16 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(found["detail"], "the release built did not run: ModuleNotFoundError: No module named 'ezdxf'")
         self.assertEqual((self.serving, self.pointer, self.phases), ("0.1.0", None, ["building"]))
 
+    def test_the_way_back_is_named_only_once_the_pointer_is_back(self) -> None:
+        """While the pointer names the release that did not start, a start of the release before stands by
+        (``auto_update.leaving``, ``client.start``); the phase ``restoring`` lets it launch its own again, so it is
+        kept only once the pointer is back: a daemon launched before would run the release that does not start."""
+        self.starts["0.2.0"] = False
+        seen: list[tuple[str, str | None]] = []
+        helper.update(self.told, run=self.cad, mark=lambda phase: seen.append((phase, self.pointer)))
+        self.assertEqual([phase for phase, _pointer in seen], ["building", "switching", "restoring"])
+        self.assertIsNone(seen[-1][1], "the pointer was back, at none as before, when the way back was named")
+
     def test_a_server_that_does_not_start_puts_the_pointer_back_and_the_release_before_runs_again(self) -> None:
         self.starts["0.2.0"] = False
         found = self.update()
@@ -3972,6 +3982,8 @@ class SwitchingTest(Case):
         self.assertFalse(auto_update.switching())
         self.keep(phase="switching")
         self.assertTrue(auto_update.switching())
+        self.keep(phase="restoring")
+        self.assertTrue(auto_update.switching(), "on the way back the release before is the one to wait for")
         self.keep(phase="switching", outcome="installed")
         self.assertFalse(auto_update.switching(), "ended")
         self.keep(phase="switching", beat=time.time() - auto_update.LOST_SECONDS)
@@ -4019,9 +4031,89 @@ class SwitchingTest(Case):
     def test_the_cad_command_sets_the_hook_where_it_holds_its_release(self) -> None:
         from cad_server import cli
 
-        fake = types.SimpleNamespace(RELEASE=None, SWITCHING=None)
+        fake = types.SimpleNamespace(RELEASE=None, SWITCHING=None, LEAVING=None)
         cli._hold_to_release(fake)
-        self.assertEqual((fake.RELEASE, fake.SWITCHING), (version(), auto_update.switching))
+        self.assertEqual((fake.RELEASE, fake.SWITCHING, fake.LEAVING), (version(), auto_update.switching, None))
+        # Every command's client stands by for the update's switch, the server's own too: they start servers.
+        cli._stand_by(fake)
+        self.assertIs(fake.LEAVING, auto_update.leaving)
+
+    def start(self, looks: list, *, leaving: list, exits: list) -> tuple[object, int]:
+        """``client.start`` with stand-ins: ``looks``, the server that answers at each look (None: none; the last
+        stays); ``leaving``, what the hook says at each ask (the last stays); ``exits``, how each daemon launched
+        has left by the time it is asked (None: it runs on). What it returned or raised, and how many it launched.
+        Each look is half a second of the clock."""
+        clock, launched = [0.0], []
+        answers, says = iter(looks), iter(leaving)
+        last, said = [None], [False]
+
+        def connect_(*_args, **_kwargs):
+            last[0] = next(answers, last[0])
+            return None if last[0] is None else mock.Mock(release=last[0])
+
+        def leaving_() -> bool:
+            said[0] = next(says, said[0])
+            return said[0]
+
+        def spawn(_port):
+            launched.append(mock.Mock(poll=mock.Mock(return_value=exits[min(len(launched), len(exits) - 1)])))
+            return launched[-1]
+
+        note = self.state / "failure.json"  # none is left: a daemon that leaves badly is said by its exit status
+        note.parent.mkdir(parents=True, exist_ok=True)
+        with mock.patch.object(client, "make_way", return_value=None), \
+                mock.patch.object(client.places, "make_engine_dir"), \
+                mock.patch.object(client.places, "folder_refusal", return_value=None), \
+                mock.patch.object(client.places, "failure_path", return_value=note), \
+                mock.patch.object(client, "_spawn", side_effect=spawn), \
+                mock.patch.object(client, "_connect", side_effect=connect_), \
+                mock.patch.object(client, "_another_s", return_value=False), \
+                mock.patch.object(client, "LEAVING", leaving_), \
+                mock.patch.object(client.time, "monotonic", side_effect=lambda: clock[0]), \
+                mock.patch.object(client.time, "sleep", side_effect=lambda _s: clock.__setitem__(0, clock[0] + 0.5)):
+            try:
+                return client.start(), len(launched)
+            except ConnectionError as error:
+                return error, len(launched)
+
+    def test_a_start_launches_nothing_while_the_update_switches_away_and_waits_for_its_server(self) -> None:
+        """``client.start`` while ``leaving``: the next server is the update's to start. A daemon launched then runs
+        whichever release the pointer names at that instant, and one of a release whose server does not start would
+        fail the start a moment before the update goes back."""
+        mine = version()
+        # The daemon launched stood aside (it left at once, well); the update's server answers ten looks on: nothing
+        # more was launched in those five seconds, and the start says cad updated itself.
+        said, launched = self.start([None] * 10 + ["99.0.0"], leaving=[True], exits=[0])
+        self.assertEqual((said, launched), (f"started the cad server (cad 99.0.0): cad updated itself from {mine} as "
+                                            "the server started", 1))
+        # A daemon that left badly during the switch (it ran the release that does not start) is no failure of this
+        # start: the update went back, and the release before answers.
+        said, launched = self.start([None] * 6 + [mine], leaving=[True] * 4 + [False], exits=[1])
+        self.assertEqual(launched, 1, "the update's own start of the release before answered first")
+        self.assertIn(f"(cad {mine})", str(said))
+        self.assertNotIsInstance(said, ConnectionError)
+        # The switch ended and left no server: a second later, and not before, this start launches its own again,
+        # however the one before left; that one is judged as any is.
+        said, launched = self.start([None] * 9 + [mine], leaving=[True] * 3 + [False], exits=[1, None])
+        self.assertEqual((said, launched), (f"started the cad server (cad {mine})", 2))
+        said, launched = self.start([None], leaving=[True] * 3 + [False], exits=[0, 1])
+        self.assertEqual((str(said), launched), ("the engine server did not start: it exited with code 1", 2))
+        # With no switch, as ever: a daemon that left badly is said at once, one that left well is launched again a
+        # second on, and a newer server that answers was another start's.
+        said, launched = self.start([None], leaving=[False], exits=[1])
+        self.assertEqual((str(said), launched), ("the engine server did not start: it exited with code 1", 1))
+        said, launched = self.start([None] * 5 + [mine], leaving=[False], exits=[0, None])
+        self.assertEqual((said, launched), (f"started the cad server (cad {mine})", 2))
+        said, launched = self.start([None, "99.0.0"], leaving=[False], exits=[None])
+        self.assertEqual((said, launched), (f"the cad server (cad 99.0.0, newer than this cad {mine}) is already running", 1))
+        # A hook that fails is no switch, and neither is none.
+        def broken() -> bool:
+            raise OSError("the state folder is refused")
+
+        with mock.patch.object(client, "LEAVING", broken):
+            self.assertFalse(client._leaving())  # noqa: SLF001
+        with mock.patch.object(client, "LEAVING", None):
+            self.assertFalse(client._leaving())  # noqa: SLF001
 
     def connect(self, answers: list, *, switching, release: str | None = "0.2.0", seconds: float = 5.0):
         """``client.connect`` with the servers that answer one look after another (the last stays) and the hook."""

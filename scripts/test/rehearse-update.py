@@ -663,7 +663,7 @@ class Box:
         self.run([self.cad(), "server", "stop"])
         self.an_hour_passes()
         started = self.run([self.cad(), "server", "start"]).stdout.strip()
-        switched = held.get("outcome") == "ready" and started == JOINED.format(release=held.get("release"), was=was)
+        switched = held.get("outcome") == "ready" and started == UPDATED.format(release=held.get("release"), was=was)
         if "started" not in started and not switched:
             raise Failed(f"{self.label}: cad server start said {started!r}")
 
@@ -864,10 +864,10 @@ def updated(box: Box, target: str, outcome: str = "installed", *, after: dict | 
 
 
 # What ``cad server start`` says (``cad.engine.client.start``): where it started a server of the release it is, and
-# where the server that answered it is a newer release's -- a start that became the switch to a release cad's own
-# update had ready (``restarted_at_start``).
+# where it stood by while cad's own update switched releases and the server that answered is the next release's -- a
+# start that became the switch to a release the update had ready (``restarted_at_start``).
 STARTED = "started the cad server (cad {release})"
-JOINED = "the cad server (cad {release}, newer than this cad {was}) is already running"
+UPDATED = "started the cad server (cad {release}): cad updated itself from {was} as the server started"
 
 
 def made_ready(box: Box, env: Path, was: str, target: str, first: dict) -> dict:
@@ -962,7 +962,7 @@ def restarted_at_start(box: Box, env: Path, was: str, target: str, ready: dict) 
     """The server's next start, with ``target`` ready beside ``was`` (``ready``: its record): stopped by its own
     command, then ``cad server start``, which becomes the switch -- the server of ``was`` it starts begins the switch
     and serves nothing, the update's worker starts ``target``'s, and the command returns once that one answers, saying
-    it runs (``JOINED``), exit 0. No server of ``was`` answered the door from the stop until ``target``'s did, as a
+    it runs (``UPDATED``), exit 0. No server of ``was`` answered the door from the stop until ``target``'s did, as a
     client looking every 50 ms sees it (``Watch``). The switch is the automatic one's: its record ``installed``, not
     typed, at the try that got it ready. The record, and the route's line."""
     box.run([box.cad(), "server", "stop"])
@@ -976,7 +976,7 @@ def restarted_at_start(box: Box, env: Path, was: str, target: str, ready: dict) 
         box.until(lambda: watch.saw(target), f"the watch on the door seeing {target}'s server", seconds=60)
     finally:
         seen = watch.stop()
-    said = JOINED.format(release=target, was=was)
+    said = UPDATED.format(release=target, was=was)
     if (done.returncode, done.stdout.strip()) != (0, said) or [release for release, _pid in seen] != [target]:
         raise Failed(f"{box.label}: cad server start with {target} ready exited {done.returncode} in {took:.1f} s:\n"
                      f"{done.stdout}\n{done.stderr}\nthe door answered as {seen} ({watch.looks} looks)\n{box.said()}")
@@ -2045,7 +2045,7 @@ def self_ready_damaged(box: Box) -> None:
     record = updated(box, NEXT, after=ready)
     log = (box.state / "auto-update.log").read_text(encoding="utf-8", errors="replace")
     said = done.stdout.strip()
-    if done.returncode != 0 or said not in (JOINED.format(release=NEXT, was=NEW), STARTED.format(release=NEW)):
+    if done.returncode != 0 or said not in (UPDATED.format(release=NEXT, was=NEW), STARTED.format(release=NEW)):
         raise Failed(f"{box.label}: cad server start with {NEXT} ready but damaged exited {done.returncode}:\n"
                      f"{done.stdout}\n{done.stderr}\n{box.said()}")
     if (record.get("asked"), record.get("tries")) != (False, 1) or ".building-" not in log:
