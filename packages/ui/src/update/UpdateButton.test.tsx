@@ -40,7 +40,8 @@ const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAs
 it('is a blue icon, and nothing else, while the install is behind; nothing where it is current or cannot update itself', async () => {
   render(<Host server={calls()} />);
   const button = screen.getByRole('button', { name: 'Update to 0.9.1' });
-  expect(button.className).toContain('bg-blue-500');
+  expect(button.className).toContain('bg-brand');
+  expect(button.className).not.toContain('blue-');
   expect(button.textContent).toBe('');
   expect(screen.queryByRole('alert')).toBeNull();
   cleanup();

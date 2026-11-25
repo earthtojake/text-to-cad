@@ -72,7 +72,7 @@ chrome that floats over the picture. The home is the navbar over the library.
   accent fill on hover and while their menu is open, and no tooltip, since each says what it is.
 - **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning), Display, Preview,
   the host's actions (the CAD app's Full size), then, outermost, the update button.
-- **The update button** (`@cad/ui/update`), over every file and over the home, as 0.11.1 had it: a 24px blue icon
+- **The update button** (`@cad/ui/update`), over every file and over the home, as 0.11.1 had it: a 24px brand-blue icon
   (a download arrow) and nothing else, shown while a global install of cad is behind a newer release of its own major,
   automatic updates on or off; none where cad cannot update itself. Its tooltip says "Update". A click updates: the
   icon becomes a ring that fills a stage at a time (asked, begun, installing while the server is away), each step

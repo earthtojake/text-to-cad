@@ -60,7 +60,7 @@ function TerminalCommand() {
 }
 
 /**
- * A newer text-to-cad, as the update button: a blue icon and nothing else, which a host hands the viewer
+ * A newer text-to-cad, as the update button: a brand-blue icon and nothing else, which a host hands the viewer
  * (`update`) to draw last among the navbar's controls, outermost, over every file and over the home, while
  * this install is behind (a newer release of its own major: `auto_update.button`'s `latest`). A click
  * updates (`useUpdate`): the icon becomes a ring that fills a stage at a time as the release installs (each
@@ -80,7 +80,7 @@ export function UpdateButton({ state, phase, failure, onUpdate, onDismiss }: {
 }) {
   const { t } = useI18n();
   const version = state?.latest ?? "";
-  const blue = "bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-500 dark:hover:bg-blue-400";
+  const brand = "bg-brand text-white hover:bg-brand-icon dark:text-primary-foreground dark:hover:bg-brand/75";
   if (phase.phase === "restarting") {
     return <TooltipHint content={t("update.restarting", { version })}>
       <span className="inline-flex size-6 shrink-0 items-center justify-center" data-update="restarting">
@@ -94,7 +94,7 @@ export function UpdateButton({ state, phase, failure, onUpdate, onDismiss }: {
     return <TooltipHint content={t("update.progress", { percent })}>
       <span role="progressbar" aria-label={t("update.updating", { version })} aria-valuemin={0}
         aria-valuemax={phase.total} aria-valuenow={phase.done} data-update="working"
-        className="inline-flex size-6 shrink-0 items-center justify-center text-blue-500">
+        className="inline-flex size-6 shrink-0 items-center justify-center text-brand-icon">
         <svg viewBox="0 0 16 16" className="size-4 -rotate-90" aria-hidden="true">
           <circle cx="8" cy="8" r={RADIUS} fill="none" stroke="currentColor" strokeOpacity={0.25} strokeWidth={2} />
           <circle cx="8" cy="8" r={RADIUS} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"
@@ -106,7 +106,7 @@ export function UpdateButton({ state, phase, failure, onUpdate, onDismiss }: {
   }
   if (!version && !failure) return null;
   const button = <Button variant="default" size="icon-xs" aria-label={version ? t("update.toAria", { version }) : t("update.label")}
-    data-update={failure ? "failed" : ""} className={`size-6 shrink-0 ${blue}`} onClick={onUpdate}>
+    data-update={failure ? "failed" : ""} className={`size-6 shrink-0 ${brand}`} onClick={onUpdate}>
     <Download className="size-3.5" aria-hidden="true" />
   </Button>;
   if (!failure) return <TooltipHint content={t("update.label")}>{button}</TooltipHint>;
