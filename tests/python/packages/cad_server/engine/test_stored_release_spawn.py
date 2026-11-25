@@ -32,7 +32,7 @@ class StoredReleaseSpawnTest(unittest.TestCase):
         scratch = tempfile.TemporaryDirectory(prefix="stored-spawn-")
         self.addCleanup(scratch.cleanup)
         root = Path(scratch.name).resolve()
-        # Both outside this environment (``sys.prefix``): a release in the state folder's store, and a checkout.
+        # All outside this environment (``sys.prefix``): releases in the state folder's store, a checkout, a folder.
         self.release, self.source, self.other, self.kept = (str(root / name) for name in
                                                             ("1.0.1-tag", "src", "1.0.0-tag", "kept"))
         for folder in (self.release, self.source, self.other, self.kept):
