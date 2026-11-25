@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
 class DaemonRenderTest(unittest.TestCase):
     """`cad <type> snapshot` drawn by OCCT through the daemon: a render process per served
-    document, warm from its second picture, sent its file's new version by the next picture with
+    document, warm from its second picture, sent its model's new version by the next picture with
     only the parts it lacks, gone with the daemon; and in this process with ``daemon=False`` from Python. Nothing is written but
     the pictures, and the daemon's door, lock and clients' pipes."""
 
@@ -82,8 +82,8 @@ class DaemonRenderTest(unittest.TestCase):
                               timeout=300)
         self.assertEqual(done.returncode, 0, done.stderr)
 
-    def renders(self) -> list[dict]:
-        return json.loads(self.cli("status", "--json").stdout)["renders"]
+    def status(self) -> dict:
+        return json.loads(self.cli("status", "--json").stdout)
 
     def test_a_served_document_is_drawn_warm_and_follows_its_builds(self) -> None:
         self.build(10)
@@ -93,12 +93,12 @@ class DaemonRenderTest(unittest.TestCase):
         warm = self.snapshot("warm.png")
         self.assertEqual(warm["process"]["pid"], pid)
         self.assertFalse({"meshMs", "holdMs", "sceneMs"} & set(warm["timings"]), warm["timings"])
-        self.build(14)  # the file is rewritten: the next picture reads it, and makes the new part alone
-        version = f"{(self.folder / 'XBF/pair.xbf').stat().st_mtime_ns}-{(self.folder / 'XBF/pair.xbf').stat().st_size}"
+        self.build(14)  # built again: the .xbf is the model's document, and the next picture makes the new part alone
         edited = self.snapshot("edited.png")
-        self.assertEqual(edited["process"]["pid"], pid, "the same process, sent the file's new version")
-        [render] = self.renders()
-        self.assertEqual((render["version"], render["held"]["made"], render["held"]["kept"]), (version, 1, 1))
+        self.assertEqual(edited["process"]["pid"], pid, "the same process, sent the model's new version")
+        status = self.status()
+        [model], [render] = status["models"], status["renders"]
+        self.assertEqual((render["version"], render["held"]["made"], render["held"]["kept"]), (model["version"], 1, 1))
         self.assertNotEqual((self.folder / "edited.png").read_bytes(), (self.folder / "first.png").read_bytes())
         # A model, by its id, is drawn from the document its worker holds, in that worker.
         from tests.python.support.ids import model_id

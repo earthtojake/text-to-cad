@@ -349,7 +349,8 @@ test("the sidebar ends in the panel's foot under a full-width rule: the host's l
     assert.equal(await menu.getByRole("menuitemcheckbox", { name: "Telemetry" }).getAttribute("aria-checked"), "true");
     await page.keyboard.press("Escape");
     await menu.waitFor({ state: "detached" });
-    assert.equal(await cog.evaluate((node) => node === document.activeElement), true);
+    // The menu gives the focus back a task after it unmounts: awaited, never read at once.
+    await page.waitForFunction((node) => node === document.activeElement, await cog.elementHandle());
   } finally { await context.close(); }
   // At the sidebar's narrowest, 200px, the row still fits on one line, the cog in its corner.
   const narrow = await home('panel={"width":200}');

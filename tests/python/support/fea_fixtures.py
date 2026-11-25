@@ -62,9 +62,9 @@ def study_of(document: Path):
     """``cad.<type>.solve`` for the document's type: ``cad.step.solve`` for a STEP, ``cad.model.solve`` for an .xbf."""
     import importlib
 
-    from cad.registry import spelling, type_of
+    from cad.registry import type_of
 
-    return importlib.import_module(f"cad.{spelling(type_of(document).id)}").solve
+    return importlib.import_module(f"cad.{type_of(document).id}").solve
 
 
 def solve(step: Path, out: Path, study: dict, *, pictures: bool = False, **options):

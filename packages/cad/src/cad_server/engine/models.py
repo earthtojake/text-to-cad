@@ -367,7 +367,9 @@ class Models:
             raise ValueError(f"{request.get('id')!r} is not the id of {saving}")
         data = base64.b64decode(request.get("xbf") or "")
         replies: list[dict[str, Any]] = []
-        self.daemon._call({"source": {"document": ident}, "cwd": request.get("cwd")},
+        # Read by the documents worker in its caller's environment, as a file's or an .xbf's bytes are: a worker
+        # started in none would lack what its interpreter needs to start (on Windows, the user's home).
+        self.daemon._call({"source": {"document": ident}, "cwd": request.get("cwd"), "env": request.get("env")},
                           {"id": 1, "op": "result", "document": True, "name": name}, replies.append, data)
         answer = next((row for row in reversed(replies) if "done" in row or "failed" in row), {})
         if "done" not in answer:

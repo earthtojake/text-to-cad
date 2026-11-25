@@ -1215,7 +1215,8 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
 
         with Image.open(self.folder / "bracket.png") as picture:
             self.assertEqual(picture.size, (200, 150))
-        self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["bracket.png", "bracket.py"])
+        # The picture beside the model's own .xbf, which its build wrote: nothing written for the snapshot.
+        self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["bracket.png", "bracket.py", "bracket.xbf"])
 
     def test_a_served_xbf_is_its_model_and_follows_its_runs(self) -> None:
         """A model's .xbf opened by its path is the model, live while its worker holds the build: the page's id is the

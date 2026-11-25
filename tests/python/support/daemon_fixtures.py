@@ -38,7 +38,7 @@ if __name__ == "__main__":
 """
 
 
-# A bare model: no file, its document the worker's memory alone.
+# A bare model: no path given, its document the .xbf its run writes beside the script.
 BARE = """
 import build123d as bd
 from cad.engine import model
