@@ -533,6 +533,14 @@ class LinuxTest(unittest.TestCase):
         self.assertFalse({"fusion", "solidworks", "solidedge", "rhino"} & set(everything))
         self.assertEqual(everything["plasticity"], "/usr/bin/plasticity")
 
+    def test_the_default_handler_is_xdg_open_where_the_look_finds_it_and_always_on_macos_and_windows(self) -> None:
+        self.assertEqual(apps.linux({"xdg-open": "/usr/bin/xdg-open"}.get), {apps.DEFAULT: "/usr/bin/xdg-open"})
+        for platform, found, handles in (("linux", {apps.DEFAULT: "/usr/bin/xdg-open"}, True),
+                                         ("linux", {"vscode": "/usr/bin/code"}, False),
+                                         ("darwin", {}, True), ("win32", {}, True)):
+            with self.subTest(platform=platform, found=found):
+                self.assertEqual(apps.Detected(platform=platform).handles(found), handles)
+
 
 class KindsTest(unittest.TestCase):
     def test_the_apps_each_kind_takes_in_the_menus_order(self) -> None:

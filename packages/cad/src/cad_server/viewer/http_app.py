@@ -1252,15 +1252,17 @@ class CadApp:
         computer has that take its kind (``apps``, as last found: never looked for on a request; a KiCad that
         cannot read the file listed with ``refuses: "newer"``), whether the operating system's own handler may
         not open it (``default: false``: every file but those ``apps.defaults`` lists by extension -- code, a
-        KiCad file, an extension no list names), and the desktop's file manager (``fileManager``)."""
+        KiCad file, an extension no list names -- and every file on a computer that has no handler, a Linux
+        without ``xdg-open``: ``Detected.handles``), and the desktop's file manager (``fileManager``)."""
         from cad_server._internal.apps import DETECTED, apps_for, defaults, file_manager
 
         found = DETECTED.found()
+        handles = DETECTED.handles(found)
         return {"targets": [{"target": target["target"], "kind": target["kind"],
                              "name": node_basename(target["path"]) if target["path"] else "",
                              "present": _is_file(target["path"]),
                              "apps": apps_for(target["kind"], found, target["path"]),
-                             **({} if defaults(target["path"]) else {"default": False})}
+                             **({} if handles and defaults(target["path"]) else {"default": False})}
                             for target in self._open_targets(ident)],
                 "fileManager": file_manager()}
 
@@ -1269,8 +1271,8 @@ class CadApp:
         file a folder listed (``_open_targets``), in an app found for its kind, or the operating system's own
         handler (``"default"``), started detached (``apps.open_file``). 404 for an id or a file not there,
         400 for a target the id does not have, an app not found for that file, a KiCad that cannot
-        read it, or the default handler of a file it may not open (``apps.defaults``), whatever the request
-        says."""
+        read it, the default handler of a file it may not open (``apps.defaults``) or on a computer that has
+        none (``Detected.handles``), whatever the request says, and an app that could not be started."""
         from cad_server._internal import apps
 
         self._limit(request, 8192)
@@ -1283,14 +1285,17 @@ class CadApp:
         if chosen is None:
             raise ApiError(400, f"the document has no target {payload['target']!r}",
                            f"name one of {', '.join(targets)}: GET /api/v1/local/open-in?id= lists them")
-        takes_default = apps.defaults(chosen["path"])
+        found = apps.DETECTED.found()
+        takes_default = apps.defaults(chosen["path"]) and apps.DETECTED.handles(found)
         app = None
         if payload["app"] == "default":
-            if not takes_default and chosen["path"]:
+            if not apps.defaults(chosen["path"]) and chosen["path"]:
                 raise ApiError(400, f"{node_basename(chosen['path'])} is never opened in its default app from here",
                                "open it in an app Open in lists for it, or reveal it in the file manager and open it there")
+            if not apps.DETECTED.handles(found):
+                raise ApiError(400, "this computer has no default app to start: xdg-open is not installed",
+                               "open it in an app Open in lists for it, or from the file manager")
         else:
-            found = apps.DETECTED.found()
             listed = apps.apps_for(chosen["kind"], found, chosen["path"])
             entry = next((item for item in listed if item["id"] == payload["app"]), None)
             if entry is None:
@@ -1308,8 +1313,8 @@ class CadApp:
             raise ApiError(404, "That file is no longer there.", "build the model again, or open the file from where it is now")
         try:
             apps.open_file(path, app, app_id=payload["app"])
-        except OSError as error:
-            raise ApiError(500, f"the app could not be started: {error}", "open the file from the file manager instead") from None
+        except OSError as error:  # a program missing on the person's computer: not the server's fault
+            raise ApiError(400, f"the app could not be started: {error}", "open the file from the file manager instead") from None
         response.send_empty(204)
 
     def _clipboard(self, request, response) -> None:

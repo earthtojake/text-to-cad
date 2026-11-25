@@ -22,7 +22,7 @@ apps_open_file = apps.open_file  # the real opener, before the tests replace it 
 
 MODEL = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
 UNKNOWN = "0f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
-FOUND = {"vscode": "/A/Visual Studio Code.app", "cursor": "/A/Cursor.app", "freecad": "/A/FreeCAD.app",
+FOUND = {apps.DEFAULT: "/usr/bin/xdg-open", "vscode": "/A/Visual Studio Code.app", "cursor": "/A/Cursor.app", "freecad": "/A/FreeCAD.app",
          "bambu": "/A/BambuStudio.app", "blender": "/A/Blender.app"}
 STABLE = apps.KiCad("9.0.6", date(2025, 11, 1), "/K/pcbnew.app", "/K/eeschema.app", False)
 NIGHTLY = apps.KiCad("10.99.0-5334-ge37c27a8ce", date(2026, 11, 6), "/N/pcbnew.app", "/N/eeschema.app", True)
@@ -244,6 +244,22 @@ class OpenInRoutesTest(unittest.TestCase):
         self.script.unlink()
         self.assertEqual(self.post({"id": MODEL, "target": "source", "app": "cursor"})[0], 404)
         self.opener.assert_not_called()
+
+    def test_a_linux_without_xdg_open_offers_no_default_handler_and_one_that_cannot_start_is_a_400(self) -> None:
+        del self.found[apps.DEFAULT]
+        with mock.patch.object(apps.DETECTED, "_platform", "linux"):
+            self.assertEqual({target["target"]: target.get("default", True) for target in self.get(MODEL)[1]["targets"]},
+                             {"source": False, "export:xbf": False, "export:step": False, "export:stl": False})
+            status, answer = self.post({"id": MODEL, "target": "export:step", "app": "default"})
+            self.assertEqual((status, answer), (400, {"error": "this computer has no default app to start: xdg-open is not installed",
+                                                      "hint": "open it in an app Open in lists for it, or from the file manager"}))
+        self.opener.assert_not_called()
+        # An app found that cannot be started now (gone since the look, say) is the person's computer's, not a fault.
+        self.opener.side_effect = FileNotFoundError("xdg-open is not installed")
+        self.found[apps.DEFAULT] = "/usr/bin/xdg-open"
+        self.assertEqual(self.post({"id": MODEL, "target": "export:step", "app": "default"}), (400, {
+            "error": "the app could not be started: xdg-open is not installed",
+            "hint": "open the file from the file manager instead"}))
 
     def test_open_needs_the_write_header_and_only_posts(self) -> None:
         payload = {"id": MODEL, "target": "source", "app": "vscode"}

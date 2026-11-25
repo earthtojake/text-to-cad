@@ -17,7 +17,8 @@ look as arguments so every platform's lookup runs anywhere:
   known identifiers wherever they are.
 * Windows (``windows``): the App Paths registry (the user's, then the machine's), else the
   installers' own folders under ``%LOCALAPPDATA%`` and ``%ProgramFiles%``.
-* Linux (``linux``): each app's command in one of PATH's absolute folders.
+* Linux (``linux``): each app's command in one of PATH's absolute folders, and ``xdg-open``, the default
+  handler, which a Linux without it does not have (``DEFAULT``, ``Detected.handles``).
 
 KiCad is two apps, its stable and its nightly channel, and a record (``KiCad``) rather than a path: a
 KiCad is opened through its editors alone, its board editor on a board and its schematic editor on a
@@ -61,7 +62,7 @@ from typing import NamedTuple
 
 from cad.engine import executables
 
-__all__ = ["APPS", "BLENDER_SCRIPT", "DETECTED", "FILES", "KINDS", "REFRESH_SECONDS", "Detected", "KiCad",
+__all__ = ["APPS", "BLENDER_SCRIPT", "DEFAULT", "DETECTED", "FILES", "KINDS", "REFRESH_SECONDS", "Detected", "KiCad",
            "NEVER_OPENED", "apps_for", "defaults", "detect", "file_manager", "kicad_label", "kicad_reads", "kind_of",
            "linux", "mac", "open_file", "opens", "windows"]
 
@@ -196,6 +197,9 @@ _APP_PATHS = r"Software\Microsoft\Windows\CurrentVersion\App Paths"
 WINDOWS_KICAD_FOLDERS = (("ProgramFiles", "KiCad"), ("LOCALAPPDATA", "Programs", "KiCad"))
 _UNINSTALL = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
 
+# Linux: where a look found ``xdg-open``, the operating system's own handler, which macOS and Windows always have
+# (``Detected.handles``): the key it is found under, the name a request opens the handler by.
+DEFAULT = "default"
 # Linux: each app's commands, in order of preference (Fusion, SolidWorks, Solid Edge and Rhino have no Linux build).
 LINUX_COMMANDS = {"vscode": ("code",), "cursor": ("cursor",), "zed": ("zed", "zeditor"),
                   "pycharm": ("pycharm", "pycharm-community", "pycharm-professional"), "sublime": ("subl",),
@@ -559,6 +563,9 @@ def linux(find: Callable[[str], str | None],
             if path:
                 found[app] = path
                 break
+    handler = find("xdg-open")
+    if handler:
+        found[DEFAULT] = handler
     if kicad_about is not None:
         found.update(_linux_kicads(find, kicad_about))
     return found
@@ -640,6 +647,11 @@ class Detected:
     def warm(self) -> threading.Thread | None:
         """Look now, in the background, without a command: the server's start."""
         return self._start(commands=False)
+
+    def handles(self, found: Mapping[str, str | KiCad]) -> bool:
+        """Whether the operating system's own handler can be started here, by what a look ``found``: macOS's and
+        Windows' always, Linux's where it found ``xdg-open`` (``DEFAULT``)."""
+        return self._platform in ("darwin", "win32") or DEFAULT in found
 
     def found(self) -> dict[str, str | KiCad]:
         """The apps last found (none before the first look ends); a look started if one is due."""

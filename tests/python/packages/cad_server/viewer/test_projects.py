@@ -399,7 +399,7 @@ class ProjectRoutesTest(unittest.TestCase):
         for path in (check, tool, drawing):
             path.write_bytes(b"x")
         ident = self.request("POST", "/api/v1/projects", {"path": str(self.work)})[1]["project"]["id"]
-        found = {"vscode": "/A/Visual Studio Code.app", "freecad": "/A/FreeCAD.app"}
+        found = {apps.DEFAULT: "/usr/bin/xdg-open", "vscode": "/A/Visual Studio Code.app", "freecad": "/A/FreeCAD.app"}
         opener = mock.Mock()
         for patch in (mock.patch.object(apps.DETECTED, "found", side_effect=lambda: dict(found)),
                       mock.patch.object(apps, "open_file", opener)):
