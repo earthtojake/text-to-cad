@@ -18,6 +18,7 @@ import { buildGlbDocumentFromBuffer } from "../lib/render/glbMeshData.js";
 import { fitCameraDepthToBounds } from "./renderOptions.js";
 import { applyPhotographicStudio, disposePhotographicStudio } from "./photographicStudio.js";
 import { PHOTOGRAPHIC_STUDIO_FRAME } from "./photographicStudioRig.js";
+import { snapshotPacket } from "../prompt/snapshotPacket.js";
 
 function twoPartMeshData() {
   return {
@@ -423,6 +424,35 @@ test("a snapshot draws the job's annotation where it was drawn, whatever the exp
   } finally {
     viewport.annotationLayer?.layer.dispose();
     viewport.sceneClip?.dispose();
+    model.dispose();
+  }
+});
+
+test("a Quick Edit's packet draws in a snapshot as the page shortened it: its stroke, and its area by its outline", async () => {
+  // The ink as the page's packet carries it (`snapshotPacket`): no ids, no defaults, touches as selectors, an area
+  // its outline alone.
+  const packet = snapshotPacket({ input: "98427829-14ec-563f-a02d-9372a85cecef", type: "model",
+    views: [{ label: "view 1", camera: { position: [20, -100, 10], target: [20, -10, 10], up: [0, 0, 1], orthographicHalfHeight: 30 }, width: 64, height: 450 }],
+    annotation: { units: "mm", marks: [
+      { id: "ink-1", kind: "stroke", points: [30, -10, 10, 35, -5, 10, 40, 0, 10], color: "#ff2d55", width: 3, opacity: 1, closed: false, view: "view 1",
+        touches: [{ part: "i1", ref: "98427829-14ec-563f-a02d-9372a85cecef#pair/f:left.make_box1.1" }, { part: "i2" }] },
+      { id: "ink-2", kind: "area", points: [0, -20, 20, 20, -20, 20, 20, 0, 20, 10, -10, 20], outline: 3, triangles: [0, 1, 3, 1, 2, 3], color: "#00aa44", view: "view 1" },
+    ] } });
+  assert.deepEqual(packet.annotation.marks.map(mark => ["id" in mark, "triangles" in mark, mark.touches ?? null]),
+    [[false, false, ["pair/f:left.make_box1.1"]], [false, false, null]]);
+  const job = glbJob({ mode: "view", annotation: packet.annotation, display: { mode: "solid" }, outputs: [{ path: "a.png", width: 64, height: 450, camera: "iso" }] });
+  const { context, model, scene } = await pairCapture(job);
+  const viewport = { ...stubViewport(model, scene), context };
+  viewport.renderer.domElement = { ...viewport.renderer.domElement, height: 450 };
+  try {
+    await captureModel(viewport, { job });
+    const [stroke, area] = scene.getObjectByName("annotation").children;
+    // Half the viewer's reference height: the stroke half as wide, and the area a closed line of its outline, round
+    // its three corners and back.
+    assert.deepEqual([stroke.isLine2, stroke.material.linewidth], [true, 1.5]);
+    assert.deepEqual([area.isLine2, area.material.linewidth, area.geometry.attributes.instanceEnd.count], [true, 1, 3]);
+  } finally {
+    viewport.annotationLayer?.layer.dispose();
     model.dispose();
   }
 });

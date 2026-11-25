@@ -276,7 +276,9 @@ person's home from its description (`GET /api/v1/server`), which the message nam
 (`displayPath`). The page makes a Quick Edit's snapshot packet itself (below), and asks the server nothing
 for it. The annotation format, and
 the code that draws an annotation in a scene for the viewer and for a snapshot alike, is
-`common/annotation.js`.
+`common/annotation.js`, which reads a packet's shortened marks as the page's own: one with no id takes one
+by its place, `touches` may be selectors, and an area with no triangles is its outline, drawn as a closed line
+as cad's own stills draw every area.
 
 Inspect and Render each resolve their fixed scene base. Legacy host theme input
 cannot replace either base.
