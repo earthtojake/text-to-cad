@@ -252,8 +252,10 @@ cad_server._internal.auto_update_helper` by the environment's interpreter, so it
    asked to stop once nothing is in flight, and waited for ten minutes at most (`client.drain`), after which
    the next start replaces it. The pointer written (`store.point`), then `cad server start` where a server ran
    or one is wanted, which must leave a server of the release, else `cad --version`, which must name it. A `cad`
-   command that finds no server meanwhile, or an older one, waits for the next (`client.SWITCHING`, 30 s).
-3. **The way back.** Where that fails: the pointer put back as it was read (`store.restore`), a server of the
+   command that finds no server meanwhile, or an older one, waits for the next (`client.SWITCHING`, 30 s), and a
+   server of the release being left starts none in the next one's place (`auto_update.leaving`: its starter
+   waits for the server that answers).
+3. **The way back** (`restoring`). Where that fails: the pointer put back as it was read (`store.restore`), a server of the
    new release that came up late stopped, the release before's server started where one is wanted; cause
    `start_failed` (the server) or `broken` (the command), `restored` where the release before runs. Where the
    pointer could not be written, the cause is the write's.

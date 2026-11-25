@@ -143,7 +143,8 @@ last read names a newer release of its major. It runs beside the server, never b
 (`auto_update_helper`, by the environment's own interpreter) builds the release in a folder of its own in the state
 folder (`cad_server._internal.store`), drains the server, points the environment at that folder (the pointer, which
 `_cad_release` reads as each interpreter starts) and starts the new release's server, or goes back where it does not
-start. Meanwhile a command that finds no server waits for the next (`client.SWITCHING`); a `cad server start` that
+start. Meanwhile a command that finds no server waits for the next (`client.SWITCHING`), and a server of the
+release being left starts none in its place (`daemon.main`, `auto_update.leaving`); a `cad server start` that
 fails asks for the update before it gives up; a start never replaces a newer server, it joins it (`client.start`,
 `cad_mcp.shim.start_server`). With `cad plugin update auto` on, the server, at its start and at each quiet tending, runs `cad plugin install` (which
 updates the plugin in each agent app with that app's own command, with 15 minutes at most) once where its cad is
