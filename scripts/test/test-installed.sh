@@ -169,9 +169,14 @@ PY
 
 step "import build123d is lazy from interpreter start: the library wheel's .pth is in site-packages"
 scratch_sp="$("$VENV/bin/python" -c 'import site; print(site.getsitepackages()[0])')"
-PTH="$scratch_sp/cad-lazy-kernel.pth"
-[ -f "$PTH" ] || fail "cad-lazy-kernel.pth is not in $scratch_sp"
-[ "$(cat "$PTH")" = "import cad._internal.lazy_kernel" ] || fail "cad-lazy-kernel.pth does not import the finder"
+PTH="$scratch_sp/cad.pth"
+[ -f "$PTH" ] || fail "cad.pth is not in $scratch_sp"
+[ "$(cat "$PTH")" = "import _cad_release; import cad._internal.lazy_kernel" ] \
+  || fail "cad.pth does not import _cad_release, then the finder"
+[ -f "$scratch_sp/_cad_release.py" ] || fail "_cad_release.py is not in $scratch_sp, beside cad.pth"
+# It ran as the interpreter started, from the environment's own packages, and with no pointer left them in place.
+started="$(cd "$EMPTY" && "$VENV/bin/python" -c "import sys, _cad_release as r; print(r.STORED, r.HERE in sys.path)")"
+[ "$started" = "None True" ] || fail "_cad_release did not run from site-packages, or moved it ($started)"
 # Bound, not loaded: the kernel is untouched until an attribute is read from it.
 lazy="$(cd "$EMPTY" && "$VENV/bin/python" -c "import build123d as bd; import sys; print('OCP' in sys.modules)")"
 [ "$lazy" = "False" ] || fail "import build123d loaded the kernel ($lazy)"

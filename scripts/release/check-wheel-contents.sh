@@ -47,10 +47,12 @@ REQUIRED=(
   "cad/__init__.py"
   # The library's earlier import name, an alias of it.
   "cadgen/__init__.py"
-  # `import build123d` made lazy at interpreter start: the finder, and the .pth at the root of
-  # site-packages that installs it.
+  # What every interpreter of the environment runs as it starts, from the .pth at the root of site-packages: the
+  # release it runs (the module at the root beside it, which reads the pointer to a release cad's update keeps), then
+  # `import build123d` made lazy (the finder).
+  "cad.pth"
+  "_cad_release.py"
   "cad/_internal/lazy_kernel.py"
-  "cad-lazy-kernel.pth"
   # The document types and their registry, and the robot checks' library: a packaging regression
   # here would ship a server whose `cad urdf validate` cannot import.
   "cad/registry.py"
@@ -97,6 +99,9 @@ REQUIRED=(
   "cad_server/_internal/auto_update.py"
   "cad_server/_internal/auto_update_helper.py"
   "cad_server/cli/auto_update.py"
+  # The releases the update keeps beside the installed one, and the check a release runs of itself before it counts.
+  "cad_server/_internal/store.py"
+  "cad_server/_internal/selftest.py"
   # The install command as the bridge's install mode runs it, once (`install_script`); and `cad plugin`, its command:
   # `cad plugin install`, which the server of a newer cad runs where `cad plugin update auto` is on (`plugin_catch_up`,
   # the rule it runs by), and which the install command hands the agent apps to.
@@ -145,7 +150,7 @@ BUILD_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/wheel-build.XXXXXX")"
 trap 'rm -rf "$BUILD_SCRATCH"' EXIT
 
 # check PROJECT DISTRIBUTION TOP REQUIRED...: build packages/PROJECT's wheel, and hold it to the paths it
-# must carry and to TOP, the top-level entries it may hold beside its dist-info (its packages, its .pth;
+# must carry and to TOP, the top-level entries it may hold beside its dist-info (its packages, its .pth and module;
 # none for an alias); then build it as the release does, its sdist and a wheel from that, which must hold
 # the same files.
 check() {
@@ -268,7 +273,7 @@ check_alias cad-server cad_server "" "cad=cad_server.cli:main"
 check_alias cad-mcp cad_mcp "" "cad-mcp=cad_mcp.shim:main"
 check_alias cadgen cadgen "build123d kernel" ""
 # cad's last: the runtime checks below read its wheel and listing.
-check cad cad "cad|cadgen|cad_server|cad_mcp|cad-lazy-kernel\.pth" "${REQUIRED[@]}"
+check cad cad "cad|cadgen|cad_server|cad_mcp|cad\.pth|_cad_release\.py" "${REQUIRED[@]}"
 
 # The server's runtime. A nested-glob failure usually loses MANY files at once rather than one, so
 # report the count too: it distinguishes "one file moved" from "package-data is not matching".
