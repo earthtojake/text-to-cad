@@ -64,12 +64,14 @@ class RegistryTest(unittest.TestCase):
         self.assertFalse((cache / "documents" / file_id(board)).exists(), "deleted with its document")
 
     def test_an_engine_record_reads_only_a_port_number(self) -> None:
-        engines = self.state / registry.ENGINES
+        from cad_server.engine import state
+
+        engines = self.state / state.ENGINES
         engines.mkdir(parents=True, exist_ok=True)
         for port, read in ((3246, {"port": 3246}), (True, {}), ("3246", {}), (70000, {}), (3246.0, {})):
-            (engines / "abc123.json").write_text(json.dumps({"schema": registry.ENGINE_SCHEMA, "port": port}),
+            (engines / "abc123.json").write_text(json.dumps({"schema": state.ENGINE_SCHEMA, "port": port}),
                                                  encoding="utf-8")
-            self.assertEqual(self.registry.engine("abc123"), read, port)
+            self.assertEqual(state.State(self.state).engine("abc123"), read, port)
 
     def test_a_record_is_written_once_until_it_changes_and_its_observers_hear_each_write(self) -> None:
         heard: list[dict] = []

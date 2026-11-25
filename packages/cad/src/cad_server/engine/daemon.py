@@ -320,18 +320,18 @@ def bind(host: str, asked: int | None, listen: Callable[[int, str], Any]) -> tup
     device's port: 3245 (``DEFAULT_PORT``) when it is free, else the port it remembers, else the one it
     rolls to (``_installation_port``). Another process on it -- another engine, 0.8's among them,
     whatever it is -- is asked nothing: a port named is refused, naming it, and the device's port is
-    rolled from (``_listen``). The page token is the user's (``registry.TOKEN``), one for every engine,
+    rolled from (``_listen``). The page token is the user's (``state.TOKEN``), one for every engine,
     made by the first to start (``_new_token``); one there that cannot be read is refused by name, and
     nothing is served.
 
     ``where``: ``source`` (``--port``, ``CAD_ENGINE_PORT``, ``default`` or ``rolled``), for a
     rolled port ``because`` (who holds 3245), and ``notice``, the line this start says once: a move of
     its port (a roll, or the return to 3245)."""
-    from cad_server.engine import registry
+    from cad_server.engine import state
 
-    held = registry.current()
-    record = held.engine(NAME) if held is not None else {}
-    token = (held.token() if held is not None else None) or _new_token(held)
+    held = state.current()
+    record = held.engine(NAME)
+    token = held.token() or _new_token(held)
     remembered = record.get("port")
     if asked is not None:
         server, where = _listen(host, asked, "--port", token, listen), {"source": "--port"}
@@ -341,7 +341,7 @@ def bind(host: str, asked: int | None, listen: Callable[[int, str], Any]) -> tup
         server, where = _installation_port(host, remembered, token, listen)
         remembered = server.port if where["source"] == "rolled" else None
     kept = {"port": remembered} if remembered else {}
-    if held is not None and kept != record:
+    if kept != record:
         try:
             held.put_engine(NAME, kept)
         except OSError:
@@ -350,13 +350,10 @@ def bind(host: str, asked: int | None, listen: Callable[[int, str], Any]) -> tup
 
 
 def _new_token(held: Any) -> str:
-    """A new page token, made the user's (``registry.TOKEN``) when there is a state folder: made only
-    where there is none (``Registry.make_token``), so of two engines starting at once one makes it and
-    the other serves the one it reads. One that is there but cannot be read is refused by name
-    (``Registry.token``), never replaced."""
+    """A new page token, made the user's (``state.TOKEN``): made only where there is none
+    (``State.make_token``), so of two engines starting at once one makes it and the other serves the one it
+    reads. One that is there but cannot be read is refused by name (``State.token``), never replaced."""
     token = secrets.token_urlsafe(32)
-    if held is None:
-        return token
     for _attempt in range(3):
         try:
             if held.make_token(token):
@@ -542,20 +539,17 @@ def _netstat_holder(port: int) -> tuple[int | None, str | None, str | None]:
     return pid, name, None
 
 
-def rotate_token(told: Callable[[str], None] = lambda _line: None) -> str | None:
+def rotate_token(told: Callable[[str], None] = lambda _line: None) -> str:
     """Replace the user's page token (``cad server --rotate-token``): every link and browser session made before
     stops working, at once. The new token is written into the state folder (an ``OSError`` there is the command's
     failure), and the server running is told to take it now (``{"op": "token"}``, ``Daemon.retoken``); one that
     cannot be told -- a server of 0.11.11 or earlier, which reads its token only as it starts -- is said through
-    ``told``. The new token; None where there is no state folder to keep it in."""
+    ``told``. The new token."""
     from cad.engine.client import request
-    from cad_server.engine import registry
+    from cad_server.engine import state
 
-    held = registry.current()
-    if held is None:
-        return None
     token = secrets.token_urlsafe(32)
-    held.put_token(token)
+    state.current().put_token(token)
     answer = request({"op": "token"}, start=False)
     if answer is not None and not answer.get("ok"):
         told("the server that runs still admits the token before until it stops (`cad server stop`); it reads the "
@@ -1152,14 +1146,12 @@ class Daemon:
         if default is not None:
             default.port = port
         self.port_source, self.port_because, self.port_notice = "handed", "", ""
-        from cad_server.engine import registry
+        from cad_server.engine import state
 
-        held = registry.current()
-        if held is not None:
-            try:  # the port pages were on, which the next start comes back to: none kept for the default
-                held.put_engine(NAME, {} if port == default_port() else {"port": port})
-            except OSError:
-                pass
+        try:  # the port pages were on, which the next start comes back to: none kept for the default
+            state.current().put_engine(NAME, {} if port == default_port() else {"port": port})
+        except OSError:
+            pass
 
     def document(self, ident: str) -> tuple[dict[str, Any], bytes]:
         """What the document ``ident`` is while this engine knows it, as an export reads it, and the
@@ -1801,11 +1793,10 @@ class Daemon:
         --rotate-token`` asks every running server once it has written the new one: ``rotate_token``) and taken at
         once by its HTTP application, every listener of it: a link or a browser session signed with the one before
         is refused from now on. A server serving nothing yet takes it as it binds (``bind``). ``ValueError`` for a
-        token there that cannot be read (``Registry.token``)."""
-        from cad_server.engine import registry
+        token there that cannot be read (``State.token``)."""
+        from cad_server.engine import state
 
-        held = registry.current()
-        token = held.token() if held is not None else None
+        token = state.current().token()
         if not token:
             return {"failed": "this server keeps no page token to read again"}
         with self.serving:

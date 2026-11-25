@@ -19,7 +19,7 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cad/src")
 
 from cad_server._internal import installations, proxy  # noqa: E402
-from cad_server.engine.registry import Folder, Registry  # noqa: E402
+from cad_server.engine.state import Folder, State  # noqa: E402
 from cad_server._internal import engine_host  # noqa: E402
 from cad_mcp import host  # noqa: E402
 
@@ -198,7 +198,7 @@ class TokenTests(unittest.TestCase):
         import re
 
         with TemporaryDirectory() as scratch:
-            held = Registry(scratch)
+            held = State(scratch)
             self.assertIsNone(held.token())
             held.put_token("t" * 43)
             self.assertEqual(held.token(), "t" * 43)
@@ -229,7 +229,7 @@ class TokenTests(unittest.TestCase):
         from cad_server.engine import daemon
 
         with TemporaryDirectory() as scratch:
-            held = Registry(scratch)
+            held = State(scratch)
             self.assertTrue(held.make_token("a" * 43))
             self.assertFalse(held.make_token("b" * 43), "never made over one that is there")
             self.assertEqual(held.token(), "a" * 43)
@@ -248,7 +248,7 @@ class TokenTests(unittest.TestCase):
         from cad_server.engine import daemon
 
         with TemporaryDirectory() as scratch:
-            held = Registry(scratch)
+            held = State(scratch)
             held.put_token("a" * 43)
             path = Path(scratch) / "engines" / "token"
             path.chmod(0)

@@ -113,11 +113,9 @@ def _rotate(args: argparse.Namespace, prog: str) -> None:
                      "with the one it has now stops working at once, in the server running too, and each page needs a "
                      "new link (cad viewer prints one). This cannot be undone."])
     try:
-        rotated = rotate_token(told=lambda line: print(f"cad: {line}", file=sys.stderr, flush=True))
+        rotate_token(told=lambda line: print(f"cad: {line}", file=sys.stderr, flush=True))
     except (OSError, ValueError) as error:
         raise Failed(f"cannot replace the page token: {getattr(error, 'strerror', None) or error}") from None
-    if rotated is None:
-        raise Failed("cannot replace the page token: there is no state folder to keep it in")
     print("cad: a new page token: every link and browser session made before no longer works", file=sys.stderr,
           flush=True)
 

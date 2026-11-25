@@ -430,7 +430,7 @@ class RunnerTest(unittest.TestCase):
         ``cad`` command, which names no library, and to the script again; a caller of another library's version
         is measured again, and its result serves the command from then on."""
         from cad_server.engine.checks import Checks
-        from cad_server.engine.registry import Folder
+        from cad_server.engine.state import Folder
 
         folder = Folder(tempfile.mkdtemp(prefix="engine-dfm-restart-"))
         self.addCleanup(shutil.rmtree, folder.root, True)

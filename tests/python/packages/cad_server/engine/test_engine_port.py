@@ -174,22 +174,22 @@ class EnginePortTest(unittest.TestCase):
     def bound(self, default: int, **extra: str) -> tuple[Listener, dict]:
         """``daemon.bind`` in this process, nothing named, its default ``default``: its listener
         (closed at the end) and where its port came from. ``extra``: this process's environment."""
-        from cad_server.engine import daemon, registry
+        from cad_server.engine import daemon
 
         environment = {key: value for key, value in os.environ.items() if key != "CAD_ENGINE_PORT"}
         with mock.patch.dict(os.environ, {**environment, "CAD_ENGINE_DIR": self.env["CAD_ENGINE_DIR"],
+                                          "CAD_STATE_DIR": str(self.root / "state"),
                                           "CAD_ENGINE_DEFAULT_PORT": str(default), **extra},
-                             clear=True), \
-                mock.patch.object(registry, "FACTORY", lambda: registry.Registry(self.root / "state")):
+                             clear=True):
             server, where = daemon.bind("127.0.0.1", None, Listener)
         self.addCleanup(server.socket.close)
         return server, where
 
     def remembered(self) -> int | None:
         from cad.engine import places
-        from cad_server.engine import registry
+        from cad_server.engine import state
 
-        return registry.Registry(self.root / "state").engine(places.NAME).get("port")
+        return state.State(self.root / "state").engine(places.NAME).get("port")
 
     def test_the_default_port_is_3245_and_taken_when_free(self) -> None:
         from cad_server.engine import daemon
@@ -280,11 +280,11 @@ class EnginePortTest(unittest.TestCase):
 
     def test_the_installation_port_returns_to_a_free_default_and_rolls_from_a_held_remembered_one(self) -> None:
         from cad.engine import places
-        from cad_server.engine import registry
+        from cad_server.engine import state
 
         default, remembered = held_port(self), free_port()
-        registry.Registry(self.root / "state").put_token("t" * 43)
-        registry.Registry(self.root / "state").put_engine(places.NAME, {"port": remembered})
+        state.State(self.root / "state").put_token("t" * 43)
+        state.State(self.root / "state").put_engine(places.NAME, {"port": remembered})
         server, where = self.bound(default)  # the default held, the remembered port free: used, nothing said
         self.assertEqual((server.port, where["source"], "notice" in where), (remembered, "rolled", False))
         self.assertEqual(server.token, "t" * 43)
@@ -308,9 +308,9 @@ class EnginePortTest(unittest.TestCase):
     @unittest.skipIf(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
                      "a file's mode is POSIX's, and refuses no one running as root")
     def test_a_page_token_that_cannot_be_read_serves_nothing_and_is_left_as_it_is(self) -> None:
-        from cad_server.engine import registry
+        from cad_server.engine import state
 
-        registry.Registry(self.root / "state").put_token("t" * 43)
+        state.State(self.root / "state").put_token("t" * 43)
         token = self.root / "state" / "engines" / "token"
         token.chmod(0)
         self.addCleanup(token.chmod, 0o600)

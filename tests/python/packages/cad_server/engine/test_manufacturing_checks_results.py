@@ -257,7 +257,7 @@ class KeptResultTest(unittest.TestCase):
 
     def test_the_disk_store_holds_one_version_and_its_bounds_and_drops_what_does_not_read(self) -> None:
         from cad_server.engine.checks import Disk
-        from cad_server.engine.registry import Folder
+        from cad_server.engine.state import Folder
 
         folder = Folder(tempfile.mkdtemp(prefix="engine-dfm-disk-"))
         self.addCleanup(shutil.rmtree, folder.root, True)
