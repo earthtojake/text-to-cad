@@ -262,7 +262,7 @@ cad model snapshot "$ID" tmp/lift.png --pose '{"shoulder": 30}' --camera right
 ## 7. Export and compare
 
 ```bash
-cad model export "$ID" sim/arm.xml description/arm.urdf   # add --zero <state> only where step 6 re-zeroed
+cad model export src/arm.xbf sim/arm.xml description/arm.urdf   # the model's own .xbf; add --zero <state> only where step 6 re-zeroed
 cad mujoco check sim/scene.xml
 cad urdf validate description/arm.urdf
 cad urdf snapshot description/arm.urdf tmp/urdf.png --pose '{"shoulder": 30}' --camera right

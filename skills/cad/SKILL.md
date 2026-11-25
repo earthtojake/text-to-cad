@@ -20,7 +20,7 @@ Files are exports, written when asked.
 | Create or edit a part or assembly | A model script ([below](#write-a-model-and-run-it)) | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
 | Let the person tune a number (a wall, a fit, a count) | `model.param(...)` at the script's top level; change a value by editing its number and running the script | [Parameters](references/model-contract.md#parameters-a-person-tunes) |
 | Organize a project | Its existing layout | [Project layout](references/project-layout.md) |
-| Export STEP, STL, 3MF, GLB or xbf | `cad model export <id> <file>` | [Exports](references/exports.md) |
+| Export STEP, STL, 3MF or GLB | `cad model export src/bracket.xbf <file>` | [Exports](references/exports.md) |
 | A 2D profile, flat pattern or DXF | A model that returns 2D geometry on z=0, exported as `.dxf` | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
 | Use a vendor STEP, an xbf or a scan | `step.read`, `model.read` or `stl.read` in the body | [Inputs](references/model-contract.md#inputs) |
 | Resolve a reference or a Quick Edit prompt | `cad model inspect <id> '<ref>'` | [References](references/inspection-and-validation.md#references) |
@@ -87,8 +87,9 @@ cad run src/bracket.py
 ```
 
 ```text
-built src/bracket.py::bracket cold in 2.61s: bodies 1 run; 6 misses, 0 hits; body 0.01s, names 0.00s, document 0.00s
+built src/bracket.py::bracket cold in 2.76s: bodies 1 run; 6 misses, 0 hits; body 0.17s, names 0.01s, document 0.00s, xbf 0.00s
   parts 1 · bounds 40 × 20 × 6 mm · joints 0 · sequences 0
+  src/bracket.xbf (written, 11.8 KB)
   id: 0dc50a92-a21f-5895-a245-ebdeb5352f3b
   view: http://127.0.0.1:<port>/<id>?token=<token>
 ```
@@ -126,7 +127,7 @@ file takes the operations its own type lists (`cad step|stl|threemf|glb|dxf --he
 | --- | --- |
 | `cad model inspect "$ID" ['<ref>']` | The document's parts, bounds, volume, mass and joints; with a ref, one part, face or edge as JSON, with `made_by`: the function, file and line that made it |
 | `cad model snapshot "$ID" out.png` | A picture, drawn as the viewer draws it: `--camera top`, `--display hidden-line`, `--pose open`, `--preview` (lit, for a person) |
-| `cad model export "$ID" a.step b.stl c.glb` | Files, by suffix; nothing rebuilds ([exports](references/exports.md)) |
+| `cad model export src/bracket.xbf a.step b.stl c.glb` | Files, by suffix, from the model's `.xbf`; nothing rebuilds ([exports](references/exports.md)) |
 | `cad model interference "$ID" [--pose P]` | Every pair of parts that shares volume, exactly, as built and at each pose |
 | `cad model dfm "$ID" --process ...` | A manufacturing check ([Can it be made?](#can-it-be-made)) |
 | `cad model ranges "$ID"` | Each joint's stops, swept from the parts ([joint stops](references/kinematics.md#joint-stops)) |
@@ -137,8 +138,8 @@ render) and apply to nothing else: an export that takes them names only mesh fil
 DXF beside them refuses the whole export.
 
 ```bash
-cad model export "$ID" STEP/bracket.step GLB/bracket.glb
-cad model export "$ID" STL/bracket.stl 3MF/bracket.3mf --tolerance 0.02
+cad model export src/bracket.xbf STEP/bracket.step GLB/bracket.glb
+cad model export src/bracket.xbf STL/bracket.stl 3MF/bracket.3mf --tolerance 0.02
 ```
 
 A reference such as `0dc50a92-...#bracket/face 7` is what the viewer copies when the person picks

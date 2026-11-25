@@ -69,10 +69,10 @@ def assembly():   # plate and standoff_m3 are models imported from their scripts
 
 Running a child's script alone leaves its assemblies as they were, so the assembly's own script is run to update them.
 
-Exports are written from the document the server holds, so no code changes and nothing rebuilds:
+Exports are written from the model's `.xbf`, so no code changes and nothing rebuilds:
 
 ```bash
-cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad model export src/bracket.xbf STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
 | Format | What it carries |
@@ -125,7 +125,7 @@ def gasket():
 
 A drawing with more than one CAM operation returns a `Compound` whose children's labels are their layers (`CUT`, `ENGRAVE`). From a 3D part, the drawing script calls the model and lays one of its faces on z=0 with build123d's own calls (`Plane(face).to_local_coords(face)`); a bent part is unrolled with `unfold(shape, k_factor=)` from `cad.build123d`, which can put the bend lines on a `BEND` layer; a vendor STEP is read with `step.read` first. Kerf is added with build123d's `offset`, never by hand-offsetting coordinates.
 
-`cad model export "$ID" DXF/gasket.dxf` runs the drawing checks and refuses the file if one fails: units are set, nothing is drawn twice, no entity has zero length, every cut profile closes, and something is drawn. The file is in millimetres, arcs stay arcs and holes stay circles, and an unchanged drawing exports an identical file on any machine. `cad dxf snapshot` draws the file itself, and the viewer opens it as a read-only 2D drawing with its layers.
+`cad model export src/gasket.xbf DXF/gasket.dxf` runs the drawing checks and refuses the file if one fails: units are set, nothing is drawn twice, no entity has zero length, every cut profile closes, and something is drawn. The file is in millimetres, arcs stay arcs and holes stay circles, and an unchanged drawing exports an identical file on any machine. `cad dxf snapshot` draws the file itself, and the viewer opens it as a read-only 2D drawing with its layers.
 
 For sheet work, a cut-file check reads every entity on a cut layer as a cutter would:
 

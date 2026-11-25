@@ -83,7 +83,7 @@ Declare on finished parts, as a material is set: an operation after a `frame()`,
 or `point_mass()` makes a new shape that has lost it, with no warning, while a move or a copy keeps
 it.
 
-`cad model export "$ID" sim/gripper.xml` writes the file a MuJoCo function starts from (`spec()`
+`cad model export src/gripper.xbf sim/gripper.xml` writes the file a MuJoCo function starts from (`spec()`
 holds the same), abridged:
 
 ```xml

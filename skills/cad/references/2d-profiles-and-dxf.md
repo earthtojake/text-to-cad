@@ -38,8 +38,8 @@ if __name__ == "__main__":
 ```
 
 ```bash
-cad run src/gasket.py                     # prints id: and view:
-cad model export "$ID" DXF/gasket.dxf     # runs the drawing checks, then writes
+cad run src/gasket.py                              # saves src/gasket.xbf
+cad model export src/gasket.xbf DXF/gasket.dxf     # runs the drawing checks, then writes
 ```
 
 - **One shape is one layer, `CUT`.** For more than one CAM operation, return a `Compound` of
@@ -58,7 +58,7 @@ cad model export "$ID" DXF/gasket.dxf     # runs the drawing checks, then writes
   name may not hold any of `<>/\":;?*|=` or a backtick, and an unlabelled child is a cut layer
   of its own (`part2`).
 - **Planar means 2D, on z=0, at 1:1, in millimetres** (`$INSUNITS` is set for you). The export
-  refuses a document holding a solid (`bracket is 3D: a DXF is drawn from 2D geometry a model
+  refuses a document holding a solid (`bracket.xbf is 3D: a DXF is drawn from 2D geometry a model
   returns`) and an edge with any point off z=0, by its element name. A face taken from a solid
   sits at that solid's height: move it down (`bd.Pos(0, 0, -z) * face`).
 - **Text** is `bd.Text(...)`, written as outlines on a marking layer, never a DXF `TEXT` entity:
@@ -69,9 +69,8 @@ cad model export "$ID" DXF/gasket.dxf     # runs the drawing checks, then writes
 
 A drawing gets a script of its own beside the geometry it derives from, with its own stem
 (`bracket_drawing.py` beside `bracket.py`), and composes models, never the reverse. `exports.py`
-and the `@dxf("../DXF/gasket.dxf")` decorator write a drawing's file as they write any other
-([exports](exports.md#standing-deliverables-exportspy)). An existing `.dxf` needs no model: hand
-it straight to a snapshot or the viewer.
+writes a drawing's file as it writes any other ([exports](exports.md#standing-deliverables-exportspy)).
+An existing `.dxf` needs no model: hand it straight to a snapshot or the viewer.
 
 ## Flat patterns, kerf and curves
 

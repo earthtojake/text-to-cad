@@ -24,7 +24,7 @@ There are two routes to one:
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| A URDF or MJCF from a CAD model | The model's declarations, then `cad model export <id> robot.xml` or `.urdf` | [Generate from CAD](#generate-from-cad), [from CAD](references/from-cad.md) |
+| A URDF or MJCF from a CAD model | The model's declarations, then `cad model export robot.xbf robot.xml` or `.urdf` | [Generate from CAD](#generate-from-cad), [from CAD](references/from-cad.md) |
 | Collision shapes, joint dynamics, actuators for MuJoCo | A MuJoCo function, run with `cad run` | [The MuJoCo function](#the-mujoco-function), [MuJoCo environment](references/mujoco-environment.md) |
 | A robot from a vendor's STEP | Read it, group parts into links, find each axis, declare, export | [From a vendor STEP](references/from-a-vendor-step.md) |
 | A MuJoCo scene: several robots, objects, a world | `spec()` for each piece, composed with MuJoCo's own `MjSpec` | [MuJoCo environment](references/mujoco-environment.md#the-scene-in-code) |
@@ -82,10 +82,10 @@ free(root)                             # on a mobile base: not bolted to the wor
 ```
 
 ```bash
-cad run src/gripper.py
+cad run src/gripper.py                                       # saves the model as src/gripper.xbf
 cad model ranges "$ID"                                       # stops where the parts meet, to write into the joints
-cad model export "$ID" sim/gripper.xml
-cad model export "$ID" description/gripper.urdf --zero home
+cad model export src/gripper.xbf sim/gripper.xml
+cad model export src/gripper.xbf description/gripper.urdf --zero home
 ```
 
 `$ID` is the `id:` line the run printed; the suffix picks the format, and meshes are written beside

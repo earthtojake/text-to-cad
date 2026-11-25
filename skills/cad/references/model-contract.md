@@ -25,11 +25,6 @@ files into a model, or working out why a run ran what it ran.
   pays nothing for it. In a plain script (a check, a drawing) it is the tree a calling
   body reads, every part placed, named, coloured and given its material, without its
   joints. Verbs take the handle (`model.export(handle, ...)`, `posed(handle, state)`).
-- **File decorators write a file**: `@step("part.step")`, and `@glb`, `@stl`,
-  `@threemf` and `@dxf` likewise, make each run write that file (with no path,
-  `<name>.<ext>` beside the script); `@model` alone writes only its `.xbf`, and a file
-  decorator without `@model` only its file, so after a server restart its next run builds
-  it again ([model page or file page](exports.md#model-page-or-file-page)).
 - **Kernel objects belong in bodies.** `import build123d as bd` loads no kernel until an
   attribute is read from `bd`, which in a body happens in the server. Read at module
   level (`from build123d import Box`, an `Axis`, a `Location`, a colour palette, a
@@ -66,7 +61,7 @@ parameters
 To change a value, edit its number in the script and run it. A save from the viewer rewrites numbers
 in the script and builds it again, so read a script again before you edit it.
 
-An exported xbf lists each parameter at the value it was built with, read-only.
+A copy of a model's xbf lists each parameter at the value it was built with, read-only.
 
 ## Assemblies call their parts
 
@@ -99,7 +94,7 @@ if __name__ == "__main__":
 - **A child builds in the same run** and keeps its own document and id, which every
   command answers. Its `.shape` is what its body returned, before the caller placed or
   labelled it. Called twice it is built once, each call a new placement of the one
-  result; called only for the files it declares, it is a bare call.
+  result; called only to save its `.xbf`, it is a bare call.
 - **A jointed child brings its mechanism**: its joints, states and sequences are in the
   assembly's document too. The joints between children are written in the assembly's
   body ([kinematics](kinematics.md#joints-place-parts-and-make-the-mechanism)).
@@ -117,11 +112,14 @@ docstrings; the constants and defaults they read) and every file it reads, by it
 ([inputs](#inputs)). The run's lines say which:
 
 ```text
-built src/assembly.py::assembly warm in 0.09s: bodies 2 run, 1 replayed; 3 misses, 2 hits; body 0.02s, names 0.00s, document 0.00s
+built src/assembly.py::assembly warm in 0.07s: bodies 2 run, 1 replayed; 3 misses, 2 hits; body 0.01s, names 0.00s, document 0.00s, xbf 0.00s
   parts 3 · bounds 60 × 44 × 16 mm (was 60 × 40 × 16) · joints 0 · sequences 0 · changed 1
   rebuilt: plate.py: DEPTH changed
+  src/assembly.xbf (written, 14.3 KB)
   src/plate.py::plate, a child
+    src/plate.xbf (written, 8.5 KB)
   src/standoff.py::standoff_m3, a child
+    src/standoff_m3.xbf (kept, 6.9 KB)
 ```
 
 That run followed an edit of the plate's depth: the plate's body and the assembly's ran,
@@ -251,12 +249,11 @@ def rig():
 
 ## Documents and the server
 
-- **The id names the model, not a state of it.** It comes from the script's path and the
-  function's name (`bracket.id`, without a call), so two scripts may use one function
-  name, and a renamed function is a new document. `@model(name="bracket")` takes the id
-  from the script's folder and that name instead, whichever file of the folder declares
-  it; one name declared twice in a folder is refused, naming both declarations and the
-  way out.
+- **The id names the model, not a state of it.** It is that of the model's `.xbf`
+  (`bracket.id`, without a call), which is named for the function or for
+  `@model(name="bracket")`. A renamed function is a new document, and two models of one
+  name in a folder, in one script or two, save one file and are one document, the last
+  one built: nothing refuses it.
 - **What names the state** is the key of the code and inputs the document was built
   from, `handle.report["closure"]["key"]` (`cad model inspect "$ID" --query closure`
   prints the closure). A file derived from a document (a simulator's description, a GLB

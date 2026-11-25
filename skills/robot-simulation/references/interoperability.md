@@ -7,7 +7,7 @@ and what a URDF edit asks of the SRDF beside it, are in [SKILL.md](../SKILL.md#a
 ## One description, two writers
 
 A CAD model with a mechanism is described once and written by the destination's suffix, `cad model
-export <id> robot.xml` (MJCF) or `robot.urdf` ([from CAD](from-cad.md)). Export each from the model,
+export robot.xbf robot.xml` (MJCF) or `robot.urdf` ([from CAD](from-cad.md)). Export each from the model,
 never one from the other. An SRDF is always hand-written, over the generated URDF's names
 ([srdf-authoring.md](srdf-authoring.md)).
 

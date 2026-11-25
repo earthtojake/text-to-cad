@@ -6,32 +6,32 @@ converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-pro
 
 ## Contents
 
-- [A file is an action](#a-file-is-an-action)
+- [A file is exported from the `.xbf`](#a-file-is-exported-from-the-xbf)
 - [Model page or file page](#model-page-or-file-page)
 - [Standing deliverables: `exports.py`](#standing-deliverables-exportspy)
 - [Posed files and parts on their own](#posed-files-and-parts-on-their-own)
-- [The xbf is Save As](#the-xbf-is-save-as)
+- [The `.xbf` is the model](#the-xbf-is-the-model)
 - [Formats](#formats)
 - [Mesh tolerance](#mesh-tolerance)
 - [Robot descriptions](#robot-descriptions)
 
-## A file is an action
+## A file is exported from the `.xbf`
 
-A file is written from the document the server holds, when asked, each destination by its suffix.
-No code changes and nothing rebuilds. The person can export the same files from the viewer, as
-downloads.
+A file is written from the model's `.xbf`, the file its run saved, when asked, each destination
+by its suffix. No code changes and nothing rebuilds, even after a server restart. The `.xbf`
+holds the model as its last run left it: after an edit, run the script first. The person can
+export the same files from the viewer, as downloads.
 
 ```bash
-cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad model export src/bracket.xbf STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
-A file the server reads as a document is a source too (an `.xbf` by `cad model`, a `.step` by its
-own type), and a mesh file (`.stl`, `.glb`, `.3mf`) converts to either of the other two mesh
-formats, keeping what the target can hold:
+Any other file exports through its own type (a `.step` by `cad step export`), and a mesh file
+(`.stl`, `.glb`, `.3mf`) converts to either of the other two mesh formats, keeping what the target
+can hold:
 
 ```bash
 cad step export vendor/motor.step vendor/motor.xbf   # a vendor STEP as an xbf, which model.read loads many times faster
-cad model export share/arm.xbf GLB/arm.glb
 cad stl export scan.stl scan.3mf
 ```
 
@@ -60,26 +60,24 @@ A mesh never becomes an `.xbf`, `.step` or `.dxf`: it has no B-rep, so model it 
 
 The model's page is the default. A project can instead revolve around its exported files, where
 the person asks to iterate on the file or the project already works that way (an `exports.py`, a
-consumer reading the files, a 0.7-era layout). Each run then writes the file too, by a file
-decorator (`@step("../STEP/bracket.step")`, relative to the script; `@glb`,
-`@stl`, `@threemf` and `@dxf` alike; an `.xbf` by `@model("...")`, whose page is the model's), by `exports.py` or by
-`cad <type> export` after the run; the person looks at the file's page; and checks read the file
-(`cad <type> snapshot` or `inspect` with its path, or `step.read` in a check).
+consumer reading the files). Each change then ends in the export too, by `exports.py` in place of
+the model's script or by `cad model export` after its run; the person looks at the file's page;
+and checks read the file (`cad <type> snapshot` or `inspect` with its path, or `step.read` in a
+check).
 
 | | Model page | File page |
 | --- | --- | --- |
-| Each run | The page updates; only the model's `.xbf` is written, beside the script. | The file is written too and the page re-reads it, a STEP parsed again. |
+| Each run | The page updates; only the model's `.xbf` is written. | The file is written too and the page re-reads it, a STEP parsed again. |
 | A picked ref | `made_by` names the function, file and line. | No `made_by`, a file names no model: a Quick Edit has no way back into the code. |
 | A failed run | The page says so. | The file keeps its last write and the page says nothing. |
 
 ## Standing deliverables: `exports.py`
 
 A project whose files are delivered again after each change (a print set, a STEP for a
-supplier) keeps one script beside its models that imports them and exports each; a one-off file
-is a `cad <type> export`. `model.export(x, path, ...)` takes what a model call returns (the
-document's handle, whose own `.export(path, ...)` is the same), a document id, or the model
-function itself, called as the script's own call is, so an unchanged model is replayed. A file
-exports through its own type, an `.xbf` through `model` (`model.export("share/arm.xbf", ...)`).
+supplier) keeps one script beside its models. It calls each model first, so its `.xbf` is
+current (an unchanged model runs nothing), then exports from the `.xbf`; a one-off file is a
+`cad model export`. `model.export(xbf, path, ...)` is that command from Python, and a file of
+another type exports through its own (`step.export`).
 
 ```python
 # src/exports.py
@@ -87,15 +85,16 @@ from pathlib import Path
 
 from cad import model
 
-from assembly import assembly
-from standoff import standoff_m3, standoff_m4
+from bracket import bracket, bracket_wide
 
-ROOT = Path(__file__).resolve().parent.parent      # the project's folder
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent                                  # the project's folder
 
 if __name__ == "__main__":
-    model.export(assembly(), ROOT / "STEP/assembly.step", ROOT / "GLB/assembly.glb")
-    model.export(standoff_m3, ROOT / "STL/standoff_m3.stl", ROOT / "3MF/standoff_m3.3mf")
-    model.export(standoff_m4, ROOT / "STL/standoff_m4.stl")
+    bracket()
+    bracket_wide()
+    model.export(HERE / "bracket.xbf", ROOT / "STEP/bracket.step", ROOT / "STL/bracket.stl")
+    model.export(HERE / "bracket_wide.xbf", ROOT / "STEP/bracket_wide.step")
 ```
 
 ```bash
@@ -105,7 +104,7 @@ cad run src/exports.py
 ## Posed files and parts on their own
 
 A posed file is a model that returns the assembly at a named mechanism state
-([mechanism states](kinematics.md#mechanism-states)), exported by its own id:
+([mechanism states](kinematics.md#mechanism-states)), exported from its own `.xbf`:
 
 ```python
 # src/arm_poses.py
@@ -124,13 +123,14 @@ A part meant to ship on its own (a printable bracket, a robot link's mesh in the
 `@model` returning that part where it should sit, which the assembly calls and places; export that
 model.
 
-## The xbf is Save As
+## The `.xbf` is the model
 
 The `.xbf` is text-to-cad's own document: the parts and placements, names, colours,
 materials, element names and mechanism, read back losslessly, and the compiled tracks of
-the model's animations, which only a GLB exported from it reads. Export one only to share a model
-without its code, or to compose it in another project, where `model.read` reads it as an input. A
-server restart needs none: each model's own `.xbf`, which every run writes, is its document.
+the model's animations, which only a GLB exported from it reads. Every run writes it, beside the
+script or at the path `@model("../XBF/arm.xbf")` gives, relative to the script. A copy of the file
+is a model of its own: copy it to share a model without its code, or to compose it in another
+project, where `model.read` reads it as an input.
 
 ## Formats
 
@@ -148,12 +148,11 @@ server restart needs none: each model's own `.xbf`, which every run writes, is i
   of its `animation()`s ([animation](animation.md)) is an animation of its name, whose
   `extras.cad` holds its `duration` and its `kind`, `"motion"` or `"animation"`; a sub-assembly
   that moves as one is keyed on its own node. `asset.generator` is `cad`. A GLB exported from the
-  model by its id, by `model.export(x, path)` or from an xbf the model exported is byte for byte
-  the same file.
+  model's `.xbf`, from a copy of it or by the model's id is byte for byte the same file.
 - **3MF**: an object per part, a build item per placement, in millimetres, with colours
   and materials through the materials extension.
 - **STL**: binary, every placed triangle, in millimetres.
-- **xbf**: of a model, or of a STEP (converting a vendor file).
+- **xbf**: of a STEP (converting a vendor file); a model's is the file its run saves.
 - **DXF**: of a planar document only (a 2D drawing); a solid is refused.
 
 STL and 3MF files are in millimetres and a GLB in metres, so a hand-written URDF or MJCF scales an
@@ -174,8 +173,8 @@ cylinders show their facets. `--tolerance MM` and `--angle DEG` mesh an STL, a 3
 either alone:
 
 ```bash
-cad model export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
-cad model export "$ID" GLB/hero.glb --tolerance 0.05 --angle 5
+cad model export src/hopper.xbf STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
+cad model export src/hopper.xbf GLB/hero.glb --tolerance 0.05 --angle 5
 ```
 
 - `--tolerance` is an absolute chord deviation in millimetres, at least 0.001. For a print with
@@ -183,8 +182,7 @@ cad model export "$ID" GLB/hero.glb --tolerance 0.05 --angle 5
   is designed around (0.02 for a 0.2 mm fit; 0.01 to 0.05 covers most prints).
 - `--angle` is a ceiling in degrees, from 1 to 28.5 (the viewer's): it draws small radii in more
   segments, where a tolerance does not reach them.
-- From Python they are `model.export(x, path, tolerance=0.02, angle=5)`, and
-  `@stl("hopper.stl", tolerance=0.02)`, `@threemf(...)` or `@glb(...)` on a model.
+- From Python they are `model.export(xbf, path, tolerance=0.02, angle=5)`.
 
 Each part is meshed again at the finer of the option and its own, for that file alone: a file is
 never coarser than the viewer's mesh, and the viewer, snapshots and every other export keep
@@ -204,8 +202,8 @@ A mechanism exports as a robot description for a simulator or ROS, by the destin
 `.xml` (or `.mjcf`) is a MuJoCo MJCF, `.urdf` a ROS URDF.
 
 ```bash
-cad model export "$ID" sim/arm.xml description/arm.urdf
-cad model export "$ID" sim/arm.xml --zero home
+cad model export src/arm.xbf sim/arm.xml description/arm.urdf
+cad model export src/arm.xbf sim/arm.xml --zero home
 ```
 
 Each is one description of the model in SI units at its as-built state, and writes its meshes as

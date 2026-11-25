@@ -24,11 +24,11 @@ The CAD model declares what the geometry determines: joints (build123d `Revolute
 ```bash
 cad run src/gripper.py
 cad model ranges "$ID"
-cad model export "$ID" sim/gripper.xml
-cad model export "$ID" description/gripper.urdf --zero home
+cad model export src/gripper.xbf sim/gripper.xml
+cad model export src/gripper.xbf description/gripper.urdf --zero home
 ```
 
-`$ID` is the `id:` line the run printed, and `--zero home` counts every joint from the named pose. An MJCF export also writes a `scene.xml` beside it with a floor, a light and a skybox, unless one exists. In the export's log, a mass of 0 or a missing joint means the model needs fixing.
+`$ID` is the `id:` line the run printed, `src/gripper.xbf` the model the run saved, and `--zero home` counts every joint from the named pose. An MJCF export also writes a `scene.xml` beside it with a floor, a light and a skybox, unless one exists. In the export's log, a mass of 0 or a missing joint means the model needs fixing.
 
 The plain export holds no chosen collision shape, joint dynamics or actuator. For a simulation, a MuJoCo function replaces it: a Python script that turns the model into a `mujoco.MjSpec` with `spec()` and chooses collision shapes (`fit` for a box, sphere, cylinder or capsule; `decompose` for a concave part), friction, joint damping and actuators.
 

@@ -86,13 +86,13 @@ A run writes one file, `src/bracket.xbf` beside the script: the model's own docu
 Export the bracket as a STEP file and an STL.
 ```
 
-The agent runs `cad model export` with the model's id:
+The agent runs `cad model export` on that file:
 
 ```bash
-cad model export "$ID" STEP/bracket.step STL/bracket.stl
+cad model export src/bracket.xbf STEP/bracket.step STL/bracket.stl
 ```
 
-`$ID` is the `id:` line from the run. The format comes from the file's suffix, and `GLB` and `3MF` work the same way. You can also use Export in the viewer's **⋯** menu, beside the file's name, which hands you a browser download. An STL for printing a part with fits takes a tolerance, which [exports](repo:skills/cad/references/exports.md) explains.
+The format comes from the file's suffix, and `GLB` and `3MF` work the same way. You can also use Export in the viewer's **⋯** menu, beside the file's name, which hands you a browser download. An STL for printing a part with fits takes a tolerance, which [exports](repo:skills/cad/references/exports.md) explains.
 
 ## Where to go next
 

@@ -119,8 +119,8 @@ parts a density weighs wrongly, and the checks).
 ```bash
 cad run src/gripper.py
 cad model ranges "$ID"
-cad model export "$ID" sim/gripper.xml
-cad model export "$ID" description/gripper.urdf --zero home
+cad model export src/gripper.xbf sim/gripper.xml
+cad model export src/gripper.xbf description/gripper.urdf --zero home
 cad step export vendor/part.step sim/part.xml
 ```
 

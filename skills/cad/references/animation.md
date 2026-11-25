@@ -50,8 +50,8 @@ def hinged_box_showcase():
 ```
 
 ```bash
-cad run src/hinged_box.py                             # prints the model's id
-cad model export "$ID" GLB/hinged_box_showcase.glb
+cad run src/hinged_box.py                             # saves src/hinged_box_showcase.xbf
+cad model export src/hinged_box_showcase.xbf GLB/hinged_box_showcase.glb
 ```
 
 `animation(assembly, name, duration=)` returns a builder; every call returns it, so calls

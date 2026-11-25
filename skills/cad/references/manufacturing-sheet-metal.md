@@ -117,7 +117,7 @@ every bend can be made.
 ## Cut files (DXF)
 
 A laser, plasma, waterjet or routing shop cuts the DXF, so check the file it gets (a model's is the
-one `cad model export "$ID" part.dxf` wrote), not the model it came from:
+one `cad model export src/part.xbf part.dxf` wrote), not the model it came from:
 
 ```bash
 cad dxf dfm part.dxf --thickness 3 --kerf 0.2 --sheet-size 1219x2438

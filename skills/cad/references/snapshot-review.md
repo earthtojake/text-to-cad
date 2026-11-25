@@ -97,7 +97,7 @@ of a large curved part (a faceted outline, uneven shading). For a still that nee
 export the model as a GLB at the tolerance wanted and draw that file:
 
 ```bash
-cad model export "$ID" tmp/fine.glb --tolerance 0.02 --angle 3
+cad model export src/bracket.xbf tmp/fine.glb --tolerance 0.02 --angle 3
 cad glb snapshot tmp/fine.glb tmp/close.png --camera 35:20
 ```
 

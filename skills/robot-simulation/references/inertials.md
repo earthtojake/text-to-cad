@@ -8,7 +8,7 @@ script in the same task. A hand-written file's ledger says which, per link
 
 ## Generated From the CAD Model
 
-A description generated from a CAD model (`cad model export <id> robot.xml` or `.urdf`, or
+A description generated from a CAD model (`cad model export robot.xbf robot.xml` or `.urdf`, or
 `cad.mujoco.spec`) takes every link's inertial from the kernel: its parts' exact solids at their
 materials' densities, with the masses the model declares ([from CAD](from-cad.md#mass)), as the
 centre of mass in the link frame and the tensor about it, in kilograms and kg·m². A number in it is
