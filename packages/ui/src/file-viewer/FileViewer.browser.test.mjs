@@ -78,8 +78,8 @@ test("the renderer is not re-rendered by the frame's own chrome: a navbar action
   assert.equal(await page.evaluate(() => window.harness.renders["root-a"]), before, "no renderer render for its own navbar action, or a width that does not cross the breakpoint");
 });
 
-// A library card's picture is drawn by a viewer of its own, out of sight at 480 × 360 (`OffscreenPicture.tsx`). That viewer
-// is under the phone breakpoint, and the page's type once followed it: Home's text grew a step while its cards got pictures.
+// A viewer that is not the page's own (`FileViewerProps.layout`), here out of sight at 480 × 360, is under the phone
+// breakpoint: the page's type must not follow it.
 test("a viewer drawn out of sight for a picture never changes the page: its layout pinned, no data-viewer-layout, the page's type its own", async () => {
   await reset();
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -89,7 +89,7 @@ test("a viewer drawn out of sight for a picture never changes the page: its layo
     layouts: [...document.querySelectorAll("[data-viewer-layout]")].map((node) => node.getAttribute("data-viewer-layout")) }));
   const desktop = await type();
   assert.deepEqual(desktop.layouts, ["desktop"]);
-  // As OffscreenPicture draws it: pinned, it neither measures nor carries the attribute the page's stylesheet reads.
+  // Pinned, it neither measures nor carries the attribute the page's stylesheet reads.
   await page.evaluate(() => window.harness.picture("pinned"));
   await page.getByTestId("picture").locator("[data-viewer-pinned-layout]").waitFor({ state: "attached" });
   await settle();

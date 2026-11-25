@@ -235,8 +235,8 @@
    bottom (`--cad-host-bottom-inset`), whichever is more. Added together, a library that fits would still scroll. */
 .cad-library-content { box-sizing: border-box; flex: 1 1 0; min-width: 0; padding: 20px 24px max(40px, calc(var(--cad-host-bottom-inset, 0px) + 16px)); container-type: inline-size; }
 [data-library-narrow] .cad-library-content { padding: 12px 16px max(40px, calc(var(--cad-host-bottom-inset, 0px) + 16px)); }
-/* The place's heading row, every control the scale's: at its left the place's name (a project's after its folder glyph,
-   its folder and its ⋯ following) and the way back to the document just left; at its right Sort and the grid/list
+/* The place's heading row, every control the scale's: at its left the place's name (a project's folder's path after its
+   folder glyph, its folder and its ⋯ following) and the way back to the document just left; at its right Sort and the grid/list
    segmented control. It wraps where it must. Where the place holds more than one kind, the kinds' chips are a row of
    their own 12px under it and 16px over the documents. */
 .cad-library-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; min-height: var(--cad-control); margin-bottom: 16px; }
@@ -247,6 +247,18 @@
 .cad-library-place { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; }
 .cad-library-title { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); font-weight: 600; letter-spacing: -0.01em; color: var(--foreground); }
+/* A project's page: the folder's path, the project's name first. Each part but the last is a way back up, muted, giving
+   way first (each keeps its first letters); the last, the folder on screen, is the heading and stays whole while it
+   fits. A path longer than the row loses its start, never its end. */
+.cad-library-crumbs { display: flex; flex: 0 1 auto; align-items: baseline; justify-content: flex-end; min-width: 0; overflow: hidden; }
+.cad-library-crumb-part { display: flex; flex: 0 1 auto; align-items: baseline; min-width: 0; }
+.cad-library-crumb { flex: 0 1 auto; min-width: 2.5em; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 4px; outline: none;
+  font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); font-weight: 600; letter-spacing: -0.01em; color: var(--muted-foreground);
+  text-decoration: none; cursor: pointer; background: none; border: 0; padding: 0; }
+.cad-library-crumb:hover { color: var(--foreground); }
+.cad-library-crumb:focus-visible { box-shadow: 0 0 0 2px var(--ring); }
+.cad-library-crumb-slash { flex: none; padding: 0 6px; font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); color: var(--muted-foreground); }
+.cad-library-crumbs .cad-library-title { flex: none; max-width: 100%; }
 .cad-library-path { flex: 0 1 auto; min-width: 0; font-size: var(--cad-text-xs); line-height: var(--cad-leading-xs); color: var(--muted-foreground); }
 .cad-library-place-actions { flex: none; color: var(--muted-foreground); }
 .cad-library-place-actions button[data-state=open] { background: var(--accent); color: var(--foreground); }
@@ -288,6 +300,20 @@
    brand's ring with the caption on --brand-subtle. */
 .cad-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); align-items: start; gap: 24px 16px; margin: 0; padding: 0; list-style: none; }
 .cad-library-card, .cad-library-row { position: relative; min-width: 0; scroll-margin: 16px; }
+/* A project's page's subfolders, in a grid: the plainest folder there is, its glyph and its name on one line, in the
+   cards' columns and drawn as a card is (its border, its colour, the pointer's and the keyboard's marks), as tall as a
+   list's row; their own grid over the files', as Drive keeps its folders over its files. In a list a folder is a row,
+   its glyph where a file's picture is and a dash in each column. */
+.cad-library-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 8px 16px; margin: 0 0 24px; padding: 0; list-style: none; }
+.cad-library-folder { min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--card); transition: border-color .15s ease, box-shadow .15s ease; }
+.cad-library-folder:hover { border-color: color-mix(in srgb, var(--foreground) 22%, transparent); box-shadow: 0 2px 10px rgba(0, 0, 0, .06); }
+.cad-library-folder:has(.cad-library-open:focus-visible) { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.cad-library-folder .cad-library-open { align-items: center; height: 42px; padding: 0 12px; border-radius: inherit; }
+.cad-library-folder .cad-library-label { font-size: var(--cad-text-xs); line-height: var(--cad-leading-xs); font-weight: 500; }
+.cad-library-folder-glyph { display: grid; flex: none; place-items: center; color: var(--muted-foreground); }
+.cad-library-folder-glyph > svg { width: 16px; height: 16px; }
+.cad-library-row .cad-library-folder-glyph { width: 40px; height: 28px; }
+.cad-library-row .cad-library-folder-glyph > svg { width: 16px; height: 16px; }
 .cad-library-main { position: relative; min-width: 0; }
 .cad-library-card { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--card); transition: border-color .15s ease, box-shadow .15s ease; }
 .cad-library-card:not([data-missing]):hover { border-color: color-mix(in srgb, var(--foreground) 22%, transparent); box-shadow: 0 2px 10px rgba(0, 0, 0, .06); }
@@ -368,11 +394,7 @@
 }
 /* A place with nothing to list, or nothing that matches, says so in one muted line. */
 .cad-library-empty { margin: 48px 0 0; text-align: center; color: var(--muted-foreground); line-height: 1.6; }
-/* Past the first of a long place: Show more, a quiet button under the last row; and, under a project's last row, that
-   the host's walk of its folder stopped early. */
-.cad-library-more { margin-top: 16px; padding: 2px 6px; margin-left: -6px; border-radius: 6px; color: var(--muted-foreground); cursor: pointer; }
-.cad-library-more:hover { background: var(--accent); color: var(--foreground); }
-.cad-library-more:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+/* Under a folder's last row: that the host listed only part of it. */
 .cad-library-truncated { margin: 16px 0 0; color: var(--muted-foreground); }
 /* What came of an Import's Folder or a project removed: one line over the place it led to. */
 .cad-library-note { margin: 0 0 16px; padding: 6px 10px; border-radius: 6px; background: var(--brand-subtle); color: var(--foreground); }

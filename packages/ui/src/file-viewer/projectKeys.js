@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useRef } from "react";
 
 /**
- * Moving through the project a document is in, one document at a time: `[` the previous and `]` the next, in the
- * order the project lists them (its models, then its files, as the host reads them), stopping at its ends.
+ * Moving through the folder of its project a document is in, one file at a time: `[` the previous and `]` the next,
+ * in the order that folder's page lists them, stopping at its ends.
  *
  * `FileViewer` works the two out of its `project` (`projectNeighbours`) and hands them to the view under it
  * (`ProjectKeysContext`, a ref that never changes, so a project read again re-renders no view) and to its ⋯ (Previous
@@ -20,18 +20,19 @@ export const ProjectKeysContext = createContext(null);
 const slashed = path => String(path || "").replace(/\\/g, "/").replace(/\/+$/, "");
 
 /**
- * The documents before and after `current` (a file's path, a model's id) among a project's `documents`, skipping one
- * that is gone (`missing`), each null at an end; null where `current` is not one of them or the project has no other.
+ * The documents before and after `current` (the document on screen, by its file's path or its id: either names it)
+ * among a folder's `documents`, skipping one that is gone (`missing`), each null at an end; null where `current` is not
+ * one of them or the folder has no other.
  *
- * @template {{ path: string, missing?: boolean }} Row
+ * @template {{ path: string, id?: string, missing?: boolean }} Row
  * @param {readonly Row[] | null | undefined} documents
- * @param {string | null | undefined} current
+ * @param {string | null | undefined | readonly (string | null | undefined)[]} current
  * @returns {{ previous: Row | null, next: Row | null } | null}
  */
 export function projectNeighbours(documents, current) {
-  if (!documents || documents.length < 2 || !current) return null;
-  const here = slashed(current);
-  const at = documents.findIndex(row => slashed(row.path) === here);
+  const names = new Set([current].flat().filter(Boolean).map(slashed));
+  if (!documents || documents.length < 2 || !names.size) return null;
+  const at = documents.findIndex(row => names.has(slashed(row.path)) || Boolean(row.id && names.has(row.id)));
   if (at < 0) return null;
   const find = by => { for (let index = at + by; index >= 0 && index < documents.length; index += by) if (!documents[index].missing) return documents[index]; return null; };
   return { previous: find(-1), next: find(1) };

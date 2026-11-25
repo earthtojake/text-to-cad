@@ -9,19 +9,10 @@ import { createLiveRegistry } from '../../dist/host/liveRegistry.js';
 import { createTabStore, memoryTabRecord } from '../../dist/tab-store/tabStore.js';
 import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 
-// The shared FileViewer, reduced to what this composition hands it: the view on screen, and the
-// one a card's picture is drawn in out of sight (a compact one), while it is mounted.
-const viewer = vi.hoisted(() => ({ props: null as FileViewerProps | null, hidden: null as FileViewerProps | null }));
-vi.mock('../../dist/file-viewer/FileViewer.js', async () => {
-  const { useEffect } = await import('react');
-  return { FileViewer: (props: FileViewerProps) => {
-    const hidden = Boolean(props.host.environment.compact);
-    if (hidden) viewer.hidden = props; else viewer.props = props;
-    useEffect(() => () => { if (hidden) viewer.hidden = null; }, [hidden]);
-    return null;
-  } };
-});
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewer.props = null; viewer.hidden = null; });
+// The shared FileViewer, reduced to what this composition hands it: the one view, on screen.
+const viewer = vi.hoisted(() => ({ props: null as FileViewerProps | null }));
+vi.mock('../../dist/file-viewer/FileViewer.js', () => ({ FileViewer: (props: FileViewerProps) => { viewer.props = props; return null; } }));
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewer.props = null; });
 
 function cadClient() {
   let snapshot = { hydrated: false, entries: [] as Record<string, unknown>[], error: '', revision: 0, refreshing: true, catalogRevision: '' };
@@ -132,61 +123,6 @@ test('the failure states read in the language the host names, and follow it when
   back.unmount();
 });
 
-test('the home pictures a card out of sight, in a viewer of its own, and never starts the engine reading a STEP', async () => {
-  const client = { ...cadClient(), engineHolds: vi.fn(async (file: string) => file === '/models/held.step') };
-  const host = ports(client);
-  const view = (file: string) => <CadViewer client={client as never} host={host} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file={file}
-    library={library} onThumbnail={async () => {}} onShow={() => {}} />;
-  const { rerender } = render(view(''));
-  const picture = (props().presentation!.home as { props: { picture(model: { path: string }): Promise<boolean> } }).props.picture;
-  // A STEP the engine does not hold keeps its placeholder: the engine is asked, and that is all.
-  await expect(picture({ path: '/models/b.step' })).resolves.toBe(false);
-  expect(client.engineHolds).toHaveBeenCalledWith('/models/b.step');
-  expect(viewer.hidden).toBeNull();
-  // One it holds is drawn.
-  let held!: Promise<boolean>;
-  await act(async () => { held = picture({ path: '/models/held.step' }); });
-  expect(viewer.hidden!.file).toBe('/models/held.step');
-  act(() => viewer.hidden!.onError!(new Error('unreadable')));
-  await expect(held).resolves.toBe(false);
-  // One that is built is drawn in a view of its own: compact, with renderers of its own, reaching no prompt.
-  let drawn!: Promise<boolean>;
-  await act(async () => { drawn = picture({ path: '/models/a.stl' }); });
-  const hidden = viewer.hidden!;
-  expect([hidden.file, hidden.host.promptContext.getSnapshot().kind]).toEqual(['/models/a.stl', 'unavailable']);
-  expect(hidden.renderers).not.toBe(props().renderers);
-  // A view that fails gives the card up, and goes.
-  act(() => hidden.onError!(new Error('unreadable')));
-  await expect(drawn).resolves.toBe(false);
-  expect(viewer.hidden).toBeNull();
-  // A file opened while one is drawn has the screen to itself.
-  let again!: Promise<boolean>;
-  await act(async () => { again = picture({ path: '/models/a.stl' }); });
-  expect(viewer.hidden).not.toBeNull();
-  rerender(view('/models/parts/a.step'));
-  await expect(again).resolves.toBe(false);
-  expect(viewer.hidden).toBeNull();
-});
-
-test('the home pictures a model document the engine holds, by its id, and leaves one it does not hold (unsaved, detached) to its placeholder', async () => {
-  const held = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab', unsaved = '0a1b2c3d-4e5f-5a6b-8c7d-0123456789ab';
-  const client = { ...cadClient(), engineHolds: vi.fn(async (file: string) => file === held) };
-  render(<CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file=""
-    library={library} onThumbnail={async () => {}} onShow={() => {}} />);
-  const picture = (props().presentation!.home as { props: { picture(model: { path: string }): Promise<boolean> } }).props.picture;
-  // The engine is asked, and nothing is built or drawn.
-  await expect(picture({ path: unsaved })).resolves.toBe(false);
-  expect(client.engineHolds).toHaveBeenCalledWith(unsaved);
-  expect(viewer.hidden).toBeNull();
-  // One it holds is drawn out of sight, by its id, in a view of its own.
-  let drawn!: Promise<boolean>;
-  await act(async () => { drawn = picture({ path: held }); });
-  expect(viewer.hidden!.file).toBe(held);
-  expect(viewer.hidden!.renderers).not.toBe(props().renderers);
-  act(() => viewer.hidden!.onError!(new Error('unreadable')));
-  await expect(drawn).resolves.toBe(false);
-});
-
 test('a model document on screen is pictured by its id once it settles, once per build the engine holds', async () => {
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
   const client = cadClient();
@@ -258,19 +194,9 @@ test('a document named by its id is its row, joined by id: the host hears its fi
   // A symlink's target and its link are one document, one row: the file is heard by the row's own path.
   await act(async () => client.publish([{ id, file: '/models/real/a.step' }]));
   expect(shown.at(-1)).toEqual(['/models/real/a.step', id]);
-  const missing = render(<>{props().presentation!.error!({ message: `no document ${id} is held: bracket is no longer in memory; run \`python /m/parts.py\` to build it again`, missing: true })}</>);
-  expect(missing.getByText('This model is no longer held')).toBeTruthy();
-  expect(missing.getByText(/run `python \/m\/parts.py` to build it again/)).toBeTruthy();
-  missing.unmount();
-  // The engine's state names the page: a model not saved, and one whose script is gone, each over the engine's words.
-  const failure = (state: string, message: string) => render(<>{props().presentation!.error!({ message, missing: true,
-    error: Object.assign(new Error(message), { code: 'cad-file-missing', state }) })}</>);
-  const unsaved = failure('unsaved', `bracket (${id}) is not saved: the engine's cache holds no file of its last build; run \`python /m/parts.py\` to build it again`);
-  expect([unsaved.getByText('This model is not saved'), unsaved.getByText(/is not saved: the engine's cache/)].every(Boolean)).toBe(true);
-  expect(unsaved.queryByText('This model is no longer held')).toBeNull();
-  unsaved.unmount();
-  const detached = failure('detached', `bracket (${id}) is detached: /m/parts.py is gone, and nothing builds it again; delete it from the home`);
-  expect(detached.getByText('This model’s script is gone')).toBeTruthy();
+  // One the engine does not hold: one title, over the engine's own words.
+  const missing = render(<>{props().presentation!.error!({ message: `no document ${id} is held`, missing: true })}</>);
+  expect([missing.getByText('This model is no longer held'), missing.getByText(`no document ${id} is held`)].every(Boolean)).toBe(true);
 });
 
 test("the host's Full size is the navbar's one host action: Export is the file menu's, never the navbar's", () => {
@@ -306,11 +232,11 @@ type HomeProps = { place: unknown; from: { path: string; id: string | null; name
   onPlaceShown(name: string): void; navigation: { hrefOf?: unknown; openBeside?: unknown } };
 const homeProps = () => (props().presentation!.home as { props: HomeProps }).props;
 
-test("a document in a project has its project's name before its own and its list, read again while it is shown; the name shows its project's page with the document just left remembered", async () => {
-  const listed = { id: 'p1', name: 'parts', root: '/models/parts', created: 1, opened: 1, missing: false, truncated: false,
-    documents: [{ path: '/models/parts/a.step', name: 'a.step', kind: 'file', folder: '/models/parts' }] };
+test("a document in a project has its project's name before its own and its folder's files, read again while it is shown; the name shows that folder with the document just left remembered", async () => {
+  const listed = { project: { id: 'p1', name: 'parts', root: '/models/parts', created: 1, opened: 1, missing: false }, path: 'v3', folders: [], truncated: false,
+    documents: [{ path: '/models/parts/v3/a.step', name: 'a.step', folder: '/models/parts/v3' }] };
   const base = cadClient();
-  const client = Object.assign(base, { serverInfo: vi.fn(async () => ({ home: '/Users/me' })), project: vi.fn(async () => listed),
+  const client = Object.assign(base, { serverInfo: vi.fn(async () => ({ home: '/Users/me' })), projectFolder: vi.fn(async () => listed),
     entryOf: (path: string) => (base.getSnapshot() as unknown as { entries: Record<string, unknown>[] }).entries.find(entry => entry.file === path) ?? null });
   // A host that keeps the file and the place itself, as an app does: what it is asked to show is what it shows next.
   const shows: [string, unknown][] = [];
@@ -318,43 +244,44 @@ test("a document in a project has its project's name before its own and its list
   const host = ports(client);
   const view = (file: string, extra: object = {}) => <CadViewer client={client as never} host={host} tabStore={tabStore}
     live={createLiveRegistry()} file={file} name="a.step" library={library} onShow={(next, place) => shows.push([next, place])} {...extra} />;
-  const { rerender } = render(view('/models/parts/a.step'));
+  const { rerender } = render(view('/models/parts/v3/a.step'));
   expect(props().project).toBeNull();
-  await act(async () => client.publish([{ id: 'f1', file: '/models/parts/a.step', name: 'a.step', project: { id: 'p1', name: 'parts', root: '/models/parts' } }]));
-  // Its name from its row, its documents as the client reads them.
+  await act(async () => client.publish([{ id: 'f1', file: '/models/parts/v3/a.step', name: 'a.step', project: { id: 'p1', name: 'parts', root: '/models/parts', folder: 'v3' } }]));
+  // Its name from its row; the files of its folder as the client reads them, which [ and ] step through.
   expect(props().project?.name).toBe('parts');
   await vi.waitFor(() => expect(props().project?.documents).toEqual(listed.documents));
-  expect(client.project).toHaveBeenCalledWith('p1', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  expect(client.projectFolder).toHaveBeenCalledWith('p1', expect.objectContaining({ path: 'v3', signal: expect.any(AbortSignal) }));
   // A host with no addresses: the name is no link.
   expect(props().project?.href).toBeNull();
-  // Its name shows the home at that project's page; the person's home folder says its folder from `~`.
+  // Its name shows the home at that project's page, at the folder the document is in; the person's home folder says
+  // its folder from `~`.
   act(() => props().project!.onShow());
-  expect(shows.at(-1)).toEqual(['', { view: 'project', project: 'p1' }]);
-  rerender(view('', { place: { view: 'project', project: 'p1' } }));
-  await vi.waitFor(() => expect(homeProps()).toMatchObject({ place: { view: 'project', project: 'p1' }, home: '/Users/me' }));
+  expect(shows.at(-1)).toEqual(['', { view: 'project', project: 'p1', path: 'v3' }]);
+  rerender(view('', { place: { view: 'project', project: 'p1', path: 'v3' } }));
+  await vi.waitFor(() => expect(homeProps()).toMatchObject({ place: { view: 'project', project: 'p1', path: 'v3' }, home: '/Users/me' }));
   // The document just left is the home's to ring, by its path and its id, with the way back to it.
-  expect(homeProps().from).toMatchObject({ path: '/models/parts/a.step', id: 'f1', name: 'a.step' });
+  expect(homeProps().from).toMatchObject({ path: '/models/parts/v3/a.step', id: 'f1', name: 'a.step' });
   act(() => homeProps().onBack());
-  expect(shows.at(-1)).toEqual(['/models/parts/a.step', undefined]);
+  expect(shows.at(-1)).toEqual(['/models/parts/v3/a.step', undefined]);
   // Back on it and at its project's page again (the browser's Back): still the one just left.
-  rerender(view('/models/parts/a.step'));
+  rerender(view('/models/parts/v3/a.step'));
   rerender(view('', { place: { view: 'project', project: 'p1' } }));
-  expect(homeProps().from).toMatchObject({ path: '/models/parts/a.step' });
+  expect(homeProps().from).toMatchObject({ path: '/models/parts/v3/a.step' });
   // Another place forgets it, for good: its project's page again has no ring.
   rerender(view('', { place: { view: 'recents' } }));
   expect(homeProps().from).toBeNull();
   rerender(view('', { place: { view: 'project', project: 'p1' } }));
   expect(homeProps().from).toBeNull();
   // So does another document opened from the project's page.
-  rerender(view('/models/parts/a.step'));
+  rerender(view('/models/parts/v3/a.step'));
   act(() => props().project!.onShow());
   rerender(view('', { place: { view: 'project', project: 'p1' } }));
   expect(homeProps().from).not.toBeNull();
-  rerender(view('/models/parts/b.step', { place: { view: 'project', project: 'p1' } }));
+  rerender(view('/models/parts/v3/b.step', { place: { view: 'project', project: 'p1' } }));
   rerender(view('', { place: { view: 'project', project: 'p1' } }));
   expect(homeProps().from).toBeNull();
   // A host with no home has no project to show.
-  rerender(view('/models/parts/a.step', { library: undefined }));
+  rerender(view('/models/parts/v3/a.step', { library: undefined }));
   expect(props().project).toBeNull();
 });
 
@@ -385,7 +312,7 @@ test("the home's place is the host's where it keeps one, the view's own otherwis
 
 test("the host's addresses and its Open in new tab reach the home, the navbar's project name and the viewer's navigation; a view with no home has neither", async () => {
   const base = cadClient();
-  const client = Object.assign(base, { project: vi.fn(async () => ({ id: 'p1', name: 'parts', root: '/models/parts', documents: [] })),
+  const client = Object.assign(base, { projectFolder: vi.fn(async () => ({ project: { id: 'p1', name: 'parts', root: '/models/parts', created: 1, opened: 1, missing: false }, path: '', folders: [], documents: [], truncated: false })),
     entryOf: (path: string) => (base.getSnapshot() as unknown as { entries: Record<string, unknown>[] }).entries.find(entry => entry.file === path) ?? null });
   const hrefOf = (target: { document?: string; home?: { view: string; project?: string } }) => target.home ? `/?project=${target.home.project}` : `/${target.document}`;
   const openBeside = { kind: 'tab' as const, open() {} };
@@ -431,7 +358,7 @@ test("a document in no project offers to import its folder as a project, the cho
 
 test("mounts the search of every document once, over a document and the home, with the document on screen and its project; a host with no library has none", async () => {
   const base = cadClient();
-  const client = Object.assign(base, { project: vi.fn(async () => ({ id: 'p1', name: 'parts', root: '/models/parts', documents: [] })),
+  const client = Object.assign(base, { projectFolder: vi.fn(async () => ({ project: { id: 'p1', name: 'parts', root: '/models/parts', created: 1, opened: 1, missing: false }, path: '', folders: [], documents: [], truncated: false })),
     entryOf: (path: string) => (base.getSnapshot() as unknown as { entries: Record<string, unknown>[] }).entries.find(entry => entry.file === path) ?? null });
   const view = (file: string, extra: object = {}) => <CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())}
     live={createLiveRegistry()} file={file} library={library} onShow={() => {}} {...extra} />;

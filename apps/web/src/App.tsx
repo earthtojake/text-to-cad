@@ -3,6 +3,7 @@ import { CadViewer, createCadFileSource, normalizePath, type CadViewerProps } fr
 import { createCadFileActions } from '@cad/ui/catalog';
 import type { ModelLibrarySource } from '@cad/ui/library';
 import { createLiveRegistry, type HomeLocation, type NavigationTarget } from '@cad/ui/host';
+import { samePlace } from '@cad/ui/library';
 import type { TabStore, Appearance } from '@cad/ui/tab-store';
 import { createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerInfo } from '@cad/core/client';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
@@ -39,12 +40,11 @@ export function useTabAppearance(tabStore: TabStore): { preference: Appearance; 
 
 const DOCUMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const RECENTS: HomeLocation = { view: 'recents' };
-const samePlace = (a: HomeLocation, b: HomeLocation) => a.view === b.view && (a.view !== 'project' || (b.view === 'project' && a.project === b.project));
 
 /**
  * The viewer's page: one document at a time, by the id its URL's path names (`/<id>`: a model's,
  * or a file's, which the server registers when it is opened), or the home (`/`) at the place its query names
- * (`fileParam.js`: Recents, `?view=pinned`, `?view=standalone`, `?project=<id>`). A file opened by its path (from the
+ * (`fileParam.js`: Recents, `?view=pinned`, `?view=standalone`, `?project=<id>&path=<folder>`). A file opened by its path (from the
  * home's Open) is asked for its id first, and shown by it. The browser's own history is the way back: showing a
  * document, the home or another place on it is a new entry, and every one of them has its own address, for a link
  * and for Open in new tab.
@@ -142,8 +142,9 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     setShownPath(path);
     if (path) void client.changeRecents({ action: 'open', path }).catch(() => {});
   }, [client]);
-  // The home: the projects and the library every CAD view shares, and Import with the desktop's chooser where the
-  // server's computer has one -- a file, shown, or a folder, opened as a project. A card's picture is the server's, by name.
+  // The home: the projects (a project's page is one folder of it, read from the server) and the library every CAD view
+  // shares, and Import with the desktop's chooser where the server's computer has one -- a file, shown, or a folder,
+  // opened as a project. A card's picture is the server's, by its token.
   const library = useMemo<ModelLibrarySource>(() => ({
     list: () => client.recents(),
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
@@ -154,6 +155,7 @@ export default function App({ client, server, tabStore, language: chosenLanguage
       await show(entry.path);
     },
     projects: () => client.projects?.() ?? Promise.resolve([]),
+    ...(client.projectFolder ? { folder: (project: string, options: { path?: string; q?: string }) => client.projectFolder!(project, options) } : {}),
     removeProject: project => client.removeProject?.(project.id) ?? Promise.resolve([]),
     ...(server.pick ? {
       pick: async () => { const picked = await client.pick(); if (picked) await show(picked); },

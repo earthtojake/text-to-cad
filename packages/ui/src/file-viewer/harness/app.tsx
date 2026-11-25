@@ -70,8 +70,8 @@ export function App() {
   const [second, setSecond] = useState(false);
   const [state, setState] = useState<FileViewerState>({});
   const [otherState, setOtherState] = useState<FileViewerState>({});
-  // A viewer drawn out of sight at a library picture's size, as `OffscreenPicture.tsx` draws one: its layout pinned
-  // (`"pinned"`, as it is), or measured (`"measured"`, a viewer that forgot to pin it), or none.
+  // A viewer that is not the page's own, drawn out of sight at 480 × 360: its layout pinned (`"pinned"`), or measured
+  // (`"measured"`, a viewer that forgot to pin it), or none.
   const [picture, setPicture] = useState<"none" | "pinned" | "measured">("none");
   const [pictureState, setPictureState] = useState<FileViewerState>({});
   // The project the file on screen is in, where a spec names one: its name before the file's in the navbar.

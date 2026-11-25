@@ -737,7 +737,7 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   const openInRow = screen.getByRole('menuitem', { name: 'Open in' });
   expect([openInRow.getAttribute('aria-disabled'), openInRow.closest('[data-disabled-reason]')]).toEqual(['true', expect.anything()]);
   await user.hover(openInRow.closest('[data-disabled-reason]')!);
-  expect((await screen.findByRole('tooltip')).textContent).toBe('The source was moved or deleted.');
+  expect((await screen.findByRole('tooltip')).textContent).toBe('The source was moved, or is gone.');
   expect(screen.queryByRole('menu', { name: 'Open in' })).toBeNull();
   await user.click(screen.getByRole('menuitem', { name: 'Copy path' }));
   expect(perform['copy-path']).toHaveBeenLastCalledWith({ path: '/m/parts.py', kind: 'file' });
@@ -759,7 +759,7 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   // The pointer straight onto its row's wrapper: jsdom lays nothing out, so a pointer crossing from
   // Open in to its submenu would close it (a browser's pointer grace keeps it open).
   fireEvent.pointerMove(finder.closest('[data-disabled-reason]')!, { pointerType: 'mouse' });
-  expect((await screen.findByRole('tooltip')).textContent).toBe('The source was moved or deleted.');
+  expect((await screen.findByRole('tooltip')).textContent).toBe('The source was moved, or is gone.');
   const reveals = perform.reveal.mock.calls.length;
   await user.click(screen.getByRole('menuitem', { name: 'Browser' }));
   expect(perform.browser).toHaveBeenLastCalledWith({ path: id, kind: 'file' });

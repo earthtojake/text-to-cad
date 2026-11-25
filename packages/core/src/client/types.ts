@@ -279,10 +279,10 @@ export interface CadWorkspaceService {
   /** The home's library, newest first. */
   recents(options?: CadRequestOptions): Promise<CadRecent[]>;
   /**
-   * A change to the library (`open`, `pin`, `unpin`, `thumbnail`; `remove` and `delete`, one thing: the file's entry
-   * forgotten, the file untouched): the library as it now is.
+   * A change to the library (`PATCH /api/v1/documents`: `open`, `pin`, `unpin`, `thumbnail`; `remove`, the file's
+   * entry forgotten, the file untouched): the library as it now is.
    */
-  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
+  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
   /** Keep a model's picture in the library: the light viewport's, which the home shows in both themes. */
   keepThumbnail(png: Blob, path: string): Promise<CadRecent[]>;
   /** A library picture, of the row it is of (its document's id, the picture's name), as a data URL; null when there is none. */

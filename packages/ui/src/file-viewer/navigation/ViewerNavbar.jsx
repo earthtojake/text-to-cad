@@ -26,7 +26,7 @@ const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", "cop
  * The row above a file and above the host's home, in every host: the same row whatever is open, so a
  * person finds each control in the same place. Over the home it has only the logo, the panel's toggle,
  * Back and Forward and the host's actions. Preview hides it, drawing its own bar in its place, and a
- * compact view (an offscreen picture) has none.
+ * compact view (a small inline view) has none.
  *
  * Left, in this order: the text-to-cad logo (the C mark, over the home and over a document alike), always first, so the
  * way home stands in one place on every page: where the host has a home (`onHome`) a link to it (Recents; a real link

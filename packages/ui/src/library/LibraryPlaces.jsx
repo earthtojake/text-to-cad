@@ -11,17 +11,17 @@ import { cn } from "../lib/utils.js";
 // phone's sheet), in the design system's own parts: the panel's rows on the panel's surface (`primitives/tree-row.jsx`).
 
 /**
- * @typedef {{ view: "recents" | "pinned" | "standalone" } | { view: "project", project: string }} Place
+ * @typedef {{ view: "recents" | "pinned" | "standalone" } | { view: "project", project: string, path?: string }} Place
  * @typedef {object} PlaceRow  One place as its row draws it.
  * @property {Place} place
  * @property {string} key  The place as one word (`placeKey`): what marks the row of the place on screen.
  * @property {string} label
- * @property {number} count  Its documents; none is not said.
+ * @property {number} [count]  Its documents (Pinned's, Standalone's; a project's row has none); none is not said.
  * @property {import("react").ComponentType<any>} Icon
  * @property {boolean} [missing]  A project whose folder is gone: drawn muted.
  * @typedef {object} PlacesProps
  * @property {readonly PlaceRow[]} lead  Recents and Pinned.
- * @property {readonly PlaceRow[]} projects  One a project, the latest activity first.
+ * @property {readonly PlaceRow[]} projects  One a project, the latest activity first: its glyph and its name.
  * @property {PlaceRow} standalone
  * @property {string} current  The key of the place on screen.
  * @property {(place: Place) => void} onVisit
@@ -37,7 +37,7 @@ export const plainClick = event => event.button === 0 && !event.metaKey && !even
 /**
  * The places: Recents and Pinned, "Projects" with its "+" over one row a project, then Standalone, on the panel's
  * 16px inset (the surface's: its one type size, its rows hanging 8px past the inset). A row is the panel's row: its
- * glyph, its name (the first to give way, whole in a hint) and its count on the right line. The place on screen is
+ * glyph, its name (the first to give way, whole in a hint) and, for Pinned and Standalone, its count on the right line. The place on screen is
  * marked as an open tab is (the accent fill, medium weight) and said (`aria-current`). A row is a link where the host
  * gives the place an address (`hrefOf`): a plain click shows it here, and the browser's own ways open it in a new tab.
  * Up and Down move between the rows, Home and End to the first and the last (`primitives/tree-keys.js`).

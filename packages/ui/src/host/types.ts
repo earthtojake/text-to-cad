@@ -72,9 +72,10 @@ export interface DownloadPort {
 }
 /**
  * A place on the host's home: the documents opened lately across every project (`recents`), the pinned ones, the
- * documents in no project (`standalone`), or one project's page, by the project's id.
+ * documents in no project (`standalone`), or one project's page, by the project's id: one folder of it, `path` below
+ * its root (`/`-separated; none, or `""`, its root).
  */
-export type HomeLocation = { view: 'recents' | 'pinned' | 'standalone' } | { view: 'project'; project: string };
+export type HomeLocation = { view: 'recents' | 'pinned' | 'standalone' } | { view: 'project'; project: string; path?: string };
 /** What a link or Open in new tab names: a document, by its id (one whose row carries none: its path), or a place on the home. */
 export type NavigationTarget = { document: string } | { home: HomeLocation };
 export interface ViewerHost {
@@ -124,7 +125,7 @@ export interface ViewerHost {
   /**
    * `platform` names the keyboard's modifiers (⌘ on `darwin`, Ctrl elsewhere); `reducedMotion` is
    * the app's own motion setting, honoured beside the system's `prefers-reduced-motion`. `compact`
-   * is a view drawn with no chrome (the library's picture of a model, drawn out of sight): a
+   * is a view drawn with no chrome (a small inline view): a
    * renderer draws the model alone — not its tools, its view's controls, its cube or its Quick
    * Edit — and the view has no navbar. `locale` is the language the view reads in, as the host
    * resolved it (`@cad/ui/i18n`'s `useLanguage`: the person's choice, else what the context

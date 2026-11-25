@@ -9,22 +9,30 @@ import { ControlUsageProvider } from '../../dist/usage/controls.js';
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-// A library row, as a host lists it: a file unless said, opened at `opened` (seconds).
+// A row, as a host lists it, opened at `opened` (seconds).
 const doc = (path: string, extra: Record<string, unknown> = {}) => ({ path, id: `id:${path}`, name: path.split('/').pop()!, folder: '', opened: null,
-  updated: null, created: null, pinned: false, missing: false, thumbnail: null, pictured: null, kind: 'file', ...extra }) as any;
-const ACTUATOR = doc('m1', { id: 'm1', name: 'actuator', kind: 'model', updated: 50, thumbnail: 'pic-1' });
+  updated: null, created: null, pinned: false, missing: false, thumbnail: null, pictured: null, ...extra }) as any;
+const ACTUATOR = doc('/w/drive/actuator.xbf', { id: 'm1', updated: 50, thumbnail: 'pic-1', project: 'p1' });
 const GEAR = doc('/w/drive/gear.step', { opened: 100, project: 'p1' });
-const SHAFT = doc('/w/drive/STEP/shaft.stl', { opened: 10 });
-const BLANK = doc('/w/examples/gear_blank.step', { opened: 70 });
+const SHAFT = doc('/w/drive/shaft.stl', { opened: 10, project: 'p1' });
+const NUT = doc('/w/drive/STEP/nut.step', { project: 'p1' });
+const BLANK = doc('/w/examples/gear_blank.step', { opened: 70, project: 'p2' });
 const LOOSE = doc('/tmp/gearbox.step', { opened: 90, project: null });
-const PROJECTS = [{ id: 'p1', name: 'drive', root: '/w/drive', opened: 1, missing: false, documents: [ACTUATOR, SHAFT, GEAR] },
-  { id: 'p2', name: 'examples', root: '/w/examples', opened: 1, missing: false, documents: [BLANK] }];
-// The document on screen: the model, in the drive project.
-const ON_MODEL = { id: 'm1', path: 'm1', project: { id: 'p1', name: 'drive' } };
+const PROJECTS = [{ id: 'p1', name: 'drive', root: '/w/drive', opened: 1, missing: false }, { id: 'p2', name: 'examples', root: '/w/examples', opened: 1, missing: false }];
+// The document on screen: the model, at the top of the drive project.
+const ON_MODEL = { id: 'm1', path: ACTUATOR.path, project: { id: 'p1', name: 'drive', folder: '' } };
+// The drive project's folder as its host answers it: the files directly in it; with words, every file below that holds them.
+const folderOf = (files: any[]) => vi.fn(async (_id: string, { path = '', q = '' }: { path?: string; q?: string }) => {
+  const base = path ? `/w/drive/${path}` : '/w/drive';
+  const below = files.map(file => ({ file, rest: file.path.slice(base.length + 1) })).filter(({ file }) => file.path.startsWith(`${base}/`));
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  return { project: PROJECTS[0], path, folders: [], truncated: false, documents: (words.length
+    ? below.filter(({ rest }) => words.every(word => rest.toLowerCase().includes(word))) : below.filter(({ rest }) => !rest.includes('/'))).map(({ file }) => file) };
+});
 
 function library(overrides: Record<string, unknown> = {}) {
-  return { list: vi.fn(async () => [GEAR, LOOSE]), projects: vi.fn(async () => PROJECTS), change: vi.fn(), open: vi.fn(async () => {}),
-    thumbnail: vi.fn(async (model: any) => (model.thumbnail ? `blob:${model.thumbnail}` : null)), ...overrides };
+  return { list: vi.fn(async () => [GEAR, LOOSE, BLANK]), projects: vi.fn(async () => PROJECTS), folder: folderOf([ACTUATOR, GEAR, SHAFT, NUT]),
+    change: vi.fn(), open: vi.fn(async () => {}), thumbnail: vi.fn(async (model: any) => (model.thumbnail ? `blob:${model.thumbnail}` : null)), ...overrides };
 }
 // The search as `CadViewer` mounts it: under the viewer's host (its platform) and layout, a control opening it.
 function Page({ source, navigation = {}, current = ON_MODEL as object | null, platform = 'darwin', mobile = false, report = (_: unknown) => {} }:
@@ -60,10 +68,11 @@ it("opens as a dialog with the keyboard in its input, reads the library as it op
   // While it reads: placeholders where the rows will be, and a line saying so.
   expect([document.querySelectorAll('[data-search-placeholder]').length, within(dialog).getByRole('status').textContent, input().getAttribute('aria-expanded')])
     .toEqual([3, 'Reading the documents…', 'false']);
-  await act(async () => answer([GEAR, LOOSE]));
+  await act(async () => answer([GEAR, LOOSE, BLANK]));
   expect(source.projects).toHaveBeenCalledTimes(1);
-  // Nothing typed: the project on screen, by kind (its model, then its files by format and name).
-  expect(groups()).toEqual([['In drive', [['actuator', 'On screen'], ['gear.step', 'STEP'], ['shaft.stl', 'STL']]]]);
+  // Nothing typed: the folder of the project the document on screen is in, as its host lists it.
+  expect(source.folder).toHaveBeenCalledWith('p1', { path: '' });
+  expect(groups()).toEqual([['In drive', [['actuator.xbf', 'On screen'], ['gear.step', 'STEP'], ['shaft.stl', 'STL']]]]);
   const own = options()[0];
   expect([own.getAttribute('aria-current'), own.getAttribute('aria-disabled'), own.hasAttribute('href')]).toEqual(['page', 'true', false]);
   // The keys start on the first row that opens; a press on its own row opens nothing and keeps it open.
@@ -76,44 +85,44 @@ it("opens as a dialog with the keyboard in its input, reads the library as it op
   expect([source.thumbnail.mock.calls.length, options()[1].querySelector('[data-search-picture] img')]).toEqual([1, null]);
 });
 
-it("says a document built from code is an XBF where its parts are not known, and a file its format, in the project on screen", async () => {
+it("says an .xbf is an XBF where its parts are not known, and a file its format, in the project on screen", async () => {
   const user = userEvent.setup();
-  render(<Page source={library()} current={{ id: GEAR.id, path: GEAR.path, project: { id: 'p1', name: 'drive' } }} />);
+  render(<Page source={library()} current={{ id: GEAR.id, path: GEAR.path, project: { id: 'p1', name: 'drive', folder: '' } }} />);
   await openSearch(user);
-  expect(groups()).toEqual([['In drive', [['actuator', 'XBF'], ['gear.step', 'On screen'], ['shaft.stl', 'STL']]]]);
+  expect(groups()).toEqual([['In drive', [['actuator.xbf', 'XBF'], ['gear.step', 'On screen'], ['shaft.stl', 'STL']]]]);
 });
 
 it("says a model is a Part when its document holds one part and an Assembly when it holds more, an xbf too; a file of another format keeps its format", async () => {
   const user = userEvent.setup();
-  const documents = [doc('m2', { id: 'm2', name: 'bracket', kind: 'model', parts: 1 }), doc('m3', { id: 'm3', name: 'gearbox', kind: 'model', parts: 4 }),
-    doc('/w/drive/hinge.xbf', { parts: 2 }), doc('/w/drive/pin.xbf', { parts: 1 }), doc('/w/drive/unread.xbf'), doc('/w/drive/pair.step', { parts: 2 }), GEAR];
-  const projects = [{ ...PROJECTS[0], documents }, PROJECTS[1]];
-  render(<Page source={library({ projects: vi.fn(async () => projects) })} current={{ id: GEAR.id, path: GEAR.path, project: { id: 'p1', name: 'drive' } }} />);
+  const documents = [doc('/w/drive/hinge.xbf', { parts: 2 }), doc('/w/drive/pin.xbf', { parts: 1 }), doc('/w/drive/unread.xbf'), doc('/w/drive/pair.step', { parts: 2 }), GEAR];
+  render(<Page source={library({ folder: folderOf(documents) })} current={{ id: GEAR.id, path: GEAR.path, project: { id: 'p1', name: 'drive', folder: '' } }} />);
   await openSearch(user);
-  expect(groups()).toEqual([['In drive', [['bracket', 'Part'], ['gearbox', 'Assembly'], ['hinge.xbf', 'Assembly'], ['pin.xbf', 'Part'],
-    ['unread.xbf', 'XBF'], ['gear.step', 'On screen'], ['pair.step', 'STEP']]]]);
+  expect(groups()).toEqual([['In drive', [['hinge.xbf', 'Assembly'], ['pin.xbf', 'Part'], ['unread.xbf', 'XBF'], ['pair.step', 'STEP'], ['gear.step', 'On screen']]]]);
 });
 
-it("finds as the home does, the project on screen's first; elsewhere a row says its project, or Standalone, and the words found are lit", async () => {
+it("asks the host for the project on screen's files that hold the words, then finds the library's others; a row says its project, or Standalone, and the words found are lit", async () => {
   const user = userEvent.setup();
-  render(<Page source={library()} />);
+  const source = library();
+  render(<Page source={source} />);
   await openSearch(user);
   await user.type(input(), 'gear');
-  expect(groups()).toEqual([['In drive', [['gear.step', 'STEP']]], ['Other projects', [['gearbox.step', 'Standalone'], ['gear_blank.step', 'examples']]]]);
+  // Once typing rests, one search of the whole project, from its root.
+  await waitFor(() => expect(source.folder).toHaveBeenLastCalledWith('p1', { q: 'gear' }));
+  await waitFor(() => expect(groups()).toEqual([['In drive', [['gear.step', 'STEP']]], ['Other projects', [['gearbox.step', 'Standalone'], ['gear_blank.step', 'examples']]]]));
   expect([...options()[0].querySelectorAll('[data-tree-filter-hit]')].map(hit => hit.textContent).join('')).toBe('gear');
-  // A file's folder is in its path; nothing found says so.
+  // Every level of the project is searched: a file's folder below the root is in what the words are found in.
   await user.clear(input());
-  await user.type(input(), 'drive step');
-  expect(rowNames()).toEqual(['gear.step', 'shaft.stl']);
+  await user.type(input(), 'step nut');
+  await waitFor(() => expect(rowNames()).toEqual(['nut.step']));
   await user.type(input(), ' nothing');
-  expect([options(), screen.getByRole('status').textContent, input().getAttribute('aria-expanded')]).toEqual([[], 'Nothing matches “drive step nothing”', 'false']);
+  expect([options(), screen.getByRole('status').textContent, input().getAttribute('aria-expanded')]).toEqual([[], 'Nothing matches “step nut nothing”', 'false']);
 });
 
 it("with nothing typed and no project on screen (the home) lists the latest documents under Recent, each saying its project", async () => {
   const user = userEvent.setup();
   render(<Page source={library()} current={null} />);
   await openSearch(user);
-  expect(groups()).toEqual([['Recent', [['gear.step', 'drive'], ['gearbox.step', 'Standalone'], ['gear_blank.step', 'examples'], ['actuator', 'drive'], ['shaft.stl', 'drive']]]]);
+  expect(groups()).toEqual([['Recent', [['gear.step', 'drive'], ['gearbox.step', 'Standalone'], ['gear_blank.step', 'examples']]]]);
 });
 
 it("moves with the arrows, Home and End, past the row on screen; Enter opens the row here through the library and closes, the focus back where it was; counted, never what was typed", async () => {
@@ -190,7 +199,7 @@ it("opens beside where the host can: ⌘Enter (Ctrl+Enter off a Mac), and the ro
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   await openSearch(user);
   fireEvent.click(buttons()[1]);
-  expect(beside).toHaveBeenLastCalledWith({ document: 'id:/w/drive/STEP/shaft.stl' });
+  expect(beside).toHaveBeenLastCalledWith({ document: 'id:/w/drive/shaft.stl' });
   view.unmount();
   // Off a Mac, Ctrl+Enter; an app's frame says Open in browser.
   render(<Page source={source} platform="win32" navigation={{ openBeside: { kind: 'browser', open: beside } }} />);
@@ -207,7 +216,7 @@ it("opens beside where the host can: ⌘Enter (Ctrl+Enter off a Mac), and the ro
   expect([source.open.mock.calls.length, screen.queryByRole('dialog') !== null]).toEqual([0, true]);
 });
 
-it("says when the read failed and offers nothing; a read of the projects that fails leaves the documents opened before", async () => {
+it("says when the read failed and offers nothing; a read of the projects that fails leaves the documents unnamed by project", async () => {
   const user = userEvent.setup();
   render(<Page source={library({ list: vi.fn(async () => { throw new Error('offline'); }) })} />);
   await openSearch(user);
@@ -216,7 +225,7 @@ it("says when the read failed and offers nothing; a read of the projects that fa
   cleanup();
   render(<Page source={library({ projects: vi.fn(async () => { throw new Error('offline'); }) })} current={null} />);
   await openSearch(user);
-  expect(groups()).toEqual([['Recent', [['gear.step', 'Standalone'], ['gearbox.step', 'Standalone']]]]);
+  expect(groups()).toEqual([['Recent', [['gear.step', 'Standalone'], ['gearbox.step', 'Standalone'], ['gear_blank.step', 'Standalone']]]]);
 });
 
 it('draws at most 50 rows and says how many there are', async () => {

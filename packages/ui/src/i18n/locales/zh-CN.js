@@ -197,8 +197,6 @@ export default {
   "file.opening": "正在打开…",
   "file.missing": "文件不存在",
   "file.notHeld": "此模型已不再保留",
-  "file.notSaved": "此模型未保存",
-  "file.detached": "此模型的脚本已不存在",
   "file.openFailed": "无法打开该文件",
   "file.displayFailed": "无法显示该文件",
   "file.goHome": "返回主页",
@@ -219,7 +217,7 @@ export default {
   "file.browser": "浏览器",
   "file.fileExplorer": "文件资源管理器",
   "file.fileManager": "文件管理器",
-  "file.sourceMissing": "源文件已被移动或删除。",
+  "file.sourceMissing": "源文件已被移动或已不存在。",
   "file.kicadBoardTooNew": "{app} 无法打开此电路板：它由更新版本的 KiCad 保存。",
   "file.kicadSchematicTooNew": "{app} 无法打开此原理图：它由更新版本的 KiCad 保存。",
   "file.defaultApp": "默认应用",
@@ -314,6 +312,7 @@ export default {
 
 
   "home.projectEmpty": "这里还没有模型或 CAD 文件。",
+  "home.folderFailed": "无法读取此文件夹。它可能已被移动或重命名。",
 
 
   "home.projectMissing": "此项目的文件夹已不存在。请移除它，或把文件夹放回原处。",
@@ -362,7 +361,6 @@ export default {
   "home.standaloneEmpty": "没有独立文档。所有文档都在项目中。",
 
 
-  "home.showMore": "再显示 {count} 个",
 
 
   "home.sortAria": "排序",
@@ -412,6 +410,7 @@ export default {
   "home.formatAssembly": "装配体",
   "home.noMatchingModels": "没有匹配的模型。",
   "home.filesAria": "文件",
+  "home.foldersAria": "文件夹",
   "home.loadingFiles": "正在加载文件",
   "home.modelsAria": "CAD 模型",
   "home.fileUnavailable": "文件不可用",
@@ -419,12 +418,7 @@ export default {
   "home.menuOpen": "打开",
   "home.pin": "置顶",
   "home.unpin": "取消置顶",
-  "home.delete": "删除",
-  "home.deleteModelTitle": "删除 {name}?",
-  "home.deleteModelBody": "删除引擎的记录及其保存的构建。脚本和任何导出的文件仍保留在磁盘上。运行脚本即可重新构建。",
-  "home.deleteFileTitle": "从查看器中删除 {name}?",
-  "home.deleteFileBody": "删除引擎对此文件的记录。文件本身仍保留在磁盘上。",
-  "home.cancel": "取消",
+  "home.removeFromRecents": "从最近中移除",
   "home.kindsAria": "显示",
   "home.kind.all": "全部",
   "home.kind.models": "3D 模型",
