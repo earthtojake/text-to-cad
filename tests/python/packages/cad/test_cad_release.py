@@ -168,6 +168,32 @@ class Bootstrap(unittest.TestCase):
                 self.assertOwn(self.env.probe(state=self.state), name)
                 self.assertSilent()
 
+    def test_a_stored_release_named_by_no_absolute_path_is_not_taken_from_wherever_the_process_runs(self) -> None:
+        # A relative path, or none, would be found from the working folder: the folder a process happens to run in,
+        # its marker there, would stand in for cad's packages, and "" would put the working folder itself there.
+        for name, path, cwd in [("relative", lambda test: test.stored.name, lambda test: test.stored.parent),
+                                ("empty", lambda test: "", lambda test: test.stored),
+                                (".", lambda test: ".", lambda test: test.stored)]:
+            with self.subTest(case=name):
+                self.fresh()
+                self.env.point(self.state, self.stored, path=path(self))
+                found = self.env.probe(state=self.state, cwd=cwd(self))
+                self.assertEqual((found["cad"], found["stored"], found["held"]), ("own", None, False))
+                self.assertSilent()
+
+    def test_a_pointer_or_a_marker_it_may_not_read_is_left_silently(self) -> None:
+        if os.name == "nt" or os.geteuid() == 0:
+            self.skipTest("POSIX permissions, which the superuser passes by")
+        for name in ("pointer", "marker"):
+            with self.subTest(file=name):
+                self.fresh()
+                self.env.point(self.state, self.stored)
+                target = self.env.pointer_path(self.state) if name == "pointer" else self.stored / "cad-store.json"
+                target.chmod(0)
+                self.addCleanup(target.chmod, 0o644)
+                self.assertOwn(self.env.probe(state=self.state), name)
+                self.assertSilent()
+
     def test_a_pointer_in_another_state_folder_is_not_this_one_s(self) -> None:
         self.env.point(self.state, self.stored)
         other = self.folder / "other-state"

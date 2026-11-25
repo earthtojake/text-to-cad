@@ -24,7 +24,8 @@ and says nothing:
   cad installed here) has the time and the size it had then (``"stamp"``). Installing cad again, with its installer or
   by hand, writes that file anew, so **a reinstall always runs what it installed**: the way out of a stored release
   that does not run;
-- the stored release (``"path"``) is there and whole: its marker (``MARKER``), which the store writes last, opens.
+- the stored release (``"path"``, an absolute path) is there and whole: its marker (``MARKER``), which the store
+  writes last, opens.
 
 The marker stays open for as long as the process lives (``HELD``). That is how the store tells a release in use from
 one it may remove: on Windows a folder with an open file in it cannot be renamed, and elsewhere the open file carries
@@ -101,7 +102,10 @@ def _pointed():
     installed = os.stat(os.path.join(HERE, found["record"]))
     if [installed.st_mtime_ns, installed.st_size] != found["stamp"]:
         return None  # cad was installed again since: what was installed runs
-    return found["path"]
+    path = found["path"]
+    if not isinstance(path, str) or not os.path.isabs(path):
+        return None  # never a folder found from wherever the process happens to run
+    return path
 
 
 def _hold(path):
