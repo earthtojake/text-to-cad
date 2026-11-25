@@ -21,7 +21,7 @@ from unittest import mock
 
 import cad_server
 from cad_server import analytics
-from cad_server._internal import auto_update_helper, file_lock, telemetry_send
+from cad_server._internal import file_lock, plugin_catch_up, telemetry_send
 from cad_server.cli import plugin as command
 from cad_server.plugin import apps, computer, run, terminal
 from tests.python.support.agent_apps import PluginRuns
@@ -431,7 +431,7 @@ class ToldTest(PluginRuns):
         self.assertEqual(75, done.returncode)
         self.assertEqual(self.counted(), [("server", "busy", 0)])
         # Its time up before it was done: stopped, and counted as that.
-        with mock.patch.object(auto_update_helper, "INSTALL_SECONDS", 0):
+        with mock.patch.object(plugin_catch_up, "RUN_SECONDS", 0):
             done = self.cad("plugin", "update", CAD_PLUGIN_SERVER_RUN="7.0")
         self.assertEqual(computer.STOPPED, done.returncode, done.stdout)
         self.assertEqual(self.counted(), [("server", "stopped", 0)])
