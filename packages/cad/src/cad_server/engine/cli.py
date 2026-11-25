@@ -378,7 +378,7 @@ def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
         job = _linked_inputs(job)
     started = time.perf_counter()
     try:
-        drawn = api.snapshot(args.document, getattr(args, "out_folder", None), job=job, display=args.display,
+        drawn = api.snapshot(args.document, job=job, folder=getattr(args, "out_folder", None), display=args.display,
                              camera=args.camera, grid=args.grid, preview=args.preview, pose=args.pose,
                              width=args.width, height=args.height, size_profile=args.size_profile,
                              annotation=args.annotation, measurements=args.measurements)

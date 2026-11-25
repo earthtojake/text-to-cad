@@ -858,8 +858,8 @@ def _outside(measures: dict[str, Any], why: str) -> None:
         pass
 
 
-def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None,
-             grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None,
+def snapshot(source: Any = None, out: Any = None, *, job: Any = None, folder: Any = None, display: Any = None,
+             camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None,
              height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
              measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]:
     """Draw a document (``.xbf``, ``.step``, or a document id: the one the engine holds) or a mesh
@@ -878,8 +878,9 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     Quick Edit packet (the JSON a Quick Edit's message carries, a file of it, or its object), a job
     or a list of jobs, each job a view drawn as it was -- its camera, display, hidden and isolated
     parts, pose, the packet's ink and dimensions -- at its output settings, into each of its outputs
-    (``snapshot.job_pictures``): at its path, or, naming none, in the folder ``out`` (the current
-    folder when it is None) as ``<its input's stem>-<its label>.png``. ``source`` is then drawn in
+    (``snapshot.job_pictures``): at its path, or, naming none, in ``folder`` (the current folder when
+    it is None) as ``<its input's stem>-<its label>.png``; ``out`` is one picture's, refused with a job.
+    ``source`` is then drawn in
     place of every job's input; a flag given overrides every job. Every request is checked before
     anything renders, and a picture that fails writes none of the job's, leaving every output as it
     was.
@@ -892,20 +893,22 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
 
     frames, bar = progressing.sink(progress)
     try:
-        return _pictured(source, out, job=job, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
-                         width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
+        return _pictured(source, out, job=job, folder=folder, display=display, camera=camera, grid=grid, preview=preview,
+                         pose=pose, width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                          measurements=measurements, progress=frames)
     finally:
         if bar is not None:
             bar.close()
 
 
-def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
-              width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
+def _pictured(source: Any, out: Any, *, job: Any, folder: Any, display: Any, camera: Any, grid: bool, preview: bool,
+              pose: Any, width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
               measurements: Any, progress: Callable[[dict], None] | None) -> Drawn | list[Drawn]:
     """``snapshot``, its frames to ``progress`` (a callable, or None for nowhere)."""
     if job is not None:
-        return _job(job, source, out, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
+        if out is not None:
+            raise TypeError("snapshot() takes out for one picture: a job's pictures go to folder")
+        return _job(job, source, folder, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
                     width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                     measurements=measurements, progress=progress)
     if source is None or out is None:
