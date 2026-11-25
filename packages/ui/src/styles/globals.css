@@ -247,19 +247,18 @@
 .cad-library-place { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; }
 .cad-library-title { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); font-weight: 600; letter-spacing: -0.01em; color: var(--foreground); }
-/* A project's page: the folder's path, the project's name first. Each part but the last is a way back up, muted, giving
-   way first (each keeps its first letters); the last, the folder on screen, is the heading and stays whole while it
-   fits. A path longer than the row loses its start, never its end. */
+/* A project's page: the folder's path, the project's name first. Each part but the last is a way back up, muted, and
+   gives way first, down to its first letters; the last, the folder on screen, is the heading and gives way after them.
+   A path longer than the row loses its start, never its end. The folder from `~` beside it gives way before any part. */
 .cad-library-crumbs { display: flex; flex: 0 1 auto; align-items: baseline; justify-content: flex-end; min-width: 0; overflow: hidden; }
-.cad-library-crumb-part { display: flex; flex: 0 1 auto; align-items: baseline; min-width: 0; }
-.cad-library-crumb { flex: 0 1 auto; min-width: 2.5em; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 4px; outline: none;
+.cad-library-crumb { flex: 0 1000 auto; min-width: 2ch; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 4px; outline: none;
   font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); font-weight: 600; letter-spacing: -0.01em; color: var(--muted-foreground);
   text-decoration: none; cursor: pointer; background: none; border: 0; padding: 0; }
 .cad-library-crumb:hover { color: var(--foreground); }
-.cad-library-crumb:focus-visible { box-shadow: 0 0 0 2px var(--ring); }
+.cad-library-crumb:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
 .cad-library-crumb-slash { flex: none; padding: 0 6px; font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); color: var(--muted-foreground); }
-.cad-library-crumbs .cad-library-title { flex: none; max-width: 100%; }
-.cad-library-path { flex: 0 1 auto; min-width: 0; font-size: var(--cad-text-xs); line-height: var(--cad-leading-xs); color: var(--muted-foreground); }
+.cad-library-crumbs .cad-library-title { flex: 0 1 auto; min-width: 0; }
+.cad-library-path { flex: 0 100000 auto; min-width: 0; font-size: var(--cad-text-xs); line-height: var(--cad-leading-xs); color: var(--muted-foreground); }
 .cad-library-place-actions { flex: none; color: var(--muted-foreground); }
 .cad-library-place-actions button[data-state=open] { background: var(--accent); color: var(--foreground); }
 /* Back to the document just left: a small outline button, its name the first to give way, its key a hint after it

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ComponentType, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Box, ChevronDown, Clock, Ellipsis, Files, Folder, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
 import { Button } from "../primitives/button.jsx";
@@ -863,11 +863,11 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     <span className="cad-library-label">{t("home.backTo", { name: from.name })}</span><kbd className="cad-library-key" aria-hidden="true">{ESCAPE_KEY}</kbd></Button> : null;
   // The place's name; on a project's page, the folder's path: each part but the last a way back up to its folder.
   const title = crumbs.length > 1 ? <div className="cad-library-crumbs">
-    {crumbs.slice(0, -1).map(crumb => <span key={crumb.path} className="cad-library-crumb-part">
+    {crumbs.slice(0, -1).map(crumb => <Fragment key={crumb.path}>
       <PressTarget className="cad-library-crumb" href={hrefOf?.({ home: { view: "project", project: shownProject?.id ?? "", path: crumb.path } }) ?? null}
         onPress={() => visit(place.view === "project" ? { view: "project", project: place.project, path: crumb.path } : place)}>{crumb.name}</PressTarget>
       <span className="cad-library-crumb-slash" aria-hidden="true">/</span>
-    </span>)}
+    </Fragment>)}
     <h2 className="cad-library-title">{shownAs}</h2>
   </div> : <h2 className="cad-library-title">{placeName}</h2>;
   // Nothing at all yet: no project, no document.
