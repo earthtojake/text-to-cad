@@ -338,7 +338,7 @@ Display card the Background alone, and its Layers tab in the view's panel from t
 
 A project is a folder a person opened as one (Import's Folder on the home, a standalone
 document's Import its folder as a project, or `cad viewer <folder>`); its page on the home lists its
-models and its CAD files, the document just left ringed. Below 600px of
+folder's files, the CAD files and the rest together, the document just left ringed. Below 600px of
 FileViewer width (a phone) the chrome is touch-sized (the phone's scale) and the panel is a sheet under the navbar.
 Preview is the navbar's button right of Display: it takes the whole page,
 hiding the navbar, the tool strip and Quick Edit, opens still (Orbit, in its settings, is
@@ -423,18 +423,23 @@ Telemetry, Theme and the version.
 
 A sidebar at the left lists the places: Recents (every document opened lately, across projects), Pinned, each project
 (`GET /api/v1/projects`, the latest activity first, with no count) and Standalone, the documents of no project. A
-project's page is one folder of it (`GET /api/v1/projects/<id>?path=`): its subfolders that hold a CAD file somewhere
-below, each its glyph and its name and a link into it, then the CAD files directly in it; from the sidebar it opens
-at the project's top, and from a document's navbar at the document's folder. Its heading is the folder's path, the
-project's name first, each part above the folder on screen a link back up, then that folder from `~` and its ⋯ (Open
-in new tab, Copy path, Reveal, Remove from CAD, which forgets the project, changes nothing on disk and goes to
-Recents). The search on a project's page asks the server for every CAD file below the folder on screen that holds the
+project's page is one folder of it (`GET /api/v1/projects/<id>?path=`): its subfolders, each its glyph and its name,
+a row and a link into it, then every file directly in it; from the sidebar it opens at the project's top, and from a
+document's navbar at the document's folder. A file the viewer does not open (a PDF, a script, another tool's native
+file) is a card and a row like the rest, with its extension for a badge: a press opens it in an app of the
+computer's (`GET /api/v1/local/open-in?id=`, then `POST /api/v1/local/open`: the OS's own handler where the server
+offers it, else the first app it lists; where neither, a line says no app here opens it), and its ⋯ holds Open in,
+Copy path and the file manager. Its heading is the folder's path, the project's name first, each part above the
+folder on screen a link back up, then, at the project's top, that folder from `~`, and its ⋯ (Open in new tab, Copy
+path, Reveal, Remove from CAD, which forgets the project, changes nothing on disk and goes to Recents). The search on
+a project's page asks the server for every file below the folder on screen that holds the
 words (`?path=&q=`, once typing rests) and lists them flat, each saying where it is below that folder; elsewhere it
 narrows the rows in hand. Every heading row ends in Sort and grid or list, one segmented control; the kinds' chips
 under it (All, then 3D models, Drawings, Boards, Schematics and Robots, each the place holds, with its count: an
 `.xbf` and the STEP, STL or GLB exported from it are all 3D models); then the documents, all of them. The grid's tiles
-are framed cards, at least 232px wide: the picture its row names (the light viewport's, on the model area's light
-gradient in both themes; a file with none, its format's tile), its format's badge at its top-left (for an `.xbf`
+are framed cards, at least 232px wide and 16px apart: the picture its row names (the light viewport's, 3:2 on the
+model area's light gradient in both themes; a file with none, its kind's glyph on the plain tile), its format's chip
+at its top-left (for an `.xbf`
 file, the engine's own document saved as a file, so a model though still a file in everything else, "Part" when its
 document holds one part and "Assembly" when it holds more, as desktop CAD names its documents (the row's `parts`), and
 "XBF", its format, where the server does not know the count for the file as it is; every other file its format,
@@ -442,11 +447,11 @@ document holds one part and "Assembly" when it holds more, as desktop CAD names 
 and Pinned, its folder in a project's search), then its last activity with its verb ("Edited now", "Viewed 5m ago",
 "Edited 2h ago", "Viewed 3d ago", then the short date: Edited when it changed after it was last opened, Viewed when it
 was opened after it last changed). The list is a table: Name, Project (or, in a project's search, Where), Kind, Size,
-Updated and Created over 44px rows, each a document's small picture and name, its format (as the badge), its size and
+Updated and Created over rows the control + 16 tall (44px), each a document's small picture and name, its format (as the badge), its size and
 those two ages with no verb; a folder's row has its glyph and a dash in each column. Every file is a tile and a row
 of its own, a model's `.xbf` among them. The pin and the ⋯ appear on hover (at a tile's picture's corner, at a row's
-end); a pinned one keeps its pin. The ⋯ menu holds Open, Open in new tab, Copy path, Copy link and Reveal, Pin or
-Unpin, and, but on a project's page, Remove from Recents, which forgets the library's entry of the file at once, asks
+end); a pinned one keeps its pin. The ⋯ menu holds Open, Open in new tab, Open in (the apps the server lists for
+its files), Copy path, Copy link and Reveal, Pin or Unpin, and, but on a project's page, Remove from Recents, which forgets the library's entry of the file at once, asks
 nothing and touches no file (opening the file again brings it back). From a file, the navbar's C logo leads back to it: a link to `/` (Recents), so a
 plain click goes home in this tab and ⌘ or Ctrl and a click opens the home in a new one. The home has the same
 navbar and the same C logo (one 16px mark on every page), which there goes to Recents; the links and Settings are

@@ -96,9 +96,9 @@ export interface LibraryProject {
 /** A folder of a project, below its root (`path`, `/`-separated; `""` the root), as the host lists it. */
 export interface LibraryFolderRef { name: string; path: string }
 /**
- * One folder of a project as the host reads it (a CAD host's `CadProjectFolder`): its subfolders that hold a CAD file
- * somewhere below, in the folder's order, then its CAD files; or, asked with words, every CAD file below it that holds
- * them, and no folders. `truncated`: not all of it is listed.
+ * One folder of a project as the host reads it (a CAD host's `CadProjectFolder`): its subfolders, in the folder's
+ * order, then every file in it, documents and the files no page opens together; or, asked with words, every file below
+ * it that holds them, and no folders. `truncated`: not all of it is listed.
  */
 export interface LibraryFolder<Model extends LibraryModel = LibraryModel> {
   project: LibraryProject;
@@ -198,7 +198,7 @@ export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
   /** The projects, the latest activity first. A host with none lists none. */
   projects?(): Promise<readonly LibraryProject[]>;
   /**
-   * One folder of a project (`path`, below its root; the root with none), or with words (`q`) every CAD file anywhere
+   * One folder of a project (`path`, below its root; the root with none), or with words (`q`) every file anywhere
    * below it whose path below it holds them all. A project's page is read through it.
    */
   folder?(project: string, options: { path?: string; q?: string }): Promise<LibraryFolder<Model>>;
@@ -590,7 +590,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", again); };
   }, [refresh]);
   // A project's page: its folder, read through the host as it is shown, again every couple of seconds and when the page
-  // is shown; with words typed, every CAD file below it that holds them, asked once typing rests (the last answer
+  // is shown; with words typed, every file below it that holds them, asked once typing rests (the last answer
   // wins). The same answer twice is not news. Until the first answer of a new search, the one before stays, narrowed
   // by the words here.
   const words = place.view === "project" ? query.trim() : "";

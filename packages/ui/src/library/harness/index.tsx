@@ -10,8 +10,7 @@ import { ModelLibrary, type LibraryFolder, type LibraryModel, type LibraryProjec
 // The home under the viewer's navbar, as a host shows it, for the home's browser spec (`ModelLibrary.browser.test.mjs`)
 // and for a look at the page: a few standalone documents and three projects: gearbox, a tree of folders; an empty one;
 // and one whose folder is gone. A project's folder is answered as a CAD host answers it (`GET /api/v1/projects/<id>`):
-// its subfolders that hold a CAD file somewhere below (gearbox/notes holds none, and is left out), then its CAD files;
-// with words, every file below it that holds them all. gearbox holds an engineer's other files too (a datasheet, a script,
+// its subfolders that hold a file somewhere below, then its files; with words, every file below it that holds them all. gearbox holds an engineer's other files too (a datasheet, a script,
 // notes, another tool's native file, a file of an unknown kind and one with no extension): files the viewer does not open,
 // listed with the rest and opened in the computer's apps (`fileActions`: Open in's apps as a CAD host answers them).
 // The page's address chooses what is on screen: `?place=pinned|standalone|<project id>` the place (`&path=` a folder

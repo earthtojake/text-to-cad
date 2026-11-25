@@ -221,7 +221,8 @@ server lacks is an `isMissingFileError`, in the engine's words for an id it does
 file's entry current as polling refreshes it. A cancelled or older request
 cannot overwrite a newer file revision. `projects()` lists the folders a person opened as projects (no
 documents: a project is its folder), `projectFolder(id, { path, q })` reads one folder of one, below its root (its
-subfolders that hold a CAD file somewhere below, then its CAD files, rows as `recents()` reads them) or with words
+subfolders, then every file in it, rows as `recents()` reads them; a file that is no document has no `documentKind`,
+`api`, picture or pin, and is opened in an app with `openInApps(id)` and `openIn(id, "source", app)`) or with words
 searches everything below that folder, `openProject(path)` opens a folder as one (the project it already is, or is
 inside, where it is), `removeProject(id)` forgets one, and `pick({ folder, start })` asks the desktop's chooser for a
 folder, opening in `start`. A row names the project it is in by its id (`project`); an entry names it in full, with
