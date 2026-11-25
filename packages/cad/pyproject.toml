@@ -192,6 +192,11 @@ use-ignore-files = false
 # the one the package jobs check types on.
 ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx", "coacd", "bpy", "bpy.*", "mathutils"]
 
+[tool.setuptools]
+# The one module that is no package: what an interpreter of the environment imports first, from cad.pth, before any
+# package of cad's (src/_cad_release.py).
+py-modules = ["_cad_release"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 # `cad`, the library, and `cadgen`, its earlier name: an alias of it (src/cadgen/__init__.py); `cad_server`,
