@@ -8,41 +8,51 @@ command), ``uv`` (the uv it builds with) and ``installer`` (who made the environ
 
 In order (``update``):
 
-1. **Build** (the record's ``phase``: ``building``). Where the environment runs ``target`` or newer already
-   (``store.active``: another update got there first), nothing is built: outcome ``current``, and a server of an older
-   release, or of another environment, is replaced by this one's (``replace``). Else the stored release ``target``
-   where it is there and runs (``store.sound``: run once now, since another Python may have built it, or a file of it
-   be gone), or the requirement built and run once in a folder of the store (``store.build``, ``store.verify``) and
-   judged: never older than ``from`` and, but for ``major``, of ``from``'s major (``accepted``); ``from`` itself is
-   ``current``, nothing newer; then named (``store.publish``, which removes a stored release of that name that no
-   longer runs). Nothing that runs is touched, so a failure here leaves cad as it was.
-2. **Switch** (``phase``: ``switching``, kept before anything stops; while it lasts a server of the release being
+1. **Build** (the record's ``phase``: ``building``, kept as uv builds). Where the environment runs ``target`` or newer
+   already (``store.active``: another update got there first), nothing is built: outcome ``current``, and a server of
+   an older release, or of another environment, is replaced by this one's (``replace``). Else the stored release
+   ``target`` where it is there and runs (``store.sound``: run once now, since another Python may have built it, or a
+   file of it be gone), or the requirement built and run once in a folder of the store (``store.build``,
+   ``store.verify``) and judged: never older than ``from`` and, but for ``major``, of ``from``'s major
+   (``accepted``); ``from`` itself is ``current``, nothing newer; then named (``store.publish``, which removes a
+   stored release of that name that no longer runs). Nothing that runs is touched, so a failure here leaves cad as it
+   was. A resumed attempt (its record kept as ``switching``, ``auto_update._claim``) finds its stored release this
+   way, and builds it again only where it no longer runs.
+2. **Ready, or on** (``settle``): in one step under the state folder's lock, where the record is still this
+   attempt's, underway, and says ``"switch": false``, the attempt ends here, outcome ``ready``: the release stored and
+   checked, nothing pointing at it, and the store's tidying keeps it. Else, a person's ask during the build included
+   (the record's ``asked``), on to the switch.
+3. **Switch** (``phase``: ``switching``, kept before anything stops; while it lasts a server of the release being
    left starts none in the next one's place, ``auto_update.leaving``). The pointer read as it is, for the way back.
    Where a server answers, it is asked to stop once nothing is in flight, and waited for (``client.drain``,
    ``DRAIN_SECONDS``); one still there after them is replaced by the new release's start all the same, its work cut
    short. Then the environment pointed at the release (``store.point``) and the release run: ``cad server start`` where
    a server ran or ``start`` asks for one, which must end 0 with a server whose greeting names the release; else ``cad
    --version``, which must say it.
-3. **Way back** (``phase``: ``restoring``). Where that fails, the pointer put back exactly as it was read (``store.restore``), a server of
-   another release that answers by then stopped (``clear``: the new release's, come up late), and the server of the
-   release before started where one is wanted: outcome ``failed``, cause ``start_failed`` (the server) or ``broken``
-   (the command), ``restored`` whether the release before runs again. Where it is the pointer that could not be
-   written, nothing was switched: the same way back, and the cause is the write's (``denied``, ``disk_full``), which
-   the schedule tries again.
-4. **Outcome**, kept in the record: ``installed``, ``current`` or ``failed``, with ``detail``, ``cause`` where it did
+4. **Way back** (``phase``: ``restoring``). Where that fails, the pointer put back exactly as it was read
+   (``store.restore``), a server of another release that answers by then stopped (``clear``: the new release's, come
+   up late), and the server of the release before started where one is wanted: outcome ``failed``, cause
+   ``start_failed`` (the server) or ``broken`` (the command), ``restored`` whether the release before runs again.
+   Where it is the pointer that could not be written, nothing was switched: the same way back, and the cause is the
+   write's (``denied``, ``disk_full``), which the schedule tries again.
+5. **Outcome**, kept in the record: ``installed``, ``current`` or ``failed``, with ``detail``, ``cause`` where it did
    not install what it was for (one of ``CAUSES``), ``restored``, and ``started`` (``"start": false`` where no server
-   was wanted); then the store tidied (``store.clean``).
+   was wanted) -- or ``ready``, kept as step 2 decided it; then the store tidied (``store.clean``), the release built
+   kept where it was installed or is ready.
 
 No step is tried twice in a run: the schedule tries a failed release again (``auto_update.next_try``). uv stopped at
 its deadline leaves only a folder that is no release yet. Why a build failed is told from uv's words (``cause_of``:
 its exit status, all it printed, the system's error, and which of uv's settings are there, by name alone). As it runs
 the worker writes the time into the record every ``BEAT_SECONDS`` (``Beat``), by which the server tells it is
-underway, never over another attempt's record; where it raises, the attempt stays underway, marked ``helper_crash``
-(``main``). Each command it runs, its exit status, how long it took and the end of what it printed go to the log
-(``Log``), which stays on the computer; neither the log nor the cause can stop the update. It counts nothing and runs
-no install command: the server that runs after it does both (``auto_update.report``, ``plugin_catch_up``).
+underway, never over another attempt's record, and, as every write of the record that another process may make at
+the same moment, under the state folder's lock (``held``: done without it where it cannot be taken); where it
+raises, the attempt stays underway, marked ``helper_crash`` (``main``). Each command it runs, its exit status, how
+long it took and the end of what it printed go to the log (``Log``), which stays on the computer; neither the log nor
+the cause can stop the update. It counts nothing and runs no install command: the server that runs after it does
+both (``auto_update.report``, ``plugin_catch_up``).
 """
 
+import contextlib
 import json
 import os
 import re
@@ -113,26 +123,57 @@ def update(told, run=run, mark=lambda phase: None):
         found = {"release": named(held), "outcome": "current", "detail": f"cad {named(held)} is installed",
                  **replace(told, run, named(held), log, mark)}
     else:
-        found = build(told, run, log)
+        found = build(told, run, log, mark)
         built = found.pop("path", None)
         if built is not None:
-            mark("switching")
-            found = switch(told, run, built, found, log, mark)
-    store.clean(keep=[built] if found["outcome"] == "installed" else [])
-    found = {**found, "from": told["from"], "at": told["at"], "tries": told.get("tries", 1), "ended": time.time(),
-             **{name: told[name] for name in ("installer", "wanted", "asked", "major") if name in told}}
+            done, asked = settle(told, found, built)
+            if done is not None:
+                found = done
+            else:
+                told = {**told, "asked": asked}
+                mark("switching")
+                found = switch(told, run, built, found, log, mark)
+    store.clean(keep=[built] if found["outcome"] in ("installed", "ready") else [])
+    if found["outcome"] != "ready":
+        found = {**found, "from": told["from"], "at": told["at"], "tries": told.get("tries", 1), "ended": time.time(),
+                 **{name: told[name] for name in ("installer", "wanted", "asked", "major") if name in told}}
     log.end(found)
     return found
 
 
-def build(told, run, log):
-    """Step 1 (see the module): ``{"path", "release"}``, the stored release to switch to; else how the attempt ended."""
+def settle(told, found, path):
+    """Once the build gave a stored release (``found``: its ``release``, at ``path``), the one step, under the state
+    folder's lock, that decides whether the attempt goes on to the switch. Where the record is still this attempt's,
+    underway, and says ``"switch": false`` (the server's own, getting the release ready alone), the attempt ends there:
+    its outcome ``ready`` kept whole in that same step, as ``update`` composes every outcome, so the beat writes nothing
+    after it and no ask can fall between the look and the write: ``(that outcome, False)``. Else ``(None, asked)``:
+    the switch, as a person's where the record says so now (a person's ask during the build made the attempt theirs:
+    ``auto_update._claim``), as the worker was told where the record is not this attempt's."""
+    with held(told):
+        kept = _read(told)
+        if kept is None or kept.get("outcome") != "underway":
+            return None, told.get("asked") is True
+        if kept.get("switch") is not False:
+            return None, kept.get("asked") is True
+        done = {**found, "outcome": "ready", "switch": False,
+                "detail": f"cad {found['release']} is ready in {path}, and nothing points at it yet",
+                "from": told["from"], "at": told["at"], "tries": told.get("tries", 1), "ended": time.time(),
+                **{name: told[name] for name in ("installer", "wanted", "major") if name in told}, "asked": False}
+        keep(told["record"], done)
+    return done, False
+
+
+def build(told, run, log, mark=lambda phase: None):
+    """Step 1 (see the module): ``{"path", "release"}``, the stored release to switch to; else how the attempt ended.
+    The phase ``building`` kept (``mark``) only where uv builds: a resumed attempt, kept as ``switching``, says so
+    only where its stored release no longer runs."""
     from cad_server._internal import store
 
     before, major, target = release(told["from"]), told.get("major") is True, told.get("target")
     path = store.folder(target) if release(target) is not None else None
     if path is not None and store.sound(path, run=run):
         return {"path": path, "release": target}
+    mark("building")
     wanted = target or "latest"
     try:
         staged = store.build(told["requirement"], uv=told["uv"], run=run)
@@ -215,7 +256,7 @@ def started(wanted, ok, said):
 
 
 def switch(told, run, path, built, log, mark=lambda phase: None):
-    """Steps 2 and 3 (see the module): the environment switched to the stored release at ``path`` (``built``: its
+    """Steps 3 and 4 (see the module): the environment switched to the stored release at ``path`` (``built``: its
     ``release``), and back where it does not run (the record's phase ``restoring`` kept first, ``mark``: the release
     before is the one to start again)."""
     from cad_server._internal import store
@@ -538,6 +579,26 @@ def _read(told):
     return found if found is not None and found.get("at") == told.get("at") else None
 
 
+@contextlib.contextmanager
+def held(told):
+    """The state folder's lock (``file_lock.state``, in the record's folder) held for one read-change-write of the
+    record, as every writer of it holds it. Where the lock cannot be taken -- its file cannot be opened, the system's
+    lock call fails -- the step is done without it: a rare race is better than an attempt that dies of its lock, and
+    the worker never dies of its record (``keep``). Only the taking is forgiven, never an error of the step itself."""
+    from cad_server._internal.file_lock import state
+
+    try:
+        lock = state(Path(told["record"]).parent)
+        lock.__enter__()
+    except Exception:  # noqa: BLE001 - see above
+        lock = None
+    try:
+        yield
+    finally:
+        if lock is not None:
+            lock.__exit__(None, None, None)
+
+
 def ours(told):
     """Whether the record is still this attempt's (its ``at``), or there is none to read: an attempt begun since, by a
     process that took this one for lost, keeps it, and this one was counted ``lost`` as that began."""
@@ -564,9 +625,11 @@ class Beat:
             self.mark()
 
     def mark(self, phase=None):
-        """One beat: the record's ``beat`` now (and its ``phase``), where the record is this attempt's and underway."""
+        """One beat: the record's ``beat`` now (and its ``phase``), where the record is this attempt's and underway,
+        read, changed and written under the state folder's lock, as every writer of the record does: a beat read before
+        a person's ask changed the record (``auto_update._claim``) never writes the old one back over it."""
         try:
-            with self.lock:
+            with self.lock, held(self.told):
                 found = _read(self.told)
                 if found is not None and found.get("outcome") == "underway":
                     keep(self.told["record"], {**found, "beat": time.time(), **({"phase": phase} if phase else {})})
@@ -591,8 +654,10 @@ def crashed(told, error):
 
 def main(told):
     """The update ``told`` asks for, beating as it runs (``Beat``), its record kept where it is still this attempt's
-    (``ours``); where the worker itself raises, the attempt kept as it was, marked ``helper_crash`` (``crashed``), and
-    the error written to the log."""
+    (``ours``), under the state folder's lock, ``asked`` where the record says a person asked since; where the worker
+    itself raises, the attempt kept as it was, marked ``helper_crash`` (``crashed``), and the error written to the log.
+    A ``ready`` outcome is written once, as it is decided (``settle``), and never again: not over the sitting that
+    resumed it since, whose ``at`` is its own."""
     beat = Beat(told)
     try:
         found = update(told, mark=beat.mark)
@@ -605,8 +670,13 @@ def main(told):
         except Exception:  # noqa: BLE001 - nothing more to say: the attempt stays as the trigger kept it
             found = None
     beat.stop()
-    if found is not None and ours(told):
-        keep(told["record"], found)
+    if found is None or found.get("outcome") == "ready":
+        return
+    with held(told):
+        kept = _record(told)
+        if kept is None or kept.get("at") == told.get("at"):  # ``ours``
+            asked = kept is not None and kept.get("asked") is True and found.get("asked") is not True
+            keep(told["record"], {**found, **({"asked": True} if asked else {})})
 
 
 if __name__ == "__main__":

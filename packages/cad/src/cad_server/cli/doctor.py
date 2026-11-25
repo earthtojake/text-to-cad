@@ -9,9 +9,10 @@ integration's operations run, whether the server runs and its release, and cad's
 whether an update can begin at all, ``blocked``; the newest release of this cad's major the version feed as last read
 names, and when it was last asked for, and, where it names a release of a higher major, the one line that says how to
 get it (``auto_update.MAJOR_LINE``); the uv the update builds with; and the last attempt: its outcome and uv's words,
-why in plain words where it did not install what it was for, a release held back, and where the worker's log of it
-is) and the plugin's record (``cad_server._internal.plugin_catch_up``: the release of cad the plugin in the agent apps
-is up to date for, and the last run of ``cad plugin install`` the server began for a newer cad, and how it went); on
+why in plain words where it did not install what it was for, a release held back, a release ready and when cad
+restarts on it, and where the worker's log of it is) and the plugin's record
+(``cad_server._internal.plugin_catch_up``: the release of cad the plugin in the agent apps is up to date for, and
+the last run of ``cad plugin install`` the server began for a newer cad, and how it went); on
 Windows, uv's folder in an app's private copy of AppData, a copy of cad or uv's leftovers, to delete
 (``private_folders``). Where cad's update is not working -- no update can begin, its last attempt failed, or this cad
 has stayed behind for days (``auto_update.stayed_behind``) -- the line that says so has under it what to do
@@ -297,11 +298,13 @@ def _attempt() -> tuple:
     ``auto_update.in_words``) and whether the release before runs again (``restored``); where the release the feed
     calls for has been tried by itself (``auto_update.waiting``), how many times and when it is tried next, or that it
     is held back (``auto_update.given_up``: its server did not start, and cad waits for the next release); then where
-    the worker's log of it is (``auto_update.LOG``), where there is one. A WARNING where an attempt of this release
-    failed, did not install what it was for, or was lost, where that release has been tried more than once, or is held
-    back; then, under it, the one line that says what to do (``auto_update.advice``, by who made the global install).
-    An attempt of another release is said as it was, and nothing more. Where no update can begin at all is the update
-    line's to say."""
+    the worker's log of it is (``auto_update.LOG``), where there is one. A release that is ready (``auto_update.ready``)
+    is said as that alone, INFO: installed beside the cad that runs, and when cad restarts on it
+    (``auto_update.called_for``, ``restart``'s rule), or that it does not by itself. A WARNING where an attempt of this
+    release failed, did not install what it was for, or was lost, where that release has been tried more than once, or
+    is held back; then, under it, the one line that says what to do (``auto_update.advice``, by who made the global
+    install). An attempt of another release is said as it was, and nothing more. Where no update can begin at all is the
+    update line's to say."""
     import time
 
     import cad_server
@@ -310,6 +313,21 @@ def _attempt() -> tuple:
     auto = _auto()
     last = auto.last()
     warn, said, word = False, "none", None
+    held = auto.ready()
+    log = state_dir() / auto.LOG
+    where = f"; its log: {log}" if log.is_file() else ""
+    if held is not None:
+        said = f"cad {held['release']} is installed beside the cad that runs"
+        if not auto.called_for(held):
+            said += (", but the version feed no longer calls for it, so cad does not restart on it by itself: `cad "
+                     "update` updates cad")
+        elif not auto.switches()["on"]:
+            said += (": automatic updates are off, so cad restarts on it with `cad update` or the viewer's update "
+                     "button")
+        else:
+            said += (", and cad restarts on it as the server next starts, once the server has been left alone for "
+                     "an hour, or now with `cad update`")
+        return INFO, said + where
     if last is not None:
         mine = last.get("from") == cad_server.__version__
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(last["at"]))
@@ -332,9 +350,7 @@ def _attempt() -> tuple:
                 said += ((f"tried again from {time.strftime('%Y-%m-%d %H:%M', time.localtime(at))}" if at else
                           "tried again at the next check") + ": `cad update` tries it now")
                 warn = warn or count > 1
-    log = state_dir() / auto.LOG
-    if log.is_file():
-        said += f"; its log: {log}"
+    said += where
     if not warn:
         return INFO, said
     installer = last.get("installer")

@@ -12,7 +12,8 @@ records, Recents and settings in the state folder, and anything else in the fold
   ``base.marked``), and the release folders of the layout of 0.11.11 and earlier (``<state>/releases/<release>``,
   ``releases.root``) but the one ``installations/current`` names, which those releases' server lines still start;
   and the releases cad's update keeps that nothing runs or points at any more (its store, which is in the state
-  folder, not the cache: ``store.clean``), left as they are while an update is underway (``_store``).
+  folder, not the cache: ``store.clean``) but the one it has ready to restart on, left as they are while an update is
+  underway (``_store``).
 - ``clean``: all of the cache, and what ``prune`` removes of it; refused while a server runs, which runs from it.
 
 Neither asks first: each says what it removed, and the disk that freed (``freed``). A folder a process runs from is
@@ -151,7 +152,8 @@ def _say(line: str) -> None:
 
 def _store() -> tuple[int, int, str]:
     """The store of cad's update tidied (``store.clean``), where no update is underway (``auto_update.underway``: one
-    may have built a release and not pointed at it yet), each thing it removed said, and each stored release it kept
+    may have built a release and not pointed at it yet), the release that is ready kept (``auto_update.kept``: built,
+    and nothing points at it until cad restarts on it), each thing it removed said, and each stored release it kept
     because a process runs it (one no pointer names: ``store.remove`` refused it): ``(how many removed, the room that
     freed, the clause the summary ends with)``."""
     from cad_server._internal import auto_update, store
@@ -161,8 +163,10 @@ def _store() -> tuple[int, int, str]:
     root = store.root()
     entries = _folders(root)
     space = freed(entries)
-    gone = store.clean()
-    named: set[str] = set()  # what the pointers left name: kept for what they are, not said
+    ready = auto_update.kept()
+    gone = store.clean(keep=ready)
+    # What the pointers left name, and the release that is ready: kept for what they are, not said.
+    named = {os.path.normcase(os.path.abspath(path)) for path in ready}
     for pointer in root.glob("pointer-*.json"):
         try:
             found = json.loads(pointer.read_text(encoding="utf-8"))

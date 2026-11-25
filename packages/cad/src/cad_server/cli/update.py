@@ -14,7 +14,8 @@ starts no server: an update typed with none running leaves none running. In a sh
 first to update through it.
 
 Then it waits for the update to end, saying each step once on stderr as the attempt's record names it (its ``phase``:
-the release installed beside this one, then the server restarted on it), and says how it ended (a failure: why, what
+the release installed beside this one, then the server restarted on it; where cad's own update had the release ready
+already, the restart alone, which needs no answer from PyPI), and says how it ended (a failure: why, what
 to do and where its log is, ``ended``), as the server that
 answers afterwards tells it (``{"op": "update", "begin": false}``), else as the attempt's record in the state folder
 does; ``WAIT_SECONDS`` at most. Nothing of this cad changes under it meanwhile: the update builds the release in a
@@ -54,9 +55,12 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
                             description=(
         "cad installs every newer release of its major version by itself, and a new major version only when you run "
         "`cad update --major`. `cad update` updates cad now to the newest release of its major version, even with "
-        "automatic updates off: cad asks PyPI, installs it beside the cad that runs, and switches to it. A cad server "
-        "that was running restarts on it once nothing is running; with none running, none is started. `cad update "
-        "auto` shows or changes whether cad updates itself."))
+        "automatic updates off: cad asks PyPI, installs it beside the cad that runs, and switches to it (where cad "
+        "has it installed and ready already, it only switches, even without PyPI). A cad server that was running "
+        "restarts on it once nothing is running; with none running, none is started. By itself, cad installs a new "
+        "release beside the cad that runs and restarts the server on it as the server next starts, once nothing has "
+        "been asked of it for an hour, or, a day on, once nothing has run for a minute. `cad update auto` shows or "
+        "changes whether cad updates itself."))
     parser.add_argument("--major", action="store_true",
                         help="install the newest release of all, a new major version included, which may ask for "
                              f"changes ({MIGRATIONS})")
@@ -181,16 +185,25 @@ def wait(looked: Callable[[], tuple[str | None, Any, Any, bool]], was: str, sinc
 
 def step(attempt: dict[str, Any], was: str, told_of: set[str], *, server: bool) -> None:
     """The step the attempt underway is at (its ``phase``), said once on stderr: the release installed beside this one
-    (``building``), then the switch to it, with the server restarted (``switching``). ``told_of``: the steps said."""
+    (``building``), then the switch to it, with the server restarted (``switching``). An attempt that begins at its
+    switch -- a release that was ready, only its restart left -- names the release there, with no line before it; and
+    where that release no longer runs and is built again, its switch is said again after. ``told_of``: the steps
+    said."""
     phase = attempt.get("phase")
     if phase in told_of or phase not in ("building", "switching"):
         return
-    told_of.add(phase)
     target = attempt.get("release")
     named = "the newest release" if target in (None, "latest") else f"cad {target}"
-    print(f"cad: installing {named} beside cad {was}" if phase == "building" else
-          "cad: restarting the cad server on it, once nothing is running" if server else "cad: switching to it",
-          file=sys.stderr, flush=True)
+    if phase == "building":
+        told_of.discard("switching")
+        line = f"cad: installing {named} beside cad {was}"
+    elif "building" in told_of:
+        line = "cad: restarting the cad server on it, once nothing is running" if server else "cad: switching to it"
+    else:
+        line = (f"cad: restarting the cad server on {named}, installed beside cad {was}, once nothing is running"
+                if server else f"cad: switching to {named}, installed beside cad {was}")
+    told_of.add(phase)
+    print(line, file=sys.stderr, flush=True)
 
 
 def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable[[str], int], *,

@@ -155,6 +155,25 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(named.exists())
         self.assertEqual(_run("clean")[1], "nothing removed\n", "clean is the cache's alone")
 
+    def test_prune_keeps_the_release_cad_s_update_has_ready(self) -> None:
+        """Built, run once and pointed at by nothing until cad restarts on it (``auto_update.kept``): never tidied
+        away while its record is the last attempt's."""
+        import cad_server
+        from cad_server._internal import auto_update, store
+
+        ready, other = self.stored("0.0.5"), self.stored("0.0.6")
+        (ready / store.MARKER).write_text(json.dumps({"store": 1, "release": "0.0.5", "python": store.tag(),
+                                                      "for": store.built_for(), "built": 0.0}), encoding="utf-8")
+        auto_update._keep(self.state / auto_update.RECORD, {
+            "release": "0.0.5", "wanted": "0.0.5", "from": cad_server.__version__, "at": 1.0, "tries": 1,
+            "outcome": "ready", "switch": False, "ended": 2.0})
+        code, out, err = _run("prune")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(out.splitlines()[:-1], [f"removed {other} (cad 0.0.6, kept by cad's update)"],
+                         "the release ready kept, and not said as one a process runs")
+        self.assertTrue(ready.exists())
+        self.assertFalse(other.exists())
+
     def test_clean_is_refused_while_a_server_runs_and_removes_all_of_the_cache_after(self) -> None:
         from cad.engine import client
 

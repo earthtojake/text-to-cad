@@ -135,22 +135,28 @@ itself (`updates.refresh`), never waited on, for cad's automatic update alone; `
 (`updates.pypi`), at once; nothing says a newer release to a person or an agent unasked (`cad update` and `cad
 doctor` name a release of a higher major, which never installs itself).
 
-A global install of cad (`uv tool install cad`; `cad_server._internal.auto_update.global_install`) updates itself
-to newer releases of its own major unless the person turned it off (`cad update auto off`), or when asked (`cad
-update`: `Daemon.update`, begun at once, whatever the switch says; `cad update --major` to the newest of all): as
-the server tends itself once nothing has run for a minute (or nothing since it started), where the version feed as
-last read names a newer release of its major. It runs beside the server, never before it: a detached worker
-(`auto_update_helper`, by the environment's own interpreter) builds the release in a folder of its own in the state
-folder (`cad_server._internal.store`), drains the server, points the environment at that folder (the pointer, which
-`_cad_release` reads as each interpreter starts) and starts the new release's server, or goes back where it does not
-start. Meanwhile a command that finds no server waits for the next (`client.SWITCHING`), and a server of the
-release being left starts none in its place (`daemon.main`, `auto_update.leaving`); a `cad server start` that
-fails asks for the update before it gives up; a start never replaces a newer server, it joins it (`client.start`,
-`cad_mcp.shim.start_server`). With `cad plugin update auto` on, the server, at its start and at each quiet tending, runs `cad plugin install` (which
-updates the plugin in each agent app with that app's own command, with 15 minutes at most) once where its cad is
-newer than the release that command last went well in every app for, however it got newer (`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the
-worker and `cad update` run none. Where no server runs, a typed `cad update` begins the update itself
-(`cli/update.py`), and its worker starts no server after it.
+A global install of cad (`uv tool install cad`; `cad_server._internal.auto_update.global_install`) updates itself to
+newer releases of its own major unless the person turned it off (`cad update auto off`), or when asked (`cad update`:
+`Daemon.update`, begun at once, whatever the switch says; `cad update --major` to the newest of all). A detached
+worker (`auto_update_helper`, by the environment's own interpreter) builds the release in a folder of its own in the
+state folder (`cad_server._internal.store`) beside the server, drains the server, points the environment at that
+folder (the pointer, which `_cad_release` reads as each interpreter starts) and starts the new release's server, or
+goes back where it does not start. By itself that is two sittings, so no server restarts under a viewer page someone
+is looking at: as the server tends itself once no command has run for a minute (or nothing since it started), where
+the version feed as last read names a newer release of its major, the worker builds the release and stops there
+(`ready`, nothing switched); the switch follows, where the feed still calls for that release, as the server next
+starts (the start is the switch, begun before it serves anything, and stands aside for it: `daemon.main`, never in the
+foreground nor on a port the start names), once nothing at all has been asked of the server for an hour (a page's
+requests count: `Daemon.last`), or, the release ready a day, at the first minute with no command
+(`auto_update.restart`); at once on `cad update` or the viewer's button. Meanwhile a command that finds no server
+waits for the next (`client.SWITCHING`), and a server of the release being left starts none in its place
+(`daemon.main`, `auto_update.leaving`); a `cad server start` that fails asks for the update before it gives up; a
+start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With `cad plugin
+update auto` on, the server, at its start and at each quiet tending, runs `cad plugin install` (which updates the
+plugin in each agent app with that app's own command, with 15 minutes at most) once where its cad is newer than the
+release that command last went well in every app for, however it got newer (`_internal/plugin_catch_up.py`), then
+counts the last update attempt once (`auto_update.report`); the worker and `cad update` run none. Where no server
+runs, a typed `cad update` begins the update itself (`cli/update.py`), and its worker starts no server after it.
 
 The updaters of 0.10.0 to 0.11.11 are frozen on computers, though, and update by running a newer release's hidden
 `cad setup --engine-update` from a flat release folder they made (`<state>/releases/X`). The bridge

@@ -968,7 +968,7 @@ class TendTest(unittest.TestCase):
         from cad_server._internal import auto_update
         from cad_server.engine import daemon
 
-        engine = mock.Mock(address=None, door=None, draining=False, worked=5.0, began=5.0)
+        engine = mock.Mock(address=None, door=None, draining=False, worked=5.0, began=5.0, last=5.0)
         engine.stopping.is_set.return_value = False
         engine.working.return_value = False
         with mock.patch.object(updates, "refresh") as refresh, mock.patch.object(daemon, "_send_counts"), \
@@ -978,6 +978,40 @@ class TendTest(unittest.TestCase):
         self.assertEqual(tended.call_args.kwargs["working"], False)
         self.assertEqual(tended.call_args.kwargs["ran"], False, "nothing has run since the server started")
         self.assertEqual(engine.handover.tend.call_args.args[0], version(), "the bridge's, named by this release")
+
+    def test_the_tending_tells_the_update_since_when_anything_was_asked_and_says_what_it_began(self) -> None:
+        """``idle_for``: since anything at all was asked of the server (``last``, a page's requests too), beside
+        ``quiet_for``, since the last command (``worked``); and one line for what the update began."""
+        import io
+        from contextlib import redirect_stderr
+
+        from cad_server import updates
+        from cad_server._internal import auto_update
+        from cad_server.engine import daemon
+
+        now = time.monotonic()
+        engine = mock.Mock(address=None, door=None, draining=False, worked=now - 600.0, began=now - 900.0,
+                           last=now - 30.0)
+        engine.stopping.is_set.return_value = False
+        engine.working.return_value = False
+        for begun, said in (({"release": "0.2.0", "switch": False, "phase": "building"},
+                             "cad: installing cad 0.2.0 beside this cad: this server restarts on it as it next starts, "
+                             "once nothing has been asked of it for an hour, or with `cad update`\n"),
+                            ({"release": "0.2.0", "phase": "switching"},
+                             "cad: restarting this server on cad 0.2.0, which is installed beside this cad, once "
+                             "nothing is in flight\n")):
+            with self.subTest(begun=begun), mock.patch.object(updates, "refresh"), \
+                    mock.patch.object(daemon, "_send_counts"), \
+                    mock.patch.object(auto_update, "tend", return_value=begun) as tended, \
+                    redirect_stderr(io.StringIO()) as err:
+                daemon.Daemon.tend(engine)
+            told = tended.call_args.kwargs
+            self.assertEqual((told["working"], told["ran"]), (False, True))
+            self.assertAlmostEqual(told["quiet_for"], 600.0, delta=30.0)
+            self.assertAlmostEqual(told["idle_for"], 30.0, delta=30.0)
+            self.assertLess(told["idle_for"], told["quiet_for"], "a page asked since the last command")
+            self.assertEqual(err.getvalue(), said)
+        engine.handover.tend.assert_not_called()
 
 
 class OwnFilesTest(unittest.TestCase):

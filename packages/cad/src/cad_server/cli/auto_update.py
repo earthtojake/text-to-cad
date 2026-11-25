@@ -16,9 +16,11 @@ from collections.abc import Sequence
 
 DEFAULT_PROG = "cad update auto"
 DESCRIPTION = ("Show or change whether cad updates itself to the newest release of its major version: once nothing "
-               "has run for a minute, the cad server stops, installs it and starts again. A new major version never "
-               "installs itself: `cad update --major` installs it. On by default, for a global install (`uv tool "
-               "install cad`).")
+               "has run for a minute, cad installs it beside the cad that runs, and restarts the cad server on it as "
+               "the server next starts, once nothing has been asked of the server for an hour, or, a day on, once "
+               "nothing has run for a minute; the viewer's update button and `cad update` restart it now. A new major "
+               "version never installs itself: `cad update --major` installs it. On by default, for a global install "
+               "(`uv tool install cad`).")
 NOT_GLOBAL = "this cad is not a global install, so it does not update itself (`uv tool install cad` makes one)"
 REFUSED = "refused: this cad is not a global install, and only a global install updates itself (`uv tool install cad`)"
 # After the switch's word, where it is off by the choice an earlier release kept (``auto_update.switches``).

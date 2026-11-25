@@ -101,16 +101,17 @@ cad_server/
   runs passes its own check (`store.checks`), its data and cache folders and what `cad cache prune` would free,
   the CAD kernel environment and whether it loads, the integrations, whether the server runs and its release, and
   cad's own update (the switches, whether an update can begin, the feed's newest release, the uv it builds with,
-  the last attempt with uv's words, why in plain words, a release held back, and its log); on Windows, a uv folder
+  the last attempt with uv's words, why in plain words, a release held back, a release ready and when cad restarts
+  on it, and its log); on Windows, a uv folder
   in an app's private copy of AppData. Under a line that warns, what to do (`auto_update.advice`); where cad or
   its update is not working, a last check, `fix`, says the one thing to do next. It changes nothing. Exit 1 where
   the kernel is installed and does not load, or the release that runs fails its check; `--json` gives the report
   as one document.
 - **`cad cache dir|prune|clean`**, as `uv cache` treats uv's: `dir` prints the cache folder, `prune`
   removes what this release cannot use (environments made for other releases, the release folders 0.11.11 and
-  earlier left, and the stored releases nothing runs or points at, which it leaves alone while an update is
-  underway), `clean` removes all of the cache, refused while the server runs. Only these, cad's update and the
-  server's start delete a past release's files.
+  earlier left, and the stored releases nothing runs or points at but the one cad's update has ready, which it
+  leaves alone while an update is underway), `clean` removes all of the cache, refused while the server runs.
+  Only these, cad's update and the server's start delete a past release's files.
 - **`cad update`**: cad, and only cad, updated now to the newest release of its major version on PyPI, by the
   server that runs, or by the command itself where none runs (below), even with automatic updates off; where a
   release of a higher major is out, one more line names it. **`cad update --major`**: the newest release of all,
@@ -206,8 +207,8 @@ stored release is one folder of the import path.
 which the system refuses while a file in it is open; elsewhere by taking the marker's lock, which each process
 that runs it shares. The tidying (`store.clean`) keeps what a pointer names and the release it ran before, and
 removes pointers that mean nothing (once ten minutes old), builds that died (an hour old) and every other release
-no process runs. The worker tidies as it ends; a server as it starts, and `cad cache prune`, where no attempt is
-underway.
+no process runs but the one that is ready (`auto_update.kept`, below). The worker tidies as it ends; a server as it
+starts, and `cad cache prune`, where no attempt is underway.
 
 **When** (`due`). The server reads the version feed (`updates.py`, at most once an hour, in the background):
 `api.texttocad.dev/v1/releases`, `latest` and the newest of each major (`lines`), kept in the state folder's
@@ -217,10 +218,11 @@ release, and the feed names a newer release of this cad's major: exactly that re
 of this major and its `latest` is of a higher one, PyPI's newest of this major (`cad>=<this>,<<major + 1>`). Not
 where the environment runs it already under this older server (`stale`: `cad server start` replaces the server),
 nor for a release whose last automatic try ended `start_failed` (`given_up`: a server restarting for nothing
-once a day is worse than waiting; `cad doctor` says it is held back, and `cad update` tries it). The server asks
-as it tends itself with nothing in flight (nothing run for a minute, or since it started), and `cad server
-start` asks when its start fails. One due that cannot begin (`blocked`: `no_switch`, the environment does not
-read the pointer or its cad is damaged; `no_installer`, no uv) is counted once for its release.
+once a day is worse than waiting; `cad doctor` says it is held back, and `cad update` tries it), nor for the
+release that is ready already. The server asks as it tends itself with nothing in flight (no command run for a
+minute, or nothing since it started), and `cad server start` asks when its start fails. One due that cannot begin
+(`blocked`: `no_switch`, the environment does not read the pointer or its cad is damaged; `no_installer`, no uv)
+is counted once for its release.
 `CAD_UPDATE_CHECK=0` turns the check off for a process; with no answer from the feed, nothing happens. A global
 install behind a release of its major for three days, the switch on, says so at most once a day on stderr after
 a command's output (`auto_update.notice`, kept in `auto-update-notice.json`; not after `cad update`, `cad
@@ -232,22 +234,39 @@ automatic try, then 2, 4, 8 and 16 hours, then a day after each (`next_try`), co
 `tried` in the state folder (the eight tried last), so a newer release starts afresh; no automatic update begins
 where four attempts, of any release, began in the last day; a person's own (`cad update`, the button: `asked`)
 counts among them and spends no try. The attempt is kept in `auto-update.json`, begun in one step under the state
-folder's lock (nothing underway, then this one underway), so two servers begin one. Its worker beats in it every
-minute; one silent for 20 minutes is `lost`. It ends `installed`, `current` or `failed`, with `detail`,
-`restored`, `started` and, where it did not install what it was for, `cause`, one word of a closed list
-(`auto_update_helper.CAUSES`), said in plain words by `auto_update.SAID`.
+folder's lock (nothing underway, then this one underway), so two servers begin one; every write of it that another
+process may make at the same moment holds that lock (the claim, the worker's beat, its decision to end `ready`,
+its last write, `dismiss`, `report`). Its worker beats in it every minute; one silent for 20 minutes is `lost`. It
+ends `installed`, `current` or `failed`, with `detail`, `restored`, `started` and, where it did not install what
+it was for, `cause`, one word of a closed list (`auto_update_helper.CAUSES`), said in plain words by
+`auto_update.SAID` -- or `ready`, below.
+
+**Ready, then the switch.** The server's own update only gets the release ready: its record says `"switch": false`,
+and its worker, once the release is built and checked, ends it `ready` (nothing points at it; no event is counted,
+and no cause) in one step under the lock, so no server restarts under a viewer page someone is looking at. A release
+is ready (`auto_update.ready`) where the last record says so, it began from the release that runs, and its folder is
+still a stored release; the tidying keeps it. The switch to it begins by itself, where automatic updates are on, the
+check is on and the feed as last read still calls for that release (`auto_update.restart`): as the server starts
+(`daemon.main`, before it serves anything: that start stands aside, and its starter waits for the next release's
+server; never for `--foreground`, nor a start that names its port, `--port`), once nothing at all has been asked of
+the server for an hour (`ALONE_SECONDS`, a page's requests too: `Daemon.last`; a hidden page asks nothing), or, the
+release ready a day, at the first minute with no command. A person's ask (`cad update`, the button) switches to it
+at once, even where PyPI cannot be reached, and one made during the silent build makes that attempt theirs
+(`"switch": true, "asked": true`, in the step that joins it). The switch resumes the attempt: a new record at
+`switching`, its tries the ready one's, held by no schedule and counted among none of the day's attempts. A newer
+release takes the record's place as any attempt does, and the one that was ready is tidied.
 
 **The worker** (`_internal/auto_update_helper.py`), started detached as `python -P -m
 cad_server._internal.auto_update_helper` by the environment's interpreter, so it runs the current release:
 
-1. **Build** (`phase`: `building`). A release stored already is run once first (`store.sound`) and used where
-   it runs; else it is built (and one that does not run replaced, or, where a process still runs it, the attempt
-   ends `in_use`), with the uv the release that runs carries (`carried_uv`, beside its `uv` package; else the
+1. **Build** (`phase`: `building`, kept as uv builds). A release stored already is run once first
+   (`store.sound`) and used where it runs; else it is built (and one that does not run replaced, or, where a
+   process still runs it, the attempt ends `in_use`), with the uv the release that runs carries (`carried_uv`, beside its `uv` package; else the
    person's), in a `.building-` folder; run once by the environment's interpreter with that
    folder and the standard library alone on its path (`store.verify`: the release's own check,
    `_internal/selftest.py`, says `cad <release>` last); judged (not older, and but for `--major` of the same
    major; the same release is `current`); named (`store.publish`). Nothing that runs is touched: uv stopped at
-   its 15 minutes leaves no release.
+   its 15 minutes leaves no release. An attempt that only gets its release ready ends here, `ready`.
 2. **Switch** (`switching`, kept first). The pointer read, for the way back. A server that answers is drained:
    asked to stop once nothing is in flight, and waited for ten minutes at most (`client.drain`), after which
    the next start replaces it. The pointer written (`store.point`), then `cad server start` where a server ran
@@ -267,8 +286,10 @@ attempt underway, `helper_crash`. Forward only: nothing moves to an older releas
 
 **The update button** (`auto_update.button`, `GET /api/v1/server`'s `cadUpdate`; `POST /api/v1/local/update`).
 Where cad can update itself, whatever the switch says, the viewer and the CAD app show it while the feed names a
-newer release of this cad's major, with the attempt of this release underway (and its `phase`) or, where the last
-did not install what it was for and cad is still behind, its `cause` and the worker's log, said in the alert
+newer release of this cad's major, with the attempt of this release underway that restarts the server (and its
+`phase`; a silent build shows nothing), `ready` and the release where one is ready and the feed calls for it (a
+click only restarts the server), or, where the last did not install what it was for and cad is still behind, its
+`cause` and the worker's log, said in the alert
 card until another attempt begins or the person puts it away (`dismissed`, `auto_update.dismiss`). A click is
 `cad update` (`Daemon.update`): PyPI asked, the attempt underway joined, else one begun at once. The route is
 refused where cad cannot update itself, saying why, and sits behind the credentials and guard header of every
@@ -322,10 +343,12 @@ schedule says (it spends no automatic try, and counts among the day's four), or 
 process's too. `cad update --major` (`{"op": "update", "major": true}`) builds PyPI's newest of all, never below
 the release that runs; the next automatic update keeps to the new major. Where uv's own record keeps the install
 below the major it then runs (`outgrown`), it says so in one more line, with `uv tool install --force cad`. Where PyPI cannot be reached it builds
-all the same. It waits for the end, up to 30 minutes, saying each step once on stderr (`cad: installing cad X
-beside cad Y`, then `cad: restarting the cad server on it, once nothing is running`, or `cad: switching to it`
-with no server). It never runs `cad plugin`. Where no server runs, the command judges and begins the update
-itself, and its worker starts no server: an update typed with none running leaves none running. In a shell whose
+all the same, or, where a release is ready and PyPI names it or none, only switches to it. It waits for the end, up
+to 30 minutes, saying each step once on stderr (`cad: installing cad X beside cad Y`, then `cad: restarting the cad
+server on it, once nothing is running`, or `cad: switching to it` with no server; for a release that was ready,
+`cad: restarting the cad server on cad X, installed beside cad Y, once nothing is running` alone). It never runs
+`cad plugin`. Where no server runs, the command judges and begins the update itself, and its worker starts no
+server: an update typed with none running leaves none running. In a shell whose
 sandbox cannot start a server, it says so and updates nothing.
 
 ## Folders

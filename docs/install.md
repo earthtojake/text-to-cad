@@ -376,8 +376,12 @@ cad and the plugin update separately.
 ### cad
 
 cad updates itself to every new release of its major version (the first number: 0 in 0.12.3). While
-its server runs, it looks for a new release about once an hour, installs it beside the cad that runs
-once nothing has run for a minute, and then restarts the server on it. To update it now:
+its server runs, it looks for a new release about once an hour and, once nothing has run for a
+minute, installs it beside the cad that runs, without restarting anything: the viewer's update
+button then offers the restart (a click asks first: Restart, or Later). Otherwise cad restarts its
+server on the new release when nobody would notice: as the server next starts, once nothing has
+asked anything of it for an hour (a viewer page asks while it is shown), or, a day later, the next
+time nothing has run for a minute. To update it now:
 
 ```bash
 cad update
