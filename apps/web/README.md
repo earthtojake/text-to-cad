@@ -528,8 +528,8 @@ links open in a new tab. Outermost at the navbar's right end, over a file and on
 (`@cad/ui/update`) while a global install of cad is behind a newer release of its own major (`GET /api/v1/server`'s
 `cadUpdate`, read with the server's description in `main.tsx`, so it draws with the page, again when the person comes
 back to it, and once a minute while the page is seen, never while it is hidden), or while a release is installed
-and only the server's restart is left (`cadUpdate.state` `ready`). A click opens a small popover that names the
-release and asks (Update or Restart, and Later); its action is a person's update (`POST /api/v1/local/update`): a
+and only the server's restart is left (`cadUpdate.state` `ready`: the restart icon, "Restart to update"), always the
+navbar's rightmost control, the home's too. A click is a person's update (`POST /api/v1/local/update`), at once: a
 ring that fills while it installs (a ready release has nothing to install: the spinner at once), the server's going
 for it no notice of the page's, then a spinner, and the page reloads into the
 server that comes back on the new release once nothing on it is unsaved (`reloadWhenClean`), where it says it is updated, once; the tab keeps

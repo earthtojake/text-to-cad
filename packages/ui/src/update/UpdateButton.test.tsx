@@ -65,12 +65,13 @@ const show = (props: Parameters<typeof Host>[0]) => render(<I18nProvider locale=
 const rightHand = () => [...document.querySelector('[data-viewer-navbar]')!.lastElementChild!.querySelectorAll('button')]
   .map(node => node.getAttribute('aria-label'));
 const cards = () => screen.queryAllByRole('alert');
-/** What a person does to update: the button, then its popover's action. */
-async function confirm(action = 'Update') {
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Update to 0.9.1' })); });
-  await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: action })); });
+/** A click on the button: its name says which it is, the download icon's or the restart icon's. */
+async function confirm(name = 'Update to 0.9.1') {
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name })); });
 }
-const prompt = () => screen.queryByRole('dialog');
+const RESTART = 'Restart to update to 0.9.1';
+/** Which lucide icon a button draws: lucide marks each svg with its name. */
+const icon = (button: HTMLElement) => [...button.querySelector('svg')!.classList].find(name => /^lucide-(?!icon)/.test(name));
 
 vi.mock('sonner', async original => ({ ...await original<object>(), toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 
@@ -161,72 +162,39 @@ it('an automatic update the page finds underway shows its progress and is follow
   expect(server.start).not.toHaveBeenCalled();
 });
 
-it('a release that is ready is the same icon as an update offered, shown with nothing newer offered', async () => {
-  show({ server: calls() });
-  const offered = screen.getByRole('button', { name: 'Update to 0.9.1' });
-  const look = [offered.className, offered.innerHTML, offered.textContent];
-  cleanup();
-  show({ server: calls(), initial: reply(ready()) });
-  const button = screen.getByRole('button', { name: 'Update to 0.9.1' });
-  expect([button.className, button.innerHTML, button.textContent]).toEqual(look);
-  expect(button.getAttribute('data-update')).toBe('ready');
-});
-
-it('a click asks first: a popover names the release, ready or offered, its action focused, and nothing is asked of the server', async () => {
-  for (const [initial, title, text, action] of [
-    [reply(ready()), 'Update ready', 'cad 0.9.1 is installed. Restart to finish.', 'Restart'],
-    [reply(behind()), 'Update available', 'cad 0.9.1 is out. Updating restarts the server.', 'Update'],
-    [failed('network'), 'Update available', 'cad 0.9.1 is out. Updating restarts the server.', 'Update'],
+it('two looks of one button: the download icon while a release is out, the restart icon while one is installed and ready, even with nothing newer offered', async () => {
+  for (const [initial, label, tip, look, mark] of [
+    [reply(behind()), 'Update to 0.9.1', 'Update', '', 'lucide-download'],
+    [failed('network'), 'Update to 0.9.1', 'Update', '', 'lucide-download'],
+    [reply(ready()), RESTART, 'Restart to update', 'ready', 'lucide-rotate-ccw'],
   ] as const) {
-    const server = calls();
-    show({ server, initial });
-    expect(prompt()).toBeNull();  // nothing opens by itself
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Update to 0.9.1' })); });
-    const dialog = prompt()!;
-    expect([...dialog.querySelectorAll('p')].map(line => line.textContent)).toEqual([title, text]);
-    expect(within(dialog).getAllByRole('button').map(button => button.textContent)).toEqual(['Later', action]);
-    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: action }));
-    expect([server.start.mock.calls.length, server.read.mock.calls.length]).toEqual([0, 0]);
+    show({ server: calls(), initial });
+    const button = screen.getByRole('button', { name: label });
+    expect([icon(button), button.getAttribute('data-update'), button.textContent]).toEqual([mark, look, '']);
+    expect(button.className).toContain('size-6');
+    expect(button.className).toContain('bg-brand');
+    // Its hint, under a resting pointer.
+    await act(async () => { fireEvent.pointerMove(button, { pointerType: 'mouse' }); });
+    await advance(450);
+    expect(screen.queryAllByRole('tooltip').map(node => node.textContent)).toContain(tip);
     cleanup();
   }
-  show({ server: calls(), initial: reply(ready()), locale: 'ja' });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '0.9.1 にアップデート' })); });
-  expect(prompt()!.textContent).toContain('cad 0.9.1 をインストールしました。再起動すると完了します。');
 });
 
-it('Later, Escape and a press outside close it, ask nothing and give the focus back to the button', async () => {
-  const server = calls();
-  show({ server, initial: reply(ready()) });
-  const button = screen.getByRole('button', { name: 'Update to 0.9.1' });
-  const open = async () => { await act(async () => { fireEvent.click(button); }); await advance(0); expect(prompt()).toBeTruthy(); };
-  await open();
-  await act(async () => { fireEvent.click(within(prompt()!).getByRole('button', { name: 'Later' })); });
-  await advance(0);
-  expect(prompt()).toBeNull();
-  expect(document.activeElement).toBe(button);
-  await open();
-  await act(async () => { fireEvent.keyDown(document.activeElement!, { key: 'Escape' }); });
-  expect(prompt()).toBeNull();
-  await open();
-  await act(async () => { fireEvent.pointerDown(document.body, { button: 0, pointerType: 'mouse' }); fireEvent.click(document.body); });
-  expect(prompt()).toBeNull();
-  expect(server.start).not.toHaveBeenCalled();
-  expect(cards()).toEqual([]);
-});
-
-it('its action updates once and closes it; while an update installs or the server restarts there is no popover', async () => {
+it('a click acts at once and opens nothing: the restart icon\'s, or the download icon\'s; while an update installs or the server restarts there is no button', async () => {
   const onUpdate = vi.fn();
-  const draw = (phase: Parameters<typeof UpdateButton>[0]['phase']) => <I18nProvider locale="en">
-    <UpdateButton state={ready()} phase={phase} onUpdate={onUpdate} /></I18nProvider>;
-  const view = render(draw({ phase: 'idle' }));
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Update to 0.9.1' })); });
-  await act(async () => { fireEvent.click(within(prompt()!).getByRole('button', { name: 'Restart' })); });
+  const draw = (state: UpdateState, phase: Parameters<typeof UpdateButton>[0]['phase']) => <I18nProvider locale="en">
+    <UpdateButton state={state} phase={phase} onUpdate={onUpdate} /></I18nProvider>;
+  const view = render(draw(ready(), { phase: 'idle' }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: RESTART })); });
   expect(onUpdate).toHaveBeenCalledOnce();
-  expect(prompt()).toBeNull();
+  view.rerender(draw(behind(), { phase: 'idle' }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Update to 0.9.1' })); });
+  expect(onUpdate).toHaveBeenCalledTimes(2);
+  expect([screen.queryByRole('dialog'), screen.queryByRole('menu')]).toEqual([null, null]);
   for (const phase of [{ phase: 'working', done: 0, total: 3 }, { phase: 'restarting' }] as const) {
-    view.rerender(draw(phase));
-    expect(screen.queryByRole('button', { name: 'Update to 0.9.1' })).toBeNull();
-    expect(prompt()).toBeNull();
+    view.rerender(draw(ready(), phase));
+    expect(screen.queryByRole('button')).toBeNull();
   }
 });
 
@@ -239,7 +207,7 @@ it('a click on a ready release shows the spinner at once and asks once; the serv
     read: async () => { const next = answers.shift() ?? reply(behind()); if (next instanceof Error) throw next; return next; } });
   const onRestarted = vi.fn();
   show({ server, initial: reply(ready()), onRestarted });
-  await confirm('Restart');
+  await confirm(RESTART);
   // Before the server has answered: nothing left to install, so no ring.
   expect(screen.getByRole('status', { name: 'Restarting with 0.9.1' })).toBeTruthy();
   expect(server.start).toHaveBeenCalledOnce();
@@ -258,7 +226,7 @@ it('a click on a ready release whose server builds a newer one after all shows t
   const server = calls({ start: async () => reply(behind({ state: 'working', phase: 'switching', at: 5, asked: true })),
     read: async () => reply(behind({ latest: '0.9.2', state: 'working', phase: 'building', at: 6, asked: true })) });
   show({ server, initial: reply(ready()) });
-  await confirm('Restart');
+  await confirm(RESTART);
   expect(screen.getByRole('status', { name: 'Restarting with 0.9.1' })).toBeTruthy();
   await advance(UPDATE_POLL_MS);
   expect(screen.getByRole('progressbar', { name: 'Updating to 0.9.2' }).getAttribute('aria-valuenow')).toBe('0');
@@ -267,9 +235,9 @@ it('a click on a ready release whose server builds a newer one after all shows t
 it('a refused click on a ready release goes back to the button and says why', async () => {
   const refusal = Object.assign(new Error('HTTP 409'), { failure: { payload: { error: 'cad cannot switch', cause: 'no_switch', installer: 'uv' } } });
   show({ server: calls({ start: async () => { throw refusal; } }), initial: reply(ready()) });
-  await confirm('Restart');
+  await confirm(RESTART);
   expect(screen.queryByRole('status')).toBeNull();
-  expect(screen.getByRole('button', { name: 'Update to 0.9.1' }).getAttribute('data-update')).toBe('ready');
+  expect(screen.getByRole('button', { name: RESTART }).getAttribute('data-update')).toBe('ready');
   const [card] = cards();
   expect(within(card).getByRole('heading').textContent).toBe('Couldn’t update to 0.9.1');
   expect(card.textContent).toContain('This install of cad can’t switch to a newer release by itself');
@@ -285,8 +253,7 @@ it('a page that is seen reads the server again once a minute, and as it is shown
   expect(screen.getByRole('button', { name: 'Update to 0.9.1' })).toBeTruthy();
   await advance(UPDATE_READ_MS);
   expect(server.read).toHaveBeenCalledTimes(2);
-  expect(screen.getByRole('button', { name: 'Update to 0.9.1' }).getAttribute('data-update')).toBe('ready');  // made ready meanwhile
-  expect(prompt()).toBeNull();  // and nothing opens by itself
+  expect(screen.getByRole('button', { name: RESTART })).toBeTruthy();  // made ready meanwhile, shown by itself
   seen(false, { tell: true });
   await advance(3 * UPDATE_READ_MS);
   expect(server.read).toHaveBeenCalledTimes(2);

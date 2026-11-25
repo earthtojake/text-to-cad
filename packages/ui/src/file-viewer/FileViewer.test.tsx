@@ -217,8 +217,9 @@ it('draws the home\'s own controls in its navbar on the grid\'s column: the logo
   expect([left.querySelector('h1')!.textContent, right.querySelector('input')!.getAttribute('aria-label'), within(right as HTMLElement).getByRole('button', { name: 'Open' }) !== null])
     .toEqual(['Recent2', 'Search models', true]);
   // On the grid's column at 1440, (1440 − 1128) / 2 + 24 = 180px from either edge, the background full width: the
-  // logo's mark (16px into its row) at 180, "Recent" after it, and Open ending at 180 from the right: the row's padding.
-  await waitFor(() => expect([navbar()!.style.paddingLeft, navbar()!.style.paddingRight]).toEqual(['172px', '180px']));
+  // logo's mark (16px into its row) at 180, "Recent" after it, and Open ending at 180 from the right: the row's left
+  // padding, and on the right the home's own margin past the row's 8px, so a trailing control keeps the row's end.
+  await waitFor(() => expect([navbar()!.style.paddingLeft, navbar()!.style.paddingRight, home.style.marginRight]).toEqual(['172px', '', '172px']));
   const lead = navbar()!.querySelector('nav')!;
   expect([lead.nextElementSibling === home, home.firstElementChild === left]).toEqual([true, true]);
   // No panel toggles and no ⋯ on the home; the app menu is the logo's.

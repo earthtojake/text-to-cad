@@ -267,10 +267,12 @@ const HOME_ROW_STYLE = Object.freeze({ containerType: "inline-size", containerNa
 /**
  * Where Home's controls stand on the row: on the grid's column, so the logo's mark (and Back and Forward after it), then
  * "Recent" and its count, start over the grid's first tile, as the logo precedes the file's name on a file's page, and
- * the search and Open end over its last tile; never over the host's actions at the row's right end. The row's
- * background stays full width: these are its padding (the logo stays the row's first child, the one button over the
- * home and every file). In a pane narrower than the column they meet the
- * row's own padding, as on a file's page. Measured whenever the row changes size.
+ * the search and Open end over its last tile. The trailing controls -- the host's actions and, outermost, the update
+ * button -- keep the row's right end, as on a file's page, so the update button is always the navbar's top-right
+ * corner. The row's background stays full width: the left inset is the row's padding (the logo stays the row's first
+ * child, the one button over the home and every file), the right one the home's own controls' margin, short of the
+ * trailing controls. In a pane narrower than the column they meet the row's own padding, as on a file's page.
+ * Measured whenever the row changes size.
  */
 function useHomeColumn(header, trail, on) {
   const [insets, setInsets] = useState(null);
@@ -282,7 +284,8 @@ function useHomeColumn(header, trail, on) {
       const margin = (width - HOME_COLUMN_PX) / 2;
       const actions = trail.current?.getBoundingClientRect().width || 0;
       // What the row adds to its own 8px a side. The mark stands HOME_MARK_PX in from the row's edge (its 8px, its
-      // button's 6px, the artwork's 2px); the host's actions keep the row's right end, Open ending before them.
+      // button's 6px, the artwork's 2px). Right: the margin that ends Open on the column's edge, past the row's 8px, the
+      // trailing controls and the row's gap before them, which keep the row's right end.
       const next = { left: Math.round(Math.max(0, margin + HOME_GUTTER_PX - HOME_MARK_PX)),
         right: Math.round(Math.max(0, Math.max(0, margin) + HOME_GUTTER_PX - HOME_ROW_PAD_PX - (actions ? actions + HOME_CLEAR_PX : 0))) };
       setInsets(now => (now?.left === next.left && now?.right === next.right ? now : next));
@@ -382,10 +385,11 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
     // On the chrome's colour, a step off the canvas's (`--sidebar`: lighter than white's off-white, a
     // step above the dark canvas), as the panel beside a board or a model is: the frame reads as frame.
     <header ref={header} className={cn(NAVBAR_ROW_CLASS, "relative border-border bg-sidebar text-foreground", className)} data-viewer-navbar=""
-      style={homing ? { ...HOME_ROW_STYLE, ...(homeInsets ? { paddingLeft: HOME_ROW_PAD_PX + homeInsets.left, paddingRight: HOME_ROW_PAD_PX + homeInsets.right } : null) } : undefined}>
+      style={homing ? { ...HOME_ROW_STYLE, ...(homeInsets ? { paddingLeft: HOME_ROW_PAD_PX + homeInsets.left } : null) } : undefined}>
       {leadNav}
       {/* Over the home: "Recent" and its count after the logo, the search and Open at the column's right. */}
-      {homing ? <div className="flex min-w-0 flex-1 items-center justify-between gap-2" data-navbar-home="">
+      {homing ? <div className="flex min-w-0 flex-1 items-center justify-between gap-2" data-navbar-home=""
+        style={homeInsets?.right ? { marginRight: homeInsets.right } : undefined}>
         <div ref={homeSlots.left} className="flex min-w-0 items-center" data-navbar-home-left="" />
         <div ref={homeSlots.right} className="flex shrink-0 items-center gap-2" data-navbar-home-right="" />
       </div> : null}

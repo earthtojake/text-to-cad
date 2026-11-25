@@ -151,8 +151,8 @@ The tokens are shadcn's neutral set (`styles/tokens.css`), greys with no hue, as
   hover `--brand-icon` in light and the brand at 75% in dark; its ring and spinner `--brand-icon`): a newer release is the one
   thing the chrome asks a person to act on, so it is the one thing that stands out ([viewer layout](viewer-ux.md#the-navbar)).
   Its glyph is white in light (3.0:1 on `--brand`, 4.1:1 on hover) and `--primary-foreground` in dark, as white on #62b7ec is
-  only 2.2:1 (the dark glyph is 8:1). The brand fill is the button's alone: the popover its click opens is a popup like any
-  other, its action the one `default` button beside a ghost Later ([Buttons](#buttons)). `--brand-icon` is at least 3:1 on the pressed fill and on white;
+  only 2.2:1 (the dark glyph is 8:1); its glyph is a download arrow, or a restart arrow where a release is installed and
+  only the restart is left, never words. `--brand-icon` is at least 3:1 on the pressed fill and on white;
   `--brand-text` is darker, for text, as that blue reads dark and odd on a glyph.
 - **A link in the chrome** (the app menu's version, "Made by") is muted `text-tiny` that turns the foreground and
   underlined under the pointer or keyboard focus. A slider's colours are its own `--slider-*` tokens.
@@ -187,7 +187,7 @@ layout, never a surface. Why: chrome reads as chrome over any canvas, light or d
 | --- | --- | --- | --- |
 | Docked chrome | `bg-sidebar` | opaque, a 1px rule on its inner edge | the navbar, the docked panel, a tab's actions row |
 | Floating chrome | `FLOATING_CHROME_SURFACE_CLASS` | the popover colour at 90%, a border, `shadow-md`, `backdrop-blur-sm` | the strip, sub-toolbars, the tool stack, Quick Edit's bar, the bar over picked ink |
-| Popups | `FLOATING_SURFACE_CLASS` | the popover colour at 95%, a border, `shadow-sm`, `backdrop-blur-md` | dropdown lists, tool menus, the app menu, the view's menu, the name menu, chip lists, the update button's prompt |
+| Popups | `FLOATING_SURFACE_CLASS` | the popover colour at 95%, a border, `shadow-sm`, `backdrop-blur-md` | dropdown lists, tool menus, the app menu, the view's menu, the name menu, chip lists |
 | Cards | `PANEL_PEEK_CARD_CLASS`, `SettingsCard` | opaque `bg-sidebar`, a border, `shadow-md`, 10px corners | the panel's peek, the Display card, Preview's Settings |
 | On the picture | the picture's scheme | the zoom: the foreground at 6% (10% under the pointer, 14% open), haloed; the update status: the background at 95% | the corner's zoom, the update status; Preview's bar has no surface |
 
