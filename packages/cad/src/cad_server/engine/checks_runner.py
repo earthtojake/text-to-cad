@@ -248,7 +248,6 @@ class Runner:
             except ValueError as error:
                 told(_refused(error))
                 return
-            since = self.store.epoch(durable[0] if durable is not None else ident)
             same = (document, before, key) if before is not None else None
             with self.lock:
                 # Under one lock with a check's end (which keeps its result, then leaves ``running``) and with
@@ -321,7 +320,7 @@ class Runner:
                         answer = {"failed": SUPERSEDED, "reason": "superseded"}
                     by = measured.get("measures")
                     if "done" in answer and before is not None and current and _clean(measured) and serves(by):
-                        self.store.keep(document, before, key, _result(measured), durable, since, by)
+                        self.store.keep(document, before, key, _result(measured), durable, by)
                 if answer.get("reason") == State.SUPERSEDED.value:
                     reads += 1
                     if reads < READS and not asked.abandoned():

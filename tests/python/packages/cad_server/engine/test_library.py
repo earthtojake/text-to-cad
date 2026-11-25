@@ -131,10 +131,6 @@ class LibraryTest(unittest.TestCase):
         self.assertEqual(json.loads((folder / "note.json").read_text(encoding="utf-8")),
                          {"schema": 1, "version": second, "parts": 5})
         self.assertFalse((folder / "picture.png").exists(), "the picture of the version before went with its note")
-        (folder / "checks").mkdir()
-        notes.forget(ident)
-        self.assertFalse(folder.exists(), "forgotten: everything the cache derived of it")
-        self.assertEqual(notes.read(ident, second), {})
 
     def test_the_records_of_0_11_17_are_carried_once_and_removed(self) -> None:
         """A state and a cache folder as 0.11.17 wrote them (``Registry.put``'s ``document.json``, one per

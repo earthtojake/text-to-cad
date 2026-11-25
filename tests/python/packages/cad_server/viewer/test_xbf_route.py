@@ -398,6 +398,11 @@ finally:
         self.assertEqual((row["parts"], row["opened"], row["thumbnail"] is not None, listed()["opened.xbf"]["parts"]),
                          (2, None, True, 2))
         self.assertEqual(self.request(f"/api/v1/documents/{row['id']}/thumbnail")[0], 200)
+        # Removed from Recents, a file keeps its note: its folder's row has its count and its picture still.
+        self.send("PATCH", "/api/v1/documents", {"action": "thumbnail", "path": str(opened), "png": png})
+        self.assertEqual(self.send("PATCH", "/api/v1/documents", {"action": "remove", "path": str(opened)})[0], 200)
+        self.assertNotIn(str(opened), [row["path"] for row in self.get("/api/v1/documents")[1]["documents"]])
+        self.assertEqual((listed()["opened.xbf"]["parts"], listed()["opened.xbf"]["thumbnail"] is not None), (2, True))
         # Written since: its count and its picture are of another version, so none until the engine reads it again.
         later = time.time_ns() + 5_000_000_000
         os.utime(pictured, ns=(later, later))

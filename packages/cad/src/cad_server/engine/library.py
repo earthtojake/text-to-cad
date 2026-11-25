@@ -373,12 +373,3 @@ class Notes:
         if "pictured" not in self.read(ident, version):
             return None
         return self.cache.read(f"{DOCUMENTS}/{ident}/{PICTURE}")
-
-    def forget(self, ident: str) -> None:
-        """Everything the cache derived of the file of id ``ident`` removed: its note, its picture, its kept
-        checks and plots (``documents/<id>``, whole)."""
-        if not is_id(ident):
-            return
-        with self._lock(ident):
-            self.cache.remove(f"{DOCUMENTS}/{ident}")
-            _NOTES.pop((str(self.cache.root), ident), None)

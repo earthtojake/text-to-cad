@@ -149,7 +149,7 @@ class LibraryTest(unittest.TestCase):
         self.assertEqual(self.change("delete", ident)[0], 400, "one word forgets an entry: remove")
         self.assertEqual(self.change("remove", ident), (200, {"documents": []}))
         self.assertEqual(Library().read()["files"], {})
-        self.assertFalse(noted.exists(), "what the cache derived of it goes with its entry")
+        self.assertEqual(sorted(os.listdir(noted)), ["note.json", "picture.png"], "the cache's note is the file's: it stays")
         self.assertTrue(saved.is_file(), "its file stays")
         # Pinned again by its path, with no entry: the pin makes it. No route deletes a document.
         self.assertTrue(self.change("pin", str(saved))[1]["documents"][0]["pinned"])

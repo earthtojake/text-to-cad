@@ -420,13 +420,12 @@ class Models:
             return dict(found) if found is not None else None
 
     def forget(self, ident: str) -> None:
-        """Document ``ident`` forgotten (the home's Remove): what this engine holds of it (``drop``), its
-        library entry, and what the cache derived of it (its note, its kept checks). Never a file: the document
-        is its file still, and a project's folder lists it as before."""
+        """Document ``ident`` forgotten (the home's Remove): what this engine holds of it (``drop``) and its
+        library entry. Never a file, nor what the cache derived of it (its note, its kept checks: facts of the
+        file's bytes, whether or not it is in Recents): the document is its file still, and a project's folder
+        lists it as before, with its count and its picture."""
         self.drop(ident)
         self.library.forget(ident)
-        self.notes.forget(ident)
-        self.daemon.checks.store.deleted(ident)
 
     def drop(self, ident: str) -> dict[str, Any] | None:
         """What this engine holds of document ``ident``, dropped: its row in the book (a live

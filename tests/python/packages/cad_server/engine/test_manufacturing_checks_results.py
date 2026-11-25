@@ -296,34 +296,25 @@ class KeptResultTest(unittest.TestCase):
             store.keep(f"file:{name}", "d", "cnc", {"x": name})
         self.assertEqual((store.status()["held"], store.get("file:one", "d", "cnc")), (2, None))
 
-    def test_a_forgotten_document_keeps_nothing_and_its_entries_leave_the_index(self) -> None:
-        """Forgetting a document (``Models.forget``: its cache folder, then ``Checks.deleted``) drops its results from
-        memory and from the disk's index, and a check of it that began before keeps nothing. The half-written files a stopped engine left are swept as the
-        folder is listed; a result gone since (its folder wiped) leaves the index as it is asked for; and a folder
-        that takes no write keeps nothing, with nothing remembered of it."""
+    def test_a_wiped_or_sealed_cache_folder_keeps_nothing_and_says_nothing(self) -> None:
+        """The half-written files a stopped engine left are swept as the folder is listed; a result gone since (its
+        folder wiped) leaves the index as it is asked for; and a folder that takes no write keeps nothing, with
+        nothing remembered of it."""
         from cad_server.engine.checks import Checks, Disk
-        from cad_server.engine.library import Notes
         from cad_server.engine.state import Folder
 
-        root = Path(tempfile.mkdtemp(prefix="engine-dfm-deleted-"))
+        root = Path(tempfile.mkdtemp(prefix="engine-dfm-wiped-"))
         self.addCleanup(shutil.rmtree, root, True)
-        notes = Notes(root / "cache")
-        cache = notes.cache
+        cache = Folder(root / "cache")
         store = Checks(folder=lambda: cache)
         a, b = str(uuid.uuid4()), str(uuid.uuid4())
         store.keep(f"model:{a}", "v", "cnc", {"x": 1}, (a, "r"))
         store.keep("file:2:3", "d", "cnc", {"x": 2}, (b, "d"))
         self.assertEqual(store.status()["disk"]["held"], 2)
-        since = store.epoch(b)
-        notes.forget(b)
-        store.deleted(b)
-        self.assertEqual((store.status()["held"], store.status()["disk"]["held"]), (1, 1), "its entries went")
-        store.keep("file:2:3", "d", "cnc", {"x": 2}, (b, "d"), since)
-        self.assertEqual(cache.names(f"documents/{b}"), [], "a check that began before it was forgotten keeps nothing")
-        self.assertIsNone(store.get("file:2:3", "d", "cnc"))
 
         shutil.rmtree(cache.path("documents"))  # a person wiping the cache folder
         self.assertIsNone(store.disk.get(a, "r", "cnc"))
+        self.assertIsNone(store.disk.get(b, "d", "cnc"))
         self.assertEqual(store.status()["disk"]["held"], 0, "gone with its folder: out of the index as it is asked for")
 
         sealed = {"on": True}

@@ -121,8 +121,8 @@ no delta against the build before: the facts it compares are memory's.
 `CAD_CACHE_DIR`, else `$XDG_CACHE_HOME/cad`, else `~/.cache/cad`) holds only what it derived from a document and
 can make again, under that document's folder, keyed by its bytes: a KiCad board's plot, refilled pours, DRC and
 kept exports, `documents/<id>/kicad/<key>/` (`formats/kicad/poured.folder`), a manufacturing check's kept
-results, a model's and a file's (`documents/<id>/checks/`, `checks.Disk`), and the file's note, removed when the
-document is forgotten (`Notes.forget` removes `documents/<id>` whole). The folder is shared with any 0.7 install's store: the engine
+results, a model's and a file's (`documents/<id>/checks/`, `checks.Disk`), and the file's note: facts of the
+file's bytes, which Remove leaves (**Forgetting**). The folder is shared with any 0.7 install's store: the engine
 reads, writes and removes only under `documents/` there (its processes' bytecode is under `pycache/`), and lists,
 counts and removes nothing else (`cad cache clean` neither).
 
@@ -161,8 +161,8 @@ status` ends that document's line with "serving its previous good build".
 after which it is on no list and its id names nothing. What a person can take back is its place in the library:
 the home's Remove (`PATCH /api/v1/documents` with `remove`) forgets the file (`Models.forget`) -- what the engine
 holds of it (its row, the server's copy and its page; a live document's worker keeps its memo, and its next run
-registers the document again), its library entry, and what the cache derived of it (its note, its kept checks)
--- and touches no file. A file in a project's folder stays on its folder's page: the folder lists it. An
+registers the document again) and its library entry -- and touches no file, nor what the cache derived of its
+bytes (its note, its kept checks), which is the file's whether or not it is in Recents. A file in a project's folder stays on its folder's page: the folder lists it. An
 unsupported document format or a failed saved-format conversion preserves the file (**Document compatibility**).
 
 **Drain.** Before the supervisor stops a worker -- the count cap's least recently used, replaced for

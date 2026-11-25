@@ -1407,11 +1407,10 @@ class CadApp:
                     self.analytics.opened(path)
 
     def forget(self, ident) -> None:
-        """Document ``ident`` forgotten (the home's Remove): its library entry and what the cache derived of it
-        -- and, from the engine's own page (``engine_app.ViewerApp``), what the engine holds of it first. Never a
-        file of the person's."""
+        """Document ``ident`` forgotten (the home's Remove): its library entry -- and, from the engine's own page
+        (``engine_app.ViewerApp``), what the engine holds of it first. Never a file of the person's, nor the cache's
+        note of it, which is the file's (``library.Notes``)."""
         self.library.forget(ident)
-        self.notes.forget(ident)
         self._files.pop(ident, None)
 
     def _thumbnail(self, response, ident):
