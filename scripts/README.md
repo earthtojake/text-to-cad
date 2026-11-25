@@ -119,14 +119,18 @@ where those files ship, so these scripts are what produces them.
 - `rehearse-update.py [ROUTE ...] [--old RELEASE]` — rehearses cad's updates on private computers (each its
   own home, state, engine, cache and `cad` command folders), with real uv and real servers. `self`: cad, a uv
   tool, updating itself through the store (the release installed in a folder of cad's state folder, then the
-  pointer written; uv's tool, its receipt and its files never changed): idle, typed with `cad update` with and
-  without a server running, beside a server that started at once, switched off, back by itself from a release
-  whose server cannot start, past an installed release whose server cannot start, untouched by a release uv
-  cannot install or one that fails its own check, inside its major with a higher major out and across it only
-  by `cad update --major`, by pipx (no `pipx upgrade`), while three callers run `cad` every 50 ms, while files
-  of the installed and the running release are held open, after a person's own `uv tool install --reinstall`
-  and `uv tool upgrade`, after its worker was stopped midway, and from the shipped 0.11.17, which updates itself
-  in place into this build first; and the new cad's server running `cad plugin
+  pointer written; uv's tool, its receipt and its files never changed): by itself the release only got ready,
+  nothing restarted, then the server restarted on it at its next start, by the viewer's button, by a typed `cad
+  update` (with PyPI out of reach too) or once it was ready a day, and never by itself with automatic updates off
+  or a feed that names it no more; typed with `cad update` with and without a server running, beside a server
+  that started at once, switched off, back by itself from a release whose server cannot start (typed, or at the
+  start that switched to it ready, then held back), a ready release damaged before its restart built again, past
+  an installed release whose server cannot start, untouched by a release uv cannot install or one that fails its
+  own check, inside its major with a higher major out and across it only by `cad update --major`, by pipx (no
+  `pipx upgrade`), while three callers run `cad` every 50 ms, while files of the installed and the running
+  release are held open, after a person's own `uv tool install --reinstall` and `uv tool upgrade`, after its
+  worker was stopped midway, and from the shipped 0.11.17, which updates itself in place into this build first;
+  and the new cad's server running `cad plugin
   install` once, as its own run under a deadline, where `cad plugin update auto` is on and cad got newer, by
   itself or by a typed `cad update`, never after a failed update; that run installs the plugin with cad's own
   code, so it is read from cad's record of it, and the install command's count stays 0.
