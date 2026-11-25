@@ -58,7 +58,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 /** One pane of the harness: a host, a workspace, host commands and a live binding, and the tab. */
-async function openDrawing(destinationKind = 'composer', notice: ReactNode = null, promptFiles?: any, { drawn = true } = {}) {
+async function openDrawing(destinationKind = 'composer', notice: ReactNode = null, promptFiles?: any, { drawn = true, subject = null as object | null } = {}) {
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith('/api/v1/documents') && init?.method === 'POST') {
@@ -94,7 +94,7 @@ async function openDrawing(destinationKind = 'composer', notice: ReactNode = nul
   const destination = { kind: destinationKind, available: destinationKind !== 'unavailable' };
   const delivered: Array<{ type: string; parts: string[] }> = [];
   const host = {
-    promptFiles,
+    promptFiles, ...(subject ? { promptSubject: subject } : {}),
     files: {
       id: 'one',
       stat: async (path: string) => ({ path, name: path.split('/').pop(), kind: 'file', size: 400, extension: 'dxf' })
@@ -274,6 +274,18 @@ it('Select picks an entity by handle: lit, a Quick Edit chip by type and layer (
   await waitFor(() => expect(controller.readState().selectedEntities).toEqual([]));
   expect(within(box).queryByText('Circle on 0')).toBeNull();
   dispose();
+});
+
+it("where the host's prompts name the drawing otherwise (a shared model's link), Copy Reference names an entity by it", async () => {
+  const link = 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-';
+  const drawing = await openDrawing('clipboard', null, undefined, { subject: { resource: { kind: 'url', url: link } } });
+  // A secondary press on the red circle (handle 33): its reference first in the view's menu.
+  drawing.tap(34, 40, { pointerId: 2, button: 2 });
+  const menu = await screen.findByRole('menu');
+  fireEvent.click(within(menu).getByRole('menuitem', { name: 'Copy Reference' }));
+  await waitFor(() => expect(copied).not.toBe(''));
+  expect(await copied).toBe(`${link}#h33`);
+  drawing.dispose();
 });
 
 // A finger has no Shift: its tap adds what it lands on and takes out what is picked, and on nothing it clears at once.

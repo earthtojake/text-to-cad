@@ -533,9 +533,9 @@ function XbfSurface({ view, data }) {
     const instance = parseXbfElementId(hit?.id)?.instance;
     if (instance == null) return [];
     const part = `i${instance}`;
-    const ref = hit.kind ? xbfCopyText({ scene, tree, resource: shellRef.current?.frame.resource, ids: [hit.id] }).split("\n")[0] : "";
+    const ref = hit.kind ? xbfCopyText({ scene, tree, resource: shellRef.current?.frame.resource, ids: [hit.id], subject: host.promptSubject }).split("\n")[0] : "";
     return [ref ? { part, ref } : { part }];
-  }, [scene, tree, modelAt]);
+  }, [scene, tree, modelAt, host.promptSubject]);
 
   // Select tangent faces and Select tangent edges (the view's menu): the engine's groups of a part, asked for once per part.
   const groupsRef = useRef(new Map());
@@ -627,10 +627,10 @@ function XbfSurface({ view, data }) {
   // What a pick is, as its chip's card and the hover tip read it (`xbfDescriber`).
   const describe = useMemo(() => xbfDescriber({ scene, tree, facts, t }), [scene, tree, facts, t]);
   const { references, chips } = useXbfSelectionChips({ scene, tree, resource, selectedIds: selected, facts,
-    onRemove: removeFromSelection, onHover: hoverChip, describe });
+    onRemove: removeFromSelection, onHover: hoverChip, describe, subject: host.promptSubject });
   promptReferencesRef.current = previewing ? NO_REFERENCES : references;
   // What a node or an element copies: its reference, the file's path with it.
-  const singleChip = useCallback(ids => xbfCopyText({ scene, tree, resource, ids }), [scene, tree, resource]);
+  const singleChip = useCallback(ids => xbfCopyText({ scene, tree, resource, ids, subject: host.promptSubject }), [scene, tree, resource, host.promptSubject]);
   const copy = useCallback(text => { if (text) void host.clipboard.writeText(text).catch(() => {}); }, [host.clipboard]);
   const copySelection = selected.length && !previewing ? () => copy(chips.map(chip => chip.copy).filter(Boolean).join("\n")) : null;
   const nameReference = useCallback((reference) => {

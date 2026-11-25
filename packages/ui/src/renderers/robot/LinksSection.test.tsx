@@ -67,7 +67,8 @@ let highlight: Record<string, unknown> = {};
 const scene = { hasComponent: (id: string) => components.some(component => component.id === id), setHighlight(next: Record<string, unknown>) { highlight = next; } };
 const drawn = () => JSON.stringify([highlight.selectedLinks || [], highlight.selectedComponents || []]);
 function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload = robot as typeof planned,
-  hiddenPartIds = undefined as string[] | undefined, onVisibilityChange = undefined as ((ids: string[], visible: boolean) => void) | undefined }) {
+  hiddenPartIds = undefined as string[] | undefined, onVisibilityChange = undefined as ((ids: string[], visible: boolean) => void) | undefined,
+  subject = null as object | null }) {
   const selection = useLinkSelection({ scene, hidden: false, requestRender() {} });
   const observed = {
     ...selection,
@@ -77,7 +78,7 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload
   };
   const resource = { kind: 'workspace-file', path: '/work/arm.urdf' };
   const describe = useRobotDescribe({ robot: payload, components, selectLink: observed.selectLink });
-  const { references, chips } = useRobotReferences({ robot: payload, components, selection: observed, resource, describe });
+  const { references, chips } = useRobotReferences({ robot: payload, components, selection: observed, resource, describe, subject });
   const inspect = useRobotInspect({ selection: observed, describe });
   return <InspectContext.Provider value={inspect}>
     {/* In the view's panel, as it ships: its Links tab, searched by the panel's search box. */}
@@ -158,6 +159,16 @@ it('selects a link in the scene graph and reads the payload back', () => {
   fireEvent.click(details.getByRole('button', { name: 'Remove shoulder_link' }));
   expect(screen.queryByRole('region', { name: 'Reference details' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Select shoulder_link' }).getAttribute('aria-pressed')).toBe('false');
+  cleanup();
+
+  // Where the host's prompts name the file otherwise (a shared model's link), its chip copies that name; the
+  // reference Quick Edit carries stays the file's.
+  const link = 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-';
+  render(<Harness payload={planned} subject={{ resource: { kind: 'url', url: link } }}/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Select shoulder_link' }));
+  const shared = within(screen.getByRole('region', { name: 'Reference details' }));
+  expect(shared.getByLabelText('Chip shoulder_link').getAttribute('data-copy')).toBe(`${link}#shoulder_link`);
+  expect(screen.getByRole('region', { name: 'Reference details' }).getAttribute('data-references')).toBe('[["shoulder_link"]]');
 });
 
 it('a link\'s card follows its parent: pressing the parent selects it there and in the viewport', () => {

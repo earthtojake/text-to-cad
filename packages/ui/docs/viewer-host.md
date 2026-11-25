@@ -278,9 +278,9 @@ each file of the view from the packs it lies in, fetched once each and kept by t
 files that made it lie in), and hands them to `openViewBundle` as a lazy source; it shows that service as `?bundle=`
 does. Everything a bundle's view keeps and leaves out stays as it is. What the share adds lives in the host alone:
 its prompts' subject (`promptSubject`): the share's link, `<origin>/<id>`, for the model, so a prompt says
-`File: <origin>/<id>` and each reference `<origin>/<id>#<selectors>`, and the line
-``This model is shared at <origin>/<id>: run `cad fork <origin>/<id>` to get its files, then work on them.``, in
-English as `File:` is, for the agent; the share's status screens (gone, damaged, a format it does not read, a
+`File: <origin>/<id>` and each reference `<origin>/<id>#<selectors>`, which Copy Reference and a chip copy too,
+and the line ``This model is shared at <origin>/<id>: run `cad fork <origin>/<id>` to get its files, then work on
+them.``, in English as `File:` is, for the agent; the share's status screens (gone, damaged, a format it does not read, a
 failure with Retry) and its delete page (`/<id>#delete=<secret>`). The delete secret never reaches the viewer: no
 port, URL, storage or log carries it.
 
@@ -342,7 +342,8 @@ available; references do not promise to survive edits. Shared serialization hand
 
 Where an agent reading a prompt could not reach the document as the view names it, the host says what its prompts
 name it by (`promptSubject`): `resource` stands for the document on screen in a Quick Edit's and a screenshot's
-prompt, as their file and in each reference into it, whose target it keeps; `note` is one line they say, with the
+prompt, as their file and in each reference into it, whose target it keeps, and in what Copy Reference and a chip copy
+(a pick still named in its file's own grammar, or not at all); `note` is one line they say, with the
 view's own notes, after what the person wrote and before `File:`. Without it a prompt names the document as the view
 does. The web's share mode names a shared model by its link ([below](#a-shared-view-bundles-host)).
 

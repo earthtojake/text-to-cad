@@ -34,8 +34,9 @@ export interface PromptFiles {
 /**
  * What this host's prompts name the document on screen by, where an agent reading them could not reach it as the
  * view names it (a shared model, whose page is on another computer than the agent): `resource` stands for it in a
- * Quick Edit's and a screenshot's prompt, as its file and in each reference into it, which keeps its target; `note`
- * is one line those prompts say, with the view's own notes, after what the person wrote and before the file.
+ * Quick Edit's and a screenshot's prompt, as its file and in each reference into it, which keeps its target, and in
+ * what Copy Reference and a chip copy; `note` is one line those prompts say, with the view's own notes, after what
+ * the person wrote and before the file.
  */
 export interface PromptSubject {
   resource?: ResourceRef;

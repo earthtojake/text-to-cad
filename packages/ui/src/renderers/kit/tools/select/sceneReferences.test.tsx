@@ -44,3 +44,17 @@ it('Copy Reference on a selection with an unnameable pick copies nothing, and on
   expect(sceneCopyText({ kind: 'url', url: 'https://example.com/a.3mf' } as never, ['o1'])).toBe('');
   expect(sceneCopyText(FILE, [])).toBe('');
 });
+
+it("where the host's prompts name the file otherwise (a shared model's link), a chip and Copy Reference copy that name, and the references stay the view's", () => {
+  const link = 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-';
+  const subject = { resource: { kind: 'url', url: link }, note: 'Shared.' };
+  const select = vi.fn(), hover = vi.fn();
+  const scene = { describePart: (id: string) => ({ name: `part ${id}`, facts: [] }) };
+  const { result } = renderHook(() => useSceneReferences({ scene, selection: { selected: ['o1', 'wheel 1'], select, hover } as never,
+    resource: FILE as never, subject: subject as never }));
+  expect(result.current.chips.map(chip => chip.copy)).toEqual([`${link}#o1`, undefined]);
+  expect(result.current.references).toEqual([{ resource: FILE, target: { kind: 'cad-selector', selectors: ['o1'] } }]);
+  expect(sceneCopyText(FILE as never, ['o1', 'o2.1'], subject as never)).toBe(`${link}#o1,o2.1`);
+  // What the file's own grammar cannot name copies nothing, whatever the host names the file by.
+  expect(sceneCopyText(FILE as never, ['o1', 'wheel 1'], subject as never)).toBe('');
+});

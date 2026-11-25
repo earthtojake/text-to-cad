@@ -207,9 +207,10 @@ bundle's or the engine's page, as above; the engine's ids never have a share id'
   view ahead and none that only the files that made it lie in, and shows the bundle exactly as `?bundle=` does
   (`BundleApp`, titled by the document's name). A prompt from it (Quick Edit's, a screenshot's) names the model by
   the share's link, not by the model's id on the computer it was shared from, which means nothing to an agent on
-  another: `File: <origin>/<id>`, each reference `<origin>/<id>#<selectors>`, with one line for the agent after what
-  the person wrote, ``This model is shared at <origin>/<id>: run `cad fork <origin>/<id>` to get its files, then work
-  on them.`` (`sharePromptSubject`, the host's `promptSubject`). A 404 says
+  another: `File: <origin>/<id>`, each reference `<origin>/<id>#<selectors>` (as Copy Reference and a chip copy
+  it), with one line for the agent after what the person wrote, ``This model is shared at <origin>/<id>: run `cad
+  fork <origin>/<id>` to get its files, then work on them.`` (`sharePromptSubject`, the host's `promptSubject`). A
+  404 says
   "This shared model has expired or was deleted.", and that a share lasts 7 days after it was last shared, so
   whoever shared it can share it again; a manifest that does not open or is not one, or a file not as it
   says, says the link is damaged; a bundle it does not read says so; anything else (no network, a refusal, a

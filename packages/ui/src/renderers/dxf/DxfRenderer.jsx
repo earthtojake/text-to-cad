@@ -144,7 +144,7 @@ function DxfSurface({ view, data }) {
   selectionRef.current = selection;
   // What a pick is, as its chip's card and the hover tip read it (`describeDrawingPick`).
   const describe = useCallback(id => (drawing ? describeDrawingPick(drawing, id, units.unit, t) : null), [drawing, units, t]);
-  const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource, describe, group: "entity" });
+  const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource, describe, group: "entity", subject: host.promptSubject });
   const overlay = useCallback((ctx, { transform, pixelRatio }) => {
     const drawable = drawingRef.current;
     if (!drawable) return;
@@ -389,7 +389,7 @@ function DxfSurface({ view, data }) {
     }
     const id = drawingReferenceId(handle), selected = now.selected.includes(id);
     const layer = drawingRef.current?.entities?.get(handle)?.layer || "0";
-    const copyText = sceneCopyText(workspace.resource, [...new Set([...now.selected, id])]);
+    const copyText = sceneCopyText(workspace.resource, [...new Set([...now.selected, id])], host.promptSubject);
     return menuGroups(
       referenceGroup({ copyText, onCopy: () => { void Promise.resolve(host.clipboard.writeText(copyText)).catch(() => {}); }, t }),
       pickGroup({ selected, onSelect: () => now.select(id, { multiSelect: selected }), t }),
@@ -399,7 +399,7 @@ function DxfSurface({ view, data }) {
 
   // What is picked, as the frame reads it: Quick Edit's chips and their cards' rows, and the hover tip.
   const resource = workspace.resource;
-  const copyText = useCallback(ids => sceneCopyText(resource, ids), [resource]);
+  const copyText = useCallback(ids => sceneCopyText(resource, ids, host.promptSubject), [resource, host.promptSubject]);
   const tip = useCallback(id => (drawing ? drawingPickTip(drawing, id, units.unit, t) : ""), [drawing, units, t]);
   const inspect = useSceneInspect({ scene, selection, describe, tip, data: "drawing" });
 
