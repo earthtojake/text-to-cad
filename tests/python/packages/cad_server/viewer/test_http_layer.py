@@ -590,12 +590,16 @@ class Streaming(unittest.TestCase):
                 for via_tunnel in (False, True):
                     with self.subTest(length=len(payload), tunnel=via_tunnel):
                         model.write_bytes(b"original contents")
+                        served = threading.Event()
 
                         def replace(response, path, stat_result, *args):
                             pending = Path(path).with_suffix(".pending")
                             pending.write_bytes(payload)
                             os.replace(pending, path)
-                            return original(response, path, stat_result, *args)
+                            try:
+                                return original(response, path, stat_result, *args)
+                            finally:
+                                served.set()
 
                         with mock.patch.object(Response, "stream_file", replace):
                             if via_tunnel:
@@ -609,6 +613,9 @@ class Streaming(unittest.TestCase):
                                     status, headers, body = reply.status, dict(reply.getheaders()), reply.read()
                                 finally:
                                     conn.close()
+                                # The body can arrive before the server's thread closes the file it streamed, and
+                                # the next subtest replaces that file, which Windows refuses while a handle holds it.
+                                self.assertTrue(served.wait(5), "the server finished streaming the file")
                         self.assertEqual((status, int(headers["content-length"]), body), (200, len(payload), payload))
         finally:
             fixture.close()
