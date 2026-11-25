@@ -1759,8 +1759,8 @@ class CauseTest(unittest.TestCase):
             self.assertEqual(said["disk_full"], f"free room on the disk, then {retries}")
             self.assertEqual(said["offline"], "the update follows your uv settings: change uv's offline setting, then "
                                               "`cad update`")
-            self.assertEqual(said["config_index"], "the update follows your uv settings: change the package index uv's "
-                                                   "settings name, then `cad update`")
+            self.assertEqual(said["config_index"], "the update follows your uv settings: change the package index named "
+                                                   "in uv's settings, then `cad update`")
             self.assertEqual(said["broken"], "nothing to do: cad kept the release it has and tries again by itself")
             self.assertEqual(said["start_failed"], "nothing to do: cad went back to the release before and takes the "
                                                    "next release when it is out; `cad update` tries this one again")

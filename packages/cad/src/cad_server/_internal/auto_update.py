@@ -987,7 +987,7 @@ ADVICE = {
     "disk_full": "free room on the disk, then " + RETRIES,
     "offline": _SETTING.format(setting="uv's offline setting"),
     "config_exclude": _SETTING.format(setting="uv's exclude-newer setting"),
-    "config_index": _SETTING.format(setting="the package index uv's settings name"),
+    "config_index": _SETTING.format(setting="the package index named in uv's settings"),
     "config_tls": _SETTING.format(setting="uv's TLS settings"),
     "python": "the release asks for a newer Python than this cad was installed on: install cad again: `{reinstall}`",
     "platform": "nothing to do: this computer cannot take the release, and cad tries each newer one by itself",
