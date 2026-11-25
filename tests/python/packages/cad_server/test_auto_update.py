@@ -1861,7 +1861,8 @@ class AskedTest(Case):
             self.assertEqual(popen.call_count, 1)
             auto_update._keep(self.state / auto_update.RECORD, {**first, "outcome": "failed"})
             again = auto_update.begin("0.2.0")
-            self.assertEqual((again["tries"], popen.call_count), (2, 2), "counted, so the automatic tries stay bounded")
+            self.assertEqual((again["tries"], again["auto_tries"], popen.call_count), (2, 0, 2),
+                             "counted as an attempt, and none of the automatic tries spent")
             auto_update._keep(self.state / auto_update.RECORD, {**again, "at": again["at"] - auto_update.RETRY_SECONDS})
             self.assertEqual(auto_update.begin("0.2.0")["tries"], 3, "an underway record past the hour: a dead helper")
             auto_update._keep(self.state / auto_update.RECORD, {**again, "outcome": "failed"})
@@ -1871,6 +1872,120 @@ class AskedTest(Case):
         with mock.patch.object(auto_update, "_start", side_effect=OSError("the state folder is read-only")):
             auto_update._keep(self.state / auto_update.RECORD, {**again, "outcome": "failed"})
             self.assertIsNone(auto_update.begin("0.2.0"))
+
+
+class AskedSpendsNoTriesTest(Case):
+    """A person's own update (``cad update``, the viewer's update button: ``asked``) spends none of the tries the
+    automatic update has for a release (``TRIES``): the record counts it as an attempt (``tries``) and carries the
+    automatic ones on (``auto_tries``), through the helper's own record of how it ended."""
+
+    def test_a_person_s_update_carries_the_automatic_tries_on_without_adding_to_them(self) -> None:
+        record = self.state / auto_update.RECORD
+        with self.feed("0.2.0"), mock.patch.object(auto_update.subprocess, "Popen") as popen, \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
+            self.assertTrue(auto_update.trigger("0.2.0"))
+            first = auto_update.last()
+            self.assertEqual((first["tries"], first["auto_tries"], first["asked"]), (1, 1, False))
+            auto_update._keep(record, {**first, "outcome": "failed", "at": first["at"] - auto_update.RETRY_SECONDS})
+            asked = auto_update.begin("0.2.0")
+            self.assertEqual((asked["tries"], asked["auto_tries"], asked["asked"]), (2, 1, True))
+            told = json.loads(popen.call_args.args[0][-1])
+            self.assertEqual((told["tries"], told["auto_tries"], told["asked"]), (2, 1, True), "the helper is told")
+            ended = helper.update({**told, "cad": "cad", "prefix": str(self.tool)}, run=lambda command, _t: (1, "no"),
+                                  sleep=lambda _s: None, windows=False, environ={})
+            self.assertEqual((ended["tries"], ended["auto_tries"]), (2, 1), "and keeps it in its record")
+            auto_update._keep(record, {**ended, "at": asked["at"] - auto_update.RETRY_SECONDS})
+            self.assertEqual(auto_update.due(), auto_update.Due("0.2.0", "0.2.0"), "one automatic try is left")
+            self.assertTrue(auto_update.trigger("0.2.0"))
+            self.assertEqual((auto_update.last()["tries"], auto_update.last()["auto_tries"]), (3, 2))
+            auto_update._keep(record, {**auto_update.last(), "outcome": "failed",
+                                       "at": time.time() - auto_update.RETRY_SECONDS})
+            self.assertIsNone(auto_update.due(), "the automatic tries spent")
+            self.assertEqual(auto_update.spent(), "0.2.0")
+            self.assertEqual(auto_update.begin("0.2.0")["tries"], 4, "a person can always ask")
+
+    def test_a_record_kept_before_auto_tries_counts_its_tries_as_it_did(self) -> None:
+        auto_update._keep(self.state / auto_update.RECORD, {
+            "release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 5.0, "tries": 2, "outcome": "failed",
+            "ended": 6.0, "asked": True, "reported": True})
+        self.assertEqual(auto_update._automatic_tries("0.2.0"), 2)
+        with self.feed("0.2.0"):
+            self.assertIsNone(auto_update.due(now=10_000.0))
+
+
+class ButtonTest(Case):
+    """What the viewer's update button shows (``auto_update.button``): only where cad can update itself; the release
+    of its own major it is behind, never a higher major's; an attempt of this release underway; the last one's
+    failure, said by its cause, until it is put away (``dismiss``) or another attempt begins."""
+
+    def keep(self, **record) -> dict:
+        found = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 1000.0, "tries": 1, "auto_tries": 1,
+                 "installer": "uv", "asked": False, **record}
+        auto_update._keep(self.state / auto_update.RECORD, found)
+        return found
+
+    def test_where_it_shows_and_what_it_offers(self) -> None:
+        with self.feed("0.2.0", {"0": "0.2.0"}):
+            self.assertEqual(auto_update.button(), {"version": "0.1.0", "latest": "0.2.0", "state": "idle"})
+            auto_update.change(False)
+            self.assertEqual(auto_update.button()["latest"], "0.2.0", "automatic updates off: a person can click")
+            with mock.patch.object(updates, "checking", return_value=False):  # CAD_UPDATE_CHECK=0, CI
+                self.assertIsNone(auto_update.button())
+            with mock.patch.object(sys, "prefix", str(self.tmp)):  # not a global install
+                self.assertIsNone(auto_update.button())
+            with mock.patch.object(cad_server, "__version__", "0.1.0-dev.1"):
+                self.assertIsNone(auto_update.button())
+            self.assertEqual(auto_update.button(waiting=True)["state"], "waiting")
+        for latest, lines, offered in (("0.1.0", {"0": "0.1.0"}, None), ("1.0.0", {"0": "0.1.0", "1": "1.0.0"}, None),
+                                       ("1.0.0", {"1": "1.0.0"}, None), ("1.0.0", {"0": "0.3.0", "1": "1.0.0"}, "0.3.0")):
+            with self.subTest(lines=lines), self.feed(latest, lines):
+                self.assertEqual(auto_update.button()["latest"], offered, "never a higher major")
+        with self.feed(None):
+            self.assertEqual(auto_update.button()["latest"], None)
+
+    def test_an_attempt_underway_and_one_that_failed(self) -> None:
+        now = time.time()
+        with self.feed("0.2.0", {"0": "0.2.0"}):
+            self.keep(outcome="underway", at=now)
+            self.assertEqual(auto_update.button(now=now + 5),
+                             {"version": "0.1.0", "latest": "0.2.0", "state": "working", "at": now, "asked": False})
+            self.keep(outcome="underway", at=now, **{"from": "0.0.9"})
+            self.assertEqual(auto_update.button(now=now + 5)["state"], "idle",
+                             "another release's attempt: the one that installed this cad, its end not written yet")
+            for word, said in (("in_use", "a file of cad's was in use by another program"),
+                               ("network", "uv could not reach the package index"),
+                               ("config_exclude", "a setting of uv's hides newer releases (exclude-newer)")):
+                with self.subTest(word=word):
+                    self.keep(outcome="failed", ended=now, cause=word, at=now)
+                    self.assertEqual(auto_update.button(now=now + 5),
+                                     {"version": "0.1.0", "latest": "0.2.0", "state": "failed", "at": now,
+                                      "asked": False, "cause": word, "said": said, "installer": "uv"})
+            self.keep(outcome="current", ended=now, cause="kept", at=now, asked=True)
+            self.assertEqual(auto_update.button(now=now + 5)["cause"], "kept", "the release that ran, kept")
+            self.keep(outcome="underway", at=now - auto_update.RETRY_SECONDS)
+            self.assertEqual(auto_update.button(now=now)["cause"], "lost")
+            self.keep(outcome="underway", at=now, cause="helper_crash")
+            self.assertEqual(auto_update.button(now=now + 5)["state"], "failed", "a helper that raised")
+            self.keep(outcome="installed", ended=now, release="0.2.0", at=now)
+            self.assertEqual(auto_update.button(now=now + 5)["state"], "idle")
+            self.keep(outcome="failed", ended=now, cause="network", at=now)
+            self.assertEqual(auto_update.button(waiting=True, now=now + 5)["state"], "waiting", "a new attempt asked")
+        with self.feed("0.1.0", {"0": "0.1.0"}):
+            self.assertEqual(auto_update.button(now=now + 5)["state"], "idle", "no longer behind: nothing to say")
+
+    def test_a_failure_put_away_stays_away_until_another_attempt(self) -> None:
+        now = time.time() - 100
+        with self.feed("0.2.0", {"0": "0.2.0"}):
+            self.keep(outcome="failed", ended=now, cause="disk_full", at=now)
+            self.assertFalse(auto_update.dismiss(now - 1), "another attempt's: nothing put away")
+            self.assertEqual(auto_update.button(now=now + 5)["state"], "failed")
+            self.assertTrue(auto_update.dismiss(now))
+            self.assertTrue(auto_update.last()["dismissed"])
+            self.assertEqual(auto_update.button(now=now + 5)["state"], "idle")
+            self.keep(outcome="underway", at=now + 10)
+            self.assertFalse(auto_update.dismiss(now + 10), "an attempt underway has nothing to put away")
+            self.keep(outcome="failed", ended=now + 20, cause="network", at=now + 10)
+            self.assertEqual(auto_update.button(now=now + 30)["cause"], "network", "a new attempt's failure shows")
 
 
 class ServerUpdateTest(Case):

@@ -1079,7 +1079,7 @@ class CadApp:
     def _local(self, request, response, rest) -> None:
         """``/api/v1/local``: what a local engine does on this computer -- the explorer,
         files by path, Quick Edit's files, Reveal, Open in, the clipboard, Open's chooser, the page's link,
-        the page's activity."""
+        the page's activity, cad's update (the update button)."""
         route = rest[0] if rest else ""
         if rest == ["folder"]:
             return self._methods(request, {"GET": lambda: self._handle_folder(response, request.query)})
@@ -1103,6 +1103,8 @@ class CadApp:
             return self._methods(request, {"GET": lambda: send_json(response, 200, self.issue_link())})
         if rest == ["activity"] and self.analytics is not None:
             return self._methods(request, {"POST": lambda: self._activity(request, response)})
+        if rest == ["update"]:
+            return self._methods(request, {"POST": lambda: send_json(response, *self._update(request))})
         raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
 
     def _create_prompt_files(self, request, response) -> None:
@@ -1366,11 +1368,53 @@ class CadApp:
                 **({"saved": bool(changed.get("saved"))} if changed is not None else {})}
 
     def _version(self) -> dict:
-        """The release this engine runs, which a page compares with its own to reload into a new one, and the token
-        of this start of it (``instance``)."""
+        """The release this engine runs, which a page compares with its own to reload into a new one, the token
+        of this start of it (``instance``), and what the update button shows (``cadUpdate``: ``auto_update.button``,
+        null where cad cannot update itself), with whether a person's update waits for the work in flight to end
+        (the engine's ``update``, asked to begin nothing)."""
         from cad_server import __version__
+        from cad_server._internal import auto_update
 
-        return {"release": __version__, "instance": INSTANCE}
+        ask = getattr(getattr(self, "server", None), "update", None)
+        waiting = bool(ask(False).get("waiting")) if callable(ask) else False
+        return {"release": __version__, "instance": INSTANCE, "cadUpdate": auto_update.button(waiting=waiting)}
+
+    def _update(self, request) -> tuple[int, dict]:
+        """``POST /api/v1/local/update``: the update button. ``{}``: a person's update of cad, as ``cad update`` asks it
+        of the engine (``Daemon.update``: PyPI asked now, the attempt underway joined, else begun once nothing is in
+        flight, never past this cad's major; ``asked`` in its record, so it spends none of the automatic tries),
+        answered ``202`` with ``GET /api/v1/server``'s ``release``, ``instance`` and ``cadUpdate``. ``{"dismiss": at}``:
+        the failure of the attempt begun at ``at`` put away (``auto_update.dismiss``), answered ``200`` the same way.
+        Refused (409, its ``cause`` where it is one of ``auto_update.SAID``) where cad cannot update itself, or where no
+        engine serves this page (a test's server of its own). Behind every check a route that changes something has."""
+        from cad_server import updates
+        from cad_server._internal import auto_update
+
+        self._limit(request, 1024)
+        payload = json.loads(request.body() or b"{}")
+        if type(payload) is not dict or not set(payload) <= {"dismiss"} or (
+                "dismiss" in payload and (type(payload["dismiss"]) not in (int, float))):
+            raise ValueError('an update is {} (update cad now) or {"dismiss": <the attempt\'s at>}')
+        if "dismiss" in payload:
+            auto_update.dismiss(payload["dismiss"])
+            return 200, self._version()
+        hint = "run `cad update` in a terminal"
+        ask = getattr(getattr(self, "server", None), "update", None)
+        if not callable(ask):
+            raise ApiError(409, "no engine serves this page: nothing to update", hint)
+        found = auto_update.global_install()
+        if found is None:
+            raise ApiError(409, auto_update.NOT_THE_TOOL, hint)
+        if not updates.checking():
+            raise ApiError(409, auto_update.CHECK_OFF, hint)
+        blocked = auto_update.blocked(found)
+        if blocked is not None:
+            said = auto_update.in_words(blocked, found.installer.name)
+            raise ApiError(409, said, hint, cause=blocked, said=said, installer=found.installer.name)
+        answer = ask(True)
+        if "failed" in answer:
+            raise ApiError(409, str(answer["failed"]), hint)
+        return 202, self._version()
 
     def _report_activity(self, payload: dict) -> None:
         """What the page did: a person touched it (``touched``), a Quick Edit was sent (``quickEdit``), used its

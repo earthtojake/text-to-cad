@@ -522,7 +522,15 @@ in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
-links open in a new tab. The page never tells of a newer release: cad updates itself, and the agent the rest.
+links open in a new tab. Outermost at the navbar's right end, over a file and on the home, is the update button
+(`@cad/ui/update`) while a global install of cad is behind a newer release of its own major (`GET /api/v1/server`'s
+`cadUpdate`, read with the server's description in `main.tsx`, so it draws with the page, and again when the person comes
+back to it). A click is a person's update (`POST /api/v1/local/update`): a ring that fills while it installs, the
+server's going for it no notice of the page's, then a spinner, and the page reloads into the server that comes back
+on the new release once nothing on it is unsaved (`reloadWhenClean`), where it says it is updated, once; the tab keeps
+the release it followed the update from across the reload (`host/followedUpdate.js`). An automatic update the page
+finds underway is followed the same way. A failed one, automatic or not, says why and what to do under the button,
+from the server's record (so through a reload too), until it is put away, for every page.
 The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
 A document's id is never its name, in the navbar or the title: the page asks for the document its URL names
 beside the server's description (`main.tsx`), into the client's catalog, so its first frame has its name where the

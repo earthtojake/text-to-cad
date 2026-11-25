@@ -8,6 +8,8 @@ import { createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerI
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
 import { reloadWhenClean } from './host/reloadWhenClean.js';
+import { followedUpdate, forgetFollowedUpdate, noteFollowedUpdate } from './host/followedUpdate.js';
+import { UpdateButton, useUpdate, type UpdateCalls } from '@cad/ui/update';
 import { useAnalyticsConsent } from '@cad/ui/consent';
 import { english, translator, useLanguage } from '@cad/ui/i18n';
 import { useWhatsNew } from '@cad/ui/whats-new';
@@ -155,6 +157,32 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   // What's new: once after a release with notes is installed, over the home or a file's view, kept
   // seen in the person's settings for every CAD view (`@cad/ui/whats-new`).
   const whatsNew = useWhatsNew(client.whatsNew);
+  // cad's own update, as the update button (`@cad/ui/update`): the blue icon, outermost in the navbar, while this
+  // install is behind, from what the server said as the page started (`main.tsx`). A click updates; meanwhile, and
+  // through an automatic update the page finds underway, the page asks where it is, says nothing of the server's
+  // going while the release installs, and reloads into the server that comes back on the new release, once nothing
+  // on it is unsaved. The tab notes the release it followed the update from (`followedUpdate`), so the page loaded
+  // after the restart says it is updated, or, the update failed and the release before started again, why. A
+  // failure says why until it is put away, from the server's record, through a reload too.
+  const [followed] = useState(() => followedUpdate());
+  useEffect(() => { forgetFollowedUpdate(); }, []);
+  const reloading = useRef(false);
+  const reload = useCallback(() => {
+    if (reloading.current) return;
+    reloading.current = true;
+    reloadWhenClean(() => window.location.reload());
+  }, []);
+  const updateCalls = useMemo<UpdateCalls>(() => ({ read: () => client.serverInfo({ fresh: true }),
+    start: () => client.startUpdate(), dismiss: at => client.dismissUpdate(at) }), [client]);
+  const updater = useUpdate(updateCalls, server, { instance: server.instance, followed,
+    onRestarted: () => { noteFollowedUpdate(String(server.release || '')); reload(); } });
+  // The server gone for the install, or back and restarting: the page that reloads after it follows it still.
+  const away = updater.phase.phase === 'restarting' || (updater.phase.phase === 'working' && updater.phase.done >= 2);
+  const updating = updater.phase.phase !== 'idle';
+  useEffect(() => {
+    if (away) noteFollowedUpdate(String(server.release || ''));
+    else if (!updating) forgetFollowedUpdate();
+  }, [away, updating, server.release]);
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
   useEffect(() => {
@@ -177,12 +205,12 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     environment: { colorScheme: appearance.colorScheme, locale, platform: keyboardPlatform() },
   }), [downloads, client, source, fileActions, promptContext, promptFiles, links, appearance.colorScheme, locale]);
   // The engine gone under the page: said over it, which stays as it was for the engine's return.
-  const engineGone = useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineGone, () => false) || foreign;
+  // An update's restart is the button's to say: the server going for it is no notice of its own.
+  const engineGone = (useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineGone, () => false) && !updating) || foreign;
   const readRefused = useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineRefused, () => false);
   // Asked again, at the same address with the same token, until an engine answers: a new one reloads the page.
   // An engine that refuses the token runs: the page's link was replaced, which the last ask says once it has asked.
-  const askedRefused = useEngineReconnect(engineGone, { instance: server.instance,
-    reload: () => { reloadWhenClean(() => window.location.reload()); },
+  const askedRefused = useEngineReconnect(engineGone, { instance: server.instance, reload,
     ask: () => client.serverInfo({ fresh: true }).then(info => info, error => (isEngineRefused(error) ? { refused: true } : null)) });
   const refused = askedRefused ?? readRefused;
   return <div className="fixed inset-0 flex flex-col overflow-hidden">{engineGone ? <EngineStopped locale={locale} refused={refused} /> : null}
@@ -194,6 +222,8 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} name={name} onShow={next => { void show(next); }} onShown={shown}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings}
       colorScheme={colorScheme} language={language}
-      whatsNew={engineGone ? undefined : { entry: whatsNew.entry, onDismiss: whatsNew.dismiss }} />
+      update={updater.shown ? <UpdateButton state={updater.state} phase={updater.phase} failure={updater.failure}
+        onUpdate={updater.update} onDismiss={updater.dismiss} /> : null}
+      whatsNew={engineGone || updating ? undefined : { entry: whatsNew.entry, onDismiss: whatsNew.dismiss }} />
   </div></div>;
 }

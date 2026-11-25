@@ -15,7 +15,7 @@ around it are few, and each stands in the same place for every file.
 
 | Region | Holds | Never holds | Why |
 |---|---|---|---|
-| **Navbar**, across the top | Left: the panel toggle, the logo's app menu, Back and Forward (the CAD app), the file's name and its ⋯. Right: a put-away alert, Display, Preview, the host's actions | Tools, a switch for one file type, the camera | One bar, the same over every file and the home, so each control is where the person last found it |
+| **Navbar**, across the top | Left: the panel toggle, the logo's app menu, Back and Forward (the CAD app), the file's name and its ⋯. Right: a put-away alert, Display, Preview, the host's actions, the update button | Tools, a switch for one file type, the camera | One bar, the same over every file and the home, so each control is where the person last found it |
 | **Panel**, at the left | The file's structure (Model, Links, Parts, Nets, Layers), then what the file declares (Params, Joints, Animation), and one search over its trees | Tools, how the picture is drawn, what is selected | It is where the file is read and where its own settings are set. One panel keeps structure and settings together and leaves the model the rest of the view |
 | **Tool strip**, top centre of the view | The file's own tools, and under it the row of the tool in hand | View controls (Display, Preview, projection, zoom), a tool the file cannot use | Tools are used most, so they stay in reach, in the same place and order in every file |
 | **The corner**, top right of the view | Camera navigation only: the cube on a 3D view, one "100%" zoom menu on a flat view | Display settings, tools, +/− buttons, a Home button | The corner is where the picture is looked at from. A setting or a tool there would mix moving the camera with changing the picture |
@@ -71,7 +71,17 @@ chrome that floats over the picture. The home is the navbar over the library.
   name (no glyph; a chevron where it opens the name menu); its ⋯. Past the toggle they have no fill at rest, the
   accent fill on hover and while their menu is open, and no tooltip, since each says what it is.
 - **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning), Display, Preview,
-  then the host's actions (the CAD app's Full size).
+  the host's actions (the CAD app's Full size), then, outermost, the update button.
+- **The update button** (`@cad/ui/update`), over every file and over the home, as 0.11.1 had it: a 24px blue icon
+  (a download arrow) and nothing else, shown while a global install of cad is behind a newer release of its own major,
+  automatic updates on or off; none where cad cannot update itself. Its tooltip says "Update". A click updates: the
+  icon becomes a ring that fills a stage at a time (asked, begun, installing while the server is away), each step
+  eased, then a spinner while the server restarts, and the page reloads into the new release once nothing on it is
+  unsaved. An automatic update underway shows the same. A failed update, automatic or not, says why under the button
+  in a card shaped as an alert's (the red icon, "Couldn't update to 0.12.3", the cause in plain words and what to do,
+  then "Or update in a terminal:" with `cad update` and its copy icon, then Try again), which a press elsewhere leaves
+  open: its X (or Escape) puts it away, for every page, as does another attempt. Why: automatic updates fail on some
+  computers, and this is where the person learns why and what to do; the button blocks nothing.
 - The first glyph stands 16px in, on the page's gutter: the panel toggle's icon, on the panel's 16px line; else the
   logo's drawn mark (the row's 8px, the tile's 6px and the artwork's 2px).
 - The panel toggle is a 28px tile with the sidebar glyph, the same neutral button open or shut (`aria-expanded` says

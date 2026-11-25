@@ -169,8 +169,13 @@ keeps the last upgrade's, so `cad update --major` passes a floor alone to replac
 **Decision.** cad and the plugin update separately. A global install of cad updates itself, inside
 its major version, on by default (`cad update auto off` stops it). `cad update` updates cad now,
 inside its major (`--major`: the newest of all), with or without a server running and with automatic
-updates off too, and touches nothing else. A cad that is not a global install, such as one installed
-with pip into a project's own Python, never updates itself.
+updates off too, and touches nothing else. The viewer and the CAD app show an update button while a
+global install is behind a newer release of its own major, automatic updates on or off: a click is
+the same request as `cad update` (never across a major), and an update that failed, automatic or
+not, says why there, in plain words, and what to do, with `cad update` to copy, until the person puts
+it away or another attempt begins. A person's own update (the button, `cad update`) spends none of the
+tries the automatic update has for a release. A cad that is not a global install, such as one installed
+with pip into a project's own Python, never updates itself, and shows no button.
 
 The plugin is `cad plugin install`'s, the one command that installs it: in every agent app it finds,
 the plugin installed or updated with that app's own command, then our older copies there removed, and
@@ -214,8 +219,13 @@ update holds while a run is going: the automatic update begins none, and a typed
 refused in one line.
 
 **Why.** People install and forget, and they should get our fixes without being asked. Nothing of
-ours asks a person to update: in blind tests, agents would not install without the person's say-so,
-and a prompt the person must act on is one most people ignore. A command does what it says: `cad
+ours asks a person to update in their way: in blind tests, agents would not install without the
+person's say-so, and a prompt the person must act on is one most people ignore. The one exception is
+the update button, which the maintainer chose to bring back as 0.11.1 had it: automatic updates fail
+on some computers (a file in use, a full disk, an installer's setting that hides the release), and a
+person there, left behind with nothing to see, needs a way to see why and to fix it. It stands where
+the person already looks, offers the update the automatic one would make, blocks nothing, and is the
+only thing of ours that asks. A command does what it says: `cad
 update` updates cad, `cad plugin install` installs the plugin, and only the install command, which the
 person runs to have text-to-cad, opts them in to the plugin following cad. The plugin's update is the
 code of the installed cad, the release that was tested, and nothing is fetched from our website to
@@ -225,6 +235,8 @@ would hold the lock for as long as its process lived, hence the hard stop. A run
 keeps no release, or the server would not try that app again until the next release.
 
 **What it costs.** The plugin's install is only as new as the cad that runs it (the first decision).
+The button is a standing blue icon on every page of a computer that is behind, which a person may
+ignore as they would any prompt; a failure it says stays on every page until it is put away.
 Released 0.11.12 and 0.11.13 still download the hosted install command and run it unattended, as their
 `cad plugin update` and after their own update, and so does the bridge:
 [SECURITY.md](../../SECURITY.md) says so, and nothing shipped later can change them. A typed `cad

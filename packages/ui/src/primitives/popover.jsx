@@ -17,7 +17,7 @@ const PopoverTrigger = React.forwardRef(/** @param {React.ComponentPropsWithoutR
 
 // Positions a popover against an element that is not its trigger — used by
 // coach marks, which point at a control the user still has to be able to click.
-const PopoverAnchor = React.forwardRef(function PopoverAnchor({
+const PopoverAnchor = React.forwardRef(/** @param {React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Anchor>} props */ function PopoverAnchor({
   ...props
 }, ref) {
   return <PopoverPrimitive.Anchor ref={ref} data-slot="popover-anchor" {...props} />

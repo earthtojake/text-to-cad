@@ -51,7 +51,8 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  * Right, only what a host or a file adds, in this order: the file's own actions (the viewer's
  * one: a dismissed alert's icon, which brings its card back); the view's own controls, Display (the plain cube) then,
  * where the view has it, Preview, which the view on screen portals into the row's view slot (`../navbarSlots.js`);
- * last, outermost, the host's own actions (`actions`: the CAD app's Full size, inline).
+ * the host's own actions (`actions`: the CAD app's Full size, inline); last, outermost, the host's update button
+ * while its install is behind or an update is underway or failed (`update`, the blue `UpdateButton` from `@cad/ui/update`).
  * The colour scheme is the app menu's.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
@@ -343,6 +344,7 @@ function PanelToggleButton({ toggle }) {
  *   The ⋯ after the name: what the host can do with the document on screen, and its own items (Export).
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
+ * @param {import("react").ReactNode} [props.update] The host's update button, last among the controls (outermost).
  * @param {{ left(element: HTMLElement | null): void, right(element: HTMLElement | null): void } | null} [props.homeSlots]
  *   Over the home: where its controls go (`../navbarSlots.js`), two slots on the grid's column.
  * @param {{ left?: { open: boolean, label: string, shortcut?: string, toggle(): void, hover?: object | null } | null } | null} [props.panels]
@@ -351,7 +353,7 @@ function PanelToggleButton({ toggle }) {
  *   (`../navbarSlots.js`'s `NavbarViewSlotContext`).
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, trailing = null, actions = null, panels = null, homeSlots = null, viewSlot = null, className }) {
+export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, trailing = null, actions = null, update = null, panels = null, homeSlots = null, viewSlot = null, className }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const onHome = goHome ? () => { usage.used("home"); goHome(); } : goHome;
@@ -393,6 +395,7 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
             in by the view on screen (`../navbarSlots.js`); before the host's actions. */}
         {file && viewSlot ? <div ref={viewSlot} className="flex shrink-0 items-center gap-0.5 empty:hidden" data-navbar-view="" /> : null}
         {actions}
+        {update}
       </div>
     </header>
   );

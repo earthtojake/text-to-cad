@@ -135,6 +135,14 @@ work is bounded as a run's is: one preview builds per document at a time, a newe
 request replaces the one waiting, and the server holds at most two per page and
 sixteen in all.
 
+**The route that updates cad.** The update button's `POST /api/v1/local/update` is behind the
+same Host check, guard header and credentials as every route that changes something. Its body is
+`{}` or `{"dismiss": <a number>}` (1 KiB at most): it names no release, index, path or command. It
+asks the server what `cad update` asks: the newest release of the installed cad's own major, from
+the package index its installer already uses, never older and never across a major; or it marks a
+failed attempt put away in the update's record. So whoever holds a credential can have cad update
+itself now, as it would by itself, and nothing more.
+
 **The CAD app in agent hosts.** The page's own tools (`cad_sync`,
 `cad_capture_reply` and `cad_http`, its requests of the viewer's routes) need a
 capability, one for each host connection. The server delivers it in tool-result metadata, which

@@ -211,14 +211,19 @@ _BROWSER_OPEN_ROUTE = "/api/v1/local/browser/open"
 
 
 def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
-    """A launch with what the page needs to start on it alone: this server's version and platform, and whether
-    this computer has a file chooser for the home's Open."""
+    """A launch with what the page needs to start on it alone: this server's version and platform, whether
+    this computer has a file chooser for the home's Open, and what the update button shows
+    (``auto_update.button``, from the feed as last read: a launch never waits on the network)."""
     from cad_server import __version__
+    from cad_server._internal import auto_update
     from cad_server._internal.picker import available
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
     launch["pick"] = available()
+    update = auto_update.button()
+    if update is not None:  # none where cad cannot update itself: no button
+        launch["cadUpdate"] = update
     return launch
 
 

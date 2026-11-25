@@ -45,8 +45,9 @@ feed names none of this major, its ``latest`` where that is of this major and ne
 higher major, the bounded upgrade all the same with no release named (whatever it gets of this major), so a feed
 without ``lines`` never strands a computer. No answer from the feed, no update; never a higher major, never an older
 release. The release it is for (``wanted``: the release named, or the feed's ``latest`` where none is) not tried
-``TRIES`` times already, nor in the last ``RETRY_SECONDS``: one that fails, or finds nothing newer, is tried once more
-at a check an hour later, never in a loop. It is asked first thing as the server starts (``at_start``, from the feed
+``TRIES`` times already by itself (``_automatic_tries``: a person's own update spends none), nor in the last
+``RETRY_SECONDS``: one that fails, or finds nothing newer, is tried once more at a check an hour later, never in a
+loop. It is asked first thing as the server starts (``at_start``, from the feed
 as last read), as the server tends itself (``tend``, the feed read again in the background once an hour), and by ``cad
 server start`` when the start failed (``after_failed_start``, the feed read when due): a release whose server cannot
 start still updates. These three are the automatic updates.
@@ -64,11 +65,13 @@ there. On Windows it renames each ``cad.exe`` of the tool aside before the insta
 because an installer cannot remove one that is running (a ``cad update`` that waits, a ``cad server start``); that works
 because cad takes its launcher off ``sys.path`` as it starts (``cad_server/__init__.py``). The helper runs no install
 command: the server of the newer cad does, by ``plugin_catch_up``'s rule, whatever brought cad there. The attempt is
-kept in the state folder (``RECORD``: ``release``, ``wanted``, ``from``, ``at``, ``tries``, ``installer``, ``asked`` -- a
-typed update --, ``major`` -- ``cad update --major`` --, then the helper's ``ended``, ``outcome``, ``detail``,
+kept in the state folder (``RECORD``: ``release``, ``wanted``, ``from``, ``at``, ``tries`` -- the release's attempts --,
+``auto_tries`` -- how many of them were automatic --, ``installer``, ``asked`` -- a person's own update: typed, or the
+viewer's update button --, ``major`` -- ``cad update --major`` --, then the helper's ``ended``, ``outcome``, ``detail``,
 ``restored``, ``started`` and, where it did not install what it was for, ``cause``: one word of a closed list,
 ``auto_update_helper.CAUSES``, said in plain words by ``SAID``; ``helper_start`` where the trigger could not start the
-helper), which ``cad doctor`` shows, with the helper's log of each command it ran (``LOG``, the attempt before's
+helper; ``dismissed`` once the person put its failure away in the viewer), which ``cad doctor`` and the viewer's update
+button (``button``) show, with the helper's log of each command it ran (``LOG``, the attempt before's
 ``LOG_BEFORE``; on the computer alone, never sent). A release that does not know ``cause`` reads the record as before.
 
 Left as they are, on purpose: a ``cad server start`` that arrives while the helper upgrades starts whatever cad is
@@ -94,15 +97,16 @@ counted by the next server of it that runs; one that installed a newer cad, by t
 attempt begins before such a server ran, by whatever begins that attempt (a server, or a typed ``cad update`` with no
 server running, in its own process). The helper counts nothing.
 
-**Asked for** (``cad update``, which the server it asks judges, ``asked``, and begins, ``begin``; with no server
-running, the command itself, whose helper then starts none): PyPI asked now (``updates.pypi``) for the newest release of
+**Asked for** (``cad update``, and the viewer's update button, which asks the server the same: the server judges it,
+``asked``, and begins it, ``begin``; with no server running, ``cad update`` itself, whose helper then starts none): PyPI asked now (``updates.pypi``) for the newest release of
 this cad's major that is not yanked, chosen as the feed's answer is (``choose``), and updated to by the same bounded
 upgrade; where a release of a higher major is out, the answer names it (``higher``), which the command says in one
 line (``MAJOR_LINE``). ``cad update --major`` (``major``): PyPI's newest release of all, by the installer's crossing
 command. The switch, ``TRIES`` and ``RETRY_SECONDS`` do not apply (a typed update always updates); where PyPI cannot be
 reached, the upgrade runs all the same, and says what it got; the update begun as soon as nothing is in flight, not
-after the idle minute, or joined where one is underway. Counted in the record as any attempt is, so the automatic tries
-stay bounded. It never runs the install command itself, and says nothing of it; while a run of ``cad plugin install``
+after the idle minute, or joined where one is underway. Counted in the record as an attempt (``tries``), carrying the
+automatic tries on without adding to them (``auto_tries``): a person's request never spends what the automatic update
+has left, and the automatic tries stay bounded. It never runs the install command itself, and says nothing of it; while a run of ``cad plugin install``
 is going it is refused in one line (``INSTALLING``).
 
 Imports the standard library alone; what it asks of cad it imports as it asks: ``cad.engine.places`` (the folders),
@@ -618,13 +622,25 @@ def _tries(wanted: str) -> int:
     return tries if type(tries) is int else 0
 
 
+def _automatic_tries(wanted: str) -> int:
+    """How many of ``wanted``'s tries were automatic, the ones ``TRIES`` bounds: the last attempt's ``auto_tries``,
+    where it was for ``wanted`` (a person's own request, ``asked``, carries the count on without adding to it); a
+    record kept before ``auto_tries``, its ``tries``, as it was read then. Anything but an integer counts as 0."""
+    found = last()
+    if found is None or _wanted(found) != wanted:
+        return 0
+    tries = found.get("auto_tries", found.get("tries", 1))
+    return tries if type(tries) is int else 0
+
+
 def _tried(wanted: str, now: float) -> bool:
-    """Whether ``wanted`` is not to be tried now: ``TRIES`` times already, or begun less than ``RETRY_SECONDS`` ago,
-    underway or ended (a clock set back counts as long ago): the server a failed update starts never tries again."""
+    """Whether ``wanted`` is not to be tried now: ``TRIES`` times already by itself (``_automatic_tries``), or begun
+    less than ``RETRY_SECONDS`` ago, underway or ended (a clock set back counts as long ago): the server a failed
+    update starts never tries again."""
     found = last()
     if found is None or _wanted(found) != wanted:
         return False
-    return 0 <= now - float(found["at"]) < RETRY_SECONDS or _tries(wanted) >= TRIES
+    return 0 <= now - float(found["at"]) < RETRY_SECONDS or _automatic_tries(wanted) >= TRIES
 
 
 # --- the check and its trigger ----------------------------------------------------------------------------------------
@@ -687,7 +703,7 @@ def helper_command(target: str | None, *, now: float, version: str, prefix: str 
                    base: str | None = None, record: str = RECORD, tries: int = 1, asked: bool = False,
                    windows: bool = os.name == "nt", install: Global | None = None, start: bool = True,
                    major: bool = False, wanted: str | None = None, log: str | None = None,
-                   floor: str | None = None) -> list[str]:
+                   floor: str | None = None, auto_tries: int | None = None) -> list[str]:
     """The helper's command line: the Python this environment was made from (``base``: ``sys._base_executable``,
     never this environment's), isolated, running the helper's copy beside ``record`` (``helper_script``, which
     ``write_helper`` writes before it starts), and its one argument: the commands of
@@ -699,7 +715,8 @@ def helper_command(target: str | None, *, now: float, version: str, prefix: str 
     (``bound``), and only a release of this major accepted (``auto_update_helper``); ``start``, whether it starts the
     server after the update; ``log``, the file the helper writes each command it runs to (``LOG``; none, no log);
     ``floor``, the oldest uv cad asks for (``uv_floor``), by which the helper tells a uv too old. The installer's name,
-    ``wanted``, ``asked`` and ``major`` the helper keeps in the attempt's record."""
+    ``wanted``, ``asked``, ``major`` and ``auto_tries`` (``_automatic_tries``) the helper keeps in the attempt's
+    record."""
     prefix = str(install.prefix) if install is not None else prefix or sys.prefix
     installer, program = (install.installer, install.program or [uv]) if install is not None else (UV, [uv])
     told = {"cad": str(tool_command(Path(prefix), windows)), "target": target, "prefix": prefix, "record": record,
@@ -707,7 +724,8 @@ def helper_command(target: str | None, *, now: float, version: str, prefix: str 
             "upgrade": installer.cross(program, version) if major else installer.upgrade(program, version),
             "put_back": installer.put_back(program, version), "launchers": installer.launchers(program),
             "installer": installer.name, "wanted": wanted or target or LATEST, "asked": asked, "major": major,
-            "start": start, **({"log": log} if log else {}), **({"uv_floor": floor} if floor else {})}
+            "start": start, **({"log": log} if log else {}), **({"uv_floor": floor} if floor else {}),
+            **({"auto_tries": auto_tries} if auto_tries is not None else {})}
     python = base or getattr(sys, "_base_executable", None) or sys.executable
     return [python, "-I", "-S", str(helper_script(record)), json.dumps(told)]
 
@@ -741,6 +759,7 @@ def _claim(*, release: str, wanted: str, version: str, installer: str, automatic
         if before is not None and not before.get("reported"):
             counted = event(before, wait=False)
         kept = {"release": release, "wanted": wanted, "from": version, "at": now, "tries": _tries(wanted) + 1,
+                "auto_tries": _automatic_tries(wanted) + (1 if automatic else 0),
                 "outcome": "underway", "installer": installer, "asked": not automatic, "major": major}
         _keep(folder / RECORD, kept)
     if isinstance(counted, dict):
@@ -776,7 +795,7 @@ def _start(target: str | None, *, automatic: bool, start: bool, major: bool,
     try:
         command = helper_command(target, now=kept["at"], version=version, record=str(record), tries=kept["tries"],
                                  asked=not automatic, install=found, start=start, major=major, wanted=kept["wanted"],
-                                 log=str(record.with_name(LOG)), floor=uv_floor())
+                                 log=str(record.with_name(LOG)), floor=uv_floor(), auto_tries=kept["auto_tries"])
         write_helper(record)
         env = {**{name: value for name, value in os.environ.items() if name not in _UNSET},
                **found.installer.environ(found.prefix)}
@@ -964,7 +983,7 @@ def spent(known: Any = None, version: str | None = None) -> str | None:
     from cad_server import updates
 
     chosen = choose(updates.feed(fetch=False) if known is None else known, version or _version())
-    return chosen.wanted if chosen is not None and _tries(chosen.wanted) >= TRIES else None
+    return chosen.wanted if chosen is not None and _automatic_tries(chosen.wanted) >= TRIES else None
 
 
 def begin(target: str | None, *, start: bool = True, major: bool = False) -> dict[str, Any] | None:
@@ -982,6 +1001,71 @@ def begin(target: str | None, *, start: bool = True, major: bool = False) -> dic
         except Exception:  # noqa: BLE001 - an update that cannot begin leaves cad as it is
             return None
         return found if said in (BEGUN, UNDERWAY) else None
+
+
+# --- the viewer's update button --------------------------------------------------------------------------------------
+
+
+def button(*, waiting: bool = False, now: float | None = None) -> dict[str, Any] | None:
+    """What the viewer's update button shows (``GET /api/v1/server``'s ``cadUpdate``), from the feed as last read and the
+    attempt's record, never asked of the network here: None where cad cannot update itself -- no global install, the
+    check turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI), no release that runs --,
+    whatever the switch says (a person can always click); else ``{"version", "latest", "state"}``: ``latest`` the
+    newest release of this cad's major the feed names, where it is newer (``choose``; never a higher major's, which
+    only ``cad update --major`` installs), else None; ``state`` ``waiting`` (``waiting``: a person's update waits for
+    the work in flight to end), ``working`` (an attempt of this release underway, automatic or asked: ``asked`` says
+    which), ``failed`` (the last attempt of this release did not install what it was for, this cad is still behind,
+    and the person has not put it away: ``dismiss``), with ``at`` the attempt's start, ``cause`` its word, ``said``
+    it in plain words (``in_words``) and the ``installer`` it ran, else ``idle``. An attempt underway from another release is the one that
+    installed this one (its helper writes its end once this server has started): ``idle``. Never raises."""
+    try:
+        version = _version()
+        if global_install() is None or release(version) is None:
+            return None
+        from cad_server import updates
+
+        if not updates.checking():
+            return None
+        chosen = choose(updates.feed(fetch=False), version)
+        latest = chosen.target if chosen is not None else None
+        out: dict[str, Any] = {"version": version, "latest": latest, "state": "idle"}
+        now = time.time() if now is None else now
+        found = last()
+        mine = found is not None and found.get("from") == version
+        word = cause(found, now) if mine else None
+        attempt = {"at": found["at"], "asked": found.get("asked") is True} if mine else {}
+        if mine and word is None and underway(now) is not None:
+            return {**out, **attempt, "state": "working"}
+        if waiting:
+            return {**out, "state": "waiting"}
+        if word is not None and latest is not None and not found.get("dismissed"):
+            return {**out, **attempt, "state": "failed", "cause": word, "said": in_words(word, found.get("installer")),
+                    **({"installer": found["installer"]} if found.get("installer") in {each.name for each in INSTALLERS}
+                       else {})}
+        return out
+    except Exception:  # noqa: BLE001 - a button that cannot say shows nothing
+        return None
+
+
+def dismiss(at: float) -> bool:
+    """The failure of the attempt begun at ``at`` put away by the person (the button's failure closed): marked
+    ``dismissed`` in the record, under the state folder's lock, where the record is still that attempt's and it has
+    ended; the button shows it no more, here or in any page, until another attempt takes the record's place. Whether
+    it was. Never raises."""
+    try:
+        from cad_server._internal.file_lock import state
+
+        folder = _data()
+        if not (folder / RECORD).is_file():
+            return False
+        with state(folder):
+            found = last()
+            if found is None or found.get("at") != at or (found.get("outcome") == "underway" and cause(found) is None):
+                return False
+            _keep(folder / RECORD, {**found, "dismissed": True})
+        return True
+    except Exception:  # noqa: BLE001 - a failure not put away is shown again
+        return False
 
 
 # --- an attempt counted -----------------------------------------------------------------------------------------------

@@ -228,7 +228,7 @@ class ServerInfo(HttpLayerTestCase):
         # The release the engine runs: a page that reconnects to another reloads into it.
         self.assertEqual(info["release"], cad_server.__version__)
         self.assertEqual(list(info), ["app", "release", "identityToken", "platform", "user", "home",
-                                      "start", "pick", "port", "pid", "instance", "kinds"])
+                                      "start", "pick", "port", "pid", "instance", "cadUpdate", "kinds"])
         self.assertEqual(headers["cache-control"], "no-store")
         # This start of the engine: a page that sees another one reloads. One per process, so it is
         # the same at every ask.

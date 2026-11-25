@@ -147,7 +147,9 @@ The tokens are shadcn's neutral set (`styles/tokens.css`), greys with no hue, as
 - **The brand marks focus and state, never an action**: focus rings and a focused field's edge, a text selection, a
   selected row, the tool in hand's glyph, a search's match, the changed dot, the Home's chosen layout and its focused
   card, and the logo. It is never a button's fill or a link in the chrome, and the panel toggle stays neutral. Why:
-  blue says "on" only while nothing else is blue. `--brand-icon` is at least 3:1 on the pressed fill and on white;
+  blue says "on" only while nothing else is blue. The one blue fill is the update button's (`@cad/ui/update`: Tailwind's
+  `blue-500`, its ring the same blue), as it was in 0.11.1: a newer release is the one thing the chrome asks a
+  person to act on, so it is the one thing that stands out ([viewer layout](viewer-ux.md#the-navbar)). `--brand-icon` is at least 3:1 on the pressed fill and on white;
   `--brand-text` is darker, for text, as that blue reads dark and odd on a glyph.
 - **A link in the chrome** (the app menu's version, "Made by") is muted `text-tiny` that turns the foreground and
   underlined under the pointer or keyboard focus. A slider's colours are its own `--slider-*` tokens.

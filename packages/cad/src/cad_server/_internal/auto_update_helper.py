@@ -5,7 +5,8 @@ asked for, or null: whatever the upgrade gets), ``prefix`` (the environment), ``
 ``from``, ``at`` and ``tries``; the installer's commands, ``upgrade`` (cad upgraded to the newest release of the major
 of ``from``, never below it; with ``major``, to the newest release of all), ``put_back`` (the release that ran before
 installed again) and ``launchers`` (prints the folder its launchers are in); ``installer`` (its name), ``wanted`` (the
-release the attempt is for), ``asked`` (a typed update) and ``major`` (``cad update --major``), which it keeps in the
+release the attempt is for), ``asked`` (a person's own request: a typed update, the viewer's update button),
+``major`` (``cad update --major``) and ``auto_tries`` (how many of the release's tries were automatic), which it keeps in the
 record for the server to count and judge; ``start``, whether it starts the server at the end (false where ``cad
 update`` found none running: it leaves none running); ``log``, the file it writes each command to (none: no log); and
 ``uv_floor``, the oldest uv cad asks for.
@@ -214,7 +215,7 @@ def update(told, run=run, sleep=time.sleep, windows=WINDOWS, environ=None):
              "detail": detail, **({} if restored is None else {"restored": restored}),
              **({} if cause is None else {"cause": cause}),
              **({"started": said if code == 0 else f"not started: {said}"} if start else {"start": False}),
-             **{name: told[name] for name in ("installer", "wanted", "asked", "major") if name in told}}
+             **{name: told[name] for name in ("installer", "wanted", "asked", "major", "auto_tries") if name in told}}
     log.end(found)
     return found
 

@@ -66,8 +66,8 @@ to `host.presentation`, in one change.
   script was moved or deleted; Browser needs none), then the apps the server finds on this computer
   for the document's files, through the tunnel as Reveal goes (the source's, each export's as "App
   (file name)", then Default app) — no Export, as this host has no downloads;
-  then, at the right, a put-away alert's icon, the view's Display and Preview and, outermost, Full size where the
-  host can show a view full size; Back and Forward are dropped on a phone-width view), the tool strip (no view
+  then, at the right, a put-away alert's icon, the view's Display and Preview, Full size where the
+  host can show a view full size and, outermost, the update button while cad is behind; Back and Forward are dropped on a phone-width view), the tool strip (no view
   controls on it), the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
   newer card retires the older ones. The page keeps this presentation, tested and shipped in the same
@@ -261,7 +261,8 @@ the launch's `_meta` first (`host/capability.ts`).
   and a renderer's link to another file (a robot's mesh) is plain text. It is drawn
   under the same 40px navbar as every other view, so the panel's toggle is there: first the
   panel's toggle, then its logo and app menu, the file's name (no name menu) and its ⋯ (no Open in › Browser; File
-  info, the file's facts), then at the right the view's Display and Preview, then Full size where the host offers it.
+  info, the file's facts), then at the right the view's Display and Preview, then Full size where the host offers it,
+  then the update button.
   Preview's bar hides the
   navbar as it does everywhere. Its launch carries no page (`browser`). The agent reads it
   (`cad_view` lists it) but shows nothing in it: `cad_show` refuses its view, and
@@ -471,6 +472,20 @@ the launch's `_meta` first (`host/capability.ts`).
   cannot wait out it says: a card the chat never drew, a model that did not finish
   loading, a view out of sight that did not answer.
 
+## The update button
+
+The card shows the update button the browser viewer shows (`@cad/ui/update`, [the web README](../web/README.md)),
+outermost in its navbar, while a global install of cad is behind a newer release of its own major: its launch carries
+what the server last knew (`cadUpdate`, `auto_update.button`, left out where cad cannot update itself), so it draws with
+the card, and the card reads `GET /api/v1/server` again, through `cad_http`, when the person comes back to it. A click
+is `POST /api/v1/local/update` through `cad_http`, the same request as `cad update`. While the update runs the card
+asks where it is; the server stops for the install, and the four failed syncs that would say the plugin stopped say
+nothing then (the shim opens a new session with the server that comes back). Once a server of another release
+answers, the card loads that release's app in its own place (`host/release.ts`, the shell's `reload`), which says it
+is updated, once, and suggests restarting the host app, which reads a release's skills only as a session starts; a
+card whose shell is from before `reload` says CAD was updated instead. A failed update says why under the button,
+from the server's record, until it is put away.
+
 ## Protocol migration
 
 `cad_http` is app-only, as the page's other tools are: agents no longer read or turn
@@ -498,7 +513,8 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` naming the snapshot path, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
-| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch and the opening result); where neither way reaches the engine, the no-channel notice (`unconnected`) |
+| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch and the opening result, and `reload`, the engine's app loaded again in place after an update); where neither way reaches the engine, the no-channel notice (`unconnected`) |
+| `release.ts` | an update's end in the card: the next release's app loaded in place of this one (`loadNextRelease`, through the shell's `reload`), and the note the app loaded reads to say it is updated (`followedUpdate`) |
 | `capability.ts` | the page's capability: the launch's result `_meta`, else the launching tool's (`hostContext.toolInfo.tool`, Cursor) |
 | `unreachable.js` | the can't-connect notice's words, which the app's notice (`Notice.tsx`) and the shell both say in one look (`src/notice.css`): the line by whether there is a page and a model, or a capability from before CAD restarted (`refusalOf`), the button, the card's measured height, and the launch's page |
 | `clipboard.ts` | the frame's clipboard, every copy's: the asynchronous clipboard where the host grants it (the resource asks for `clipboardWrite`), else the page's own copy command, still inside the press, for text |

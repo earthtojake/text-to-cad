@@ -1096,6 +1096,8 @@ class Daemon:
                 self.server.parameters = self.models.live
                 self.server.set_parameters = self.setting.set
                 self.server.preview_parameters = self.previewing.preview
+                # The viewer's update button: ``cad update``, asked from the page (``update``).
+                self.server.update = lambda begin=True: self.update({"op": "update", **({} if begin else {"begin": False})})
                 application = getattr(self.server.http, "app", None)
                 if application is not None:
                     application.worked = self.stamp  # an agent's tool call is a command too (``mcp.http.Sessions``)

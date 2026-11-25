@@ -217,10 +217,24 @@ can stop an update: where either fails, the update runs and is recorded as witho
 Windows uv cannot remove a `cad.exe` that is running, but it can rename one, so the helper renames each
 `cad.exe` of the tool aside before uv runs and puts a copy back. For that to work, cad takes its launcher
 off `sys.path` as it starts (`__init__.py`), so it never holds the file open. One release is tried at most
-twice, never twice within an hour. `cad server start` asks too when the start fails, so a release whose
+twice by itself, never twice within an hour; a person's own update (`cad update`, the viewer's update button:
+`asked` in the record) is counted as an attempt (`tries`) and spends none of those two (`auto_tries`). `cad server start` asks too when the start fails, so a release whose
 server cannot start still updates. Forward only: nothing moves to an older release, and a start joins a
 running server of a newer release rather than replacing it. With no answer from the feed, nothing happens.
 `CAD_UPDATE_CHECK=0` in a process's environment turns the check off for it.
+
+**The update button** (`auto_update.button`, `GET /api/v1/server`'s `cadUpdate`; `POST /api/v1/local/update`). Where
+cad can update itself -- a global install, the check not turned off for the server's process --, whatever the
+switch says, the viewer and the CAD app show a button while the feed as last read names a newer release of this
+cad's major (never a higher major's, which only `cad update --major` installs), with where an attempt of this
+release is (underway, automatic or asked, or waiting for the work in flight) and, where the last one did not
+install what it was for and this cad is still behind, its `cause`, until the person puts it away (`dismissed` in
+the record, `auto_update.dismiss`) or another attempt takes the record's place. A click asks the server what `cad
+update` asks it (`Daemon.update`, through the engine's `Server.update`): PyPI asked now, the attempt underway
+joined, else one begun once nothing is in flight, bounded to the major. The route is refused where cad cannot update
+itself, saying why (`blocked`'s cause where it is that), and sits behind the credentials and the guard header of
+every route that changes something. An attempt underway from another release is the one that installed this cad
+(its helper writes its end once this server has started): the button shows nothing of it.
 
 **The plugin catches up** (`_internal/plugin_catch_up.py`). Where `plugin.auto_update` is on and this cad is
 newer than the release the plugin is up to date for, the server runs this cad's own `cad plugin

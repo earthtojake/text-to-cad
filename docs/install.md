@@ -384,6 +384,8 @@ cad update
 ```
 
 That updates cad alone; the install command, run again, does the same and then updates the plugin.
+The viewer and the CAD app show a blue update button while a newer release of your major is out;
+clicking it does what `cad update` does. Where an update fails, the button says why and what to do.
 A new major version never installs itself, because it may need changes on your side: `cad update` and `cad doctor` say when one is out, and this installs it:
 
 ```bash

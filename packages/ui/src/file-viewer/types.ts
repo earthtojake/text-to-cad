@@ -196,6 +196,11 @@ export interface FileViewerProps {
   /** Additive host actions at the navbar right (the CAD app's Full size), and persistent feedback below it. */
   navbarActions?: ReactNode;
   /**
+   * The host's update button (`@cad/ui/update`'s `UpdateButton`), while its install is behind or an update is
+   * underway or failed: the navbar's last control, outermost, over every file and over the home.
+   */
+  update?: ReactNode;
+  /**
    * The host's own items at the end of the file's ⋯ menu, after Copy path and Open in: menu items or
    * submenus (`DropdownMenuItem`, `DropdownMenuSub`), the viewer's Export. Over a document only.
    */

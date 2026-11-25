@@ -4,6 +4,7 @@ import { useAnalyticsConsent } from '@cad/ui/consent';
 import { useWhatsNew } from '@cad/ui/whats-new';
 import { translator, useI18n, useLanguage } from '@cad/ui/i18n';
 import { viewerLinks } from '@cad/ui/links';
+import { UpdateButton, useUpdate, type UpdateCalls } from '@cad/ui/update';
 import { Button } from '@cad/ui/primitives/button';
 import { TooltipHint } from '@cad/ui/primitives/tooltip';
 import { createTabStore, memoryTabRecord } from '@cad/ui/tab-store';
@@ -16,6 +17,7 @@ import { captureSettled, fitCapture } from './host/capture';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
+import { followedUpdate, forgetFollowedUpdate, loadNextRelease } from './host/release';
 import type { Launch, Server } from './host/server';
 import { createViewSync } from './host/sync';
 import { createTunnelClient, createTunnelFetch, TUNNEL_ORIGIN } from './host/tunnel';
@@ -288,6 +290,24 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // never in a card, whose few hundred pixels in a chat are no place for a dialog, nor while the
   // card says its server is gone.
   const whatsNew = useWhatsNew(presentation === 'tabs' ? client.whatsNew : NO_WHATS_NEW);
+  // cad's own update, as the update button (`@cad/ui/update`), the same as the browser viewer's: the blue icon,
+  // outermost in the navbar, while this install is behind, from what the launch carried (what the server last knew,
+  // so the button draws with the card), read again when the person comes back to the card. A click updates;
+  // meanwhile, and through an automatic update the card finds underway, the card asks where it is and says nothing
+  // of the server's going while the release installs (the plugin's shim opens a new session with the server that
+  // comes back); once a server of another release answers, the card loads that release's app in its own place (the
+  // shell a host keeps: `host/shell.ts`'s `reload`), which says it is updated, once, and suggests restarting the
+  // host app: it reads a release's skills only as a session starts. A card whose shell cannot load another app says
+  // CAD was updated, as a card from another build does. A failure says why until it is put away, from the server's
+  // record.
+  const [followed] = useState(followedUpdate);
+  useEffect(() => { forgetFollowedUpdate(); }, []);
+  const [stale, setStale] = useState(false);
+  const updateCalls = useMemo<UpdateCalls>(() => ({ read: () => client.serverInfo({ fresh: true }),
+    start: () => client.startUpdate(), dismiss: at => client.dismissUpdate(at) }), [client]);
+  const updater = useUpdate(updateCalls, { release: version, cadUpdate: initial.cadUpdate ?? null }, { followed, restartForSkills: true,
+    onRestarted: () => { if (!loadNextRelease(version)) setStale(true); } });
+  const updating = updater.phase.phase !== 'idle';
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
   // host (a frame cannot open one itself).
   const links = useMemo(() => viewerLinks({ version, build: BUILD, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
@@ -308,10 +328,13 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}><Superseded still={still} label={translator(locale)('cad.superseded')} /></Frame>;
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}
-    overlay={lost ? <Banner message={typeof lost === 'string' ? lost : lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
+    overlay={stale ? <Banner message={translator(locale)('cad.updated.message')} />
+      : lost && !updating ? <Banner message={typeof lost === 'string' ? lost : lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
     <ModelView launch={launch} sequence={showing.sequence} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings}
-      whatsNew={presentation === 'tabs' && !lost ? { entry: whatsNew.entry, onDismiss: whatsNew.dismiss } : undefined}
+      whatsNew={presentation === 'tabs' && !lost && !updating ? { entry: whatsNew.entry, onDismiss: whatsNew.dismiss } : undefined}
+      update={updater.shown ? <UpdateButton state={updater.state} phase={updater.phase} failure={updater.failure}
+        onUpdate={updater.update} onDismiss={updater.dismiss} /> : null}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
       openInBrowser={openInBrowser} engineOrigin={engineOrigin ?? undefined}
       colorScheme={colorScheme} theme={theme} locale={locale} language={language} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat} />

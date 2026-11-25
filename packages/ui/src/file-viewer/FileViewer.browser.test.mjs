@@ -91,6 +91,32 @@ test("the renderer is not re-rendered by the frame's own chrome: a navbar action
 
 // A library card's picture is drawn by a viewer of its own, out of sight at 480 × 360 (`OffscreenPicture.tsx`). That viewer
 // is under the phone breakpoint, and the page's type once followed it: Home's text grew a step while its cards got pictures.
+test("the update button is the navbar's outermost control, and a failure says why under it, inside the page, until its X", async () => {
+  await reset();
+  await waitPayload("root-a notes");
+  await page.evaluate(() => window.harness.update("failed"));
+  const navbar = pane().locator("[data-viewer-navbar]");
+  const button = navbar.locator("[data-update]");
+  await button.waitFor();
+  const controls = await navbar.evaluate((row) => [...row.querySelectorAll("button")].map((node) => node.getBoundingClientRect().right));
+  const [row, box] = await Promise.all([navbar.boundingBox(), button.boundingBox()]);
+  assert.equal(Math.max(...controls), box.x + box.width, "the last of the row's controls, outermost");
+  assert.ok(row.x + row.width - (box.x + box.width) <= 16, `at the row's right end: ${JSON.stringify([row, box])}`);
+  const card = page.locator("[data-update-failure]");
+  await card.waitFor();
+  await card.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)));
+  const at = await card.boundingBox();
+  assert.ok(at.y >= box.y + box.height && at.x + at.width <= page.viewportSize().width, `under the button, inside the page: ${JSON.stringify([box, at])}`);
+  assert.match(await card.textContent(), /cad is in use by another program: close the apps using cad, then try again\.Or update in a terminal:cad update/);
+  await payload().click();
+  await settle();
+  assert.ok(await card.isVisible(), "a press elsewhere leaves it");
+  await card.getByRole("button", { name: "Dismiss" }).click();
+  await card.waitFor({ state: "detached" });
+  assert.deepEqual(await page.evaluate(() => window.harness.events.filter((event) => event === "dismiss" || event === "update")), ["dismiss"]);
+  await page.evaluate(() => window.harness.update("none"));
+});
+
 test("a viewer drawn out of sight for a picture never changes the page: its layout pinned, no data-viewer-layout, the page's type its own", async () => {
   await reset();
   await page.setViewportSize({ width: 1280, height: 800 });
