@@ -61,7 +61,8 @@ export interface CadRecent {
   id: string;
   /** Where its kind's reads are (`/api/v1/documents/<kind>/<id>`). */
   api?: string;
-  /** The document's kind (`model`, `step`, `xbf`, `stl`, ...). */
+  /** The document's kind (`model` -- built from code, or its `.xbf` opened from disk --, `step`, `stl`, ...); a
+   * released server's `xbf` is a model's file (`documentKind`, `lib/fileFormats.js`). */
   documentKind?: string;
   path: string; name: string; folder: string;
   /** Identity namespace: the script folder in 0.8; a file’s folder for an opened file. */

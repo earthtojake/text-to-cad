@@ -1,6 +1,6 @@
 """The stress study every B-rep document type shares: ``cad.<type>.solve(source, study=..., out=...)``.
 
-``model``, ``xbf`` and ``step`` each answer ``solve`` with the same function, made for the type here (``solve_for``):
+``model`` and ``step`` each answer ``solve`` with the same function, made for the type here (``solve_for``):
 its signature takes a source of the type and plain values alone, so it is the type's (the signature rule), and what
 it runs is the integrations' -- the kernel reads the part, netgen meshes it (``cad.netgen``), CalculiX solves it
 (``cad.calculix``) -- imported when it runs. A model, which the engine holds with no file, is written to an ``.xbf`` in
@@ -95,7 +95,7 @@ def solve_for(document_type: str) -> Any:
         options(study=study, out=out, occurrence=occurrence, deck=deck)
         from cad._internal.document_type import refuse_other
 
-        of = refuse_other(document_type, source)  # the file a model is saved as, given to cad.model, is that file's
+        of = refuse_other(document_type, source)
         try:
             from cad._internal.fea import run
             from cad._internal.fea.mesh import require_fea_stack
@@ -128,7 +128,9 @@ class _readable:
         self.folder: tempfile.TemporaryDirectory | None = None
 
     def __enter__(self) -> tuple[Path, Path | None]:
-        if self.document_type != "model":
+        from cad._internal.document_type import is_file
+
+        if is_file(self.source):
             return Path(self.source), None
         from cad.engine.api import export
 

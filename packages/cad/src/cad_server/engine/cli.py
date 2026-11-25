@@ -50,7 +50,7 @@ def _source_help(document_type: str | None, generic: str) -> str:
     from cad.registry import DOCUMENT_TYPES
 
     entry = DOCUMENT_TYPES[document_type]
-    if not entry.has_file:
+    if entry.held:
         return ("a model's document id, which cad run SCRIPT.py prints: the document the engine holds of it, "
                 "never built; or the .xbf file a model is saved as, read as the file it is, never as the model "
                 "the engine holds")
@@ -260,12 +260,12 @@ def _drawn_elsewhere(error: BaseException, args: argparse.Namespace, prog: str) 
     if integration_env.carries("build123d"):
         return None
     from cad.engine.ids import is_id
-    from cad.registry import spelling, type_of
+    from cad.registry import type_of
 
     document = str(args.document) if is_id(str(args.document)) else str(Path(args.document).expanduser().resolve())
     entry = None if is_id(document) else type_of(document)
-    # The type whose function draws it, as the library spells it: a model's, for its id and for its .xbf.
-    document_type = "model" if is_id(document) else spelling(entry.id) if entry is not None else None
+    # The type whose function draws it: a model's, for its id and for its .xbf.
+    document_type = "model" if is_id(document) else entry.id if entry is not None else None
     if document_type is None:
         return None
     options = {"display": args.display, "camera": args.camera, "grid": bool(args.grid), "preview": bool(args.preview),

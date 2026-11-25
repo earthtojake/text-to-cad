@@ -77,7 +77,7 @@ class RootExports(unittest.TestCase):
                 (lambda: cad.model.export("arm.step", "arm.glb"), "arm.step is a step, not a model: use cad.step"),
                 (lambda: cad.model.inspect("arm"), "cad.model takes a model's handle, its document id (cad run "
                                                    "SCRIPT.py prints it) or an .xbf file, not 'arm'"),
-                (lambda: cad.step.export("share/arm.xbf", "arm.glb"), "share/arm.xbf is a xbf, not a step: use cad.model"),
+                (lambda: cad.step.export("share/arm.xbf", "arm.glb"), "share/arm.xbf is a model, not a step: use cad.model"),
                 (lambda: cad.step.export(ident, "arm.glb"), f"{ident} is a model's document id, not a .step file: use "
                                                             "cad.model"),
                 (lambda: cad.stl.export("part.glb", "part.3mf"), "part.glb is a glb, not a stl: use cad.glb")):
@@ -88,8 +88,8 @@ class RootExports(unittest.TestCase):
 
     def test_cad_model_is_a_model_held_or_saved_and_its_operations_run_on_the_file_as_the_file_s(self):
         """``cad.model``'s operations take the ``.xbf`` a model is saved as, as ``cad model`` does: the source
-        says which of the two it is (``refuse_other``), and the operation is then that file's type's -- the
-        engine's verb given the path, a check asked of the engine as an xbf's."""
+        says which of the two it is, and the operation is the model's either way -- the engine's verb given the
+        path, a check asked of the engine as a model's, its source the file."""
         from unittest import mock
 
         from cad._internal.document_type import refuse_other
@@ -97,7 +97,7 @@ class RootExports(unittest.TestCase):
 
         ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
         self.assertEqual([refuse_other("model", source) for source in (ident, "share/arm.xbf", "ARM.XBF", None)],
-                         ["model", "xbf", "xbf", "model"])
+                         ["model", "model", "model", "model"])
         for name, rest in (("export", ("arm.glb",)), ("inspect", ()), ("snapshot", ("arm.png",))):
             with self.subTest(operation=name), mock.patch.object(api, name, return_value="done") as verb:
                 # ``_operation`` binds the verb when the attribute is first read: a fresh one here.
@@ -108,7 +108,8 @@ class RootExports(unittest.TestCase):
         with mock.patch.object(api, "check", return_value={"unmeasured": {"message": "gone", "code": "stopped"}}) as check:
             cad.model.interference("share/arm.xbf")
             cad.model.interference(ident)
-        self.assertEqual([call.args[1]["type"] for call in check.call_args_list], ["xbf", "model"])
+        self.assertEqual([(call.args[0], call.args[1]["type"]) for call in check.call_args_list],
+                         [("share/arm.xbf", "model"), (ident, "model")])
 
     def test_model_read_reads_the_file_a_model_is_saved_as_and_refuses_any_other_by_name(self):
         """``model.read`` is the engine's one reader of an ``.xbf`` (``cad.engine.read_xbf``), the kernel's
@@ -249,7 +250,8 @@ class RootExports(unittest.TestCase):
         built = model("XBF/arm.xbf")(step(out="arm.step", name="arm_named")(arm))
         self.assertEqual(sorted(output.kind for output in built.outputs), ["step", "xbf"])
         self.assertEqual("plate", step("plate.step")(plate).name)
-        self.assertEqual([path.name for _kind, path in step()(plate).targets()], ["plate.step"])
+        # A model always writes its .xbf: @step alone writes plate.xbf beside its STEP.
+        self.assertEqual([path.name for _kind, path in step()(plate).targets()], ["plate.xbf", "plate.step"])
         for call in (lambda: step("a.step", "b"), lambda: step(path="a.step")):
             with self.subTest(call=call), self.assertRaises(TypeError):
                 call()

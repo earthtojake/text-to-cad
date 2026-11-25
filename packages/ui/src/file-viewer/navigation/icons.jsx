@@ -134,9 +134,9 @@ export function fileIconFor(filePath) {
  *   line for a dense list (the explorer's).
  */
 export function FileIcon({ path, className, strokeWidth = 1.75 }) {
-  // An engine document (`.xbf`) is the engine's, never opened by its extension's renderer, but it
+  // A model's file (`.xbf`) is the engine's, never opened by its extension's renderer, but it
   // is a CAD file all the same: a solid in a file, as a STEP is.
-  const renderFormat = renderFormatFromPath(path) || (fileExtensionFromPath(path) === ".xbf" ? RENDER_FORMAT.XBF : "");
+  const renderFormat = renderFormatFromPath(path) || (fileExtensionFromPath(path) === ".xbf" ? RENDER_FORMAT.MODEL : "");
   if (renderFormat) {
     // A file the viewer renders: its own per-format glyph, from the one
     // table every surface that lists files already reads.

@@ -183,8 +183,10 @@ test("a file that is not a CAD model has no edges, explode or section, and shows
 });
 
 test("what each kind of file offers: an engine document every mode, any other 3D file Solid, and Parts where it has several parts", () => {
+  assert.equal(viewFeaturesForKind("model", { parts: 2 }), ALL_VIEW_FEATURES);
+  assert.equal(viewFeaturesForKind("model", { parts: 1 }), STEP_PART_VIEW_FEATURES, "a part file has no Parts and no Explode");
+  // `xbf`, the kind a model's file had, is the model's.
   assert.equal(viewFeaturesForKind("xbf", { parts: 2 }), ALL_VIEW_FEATURES);
-  assert.equal(viewFeaturesForKind("xbf", { parts: 1 }), STEP_PART_VIEW_FEATURES, "a part file has no Parts and no Explode");
   assert.deepEqual(STEP_PART_VIEW_FEATURES, { modes: ["solid", "shaded", "xray", "hidden-line", "wireframe"], settings: ["edges", "clip"] });
   assert.deepEqual(viewFeaturesForKind("stl", { parts: 1 }), { modes: ["solid"], settings: ["clip"] });
   assert.deepEqual(viewFeaturesForKind("3mf", { parts: 3 }), { modes: ["solid", "parts"], settings: ["clip"] });

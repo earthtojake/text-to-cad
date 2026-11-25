@@ -86,6 +86,8 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     if (mayTakeKeyboard(element.ownerDocument, element.ownerDocument.defaultView as Window)) element.focus({ preventScroll: true });
   }, [ready, key, appearance.compact]);
   const rendererStateKey = loaded.status === "ready" ? JSON.stringify([loaded.file.path, loaded.renderer.id]) : "";
+  // A view saved under an id the renderer had before (`aliases`: the model renderer's `xbf`) is its own.
+  const aliasStateKeys = loaded.status === "ready" ? (loaded.renderer.aliases ?? []).map(id => JSON.stringify([loaded.file.path, id])) : [];
 
   // The renderer is re-rendered only when what it is handed changes: not by a navbar action it
   // published, a resize within one layout, or anything else this frame redraws for itself. Its
@@ -93,7 +95,10 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // is its own and does not come back to it, so a save never re-renders the view that made it.
   const openedState = useRef<{ key: unknown; value: JsonValue | undefined }>({ key: undefined, value: undefined });
   const openedKey = `${String(key)}\u0000${rendererStateKey}`;
-  if (openedState.current.key !== openedKey) openedState.current = { key: openedKey, value: state.renderers?.[rendererStateKey] };
+  if (openedState.current.key !== openedKey) {
+    const saved = state.renderers?.[rendererStateKey] ?? aliasStateKeys.map(found => state.renderers?.[found]).find(value => value !== undefined);
+    openedState.current = { key: openedKey, value: saved };
+  }
   const rendererState = openedState.current.value;
   // The view's panel, the file's (`filePanel.js`): held here for the file on screen, from
   // its record as it opened, and merged into every record its renderer writes, so a renderer that

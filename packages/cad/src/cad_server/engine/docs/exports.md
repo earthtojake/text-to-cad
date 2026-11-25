@@ -214,11 +214,14 @@ than it had CUBICSPLINE ones, each a third the bytes.
 
 **A file decorator's path is optional.** `@model` declares the native document, the `.xbf`
 the model is saved as; `@step`, `@glb`, `@stl`, `@threemf` and `@dxf` declare translations. They stack,
-each adding its file, and one kind twice on a model is refused. A path given, positionally or `out=`
+each adding its file, and one kind twice on a model is refused. A model always writes its `.xbf`, whatever
+declares it (`Model.files`). A path given, positionally or `out=`
 (`@model("XBF/arm.xbf")`, `@step(out="arm.step")`), is relative to the script. With none (`@step`,
 `@step()`, `@glb(tolerance=0.1)`) the file is the model's name -- `name=`, else its function's -- and
 the format's extension beside the script (`Model.plan`): bare `@model` on `arm` writes `arm.xbf`, a
-model declared by `@step` alone writes `arm.step` and no `.xbf`. Two models of a run whose files are one
+model declared by `@step` alone writes `arm.step` and `arm.xbf`. A shape handed over (`model(shape,
+name=...)`) from a script writes `<name>.xbf` beside it once the engine holds it, only where it differs or is
+missing; from a REPL or a notebook, none (`api.hand_over`). Two models of a run whose files are one
 file, where either is a default -- two scripts of a folder each with a model `part`, one importing
 the other, or one model's `name=` another's function -- are refused before either builds, naming both
 (`model.collisions`, over every model the run's load defined); two paths given are their author's. Two

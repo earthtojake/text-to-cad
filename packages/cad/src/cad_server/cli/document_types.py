@@ -9,11 +9,11 @@ wrote; ``dfm``, ``interference``, ``solve``, ``drc``, ``erc`` and ``validate`` t
 severity, a code and a location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the
 type.
 
-A B-rep type's ``interference`` (``model``, ``xbf``, ``step``) is the check that no two parts of the document
+A B-rep type's ``interference`` (``model``, ``step``) is the check that no two parts of the document
 share volume: ``cad model interference <id> --pose open --fit pin base``. The engine measures it, in a checks
 process (``cad._internal.interference``); this command holds no kernel and needs none.
 
-A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
+A 3D type's ``dfm`` (``model``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
 check, and a DXF's the check of a sheet's cut file: ``cad step dfm part.step --process molding --pull -z``,
 ``cad model dfm <id> --process printing --candidates``, ``cad dxf dfm cut.dxf``. A B-rep's (a model, an xbf,
 a STEP) and a DXF's are the build123d integration's, for cnc, sheet, molding or printing (a DXF: sheet); a
@@ -27,7 +27,7 @@ its state (``_verdict``): 0 ok, 1 failed (an error, or with ``--strict`` a warni
 was judged, or not all of it: a source that does not read or holds no solid, a family that could not be
 measured, an engine that stopped or failed, a check that crashed -- and 2 the command line's mistake, as ever.
 A B-rep
-type's ``solve`` (``model``, ``xbf``, ``step``) is the stress study: ``cad step solve part.step`` lists the parts,
+type's ``solve`` (``model``, ``step``) is the stress study: ``cad step solve part.step`` lists the parts,
 the pairs that touch and a part's faces a study names, and ``cad step solve part.step --study study.json --out
 DIR`` solves it, writing its results into DIR; it runs here when this environment holds the kernel, netgen and
 CalculiX, else in the environment of ``cad[build123d,calculix,netgen]``. Their ``ranges`` sweeps each joint of the
@@ -46,11 +46,10 @@ file's type, and a file given to ``model``, the same -- a check of the operation
 it is the command line's failure (``wrong_type``, exit 2) with ``--json`` and without
 (``cad_server._internal.cli_errors``).
 
-One file is ``model``'s too: the ``.xbf``, a model saved as a file (``cad.registry.SAVED``), as it is the
-library's ``cad.model``'s. ``cad model <operation> arm.xbf`` reads the file as the file it is, never as the
-model the engine holds: that file's type has no command of its own (``spelling``), so its operations are
-``model``'s, and the engine and the library's functions tell an id from the file themselves. ``cad xbf
-<operation>`` still answers, unlisted, as ``cad model`` under its older name (``cad_server.cli.xbf``).
+``model``'s file is the ``.xbf`` a model is saved as, as it is the library's ``cad.model``'s: ``cad model
+<operation> arm.xbf`` reads the file as the file it is, never as the model the engine holds, and the engine and
+the library's functions tell an id from the file themselves. ``cad xbf <operation>``, its earlier spelling,
+runs ``cad model <operation>``, unlisted and saying so (``cad_server.cli.xbf``).
 
 Each type's command is its own module (``cad_server.cli.<type>``), so ``python -m
 cad_server.cli.step export ...`` runs what ``cad step export ...`` does. Dispatch stays lazy: the
@@ -66,7 +65,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from cad.registry import DOCUMENT_TYPES, SAVED, by_extension, help_text, spelling
+from cad.registry import DOCUMENT_TYPES, by_extension, help_text
 
 __all__ = ["OPERATIONS", "build_parser", "operations_of", "source_word", "type_main", "type_usage"]
 
@@ -78,7 +77,7 @@ def source_word(document_type: str) -> str:
     """What a type's command takes, as its usage line says it: ``FILE``, or for ``model`` a document id or its
     saved file."""
     entry = DOCUMENT_TYPES[document_type]
-    return "FILE" if entry.has_file else f"ID|FILE{DOCUMENT_TYPES[SAVED].suffix}"
+    return f"ID|FILE{entry.suffix}" if entry.held else "FILE"
 
 
 def _urdf_parser(prog: str) -> argparse.ArgumentParser:
@@ -304,9 +303,9 @@ def _interference_parser(document_type: str, prog: str) -> argparse.ArgumentPars
 
     entry = DOCUMENT_TYPES[document_type]
     parser = command_parser(prog, description=entry.operation("interference").summary)
-    parser.add_argument("document", metavar="ID" if not entry.has_file else "FILE",
+    parser.add_argument("document", metavar="ID" if entry.held else "FILE",
                         help="the model's document id (cad run SCRIPT.py prints it), or the .xbf file a model is saved as, "
-                             "checked as the file it is" if not entry.has_file
+                             "checked as the file it is" if entry.held
                         else f"the {entry.suffix} file")
     parser.add_argument("--pose", action="append", default=[], metavar="POSE",
                         help="a pose to check at beside as built, as snapshot's --pose takes one: a mechanism "
@@ -917,8 +916,6 @@ _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
 #: ``(type, operation) -> run(argv, prog)``: what each type implements, its registry entry's operations.
 OPERATIONS: dict[tuple[str, str], Callable[[list[str], str], int]] = {}
 for _entry in DOCUMENT_TYPES.values():
-    if spelling(_entry.id) != _entry.id:  # the file a model is saved as: ``cad model``'s, no command of its own
-        continue
     for _name in _entry.operation_names:
         if (_entry.id, _name) in _OWN:
             OPERATIONS[(_entry.id, _name)] = _OWN[(_entry.id, _name)]
@@ -988,23 +985,20 @@ def _typed(parser: argparse.ArgumentParser, document_type: str, operation: str, 
 
 def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
     """A source of another type, refused by name before anything runs (``Failure``, ``wrong_type``): a file
-    of another type or of no type, a model's document id given to a file's type, a file given to ``model``;
-    and a file of the type's that is not there (``not_found``), whichever the type. The file a model is saved
-    as (``SAVED``) is ``model``'s: taken where that file's type has the operation, and where it has not, the
-    command line's failure (``usage``) naming the operations it has."""
+    of another type or of no type, a model's document id given to a file's type, a file given to ``model`` but its
+    ``.xbf``; and a file of the type's that is not there (``not_found``), whichever the type."""
     from cad.engine.addresses import parts
     from cad.engine.ids import is_id
     from cad_server._internal.cli_errors import Failure
 
     def use(other: str) -> str:
-        other = spelling(other)  # an .xbf's command is ``cad model``
         return f": use cad {other} {operation}" if (other, operation) in OPERATIONS else \
             f"; cad {other} takes {', '.join(operations_of(other))}"
 
     given = parts(source)[0]  # a FILE#REF's file, a path that holds a '#' itself (project#1/part.step) whole
     entry = DOCUMENT_TYPES[document_type]
     if is_id(given):
-        if entry.has_file:
+        if not entry.held:
             raise Failure(f"{source} is a model's document id, not a {entry.suffix} file{use('model')}", "wrong_type")
         return
     script = given.partition("::")[0]
@@ -1013,23 +1007,15 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
         import shlex
 
         then = (f", which cad model {operation} takes" if ("model", operation) in OPERATIONS else "")
-        raise Failure(f"{source} is a model's script, not {'a document id' if not entry.has_file else f'a {document_type} file'}"
+        raise Failure(f"{source} is a model's script, not {'a document id' if entry.held else f'a {document_type} file'}"
                       f": `cad run {shlex.quote(script)}` builds its models and prints each one's id{then}", "wrong_type")
     suffix = Path(given).suffix
     found = by_extension(suffix) if suffix else None
-    if found is not None and found.id == SAVED and not entry.has_file:
-        if operation not in found.operation_names:
-            raise Failure(f"{source} is an {found.suffix} file, which has no {operation}: cad model takes an "
-                          f"{found.suffix} file for {', '.join(found.operation_names)}, and cad model {operation} a "
-                          "model's document id, which cad run SCRIPT.py prints", "usage")
-        if not os.path.exists(os.path.expanduser(given)):
-            raise Failure(f"no such file: {source}", "not_found")
-        return
     if found is not None and found.id != document_type:
         raise Failure(f"{source} is a {found.id}, not a {document_type}{use(found.id)}", "wrong_type")
-    if not entry.has_file:
+    if found is None and entry.held:
         raise Failure(f"cad model takes a model's document id (cad run SCRIPT.py prints it) or an "
-                      f"{DOCUMENT_TYPES[SAVED].suffix} file, not {source!r}", "wrong_type")
+                      f"{entry.suffix} file, not {source!r}", "wrong_type")
     if found is None:
         from cad.registry import INTEGRATIONS
 
@@ -1046,8 +1032,9 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
 def type_usage(document_type: str) -> str:
     """``cad <type> --help``: the type and its operations, from the registry; for ``model``, the saved file
     its operations take too."""
-    saved = "" if DOCUMENT_TYPES[document_type].has_file else (
-        f"cad {document_type} <operation> FILE{DOCUMENT_TYPES[SAVED].suffix} takes a model saved as a file, read as "
+    entry = DOCUMENT_TYPES[document_type]
+    saved = "" if not entry.held else (
+        f"cad {document_type} <operation> FILE{entry.suffix} takes a model saved as a file, read as "
         f"the file it is, never as the model the engine holds.\n")
     return (f"usage: cad {document_type} <operation> {source_word(document_type)} [options]\n\n"
             f"{help_text(document_type)}\n\n{saved}"

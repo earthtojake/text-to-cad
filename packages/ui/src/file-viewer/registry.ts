@@ -5,6 +5,7 @@ import type { FileMetadata, FileRendererDefinition, PreparedDocument, RendererRe
 export function defineFileRenderer<T>(definition: FileRendererDefinition<T>): RendererRegistration {
   return {
     id: definition.id,
+    ...(definition.aliases ? { aliases: definition.aliases } : {}),
     priority: definition.priority,
     matches: definition.matches,
     fallback: definition.fallback,
@@ -45,9 +46,11 @@ export function defineFileRenderer<T>(definition: FileRendererDefinition<T>): Re
 export function validateRenderers(renderers: readonly RendererRegistration[]): void {
   const ids = new Set<string>();
   for (const renderer of renderers) {
-    if (!renderer.id || ids.has(renderer.id)) throw new Error(`Duplicate or empty file renderer ID: "${renderer.id}".`);
+    for (const id of [renderer.id, ...(renderer.aliases ?? [])]) {
+      if (!id || ids.has(id)) throw new Error(`Duplicate or empty file renderer ID: "${id}".`);
+      ids.add(id);
+    }
     if (!Number.isFinite(renderer.priority)) throw new Error(`Renderer "${renderer.id}" has an invalid priority.`);
-    ids.add(renderer.id);
   }
   if (renderers.filter((renderer) => renderer.fallback).length > 1) {
     throw new Error("Register at most one explicit fallback file renderer.");

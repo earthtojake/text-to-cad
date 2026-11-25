@@ -18,7 +18,7 @@ GLB in Blender's scene, for a render). Process control (``cad serve``, ``status`
 ``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD
 kernel, and ``import build123d`` binds a module the kernel loads into on its first attribute
 (``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,
-...) are aliases of what they name now, each saying so once (``_internal/aliases.py``).
+``cad.xbf``, ...) are aliases of what they name now, each saying so once (``_internal/aliases.py``).
 """
 
 import time as _time
@@ -59,11 +59,9 @@ del _install_font_guard
 # cad.engine.api.observers, which the server's commands fill (``cad_server._internal.engine_telemetry``),
 # and a process the server did not start -- a model's own, in the CAD kernel environment -- counts nothing.
 
-# The document types as the library spells them (``cad.registry.spelling``), each a subpackage that is a
-# ``DocumentType``.
+# The document types (``cad.registry``), each a subpackage that is a ``DocumentType``. ``cad.xbf``, the earlier
+# spelling of ``cad.model``, is an alias of it (``_internal/aliases.py``).
 _TYPES = ("model", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch")
-# The older spelling of ``cad.model`` for the file a model is saved as, answered and not listed (``cad/xbf``).
-_OLDER = ("xbf",)
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
 _INTEGRATIONS = ("build123d", "kicad", "trimesh", "mujoco", "coacd", "netgen", "calculix", "blender", "orcaslicer")
@@ -82,7 +80,7 @@ del _install_aliases
 
 
 def __getattr__(name: str):
-    if name in _TYPES or name in _OLDER or name in _INTEGRATIONS:
+    if name in _TYPES or name in _INTEGRATIONS:
         import importlib
 
         return importlib.import_module(f"{__name__}.{name}")
@@ -96,14 +94,15 @@ def __getattr__(name: str):
 def __dir__() -> list[str]:
     """Its public names (``__all__``) and the submodules imported so far: what ``dir()`` and
     completion offer, without loading any of them, nor the kernel."""
+    # A submodule by its own name: a module alias imported (``cad.xbf``, which is ``cad.model``) is none.
     return sorted({*__all__, *(name for name, value in globals().items() if name.startswith("__")
-                               or getattr(value, "__name__", "").startswith(__name__ + "."))})
+                               or getattr(value, "__name__", "") == f"{__name__}.{name}")})
 
 
 if _TYPE_CHECKING:
     # Mirrors the lazy __getattr__ above so type checkers and editors see the root without importing
     # OCP. Every name here must have a branch there.
-    from cad import dxf, glb, kicad_pcb, kicad_sch, model, srdf, step, stl, threemf, urdf, xbf
+    from cad import dxf, glb, kicad_pcb, kicad_sch, model, srdf, step, stl, threemf, urdf
 
 
 @_cache

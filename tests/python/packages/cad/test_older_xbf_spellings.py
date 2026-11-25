@@ -1,15 +1,20 @@
-"""The older spellings of ``cad.model`` for the file a model is saved as: ``cad.xbf`` and ``@xbf``, answered and
-listed nowhere. Each is the same thing as the model spelling, which the other tests cover on its own; these are
-the tests a removal of the older spellings deletes with them.
+"""The xbf spellings of ``cad.model``: ``cad.xbf`` (``from cad import xbf``, ``import cad.xbf``), ``@xbf``,
+``xbf.read`` and every ``cad.xbf.<operation>``, ``cad.engine.xbf`` and ``cad.read_xbf``. Each is an alias of the
+model spelling through the library's one table (``cad._internal.aliases``, pinned by ``test_aliases``): the same
+object, so the same behaviour and the same results, saying once per process that it is deprecated and what to use.
+These are the tests a removal of the spellings deletes with them.
 """
 
 from __future__ import annotations
 
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
+import warnings
 from pathlib import Path
 
 import cad
@@ -30,57 +35,53 @@ def arm():
     return bd.Compound(children=[base, pin], label="arm")
 """
 
+# Every spelling, each said once, at the line that spelled it, naming the new path; said again, silent.
+SPELLINGS = """\
+from cad import xbf
+import cad, cad.xbf, cad.engine, cad.engine.model
+xbf.read, xbf.export, cad.xbf.inspect
+cad.engine.xbf
+cad.engine.model.xbf
+cad.read_xbf
+from cad import xbf
+cad.engine.xbf, cad.engine.model.xbf, cad.read_xbf
+"""
 
-class TheOlderSpellingsAreTheModelOnes(unittest.TestCase):
-    def test_they_are_answered_and_not_listed(self) -> None:
+
+class TheXbfSpellingsAreTheModelOnes(unittest.TestCase):
+    def test_each_is_the_model_object_and_listed_nowhere(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", cad.CadDeprecationWarning)
+            from cad import xbf
+
+            self.assertIs(xbf, cad.model)
+            self.assertIs(cad.xbf, cad.model)
+            self.assertIs(cad.engine.xbf, cad.engine.model)
+            self.assertIs(cad.engine.model.xbf, cad.engine.model.model)
+            self.assertIs(cad.read_xbf, cad.model.read)
+            self.assertIs(xbf.read, cad.model.read)
+            for name in ("export", "inspect", "snapshot", "dfm", "interference", "solve", "ranges", "param"):
+                with self.subTest(operation=name):
+                    self.assertIs(getattr(xbf, name), getattr(cad.model, name))
         self.assertNotIn("xbf", cad.__all__)
         self.assertNotIn("xbf", cad.engine.__all__)
         self.assertNotIn("xbf", cad.engine.model.__all__)
-        self.assertIs(cad.engine.xbf, cad.engine.model.xbf)
-        self.assertEqual(repr(cad.xbf), "<document type 'xbf': .xbf>")
+        self.assertNotIn("xbf", dir(cad))
 
-    def test_the_decorator_is_the_model_s_declaration_of_its_xbf(self) -> None:
-        def declared(decorate):
-            def arm():
-                return None
-
-            found = decorate(arm)
-            return found.id, found.plan(), found.explicit_name, [(o.kind, o.out, o.tolerance, o.angle) for o in found.outputs]
-
-        for older, now in ((cad.xbf("XBF/arm.xbf"), cad.model("XBF/arm.xbf")),
-                           (cad.engine.xbf(out="XBF/arm.xbf"), cad.engine.model("XBF/arm.xbf")),
-                           (cad.xbf("a.xbf", name="older-arm"), cad.model("a.xbf", name="older-arm"))):
-            self.addCleanup(cad.engine.model._NAMES.clear)
-            self.assertEqual(declared(older), declared(now))
-            cad.engine.model._NAMES.clear()
-
-    def test_the_reader_is_the_model_s(self) -> None:
-        self.assertIs(cad.xbf.read, cad.model.read)
-
-    def test_an_operation_is_the_model_s_given_the_file_and_of_a_file_alone(self) -> None:
-        from unittest import mock
-
-        from cad._internal.document_type import _operation
-        from cad.engine import api
-
-        ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
-        for name in ("export", "inspect", "snapshot", "dfm", "interference", "solve", "ranges"):
-            with self.subTest(operation=name):
-                self.assertTrue(callable(getattr(cad.xbf, name)))
-                with self.assertRaises(ValueError) as refused:
-                    getattr(cad.xbf, name)(ident)
-                self.assertEqual(str(refused.exception), f"{ident} is a model's document id, not a .xbf file: use cad.model")
-        with mock.patch.object(api, "inspect", return_value="read") as verb:
-            self.assertEqual((_operation("xbf", "inspect")("share/arm.xbf"), _operation("model", "inspect")("share/arm.xbf")),
-                             ("read", "read"))
-        self.assertEqual(verb.call_args_list, [mock.call("share/arm.xbf"), mock.call("share/arm.xbf")])
-        with mock.patch.object(api, "check", return_value={"unmeasured": {"message": "gone", "code": "stopped"}}) as check:
-            cad.xbf.interference("share/arm.xbf")
-            cad.model.interference("share/arm.xbf")
-        self.assertEqual(check.call_args_list[0], check.call_args_list[1])
+    def test_each_warns_once_naming_the_model_spelling_at_the_line_that_spelled_it(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            script = Path(folder) / "older.py"
+            script.write_text(SPELLINGS, encoding="utf-8")
+            proc = subprocess.run([sys.executable, "older.py"], capture_output=True, text=True, timeout=120, cwd=folder)
+        self.assertEqual(0, proc.returncode, proc.stderr)
+        self.assertEqual(["older.py:1: CadDeprecationWarning: cad.xbf is deprecated; use cad.model",
+                          "older.py:4: CadDeprecationWarning: cad.engine.xbf is deprecated; use cad.engine.model",
+                          "older.py:5: CadDeprecationWarning: cad.engine.model.xbf is deprecated; use cad.engine.model",
+                          "older.py:6: CadDeprecationWarning: cad.read_xbf is deprecated; use cad.model.read"],
+                         [line for line in proc.stderr.splitlines() if "CadDeprecationWarning" in line])
 
 
-class TheOlderDecoratorBuildsTheSameDocument(unittest.TestCase):
+class TheXbfDecoratorBuildsTheSameDocument(unittest.TestCase):
     def test_either_spelling_makes_one_document_one_file_and_one_closure(self) -> None:
         """A script that says ``@xbf(path)`` and the same script saying ``@model(path)`` are one model: the
         same id, the same file at the path relative to the script, byte for byte (the closure in it too), and a
@@ -95,7 +96,9 @@ class TheOlderDecoratorBuildsTheSameDocument(unittest.TestCase):
         def built(imports: str, declared: str) -> dict:
             script.write_text(ARM.format(imports=imports, declared=declared), encoding="utf-8")
             os.utime(script, ns=(time.time_ns(), time.time_ns()))  # a rewrite in one clock tick is a new file
-            (report,) = engine_build.build(script, ["arm"], cwd=folder)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", cad.CadDeprecationWarning)
+                (report,) = engine_build.build(script, ["arm"], cwd=folder)
             self.assertTrue(report["ok"], report)
             return report
 

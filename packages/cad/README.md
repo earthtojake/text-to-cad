@@ -58,13 +58,13 @@ These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
   id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`, `step`,
-  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
+  `glb`, `stl`, `threemf`, `dxf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
   and `.stp` are `step`). `model` is a model built from code: held in the engine's memory, addressed by its
-  document id or the handle its call returns (`@model` declares one), or saved as a file, its `.xbf`
-  (`@model` has each run write it, `arm.xbf` beside the script unless given a path; `model.read` reads one). `xbf` is that file's kind in the
-  registry, the server and the viewer, which open it; in Python and the CLI it is `model`'s, with no name of
-  its own (law 26). A document type is a file cad shows: each has a view. A file cad writes or checks and never
+  document id or the handle its call returns, and saved as a file, its `.xbf`, which names it (`.xbf` is
+  `model`). A model always writes its `.xbf` (law 10); `model.read` reads one. `xbf`, the earlier id of that
+  file's type, is an alias of `model` wherever a type is looked up, deprecated and listed nowhere (law 26). A
+  document type is a file cad shows: each has a view. A file cad writes or checks and never
   shows is none, whatever cad does with it: an MJCF, MuJoCo's own model file, is an export's destination and
   the mujoco integration's to check, and MuJoCo Studio shows it.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
@@ -163,7 +163,7 @@ law, say which and why in the change, and amend the law in the same change. Depa
 saying so is the only wrong move.
 
 Each law says what it binds: *every document*; *models* (built from code, held in memory); *file
-documents* (a file read as it is: a board, a robot description, a mesh, an opened STEP or xbf); or *the
+documents* (a file read as it is: a board, a robot description, a mesh, an opened STEP or `.xbf`); or *the
 package*. Code, tests and documents cite a law by its number: a change that adds, merges or removes one
 renumbers the list and every citation in the same change.
 
@@ -172,7 +172,7 @@ renumbers the list and every citation in the same change.
    contents, nothing of git's. Names remain the per-element tie to code (the engine's **Build
    closure**).
 2. **Only requested files reach the disk.** *Every document.* The engine writes the files a model
-   declares, the exports a command or a person asks for, and a model's own script only where a person or an
+   declares and its `.xbf` (law 10), the exports a command or a person asks for, and a model's own script only where a person or an
    agent asks to set a parameter it declares (law 30), and nothing beside a model or an input: no
    sidecar, index, memo, mesh or record of a build. What it keeps for itself lives in three folders of
    the user's own, the same whatever release runs: state (settings and the records of documents, never
@@ -206,9 +206,9 @@ renumbers the list and every citation in the same change.
 6. **One document per model, with one id.** *Every document.* A called model makes one document and
    returns its handle, never a bare shape. Every id is one formula over a scope and a name
    (`ids.derived_id`): a model's script and function, an opened file's path, a handed-over shape's
-   calling script and name; the same in every process, worked out without asking the engine. A function's
-   declarations stack, each adding its file (`@model` its `.xbf`, a file decorator any other); one kind
-   twice is refused. A document lives until a person
+   calling script and name; the same in every process, worked out without asking the engine. A model always
+   writes its `.xbf`, whatever declares it. A function's declarations stack, each adding its file (`@model` its
+   `.xbf`, a file decorator any other); one kind twice is refused. A document lives until a person
    deletes it: neither its worker retiring nor memory ends it, and one that is not held names the
    command that builds it again (the engine's **Document lifetime**).
 7. **Provenance is served live, never written.** *Models.* What made an element (the feature, its
@@ -221,11 +221,13 @@ renumbers the list and every citation in the same change.
 9. **Names are the durable tie to code.** *Models.* An element's name is spelled from the function
    that made its feature and the author's name for that feature, never from a line or a file: moving
    code renames nothing, and the file holds no line to go stale.
-10. **A file decorator's path is optional.** *Models.* Given, it is relative to the script; omitted, it
-    is the model's name and the format's extension beside the script (`@model`: `arm.xbf`), and two
-    models whose default files are one file are refused. Whenever its model runs in a build, or is taken
-    from its key, the file is written once, from the model's own document, exactly as an export writes
-    it, and only where it differs or is missing.
+10. **A model always writes its `.xbf`, and a file decorator's path is optional.** *Models.* Whatever
+    declares a model (`@model`, or a file decorator alone), each run writes its `.xbf`: at `@model`'s path,
+    else beside the script; a shape handed over from a script writes `<name>.xbf` beside it, from a REPL
+    none. A path given is relative to the script; omitted, it is the model's name and the format's extension
+    beside the script (`arm.xbf`, `arm.step`), and two models whose default files are one file are refused.
+    Whenever its model runs in a build, or is taken from its key, each file is written once, from the
+    model's own document, exactly as an export writes it, and only where it differs or is missing.
 11. **A model script is Python, and decoration only declares.** *Models.* Decorated functions declare
     models, explicit calls build them, and `python script.py` or `cad run script.py` runs the program.
     Importing the library or defining a decorated function builds nothing, writes nothing and starts
@@ -321,7 +323,7 @@ renumbers the list and every citation in the same change.
 23. **A document type is one object.** *The package.* `cad.<type>` holds the type's decorator where it
     has one, its reader where it has one, and its operations one to one with the CLI's. Its attributes
     load on first use, so `import cad` imports no kernel. A file of another type is refused by name
-    before anything runs; `cad.model` takes the `.xbf` a model is saved as, which is its own (law 26). A
+    before anything runs; `cad.model`'s file is the `.xbf` a model is saved as (law 26). A
     type's package is neutral about producers: it imports no third-party library.
 24. **An integration is named for its tool and holds only our code for it.** *The package.*
     `cad.<integration>` holds the helpers we define that take that tool's objects and the producers it
@@ -340,9 +342,11 @@ renumbers the list and every citation in the same change.
     operation is named for what it does and means one thing: `dfm`, `interference`, `solve`, `ranges`,
     `drc`, `erc`, `validate`. `model` is the one type that is two things, in the library and the command
     alike: a model the engine holds, by its id or its handle, and a model saved as a file, its `.xbf`, which
-    is read as the file it is (it names no `made_by`: law 7). A person and an agent learn one word for a
-    model: `@model("….xbf")` writes the file, `model.read` reads it, `cad.model.*` and `cad model` take it.
-    The registry keeps the file's kind, `xbf`, for the server and the viewer, which open it. One result shape
+    is read as the file it is (it names no `made_by`: law 7). One type, one word, everywhere -- the registry,
+    the server's kinds, the viewer: `@model` writes the file, `model.read` reads it, `cad.model.*` and `cad
+    model` take it, and an `.xbf` opened is a `model` document. The `xbf` spellings (`cad.xbf`, `@xbf`, `cad
+    xbf`) are the model's under that name, each saying it is deprecated, and the HTTP API's `xbf` kind answers
+    as `model`'s (law 14). One result shape
     per operation: a check returns findings, each with
     a severity, a code and a location (`cad.results.CheckResult`), and `export` says the files it wrote.
     A new shared operation must be code-free, frequently needed and meaningful across types. A file cad
@@ -423,13 +427,12 @@ src/cad/
                          #   kernel and the earlier spellings' aliases, first
   registry.py            # the document types and the integrations: the one table every layer
                          #   reads, kernel-free (`python -m cad.registry --js` writes the JS)
-  model/                 # the model, held or saved: @model (out= the .xbf a run saves it as), its
+  model/                 # the model, held or saved: @model (out= the .xbf every run saves it as), its
                          #   parameters (param, declared in the script), model.read, and a model's
                          #   operations, by its handle, its document id or its .xbf (a ModelType)
   step/, stl/,           # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
                          #   B-rep type's solve and ranges: model's and step's)
-  xbf/                   # the older spelling of cad.model for an .xbf, answered and listed nowhere
   urdf/, srdf/           # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is

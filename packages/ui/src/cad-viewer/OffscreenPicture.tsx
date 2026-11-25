@@ -14,7 +14,7 @@ import { createMeshRenderer } from '../renderers/mesh/index.js';
 import { createRobotRenderer } from '../renderers/robot/index.js';
 import { createSchematicRenderer } from '../renderers/schematic/index.js';
 import type { CadPreferenceSource } from '../renderers/workspace/index.js';
-import { createXbfRenderer } from '../renderers/xbf/index.js';
+import { createModelRenderer } from '../renderers/xbf/index.js';
 import { createCadFileSource } from './catalog.js';
 
 /**
@@ -29,7 +29,7 @@ export function cadRenderers(client: CadWorkspaceService, preferences: CadPrefer
     createGlbRenderer({ client, preferences, live }),
     createMeshRenderer({ client, preferences, live }),
     createRobotRenderer({ client, preferences, live }),
-    createXbfRenderer({ client, preferences, live }),
+    createModelRenderer({ client, preferences, live }),
   ];
 }
 

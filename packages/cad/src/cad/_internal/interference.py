@@ -165,7 +165,7 @@ def interference_for(document_type: str) -> Any:
         from cad._internal.document_type import refuse_other
         from cad.engine import api
 
-        of = refuse_other(document_type, source)  # the file a model is saved as, given to cad.model, is that file's
+        of = refuse_other(document_type, source)
         resolved = options(poses=poses, fits=fits, min_volume=min_volume)
         checked = api.check(source, {"type": of, "process": "interference", "resolved": resolved,
                                      "candidates": False, "given": {}})

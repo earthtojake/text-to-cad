@@ -33,6 +33,8 @@ NAMES = {
         "flat_pattern", "planar_faces", "flatten_face", "flatten_faces", "union_faces", "offset_profile")},
     "cad.mujoco": {"compile_model": "cad.mujoco._compile.compile_model",
                    "compile_findings": "cad.mujoco._compile.compile_findings"},
+    "cad.engine": {"xbf": "cad.engine.model"},
+    "cad.engine.model": {"xbf": "cad.engine.model.model"},
 }
 MODULES = {
     "cad.ap242": "cad.build123d", "cad.gltf": "cad.build123d", "cad.geometry": "cad.build123d._geometry",
@@ -40,6 +42,7 @@ MODULES = {
     "cad.xml_common": "cad._internal.xml_common", "cad.check_fonts": "cad._internal.check_fonts",
     "cad.urdf_source": "cad.urdf._source",
     "cad.srdf_source": "cad.srdf._source", "cad.srdf_validation": "cad.srdf._validation",
+    "cad.xbf": "cad.model",
 }
 
 

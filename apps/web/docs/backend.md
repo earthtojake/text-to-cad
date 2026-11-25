@@ -105,8 +105,8 @@ of the document of that id: a file registered (by a launch or a row), or in Rece
 the engine holds (`file` is its id, `name` its function, `sourcePath` null: it has no file to
 browse); else a 404 whose `error` is the engine's words for why, naming the command that builds
 it again, and whose `state` the engine's (`unsaved`, `detached`). A script is never a row. An
-envelope says what the document is: `id`, `kind` (`model`, or a file's by its extension: `xbf`,
-`step`, `stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`), `name`, `version`, `state` (a model's,
+envelope says what the document is: `id`, `kind` (`model` for a model the engine holds and for its `.xbf`
+opened from disk, else a file's by its extension: `step`, `stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`), `name`, `version`, `state` (a model's,
 the engine's: `live`, `held`, `building`, `failed`; a file's `live`), `source` (a model's script and
 function, a file's path), `producers`, `api` (where its kind's reads are,
 `/api/v1/documents/<kind>/<id>`), `exports` (the formats its Export offers), and for a document

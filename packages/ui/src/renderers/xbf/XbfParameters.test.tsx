@@ -104,7 +104,7 @@ it('a file document and a model no worker holds say why in the foot\'s status; a
   const statusReason = () => tab().querySelector('[data-parameters-status]')!.getAttribute('data-parameters-status-reason');
   const read = () => [off(), rows().map(row => row[3]), save().disabled, saveWhy(), status(), statusReason()];
   const fileStructure = { parameters: structureOf().parameters.map(parameter => ({ ...parameter, writable: false, reason: 'file', source: null })) };
-  const { rerender } = render(<Tab client={{ setModelParameters: vi.fn() }} document={{ source: { kind: 'xbf', doc: ID }, structure: fileStructure }} />);
+  const { rerender } = render(<Tab client={{ setModelParameters: vi.fn() }} document={{ source: { kind: 'model', doc: ID }, structure: fileStructure }} />);
   // Nothing in the tab can work: said once, as text, left of Reset and Save; Save is simply off, with no hint.
   expect(read()).toEqual([[true, true, true, true], [null, null, null, null], true, null, 'Edit these in the script.', 'file']);
   // From one file (none named another): no heading at all.

@@ -197,7 +197,7 @@ def as_docs() -> dict[str, Any]:
     """The whole command: its ``usage``, each document type's operations (``documentTypes``), each
     integration's (``integrations``), and the other ``commands``, as ``cad --help`` lists them, each followed
     by its subcommands; their descriptions and help in ``texts``, each once (``_shared``)."""
-    from cad.registry import DOCUMENT_TYPES, INTEGRATIONS, spelling
+    from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
     from cad_server import cli
     from cad_server.cli import document_types, integrations
 
@@ -210,7 +210,7 @@ def as_docs() -> dict[str, Any]:
         "usage": f"cad {entry.id} <operation> {document_types.source_word(entry.id)} [options]",
         "operations": [operation(entry, name, document_types.build_parser(entry.id, name), entry.id)
                        for name in document_types.operations_of(entry.id)],
-    } for entry in DOCUMENT_TYPES.values() if spelling(entry.id) == entry.id]  # as `cad --help` lists them
+    } for entry in DOCUMENT_TYPES.values()]  # as `cad --help` lists them
     tools = [{
         "name": name, "summary": INTEGRATIONS[name].summary,
         "usage": f"cad {name} <operation> FILE [options]",

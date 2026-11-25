@@ -289,7 +289,9 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     REPL, no function, no body -- handed to the engine, which holds it as a drained document is (in
     memory, and in its cache), serves its page and exports it, and records that a program it did not
     run showed it: there is no command that builds it again. Its id is ``ids.derived_id`` of the
-    calling script (``frame``'s file), or the working folder where there is none, and ``name``. The handle's ``shape`` is ``shape`` itself."""
+    calling script (``frame``'s file), or the working folder where there is none, and ``name``. The handle's ``shape`` is ``shape`` itself.
+    A model always writes its ``.xbf`` (law 10): handed over from a script, ``<name>.xbf`` beside it, once the
+    engine holds it, only where it differs or is missing; from a REPL or a notebook, which has no script, none."""
     from cad.engine import model as declaring
     from cad.engine.ids import canonical, check_name, derived_id
 
@@ -300,11 +302,22 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
         raise TypeError("model(shape, name=...): a shape handed over takes its document's name")
     check_name(name)
     filename = frame.f_code.co_filename if frame is not None else ""
-    scope = canonical(filename if filename and os.path.isfile(filename) else os.getcwd())
+    script = filename if filename and os.path.isfile(filename) else None
+    scope = canonical(script or os.getcwd())
+    saved = None
+    if script is not None:
+        if name in (".", "..") or any(mark in name for mark in "/\\"):
+            raise ValueError(f"model(shape, name={name!r}) names no file beside its script, where a shape handed over "
+                             "writes its .xbf: give it a name that is a file's")
+        saved = Path(scope).parent / f"{name}.xbf"
     ident = derived_id(scope, name)
     data = _handed_bytes(shape, name, animations)
     answer = _ask({"op": "shape", "id": ident, "name": name, "scope": scope, "program": _program(),
                    "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii"), **_interpreter()})
+    if saved is not None:
+        from cad.engine.atomic_replace import put
+
+        put(saved, lambda temporary: temporary.write_bytes(data), compare=True)
     report = {"ok": True, "model": name, "id": ident, "url": (answer.get("done") or {}).get("url"),
               "source": {"script": scope, "name": name}, "kind": "shape", "bytes": len(data)}
     if frame is not None and frame.f_globals.get("__name__") == "__main__":

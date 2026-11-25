@@ -1,6 +1,7 @@
 import { DEFAULT_PART_COLOR_SETTINGS, normalizeExplodedViewSettings, validateDisplaySettings } from "./displaySettings.js";
 import { DEFAULT_STEP_CLIP_SETTINGS, normalizeStepClipSettings } from "../lib/viewer/clipPlane.js";
 import { AXIS_COLORS, GRID_COLORS } from "../lib/viewportTheme.js";
+import { documentKind } from "../lib/fileFormats.js";
 
 /** @typedef {"solid" | "shaded" | "parts" | "xray" | "hidden-line" | "wireframe"} ViewMode */
 /** @typedef {ViewMode | "render"} ViewLook */
@@ -269,15 +270,15 @@ export const XBF_PART_VIEW_FEATURES = STEP_PART_VIEW_FEATURES;
  * and Parts where it has several parts, objects or links (`parts`); Clip cuts whatever it draws
  * (`lib/viewer/sceneClip.js`), and a GLB of several parts explodes (`explodeParts`,
  * `sceneExplode.js`). A drawing (DXF) no more than an edgeless view: nothing in it to cut.
- * @param {string} kind  The file's render kind (`xbf` for a STEP), without a dot.
+ * @param {string} kind  The file's render kind (`model` for a model and a STEP; `xbf`, its earlier word, too), without a dot.
  * @param {{ parts?: number, explodeParts?: number }} [scene]
  * @returns {ViewFeatures}
  */
 export function viewFeaturesForKind(kind, { parts = 0, explodeParts = 0 } = {}) {
   const normalized = String(kind || "").trim().toLowerCase();
   if (normalized === "dxf") return EDGELESS_VIEW_FEATURES;
-  // A cadgen engine document: an assembly everything, a part no Parts or Explode.
-  if (normalized === "xbf") return parts > 1 ? XBF_VIEW_FEATURES : XBF_PART_VIEW_FEATURES;
+  // A model's document, the engine's: an assembly everything, a part no Parts or Explode.
+  if (documentKind(normalized) === "model") return parts > 1 ? XBF_VIEW_FEATURES : XBF_PART_VIEW_FEATURES;
   return {
     modes: parts > 1 ? ["solid", "parts"] : ["solid"],
     settings: normalized === "glb" && explodeParts > 1 ? ["clip", "exploded"] : ["clip"]

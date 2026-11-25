@@ -174,6 +174,8 @@ export interface RendererViewProps {
 export type FileRendererProps<T> = RendererViewProps & { data: T };
 export interface FileRendererDefinition<T> {
   id: string;
+  /** The ids it was registered under before: a file view saved under one is this renderer's. */
+  aliases?: readonly string[];
   priority: number;
   matches: (file: FileMetadata) => boolean;
   fallback?: boolean;
@@ -187,6 +189,8 @@ export interface PreparedRenderer {
 }
 export interface RendererRegistration {
   id: string;
+  /** The ids it was registered under before (`FileRendererDefinition.aliases`). */
+  aliases?: readonly string[];
   priority: number;
   matches: (file: FileMetadata) => boolean;
   fallback?: boolean;

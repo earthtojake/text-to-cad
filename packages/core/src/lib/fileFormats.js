@@ -2,9 +2,13 @@ import { DOCUMENT_TYPE_REGISTRY } from "./documentTypes.generated.js";
 
 // The document types, from the library's registry (`cad.registry`, generated into
 // `documentTypes.generated.js`): each type's format is its `wire` spelling, the one the server's
-// API names it by (the id, but `3mf` for `threemf`).
+// API names it by (the id, but `3mf` for `threemf`). An earlier id (`aliases`: `xbf`, a model's
+// file) names the type it is now (`documentKind`).
 const TYPES = Object.freeze(Object.fromEntries(
   DOCUMENT_TYPE_REGISTRY.documentTypes.map((type) => [type.id, type])
+));
+const KIND_ALIASES = Object.freeze(Object.fromEntries(
+  Object.entries(DOCUMENT_TYPE_REGISTRY.aliases || {}).map(([alias, id]) => [alias, TYPES[id].wire])
 ));
 
 export const RENDER_FORMAT = Object.freeze({
@@ -15,8 +19,9 @@ export const RENDER_FORMAT = Object.freeze({
   DXF: TYPES.dxf.wire,
   URDF: TYPES.urdf.wire,
   SRDF: TYPES.srdf.wire,
-  // A cadgen engine document (`cad.engine`): served by the engine, drawn by its own renderer.
-  XBF: TYPES.xbf.wire,
+  // A model's document (`cad.engine`), held by the engine or its `.xbf` opened from disk: served by the
+  // engine, drawn by its own renderer.
+  MODEL: TYPES.model.wire,
   KICAD_PCB: TYPES.kicad_pcb.wire,
   // A KiCad schematic, drawn from its files as a board is, a sheet at a time (`packages/ui/src/renderers/schematic`).
   KICAD_SCH: TYPES.kicad_sch.wire
@@ -26,11 +31,11 @@ export const MESH_RENDER_FORMATS = Object.freeze(
   DOCUMENT_TYPE_REGISTRY.documentTypes.filter((type) => type.view === "mesh").map((type) => type.wire)
 );
 
-// A file's format by its extension: every type's extensions but the engine's own document's, which
-// the engine serves as a document and no client reads by its extension; and `.gltf`, read as a GLB.
+// A file's format by its extension: every type's extensions but a model's (its `.xbf`), which the
+// engine serves as a document and no client reads by its extension; and `.gltf`, read as a GLB.
 const FORMAT_BY_EXTENSION = Object.freeze(Object.fromEntries([
   ...DOCUMENT_TYPE_REGISTRY.documentTypes
-    .filter((type) => type.id !== "xbf")
+    .filter((type) => !type.held)
     .flatMap((type) => type.extensions.map((extension) => [extension.slice(1), type.wire])),
   ["gltf", TYPES.glb.wire]
 ]));
@@ -44,6 +49,13 @@ export const PLOT_RENDER_FORMATS = Object.freeze(
 
 export function normalizeFormat(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+// A document's kind as it is now: an earlier one (`xbf`, which a released server or page may say) the kind it
+// names (`model`), any other as given.
+export function documentKind(value) {
+  const normalized = normalizeFormat(value);
+  return KIND_ALIASES[normalized] || normalized;
 }
 
 export function entryKind(entry) {

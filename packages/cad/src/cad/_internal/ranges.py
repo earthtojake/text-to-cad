@@ -1,6 +1,6 @@
 """The joint stops every document type with a mechanism shares: ``cad.<type>.ranges(source)``.
 
-``model``, ``xbf`` and ``step`` each answer ``ranges`` with the same function, made for the type here (``ranges_for``):
+``model`` and ``step`` each answer ``ranges`` with the same function, made for the type here (``ranges_for``):
 its signature takes a source of the type and plain values alone, so it is the type's (the signature rule), and what it
 runs is the kernel's -- the document read and described as a robot (``engine.describe``) and its joints swept against
 its parts' surfaces (``engine.ranges``) -- imported when it runs. A model, which the engine holds with no
@@ -106,7 +106,7 @@ def ranges_for(document_type: str) -> Any:
         options(step=step, clearance=clearance, joint=joints)
         from cad._internal.document_type import refuse_other
 
-        of = refuse_other(document_type, source)  # the file a model is saved as, given to cad.model, is that file's
+        of = refuse_other(document_type, source)
         try:
             from cad.engine.describe import describe
             from cad.engine.export import Source
@@ -265,7 +265,9 @@ class _readable:
         self.folder: tempfile.TemporaryDirectory | None = None
 
     def __enter__(self) -> tuple[Path, Path | None]:
-        if self.document_type != "model":
+        from cad._internal.document_type import is_file
+
+        if is_file(self.source):
             return Path(self.source).expanduser(), None
         from cad.engine.api import export
 

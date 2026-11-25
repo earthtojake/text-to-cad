@@ -53,6 +53,25 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("3mf", registry.DOCUMENT_TYPES["threemf"].wire)
         self.assertIsNone(registry.type_of("model.py"))
 
+    def test_a_model_is_one_type_whose_file_is_its_xbf_and_xbf_an_alias_of_it(self) -> None:
+        # One type: a model held by the engine, or saved as its .xbf, which names it. ``xbf``, once a type of its
+        # own, is looked up as model everywhere a type is found by its id, and no listing shows it.
+        model = registry.DOCUMENT_TYPES["model"]
+        self.assertEqual((model.extensions, model.suffix, model.held, model.wire), ((".xbf",), ".xbf", True, "model"))
+        self.assertIs(registry.DOCUMENT_TYPES["xbf"], model)
+        self.assertIs(registry.by_extension(".XBF"), model)
+        self.assertIs(registry.type_of("share/arm.xbf"), model)
+        self.assertEqual(dict(registry.ALIASES), {"xbf": "model"})
+        self.assertEqual((registry.resolve("xbf"), registry.resolve("step")), ("model", "step"))
+        self.assertIn("xbf", registry.DOCUMENT_TYPES)
+        self.assertNotIn("xbf", list(registry.DOCUMENT_TYPES))
+        self.assertNotIn("xbf", [entry.id for entry in registry.DOCUMENT_TYPES.values()])
+        self.assertEqual(len(registry.DOCUMENT_TYPES), len(list(registry.DOCUMENT_TYPES.items())))
+        self.assertEqual(["model"], [entry.id for entry in registry.DOCUMENT_TYPES.values() if entry.held])
+        self.assertEqual(registry.producers_for("xbf"), registry.producers_for("model"))
+        self.assertEqual(registry.help_text("xbf"), registry.help_text("model"))
+        self.assertEqual({"xbf": "model"}, registry.as_data()["aliases"])
+
     def test_every_integration_is_well_formed(self) -> None:
         for integration in registry.INTEGRATIONS.values():
             with self.subTest(integration=integration.name):
@@ -120,7 +139,7 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("calculix", integrations.for_command("ccx"))
         # A mechanism's joint stops are the kernel's, run in the caller: a script that calls them needs build123d.
         self.assertEqual("build123d", integrations.for_name("cad.model.ranges"))
-        self.assertEqual({"model", "xbf", "step"},
+        self.assertEqual({"model", "step"},
                          {entry.id for entry in registry.DOCUMENT_TYPES.values() if "ranges" in entry.operation_names})
         self.assertEqual("cad.calculix._command", integrations.INTEGRATIONS["calculix"].runner)
         self.assertEqual(("build123d", "netgen"), registry.INTEGRATIONS["calculix"].alongside)

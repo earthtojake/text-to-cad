@@ -209,14 +209,10 @@ class IntegrationsTest(unittest.TestCase):
         root = LIBRARY / "src" / "cad"
         packages = {path.parent.name for path in root.glob("*/__init__.py")}
         import cad
-        from cad.registry import spelling
 
-        # A type's package is named as the library spells the type: the file a model is saved as is cad.model's,
-        # and its older spelling's package (cad.xbf), while there is one, is the root's ``_OLDER``.
-        spelled = {name for name in DOCUMENT_TYPES if spelling(name) == name}
-        older = set(getattr(cad, "_OLDER", ()))
-        self.assertLessEqual(older, set(DOCUMENT_TYPES) - spelled)
-        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*spelled, *older, *INTEGRATIONS}))
+        # A type's package is named for its id; an earlier id (``cad.xbf``) is a module alias, no package.
+        spelled = set(DOCUMENT_TYPES)
+        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*spelled, *INTEGRATIONS}))
         self.assertEqual(sorted(path.stem for path in root.glob("*.py") if path.stem != "__init__"), sorted(MODULES))
         self.assertEqual(sorted(cad._TYPES), sorted(spelled))
         self.assertEqual(sorted(cad._INTEGRATIONS), sorted(INTEGRATIONS))
@@ -236,11 +232,8 @@ class IntegrationsTest(unittest.TestCase):
         from cad.registry import DOCUMENT_TYPES
 
         library = modules("cad")
-        import cad
-        from cad.registry import spelling
-
-        # Each type's package, as the library spells the type, and an older spelling's while there is one.
-        for document_type in sorted({*map(spelling, DOCUMENT_TYPES), *getattr(cad, "_OLDER", ())}):
+        # Each type's package, by its id.
+        for document_type in sorted(DOCUMENT_TYPES):
             for name, path in library.items():
                 if of(f"cad.{document_type}", name):
                     with self.subTest(module=name):

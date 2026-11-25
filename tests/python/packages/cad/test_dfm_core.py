@@ -812,10 +812,10 @@ class DeclaredProcessTest(unittest.TestCase):
         self.assertIsNone(manufacturing.options("model", None, {"material": "aluminum"}))
         with self.assertRaisesRegex(ValueError, "give --process"):  # a STEP keeps none
             manufacturing.options("step", None, {})
-        for given, said in (({"units": "cm"}, "an xbf is in millimetres"),
+        for given, said in (({"units": "cm"}, "a model is in millimetres"),
                             ({"material": "cheese"}, "--material is one of")):
             with self.subTest(given=given), self.assertRaisesRegex(ValueError, said):
-                manufacturing.options("xbf", None, given)
+                manufacturing.options("model", None, given)
         # duck typed: a route's value, an FDM skin's pitch is its line width, not a layer height
         route = SimpleNamespace(value="fdm")
         self.assertEqual(processes.declared(SimpleNamespace(process=route, pitch_mm=0.12)), ("printing", "fdm", 0.12))

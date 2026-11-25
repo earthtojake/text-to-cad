@@ -26,24 +26,6 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "id": "model",
       "title": "model",
       "wire": "model",
-      "extensions": [],
-      "mime": "",
-      "view": "document",
-      "operations": [
-        "export",
-        "snapshot",
-        "inspect",
-        "dfm",
-        "interference",
-        "solve",
-        "ranges"
-      ],
-      "decorator": true
-    },
-    {
-      "id": "xbf",
-      "title": "XBF",
-      "wire": "xbf",
       "extensions": [
         ".xbf"
       ],
@@ -58,7 +40,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "solve",
         "ranges"
       ],
-      "decorator": true
+      "decorator": true,
+      "held": true
     },
     {
       "id": "step",
@@ -79,7 +62,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "solve",
         "ranges"
       ],
-      "decorator": true
+      "decorator": true,
+      "held": false
     },
     {
       "id": "stl",
@@ -95,7 +79,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "dfm"
       ],
-      "decorator": true
+      "decorator": true,
+      "held": false
     },
     {
       "id": "glb",
@@ -112,7 +97,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "inspect",
         "dfm"
       ],
-      "decorator": true
+      "decorator": true,
+      "held": false
     },
     {
       "id": "threemf",
@@ -128,7 +114,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "dfm"
       ],
-      "decorator": true
+      "decorator": true,
+      "held": false
     },
     {
       "id": "dxf",
@@ -143,7 +130,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "dfm"
       ],
-      "decorator": true
+      "decorator": true,
+      "held": false
     },
     {
       "id": "urdf",
@@ -158,7 +146,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "validate"
       ],
-      "decorator": false
+      "decorator": false,
+      "held": false
     },
     {
       "id": "srdf",
@@ -173,7 +162,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "validate"
       ],
-      "decorator": false
+      "decorator": false,
+      "held": false
     },
     {
       "id": "kicad_pcb",
@@ -190,7 +180,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "inspect",
         "drc"
       ],
-      "decorator": false
+      "decorator": false,
+      "held": false
     },
     {
       "id": "kicad_sch",
@@ -207,7 +198,11 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "inspect",
         "erc"
       ],
-      "decorator": false
+      "decorator": false,
+      "held": false
     }
-  ]
+  ],
+  "aliases": {
+    "xbf": "model"
+  }
 });

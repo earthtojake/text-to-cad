@@ -4,18 +4,19 @@ A model is a parameterless function that returns a build123d shape. It becomes a
 through its file declarations, which stack, each adding its file: ``@model``, the ``.xbf`` the
 model is saved as, and the file decorators ``@step``, ``@glb``, ``@stl``, ``@threemf`` and ``@dxf``
 (the drawing of a planar result: a sketch, a face, wires or edges); the same kind twice is refused.
-``@xbf`` is the older spelling of ``@model``, the same declaration (``_declare``). By default its id
+Whatever declares it, a model always writes its ``.xbf``: at ``@model``'s path, else ``<name>.xbf`` beside
+the script (``Model.files``). ``@xbf`` is an earlier spelling of ``@model``, an alias of it
+(``cad._internal.aliases``). By default its id
 uses ``script.py::function``. An explicit ``name=`` uses the script folder and that name instead,
 independent of the declaring file. A path is optional on every one, positional or ``out=``
 (``@model("XBF/part.xbf")``, ``@step(out="part.step")``), relative to the script; omitted
 (``@step``, ``@step()``, ``@glb(tolerance=0.1)``), it is the model's name and the kind's suffix beside
-the script (``Model.plan``): bare ``@model`` writes ``<name>.xbf``. Two models of a run whose default
+the script (``Model.plan``): bare ``@model`` writes ``<name>.xbf``, as does ``@step`` alone. Two models of a run whose default
 files are one file are refused (``collisions``). Everything else is the model's code: its material,
 colours, joints, the pose its joints are connected at (the pose every file shows), its mechanism
 states, couplings and configuration sequences (``mechanism_state``, ``gear_pair`` and its siblings,
 ``configuration_sequence``). A picture is the ``snapshot`` verb's, never a declaration. The outputs
-are kept in the order the decorators are written, top to bottom, and the xbf, when declared, is
-always written first.
+are kept in the order the decorators are written, top to bottom, and the xbf is always written first.
 
 The decorated function is a ``Model``: the function, its id (``.id``: ``ids.model_id`` of its
 script and function, or its folder and explicit ``name=``) and the debug seam
@@ -35,7 +36,7 @@ document (``BuildContext.children``, ``build``). Called outside a build, a model
 worker to build it.
 
 ``model(shape, name=...)`` hands a shape over from a script or a REPL: no function, no body to
-run again (``api.hand_over``).
+run again (``api.hand_over``); from a script, it writes ``<name>.xbf`` beside it, from a REPL nothing.
 """
 
 from __future__ import annotations
@@ -284,17 +285,24 @@ class Model:
         return Path(_normalized(path))
 
     def targets(self) -> list[tuple[str, Path]]:
-        """Each declared output as ``(kind, path)``, the xbf first, then the derived files
+        """Each file a build writes as ``(kind, path)``, the xbf first, then the derived files
         in the order the decorators are written (``plan``)."""
         return [(target.kind, target.path) for target in self.plan()]
 
+    def files(self) -> list[Output]:
+        """What this model writes: the files its decorators declare, and its ``.xbf`` whether a decorator
+        declares it or not -- a model declared by ``@step`` alone writes ``<name>.xbf`` beside its script too,
+        as bare ``@model`` does: a model always writes its ``.xbf`` (law 10). The xbf first."""
+        found = sorted(self.outputs, key=lambda output: output.kind != "xbf")
+        return found if any(output.kind == "xbf" for output in found) else [Output("xbf", None), *found]
+
     def plan(self) -> list[Target]:
-        """The files a build of this model writes: what its decorators declare (law 10), the
-        xbf first, then the derived files in the order the decorators are written. A relative
-        path is relative to the script's folder, and a declaration with none is the model's name
-        (``name=``, else its function's) and the kind's suffix beside the script: ``arm.xbf``, ``arm.step``."""
+        """The files a build of this model writes (``files``): its ``.xbf``, then the derived files in the
+        order the decorators are written. A relative path is relative to the script's folder, and a file with
+        none is the model's name (``name=``, else its function's) and the kind's suffix beside the script:
+        ``arm.xbf``, ``arm.step``."""
         return [Target(output.kind, self._path(output.kind, output.out), output.tolerance, output.angle)
-                for output in sorted(self.outputs, key=lambda output: output.kind != "xbf")]
+                for output in self.files()]
 
     # --- the verbs, through the daemon (``cad.engine.api``) -----------------------------
 
@@ -412,7 +420,7 @@ def model(target: Any = None, /, *, name: str | None = None, out: Any = None, an
         target, out = None, target
     if target is None:
         _no_animations(animations)
-        return _declare("xbf", _saved(out), name)  # what ``@xbf(path)`` spells too
+        return _declare("xbf", _saved(out), name)
     if isinstance(target, Model) or inspect.isfunction(target):
         _no_animations(animations)
         return _declare("xbf", _saved(out), name)(target)
@@ -438,7 +446,7 @@ def _saved(out: Any) -> Any:
 
         suffix = Path(out).suffix
         found = by_extension(suffix) if suffix else None
-        if found is not None and found.id != "xbf" and found.decorator:
+        if found is not None and found.id != "model" and found.decorator:
             raise ValueError(f"@model('….xbf') writes the model's .xbf, not {os.fspath(out)!r}: declare that file "
                              f"with @{found.id}({os.fspath(out)!r}), alone or beside @model('….xbf')")
     return out
@@ -452,8 +460,7 @@ def _said(kind: str) -> str:
 
 def _declare(kind: str, out: Any, name: str | None, tolerance: float | None = None, angle: float | None = None) -> Any:
     """One file a model declares, of ``kind`` at ``out`` (None: its default, ``Model.plan``): the decorator a
-    file declaration is -- ``@step(out)``, and ``@model(out)`` for the ``.xbf`` (``@xbf(out)``, its older
-    spelling) -- which records the output on the function's ``Model`` (``Model.plan`` is what a build writes)."""
+    file declaration is -- ``@step(out)``, and ``@model(out)`` for the ``.xbf`` -- which records the output on the function's ``Model`` (``Model.plan`` is what a build writes)."""
     from cad.engine.export import angle_of, tolerance_of
 
     check_output(kind, out, "@model('….xbf')" if kind == "xbf" else f"@{kind}(out=...)")
@@ -500,8 +507,6 @@ def _decorator(kind: str) -> Callable[..., Any]:
     return decorate
 
 
-# The older spelling of ``@model(path)``, kept for the scripts that say it: the same declaration.
-xbf = _decorator("xbf")
 step = _decorator("step")
 glb = _decorator("glb")
 stl = _decorator("stl")
@@ -585,7 +590,7 @@ def collisions(models: Any) -> None:
     left as their author wrote them."""
     seen: dict[Path, tuple[Model, bool]] = {}
     for found in models:
-        for output in found.outputs:
+        for output in found.files():
             path = found._path(output.kind, output.out)
             other, given = seen.setdefault(path, (found, output.out is not None))
             if other is not found and not (given and output.out is not None):
@@ -1114,6 +1119,14 @@ from types import ModuleType as _ModuleType
 class _ModelModule(_ModuleType):
     def __call__(self, function: Any = None, /, **options: Any) -> Any:
         return model(function, **options)
+
+    def __getattr__(self, name: str) -> Any:
+        # An earlier spelling (``xbf``, the model's own declaration: ``model``), after its warning.
+        if name.startswith("__"):
+            raise AttributeError(name)
+        from cad._internal.aliases import lookup
+
+        return lookup(self.__name__, name)
 
 
 _sys.modules[__name__].__class__ = _ModelModule

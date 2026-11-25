@@ -72,7 +72,7 @@ class SameResultTest(unittest.TestCase):
         # each file type by two processes, each process by one file. The .xbf a model is saved as is cad.model's,
         # checked as the file it is.
         for document_type, of, path, processes in (("step", cad.step, step, ("cnc", "molding")),
-                                                   ("xbf", cad.model, xbf, ("sheet", "printing"))):
+                                                   ("model", cad.model, xbf, ("sheet", "printing"))):
             for process in processes:
                 with self.subTest(file=path.name, process=process):
                     held = of.dfm(path, process=process)
@@ -98,7 +98,7 @@ class SameResultTest(unittest.TestCase):
         self.assertEqual(_plain(held), _plain(today))
         self.assertEqual(held.measurements["process"], "cnc")
         self.assertTrue({"process_declared", "material_declared"} <= {f.code for f in held.findings})
-        self.assertEqual(_plain(cad.model.dfm(exported)), _plain(_today("xbf", exported, exported.resolve(), None)))
+        self.assertEqual(_plain(cad.model.dfm(exported)), _plain(_today("model", exported, exported.resolve(), None)))
         before = _restarted()  # its worker gone: the restarted engine answers from the result it kept on disk
         self.assertEqual(_plain(cad.model.dfm(block)), _plain(today))
         self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"], before["restored"] + 1))
@@ -127,12 +127,12 @@ class KeptResultTest(unittest.TestCase):
                 printer.write_text(json.dumps({"printable_area": ["0x0", f"{width}x200"], "printable_height": "200"}),
                                    encoding="utf-8")
                 for process in (None, "printing"):
-                    manufacturing.through_engine("xbf", source, process, given, False)
+                    manufacturing.through_engine("model", source, process, given, False)
             before, explicit_before, after, explicit_after = (call.args[1] for call in check.call_args_list)
             self.assertNotEqual(Checks.key(before, "test"), Checks.key(after, "test"))
             self.assertNotEqual(Checks.key(explicit_before, "test"), Checks.key(explicit_after, "test"))
             printer.unlink()  # The measuring process does not need the caller's file.
-            options = manufacturing.options("xbf", "printing", after["given"], printer_snapshot=after["printer_settings"])
+            options = manufacturing.options("model", "printing", after["given"], printer_snapshot=after["printer_settings"])
             self.assertEqual(options["build_volume"], "250x200x200")
 
     def test_a_check_is_kept_by_its_document_version_and_its_options(self) -> None:

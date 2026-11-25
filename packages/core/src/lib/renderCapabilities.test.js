@@ -18,7 +18,7 @@ test("each format's file-list glyph comes from its row", () => {
   for (const [format, row] of Object.entries(RENDER_CAPABILITIES)) {
     assert.ok(kinds.has(row.iconKind), `${format} has unknown icon kind ${row.iconKind}`);
   }
-  assert.equal(entryIconKindForRenderFormat(RENDER_FORMAT.XBF), ENTRY_ICON_KIND.STEP, "a STEP opens as an engine document");
+  assert.equal(entryIconKindForRenderFormat(RENDER_FORMAT.MODEL), ENTRY_ICON_KIND.STEP, "a STEP opens as an engine document");
   assert.equal(entryIconKindForRenderFormat(RENDER_FORMAT.SRDF), ENTRY_ICON_KIND.ROBOT);
 });
 

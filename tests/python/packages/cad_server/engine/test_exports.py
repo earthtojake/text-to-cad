@@ -588,7 +588,7 @@ class BuildFilesTest(unittest.TestCase):
         self.assertEqual(engine._routed({"source": {"path": str(declared)}, "cwd": str(self.folder)}),
                          ("documents", str(self.folder), None))
 
-    def test_a_derived_decorator_alone_writes_its_one_file(self) -> None:
+    def test_a_derived_decorator_alone_writes_its_file_and_the_model_s_xbf(self) -> None:
         script = self.write("solo.py", """
             import build123d as bd
             from cad.engine import step
@@ -600,7 +600,13 @@ class BuildFilesTest(unittest.TestCase):
         """)
         [report] = engine_build.build(script, None, cwd=self.folder)
         self.assertTrue(report["ok"], report)
-        self.assertEqual(self.files(), {"solo.py", "solo.step"})
+        # A model always writes its .xbf: @step alone, its STEP and <name>.xbf beside the script, the xbf first.
+        self.assertEqual(self.files(), {"solo.py", "solo.step", "solo.xbf"})
+        self.assertEqual([(Path(path).name, row["kind"], row["written"]) for path, row in report["files"].items()],
+                         [("solo.xbf", "xbf", True), ("solo.step", "step", True)])
+        from cad.engine import document
+
+        self.assertEqual(document.Loaded(self.folder / "solo.xbf").structure()["name"], "solo")
 
     def test_a_decorator_takes_out_alone_and_a_file_shows_the_joints_pose(self) -> None:
         import cad.engine

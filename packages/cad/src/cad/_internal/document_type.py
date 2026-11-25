@@ -19,10 +19,9 @@ step`` is one object that is
 Everything loads on first use: ``import cad`` imports no CAD kernel. A source of another type is
 refused by name before anything runs: a file of another type (``cad.stl.export("part.glb", ...)``: that's
 a glb's), a model's handle or document id given to a file's type (that's ``cad.model``'s), and a file
-given to ``cad.model`` but the one a model is saved as, its ``.xbf`` (``cad.registry.SAVED``): ``cad.model``
-is a model the engine holds or that file, and its operations run on the file as the file it is
-(``refuse_other`` says which of the two a source is). ``cad.xbf`` is the older spelling of ``cad.model``
-for that file: the same decorator, reader and operations.
+given to ``cad.model`` but the one a model is saved as, its ``.xbf``: ``cad.model`` is a model the engine
+holds or that file, and its operations run on the file as the file it is. ``cad.xbf``, its earlier
+spelling, is an alias of ``cad.model`` (``cad._internal.aliases``).
 """
 
 from __future__ import annotations
@@ -33,20 +32,14 @@ import types
 from pkgutil import resolve_name as _resolve
 from typing import Any
 
-__all__ = ["DocumentType", "ModelType", "bind", "refuse_other"]
+__all__ = ["DocumentType", "ModelType", "bind", "is_file", "refuse_other"]
 
 # An operation a type does not implement, read as one that needs no integration.
 _NONE = types.SimpleNamespace(integration=None, family=None)
-# A type's reader, by the name the type is spelled by (``cad.registry.spelling``): the function that reads a file
-# of it into a model. ``model``'s reads the file a model is saved as.
+# A type's reader: the function that reads a file of it into a model. ``model``'s reads the .xbf a model is
+# saved as.
 _READERS = {"step": "cad.engine.model.read_step", "model": "cad.engine.model.read_xbf",
             "stl": "cad.engine.reader.read_mesh"}
-
-
-def _spelled(document_type: str) -> str:
-    from cad.registry import spelling
-
-    return spelling(document_type)
 
 
 class DocumentType(types.ModuleType):
@@ -79,8 +72,8 @@ class DocumentType(types.ModuleType):
 
     def __getattr__(self, name: str) -> Any:
         entry = self.entry
-        if name == "read" and _spelled(entry.id) in _READERS:
-            value = _resolve(_READERS[_spelled(entry.id)])
+        if name == "read" and entry.id in _READERS:
+            value = _resolve(_READERS[entry.id])
             self.__dict__[name] = value  # one object, every lookup: cad.read_step is cad.step.read
             return value
         if name in ("export", "snapshot", "inspect") and name in entry.operation_names:
@@ -136,18 +129,16 @@ class DocumentType(types.ModuleType):
 
     def __repr__(self) -> str:
         entry = self.entry
-        return f"<document type {entry.id!r}: {', '.join(entry.extensions) or 'no file, held in memory'}>"
+        return f"<document type {entry.id!r}: {'held in memory, or ' if entry.held else ''}{', '.join(entry.extensions)}>"
 
 def refuse_other(document_type: str, source: Any) -> str:
-    """The type ``source`` is of, for an operation of ``document_type``: that type, or, for ``model`` given the
-    file a model is saved as, that file's (``cad.registry.SAVED``), whose operation the caller then runs. A
-    source of any other type is refused by name before anything runs: a file of another type
-    (``cad.stl.export("part.glb")`` is a glb's: use cad.glb), a model's handle or document id given to a file's
-    type (use cad.model), any other file given to ``cad.model``. None (no source: a snapshot's job names its
-    own) passes."""
+    """``document_type``, for an operation of it given ``source``, after refusing a source of any other type by
+    name before anything runs: a file of another type (``cad.stl.export("part.glb")`` is a glb's: use cad.glb), a
+    model's handle or document id given to a file's type (use cad.model), any other file given to ``cad.model``
+    than its ``.xbf``. None (no source: a snapshot's job names its own) passes."""
     if source is None:
         return document_type
-    from cad.registry import DOCUMENT_TYPES, SAVED, spelling, type_of
+    from cad.registry import DOCUMENT_TYPES, type_of
 
     entry = DOCUMENT_TYPES[document_type]
     if isinstance(source, (str, os.PathLike)):
@@ -157,21 +148,30 @@ def refuse_other(document_type: str, source: Any) -> str:
 
         named = parts(text)[0]  # a FILE#REF's file, a path that holds a '#' itself whole
         if is_id(named):
-            if entry.has_file:
+            if not entry.held:
                 raise ValueError(f"{text} is a model's document id, not a {entry.suffix} file: use cad.model")
-            return document_type
+            return entry.id
         found = type_of(named)
-        if found is not None and found.id == SAVED and not entry.has_file:
-            return SAVED
         if found is not None and found.id != entry.id:
-            raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{spelling(found.id)}")
-        if found is None and not entry.has_file:
+            raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{found.id}")
+        if found is None and entry.held:
             raise ValueError(f"cad.model takes a model's handle, its document id (cad run SCRIPT.py prints it) or "
-                             f"an {DOCUMENT_TYPES[SAVED].suffix} file, not {text!r}")
-        return document_type
-    if entry.has_file:
+                             f"an {entry.suffix} file, not {text!r}")
+        return entry.id
+    if not entry.held:
         raise ValueError(f"cad.{entry.id} takes a {entry.suffix} file; {_what(source)} is a model's: use cad.model")
-    return document_type
+    return entry.id
+
+
+def is_file(source: Any) -> bool:
+    """Whether ``source`` names a file (a path, a ``FILE#REF``'s file), not a model the engine holds (its handle,
+    its document id): a model's operation given its ``.xbf`` reads the file as the file it is."""
+    if not isinstance(source, (str, os.PathLike)):
+        return False
+    from cad.engine.addresses import parts
+    from cad.engine.ids import is_id
+
+    return not is_id(parts(os.fspath(source))[0])
 
 
 def _what(source: Any) -> str:
@@ -181,8 +181,8 @@ def _what(source: Any) -> str:
 
 
 class ModelType(DocumentType):
-    """``cad.model``: the one type with no file, whose decorator is the engine's model itself, and whose
-    script declares its parameters with it (``model.param``, ``cad.engine.parameters.param``: the standard
+    """``cad.model``: the one type a document of which the engine also holds by its id, whose decorator is the
+    engine's model itself, and whose script declares its parameters with it (``model.param``, ``cad.engine.parameters.param``: the standard
     library alone, so ``import cad`` stays kernel-free)."""
 
     _declarations = ("param",)

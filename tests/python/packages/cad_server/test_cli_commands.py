@@ -42,8 +42,8 @@ TYPES = {
 COMMANDS = ("serve", "status", "stop", "delete", "server", "mcp", "run", "requirement", "doctor", "cache", "setup",
             "viewer", "telemetry", "update", "plugin")
 # Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's skill text and updaters), the commands for
-# programs rather than people, and `xbf`, the older spelling of `cad model` for an .xbf file, which the skill text
-# of releases up to 0.11.17 says (``test_older_xbf_spellings.py``).
+# programs rather than people, and `xbf`, the earlier spelling of `cad model`, which runs it saying it is deprecated
+# and which the skill text of releases up to 0.11.17 says (``test_older_xbf_spellings.py``).
 UNLISTED = ("status", "stop", "setup", "serve", "requirement", "xbf")
 
 
@@ -61,10 +61,8 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
 
 class TheCommandTable(unittest.TestCase):
     def test_the_table_is_pinned(self) -> None:
-        from cad.registry import spelling
-
-        # Each type by the name it is spelled by: the file a model is saved as is `cad model`'s.
-        self.assertEqual(TYPES, {name: operations_of(name) for name in DOCUMENT_TYPES if spelling(name) == name})
+        # Each type by its id; an earlier one (`cad xbf`) is unlisted.
+        self.assertEqual(TYPES, {name: operations_of(name) for name in DOCUMENT_TYPES})
         self.assertEqual(sorted(TYPES), sorted(set(cli.TYPE_COMMANDS) - set(UNLISTED)))
         self.assertEqual(sorted(COMMANDS), sorted(cli._COMMANDS))  # noqa: SLF001 - the table IS the subject
         for name, module in cli.TYPE_COMMANDS.items():
@@ -139,15 +137,15 @@ class TheCommandTable(unittest.TestCase):
 
     def test_a_file_that_is_not_there_is_the_same_failure_for_every_type(self) -> None:
         """Every operation of every file's type refuses a file that is not there before anything runs, alike:
-        ``not_found``, exit 2, with ``--json`` and without; and a file of no type as ``wrong_type``."""
+        ``not_found``, exit 2, with ``--json`` and without; and a file of no type as ``wrong_type``. A model's file is
+        its ``.xbf``, which every operation of ``cad model`` takes as it takes an id: one type, no operation of it
+        that its file lacks."""
         from cad.registry import DOCUMENT_TYPES as TYPES_TABLE
         from cad_server.cli.document_types import OPERATIONS
 
         rest = {"export": ["out.step"], "snapshot": ["out.png"], "dfm": []}
         for document_type, operation in sorted(OPERATIONS):
             entry = TYPES_TABLE[document_type]
-            if not entry.has_file:
-                continue
             missing = f"no-such-file{entry.extensions[0]}"
             extra = (["--to", "pdf", "-o", "out"] if document_type.startswith("kicad_") and operation == "export"
                      else rest.get(operation, []))
@@ -230,9 +228,9 @@ class TheCommandTable(unittest.TestCase):
                                           "prints it) or an .xbf file, not 'arm'\n"))
         # An .xbf given to another type's command is sent to the one that takes it, which is `cad model`.
         code, _, err = _run(["step", "export", "arm.xbf", "arm.glb"])
-        self.assertEqual((code, err), (2, "cad step export: arm.xbf is a xbf, not a step: use cad model export\n"))
+        self.assertEqual((code, err), (2, "cad step export: arm.xbf is a model, not a step: use cad model export\n"))
         code, _, err = _run(["mujoco", "check", "arm.xbf"])
-        self.assertEqual((code, err), (2, "cad mujoco check: arm.xbf is a xbf, not a file cad mujoco check takes (.xml "
+        self.assertEqual((code, err), (2, "cad mujoco check: arm.xbf is a model, not a file cad mujoco check takes (.xml "
                                           "or .mjcf): use cad model dfm\n"))
         # A mesh's export meshes nothing: its parser has no --tolerance or --angle.
         for flag, value in (("--tolerance", "0.01"), ("--angle", "5")):
@@ -288,27 +286,6 @@ class TheCommandTable(unittest.TestCase):
             self.assertEqual(_run(["model", "export", ident, "share/arm.xbf"])[0], 0)
             self.assertEqual(_run(["model", "export", saved, "arm.glb"])[0], 0)
         self.assertEqual(asked, [(ident, ["share/arm.xbf"], "cad model export"), (saved, ["arm.glb"], "cad model export")])
-
-    def test_an_operation_an_xbf_lacks_refuses_the_file_and_says_what_takes_it(self) -> None:
-        """An operation ``model`` has and the file's type has not (none today: the registry gives both the same)
-        refuses an ``.xbf``, the command line's failure, naming the operations the file takes and what this one
-        does."""
-        import dataclasses
-        from unittest import mock
-
-        from cad import registry
-
-        said = ("arm.xbf is an .xbf file, which has no ranges: cad model takes an .xbf file for export, snapshot, "
-                "inspect, dfm, interference, solve, and cad model ranges a model's document id, which cad run "
-                "SCRIPT.py prints")
-        saved = registry.DOCUMENT_TYPES["xbf"]
-        without = dataclasses.replace(saved, operations=tuple(op for op in saved.operations if op.name != "ranges"))
-        with mock.patch.object(registry, "_BY_EXTENSION", {**registry._BY_EXTENSION, ".xbf": without}):  # noqa: SLF001
-            code, out, err = _run(["model", "ranges", "arm.xbf"])
-            self.assertEqual((code, out), (2, ""))
-            self.assertEqual(err.splitlines()[-1], f"cad model ranges: error: {said}")
-            code, out, err = _run(["model", "ranges", "arm.xbf", "--json"])
-            self.assertEqual((code, err, json.loads(out)), (2, "", {"ok": False, "error": said, "reason": "usage"}))
 
     def test_a_types_own_option_before_its_file_is_no_file(self) -> None:
         """``--urdf robot.urdf`` is srdf validate's own option, wherever it stands: the file it validates is

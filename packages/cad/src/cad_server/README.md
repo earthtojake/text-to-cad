@@ -165,8 +165,9 @@ exact requirement a Python of a program's own installs this release's cad by (`c
 
 A command the skills used keeps working for at least 30 days after the skills stop using it. One is kept so
 now, run and never listed: `cad xbf <operation> FILE`, which the skill text of releases up to 0.11.17 says and
-`cad model <operation> FILE.xbf` replaces. It is `cad model` under that name (`cli/xbf.py`), and goes, with
-that module and its `_UNLISTED` entry, 30 days after the release whose skills stop saying it.
+`cad model <operation> FILE.xbf` replaces. It runs `cad model` (`cli/xbf.py`) after one line on stderr saying it
+is deprecated (none under `--json`), and goes, with that module and its `cad.registry.ALIASES` entry, 30 days
+after the release whose skills stop saying it.
 
 On Windows, what a command writes to a pipe or a file is UTF-8, and so is what the program `cad run` runs
 writes (a console is left as it is, as is every stream elsewhere); Windows PowerShell 5.1 decodes a

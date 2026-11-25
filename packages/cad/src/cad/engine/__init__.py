@@ -41,8 +41,6 @@ from typing import Any
 
 __all__ = ["dxf", "glb", "memo", "model", "paint", "read_mesh", "read_step", "read_xbf", "step",
            "stl", "threemf"]
-# ``@xbf(path)``, the older spelling of ``@model(path)``: answered, not listed.
-_OLDER = ("xbf",)
 
 
 def _main_in_a_package() -> None:
@@ -70,12 +68,17 @@ def __getattr__(name: str) -> Any:
         from cad.engine.reader import read_mesh
 
         return read_mesh
-    if name in __all__ or name in _OLDER:
+    if name in __all__:
         import importlib
 
         declarations = importlib.import_module("cad.engine.model")
         return declarations if name == "model" else getattr(declarations, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    if name.startswith("__"):
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    # An earlier spelling (``@xbf``, the model's: ``cad.engine.model``), after its warning; else AttributeError.
+    from cad._internal.aliases import lookup
+
+    return lookup(__name__, name)
 
 
 def __dir__() -> list[str]:

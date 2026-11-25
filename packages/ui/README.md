@@ -115,7 +115,7 @@ src/
   library/           a host's home: the models opened before, to open again, and their pictures
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
-    xbf/            an engine document (.xbf) and a STEP: model tree, Params, Joints
+    xbf/            the model renderer (id `model`; `xbf` an alias): a model, held or its .xbf, and a STEP: model tree, Params, Joints
     robot/          URDF and SRDF: Links and Joints
     glb/, mesh/     GLB, and STL/3MF triangle meshes
     dxf/            2D drawings
@@ -153,14 +153,14 @@ import { createDxfRenderer } from '@cad/ui/renderers/dxf';
 import { createGlbRenderer } from '@cad/ui/renderers/glb';
 import { createMeshRenderer } from '@cad/ui/renderers/mesh';
 import { createRobotRenderer } from '@cad/ui/renderers/robot';
-import { createXbfRenderer } from '@cad/ui/renderers/xbf';
+import { createModelRenderer } from '@cad/ui/renderers/xbf';
 import '@cad/ui/tokens.css';
 import '@cad/ui/styles.css';
 
 // One viewer renderer per file family, sharing one client and one preference source.
 const renderers = [createDxfRenderer({ client, preferences }), createGlbRenderer({ client, preferences }),
   createMeshRenderer({ client, preferences }), createRobotRenderer({ client, preferences }),
-  createXbfRenderer({ client, preferences })];
+  createModelRenderer({ client, preferences })];
 // The host supplies storage, actions, navigation and environmental ports.
 <FileViewer file={selectedFile} host={host} renderers={renderers}
   state={state} onStateChange={setState} />;
@@ -264,7 +264,7 @@ A document is what a person reviews: a file in a format the viewer reads, or a m
 code. The viewer exists so that a person can review an agent's subjective output and answer it through the
 tools, annotate, select and quick edit; every renderer serves that review.
 
-A STEP opens in the engine document's renderer (`renderers/xbf`), as an `.xbf` does: the page
+A STEP opens in the model renderer (`renderers/xbf`), as a model's `.xbf` does: the page
 reads what the engine serves of it through the viewer (`client.engineDocument`,
 `/api/v1/documents/<kind>/<id>`) — its structure and one buffer per part — and reads no source or sidecar. A
 rebuild reaches the view as the engine's next version, and only the parts the edit changed are

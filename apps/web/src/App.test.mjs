@@ -210,7 +210,7 @@ test('a document\'s page has its name from its first frame where the boot learne
   const fetchBefore = globalThis.fetch;
   // The model's envelope, answered when the test says.
   let answer = () => {};
-  const envelope = { id: MODEL, kind: 'xbf', entry: { id: MODEL, file: MODEL, sourcePath: null, name: 'qdd_actuator' }, revision: '' };
+  const envelope = { id: MODEL, kind: 'model', entry: { id: MODEL, file: MODEL, sourcePath: null, name: 'qdd_actuator' }, revision: '' };
   globalThis.fetch = async (url, init = {}) => {
     if (url === `/api/v1/documents/${MODEL}`) await new Promise(resolve => { answer = resolve; });
     const reply = url === `/api/v1/documents/${MODEL}` ? envelope : url === '/api/v1/settings' ? { language: { locale: null } } : { documents: [] };

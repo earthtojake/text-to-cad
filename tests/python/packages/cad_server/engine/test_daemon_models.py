@@ -248,7 +248,7 @@ if __name__ == '__main__':
                                  env=self.env)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(sorted(path.relative_to(self.folder).as_posix() for path in self.folder.rglob("*") if path.is_file()),
-                         ["XBF/block.xbf", "block.py", "peg.stl"])
+                         ["XBF/block.xbf", "block.py", "peg.stl", "peg.xbf"])
 
     def test_decoration_only_declares_and_main_calls_only_its_selected_model(self) -> None:
         self.own()

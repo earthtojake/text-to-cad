@@ -17,10 +17,10 @@ shared by every type that has them, ``inspect`` where a type has it, and the res
 description's conformance check.
 
 ``model`` is a model built from code: held in the engine's memory, addressed by its document id or the handle
-its call returns (``@model`` declares one), or saved as a file, the ``.xbf`` the engine writes of one
-(``@model("arm.xbf")`` declares that too). ``xbf`` is that file's own type (``SAVED``), which the server and
-the viewer open; everywhere a type is named to a person or a program it is ``model``'s (``spelling``):
-``cad.model``'s decorator, reader (``model.read``) and operations, and ``cad model``, take the file.
+its call returns (``@model`` declares one), or saved as a file, its ``.xbf``, which every model writes and
+``.xbf`` names (``by_extension(".xbf")`` is ``model``). ``xbf``, the earlier id of that file's own type, is an
+alias of ``model`` wherever a type is looked up by id (``ALIASES``: ``DOCUMENT_TYPES["xbf"]`` is
+``DOCUMENT_TYPES["model"]``), and is listed nowhere.
 
 Kernel-free, the standard library alone: the server imports this module, and so does every page's
 build through the generated JavaScript. A producer's matcher reads a value's type names and modules,
@@ -37,11 +37,11 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
-__all__ = ["DOCUMENT_TYPES", "FILE_OPERATIONS", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "SAVED", "VIEWS", "DocumentTypeEntry",
+__all__ = ["ALIASES", "DOCUMENT_TYPES", "FILE_OPERATIONS", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
            "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integration_help",
            "integrations_of",
            "interference_check", "manufacturing_check", "platform_of", "producer_for", "producers_for",
-           "spelling", "type_of"]
+           "resolve", "type_of"]
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
@@ -198,9 +198,10 @@ class Edit:
 @dataclass(frozen=True)
 class DocumentTypeEntry:
     """One document type: its id, its name as people write it, its extensions (the first the one a
-    written file takes; none for ``model``, which has no file), its MIME type, how it is viewed, the
-    content it carries, its operations, and whether it has a decorator (``@<id>("out.<ext>")``) and a
-    reader (``<id>.read``).
+    written file takes: ``model``'s its ``.xbf``), its MIME type, how it is viewed, the content it carries,
+    its operations, whether it has a decorator (``@<id>("out.<ext>")``) and a reader (``<id>.read``), and
+    whether a document of it is also one the engine holds by its id, with no file of its own (``held``:
+    ``model``'s alone, built from code).
 
     ``wire`` is the spelling the frozen protocols carry for it -- the HTTP API's document kinds
     (``/api/v1/documents/<kind>/...``) and the analytics schemas -- which is the id but for
@@ -223,6 +224,8 @@ class DocumentTypeEntry:
     #: How a file of it is changed in place (``<id>.edit``, a ``with`` block), where it can be: a KiCad board's
     #: and schematic's, through KiCad's IPC API. None for a type whose files are made or authored alone.
     edit: Edit | None = None
+    #: A document of it is also one the engine holds by its id or a handle, built from code: ``model``'s alone.
+    held: bool = False
 
     def __post_init__(self) -> None:
         if not self.id.isidentifier() or self.id != self.id.lower():
@@ -240,13 +243,8 @@ class DocumentTypeEntry:
 
     @property
     def suffix(self) -> str:
-        """The extension a file of this type is written with ("" for a type with no file: ``model``)."""
+        """The extension a file of this type is written with (``model``'s: ``.xbf``)."""
         return self.extensions[0] if self.extensions else ""
-
-    @property
-    def has_file(self) -> bool:
-        """Whether a document of this type is a file (every type's but ``model``'s, held in memory)."""
-        return bool(self.extensions)
 
     def operation(self, name: str) -> Operation | None:
         return next((operation for operation in self.operations if operation.name == name), None)
@@ -313,18 +311,12 @@ _DOCUMENT_CONTENT = (*_STEP_CONTENT, "mechanism", "configuration sequences")
 _TYPES = (
     DocumentTypeEntry(
         "model", "model", "a model built from code: held in the engine's memory, addressed by its document id "
-                          "(cad run SCRIPT.py prints it) or the handle its call returns, or saved as a file, "
-                          "its .xbf",
-        (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
+                          "(cad run SCRIPT.py prints it) or the handle its call returns, and saved as a file, "
+                          "its .xbf: the engine's own document, an XCAF document as BinXCAF, with its build closure",
+        (".xbf",), "application/octet-stream", "document", (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
         (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True,
-        # ``model.read``: the reader of the file a model is saved as (``SAVED``).
-        reader=True, reader_integration=_KERNEL),
-    DocumentTypeEntry(
-        "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
-                      "closure", (".xbf",), "application/octet-stream", "document",
-        (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True, reader=True,
-        reader_integration=_KERNEL),
+        # ``model.read``: the reader of the .xbf a model is saved as.
+        reader=True, reader_integration=_KERNEL, held=True),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
         "application/step", "document", _STEP_CONTENT,
@@ -379,18 +371,38 @@ _TYPES = (
                   ("sheets", "symbols", "pins", "fields", "wires", "buses", "labels", "junctions", "no-connects", "nets"))),
 )
 
-#: Every document type, by id, in the table's order.
-DOCUMENT_TYPES: Mapping[str, DocumentTypeEntry] = MappingProxyType({entry.id: entry for entry in _TYPES})
-
-#: The type of the file a model is saved as: a kind of file the server and the viewer open, and no name of its
-#: own in the library or the ``cad`` command, where that file is ``model``'s (``spelling``).
-SAVED = "xbf"
+#: The earlier ids of a type, each the type it names now: ``xbf``, the file a model is saved as, is ``model``'s.
+#: Every lookup of a type by its id takes one (``DOCUMENT_TYPES["xbf"]``, ``resolve("xbf")``); no listing shows one.
+ALIASES: Mapping[str, str] = MappingProxyType({"xbf": "model"})
 
 
-def spelling(document_type: str) -> str:
-    """The name a type's decorator, reader, operations and command are spelled by: its id, but for the file a
-    model is saved as (``SAVED``), which is ``model``'s (``cad.model.read``, ``cad model export arm.xbf``)."""
-    return "model" if document_type == SAVED else document_type
+def resolve(document_type: str) -> str:
+    """A type's id as it is now: an earlier one (``ALIASES``) is the type it names, any other as given."""
+    return ALIASES.get(document_type, document_type)
+
+
+class _Types(Mapping):
+    """The document types by id, in the table's order: an earlier id (``ALIASES``) is looked up as the type it
+    names, and listed nowhere -- not in iteration, ``keys``, ``values``, ``items`` or ``len``."""
+
+    def __init__(self, entries: tuple[DocumentTypeEntry, ...]) -> None:
+        self._entries = {entry.id: entry for entry in entries}
+
+    def __getitem__(self, key: str) -> DocumentTypeEntry:
+        return self._entries[resolve(key)]
+
+    def __iter__(self) -> Any:
+        return iter(self._entries)
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __repr__(self) -> str:
+        return f"DOCUMENT_TYPES({', '.join(self._entries)})"
+
+
+#: Every document type, by id, in the table's order (an earlier id looked up as its type: ``ALIASES``).
+DOCUMENT_TYPES: Mapping[str, DocumentTypeEntry] = _Types(_TYPES)
 
 #: Every integration, by name.
 INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
@@ -551,7 +563,8 @@ def interference_check() -> Any:
 
 
 def producers_for(document_type: str) -> tuple[Producer, ...]:
-    """The producers of one type, every integration's."""
+    """The producers of one type, every integration's (an earlier id's: its type's, ``ALIASES``)."""
+    document_type = resolve(document_type)
     return tuple(producer for producer in _producers() if producer.document_type == document_type)
 
 
@@ -582,7 +595,7 @@ def help_text(document_type: str) -> str:
     """A type's help, worked out from this table: what it is, the content it carries, its operations and
     what writes it."""
     entry = DOCUMENT_TYPES[document_type]
-    lines = [f"{entry.id}: {entry.summary}" + (f" ({', '.join(entry.extensions)})" if entry.has_file else ""),
+    lines = [f"{entry.id}: {entry.summary}" + (f" ({', '.join(entry.extensions)})" if entry.extensions else ""),
              f"carries: {', '.join(entry.content)}"]
     lines.append("operations:")
     width = max((len(operation.name) for operation in entry.operations), default=0)
@@ -597,17 +610,15 @@ def help_text(document_type: str) -> str:
         lines.append(f"  with {entry.id}.edit(\"{entry.edit.noun}{entry.suffix}\") as {entry.edit.noun}: {entry.edit.hands}, "
                      f"changed in place, saved at the block's end when changed ({entry.edit.integration}: "
                      f"{', '.join(entry.edit.changes)})")
-    elif producers and not entry.has_file:
+    elif producers and entry.held:
         lines.append("made by:")
         for producer in producers:
-            lines.append(f"  @{entry.id} on a function returning {producer.accepts.removesuffix(' a model returns')} "
-                         f"({producer.integration}: {', '.join(producer.provides)})")
+            lines.append(f"  @{entry.id} on a function returning {producer.accepts.removesuffix(' a model returns')}, "
+                         f"its {entry.suffix} written by every run ({producer.integration}: {', '.join(producer.provides)})")
     elif producers:
         lines.append("written by:")
-        # The file a model is saved as is declared by @model itself; any other, by its type's decorator.
-        declared = f"@model({entry.id}=\"out{entry.suffix}\")" if entry.id == SAVED else f"@{entry.id}(\"out{entry.suffix}\")"
         for producer in producers:
-            lines.append(f"  {declared} of {producer.accepts} "
+            lines.append(f"  @{entry.id}(\"out{entry.suffix}\") of {producer.accepts} "
                          f"({producer.integration}: {', '.join(producer.provides)})")
     else:
         lines.append("written by: no producer; a file of it is authored")
@@ -637,9 +648,10 @@ def as_data() -> dict[str, Any]:
         "documentTypes": [
             {"id": entry.id, "title": entry.title, "wire": entry.wire, "extensions": list(entry.extensions),
              "mime": entry.mime, "view": entry.view, "operations": list(entry.operation_names),
-             "decorator": entry.decorator}
+             "decorator": entry.decorator, "held": entry.held}
             for entry in _TYPES
         ],
+        "aliases": dict(ALIASES),
     }
 
 
@@ -659,7 +671,7 @@ def as_docs() -> dict[str, Any]:
         "documentTypes": [
             {"id": entry.id, "title": entry.title, "summary": entry.summary, "extensions": list(entry.extensions),
              "mime": entry.mime, "view": entry.view, "content": list(entry.content),
-             "operations": operations(entry), "decorator": entry.decorator, "reader": entry.reader,
+             "operations": operations(entry), "decorator": entry.decorator, "held": entry.held, "reader": entry.reader,
              "readerIntegration": entry.reader_integration,
              "edit": None if entry.edit is None else {
                  "integration": entry.edit.integration, "noun": entry.edit.noun, "hands": entry.edit.hands,
@@ -668,6 +680,7 @@ def as_docs() -> dict[str, Any]:
                             "provides": list(producer.provides)} for producer in producers_for(entry.id)]}
             for entry in _TYPES
         ],
+        "aliases": dict(ALIASES),
         "integrations": [
             {"name": entry.name, "summary": entry.summary, "extra": entry.extra, "process": entry.process,
              "operations": operations(entry), "files": list(entry.files), "modules": list(entry.modules),
@@ -709,7 +722,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(as_docs_json())
         return 0
     if len(argv) == 1 and argv[0] in DOCUMENT_TYPES:
-        sys.stdout.write(help_text(argv[0]) + "\n")
+        sys.stdout.write(help_text(resolve(argv[0])) + "\n")
         return 0
     if len(argv) == 1 and argv[0] in INTEGRATIONS:
         sys.stdout.write(integration_help(argv[0]) + "\n")

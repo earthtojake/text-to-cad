@@ -30,11 +30,11 @@ class TheCopyIsTheLibrary(unittest.TestCase):
 
     def test_every_declared_name_is_in_it(self) -> None:
         import cad
-        from cad.registry import DOCUMENT_TYPES, INTEGRATIONS, spelling
+        from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
 
         docs = reference.as_docs()
-        # Each type by the name the library spells it by: the file a model is saved as is ``cad.model``'s.
-        spelled = [name for name in DOCUMENT_TYPES if spelling(name) == name]
+        # Each type by its id; an earlier one (``xbf``, an alias of ``model``) is listed nowhere.
+        spelled = list(DOCUMENT_TYPES)
         self.assertEqual([entry["name"] for entry in docs["documentTypes"]], spelled)
         model = next(entry for entry in docs["documentTypes"] if entry["name"] == "model")
         self.assertIn("read", [member["name"] for member in model["members"]])

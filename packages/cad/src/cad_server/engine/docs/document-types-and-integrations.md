@@ -24,12 +24,12 @@ protocols': `3mf` for `threemf` in `/api/v1/documents/<kind>/...` and in the ana
 `__call__` is the engine's `model` itself): `__call__` is the decorator (`cad.engine.model`'s, for a type
 with one), `read` the type's reader, and `export`, `snapshot` and `inspect` the engine's functions (`api`)
 behind a check that the source is the type's (`refuse_other`: no file of another type; for `model`, a
-handle, an id or the `.xbf` a model is saved as, `cad.registry.SAVED`, and no other file; for a file's type, no
-handle or id), which answers the type the source is of: `cad.model`'s operations given that file run as the
-file's own (a check asked of the engine as an xbf's), so `model` is a model held or saved and the registry's
-`xbf` is only the kind of file the server and the viewer open. `cad.model.read` is the reader of that file
-(`cad.engine.model.read_xbf`). `cad.xbf`, the older spelling of `cad.model` for the file, answers through the
-same functions and is listed nowhere; a mesh's `export` takes no `tolerance` or `angle`.
+handle, an id or the `.xbf` a model is saved as, and no other file; for a file's type, no handle or id):
+`cad.model`'s operations given that file read it as the file it is (`is_file`), so `model` is a model held or
+saved, one type in every layer, and `.xbf` names it (`by_extension(".xbf")`). `cad.model.read` is the reader
+of that file (`cad.engine.model.read_xbf`). `xbf`, the earlier id of that file's type, is an alias of `model`
+in the registry (`ALIASES`: `DOCUMENT_TYPES["xbf"]` is `model`'s, listed nowhere), and `cad.xbf` a module
+alias of `cad.model` (below); a mesh's `export` takes no `tolerance` or `angle`.
 `dfm` is the manufacturing check's (below); `drc`, `erc` and `validate` are the type's own functions. Each attribute is resolved on first use and kept, so `cad.step.read
 is cad.engine.model.read_step` and `import cad` loads no kernel. The earlier spellings resolve through
 `cad._internal.aliases`: names through `lookup` (a module's `__getattr__`), modules through a
@@ -72,8 +72,8 @@ parser's usage error, naming the flag; a value the function itself refuses by na
 reads (`srdf.validate`'s `urdf`): one that is not there is refused before it runs (`not_found`), as
 its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
 ...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser. `model`'s
-runs take one file too, the `.xbf` a model is saved as, whose type has no command of its own
-(`cad.registry.spelling`; **CLI**). An
+runs take its file too, the `.xbf` a model is saved as, and `cad xbf`, the earlier id's command, runs `cad
+model` saying it is deprecated (**CLI**). An
 integration's operations on its tool's own files are made the same way, by `cad_server.cli.integrations`
 (`INTEGRATION_COMMANDS`, `cad_server.cli.<integration>`): each generated from its function's signature,
 its file refused by name where it is a document type's (which names that type's own check), any other

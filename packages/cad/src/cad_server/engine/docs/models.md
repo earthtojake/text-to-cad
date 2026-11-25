@@ -6,7 +6,8 @@ A model is a parameterless function that returns a build123d shape, declared by 
 declares, which stack, each adding its file: `@model`, the `.xbf` it is saved as, and a file decorator
 for any other; one kind twice is refused. A path is optional on each: omitted, it is the model's name
 (`name=`, else the function's) and the format's extension beside the script. The engine runs it in a warm
-worker, holds the result as an XCAF document in memory (`@model` writes its BinXCAF file),
+worker, holds the result as an XCAF document in memory, writes it as its BinXCAF file, its `.xbf` (at
+`@model`'s path, else beside the script: every model writes one, a model declared by a file decorator alone too),
 and writes the derived files the model declares, each a translation of that document. A drawing is
 a model like any other: its body returns 2D geometry (a sketch, a face, wires or edges), and `@dxf`
 declares its DXF.

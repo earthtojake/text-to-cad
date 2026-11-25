@@ -11,7 +11,7 @@ import { createDxfRenderer } from '@cad/ui/renderers/dxf';
 import { createGlbRenderer } from '@cad/ui/renderers/glb';
 import { createMeshRenderer } from '@cad/ui/renderers/mesh';
 import { createRobotRenderer } from '@cad/ui/renderers/robot';
-import { createXbfRenderer } from '@cad/ui/renderers/xbf';
+import { createModelRenderer } from '@cad/ui/renderers/xbf';
 import { createHarnessRenderer } from '@cad/ui/renderers/shell-harness';
 import type { ViewerHost } from '@cad/ui/host';
 import type { LiveViewController } from '@cad/ui/renderers/xbf';
@@ -120,7 +120,7 @@ function workspace(id: string, store: TabStore) {
   // One live binding per pane: whichever renderer the file selects binds the mounted view.
   const services = { client, preferences: store.settings, commands, live };
   // `harness` is test scaffolding for the shell's own tools; it ships nowhere.
-  const renderers = [createBoardRenderer(services), createSchematicRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createXbfRenderer(services), createHarnessRenderer(services)];
+  const renderers = [createBoardRenderer(services), createSchematicRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createModelRenderer(services), createHarnessRenderer(services)];
   return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
 }
 const a = workspace('one', tabStore), b = workspace('two', otherTabStore);

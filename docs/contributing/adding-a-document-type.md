@@ -93,7 +93,7 @@ The rules are the shared UI's documents. Read, in this order:
 The steps:
 
 1. **Pick the nearest existing view kind and compose it from the kit; never write a bespoke shell.**
-   A 3D mesh view (the `xbf`, `glb` and `mesh` renderers), a flat drawing (`dxf`), or a flat plot
+   A 3D mesh view (the model renderer, `renderers/xbf`, and the `glb` and `mesh` ones), a flat drawing (`dxf`), or a flat plot
    (`kicad_pcb`, on the kit's `FlatViewFrame` and `useFlatView`).
 2. **Support every standard tool that applies to the type**: Select (its picks are the type's refs,
    shown as chips), Draw, Measure, Display (the navbar's shared card, with the type's rows), and its panel's tabs (a

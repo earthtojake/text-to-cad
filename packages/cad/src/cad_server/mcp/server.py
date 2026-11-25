@@ -85,8 +85,8 @@ _RESOURCE_NOT_FOUND = -32002
 # The formats every surface opens, as the agent is told them and as a host's file handler offers them: a
 # cadgen engine document (XBF) among them, and a KiCad board and schematic.
 EXTENSIONS = sorted(set(VIEWER_EXTENSIONS))
-# File formats alone: a model, the one type with no file, is shown by its document id.
-FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values() if entry.has_file)
+# File formats alone, by their own names: a model's file is an XBF (a model the engine holds is shown by its id).
+FORMATS = ", ".join("XBF" if entry.held else entry.title for entry in DOCUMENT_TYPES.values())
 
 # How long a call that reads a view (cad_view, cad_screenshot) waits for one the agent just opened (a tab from
 # cad_open, a card from an inline cad_show) to sync for the first time: the host loads the page, then the page its
@@ -228,14 +228,14 @@ def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
 _REMOVED_TOOLS = {
     "cad_export": "The cad_export tool was removed in cad 0.11.10. Export with the cad command instead: "
                   "`cad model export <id> <file>...` for a model's document id, or `cad <type> export <file> <file>...` "
-                  "for a CAD file (type: step, xbf, stl, glb or threemf); `cad --help` gives the details.",
+                  "for a CAD file (type: model for an .xbf, step, stl, glb or threemf); `cad --help` gives the details.",
     "cad_snapshot": "The cad_snapshot tool was removed in cad 0.11.10. Draw a PNG with the cad command instead: "
                     "`cad model snapshot <id> <out.png>` for a model's document id, `cad <type> snapshot <file> <out.png>` "
                     "for a CAD file, or `cad model snapshot --job <packet>` for a Quick Edit packet; `cad --help` gives "
                     "the details.",
     "cad_inspect": "The cad_inspect tool was removed in cad 0.11.10. Inspect with the cad command instead: "
                    "`cad model inspect <id> [ref]` for a model's document id, or `cad <type> inspect <file> [ref]` for a "
-                   "CAD file (type: step, xbf or glb); `cad --help` gives the details.",
+                   "CAD file (type: model for an .xbf, step or glb); `cad --help` gives the details.",
 }
 
 

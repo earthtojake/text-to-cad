@@ -155,7 +155,7 @@ class SetTest(SetCase):
         status, said = post("model", {"values": {"pitch": 3}})
         self.assertEqual((status, said["code"], said["reason"]), (409, "not_writable", "shared"))
         self.assertEqual(post("model", {"path": str(self.script)})[0], 400, "a request names values alone")
-        self.assertEqual(post("xbf", {"values": {"wall": 3}})[0], 404, "a model's route alone")
+        self.assertEqual(post("step", {"values": {"wall": 3}})[0], 404, "a model's route alone")
         self.assertEqual(self.script.read_bytes(), before)
         status, said = post("model", {"values": {"wall": 3}})
         self.assertEqual((status, said["written"][0]["to"], said["rebuilt"]), (200, 3.0, [self.ident]))

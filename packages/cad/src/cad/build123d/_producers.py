@@ -49,10 +49,8 @@ _DOCUMENT = (*_STEP, "mechanism", "configuration sequences")
 _TRANSLATE = "cad.engine.export.translate"
 
 PRODUCERS: tuple[Producer, ...] = (
-    # The model's own document, held in the engine's memory: what every model makes, declared files or none.
+    # The model's own document, held in the engine's memory and saved as its .xbf: what every model makes.
     Producer("model", "build123d", _ACCEPTS, is_shape, "cad.engine.document",
-             (*_DOCUMENT, "animations", "build closure")),
-    Producer("xbf", "build123d", _ACCEPTS, is_shape, "cad.engine.document",
              (*_DOCUMENT, "animations", "build closure")),
     Producer("step", "build123d", _ACCEPTS, is_shape, _TRANSLATE, _STEP),
     Producer("glb", "build123d", _ACCEPTS, is_shape, _TRANSLATE,
