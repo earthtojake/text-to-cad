@@ -334,6 +334,26 @@ finally:
         self.assertEqual(status, 400, body)
         self.assertIn("garbage.step", body["error"])
 
+    def test_a_step_the_engine_may_not_read_says_so_and_is_read_once_it_may(self) -> None:
+        held = self.base / "held.step"
+        shutil.copyfile(self.step, held)
+        held.chmod(0)
+        self.addCleanup(held.chmod, 0o644)
+        try:
+            held.open("rb").close()
+        except PermissionError:
+            pass
+        else:
+            self.skipTest("this account reads a file whatever its mode")
+        # What Windows says of a file another program holds: the person's to free, said with what to do.
+        status, body = self.answer(held)
+        self.assertEqual((status, body.get("code")), (403, "unreadable"), body)
+        self.assertEqual(body["error"], f"{held} cannot be read: permission denied")
+        self.assertIn("another program may have it open", body["hint"])
+        # Let go: read on the next open, the refusal not held against it.
+        held.chmod(0o644)
+        self.assertEqual(self.structure(self.open(held))["path"], str(held))
+
     # --- helpers ---------------------------------------------------------------------------
 
     def daemon_pid(self) -> int:

@@ -7,7 +7,8 @@ kinds `viewer/kinds.py`); the pages are at the root -- `/` the home, `/<id>` a d
 `/app` the CAD app's module a card's shell imports. The version is in the path: within v1 a route
 or a key is only ever added, and a removal or a rename is a v2. Every answer is JSON but a file's
 bytes; every refusal is `{"error", "hint"}` -- what is wrong and what to do -- with its status: 400
-for a body or query the route cannot read, 404
+for a body or query the route cannot read, 403 for a file the engine may not read (`code`
+`unreadable`: another program holds it, or this account may not read it), 404
 for an unknown route, kind or id (a document's names its `state` where the engine says one), 405
 naming the methods the route takes (`Allow`), 413 for a body over its route's limit, 409 where
 the server's state refuses a change: a telemetry answer to a server that keeps no usage stats

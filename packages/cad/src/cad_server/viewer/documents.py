@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from cad.engine.addresses import document_id
-from cad.engine.ids import is_id
+from cad.engine.ids import canonical, is_id
 
 from cad.registry import DOCUMENT_TYPES
 
@@ -21,6 +21,9 @@ SERVE_HOLD_SECONDS = 2.0
 FINISHED_SECONDS = 30.0
 # How often a held request looks for the import's frame to have moved.
 IMPORT_POLL_SECONDS = 0.25
+# What to do about a file the engine may not read (``_unreadable``).
+UNREADABLE_HINT = ("another program may have it open, or be writing, syncing or scanning it: close it there or let "
+                   "that finish, then open it again; else check that this account may read it")
 
 
 def engine_document_path(file_ref):
@@ -75,7 +78,8 @@ class EngineDocuments:
         """``(status, body)``: ``{"doc"}`` at 200; 202 while the engine reads the file,
         ``{"state": "reading", "retryMs", "building"}``, ``building`` the last frame of the file's
         import where the engine has one (``serve.Server.importing``: a STEP's reader parsing it, then
-        collecting its parts, counted), else null; or the engine's refusal at 400. A request is held
+        collecting its parts, counted), else null; or the engine's refusal at 400, and a file it may not
+        read at 403 (``_unreadable``), which the next request reads again. A request is held
         up to ``hold_seconds``, or until the import's frame moves, so a page asking again shows each
         frame as it comes. ``ValueError`` for a request that names no engine document."""
         path = engine_document_path(file_ref)
@@ -86,6 +90,12 @@ class EngineDocuments:
         while True:
             slice_ = min(IMPORT_POLL_SECONDS, max(0.0, left))
             if serve.done.wait(slice_):
+                if serve.status == 403:
+                    # A read the file refused is said once, then asked again: the program that held it
+                    # may have let go, and nothing is known of its contents to remember.
+                    with self._lock:
+                        if self._serves.get(ident) is serve:
+                            del self._serves[ident]
                 return serve.status, serve.body
             left -= slice_
             if left <= 0 or self._progress(ident) != heard:
@@ -120,6 +130,8 @@ class EngineDocuments:
     def _run(self, serve: _Serve, path: str) -> None:
         try:
             serve.status, serve.body = 200, self.serve(path)
+        except PermissionError as error:
+            serve.status, serve.body = _unreadable(path, error) or (400, {"error": str(error) or type(error).__name__})
         except (ConnectionError, OSError, ValueError) as error:
             # The engine's own words for a file it will not serve, or a daemon that would not start.
             serve.status, serve.body = 400, {"error": str(error) or type(error).__name__}
@@ -145,3 +157,16 @@ class EngineDocuments:
         else:
             ident = self.server.add(Path(path))
         return {"doc": ident}
+
+
+def _unreadable(path: str, error: PermissionError) -> tuple[int, dict] | None:
+    """The 403 of a file the engine may not read (``code`` ``unreadable``), when ``error`` is the
+    refusal of the file itself: on Windows, another program holding it (``open`` says so as
+    ``[Errno 13]``, as it says a denied account), or this account may not read it. Its person's to
+    free, not a fault of its contents nor of cad's. None for a refusal of anything else."""
+    named = getattr(error, "filename", None)
+    if not named or canonical(os.fsdecode(named)) != canonical(path):  # as the engine spells the file it opened
+        return None
+    why = error.strerror or "permission denied"
+    return 403, {"error": f"{path} cannot be read: {why[:1].lower()}{why[1:]}", "hint": UNREADABLE_HINT,
+                 "code": "unreadable"}
