@@ -1382,8 +1382,8 @@ class CadApp:
         this cad's major; ``asked`` in its record, so it spends none of the automatic tries),
         answered ``202`` with ``GET /api/v1/server``'s ``release``, ``instance`` and ``cadUpdate``. ``{"dismiss": at}``:
         the failure of the attempt begun at ``at`` put away (``auto_update.dismiss``), answered ``200`` the same way.
-        Refused (409, its ``cause`` where it is one of ``auto_update.SAID``: ``no_switch``, ``no_installer``) where cad
-        cannot update itself, or where no engine serves this page (a test's server of its own). Behind every check a route that changes something has."""
+        Refused (409, its ``cause`` where it is one of ``auto_update.SAID``: ``no_switch``, ``no_installer``, with what
+        to do as its ``hint``, ``auto_update.advice``) where cad cannot update itself, or where no engine serves this page (a test's server of its own). Behind every check a route that changes something has."""
         from cad_server import updates
         from cad_server._internal import auto_update
 
@@ -1407,7 +1407,8 @@ class CadApp:
         blocked = auto_update.blocked(found)
         if blocked is not None:
             said = auto_update.in_words(blocked)
-            raise ApiError(409, said, hint, cause=blocked, said=said, installer=found.installer)
+            raise ApiError(409, said, auto_update.advice(blocked, found.installer), cause=blocked, said=said,
+                           installer=found.installer)
         answer = ask(True)
         if "failed" in answer:
             raise ApiError(409, str(answer["failed"]), hint)

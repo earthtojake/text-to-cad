@@ -14,8 +14,8 @@ reads as its interpreter starts (``_cad_release``). A process keeps the release 
 
 **A global install** (``global_install``) is a cad whose environment uv's ``uv tool install cad`` made (uv's receipt
 there names ``cad``) or pipx's ``pipx install cad`` (pipx's ``venvs/cad``, its metadata naming ``cad``). Only a global
-install updates itself, and the same way whoever made it: the installer is named for telemetry and ``cad doctor``
-alone, and its receipt is never rewritten. ``installed_tool`` finds the global install from anywhere (a cad run from
+install updates itself, and the same way whoever made it: the installer is named for telemetry, ``cad doctor`` and
+the command that installs cad again (``reinstall``) alone, and its receipt is never rewritten. ``installed_tool`` finds the global install from anywhere (a cad run from
 uv's cache): uv's tool first, then pipx's.
 
 **The switches** are the person's, in cad's settings (``settings.json`` in the state folder): ``auto_update.on``,
@@ -48,7 +48,8 @@ starts, detached, by this environment's own interpreter (``helper_command``). Th
 (``RECORD``: ``release``, ``wanted``, ``from``, ``at``, ``tries``, ``installer``, ``asked`` -- a person's own update
 --, ``major``, ``phase``, ``beat``, then the worker's ``ended``, ``outcome``, ``detail``, ``restored``, ``started``
 and, where it did not install what it was for, ``cause``: one word of ``auto_update_helper.CAUSES``, said in plain
-words by ``SAID``; ``dismissed`` once the person put its failure away), which ``cad doctor`` and the viewer's update
+words by ``SAID``, and what to do about it by ``advice``, the one line ``cad doctor``, ``cad update`` and ``notice``
+give; ``dismissed`` once the person put its failure away), which ``cad doctor`` and the viewer's update
 button (``button``) show, with the worker's log (``LOG``; the attempt before's ``LOG_BEFORE``; never sent). While the
 worker switches releases (``switching``) a ``cad`` command that finds no server waits for the next
 (``cad.engine.client.SWITCHING``). A worker silent for ``LOST_SECONDS`` is taken for lost; should it wake, it writes
@@ -68,6 +69,10 @@ newer cad how the install command's run for it went (``plugin_catch_up.last``).
 higher major is out, the answer names it (``higher``, ``MAJOR_LINE``). ``cad update --major``: PyPI's newest of all.
 Neither the switch nor the schedule applies, and no automatic try is spent; where PyPI cannot be reached, the build
 runs all the same, bounded.
+
+**A cad that has stayed behind** (``notice``): where automatic updates are on and a global install has been behind a
+release of its own major for ``BEHIND_SECONDS``, a ``cad`` command says so in one line on stderr after its own output,
+at most once a day (``cad_server.cli``): the command line's counterpart of the viewer's update button.
 
 Imports the standard library alone; what it asks of cad it imports as it asks.
 """
@@ -833,10 +838,10 @@ CHECK_OFF = ("this cad server does not look for updates (CAD_UPDATE_CHECK=0, CI,
 def asked(*, major: bool = False, pypi: Callable[[], dict[str, Any] | None] | None = None) -> dict[str, Any]:
     """``cad update`` judged by the server it asks (``{"op": "update"}``, ``"major": true`` for ``--major``), for the
     cad this process is: ``{"failed"}`` in one line where it cannot update cad -- not a global install, the check
-    turned off for this process (``updates.checking``), none can begin (``blocked``), no release cad can bound a build
-    by --; ``{"ok": true, "newest"}``, this release, where PyPI names none newer that this update takes (of this cad's
-    major, ``choose``; of all, ``major``); or ``{"ok": true, "updating", "from"}``, the update to ``begin``:
-    ``updating`` the release PyPI names, or None where PyPI could not be asked, or named no release of this major (the
+    turned off for this process (``updates.checking``), none can begin (``blocked``: why, then what to do, ``advice``),
+    no release cad can bound a build by --; ``{"ok": true, "newest"}``, this release, where PyPI names none newer that
+    this update takes (of this cad's major, ``choose``; of all, ``major``); or ``{"ok": true, "updating", "from"}``, the
+    update to ``begin``: ``updating`` the release PyPI names, or None where PyPI could not be asked, or named no release of this major (the
     build then runs all the same); ``"major": true`` with ``major``. Without ``major``, ``higher``: the newest release
     of a higher major, where PyPI names one. PyPI is asked now (``updates.pypi``, or ``pypi``). Never raises."""
     try:
@@ -850,7 +855,7 @@ def asked(*, major: bool = False, pypi: Callable[[], dict[str, Any] | None] | No
             return {"failed": CHECK_OFF}
         stuck = blocked(found)
         if stuck is not None:
-            return {"failed": in_words(stuck)}
+            return {"failed": f"{in_words(stuck)}: {advice(stuck, found.installer)}"}
         if release(version) is None:
             return {"failed": f"cad {version} is no release, so it does not update itself"}
         known = (pypi or updates.pypi)()
@@ -924,9 +929,35 @@ SAID = {
     "lost": "the update's worker ended without saying how",
     "no_installer": "uv cannot be found, so no update can begin",
     "no_switch": ("this cad's environment does not read cad's pointer as Python starts, or its own install of cad is "
-                  "damaged, so an update would change nothing: install cad again with `uv tool install --force cad`"),
+                  "damaged, so an update would change nothing"),
     "packaged": "cad runs inside an app's private copy of AppData",
     "unknown": "uv's output names no cause cad knows",
+}
+# The command that installs cad again, by who made the global install (``Global.installer``): what a reinstall line
+# names (``advice``), never another.
+REINSTALL = {"uv": "uv tool install --force cad", "pipx": "pipx install --force cad"}
+UV_DOCS = "https://docs.astral.sh/uv/"
+# What to do about each cause (``advice``), by kind: the update tries again by itself; it follows a setting of uv's,
+# which the person changes; nothing is to be done; uv is to be installed; cad is to be installed again.
+RETRIES = "cad tries again by itself; `cad update` tries now"
+_SETTING = "the update follows your uv settings: change {setting}, then `cad update`"
+ADVICE = {
+    **dict.fromkeys(("network", "timeout", "no_release", "in_use", "unknown", "helper_start", "helper_crash", "lost"),
+                    RETRIES),
+    "denied": "give your user write access to cad's state folder ({state}) and to uv's cache, then " + RETRIES,
+    "disk_full": "free room on the disk, then " + RETRIES,
+    "offline": _SETTING.format(setting="uv's offline setting"),
+    "config_exclude": _SETTING.format(setting="uv's exclude-newer setting"),
+    "config_index": _SETTING.format(setting="the package index uv's settings name"),
+    "config_tls": _SETTING.format(setting="uv's TLS settings"),
+    "python": "the release asks for a newer Python than this cad was installed on: install cad again: `{reinstall}`",
+    "platform": "nothing to do: this computer cannot take the release, and cad tries each newer one by itself",
+    "broken": "nothing to do: cad kept the release it has and tries again by itself",
+    "start_failed": ("nothing to do: cad went back to the release before and takes the next release when it is out; "
+                     "`cad update` tries this one again"),
+    "no_switch": "install cad again: `{reinstall}`",
+    "packaged": "install cad again from PowerShell opened from the Start menu: `{reinstall}`",
+    **dict.fromkeys(("no_installer", "no_program"), f"install uv ({UV_DOCS}), then `cad update`"),
 }
 
 
@@ -948,11 +979,26 @@ def in_words(word: str) -> str:
     return SAID[word]
 
 
+def reinstall(installer: str | None = None) -> str:
+    """The command that installs cad again for a global install made by ``installer`` (``REINSTALL``; uv's where it
+    names neither)."""
+    return REINSTALL.get(installer or "uv", REINSTALL["uv"])
+
+
+def advice(word: str, installer: str | None = None) -> str:
+    """What to do about a cause (``ADVICE``), in one line that names one command where there is one to run: the one
+    ``cad doctor``, ``cad update``'s failure and the line a cad behind says (``notice``) give. A reinstall names the
+    command of who made the global install (``installer``: ``reinstall``). ``KeyError`` for a word that is no cause."""
+    return ADVICE[word].format(reinstall=reinstall(installer), state=_data())
+
+
 def waiting(known: Any = None, version: str | None = None,
             now: float | None = None) -> tuple[str, dict[str, Any], float | None] | None:
     """The release the version feed as last read (``known``) calls for from release ``version`` (this one's), where it
     has been tried by itself: ``(that release, its tries, when the next may begin by the schedule or None: at the next
-    check)``; else None. ``cad update`` tries it now whatever the schedule says."""
+    check)``; else None. A release held back (``given_up``: its tries' ``cause`` is ``start_failed``) has no next try
+    by itself, whatever the schedule says: its reader says it is held back. ``cad update`` tries it now whatever the
+    schedule says."""
     from cad_server import updates
 
     now = time.time() if now is None else now
@@ -1050,6 +1096,103 @@ def dismiss(at: float) -> bool:
         return True
     except Exception:  # noqa: BLE001 - a failure not put away is shown again
         return False
+
+
+# --- a cad that has stayed behind: one line on stderr ----------------------------------------------------------------
+
+NOTICE = "auto-update-notice.json"  # in the state folder: the release this cad is behind, since when, when it was said
+BEHIND_SECONDS = 3 * DAY  # how long a cad is behind before a command says so
+
+
+def notice(now: float | None = None) -> str | None:
+    """The one line a ``cad`` command says on stderr, after its own output, where this cad has stayed behind: the
+    command line's counterpart of the viewer's update button, for computers that never open the viewer. Only for a
+    global install with automatic updates on (a person who turned them off chose the release they have, and an agent
+    that read "run `cad update`" might run it against that choice) and the check not turned off for this process
+    (``updates.checking``); never where this cad is current by the version feed as last read (``choose``, never the
+    network), where an update is underway (``underway``) or the environment runs a newer release already (``stale``).
+    Kept in ``NOTICE`` (written whole): ``from``, this release, ``behind``, the release of its major it is behind,
+    ``since``, when a cad of this release was first seen behind, whatever newer release came out since, and ``said``.
+    The first time only the time is noted; from ``BEHIND_SECONDS`` after it, and not within a ``DAY`` of the last time
+    (a clock set back counts as long ago), the line, noted as said first: a file it cannot write says nothing, so it
+    can never be said on every command. The line names both releases, why in plain words (``in_words``), and what
+    to do (``advice``, the line ``cad doctor`` and ``cad update`` give for that cause): where none can begin
+    (``blocked``), and where this release's last attempt did not install (``cause``); else, no attempt on record,
+    ``cad update``. None otherwise. Never raises."""
+    try:
+        now = time.time() if now is None else now
+        lag = _lag(now)
+        if lag is None:
+            return None
+        version, target, kept = lag
+        path = _data() / NOTICE
+        if target is None:
+            if kept:
+                path.unlink()  # current: a release behind a later one starts afresh
+            return None
+        since = kept.get("since")
+        if kept.get("from") != version or not _time(since) or since > now:
+            _keep(path, {"from": version, "behind": target, "since": now})
+            return None
+        said = kept.get("said")
+        if now - since < BEHIND_SECONDS or (_time(said) and 0 <= now - said < DAY):
+            return None
+        line = _behind(version, target, now)
+        _keep(path, {**kept, "behind": target, "said": now})
+        return line
+    except Exception:  # noqa: BLE001 - the line never fails the command it follows, and one not kept is not said
+        return None
+
+
+def stayed_behind(now: float | None = None) -> str | None:
+    """The release this cad has been behind for ``BEHIND_SECONDS`` by ``notice``'s rule and record, read and never
+    written (``cad doctor``); else None. Never raises."""
+    try:
+        now = time.time() if now is None else now
+        lag = _lag(now)
+        if lag is None or lag[1] is None:
+            return None
+        version, target, kept = lag
+        since = kept.get("since")
+        return target if kept.get("from") == version and _time(since) and BEHIND_SECONDS <= now - since else None
+    except Exception:  # noqa: BLE001 - a report line, never a reason for it to fail
+        return None
+
+
+def _lag(now: float) -> tuple[str, str | None, dict[str, Any]] | None:
+    """What ``notice`` judges by: ``(this release, the release of its major the feed as last read calls for or None
+    where it is current, what ``NOTICE`` keeps)``; None where nothing is said (see ``notice``)."""
+    if uv_tool() is None and pipx_tool() is None or not switches()["on"]:
+        return None
+    from cad_server import updates
+
+    if not updates.checking():
+        return None
+    version = _version()
+    chosen = choose(updates.feed(fetch=False), version)
+    if chosen is not None and chosen.target is not None and (underway(now) is not None or stale(chosen.wanted)):
+        return None
+    try:
+        kept = json.loads((_data() / NOTICE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        kept = None
+    return version, chosen.target if chosen is not None else None, kept if isinstance(kept, dict) else {}
+
+
+def _behind(version: str, target: str, now: float) -> str:
+    """``notice``'s line for this cad, release ``version``, behind ``target``."""
+    found = global_install()
+    installer = found.installer if found is not None else None
+    stuck = blocked(found) if found is not None else None
+    if stuck is not None:
+        return (f"cad: this cad is {version} and cannot update itself to {target} ({in_words(stuck)}): "
+                f"{advice(stuck, installer)}")
+    record = last()
+    word = cause(record, now) if record is not None and record.get("from") == version else None
+    if word is not None:
+        return (f"cad: this cad is {version} and has not been able to update itself to {target} ({in_words(word)}): "
+                f"{advice(word, installer)}")
+    return f"cad: cad {target} is out and this is {version}: `cad update` updates it"
 
 
 

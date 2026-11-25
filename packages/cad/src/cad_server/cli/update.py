@@ -14,7 +14,8 @@ starts no server: an update typed with none running leaves none running. In a sh
 first to update through it.
 
 Then it waits for the update to end, saying each step once on stderr as the attempt's record names it (its ``phase``:
-the release installed beside this one, then the server restarted on it), and says how it ended, as the server that
+the release installed beside this one, then the server restarted on it), and says how it ended (a failure: why, what
+to do and where its log is, ``ended``), as the server that
 answers afterwards tells it (``{"op": "update", "begin": false}``), else as the attempt's record in the state folder
 does; ``WAIT_SECONDS`` at most. Nothing of this cad changes under it meanwhile: the update builds the release in a
 folder of its own and switches to it by a pointer, which this process, started before, never reads again.
@@ -195,8 +196,13 @@ def step(attempt: dict[str, Any], was: str, told_of: set[str], *, server: bool) 
 def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable[[str], int], *,
           higher: str | None = None) -> int:
     """An attempt that ended, said in one line: its exit status. The release it names is the one installed, where it
-    ended well (an update begun without PyPI's answer finds out only then). Of an attempt that was to start no server
-    (``"start": false``: none ran when it began), nothing is said of the server."""
+    ended well (an update begun without PyPI's answer finds out only then). One that failed for a cause it names says
+    it in plain words (``auto_update.in_words``), then what to do (``auto_update.advice``, by who made the global
+    install), then where the worker's log is; one whose new server did not start, that cad went back and runs the
+    release before still. One that names no cause says uv's last words (its ``detail``) and the server, of which
+    nothing is said for an attempt that was to start none (``"start": false``: none ran when it began)."""
+    from cad_server._internal import auto_update
+
     target = attempt.get("release")
     if attempt.get("outcome") in ("installed", "current"):
         done = (f"cad {target} is {newest_of(str(target), higher)}" if target == was
@@ -205,11 +211,27 @@ def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable
             return said(f"{done}, but the cad server did not start again: run `cad server start`")
         print(done)
         return 0
+    newest = "the newest release" if target == "latest" else target
+    word = auto_update.cause(attempt)
+    if word is not None:
+        installer = attempt.get("installer")
+        if installer not in auto_update.INSTALLERS:
+            found = auto_update.global_install()
+            installer = found.installer if found is not None else None
+        why, what = auto_update.in_words(word), auto_update.advice(word, installer)
+        if word == "start_failed":  # the release before named: it is the one that runs
+            why += f" (cad {was})"
+            if attempt.get("restored") is False:
+                why, what = f"{why}, but its server did not start either", "`cad server start` starts it"
+        from cad.engine.places import state_dir
+
+        log = state_dir() / auto_update.LOG
+        where = f"; its log: {log}" if log.is_file() else ""
+        return said(f"could not update cad {was} to {newest}, as {why}: {what}{where}")
     if running:
         serving = f"; cad {running} is running"
     else:
         serving = "" if attempt.get("start") is False else "; no cad server is running: run `cad server start`"
-    newest = "the newest release" if target == "latest" else target
     return said(f"could not update cad {was} to {newest}: {attempt.get('detail') or 'no reason given'}{serving}")
 
 

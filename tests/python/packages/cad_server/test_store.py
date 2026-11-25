@@ -250,6 +250,21 @@ class PublishTest(StoreCase):
         self.assertFalse(store.sound(self.staged(name="unpublished"), run=never))
         self.assertFalse(store.sound(self.root / "nothing", run=never))
 
+    def test_any_folder_of_packages_is_checked_as_a_build_is_and_says_the_check_s_last_line(self) -> None:
+        """``checks``, for ``cad doctor``: a stored release or an environment's own packages, run once by its own
+        check; whether it passed, and its last line, the error where it did not. Changes nothing."""
+        _prefix, packages = environment(self.root / "env", "1.0.0")
+        before = listing(packages)
+        run = Run((0, "selftest\ncad 1.0.0\n"))
+        self.assertEqual(store.checks(packages, run=run, timeout=5.0), (True, "cad 1.0.0"))
+        self.assertEqual(run.asked, [([sys.executable, "-I", "-S", "-c", store.VERIFY, str(packages)], 5.0)])
+        for answer, said in (((1, "Traceback\nImportError: cannot import name 'x' from 'cad_server.y'\n"),
+                              (False, "ImportError: cannot import name 'x' from 'cad_server.y'")),
+                             ((0, "cad 1.0.2\n"), (False, "cad 1.0.2")), ((None, ""), (False, "exit None"))):
+            with self.subTest(answer=answer):
+                self.assertEqual(store.checks(packages, run=Run(answer)), said)
+        self.assertEqual(listing(packages), before, "asking changes nothing")
+
     def test_a_stored_release_that_no_longer_runs_gives_way_to_the_new_build(self) -> None:
         final = self.published()
         write(final / "only-in-the-first-build")

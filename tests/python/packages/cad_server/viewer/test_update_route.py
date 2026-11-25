@@ -138,11 +138,14 @@ class UpdateRouteTest(unittest.TestCase):
         with mock.patch.object(auto_update, "find_uv", return_value=None), \
                 mock.patch.object(auto_update, "carried_uv", return_value=None):
             status, answer = self.ask("POST", "/api/v1/local/update", {})
-        self.assertEqual((status, answer["cause"], answer["said"]),
-                         (409, "no_installer", "uv cannot be found, so no update can begin"))
+        self.assertEqual((status, answer["cause"], answer["said"], answer["hint"]),
+                         (409, "no_installer", "uv cannot be found, so no update can begin",
+                          "install uv (https://docs.astral.sh/uv/), then `cad update`"))
         with mock.patch.object(store, "switches", return_value=False):
             status, answer = self.ask("POST", "/api/v1/local/update", {})
-        self.assertEqual((status, answer["cause"], answer["said"]), (409, "no_switch", auto_update.in_words("no_switch")))
+        self.assertEqual((status, answer["cause"], answer["said"], answer["hint"]),
+                         (409, "no_switch", auto_update.in_words("no_switch"),
+                          auto_update.advice("no_switch", answer["installer"])))
         self.assertEqual(self.asked, [], "nothing asked of the engine")
         self.server.update = None
         self.assertEqual(self.ask("POST", "/api/v1/local/update", {})[0], 409, "no engine under the page")

@@ -46,9 +46,9 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
-__all__ = ["BUILDING", "FOLDER", "Failed", "LINK", "MARKER", "TRASH", "active", "build", "built_for", "clean",
-           "environment", "folder", "held", "marker", "own", "packages", "point", "pointed", "pointer", "pointer_path",
-           "publish", "remove", "restore", "root", "running", "sound", "switches", "tag", "verify"]
+__all__ = ["BUILDING", "FOLDER", "Failed", "LINK", "MARKER", "TRASH", "active", "build", "built_for", "checks",
+           "clean", "environment", "folder", "held", "marker", "own", "packages", "point", "pointed", "pointer",
+           "pointer_path", "publish", "remove", "restore", "root", "running", "sound", "switches", "tag", "verify"]
 
 # ``_cad_release``'s names and rules, which never change: the store's folder in the state folder, a stored release's
 # marker, and where an environment's pointer is (``environment``, ``pointer_path``). Kept here too, since nothing
@@ -386,6 +386,16 @@ def sound(path: str | os.PathLike[str], *, run: Run, timeout: float = VERIFY_SEC
         return False
     ran, _code, _said, release = _run_once(path, run, timeout)
     return ran and release == kept["release"]
+
+
+def checks(path: str | os.PathLike[str], *, run: Run, timeout: float = VERIFY_SECONDS) -> tuple[bool, str]:
+    """Whether the cad in the folder of packages ``path`` -- a stored release, or an environment's own packages --
+    passes its own check, run once as ``verify`` runs a build's (``_run_once``), and the last line the check printed
+    (``cad <release>`` where it passed; where it did not, its error: an ``ImportError`` names the module). For ``cad
+    doctor``; changes nothing."""
+    ran, code, said, _release = _run_once(path, run, timeout)
+    lines = [line.strip() for line in (said or "").splitlines() if line.strip()]
+    return ran, lines[-1] if lines else f"exit {code}"
 
 
 def publish(staged: str | os.PathLike[str], release: str, *, run: Run | None = None) -> Path:

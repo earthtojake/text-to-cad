@@ -10,16 +10,20 @@ records, Recents and settings in the state folder, and anything else in the fold
 - ``dir``: the cache folder.
 - ``prune``: what this release of cad cannot use: the environments made for another release (their marker names it,
   ``base.marked``), and the release folders of the layout of 0.11.11 and earlier (``<state>/releases/<release>``,
-  ``releases.root``) but the one ``installations/current`` names, which those releases' server lines still start.
-- ``clean``: all of the cache, and what ``prune`` removes; refused while a server runs, which runs from it.
+  ``releases.root``) but the one ``installations/current`` names, which those releases' server lines still start;
+  and the releases cad's update keeps that nothing runs or points at any more (its store, which is in the state
+  folder, not the cache: ``store.clean``), left as they are while an update is underway (``_store``).
+- ``clean``: all of the cache, and what ``prune`` removes of it; refused while a server runs, which runs from it.
 
 Neither asks first: each says what it removed, and the disk that freed (``freed``). A folder a process runs from is
-kept, and said (``releases.running``). Nothing else of cad deletes a past release's folders or environments.
+kept, and said (``releases.running``; in the store, ``store.remove``). Nothing else of cad deletes a past release's
+folders or environments but cad's update and its server's start, which tidy the store as ``prune`` does.
 """
 
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import sys
 from collections.abc import Iterable, Sequence
@@ -40,7 +44,8 @@ def build_parser(prog: str = DEFAULT_PROG):
     commands.add_parser("dir", help="print where cad's cache is", description="Print where cad's cache is.")
     commands.add_parser("prune", help="remove what this release of cad cannot use",
                         description="Remove what this release of cad cannot use: environments made for other "
-                                    "releases, and the release folders of 0.11.11 and earlier.")
+                                    "releases, the release folders of 0.11.11 and earlier, and the releases cad's "
+                                    "update keeps that nothing runs any more.")
     commands.add_parser("clean", help="remove all of cad's cache; cad makes it again as it needs it",
                         description="Remove all of cad's cache, and what prune removes; cad makes it again as it needs "
                                     "it. Refused while the cad server runs.")
@@ -144,8 +149,46 @@ def _say(line: str) -> None:
     sys.stdout.flush()
 
 
-def _remove(going: list[tuple[Path, str]], kept: list[tuple[Path, str]]) -> int:
-    """``going`` removed, each said, and ``kept`` said; then what that freed. 1 where one could not be removed."""
+def _store() -> tuple[int, int, str]:
+    """The store of cad's update tidied (``store.clean``), where no update is underway (``auto_update.underway``: one
+    may have built a release and not pointed at it yet), each thing it removed said, and each stored release it kept
+    because a process runs it (one no pointer names: ``store.remove`` refused it): ``(how many removed, the room that
+    freed, the clause the summary ends with)``."""
+    from cad_server._internal import auto_update, store
+
+    if auto_update.underway() is not None:
+        return 0, 0, "; cad's update is underway, so the releases it keeps are left as they are"
+    root = store.root()
+    entries = _folders(root)
+    space = freed(entries)
+    gone = store.clean()
+    named: set[str] = set()  # what the pointers left name: kept for what they are, not said
+    for pointer in root.glob("pointer-*.json"):
+        try:
+            found = json.loads(pointer.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(found, dict):
+            named |= {os.path.normcase(os.path.abspath(str(found[key]))) for key in ("path", "previous")
+                      if found.get(key)}
+    for name in gone:
+        path = root / name
+        what = ("a pointer that names nothing any more" if name.startswith("pointer-") else
+                "a release removed earlier" if name.startswith(store.TRASH) else
+                "a build of cad's update that did not end" if name.startswith(store.BUILDING) else
+                f"cad {name.split('-', 1)[0]}, kept by cad's update")
+        _say(f"removed {path} ({what})")
+    left = [path for path in entries if os.path.lexists(path)]
+    for path in left:
+        if (path / store.MARKER).is_file() and not path.name.startswith(".") \
+                and os.path.normcase(os.path.abspath(path)) not in named:
+            _say(f"kept {path}: a process runs it")
+    return len(gone), max(0, space - freed(left)), ""
+
+
+def _remove(going: list[tuple[Path, str]], kept: list[tuple[Path, str]], *, tidy: bool = False) -> int:
+    """``going`` removed, each said, and ``kept`` said; ``tidy``: then the store of cad's update tidied (``_store``);
+    then what that freed. 1 where one could not be removed."""
     from cad_server._internal import base
 
     space, failed, removed = freed(path for path, _what in going), False, 0
@@ -162,7 +205,11 @@ def _remove(going: list[tuple[Path, str]], kept: list[tuple[Path, str]]) -> int:
         _say(f"kept {path}: {why}")
     if failed:  # what stayed frees nothing
         space -= freed(path for path, _what in going if os.path.lexists(path))
-    _say(f"{removed} removed, {size(max(0, space))} freed" if removed else "nothing removed")
+    clause = ""
+    if tidy:
+        more, room, clause = _store()
+        removed, space = removed + more, max(0, space) + room
+    _say((f"{removed} removed, {size(max(0, space))} freed" if removed else "nothing removed") + clause)
     return 1 if failed else 0
 
 
@@ -206,7 +253,7 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
         _say(str(folder()))
         return 0
     if args.command == "prune":
-        return _remove(*prunable())
+        return _remove(*prunable(), tidy=True)
     return _clean()
 
 

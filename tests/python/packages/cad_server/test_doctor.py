@@ -178,10 +178,127 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual((code, code_json, found["ok"], found["version"], err), (0, 0, True, version(), ""))
         self.assertEqual(said.count("\n"), 1, "one line")
         names = [check["name"] for check in found["checks"]]
-        self.assertEqual(names[:5], ["python", "install", "data", "cache", "kernel"])
+        self.assertEqual(names[:5], ["python", "install", "data", "cache", "kernel"], "a checkout: no release check")
+        self.assertNotIn("fix", names, "all is well: no fix")
         self.assertLessEqual({"trimesh", "kicad", "server"}, set(names))
         self.assertTrue(all(check["status"] in ("ok", "info", "warning", "failed") for check in found["checks"]))
         self.assertEqual([f"  {check['name']:<8} {check['detail']}" for check in found["checks"]], out.splitlines()[1:])
+
+
+class WhereCadRunsFromTests(unittest.TestCase):
+    """The install line says where cad runs from: the environment its installer made and the release installed
+    there, and where cad's own update switched it to a release it keeps, that one; a pointer the environment no longer
+    takes is said under it. The release check runs what this process runs by its own check, and where it fails says
+    the way out, cad installed again by its installer, which the fix check repeats. A checkout has neither."""
+
+    def setUp(self) -> None:
+        root = TemporaryDirectory()
+        self.addCleanup(root.cleanup)
+        self.root = Path(root.name).resolve()
+        self.prefix = self.root / "tools" / "cad"
+        self.packages = self.prefix / "lib" / "python3.12" / "site-packages"
+        info = self.packages / "cad-0.12.0.dist-info"
+        info.mkdir(parents=True)
+        for name in ("RECORD", "METADATA"):
+            (info / name).write_text("", encoding="utf-8")
+        from cad_server._internal import auto_update, store
+
+        self.ran: list[list[str]] = []
+        self.said = (0, "cad 0.12.0\n")
+        for patcher in (mock.patch.dict("os.environ", {"CAD_STATE_DIR": str(self.root / "state"),
+                                                       "CAD_CACHE_DIR": str(self.root / "cache"),
+                                                       "CAD_ENGINE_DIR": str(self.root / "engine"),
+                                                       "CAD_UPDATE_CHECK": "0"}),
+                        mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_OK, "/site/OCP.pyd")),
+                        mock.patch.object(sys, "prefix", str(self.prefix)),
+                        mock.patch.object(store, "packages", return_value=self.packages),
+                        mock.patch.object(auto_update, "global_install",
+                                          return_value=auto_update.Global("uv", self.prefix, "/bin/uv")),
+                        mock.patch("cad_server._internal.auto_update_helper.run",
+                                   side_effect=lambda command, timeout: self.ran.append(command) or self.said)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def checks(self) -> tuple[int, dict]:
+        code, out, _err = _run(["--json"])
+        return code, {check["name"]: check for check in json.loads(out)["checks"]}
+
+    def test_the_install_line_says_the_environment_and_the_release_its_update_keeps(self) -> None:
+        import cad_server
+        from cad_server._internal import store
+
+        _code, found = self.checks()
+        self.assertEqual(found["install"], {"name": "install", "status": "info",
+                                            "detail": f"{self.prefix} (cad 0.12.0, installed by uv)"})
+        kept = self.root / "state" / "store" / "0.12.4-cpython-312"
+        with mock.patch.object(store, "running", return_value=kept), \
+                mock.patch.object(cad_server, "__version__", "0.12.4"):
+            line = self.checks()[1]["install"]["detail"]
+        self.assertEqual(line, f"{self.prefix} (cad 0.12.0, installed by uv); this cad is 0.12.4, kept by its own "
+                               f"update in {kept}")
+        with mock.patch.object(store, "pointer", return_value={"pointer": 1, "release": "0.12.4", "path": str(kept)}), \
+                mock.patch.object(store, "pointed", return_value=None):
+            install = self.checks()[1]["install"]
+        self.assertEqual((install["status"], install["more"]), ("info", [
+            "cad was installed again after its update pointed it at cad 0.12.4, so it runs what was installed, and "
+            "its next update points it again"]))
+        with mock.patch.object(store, "pointer", return_value={"release": "0.12.4"}), \
+                mock.patch.object(store, "pointed", return_value={"release": "0.12.4"}):
+            self.assertNotIn("more", self.checks()[1]["install"], "a pointer taken: nothing under it")
+
+    def test_the_release_that_runs_passes_its_own_check(self) -> None:
+        from cad_server._internal import store
+
+        code, found = self.checks()
+        self.assertEqual((code, found["release"]), (0, {"name": "release", "status": "ok",
+                                                        "detail": "cad 0.12.0 runs its own check"}))
+        self.assertNotIn("fix", found, "all is well: no fix")
+        self.assertEqual(self.ran[-1][-1], str(self.packages), "the environment's own packages")
+        names = [line.split()[0] for line in _run([])[1].splitlines()[1:4]]
+        self.assertEqual(names, ["python", "install", "release"])
+        kept = self.root / "state" / "store" / "0.12.4-cpython-312"
+        (kept / "cad-0.12.4.dist-info").mkdir(parents=True)
+        for name in ("RECORD", "METADATA"):
+            (kept / "cad-0.12.4.dist-info" / name).write_text("", encoding="utf-8")
+        self.said = (0, "cad 0.12.4\n")
+        with mock.patch.object(store, "running", return_value=kept):
+            self.assertEqual(self.checks()[1]["release"]["detail"], "cad 0.12.4 runs its own check")
+        self.assertEqual(self.ran[-1][-1], str(kept), "the stored release this process runs")
+
+    def test_a_release_that_fails_its_own_check_fails_the_report_and_the_fix_is_installing_cad_again(self) -> None:
+        from cad_server._internal import auto_update
+
+        self.said = (1, "Traceback (most recent call last):\nImportError: cannot import name 'serve' from "
+                        "'cad_server.engine'\n")
+        code, found = self.checks()
+        self.assertEqual(code, 1)
+        self.assertEqual(found["release"], {
+            "name": "release", "status": "failed",
+            "detail": "FAILED — ImportError: cannot import name 'serve' from 'cad_server.engine'",
+            "more": ["install cad again, which always runs what it installs: `uv tool install --force cad`"]})
+        self.assertEqual(found["fix"]["detail"], "install cad again, which always runs what it installs: `uv tool "
+                                                 "install --force cad`")
+        self.assertEqual(list(found)[-1], "fix")
+        with mock.patch.object(auto_update, "global_install",
+                               return_value=auto_update.Global("pipx", self.prefix, "/bin/uv")):
+            self.assertTrue(self.checks()[1]["fix"]["detail"].endswith("`pipx install --force cad`"))
+
+    def test_a_checkout_or_a_cad_that_is_no_global_install_has_no_release_check(self) -> None:
+        from cad_server._internal import auto_update, store
+
+        with mock.patch.object(auto_update, "global_install", return_value=None):
+            found = self.checks()[1]
+        self.assertNotIn("release", found)
+        self.assertEqual(found["install"]["detail"], f"{self.prefix} (cad 0.12.0)")
+        source = self.root / "src"
+        source.mkdir()
+        with mock.patch.object(store, "packages", return_value=source):
+            found = self.checks()[1]
+        self.assertNotIn("release", found, "a checkout's packages hold no installed cad")
+        import cad_server
+
+        self.assertEqual(found["install"]["detail"], str(Path(cad_server.__file__).resolve().parent))
+        self.assertEqual(self.ran, [], "nothing run for either")
 
 
 class PrivateFolderTests(unittest.TestCase):
