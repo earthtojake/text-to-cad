@@ -72,8 +72,8 @@ two it leaves out.
 
    The runner gives each test file engine, state, cache and `cad` command folders of its own, with a
    server it starts there and stops when the file ends. It fails the run, naming the test, when the
-   run writes a document, engine or installation record in your own state folder, or your `cad`
-   command. A test that needs a server to itself (a cold start, its workers) calls
+   run adds an entry to your own library, or writes an engine or installation record in your own
+   state folder, or your `cad` command. A test that needs a server to itself (a cold start, its workers) calls
    `engine_daemon.isolate(unittest.addModuleCleanup)` in `setUpModule`
    (`tests/python/support/engine_daemon.py`), or sets `CAD_ENGINE_DIR` with `CAD_STATE_DIR` and
    `CAD_CACHE_DIR` beside it, registers an installation there and starts the server (`register` and

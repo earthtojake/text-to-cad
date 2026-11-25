@@ -253,6 +253,11 @@ computer inside its major before one ships.
 - A file from someone else that reads, writes or runs anything beyond what
   opening, viewing, exporting or snapshotting it should. This includes a file
   that makes the server do unbounded work or hold unbounded memory.
+- A press in the viewer that runs a file. A project's page lists every file in
+  its folder, and one cad does not show is handed to an app: an editor found on
+  the computer, or the operating system's own handler only for the kinds of
+  file it is listed for (text, PDFs, images, other CAD tools' files), never for
+  code and never for a kind it does not know.
 - A Parameters Save that writes anything but a number at a
   position a run recorded in a model's own script, or writes when the script's
   bytes are not the ones that run read; a preview that writes anything, runs a

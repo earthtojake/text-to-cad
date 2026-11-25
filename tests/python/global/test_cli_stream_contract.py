@@ -93,7 +93,7 @@ def _env() -> dict[str, str]:
     env["PYTHONPATH"] = os.pathsep.join([SOURCE_PATH, *filter(None, [WATCHED.get("PYTHONPATH"), env.get("PYTHONPATH")])])
     env[engine_daemon.JOURNAL] = WATCHED.get(engine_daemon.JOURNAL, "")
     env["CAD_ENGINE_DIR"] = ENGINE
-    # Its registry of documents and its cache too: what the builds record never reaches the developer's.
+    # Its library and its cache too: what the builds record never reaches the developer's.
     env["CAD_STATE_DIR"] = str(Path(ENGINE).parent / "state")
     env["CAD_CACHE_DIR"] = str(Path(ENGINE).parent / "cache")
     return env
