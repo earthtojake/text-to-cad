@@ -229,7 +229,8 @@ the launch's `_meta` first (`host/capability.ts`).
   model by the id its script printed (a script is never a document), and
   nothing here branches on a surface's name but one: `surface: file` (below).
 - **A launch is enough to start.** It also carries what the server is — its
-  `protocol`, `version` and `platform` — and the home's carries its `recents` and `projects`,
+  `protocol`, `version` and `platform` — and the home's carries its `recents` and `projects` (as
+  `GET /api/v1/projects` lists them, with no documents: a project's page reads its folder through the tunnel),
   so the page asks nothing before it draws. A launch from another build (a tab
   the host restored after another release was installed, a past chat's card) says so: the page
   reads only its own protocol's.
@@ -251,13 +252,13 @@ the launch's `_meta` first (`host/capability.ts`).
   and nothing else, so a project's page is not offered there (`places: false`).
 - **A view moves within its project.** A document in a project (a folder a person opened as one: the home's
   Import › Folder, a standalone document's Import its folder as a project, `cad viewer <folder>`) has the project's
-  name before its own in the navbar, which goes to that project's page on the home (the document just left ringed
-  there, Escape the way back), and the project's models and files as the Project
-  tab its panel leads with; a press shows the document in place. A tab, a card and the web viewer do the same, and
+  name before its own in the navbar, which goes to that project's page on the home at the document's folder (the
+  document just left ringed there, Escape the way back), and `[` and `]` step through that folder's files; a press
+  shows the document in place. A tab, a card and the web viewer do the same, and
   nothing browses the disk outside a project.
 - **A view keeps its own history.** As a browser keeps a tab's: every file a
   view showed, and each place of the home the person went to (Recents, Pinned, a project's page, Standalone: the
-  view has no address to keep one in), in order, the agent's shows and the person's own
+  view has no address to keep one in; a project's page is one step a folder), in order, the agent's shows and the person's own
   moves alike (`ModelView.tsx`), handed to the viewer as `history`. The navbar's Back
   and Forward, after its logo, over a file and on the home, walk it, each disabled where it
   has nowhere to go. A move after a Back drops what was ahead, and a show of what is already

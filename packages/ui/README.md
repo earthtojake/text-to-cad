@@ -18,8 +18,8 @@ that chrome changes them first. The CAD app's surrounding host controls
 remain its own.
 
 **The viewer is read-only, with one exception.** It writes no document's content and no file of
-one (an export is a download of a new file; the home's Delete removes the engine's record and cache
-of a document, never its file). Changing a design belongs to the agent and the code, and every
+one (an export is a download of a new file; the home's Remove from Recents forgets the library's entry
+of a document, never its file, and nothing in the viewer deletes a file). Changing a design belongs to the agent and the code, and every
 viewer tool (Select, Measure, Draw, Quick Edit, the filters and displays) exists to show the
 person the design and to give the agent feedback. The exception is a model's **Params** tab
 ([Parameters](docs/viewer-ux.md#parameters)): its Save asks the engine to set the named numbers
@@ -88,9 +88,10 @@ never a view's own, in the panel's 12px text, one glyph slot a row
 row backgrounds 5px from their horizontal edges, including selected, hovered and
 filtered rows; nesting adds indentation inside that gutter.
 Moving between documents is the navbar's, the keys' and the search's, never the panel's: a document in a project
-has the project's name before its own in the navbar, which goes to the project's page on the home (a link, where the
-host gives it an address); `[` and `]` step to the project's previous and next document (`file-viewer/projectKeys.js`);
-and ⌘K (Ctrl+K) searches every document in every project (`search/DocumentSearch.tsx`). The browser's tabs are the
+has the project's name before its own in the navbar, which goes to the project's page on the home at the document's
+folder (a link, where the host gives it an address); `[` and `]` step to the previous and next file of that folder
+(`file-viewer/projectKeys.js`); and ⌘K (Ctrl+K) searches the project on screen and every document of the library
+(`search/DocumentSearch.tsx`). The browser's tabs are the
 viewer's tabs: a document or a project opens in a new one from its link, Open in new tab, or ⌘Enter. A file's controls are
 the viewer's own: the tool strip at the view's top centre, the tool in hand's sub-toolbar
 under it, and the one panel docked at its left, the canvas the narrower for it while it pushes it aside (a mouse
@@ -371,10 +372,11 @@ file a view shows the host's home under the same navbar (the logo, which goes to
 Back and Forward where the host keeps the view's history, and the host's
 actions, and the home's own Home, search and Import: a file, or a folder opened as a project): a
 sidebar of places (Recents, Pinned, each project, Standalone, over the panel's foot), which is the viewer's panel
-over the home (pinned, collapsed, peeking, a phone's sheet), and the place on screen, its
+over the home (pinned, collapsed, peeking, a phone's sheet), and the place on screen (a project's: one folder of it,
+its subfolders then its files, under the folder's path), its
 documents as Figma-style tiles with their pictures or as a table of rows, shown, sorted and laid
-out from its heading row, each with its pin and a ⋯ menu (Open, Open in new tab, ending in
-Delete, which asks first); a card is a real link where the host gives documents an address
+out from its heading row, each with its pin and a ⋯ menu (Open, Open in new tab, ending, but on a folder's page, in
+Remove from Recents, which asks nothing and deletes nothing); a card is a real link where the host gives documents an address
 ([the home](docs/viewer-ux.md#the-home)). A file that
 does not exist shows "File does not exist" and its path, and any other failure to open
 "Could not open that file" and why, each with Go home where the host has a home. A

@@ -504,7 +504,7 @@ with one).
 
 - **Dialogs** are shadcn's `Dialog` and `AlertDialog` as shipped, on `text-ui`: one centred card, at most 28rem and
   1rem in from the window's sides, 24px in, `rounded-lg`, over a black overlay at 50%. A dialog has no corner X; it
-  closes by its own buttons, Escape or a press outside. The viewer's are What's new and the Home's Delete.
+  closes by its own buttons, Escape or a press outside. The viewer's is What's new.
 - **The search** (`search/DocumentSearch.tsx`) is Radix's dialog with no overlay: a card near the page's top, at most
   35rem and 1rem in from the sides, on the popups' surface with a card's 10px corners, its input row and its keys'
   line (on the chrome's colour) the control + 16 and + 8 tall, parted from the results by a full-width rule. On a phone

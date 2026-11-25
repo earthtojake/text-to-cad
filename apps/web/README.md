@@ -70,8 +70,8 @@ and assets, so the app does not scan another package's source.
   cannot read surfaces as an alert — never a silently wrong scene.
 - **The viewer is read-only**: it never changes a design. It writes no
   document's content and no file of one (an export downloads a new file; the
-  home's Delete removes the engine's record and cache of a document, never its
-  file). Changing a design belongs to the agent and the code; every viewer tool
+  home's Remove from Recents forgets the library's entry of a document, never
+  its file, and nothing in the viewer deletes a file). Changing a design belongs to the agent and the code; every viewer tool
   (Select, Measure, Draw, Quick Edit, the filters and displays) exists to
   show the person the design and to give the agent feedback.
 
@@ -170,9 +170,9 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
 
 - **A file is named by its absolute path, and nothing walks a tree but a project's folder.**
   The catalog is the named file's row, computed when it is asked for; a file under
-  a hidden folder opens like any other. A project's documents are a bounded walk of its
-  folder, which skips hidden folders and `__cadgen__`, `__pycache__`, `build`, `coverage`,
-  `dist`, `node_modules` and `viewer` (exact case), and the folders of the projects inside it.
+  a hidden folder opens like any other. A project's page lists one folder of it, and its search
+  is a bounded walk below that folder; both skip hidden folders and `__cadgen__`, `__pycache__`,
+  `build`, `coverage`, `dist`, `node_modules` and `viewer` (exact case).
   [docs/backend.md](docs/backend.md) has the rules.
 - **Verify a link by loading the page**, never by curling `/api/v1/local/files` —
   that route serves raw files; an engine document is opened with `POST /api/v1/documents` and
@@ -422,29 +422,32 @@ GitHub, Discord and Send feedback as icons, and at the right **Settings**, a cog
 Telemetry, Theme and the version.
 
 A sidebar at the left lists the places: Recents (every document opened lately, across projects), Pinned, each project
-(`GET /api/v1/projects`, the latest activity first) and Standalone, the documents of no project. The place on screen
-has a heading row (its name; a project's with its folder from `~` and its ⋯: Open in new tab, Copy path, Reveal,
-Remove from CAD, which forgets the project, changes nothing on disk and goes to Recents; then Sort and grid or list,
-one segmented control), the kinds' chips under it (All, then 3D models, Drawings, Boards, Schematics and Robots, each
-the place holds, with its count: a model built from code and the STEP, STL or GLB exported from it are all 3D models),
-then its documents, all of them. The grid's tiles are framed cards, at least 232px wide: the
-picture (the light viewport's, on the model area's light gradient in both themes, its format's badge at its
-top-left: for a model built from code and for an `.xbf` file, the engine's own document saved as a file, so a
-model too, though still a file in everything else, "Part" when its document holds one part and "Assembly" when it holds
-more, as desktop CAD names its documents (the row's `parts`), and "XBF", its format, where the server does not know the count yet;
-every other file its format, "STEP", "KiCad PCB"), then, in a compact caption, its name over one line: its project's name in Recents and Pinned, then its last activity with its verb ("Edited now",
-"Viewed 5m ago", "Edited 2h ago", "Viewed 3d ago", then the short date: Edited when it changed after it was last
-opened, Viewed when it was opened after it last changed). The list is a table: Name, Project (or, in a project's page,
-Where), Kind, Size, Updated and Created
-over 44px rows, each a document's small picture and name, its format (as the badge: "Part", "Assembly" or "XBF" for a model or an `.xbf` file), its size and those two ages with no verb. Every model is a tile and a row of
-its own: a model shows its
-name and its age, and stands for each `.xbf` the engine wrote from it (its own, one exported of it), which
-the server leaves out of the list beside it while the file is unchanged and the model is the revision written (an
-`.xbf` copied or edited, an older model's, and every STEP or GLB export are files of their own). The pin and the ⋯ appear on hover (at a tile's picture's corner, at a row's end); a
-pinned one keeps its pin. The ⋯ menu holds Open, Open in new tab, a file's Copy path and Reveal (a model has
-neither), Pin or Unpin, and Delete, which asks first: a model's "Delete bracket?" removes the engine's record and its saved build, its
-script and exported files kept, and no other model with it; a file's "Delete bracket.step from the viewer?" removes the
-engine's record of the file alone. From a file, the navbar's C logo leads back to it: a link to `/` (Recents), so a
+(`GET /api/v1/projects`, the latest activity first, with no count) and Standalone, the documents of no project. A
+project's page is one folder of it (`GET /api/v1/projects/<id>?path=`): its subfolders that hold a CAD file somewhere
+below, each its glyph and its name and a link into it, then the CAD files directly in it; from the sidebar it opens
+at the project's top, and from a document's navbar at the document's folder. Its heading is the folder's path, the
+project's name first, each part above the folder on screen a link back up, then that folder from `~` and its ⋯ (Open
+in new tab, Copy path, Reveal, Remove from CAD, which forgets the project, changes nothing on disk and goes to
+Recents). The search on a project's page asks the server for every CAD file below the folder on screen that holds the
+words (`?path=&q=`, once typing rests) and lists them flat, each saying where it is below that folder; elsewhere it
+narrows the rows in hand. Every heading row ends in Sort and grid or list, one segmented control; the kinds' chips
+under it (All, then 3D models, Drawings, Boards, Schematics and Robots, each the place holds, with its count: an
+`.xbf` and the STEP, STL or GLB exported from it are all 3D models); then the documents, all of them. The grid's tiles
+are framed cards, at least 232px wide: the picture its row names (the light viewport's, on the model area's light
+gradient in both themes; a file with none, its format's tile), its format's badge at its top-left (for an `.xbf`
+file, the engine's own document saved as a file, so a model though still a file in everything else, "Part" when its
+document holds one part and "Assembly" when it holds more, as desktop CAD names its documents (the row's `parts`), and
+"XBF", its format, where the server does not know the count for the file as it is; every other file its format,
+"STEP", "KiCad PCB"), then, in a compact caption, its name over one line: where it is (its project's name in Recents
+and Pinned, its folder in a project's search), then its last activity with its verb ("Edited now", "Viewed 5m ago",
+"Edited 2h ago", "Viewed 3d ago", then the short date: Edited when it changed after it was last opened, Viewed when it
+was opened after it last changed). The list is a table: Name, Project (or, in a project's search, Where), Kind, Size,
+Updated and Created over 44px rows, each a document's small picture and name, its format (as the badge), its size and
+those two ages with no verb; a folder's row has its glyph and a dash in each column. Every file is a tile and a row
+of its own, a model's `.xbf` among them. The pin and the ⋯ appear on hover (at a tile's picture's corner, at a row's
+end); a pinned one keeps its pin. The ⋯ menu holds Open, Open in new tab, Copy path, Copy link and Reveal, Pin or
+Unpin, and, but on a project's page, Remove from Recents, which forgets the library's entry of the file at once, asks
+nothing and touches no file (opening the file again brings it back). From a file, the navbar's C logo leads back to it: a link to `/` (Recents), so a
 plain click goes home in this tab and ⌘ or Ctrl and a click opens the home in a new one. The home has the same
 navbar and the same C logo (one 16px mark on every page), which there goes to Recents; the links and Settings are
 the foot of the sidebar, on the home and over a file.
@@ -452,13 +455,14 @@ the foot of the sidebar, on the home and over a file.
 #### Addresses, and a new tab
 
 Every place of the home and every document has its own address in this origin (`fileParam.js`'s `pageAddress`): a
-document's page `/<id>`; Recents `/`, `/?view=pinned`, `/?view=standalone`, and a project's page `/?project=<id>`,
-each beside whatever the page's address already carries (its link, `?token=`). A query that names no place is Recents.
+document's page `/<id>`; Recents `/`, `/?view=pinned`, `/?view=standalone`, and a project's page `/?project=<id>`, at
+a folder of it `/?project=<id>&path=<folder below its root>`, each beside whatever the page's address already carries
+(its link, `?token=`). A query that names no place is Recents.
 Going to a place is a step of the browser's history, as showing a file is: Back and Forward walk between them (the
 navbar draws no arrows of its own here), and a reload stays where it was. The page's title names the place
-("gearbox · text-to-cad", "Pinned · text-to-cad").
+("gearbox · text-to-cad", "v3 · text-to-cad" for a folder of it, "Pinned · text-to-cad").
 
-So a card, a row and a sidebar row are real links (`ViewerHost.navigation.hrefOf`): a plain click shows the target in
+So a card, a row, a folder, a part of a folder's path and a sidebar row are real links (`ViewerHost.navigation.hrefOf`): a plain click shows the target in
 this view, and ⌘ or Ctrl and a click, a middle click or the browser's link menu opens it in a new tab. Open in new
 tab, in every document's and project's ⋯, does the same from the menu (`navigation.openBeside`, `kind: "tab"`:
 `src/host/newTab.js`, a `window.open` with `noopener`, which takes the keyboard no further than the browser does).
@@ -466,15 +470,13 @@ A new tab needs nothing in its address to be let in: the engine admits any reque
 cookie it gave the page (`SameSite=Strict`, `Path=/`, renewed on every page load: `cad_server.viewer.engine_app`),
 as it admits a download, and serves the page for any `/<id>`; where the address also carries the page's link, it
 opens in another browser too. A file of a project's folder that no page has opened yet has its address as the rest
-have: the server knows each file a project lists by its id from then on (`cad_server.viewer.http_app`'s `_listed`),
-for as long as the engine runs, and for good once a page has opened or pictured it. A document named by a path
+have: the server knows each file a folder's page lists by its id from then on, and finds one in a project's folder
+by its id after a restart too. A document named by a path
 rather than an id has no address (`hrefOf` answers null), and Open in new tab asks for its id first (the tab opened
 at once, inside the press, and sent on when the id is known).
 
 A `/<id>` the server knows no file for, and no model the engine
-holds, shows "This model is no longer held" with the engine's words -- the command that builds it
-again, `cad run <the program that built it>` -- and Go home, titled for the state the engine
-names: "This model is not saved" (`unsaved`) or "This model’s script is gone" (`detached`); a file
+holds, shows "This model is no longer held" with the engine's words and Go home; a file
 that is not there shows "File does not exist".
 
 A file is opened by its path (the home, the search) and shown by its id: the page asks the
@@ -483,25 +485,22 @@ and moves to `/<id>`. Rows join by that id (`client.entryOf`), so a symlinked or
 spelling of one file is one row. A model, whose file is its `.xbf`: its ⋯ menu
 acts on the document and on the script that builds it ([Export and job status](#export-and-job-status)), and it is
 in the project its `.xbf` is in. A document's row says its project (`project`: the nearest project above its file as
-reached, a linked folder's inside a project's too, a model's its `.xbf`), which the navbar follows as the row is read again.
+reached, a linked folder's inside a project's too, a model's its `.xbf`, with the `folder` it is in below the project's
+root), which the navbar follows as the row is read again; `[` and `]` step through that folder's files.
 
-The home reads the projects over `GET /api/v1/projects` and the library over `GET /api/v1/documents`, each row
-with the project it is in (`project`) and three times, `updated` (a
-file's time on disk, a model's run), `opened` (when a page last opened it) and `created` (when the
-engine first made its record: a model's first run, a file's first open; null for a record from before
-it was kept), which the home orders by the person's Sort (by default the later of the first two, newest first), and
-`parts`, how many part occurrences its document holds where the server knows it (a model's or a shape's last build,
-while its `.xbf` is the version the engine wrote; an `.xbf` exported, from the document it was written from; another
-file the engine read for a page; a file's only while it is that version; null where it does not), which names a
-model's card Part or Assembly, and, of a model, its `.xbf` (`file`): a model's id is its `.xbf`'s, so a model and its
-file are one row; it pins, unpins, removes a file's record (`remove`) and
-deletes a model's document (`delete`) over `PATCH /api/v1/documents`, and draws each card's picture
-from `GET /api/v1/documents/<id>/thumbnail`. A model's script is never read for any of it. The document on
+The home reads the projects over `GET /api/v1/projects`, a project's folder over `GET /api/v1/projects/<id>?path=`
+and the library over `GET /api/v1/documents`, each row a file, with the project it is in (`project`) and three times,
+`updated` (the file's time on disk), `opened` (when a page last opened it) and `created` (when the library first knew
+it; null for a folder's file it does not know), which the home orders by the person's Sort (by default the later of
+the first two, newest first), and `parts`, how many part occurrences its document holds where the server knows it for
+the file as it is (null where it does not), which names an `.xbf`'s card Part or Assembly. It pins, unpins and removes
+a file's entry (`pin`, `unpin`, `remove`) over `PATCH /api/v1/documents`, and shows each card's picture from
+`GET /api/v1/documents/<id>/thumbnail` where its row names one (`thumbnail`); the home draws none. The document on
 screen says it was opened once the catalog has it (`{action: "open"}`: a file joins the
-library, a model's record notes the time), and its picture
+library, as an `.xbf` does), and its picture
 once it has settled — the model framed whole from the default direction, whatever the
-camera (`{action: "thumbnail"}`). `cad_server.viewer.recents` keeps the library in the
-user's state directory, shared with the CAD app.
+camera (`{action: "thumbnail"}`). The server keeps the library in the
+user's state directory, shared with the CAD app, and the pictures in its cache.
 
 ### What's new
 
@@ -594,12 +593,10 @@ A model's page is `/<id>`, its document's id -- its `.xbf`'s -- which `cad run S
 page opening that `.xbf` by its path opens. The page reads the document by id (`GET /api/v1/documents/<id>`); it
 never builds or imports a script, and no project lists one. Its ⋯ menu has the document's actions and its script's
 ([Export and job status](#export-and-job-status)), and it is in the project its `.xbf` is in, if any, whose page
-lists it, once, with the project's files. It is in the
-library by its id (the engine's record), and its picture is taken by
-its id as a file's is: on screen once it settles, once per build, and on the home only while
-the engine holds it. Once its worker retires or
-the engine restarts, its page shows its `.xbf`, read as a file is (no parameters to edit, no provenance); only once
-that file is gone (deleted by hand: the engine's state `unsaved`) does its page say it is not saved and name the
-command that builds it again. The page shows the engine's last
+lists it, once, with the folder's files. It is in the
+library by its `.xbf`, and its picture is taken by
+its id as a file's is: on screen once it settles, once per build. Once its worker retires or
+the engine restarts, its page shows its `.xbf`, read as a file is (no parameters to edit, no provenance); once
+that file is gone its id names nothing, and its page says the model is no longer held. The page shows the engine's last
 build and says nothing of the script it came from: an edit not yet built is no state of the page's;
 what it shows is the engine's own run, building or failed. Rebuilding the model updates the same view through the document version stream.
