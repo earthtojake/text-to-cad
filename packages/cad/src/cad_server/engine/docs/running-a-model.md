@@ -113,9 +113,7 @@ model's packages again, as <path> changed: ...`, and builds in a fresh worker of
 marker, written last, names the installation, the requirements (`with`), the spec, the
 integrations, its Python's version and the local fingerprints (`local`); a lock makes one maker. A
 process there reaches the device's engine as one in the base does, and -- the environment not being
-the base (`places.SEPARATE`) -- names its Python in its orders, with how `cad run` named its
-environment (`places.RUN_WITH`: the options and requirements its command line was given, one word
-an option, and the script whose header named the rest); the engine builds the script in a warm
+the base (`places.SEPARATE`) -- names its Python in its orders; the engine builds the script in a warm
 worker of that Python, as for **a Python of the script's own** below, of one release with the
 engine, so no notice of another release is said. A header's `requires-python` the Python does not meet is refused
 in one line (read as PEP 440 reads it, `>=3.11.0rc1` too): before anything is made for the engine's
@@ -155,12 +153,7 @@ environment of the model's packages needs the network once, for pandas, which uv
 hold: ...`. A program that stops importing a module of an integration its environment lacks -- one
 the scan could not see, imported by name at run time -- is said as Python says it, then in one line
 naming the extra (`cad._internal.program`, `integrations.missing`): `kicode comes with cad's kicad
-integration: add `cad[kicad]` to the script's header`; nothing runs again. The record of a document a
-`cad run` built names the options and requirements its command line was given (`with`), and the
-command that builds it again gives them again (**The rebuild command**); a header's are its
-script's, so `cad run` and the script build it again -- but the header of a program that calls a
-model another script defines (a check script's), which the record names too, so its rebuild command
-gives them with `--with` (`models._given`).
+integration: add `cad[kicad]` to the script's header`; nothing runs again.
 
 **A Python of the script's own.** A script run by any other Python that has the library -- a venv's
 `python model.py`, `uv run`, a person's own interpreter with `cad[build123d]` -- names that Python in
@@ -184,9 +177,7 @@ and stands again at the first slot free (`Supervisor._restand`), so no cap leave
 nothing. The rest of the engine's kernel processes stay in the base: the documents worker, the
 meshing and reading pools, the render processes and the standby. A document such a worker holds is
 asked of it alone (`via` and its environment's key): with that worker gone, an export or a shape of the
-document is refused as not held, never asked of another worker of its script. Its record names that
-Python (`python`), and the command that builds it again is that Python and the script (**The rebuild
-command**).
+document is refused as not held, never asked of another worker of its script.
 
 What the two meet by is **the worker contract** (`cad.engine.contract.CONTRACT`), which the library
 and the server both state: the worker protocol's number (`PROTOCOL`, bumped by any release that

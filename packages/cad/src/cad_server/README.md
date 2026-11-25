@@ -18,8 +18,8 @@ The mechanisms its laws constrain are the engine's pages: [`engine/README.md`](e
 ```
 cad_server/
   engine/                # the engine's server half: the daemon, its supervisor and the services it
-                         #   declares (its workers, its render processes), its registry of documents,
-                         #   the live models' book, the verbs as commands
+                         #   declares (its workers, its render processes), the library and the state
+                         #   folder's own (library, state), the live models' book, the verbs as commands
                          #   (cli), and the engine's README and pages (docs/), the mechanisms the laws
                          #   constrain
   cli/                   # the `cad` command: a module per command and per document type
@@ -28,7 +28,7 @@ cad_server/
   viewer/                # the engine's HTTP application (engine_app), launcher (main), routes
                          #   (http_app: /api/v1, its document kinds in kinds), files by
                          #   absolute path (backend), a file's catalog row (scanner), the folders a person opened as
-                         #   projects and their documents (projects), the model library
+                         #   projects, each shown a folder at a time (projects), the library's rows
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
                          #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's
@@ -97,7 +97,7 @@ cad_server/
 - **`cad run`**: a program exactly as `uv run` runs it, with cad pinned at this release and the
   integrations its imports use (`_internal/extras.py`, `_internal/scan.py`), in an environment the engine
   makes.
-- **`cad viewer`** opens a page of the running server; `cad delete` deletes documents.
+- **`cad viewer`** opens a page of the running server.
 - **`cad doctor`**: one read-only report: this cad's release, its Python and where it is installed, its
   data and cache folders and what `cad cache prune` would free, the CAD kernel environment and whether it
   loads, the integrations, whether the server runs and its release, and cad's own update (the switches,
@@ -151,8 +151,8 @@ cad_server/
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
 One command can install it with uv where a computer has none: `cad mcp` run from uv's cache, which
 runs that same `uv tool install`.
-Every command that destroys asks first (`cad delete`,
-`cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`; `_internal/consent.py`).
+A command that destroys asks first (`cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`;
+`_internal/consent.py`).
 
 Kept only for releases 0.10.0 to 0.11.11, and deleted with that bridge (`cli/setup.py`): `cad setup
 --engine-update`, which those releases' updater runs on the new release; plain `cad setup`, which a `cad
@@ -291,14 +291,15 @@ says so and updates nothing.
 ## Folders
 
 The data folder (the state folder, `cad.engine.places.state_dir`) is `cad` in the platform's place for state (`~/Library/Application Support/cad` on macOS,
-`~/.local/state/cad` on Linux and Windows) or the folder `CAD_STATE_DIR` names: settings, Recents, the
-documents' records, the page token and port, the telemetry spool and the feed's last answer. The cache
+`~/.local/state/cad` on Linux and Windows) or the folder `CAD_STATE_DIR` names: settings, the library
+(`library.json`: the project folders, the files a person opened or pinned), the page token and port, the
+telemetry spool and the feed's last answer. The cache
 folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: what the engine derived of a
-document (a board's plots, kept checks), the environments, bytecode and the integrations' private homes, all made
-again on demand. A model's document is its `.xbf`, which the engine keeps no copy of. On Windows neither
+document (a file's count and picture, `documents/<id>/note.json`; a board's plots, kept checks), the environments,
+bytecode and the integrations' private homes, all made again on demand. A model's document is its `.xbf`, which the engine keeps no copy of. On Windows neither
 is in the local application data, which Windows virtualizes for every process an app package (the Claude
 desktop app) starts. A release reads what the release before wrote and migrates it on first touch, once
-(`cad.engine.identity.migrate`); nothing in the cache is converted.
+(`cad_server.engine.library`); nothing in the cache is converted.
 
 Coming from 0.7 or 0.8 (named cadgen): their caches (`~/.cache/cadgen`, `%LOCALAPPDATA%\cadgen`) and the
 state files only they wrote are not read or removed by anything here; `cad doctor` says where they are,

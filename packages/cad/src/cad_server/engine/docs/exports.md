@@ -215,7 +215,7 @@ than it had CUBICSPLINE ones, each a third the bytes.
 **A file decorator's path is optional.** `@model` declares the native document, the `.xbf`
 the model is saved as; `@step`, `@glb`, `@stl`, `@threemf` and `@dxf` declare translations, each its own file and
 nothing else, alone or beside `@model`, one kind once (`Model.files`). A function with file decorators alone writes no
-`.xbf`: it is no model document (`Models.unsaved`: no record, its page its first file's), and after a restart its run
+`.xbf`: it is no model document (`Models.unsaved`: its page its first file's), and after a restart its run
 builds it from nothing, which each of its runs says (`build._unsaved`: `plate saves no .xbf (no @model): once the CAD
 server restarts, its next run builds it again from scratch; add @model to save it`). A path given, positionally or `out=`
 (`@model("XBF/arm.xbf")`, `@step(out="arm.step")`), is relative to the script. With none (`@step`,
@@ -239,7 +239,7 @@ calls, in its file or another -- writes the files it declares after its target's
 once per build, from its own document: the result its body returned, before its caller placed
 or labelled it, its closure the one a build of its own script makes (its folder, the modules its
 script imports). So its xbf is the one its own build writes, byte for byte, and a later build of it takes that
-file while it is the one the engine wrote (**Build closure**); a file whose bytes are unchanged is kept. A declared file is an export appended to the run: translated from the document
+file (**Build closure**); a file whose bytes are unchanged is kept. A declared file is an export appended to the run: translated from the document
 every time the model runs or is taken -- an xbf from the document's own bytes, serialised before any
 export meshes its shapes -- compared with the file, and written only where it differs or is missing
 (`atomic_replace.put`, the one writer `cad <type> export` writes its files with too), nothing remembered

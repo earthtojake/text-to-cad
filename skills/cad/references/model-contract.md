@@ -259,20 +259,19 @@ def rig():
   prints the closure). A file derived from a document (a simulator's description, a GLB
   beside a film) that records the key can tell whether the document has been built from
   other sources since. The key is `None` where the model's code cannot be keyed.
-- **A document is kept until it is deleted**, across server restarts: its id answers
-  every command as last built, and one whose `.xbf` is gone is refused with the `cad run`
-  that brings it back. `cad delete <id>` (or a script's path, for every document of it)
-  removes the record, never a file of yours. Delete only what the
-  person asked to delete, with `--yes`.
+- **A document is its `.xbf`**, across server restarts: its id answers every command as
+  last built while the file is there, and with the file gone the id names nothing: run its
+  script again. cad keeps no other copy of it, so to be rid of a document is to delete its
+  file. Delete only what the person asked to delete.
 - **A shape with no script** (a notebook cell, a REPL, a script that only holds a
   shape) is handed over: `model(shape, name="plate")` makes a document of it, served on
   its page and exported like any other, and returns its handle. Joints, mechanism states
   and sequences on the shape go with it; a GLB's animations are passed as
   `animations=[...]`. Nothing builds it again but the program that handed it over. A
   decorated function in no saved file is refused, with these words.
-- `cad server status` lists each document its workers hold, `live`. One no worker holds is
-  `held` (the server answers it from its `.xbf`, and a ref's `made_by` is null), `unsaved` (its
-  `.xbf` is gone: run its script) or `detached` (its script is gone too).
+- `cad server status` lists each document its workers hold: `live`, `building` or `failed`
+  (its last run failed, and its previous good build is served). One no worker holds is its
+  `.xbf`, read as any file, and a ref's `made_by` is null.
 - **A build that runs away on memory is stopped.** A worker past
   `CAD_ENGINE_WORKER_CEILING_MB` (default: half the machine's memory) at two of the server's
   checks, half a minute apart, is stopped, and the build's error says so. The server reads

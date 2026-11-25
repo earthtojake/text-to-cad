@@ -146,8 +146,8 @@ of the file's warm render process; `daemon=False` serves each file once for all 
 refill of a copy (`formats/kicad/poured.py`: the server's `_internal/boards.refill`, kicode in the
 environment of `cad[kicad]`), kept by the bytes it reads (`poured.key`) in the engine's memory
 (`viewer/plots.py`) and gzipped in the document cache beside the board's document,
-`<cache>/documents/<its id>/kicad/<key>/` (with its DRC and its kept exports, `_internal/boards.py`; a
-`cad delete` of the board deletes them with it), which a board's snapshot is drawn from too
+`<cache>/documents/<its id>/kicad/<key>/` (with its DRC and its kept exports, `_internal/boards.py`;
+forgetting the board removes them with it), which a board's snapshot is drawn from too
 (`renders.py` keeps it before the render process reads it; a payload drawn as saved says why in
 `pours` and in the snapshot's warnings). `render/board.py` paints the same layer primitives
 with Pillow in sheet millimetres, including top/bottom mirroring, Display presets, saved

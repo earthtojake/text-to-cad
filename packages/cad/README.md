@@ -176,8 +176,9 @@ renumbers the list and every citation in the same change.
    declares and its `.xbf` (law 10), the exports a command or a person asks for, and a model's own script only where a person or an
    agent asks to set a parameter it declares (law 30), and nothing beside a model or an input: no
    sidecar, index, memo, mesh or record of a build. What it keeps for itself lives in three folders of
-   the user's own, the same whatever release runs: state (settings and the records of documents, never
-   geometry or source), cache (the views it derived of a document, keyed by its bytes, bytecode and the
+   the user's own, the same whatever release runs: state (settings and the library: the project folders
+   and the files a person opened or pinned; never geometry or source), cache (the views it derived of a
+   document, keyed by its bytes, a file's count and picture, valid for the file as it is, bytecode and the
    environments it installs, every one regenerable; never a copy of a model's `.xbf`) and the engine's folder
    (its door and lock). The code stays the only source of truth: a document is what its last run made,
    and nothing reruns (the server's **Folders**; `cad.engine.places`).
@@ -203,17 +204,16 @@ renumbers the list and every citation in the same change.
    Every kernel operation a model runs is keyed by its inputs, as is every question it asks of what they made. A
    hit hands back what the first run made, and a miss makes everything downstream of it miss, so an edit costs
    what it changed and an element keeps its name across edits. Across a restart a build is cold but for its
-   `.xbf`, taken whole by its key or not at all, and only while the file is the one the engine wrote; edited or
-   replaced since, it is built and written again. No other declared file is ever a source.
+   `.xbf`, taken whole by its key or not at all: a file whose key is the model's now is the model, whoever
+   wrote it last. No other declared file is ever a source.
 6. **One document per model, with one id: its `.xbf`'s.** *Every document.* A called model makes one document
    and returns its handle, never a bare shape. Every id is one formula over a path (`ids.file_id`): a file's, and
    so a model's and a handed-over shape's, whose document is its `.xbf`; the same in every process, worked out
    without asking the engine. Two models that write one file share its id, and the last build wins. `@model` writes
    the model's `.xbf`, a file decorator its own file and nothing else, alone or combined, one kind once; a function
    with file decorators alone writes no `.xbf`, so it is no model document, and after a restart it is built from
-   nothing. A document lives until a person
-   deletes it: neither its worker retiring nor memory ends it, and one that is not held names the
-   command that builds it again (the engine's **Document lifetime**).
+   nothing. A document is its file: it lives while its file does, and one whose file is gone names nothing.
+   Neither its worker retiring nor memory ends it (the engine's **Document lifetime**).
 7. **Provenance is served live, never written.** *Models.* What made an element (the feature, its
    operation, the function, file and line of its call) lives in the trace of the worker that built the
    document and is asked of it while it lives (`made_by`). A document opened with no such worker says
@@ -264,7 +264,7 @@ renumbers the list and every citation in the same change.
       warns once per name per process (`CadDeprecationWarning`), naming the new path at the line that
       spelled the old. An alias is kept out of every `__all__` and every document but the migration
       guide; a test pins the table (`cad._internal.aliases`). Its removal is the breaking change.
-    - **Tier 3, a person's data**: documents, the state folder and its records, settings. A release
+    - **Tier 3, a person's data**: documents, the state folder's library, settings. A release
       reads what the previous shipped release wrote, writes the current form and migrates on first
       touch, once. Opening, viewing or exporting a saved document never needs its source or a rebuild
       because cad was upgraded (the engine's **Build closure**).
@@ -300,12 +300,13 @@ renumbers the list and every citation in the same change.
     starts none, and no Python function starts, stops or serves it. A newer release's start replaces
     an older engine, and an older one joins a newer engine that runs: forward only. Launchers exit and
     clients closing never stop it; kernel work runs in child processes, never in its request threads;
-    there are no page sessions (the engine's **Architecture** and **Starting and updating**).
+    there are no page sessions. An id is found from its path alone: the library's, or a project folder's
+    (the engine's **Architecture** and **Starting and updating**).
 20. **Operations on documents are Python functions the CLI exposes; process control is the CLI's
     alone.** *Every document.* A type's operations are functions of that type (`cad.model.export`,
     `cad.kicad_pcb.drc`, `cad.urdf.validate`), one to one with the commands that call them (`cad model
-    export`, `cad kicad_pcb drc`, `cad urdf validate`). Serving, the engine's status, stopping it and
-    deleting a document are commands only, with no function of the library. Every successful
+    export`, `cad kicad_pcb drc`, `cad urdf validate`). Serving, the engine's status and stopping it
+    are commands only, with no function of the library. Every successful
     server-backed build reports its id and its page.
 21. **Push, not pull: a model is what its last run told the engine.** *Models.* The engine's knowledge
     of a model comes from a run an agent or a person starts, which pushes the model's code, key and
@@ -313,7 +314,8 @@ renumbers the list and every citation in the same change.
     infers a document from a path and never runs code on its own: a script edited and not run changes
     nothing it holds or says. One case reads a script outside a run and starts a build, and only when a
     page asks: its Save of a model's parameters (law 30), and its preview of values before it saves them.
-    A file document is the disk by definition and is read again when its bytes change.
+    A file document is the disk by definition and is read again when its bytes change. A project's page
+    lists its folder, which is the disk's too, and reads no file of it.
     *Pressure-test*: build a model, then edit its script, its modules and the files its bodies read
     without running it: every page, command and tool answers as before the edit, and no process of the
     engine has opened a file of the model's code since its run, but a page's Save and preview, which
@@ -398,7 +400,7 @@ renumbers the list and every citation in the same change.
     holds the bytes its last run read, and runs that run again in the warm worker; a build the new
     values break puts the bytes back, never over another writer's change. A page's preview of other
     values is built in the same worker for that page alone and becomes nothing else: never a file, the
-    document, its record or the cache, never what another page, an export or an agent reads (the
+    document or the cache, never what another page, an export or an agent reads (the
     engine's **Parameters**).
     *Pressure-test*: declare a parameter in a shared module, in a loop and as an expression: each is
     listed read-only and a Save refuses it; edit the script by hand and a Save refuses
@@ -409,8 +411,7 @@ renumbers the list and every citation in the same change.
 
 `cad <type> inspect` and `cad.<type>.inspect()` read existing files or the
 documents the engine holds by id (`cad model inspect <id>`, `cad.model.inspect(handle)`). They never execute source to obtain a missing model or write
-its declared outputs. An unbuilt or unsaved model requires an explicit build: one
-the engine built before names the command (`cad run` and the script that defines it). With no reference,
+its declared outputs. A model with no `.xbf` requires an explicit build. With no reference,
 `cad <type> inspect` prints what the document holds -- its state, parts, bounds, volume (and a part
 inside out, a solid's faces pointing inward), materials,
 joints, couplings (name, kind, ratio, joints), states, sequences, animations, parameters (each its value, range and

@@ -76,8 +76,9 @@ that records others replaces them.
 **What the page reads.** `serve.Server.structure` adds `parameters` to every structure it serves, `[]` for a
 document that records none, through `parameters.served`: each recorded parameter with `writable`, `reason`
 and `source`. `writable` is true only for a model's document whose live worker recorded a span for the value
-the document holds; else `reason` is one of `file` (a file's document: a declared or exported xbf, a STEP),
-`no_worker` (no live worker recorded where it is: the script must run again), `shared` or `expression` (no
+the document holds; else `reason` is one of
+`no_worker` (no live worker recorded where it is: a model's `.xbf` no worker holds, an exported or a copied one
+among them; the script must run again), `shared` or `expression` (no
 span: an expression, or a literal not that declaration's alone, above).
 `source` is the declaring file relative to the script's folder where it is under it, else its name, and null
 where nothing live says it. `cad model inspect` lists the same rows, of an id and of an `.xbf` file (`api._summary`'s

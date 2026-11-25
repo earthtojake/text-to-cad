@@ -241,9 +241,8 @@ does not read -- not the JSON written, another version's or check's under its na
 and a document's `checks/` folder left empty goes with its last. The files are listed once, at the store's first
 use, the half-written ones a stopped engine left swept then; one gone since (its folder wiped) leaves the list as
 it is asked for; and a cache folder that cannot be written
-keeps nothing there, each result trying its own write. Each is written under the registry's lock of its
-document, which its deletion holds (`Registry.lock`, `FORGOTTEN`): a deleted document's results leave memory and
-the index, and a check of it that began before keeps nothing.
+keeps nothing there, each result trying its own write. A forgotten document's results leave memory and its cache
+folder (`Models.forget`), and a check of it that began before keeps nothing.
 `cad server status` lists each check asked and not ended: its process, its document or file, where it measures or that it
 waits, for how long and whether its caller is gone; and `cad server status --json` counts the store (`checks`: held,
 bytes, measured, reused, restored: those reused from disk; read: the documents a process read for a check;

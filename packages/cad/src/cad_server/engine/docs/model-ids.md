@@ -26,17 +26,15 @@ process without asking the engine (**Architecture**). Different scripts can use 
 folder each then gives its file a path or `name=`, as both would write `<name>.xbf` -- two models that write one
 file share its id, and the last build wins. Running the script again with changed code updates the same document
 and open viewers; `python parts.py` prints each model's `id:` and `view:` lines (`<engine>/<id>`), and `handle.url`
-is the page. No list of ids is saved. An id from before ids were the `.xbf`'s (its script and function, or its
-folder and `name=`) answers as the model's (**Identity migration**).
+is the page. No list of ids is saved: an id is found from its path (**An id's path**).
 
 `cad serve ID`, `cad model snapshot ID view.png`, `cad model export ID part.step`, and `cad
 inspect ID 'face 1'` take the id; `cad <type> inspect 'ID#face 1'` uses the same reference syntax.
 Each reads the document as it is -- the live worker's, else its `.xbf` -- and so does the `.xbf`'s path:
 editing the script changes nothing until Python runs it again, and no verb imports, runs or builds a script. Only the viewer's Save of a model's
 parameters, which a person asks for in a page, writes the script and runs its last run again
-(**Parameters**). An id whose `.xbf` is gone
-(unsaved, detached) is refused with its state and the command that builds it again
-(`cad run <the script that defines it>`; **Document lifetime**).
+(**Parameters**). An id whose `.xbf` is gone names nothing: `no document <id> is held`
+(**Document lifetime**).
 `--query build` returns saved-file metadata/closure or live-build metadata; `--query closure` and
 `--query geometry` select the other queries explicitly. In the viewer a model's page is
 `/<id>`, and opening its `.xbf` by path opens that page: the model, live -- its parameters editable, its

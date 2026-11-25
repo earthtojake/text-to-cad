@@ -107,10 +107,6 @@ cad kicad_sch inspect SCHEMATIC [REF] [--json]
 cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display JSON] [...]
                                              one sheet drawn flat (the root unless --sheet names another)
 cad server start [--port N] [--foreground] | stop [--json] | status [--json]; cad server --rotate-token [--yes]
-cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]
-                                             each document deleted: its record, its document in the engine's
-                                             cache and what the engine holds of it (**Delete**); never a
-                                             file of yours. Asked first; --dry-run says what and how many
 ```
 
 The rule: `cad <document_type> <operation> <file>`, the type's id as the registry names it
@@ -144,7 +140,7 @@ and `x.py::fn` are refused as any other file that is no document is.
 
 Every build and every verb goes through the engine: no command runs one in its own process. A
 verb that starts the engine to answer says so, `engine started` on stderr, once, and only when the
-engine that answers is the one it started (`client.on_started`); `status`, `stop` and `delete` never start
+engine that answers is the one it started (`client.on_started`); `status` and `stop` never start
 one, nor does an MCP host closing its session.
 `daemon=False` on the Python functions (`Model.build`, `export`, `snapshot`) is a seam for tests
 and debugging only: it runs in this process, cold, and no document is served: no page, and
@@ -155,8 +151,7 @@ the help on stdout and exits 0, and does nothing else: it moves no earlier relea
 and says no telemetry notice. Nor does a command whose answer is JSON say the notice: it waits for a run a
 person reads, and nothing is sent by default until it is said.
 
-**Consent.** A command that destroys -- `cad delete`, `cad server --rotate-token` -- says its plan first, what it removes and how many (`cad delete --dry-run`
-says it alone), and then asks: at a terminal, `... (y/N)` on stderr, anything but `y` or `yes` changing
+**Consent.** A command that destroys -- `cad server --rotate-token` -- says its plan first, what it removes, and then asks: at a terminal, `... (y/N)` on stderr, anything but `y` or `yes` changing
 nothing (`declined`, exit 1); where no one can be asked (no terminal, `--json`, CI), it changes nothing
 without `-y`/`--yes`, failing `confirmation_required` (exit 2) with the exact command with `--yes`
 (`cad_server._internal.consent`). `--yes` answers that question and no other. `cad setup` asks nothing:
@@ -180,7 +175,7 @@ a command takes it, puts one on stderr):
 `reason` is one of a fixed set, added to and never renamed (`cli_errors.REASONS`): `usage` (a command,
 option or argument the command line got wrong), `invalid_argument` (a value refused by name before
 anything ran: out of range, a pose the document lacks), `wrong_type`, `not_found` (a file that is not
-there, a document the engine has no record of or does not hold), `confirmation_required` (with
+there, an id that names no document), `confirmation_required` (with
 `"userActionRequired": true` and `"next"`, the command with `--yes`), exit 2; `declined`, `not_running`,
 `other_release`, `engine_unavailable`, `failed`, `internal_error`, exit 1; `canceled`, exit 130. Without `--json` a
 failure is its words on stderr. A

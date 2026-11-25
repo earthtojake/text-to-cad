@@ -76,8 +76,8 @@ supported set are refused with a clear error.
 The conversion is idempotent. It leaves the original build closure and toolchain provenance
 unchanged: metadata conversion does not mean the geometry was built by the current kernel.
 A separate migration record identifies the conversion (`Loaded.migration`, `Source.migration`)
-without replacing that provenance. Opening a file never rewrites its bytes, changes its record or advances its
-revision. An unsupported or failed conversion preserves the original bytes and the record.
+without replacing that provenance. Opening a file never rewrites its bytes. An unsupported or failed
+conversion preserves the original bytes.
 
 To keep an upgraded file, explicitly export the converted document to a different XBF path:
 
@@ -96,25 +96,22 @@ converted in memory; use the explicit export above to persist the conversion.
 Saved-document access is separate from build reuse. Explicit source execution compares the
 current format, material libraries and other build inputs with the original build key and
 builds normally when they differ. No build closure is restamped to manufacture a cache hit.
-The JSON identity migration (**Identity migration**) is independent of document contents, and
-this data conversion restores no retired Python authoring API or class.
+This data conversion restores no retired Python authoring API or class.
 
 Before a body runs or is replayed, the build makes the closure again -- the script loaded,
 its modules digested, each input hashed again -- and compares its key with the one the model's
 document holds: this worker's own, the document it last built or took (`"from": "memory"`), else
-the model's `.xbf` (`"from": "xbf"`, **The store**), every model alike, while that file is the one the engine
-wrote: the version its record names (`build._written_by_engine`). The same key, in an `.xbf` this engine's format
-wrote that reads whole, and the body is not run: the report says `cache: {"used": true, "from": "xbf"}`,
+the model's `.xbf` (`"from": "xbf"`, **The store**), every model alike, whoever wrote the file last. The same
+key, in an `.xbf` this engine's format wrote that reads whole, and the body is not run: the report says `cache: {"used": true, "from": "xbf"}`,
 `memo.bodies_loaded` the bodies the document is, `bodies` the root `loaded`, `timings` the key (`key`) and the read
 (`read`). A later build in the same worker takes it from memory without reading it: one taken, or one this worker
 built, so an unchanged warm build costs what a restart's second build does, the key alone (the w16: 59 s
 replaying, against under a second), and the declared files' translation and compare. Its bodies' memo entries
 count as used by that build, as a replay's do, so an edit after any number of them still replays what it leaves
-alone. An `.xbf` edited, replaced or copied over by hand since the engine wrote it is not taken: the model builds,
-and writes its `.xbf` again. A model taken writes its other declared files after, exactly as `cad <type> export`
+alone. A model taken writes its other declared files after, exactly as `cad <type> export`
 would (**Exports**), so one deleted or edited is written again from the document, and every file `written: false`
 where each holds its bytes already. Anything else builds as before, and `cache.reason` says why: it has no `.xbf`,
-the file is not the one the engine wrote, written by another engine or program, one that does not read, no key in
+written by another engine or program, one that does not read, no key in
 it, or what changed, by name (`cache.changed`, each change; the CLI prints `rebuilt: ../src/lib/arm_parts.py
 changed`): a module changed, is new or is no longer imported, an input changed or is missing, the format, a
 library, the system, the architecture or the source moved.

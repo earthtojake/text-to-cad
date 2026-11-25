@@ -37,10 +37,7 @@ Every document has one id (law 6), a lower-case UUID string (the library's `cad.
 `<name>.xbf` beside its script (`Model.xbf`, `Model.id`) -- worked out in the script's own process as in the
 engine; so is a shape handed over's (its `.xbf` at the path given, else `<name>.xbf` beside its calling script or
 in the working folder). A model's name, the function's by default, `name=` gives it another, is the name of the
-file it writes where no path is given. Two models that write one file share its id: the last build wins. Before,
-a model's id was the formula over its script and its function, or its folder and an explicit name
-(`identity.former`): a record of such an id is carried to its file's id, and the old id answers as an alias
-(**Identity migration**). The canonical path (`ids.canonical`) is `realpath` and, on
+file it writes where no path is given. Two models that write one file share its id: the last build wins. The canonical path (`ids.canonical`) is `realpath` and, on
 macOS, the name as the file system spells it, so a symlink and a case variant of one file are one
 document; the viewer's document reads (by id) and its Recents key by the same function, so it
 serves one document and keeps one Recents entry for it too, while a page names a file by the path
@@ -190,9 +187,9 @@ held by <name> (pid N): stop it, or start the server with another CAD_ENGINE_POR
 --port` for a port `--port` named).
 
 The token is made at the first engine's start and every start serves with it: the engine's record,
-`engines/engine.json` in the state folder (`places.state_dir`), keeps the port it rolled to (`registry.Registry.engine`,
-its own `registry.ENGINE_SCHEMA`), and the token is the user's one file beside it, `engines/token`,
-which every release's engine serves with (`registry.Registry.token`; both this user's alone, 0600), so a link
+`engines/engine.json` in the state folder (`places.state_dir`), keeps the port it rolled to (`state.State.engine`,
+its own `state.ENGINE_SCHEMA`), and the token is the user's one file beside it, `engines/token`,
+which every release's engine serves with (`state.State.token`; both this user's alone, 0600), so a link
 outlives an update too. So a page link
 -- the `cad viewer` output, a model's `view:` line, the CAD app's card -- works across `cad
 server stop`, a crash, a reboot and an update until the token is rotated, the session it left in a browser for 30 days past that

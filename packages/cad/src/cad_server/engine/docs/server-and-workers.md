@@ -145,7 +145,7 @@ document's measurement after its next build), then tessellations. A fact waits f
 at most, never queued meshes.
 
 A retired script's next build is a fresh worker's: a restart, which takes each model's document
-whole from its `.xbf` when its key is unchanged and the file is the one the engine wrote (**Build closure**,
+whole from its `.xbf` when its key is unchanged (**Build closure**,
 **The store**), and else builds the model cold. A render
 process (**The viewer and the snapshot**) is no worker and does not count toward the count cap; its
 memory counts toward the workers' memory cap, which retires an idle one before any worker, and one
@@ -220,7 +220,6 @@ documents:
   live      tom      8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12
   held      bracket  3e9b7c21-55aa-5f0e-8d11-6c2a9b4e7d30  memory and disk
   held      lid      0a6f2d94-7c1e-5b38-9e40-1d5c7a2b8f63  disk
-  unsaved   arm      71d0c4e8-9b2a-5c13-a6f4-0e8d2b5c9a17  run `cad run /work/assemble.py`
 ```
 
 A worker's memory is as it measured it after its last build; a busy one's build is where its
