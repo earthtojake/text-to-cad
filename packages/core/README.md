@@ -308,20 +308,7 @@ person wrote, then `File:`, `References:` and each attachment, inline where it i
 snapshot packet) or, for one that travels as a file, by its label and path. A context's `folders`
 (`{ start, home }`, which the host says) name every file in that
 message as `displayPath` does (`promptAddress`: a model by its id, a link as it is): relative to the
-workspace, else `~/`, so the person's home is never in it; its parts, and Copy References, keep the absolute path.
-
-A Quick Edit's snapshot packet is the page's, the same code for every host (`prompt/snapshotPacket.js`):
-`snapshotPacket({ input, type, views, annotation, references })` is what `cad <type> snapshot --job` draws
-again — a job per view (its `camera`, and its `display`, `kinematics`, `jointValues`, `animation` and
-`selection` where it has them; a 3D view's `output` framing, a drawing's none; its picture by its `label`
-and size, never a path), a board's `references`, the ink, and the parts hidden and isolated where it was
-last drawn — shortened: each view's numbers to a quarter of its pixel, a mark's to its view's, a stroke within
-half a pixel of its line (Douglas–Peucker), a mark without its id or a default, an area its outline alone,
-and what a mark touches and the parts a view hides by their selectors within the file. `input` is the file's
-address as `File:` names it, so the same views and ink on a local and a shared page make packets that differ
-in it alone. `snapshotPacketText` is the packet as a message carries it, inline and whole: compact JSON with
-no character a single-quoted argument ends at (an apostrophe is written `\u0027`, and PowerShell's typographic
-quotes, U+2018 to U+201B, their escapes too), so `--job '<packet>'` pastes as one argument in bash and PowerShell alike. Text, typed resource
+workspace, else `~/`, so the person's home is never in it; its parts, and Copy References, keep the absolute path. Text, typed resource
 references and attachments travel in one ordered, immutable snapshot with an
 operation ID; attachment relationships name reference parts, and an attachment's
 optional `label` ("Annotation") names it in that message. Text ranges use
@@ -333,6 +320,19 @@ label as it is. Apps own clipboard/draft delivery, MIME/size limits and
 acknowledged outcomes: `PromptContextPort.deliver` hands a context to its destination
 (`added`, `copied`) and `send`, where a host has a chat to post to, posts it as the
 person's message (`sent`); this package never submits a prompt or knows a session.
+
+A Quick Edit's snapshot packet is the page's, the same code for every host (`prompt/snapshotPacket.js`):
+`snapshotPacket({ input, type, views, annotation, references })` is what `cad <type> snapshot --job` draws
+again — a job per view (its `camera`, and its `display`, `kinematics`, `jointValues`, `animation` and
+`selection` where it has them; a 3D view's `output` framing, a drawing's none; its picture by its `label`
+and size, never a path), a board's `references`, the ink, and the parts hidden and isolated where it was
+last drawn — shortened: a mark's points to a quarter of a pixel of the view it was drawn in, each view's camera
+two decimals finer, a stroke within half a pixel of its line (Douglas–Peucker), a mark without its id or a default,
+an area its outline alone, and what a mark touches and the parts a view hides by their selectors within the file. `input` is the file's
+address as `File:` names it, so the same views and ink on a local and a shared page make packets that differ
+in it alone. `snapshotPacketText` is the packet as a message carries it, inline and whole: compact JSON with
+no character a single-quoted argument ends at (an apostrophe is written `\u0027`, and PowerShell's typographic
+quotes, U+2018 to U+201B, their escapes too), so `--job '<packet>'` pastes as one argument in bash and PowerShell alike.
 
 Native KiCad board plots use the read-only payload contract in [plot-payload](docs/plot-payload.md).
 `lib/plot2d` draws its layers; `lib/board2d` handles picking and nets; `lib/board3d` stands the

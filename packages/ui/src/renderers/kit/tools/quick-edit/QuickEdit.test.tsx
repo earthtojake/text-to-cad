@@ -151,7 +151,7 @@ it('copies the note with its references by their files\' absolute paths, and its
   // The page's packet: the file as `File:` names it, the view without a path to write, the ink shortened.
   expect(packetOf(message)!.type).toBe('step');
   expect(packetOf(message)!.packet).toEqual({ input: '/models/parts/bracket.step', jobs: [{
-    camera: { position: [1684.7, -1260.5, 725.6], target: [59.4, 16.5, -110.3], up: [0, 0, 1], orthographicHalfHeight: 968.3 },
+    camera: { position: [1684.744, -1260.513, 725.6], target: [59.422, 16.525, -110.28], up: [0, 0, 1], orthographicHalfHeight: 968.275 },
     display: { mode: 'solid', grid: false }, output: { padding: 0, tightFrame: false }, outputs: [{ label: 'view 1', width: 1600, height: 1160 }] }],
     annotation: { units: 'mm', marks: [{ kind: 'stroke', points: [0, 0, 0, 10, 0, 0], color: '#ff2d55', view: 'view 1', width: 3, touches: [] }] } });
   expect(message).not.toMatch(/snapshot\.json|\/tmp\//);

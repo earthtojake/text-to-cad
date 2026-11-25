@@ -51,29 +51,29 @@ test("a board's references, the ink, and the parts hidden and isolated where the
   assert.deepEqual(Object.keys(snapshotPacket({ input: 'kit.step', type: 'step', views: [hiding], references: [] })), ['input', 'jobs']);
 });
 
-test('each number to a quarter pixel of the view it was seen in: q = 2 × half height / height / 4, d = max(0, ceil(-log10 q)) decimals', () => {
+test('ink to a quarter pixel of the view it was drawn in, q = 2 × half height / height / 4, to d = max(0, ceil(-log10 q)) decimals; a camera to d + 2', () => {
   assert.equal(quarterPixel(view('v')), 2 * camera.orthographicHalfHeight / 1160 / 4);
   assert.deepEqual([0.41733, 0.4, 0.04, 0.00025, 1, 25, 4000].map(pixelDecimals), [1, 1, 2, 4, 0, 0, 0]);
   assert.deepEqual([quarterPixel({ camera: 'front', height: 100 }), quarterPixel({ camera, height: 0 }), pixelDecimals(null), pixelDecimals(0)], [null, null, null, null]);
-  // The camera: its position, target and half height to d, its up to four.
-  const near = { position: [1.234567, 2.345678, 3.456789], target: [0.1234567, 0, -0.98766], up: [0.123456, 0, 0.987654], orthographicHalfHeight: 0.5555555 };
+  // The camera: its position, target and half height to d + 2 (a whole quarter pixel moves the picture), its up to four.
+  const near = { position: [1.2345678, 2.3456789, 3.4567891], target: [0.1234567, 0, -0.98766], up: [0.123456, 0, 0.987654], orthographicHalfHeight: 0.5555557 };
   const packet = snapshotPacket({ input: 'a.step', type: 'step', views: [view('view 1'), view('current view', { camera: near, height: 1000 })],
     annotation: { units: 'mm', marks: [
       stroke({ points: [1.23456, 2.34567, 3.45678, 100.98765, 2.34567, 3.45678], widths: [1, 0.954321] }),
       stroke({ id: 'ink-2', view: 'current view', points: [1.23456, 2.34567, 3.45678, 1.98766, 2.34567, 3.45678] }),
       stroke({ id: 'ink-3', view: 'a view no job has', points: [1.23456, 2.34567, 3.45678, 1.98766, 2.34567, 3.45678] }),
     ] } });
-  assert.deepEqual(packet.jobs[0].camera, { position: [1684.7, -1260.5, 725.6], target: [59.4, 16.5, -110.3], up: [0, 0, 1], orthographicHalfHeight: 968.3 });
-  // Zoomed in, a quarter pixel is 0.00014 units: four decimals.
-  assert.deepEqual(packet.jobs[1].camera, { position: [1.2346, 2.3457, 3.4568], target: [0.1235, 0, -0.9877], up: [0.1235, 0, 0.9877], orthographicHalfHeight: 0.5556 });
+  assert.deepEqual(packet.jobs[0].camera, { position: [1684.744, -1260.513, 725.6], target: [59.422, 16.525, -110.28], up: [0, 0, 1], orthographicHalfHeight: 968.275 });
+  // Zoomed in, a quarter pixel is 0.00014 units: its ink to four decimals, its camera to six.
+  assert.deepEqual(packet.jobs[1].camera, { position: [1.234568, 2.345679, 3.456789], target: [0.123457, 0, -0.98766], up: [0.1235, 0, 0.9877], orthographicHalfHeight: 0.555556 });
   // A mark's points to the decimals of its view: its own label's job, else the last; a stroke's widths to two.
   assert.deepEqual(marks(packet).map(mark => mark.points), [[1.2, 2.3, 3.5, 101, 2.3, 3.5], [1.2346, 2.3457, 3.4568, 1.9877, 2.3457, 3.4568],
     [1.2346, 2.3457, 3.4568, 1.9877, 2.3457, 3.4568]]);
   assert.deepEqual(marks(packet)[0].widths, [1, 0.95]);
-  // Zoomed out past a unit a quarter pixel, whole numbers.
+  // Zoomed out past a unit a quarter pixel, the ink in whole numbers, the camera to two decimals.
   const far = snapshotPacket({ input: 'a.step', type: 'step', views: [view('view 1', { camera: { ...camera, orthographicHalfHeight: 60000 }, height: 1000 })],
     annotation: { units: 'mm', marks: [stroke({ points: [1234.56, -0.4, 7.5, 2345.67, 0.6, -7.5] })] } });
-  assert.deepEqual([far.jobs[0].camera.position, marks(far)[0].points], [[1685, -1261, 726], [1235, -0, 8, 2346, 1, -8]]);
+  assert.deepEqual([far.jobs[0].camera.position, marks(far)[0].points], [[1684.74, -1260.51, 725.6], [1235, -0, 8, 2346, 1, -8]]);
   assert.equal(snapshotPacketText(far).includes('-0,'), false);
 });
 

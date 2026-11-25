@@ -18,6 +18,9 @@ const VIEW_FIELDS = ['display', 'kinematics', 'jointValues', 'animation', 'selec
 // The fields of a mark a reader outside the page has no use for: its id is the page's, and an area's triangles
 // fill an outline the outline alone draws again.
 const MARK_DROPPED = new Set(['id', 'triangles', 'outline']);
+// A camera rounded to a quarter pixel moves the whole picture by a fraction of one, which its every edge shows: its
+// position, target and half height are two decimals finer than its view's ink, a hundredth of a quarter pixel.
+const CAMERA_EXTRA_DECIMALS = 2;
 // `up` is a direction: four decimals turn it less than a hundredth of a degree.
 const UP_DECIMALS = 4;
 const WIDTH_DECIMALS = 2;
@@ -168,9 +171,9 @@ function markOf(mark, q) {
  * document type, whose snapshot draws the packet (`cad <type> snapshot`: a drawing's views, a DXF's, a board's and a
  * schematic's, have no 3D framing). Null without a view.
  *
- * Shortened as it is made: each view's camera to a quarter of its pixel (`q`, `quarterPixel`: its position, target
- * and half height to `pixelDecimals(q)` decimals, `up` to four), each mark's points to the decimals of the view it
- * was drawn in (its `view`'s, else the last), a stroke's widths to two, and a stroke within half a pixel (`2q`) of its
+ * Shortened as it is made: each mark's points to a quarter of a pixel of the view it was drawn in (`q`,
+ * `quarterPixel`: `pixelDecimals(q)` decimals, its `view`'s, else the last view's), each view's camera two decimals
+ * finer (its position, target and half height; `up` to four), a stroke's widths to two, and a stroke within half a pixel (`2q`) of its
  * line (`douglasPeucker`); a mark with no `id`, no `opacity` of 1 or `closed` but true, an area its outline alone
  * (no `outline`, no `triangles`), and what it touches as the selectors it was drawn over within the file, as the
  * parts a view hides and isolates are: never the page's own ids, and never the file's address but in `input`.
@@ -184,7 +187,8 @@ export function snapshotPacket({ input, type, views, annotation = null, referenc
   if (!Array.isArray(views) || !views.length) return null;
   const drawing = flat(type);
   const jobs = views.map(view => {
-    const job = { camera: cameraOf(view.camera, pixelDecimals(quarterPixel(view))) };
+    const decimals = pixelDecimals(quarterPixel(view));
+    const job = { camera: cameraOf(view.camera, decimals === null ? null : Math.min(100, decimals + CAMERA_EXTRA_DECIMALS)) };
     for (const field of VIEW_FIELDS) {
       if (view[field] != null) job[field] = field === 'display' ? displayWithin(view[field]) : view[field];
     }
