@@ -76,9 +76,9 @@ chrome that floats over the picture. The home is the navbar over the library.
 - **The update button** (`@cad/ui/update`), over every file and over the home, as 0.11.1 had it: a 24px brand-blue icon
   (a download arrow) and nothing else, shown while a global install of cad is behind a newer release of its own major,
   automatic updates on or off; none where cad cannot update itself. Its tooltip says "Update". A click updates: the
-  icon becomes a ring that fills a stage at a time (asked, begun, installing while the server is away), each step
-  eased, then a spinner while the server restarts, and the page reloads into the new release once nothing on it is
-  unsaved. An automatic update underway shows the same. A failed update, automatic or not, is the viewer's alert
+  icon becomes a ring that fills a stage at a time (the release installing beside the one that runs, the switch to
+  it, the server away while it restarts), each step eased, then a spinner until the new server answers, and the page
+  reloads into the new release once nothing on it is unsaved. An automatic update underway shows the same. A failed update, automatic or not, is the viewer's alert
   card, the one every error is said in ([the alert card](#loading-and-status-screens)), and the button shows as it
   is offered. Why: automatic updates fail on some computers, and this is where the person learns why and what to do;
   nothing is blocked, and an error looks like every other error.
