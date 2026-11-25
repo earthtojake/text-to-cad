@@ -56,6 +56,17 @@ the new one and ``updater`` the shipped release the old.
   server starts the same cad: nothing updates.
 - ``self-broken``: an update to a release whose server cannot start (its daemon module raises): cad is that release, its
   server down; the feed then names the next, and ``cad server start``, failing, updates cad to it, whose server answers.
+- ``self-called``: the update while agents and apps call ``cad`` all along: from the moment the attempt is underway
+  until it ends, three callers each run the bin folder's ``cad`` every 50 ms (two ``cad server start``, one ``cad
+  --version``), as an agent app's calls do. The update installs the next release, nothing is put back, and its server
+  answers. On Windows the copy of ``cad.exe`` the update once put back was what those calls started: they restarted the
+  old server, and held the copy and the environment's Python, so uv's install and its rollback failed at every try.
+- ``self-record``: an uninstall that stopped midway (on Windows, a file of the old cad held as uv removed it) leaves
+  the release's ``dist-info`` holding nothing but its licences, no ``RECORD``, and every later uv run on the tool fails
+  on it, on every system: the server's feed naming the next release, ``cad server start`` updates cad to it all the
+  same (the helper deleted that folder first, and says so in its log). Then the same left on the next release, its
+  command gone too (``cad`` not found) and the release after out: the install command, a person's run, deletes it
+  and installs the release after, which runs.
 - ``self-uninstallable``: an update to a release uv cannot install as a tool (no command: "No executables are
   provided"): uv takes the tool away with the failed attempt, the helper puts the release before back, and its server
   answers, and counts the failure once; the plugin's switch on, no ``cad plugin install`` runs after the failed update
@@ -138,7 +149,7 @@ Usage::
 
     scripts/test/rehearse-update.py [ROUTE ...] [--old RELEASE] [--wheels DIR] [--uv-cache DIR]
 
-``all`` (the default) is every route; ``self`` the nine of cad updating itself; ``bridge`` the ten from a shipped
+``all`` (the default) is every route; ``self`` the eleven of cad updating itself; ``bridge`` the ten from a shipped
 release; ``plugin-update`` is of neither group, and runs with ``all`` or by its name. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
 are built from the source (``tests/python/support/machine.py``, no packaged runtime: no route opens a page).
 ``--uv-cache``: one folder for uv's cache and Pythons, shared by every computer of the run (default: a new one of the
@@ -1012,6 +1023,117 @@ def self_uninstallable(box: Box) -> None:
         "counted")
 
 
+class Callers:
+    """Agents and apps calling ``cad`` all along (``self-called``): a thread for each of ``commands``, each running the
+    bin folder's ``cad`` with it every ``every`` seconds, once the attempt is underway (its record), until it has ended
+    or ``stop``. What came of the calls, by how each ended."""
+
+    def __init__(self, box: Box, commands: list[list[str]], every: float = 0.05) -> None:
+        self.box, self.every, self.done = box, every, threading.Event()
+        self.ended: dict[str, int] = {}
+        self.lock = threading.Lock()
+        self.threads = [threading.Thread(target=self.call, args=(command,), daemon=True) for command in commands]
+        for thread in self.threads:
+            thread.start()
+
+    def underway(self) -> bool:
+        return self.box.read("auto-update.json").get("outcome") == "underway"
+
+    def call(self, command: list[str]) -> None:
+        while not self.done.is_set() and not self.underway():
+            time.sleep(0.05)
+        while not self.done.is_set() and self.underway():
+            try:
+                done = subprocess.run([str(rc.cad_commands(self.box.bin)[0]), *command], env=self.box.env,
+                                      cwd=self.box.work, stdin=subprocess.DEVNULL, capture_output=True, timeout=120)
+                how = f"exit {done.returncode}"
+            except FileNotFoundError:
+                how = "not found"
+            except (OSError, subprocess.TimeoutExpired) as error:
+                how = type(error).__name__
+            with self.lock:
+                self.ended[how] = self.ended.get(how, 0) + 1
+            time.sleep(self.every)
+
+    def stop(self) -> str:
+        self.done.set()
+        for thread in self.threads:
+            thread.join(150)
+        return ", ".join(f"{count} {how}" for how, count in sorted(self.ended.items())) or "none ran"
+
+
+def tries(box: Box) -> int:
+    """How many times the last attempt ran its installer's upgrade, by its log."""
+    log = box.state / "auto-update.log"
+    text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
+    return len(re.findall(r"(?m)^\$ .* tool install --upgrade ", text))
+
+
+def self_called(box: Box) -> None:
+    box.set_up("off")
+    box.out(NEXT)
+    callers = Callers(box, [["server", "start"], ["server", "start"], ["--version"]])
+    try:
+        box.hour_later()
+        record = box.until(lambda: (lambda found: found if found.get("release") == NEXT and "ended" in found
+                                    else None)(box.read("auto-update.json")), f"cad's own update to {NEXT} ended")
+    finally:
+        calls = callers.stop()
+    if record.get("outcome") != "installed" or "restored" in record:
+        raise Failed(f"{box.label}: the update while cad was called: {record} (the calls: {calls})\n{box.said()}")
+    box.tool_serves(NEXT)
+    box.is_tool(NEXT)
+    say(f"        {NEW} -> {NEXT} with three callers of `cad` all along ({calls}), after {tries(box)} "
+        f"{'try' if tries(box) == 1 else 'tries'} of the upgrade; nothing put back")
+
+
+def half_uninstalled(env: Path, version: str) -> Path:
+    """``env``'s ``cad-<version>.dist-info`` as an uninstall that stopped midway leaves it: every file of its own
+    gone, its RECORD among them, its folders (``licenses``) kept. The folder."""
+    found = list(env.glob(f"lib/python*/site-packages/cad-{version}.dist-info")) + \
+        list(env.glob(f"Lib/site-packages/cad-{version}.dist-info"))
+    if not found:
+        raise Failed(f"no cad-{version}.dist-info in {env}")
+    for path in found[0].iterdir():
+        if path.is_file():
+            path.unlink()
+    return found[0]
+
+
+def self_record(box: Box) -> None:
+    box.set_up("off")
+    box.run([box.cad(), "server", "stop"])
+    env = Path(box.tool()["env"])
+    left = half_uninstalled(env, NEW)
+    # The feed as the server last read it, naming the next release, read within the hour: due at the next start.
+    box.out(NEXT)
+    (box.state / "releases.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": NEXT}}),
+                                             encoding="utf-8")
+    done = box.run([box.cad(), "server", "start"], check=False)
+    if done.returncode != 0 or f"cad {NEXT}" not in done.stdout:
+        raise Failed(f"{box.label}: cad server start, {left.name} without its RECORD, exited {done.returncode}: "
+                     f"{done.stdout}{done.stderr}\n{box.said()}")
+    updated(box, NEXT)
+    log = (box.state / "auto-update.log").read_text(encoding="utf-8", errors="replace")
+    if f"deleted {left.name}: it had no RECORD" not in log:
+        raise Failed(f"{box.label}: the helper's log says nothing of {left.name}:\n{log[-3000:]}")
+    box.tool_serves(NEXT)
+    box.is_tool(NEXT)
+    say(f"        {NEW} -> {NEXT} by `cad server start`, {left.name} left with no RECORD deleted first")
+    # The same on the next release, its command gone too: the install command repairs it.
+    box.run([box.cad(), "server", "stop"])
+    left = half_uninstalled(env, NEXT)
+    for command in box.commands():
+        command.unlink()
+    box.out(AFTER)
+    done = box.install_command()
+    if f"Removed {left.name}" not in done.stdout:
+        raise Failed(f"{box.label}: the install command said nothing of {left.name}:\n{done.stdout}")
+    box.is_tool(AFTER)
+    say(f"        {NEXT}, {left.name} with no RECORD and no cad command: the install command deleted it and "
+        f"installed {AFTER}")
+
+
 # --- cad installed by pipx ----------------------------------------------------------------------------------------
 
 # The variables of pip and pipx a computer with pipx holds besides its own (``with_pipx``).
@@ -1572,7 +1694,8 @@ def plugin_update(box: Box) -> None:
 
 SELF = {"self-update": self_update, "self-typed": self_typed, "self-typed-stopped": self_typed_stopped,
         "self-at-start": self_at_start, "self-off": self_off, "self-broken": self_broken,
-        "self-uninstallable": self_uninstallable, "self-major": self_major, "self-pipx": self_pipx}
+        "self-uninstallable": self_uninstallable, "self-major": self_major, "self-pipx": self_pipx,
+        "self-called": self_called, "self-record": self_record}
 BRIDGE = {"updater": updater, "automatic": automatic, "updater-fallback": updater_fallback, "store-only": store_only,
           "rollback": rollback, "install-command": install_command, "typed": typed, "store-typed": store_typed,
           "uv-line": uv_line, "store-uv-line": store_uv_line}

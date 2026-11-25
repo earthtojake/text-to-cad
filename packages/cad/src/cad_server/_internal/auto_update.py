@@ -65,10 +65,12 @@ tries, before the lock is let go. So two servers that start at once, each asking
 daemon's lock, begin one update between them. Within a process ``_BEGIN`` keeps the check and the trigger together.
 Then a detached helper, never the ``cad`` executable and never run from cad's environment (``auto_update_helper``, run
 by the Python that environment was made from), stops the server, runs the installer's upgrade command, and starts the
-server with whatever cad is there. On Windows it renames each ``cad.exe`` of the tool aside before the installer runs
-and puts a copy back,
-because an installer cannot remove one that is running (a ``cad update`` that waits, a ``cad server start``); that works
-because cad takes its launcher off ``sys.path`` as it starts (``cad_server/__init__.py``). The helper runs no install
+server with whatever cad is there. On Windows it renames each ``cad.exe`` of the tool aside before the installer runs,
+putting no copy back, because an installer cannot remove one that is running (a ``cad update`` that waits, a ``cad
+server start``) and a copy is what the commands of agents and apps run meanwhile; that works because cad takes its
+launcher off ``sys.path`` as it starts (``cad_server/__init__.py``); and it stops what still runs from cad's
+environment, but a command that waits for the update. The helper is started out of the job its starter is in, where
+that job lets it (``spawn``). The helper runs no install
 command: the server of the newer cad does, by ``plugin_catch_up``'s rule, whatever brought cad there. The attempt is
 kept in the state folder (``RECORD``: ``release``, ``wanted``, ``from``, ``at``, ``tries`` -- the try of ``wanted``
 it is --, ``installer``, ``asked`` -- a typed update --, ``major`` -- ``cad update --major`` --, ``beat``, the helper's
@@ -552,14 +554,17 @@ def outside_copy(program: list[str], prefix: str | None = None) -> list[str]:
 
 # The installers cad's update knows, in the order they are asked (see the module for what each command was measured
 # to do). Python flags go only where an install starts afresh (a release put back): an upgrade keeps the environment's
-# interpreter. pipx's put-back carries none: pipx makes the environment with its own default Python, as the person's
-# ``pipx install cad`` did. pipx's bound is one argument (``--pip-args=...``) with no space or quote in it, so pipx's own
-# split of it (``shlex``, non-POSIX on Windows) leaves it one requirement everywhere.
+# interpreter. uv's put-back runs only where cad does not run: ``--force`` writes its command over whatever is in the
+# launchers' folder, and ``--reinstall-package cad`` installs cad's files again where uv finds that release there
+# already, half removed. pipx's put-back carries no Python flags: pipx makes the environment with its own default
+# Python, as the person's ``pipx install cad`` did. pipx's bound is one argument (``--pip-args=...``) with no space or
+# quote in it, so pipx's own split of it (``shlex``, non-POSIX on Windows) leaves it one requirement everywhere.
 UV = Installer(
     name="uv", owns=lambda prefix: uv_tool(str(prefix)) is not None, find=update_uv,
     upgrade=lambda uv, version: [*uv, "tool", "install", "--upgrade", bound(version)],
     cross=lambda uv, version: [*uv, "tool", "install", "--upgrade", f"cad>={version}"],
-    put_back=lambda uv, version: [*uv, "tool", "install", "--managed-python", "--python", "3.14", f"cad=={version}"],
+    put_back=lambda uv, version: [*uv, "tool", "install", "--force", "--reinstall-package", "cad", "--managed-python",
+                                  "--python", "3.14", f"cad=={version}"],
     launchers=lambda uv: [*uv, "tool", "dir", "--bin"],
     pin=lambda uv, version: [*uv, "tool", "install", "--upgrade", f"cad=={version}"],
     refresh=("--refresh",), no_config=("--no-config",))
@@ -947,8 +952,6 @@ def _start(target: str | None, *, automatic: bool, start: bool, major: bool,
            wanted: str | None) -> tuple[str, dict[str, Any]]:
     """The update to ``target`` begun (``trigger``'s work), or the attempt underway found: ``(BEGUN, the attempt)``,
     ``(UNDERWAY, the attempt underway)``, or ``("", {})`` where none could begin (``TRIED`` too)."""
-    from cad.engine.places import detached
-
     found = global_install()
     if found is None or blocked(found) is not None:
         return "", {}  # its installer not found, or no Python outside this environment to run the helper with
@@ -970,14 +973,30 @@ def _start(target: str | None, *, automatic: bool, start: bool, major: bool,
         write_helper(record)
         env = {**{name: value for name, value in os.environ.items() if name not in _UNSET},
                **found.installer.environ(found.prefix)}
-        subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         env=env, cwd=str(record.parent), **detached())
+        spawn(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env,
+              cwd=str(record.parent))
     except Exception as error:
         # Kept as underway, an attempt whose helper never started would hold every update for the hour: it failed.
         _keep(record, {**kept, "outcome": "failed", "ended": time.time(), "cause": "helper_start",
                        "detail": f"the update's helper could not start: {type(error).__name__}: {error}"})
         raise
     return BEGUN, kept
+
+
+def spawn(command: list[str], popen: Callable[..., Any] | None = None, **options: Any) -> Any:
+    """The helper started detached (``places.detached``), and on Windows out of the job its starter is in where that job
+    lets it (``breakaway``): an agent app that closes the job of the commands it ran ends every process in it, the
+    helper and its beat among them, midway through an install. Where the job forbids it, Windows refuses the start
+    (access denied), and the helper starts in the job as before."""
+    from cad.engine.places import detached
+
+    popen = popen or subprocess.Popen
+    try:
+        return popen(command, **options, **detached(breakaway=True))
+    except OSError:
+        if detached(breakaway=True) == detached():
+            raise
+    return popen(command, **options, **detached())
 
 
 def trigger(target: str | None, *, automatic: bool = True, start: bool = True, major: bool = False,
@@ -1130,6 +1149,11 @@ SAID = {
     "uv_old": "uv is older than cad asks for: `uv self update` updates it",
     "kept": "{installer} kept the release that ran, though a newer one is out",
     "server_running": "the cad server could not be stopped, and a file it holds could not be replaced",
+    "cad_running": ("a program run from cad's environment could not be stopped, and a file it holds could not be "
+                    "replaced"),
+    "broken": ("cad did not run after the update, nor after the release before was put back: the install command "
+               "repairs it (curl -fsSL https://texttocad.dev/install.sh | sh; on Windows, "
+               "irm https://www.texttocad.dev/install.ps1 | iex)"),
     "helper_start": "the update's helper could not start",
     "helper_crash": "the update's helper stopped with an error",
     "lost": "the update's helper ended without saying how",

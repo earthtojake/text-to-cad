@@ -255,7 +255,10 @@ its pull request. The tier holds:
   computers it installs the real releases 0.11.11, 0.11.0 and 0.10.4 from PyPI (and 0.10.0, on
   Windows) and brings each to this tree's build by the route it takes (where the new server runs the
   install command once, that command hands the apps to the cad it installed); then cad's own update,
-  automatic and typed, inside its major and across one only by `cad update --major`; and after an
+  automatic and typed, inside its major and across one only by `cad update --major`, while callers run
+  `cad` every 50 ms throughout (`self-called`: on Windows, the calls an agent app makes), and over a
+  `dist-info` an uninstall left with no `RECORD`, which the install command repairs too (`self-record`);
+  and after an
   update, the new server's one `cad plugin install`, read from cad's record of it. One more route
   starts on the real 0.11.13 (`plugin-update`, on shard 1/2 of each system): its own `cad plugin
   update` runs this tree's install command, which finds no `cad plugin install` there and has the

@@ -88,9 +88,19 @@ uninstall cad`. cad has no installer, uninstaller or launcher of its own.
 our own that did the same is where earlier releases failed.
 
 **What it costs.** We take uv's behaviour as it is, its bugs included: on Windows, uv cannot remove a
-running `cad.exe`, so cad's update renames each one aside first and puts a copy back, and tries again
-if uv still fails; and when an install fails after it has started, uv removes the tool, so cad's
-update puts the release it ran back.
+running `cad.exe`, so cad's update renames each one aside first, and tries again if uv still fails;
+and when an install fails after it has started, uv removes the tool, so cad's update puts the release
+it ran back, where cad does not run. It once put a copy of `cad.exe` back, so `cad` kept working while
+uv ran. On Windows that copy is what broke the update: agents and apps call `cad` all the time, and
+the calls made while uv ran started the copy, which restarted the old server, and held the copy and
+the environment's Python, so uv's install failed and its rollback with it. No copy goes back now: for
+the seconds uv runs, a new `cad` is not found and fails at once, and before each try the update stops
+whatever else still runs from cad's environment, but a `cad update` or `cad server start` that waits
+for it (those run from the file set aside, and say how the update ended). An uninstall that stopped
+midway leaves the old release's `dist-info` with no `RECORD`, on which every later uv run fails, the
+install command's too: cad's update and the install command delete such a folder before they run uv,
+so running the install command again repairs a computer left so. Whether cad was installed or put
+back is asked of cad itself (`cad --version`), not of the files uv left.
 
 ## One line installs cad
 

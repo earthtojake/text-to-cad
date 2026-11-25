@@ -443,8 +443,9 @@ jobs:
   # servers and the real install command; this build's servers there tend themselves every 2 s, not every 30 s
   # (CAD_ENGINE_TEND_SECONDS). cad updating itself (`self`: idle, typed with and without a server running, at a start
   # whose starter waits for it, switched off, to a release whose server cannot start and on past it, to a release uv
-  # cannot install and back, inside its major and never to a new major but by `cad update --major`, and installed by
-  # pipx); and the bridge from the real shipped releases on PyPI (`bridge`: 0.11.11's update button and automatic
+  # cannot install and back, inside its major and never to a new major but by `cad update --major`, installed by
+  # pipx, while `cad` is called every 50 ms throughout, and over a dist-info left with no RECORD, which the install
+  # command repairs too); and the bridge from the real shipped releases on PyPI (`bridge`: 0.11.11's update button and automatic
   # update into this build, through its server's run of the install command in install mode to the uv tool's server,
   # and the same where that run fails; a computer with no receipt of our
   # installer, whose server installs cad with uv itself and runs no install command, by the button and by a typed
@@ -487,9 +488,9 @@ jobs:
 
       # The rehearsal builds this tree's wheels from the source with the standard library alone
       # (tests/python/support/machine.py): nothing of cad is installed here.
-      - name: cad updating itself (idle, typed, typed with no server, at a start, switched off, past a broken server, back from an uninstallable release, inside its major, by pipx)
+      - name: cad updating itself (idle, typed, typed with no server, at a start, switched off, past a broken server, back from an uninstallable release, inside its major, by pipx, while called, over a dist-info with no RECORD)
         if: matrix.shard == '1/2'
-        timeout-minutes: 20
+        timeout-minutes: 25
         run: python scripts/test/rehearse-update.py self --uv-cache "${{ runner.temp }}/uv"
 
       - name: From 0.11.11 (button, automatic, a failed install command, store-only, gone back from, the install command, typed, the uv line)

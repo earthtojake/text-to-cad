@@ -647,6 +647,7 @@ def engine_root() -> str:
 # Windows' process creation flags, by number: ``subprocess`` names them on Windows alone.
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+CREATE_BREAKAWAY_FROM_JOB = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0x01000000)
 
 
 def windowless() -> dict[str, Any]:
@@ -674,13 +675,16 @@ def standard_input_aside() -> int:
     return kept
 
 
-def detached() -> dict[str, Any]:
+def detached(*, breakaway: bool = False) -> dict[str, Any]:
     """How the daemon is started: outliving the command that needed it. On Windows a console of its
     own with no window and a process group of its own, never no console at all (``DETACHED_PROCESS``),
-    which would give each console program it starts a window of its own (#597); elsewhere a session
-    of its own (``start_new_session`` is POSIX's: Windows takes it as nothing)."""
+    which would give each console program it starts a window of its own (#597); with ``breakaway``,
+    out of the job its starter is in too (``CREATE_BREAKAWAY_FROM_JOB``), which Windows refuses where
+    that job does not allow it. Elsewhere a session of its own (``start_new_session`` is POSIX's:
+    Windows takes it as nothing)."""
     if os.name == "nt":
-        return {"creationflags": CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP}
+        return {"creationflags": CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+                | (CREATE_BREAKAWAY_FROM_JOB if breakaway else 0)}
     return {"start_new_session": True}
 
 

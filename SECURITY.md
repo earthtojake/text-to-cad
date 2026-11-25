@@ -166,7 +166,8 @@ and nothing asked:
   installer from `astral.sh`.
 - `install.py`, downloaded from texttocad.dev and run with uv's Python. Where no
   `cad` is installed, or the one there does not start, it installs PyPI's newest
-  release of `cad` with `uv tool install`, and where cad's folder is then not on the
+  release of `cad` with `uv tool install` (first deleting a `dist-info` folder of cad's
+  own that an uninstall left without its `RECORD`, which no uv run gets past), and where cad's folder is then not on the
   PATH, it runs uv's own `uv tool update-shell`, which adds it to your shell profile
   (on Windows, your user PATH); `UV_NO_MODIFY_PATH` stops that, and a cad that runs
   the command sets it. A `cad` that is installed and starts is brought up to date
@@ -210,9 +211,12 @@ names a release only once it has been on PyPI for an hour, and we can hold a rel
 from it. When the feed names a release of cad's major newer than cad's and nothing has
 run for a minute, cad stops its server, runs its installer's own upgrade bounded to that
 major (`uv tool install --upgrade "cad>=<installed>,<<next major>"`), which downloads
-PyPI's newest release of `cad` in that range, and starts the server again. It never
-installs an older release; where a failed upgrade left no `cad`, it puts back the
-release that ran. A typed `cad update` asks PyPI which release of its major is newest
+PyPI's newest release of `cad` in that range, and starts the server again. On Windows,
+before the upgrade, it stops what still runs from cad's own environment and its `cad.exe`
+(never another program, nor a `cad update` or `cad server start` waiting for the update),
+and on every system it deletes a `dist-info` folder of cad's own that an uninstall left
+without its `RECORD`. It never installs an older release; where a failed upgrade left no
+`cad` that runs, it puts back the release that ran. A typed `cad update` asks PyPI which release of its major is newest
 and runs the same upgrade; `cad update --major` runs `uv tool install --upgrade
 "cad>=<installed>"`, PyPI's newest of all. Then, where `cad plugin update auto` is on, the
 server of the newer cad (however it got newer: by itself, by `cad update`, or by an

@@ -227,8 +227,16 @@ before's kept as `auto-update.1.log`. The log stays on the computer: nothing sen
 can stop an update: where either fails, the update runs and is recorded as without it. A release that does not know
 `cause` reads the record as before. On
 Windows uv cannot remove a `cad.exe` that is running, but it can rename one, so the helper renames each
-`cad.exe` of the tool aside before uv runs and puts a copy back. For that to work, cad takes its launcher
-off `sys.path` as it starts (`__init__.py`), so it never holds the file open. A release that does not install is
+`cad.exe` of the tool aside before uv runs, and puts no copy back: the calls agents and apps make meanwhile
+would start the copy and the old server with it, and hold the files uv replaces. A `cad` typed while uv runs is
+not found. For that to work, cad takes its launcher off `sys.path` as it starts (`__init__.py`), so it never holds
+the file open. Before each try it also stops what still runs from cad's environment, but a `cad update` or `cad
+server start` that waits for the update, and it starts out of the job of the app that ran cad, where that job
+lets it, so an app that closes the job does not end the update midway. On every system, before each try, it
+deletes a `dist-info` of cad's that has no `RECORD` (an uninstall that stopped midway leaves one, and uv fails on
+it every time after; the install command deletes one too, so running it again repairs such a computer). An
+update counts as installed, and a release put back as `restored`, only where `cad --version` then runs; a cad
+that does not run afterwards is `broken`, and `cad doctor` names the install command. A release that does not install is
 tried again, and never given up on: after its first automatic try it waits an hour, then 2, 4, 8 and 16 hours,
 then a day after each, counted for that release in `auto-update-tried.json` in the data folder (the eight releases
 tried last), so a newer release starts afresh and a server of another release beside it never sets the count back;

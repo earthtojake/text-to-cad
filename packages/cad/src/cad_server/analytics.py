@@ -575,7 +575,8 @@ UPDATE_FAILURES = {"failed": frozenset({"upgrade", "older", "put_back"}), "resto
 # one that could not begin (``blocked``), why.
 UPDATE_ENDED = frozenset({"timeout", "no_program", "in_use", "denied", "disk_full", "half_made", "network", "offline",
                           "no_release", "python", "platform", "config_exclude", "config_index", "config_tls", "uv_old",
-                          "kept", "server_running", "helper_start", "packaged", "unknown", "none"})
+                          "kept", "server_running", "cad_running", "broken", "helper_start", "packaged", "unknown",
+                          "none"})
 UPDATE_CAUSES = {"current": UPDATE_ENDED | {"already"}, "failed": UPDATE_ENDED, "restored": UPDATE_ENDED,
                  "lost": frozenset({"lost", "helper_crash"}), "blocked": frozenset({"no_installer", "no_python"})}
 UPDATE_INSTALLERS = frozenset({"uv", "pipx"})

@@ -37,6 +37,22 @@ RECEIPT = '[tool]\nrequirements = [{ name = "cad", specifier = "==0.1.0" }]\nent
 BOUNDED = "cad>=0.1.0,<1"  # the requirement of 0.1.0's upgrade: inside its major, never below it (``auto_update.bound``)
 
 
+def dist_info(site: Path, release: str) -> Path:
+    """``cad-<release>.dist-info`` as an install leaves it, with its ``METADATA`` and its ``RECORD``: the helper counts
+    no other (``auto_update_helper.installed``)."""
+    folder = site / f"cad-{release}.dist-info"
+    folder.mkdir(parents=True)
+    for name in ("METADATA", "RECORD"):
+        (folder / name).write_text(f"{name} of cad {release}\n", encoding="utf-8")
+    return folder
+
+
+def held(site: Path) -> str | None:
+    """The release of the one ``cad-*.dist-info`` in ``site``, as ``cad --version`` reads it; None for none."""
+    found = sorted(path.name[len("cad-"):-len(".dist-info")] for path in site.glob("cad-*.dist-info"))
+    return found[-1] if found else None
+
+
 class Case(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp()).resolve()
@@ -97,8 +113,9 @@ class GlobalInstallTest(Case):
                          "inside the major of the release that runs, never below it, and no Python flags")
         self.assertEqual(uv.cross(["uv"], "0.1.0"), ["uv", "tool", "install", "--upgrade", "cad>=0.1.0"],
                          "`cad update --major`: the floor alone, never below the release that runs")
-        self.assertEqual(uv.put_back(["uv"], "0.1.0"),
-                         ["uv", "tool", "install", "--managed-python", "--python", "3.14", "cad==0.1.0"])
+        self.assertEqual(uv.put_back(["uv"], "0.1.0"),  # only where cad does not run: over whatever is there
+                         ["uv", "tool", "install", "--force", "--reinstall-package", "cad", "--managed-python",
+                          "--python", "3.14", "cad==0.1.0"])
         self.assertEqual(uv.launchers(["uv"]), ["uv", "tool", "dir", "--bin"])
         self.assertEqual(uv.environ(self.tool), {}, "uv's commands need nothing of the server's environment changed")
         carried = self.tmp / "carried" / "uv"
@@ -1014,7 +1031,7 @@ class StaleServerTest(Case):
     def holds(self, release: str) -> None:
         site = self.tool / "lib" / "python3.14" / "site-packages"
         shutil.rmtree(site, ignore_errors=True)
-        (site / f"cad-{release}.dist-info").mkdir(parents=True)
+        dist_info(site, release)
 
     def test_no_update_and_no_try_where_the_environment_holds_the_release_wanted_or_newer(self) -> None:
         for held, latest, lines, due in (("0.2.0", "0.2.0", {"0": "0.2.0"}, None),
@@ -1190,7 +1207,8 @@ class HelperCommandTest(Case):
                     "cad": str(cad), "target": "0.2.0", "prefix": str(self.tool), "record": "/s/auto-update.json",
                     "from": "0.1.0", "at": 5.0, "tries": 1,
                     "upgrade": ["/u/uv", "tool", "install", "--upgrade", "cad>=0.1.0,<1"],
-                    "put_back": ["/u/uv", "tool", "install", "--managed-python", "--python", "3.14", "cad==0.1.0"],
+                    "put_back": ["/u/uv", "tool", "install", "--force", "--reinstall-package", "cad",
+                                 "--managed-python", "--python", "3.14", "cad==0.1.0"],
                     "launchers": ["/u/uv", "tool", "dir", "--bin"], "installer": "uv", "wanted": "0.2.0",
                     "asked": False, "major": False, "start": True,
                     "pin": ["/u/uv", "tool", "install", "--upgrade", "cad==0.2.0"],
@@ -1269,6 +1287,33 @@ class HelperCommandTest(Case):
         self.assertTrue(json.loads(self.triggered()[0][-1])["start"], "a server ran: it starts again")
         self.assertFalse(json.loads(self.triggered(automatic=False, start=False)[0][-1])["start"])
 
+    def test_on_windows_the_helper_is_started_out_of_its_starter_s_job_where_that_job_lets_it(self) -> None:
+        """An agent app that closes the job of the commands it ran ends every process in it: the helper breaks away
+        from it (``CREATE_BREAKAWAY_FROM_JOB``), and where the job forbids that (Windows refuses the start), starts in
+        it as before."""
+        from cad.engine import places
+
+        with mock.patch.object(places, "os", types.SimpleNamespace(name="nt")):
+            self.assertEqual(places.detached(breakaway=True)["creationflags"], 0x08000000 | 0x00000200 | 0x01000000)
+            self.assertEqual(places.detached()["creationflags"], 0x08000000 | 0x00000200)
+            for refused, flags in ((False, [0x01000200]), (True, [0x01000200, 0x00000200])):
+                with self.subTest(refused=refused):
+                    tried = []
+
+                    def popen(command, **options):
+                        tried.append(options["creationflags"] & ~0x08000000)
+                        if refused and len(tried) == 1:
+                            raise PermissionError(13, "Access is denied")
+                        return "started"
+
+                    self.assertEqual(auto_update.spawn(["helper"], popen=popen, cwd="/"), "started")
+                    self.assertEqual(tried, flags)
+        failing = mock.Mock(side_effect=OSError("no such file"))
+        with self.assertRaises(OSError):  # elsewhere there is no job: a refusal is the start's own
+            auto_update.spawn(["helper"], popen=failing)
+        self.assertEqual(failing.call_count, 1)
+        self.assertEqual(places.detached(breakaway=True), places.detached())
+
 
 class HelperTest(unittest.TestCase):
     """What the helper runs, in order, and what it keeps."""
@@ -1280,42 +1325,48 @@ class HelperTest(unittest.TestCase):
         self.addCleanup(__import__("shutil").rmtree, self.tmp, ignore_errors=True)
         self.site = self.tmp / "lib" / "python3.14" / "site-packages"
         self.site.mkdir(parents=True)
-        (self.site / "cad-0.1.0.dist-info").mkdir()
+        dist_info(self.site, "0.1.0")
         (self.tmp / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")  # a whole environment
         self.told = {"cad": "cad", "target": "0.2.0", "prefix": str(self.tmp), "record": "r", "from": "0.1.0",
                      "at": 1.0, "upgrade": self.UPGRADE, "put_back": ["uv", "tool", "install", "cad==0.1.0"],
                      "launchers": ["uv", "tool", "dir", "--bin"], "installer": "uv", "asked": True}
 
     def fake(self, installs: list[int], removes: bool = False, bin_folder: tuple[int, str] = (1, "no tools"),
-             newest: str = "0.2.0", said: str = "uv said", stop: int = 0, uv_version: str = "uv 0.13.8"):
+             newest: str = "0.2.0", said: str = "uv said", stop: int = 0, uv_version: str = "uv 0.13.8",
+             launchers: tuple[Path, ...] = ()):
         """A stand-in for uv and cad: each install exits as ``installs`` says, putting its release in place when it
-        succeeds (the upgrade's: ``newest``; a release put back: its own) and, with ``removes``, removing the whole tool
-        when it fails (as uv does once it has begun), printing ``said``; ``uv tool dir --bin`` answers ``bin_folder``;
-        ``cad server stop`` exits ``stop``; ``uv --version`` says ``uv_version``."""
+        succeeds (the upgrade's: ``newest``; a release put back: its own), with its ``launchers`` (the ``cad.exe`` uv
+        writes) and, with ``removes``, removing the whole tool when it fails (as uv does once it has begun), printing
+        ``said``; ``uv tool dir --bin`` answers ``bin_folder``; ``cad server stop`` exits ``stop``; ``cad --version``
+        says the release in place, where its command is there; ``uv --version`` says ``uv_version``."""
         ran: list[list[str]] = []
 
         def run(line, timeout):
+            cad = Path(line[0]).name in ("cad", "cad.exe")
             if line[1:3] == ["tool", "dir"]:
                 ran.append(["dir"])
                 return bin_folder
-            if line[1:] == ["--version"] and line[0] != self.told["cad"]:
+            if line[1:] == ["--version"] and not cad:
                 ran.append(["uv", "--version"])
                 return 0, uv_version
-            ran.append(line[1:3] if line[0] == self.told["cad"] else ["install", line[-1]])
+            ran.append(line[1:3] if cad else ["install", line[-1]])
             present = list(self.site.glob("cad-*.dist-info"))
             if line[0] == "uv":
                 code = installs.pop(0)
-                for found in present:
-                    found.rmdir()
-                if code == 0:
-                    (self.site / f"cad-{line[-1].split('==')[1] if '==' in line[-1] else newest}.dist-info"
-                     ).mkdir()
-                elif not removes:
+                if code == 0 or removes:
                     for found in present:
-                        found.mkdir()
+                        shutil.rmtree(found)
+                if code == 0:
+                    dist_info(self.site, line[-1].split("==")[1] if "==" in line[-1] else newest)
+                    for launcher in launchers:
+                        launcher.write_bytes(b"uv's new launcher")
                 return code, said
             if line[1:3] == ["server", "stop"]:
                 return stop, "the cad server is not running"
+            if Path(line[0]).is_absolute() and not Path(line[0]).exists():
+                return None, f"FileNotFoundError: [Errno 2] No such file or directory: '{line[0]}'"
+            if line[1:] == ["--version"]:
+                return (0, f"cad {held(self.site)}") if present else (1, "ModuleNotFoundError: No module named 'cad'")
             return (0, "done") if present else (127, "cad: not found")
         return ran, run
 
@@ -1323,7 +1374,8 @@ class HelperTest(unittest.TestCase):
         ran, run = self.fake([1, 1, 0])
         waited: list[float] = []
         found = helper.update(self.told, run=run, sleep=waited.append, windows=False)
-        self.assertEqual(ran, [["server", "stop"], *[["install", BOUNDED]] * 3, ["server", "start"]])
+        self.assertEqual(ran, [["server", "stop"], *[["install", BOUNDED]] * 3, ["--version"], ["server", "start"]],
+                         "and what it installed asked whether it runs")
         self.assertEqual(waited, list(helper.WAITS[:3]))
         self.assertEqual((found["outcome"], found["release"], found["from"], found["started"]),
                          ("installed", "0.2.0", "0.1.0", "done"))
@@ -1466,7 +1518,8 @@ class HelperTest(unittest.TestCase):
                                       environ=self.clean(**told))
                 self.assertEqual((found["outcome"], found.get("cause")), (outcome, cause))
                 if name == "in use":
-                    self.assertEqual(found["detail"], helper.last_line(in_use), "the detail stays the last line")
+                    self.assertEqual(found["detail"], "error: Failed to install entrypoint " + helper.last_line(in_use),
+                                     "the first error and what caused it")
         (self.site / "cad-0.1.0.dist-info").rename(self.site / "cad-0.3.0.dist-info")
         _ran, run = self.fake([])
         self.assertNotIn("cause", helper.update(self.told, run=run, windows=False, environ=self.clean()),
@@ -1496,7 +1549,7 @@ class HelperTest(unittest.TestCase):
         self.assertRegex(lines[0], r"^cad's update, begun \S+ \S+ \S+: from 0\.1\.0 to 0\.2\.0, by uv, typed, try 1$")
         self.assertEqual([line for line in lines if line.startswith("$ ")],
                          ["$ cad server stop", f"$ uv tool install --upgrade {BOUNDED}",
-                          f"$ uv tool install --upgrade {BOUNDED}", "$ cad server start"])
+                          f"$ uv tool install --upgrade {BOUNDED}", "$ cad --version", "$ cad server start"])
         self.assertRegex(first, r"\n  exit 1 after \d+\.\d s \(its first \d+ bytes left out\)\n  \| x+\n"
                                 r"  \| error: the last words of a long output\n")
         self.assertLessEqual(len(max(lines, key=len)), helper.LOG_BYTES + 4, "the end of the output alone")
@@ -1538,7 +1591,7 @@ class HelperTest(unittest.TestCase):
         ran, run = self.fake([1] * len(helper.WAITS) + [0], removes=True)
         found = helper.update(self.told, run=run, sleep=lambda _s: None, windows=False)
         self.assertEqual(ran, [["server", "stop"], *[["install", BOUNDED]] * len(helper.WAITS), ["--version"],
-                               ["install", "cad==0.1.0"], ["server", "start"]])
+                               ["install", "cad==0.1.0"], ["--version"], ["server", "start"]])
         self.assertEqual((found["outcome"], found["restored"], found["started"]), ("failed", True, "done"))
         self.assertEqual(helper.installed(self.tmp), (0, 1, 0), "the release that ran before, and no other")
         ran, run = self.fake([1] * len(helper.WAITS))  # a failure that left the tool as it was: nothing put back
@@ -1548,7 +1601,7 @@ class HelperTest(unittest.TestCase):
     def test_told_no_server_ran_it_starts_none(self) -> None:
         ran, run = self.fake([0])
         found = helper.update({**self.told, "start": False}, run=run, sleep=lambda _s: None, windows=False)
-        self.assertEqual(ran, [["server", "stop"], ["install", BOUNDED]])
+        self.assertEqual(ran, [["server", "stop"], ["install", BOUNDED], ["--version"]])
         self.assertEqual((found["outcome"], found["start"]), ("installed", False))
         self.assertNotIn("started", found)
 
@@ -1559,7 +1612,7 @@ class HelperTest(unittest.TestCase):
         self.assertEqual((found["outcome"], found["release"]), ("current", "0.3.0"))
         self.assertEqual(ran, [["server", "stop"], ["server", "start"]])
         windows = self.tmp / "win"
-        (windows / "Lib" / "site-packages" / "cad-0.2.0.dist-info").mkdir(parents=True)
+        dist_info(windows / "Lib" / "site-packages", "0.2.0")
         self.assertEqual(helper.installed(windows), (0, 2, 0), "a Windows environment's layout")
 
     def test_the_record_keeps_the_installer_and_whether_it_was_typed_and_no_install_command_runs(self) -> None:
@@ -1591,31 +1644,87 @@ class HelperTest(unittest.TestCase):
 
     def test_on_windows_each_cad_exe_is_set_aside_in_the_bin_folder_before_each_try_and_tidied(self) -> None:
         """A running cad.exe cannot be removed, only renamed: before each try both are renamed into the bin folder,
-        never left inside the environment uv deletes on a failure, and a copy put back; what was set aside is deleted
-        at the start and the end."""
+        never left inside the environment uv deletes on a failure, and no copy is put back (a copy is what the
+        commands run meanwhile start and hold); what was set aside is deleted at the start and the end."""
         folder = self.windows_tool()
         (folder / ".cad.exe.1-1.0.old").write_bytes(b"an earlier run's")
-        ran, run = self.fake([1, 0], bin_folder=(0, str(folder)))
+        launchers = (folder / "cad.exe", self.tmp / "Scripts" / "cad.exe")
+        ran, run = self.fake([1, 0], bin_folder=(0, str(folder)), launchers=launchers)
         seen = []
 
         def looking(line, timeout):
             if line[0] == "uv" and line[1:3] == ["tool", "install"]:
                 seen.append((sorted(path.name for path in folder.iterdir()),
-                             sorted(path.name for path in (self.tmp / "Scripts").iterdir()),
-                             (folder / "cad.exe").read_bytes(), (self.tmp / "Scripts" / "cad.exe").read_bytes()))
+                             sorted(path.name for path in (self.tmp / "Scripts").iterdir())))
             return run(line, timeout)
 
-        found = helper.update(self.told, run=looking, sleep=lambda _s: None, windows=True)
+        found = helper.update(self.told, run=looking, sleep=lambda _s: None, windows=True, find=lambda: [])
         self.assertEqual(found["outcome"], "installed")
-        self.assertEqual(ran, [["dir"], ["server", "stop"], *[["install", BOUNDED]] * 2, ["server", "start"]])
-        for tries, (bin_names, scripts, launcher, own) in enumerate(seen, start=1):
-            aside = [name for name in bin_names if name != "cad.exe"]
-            self.assertEqual(len(aside), 2 * tries, "both set aside at each try; the earlier run's tidied first")
-            self.assertTrue(all(name.startswith(".cad.exe.") and name.endswith((".0.old", ".1.old")) for name in aside))
-            self.assertNotIn(".cad.exe.1-1.0.old", aside)
-            self.assertEqual((scripts, launcher, own), (["cad.exe"], b"uv's launcher", b"the environment's launcher"),
-                             "a copy put back where each was, and nothing set aside inside the environment")
+        self.assertEqual(ran, [["dir"], ["server", "stop"], *[["install", BOUNDED]] * 2, ["--version"],
+                               ["server", "start"]])
+        for bin_names, scripts in seen:
+            self.assertEqual(len(bin_names), 2, "both set aside at the first try, nothing put back; the earlier "
+                                                "run's tidied first")
+            self.assertTrue(all(name.startswith(".cad.exe.") and name.endswith((".0.old", ".1.old"))
+                                for name in bin_names))
+            self.assertEqual(scripts, [], "nothing set aside inside the environment, and no cad.exe there")
         self.assertEqual([path.name for path in folder.iterdir()], ["cad.exe"], "tidied at the end")
+        self.assertEqual(launchers[0].read_bytes(), b"uv's new launcher")
+
+    def test_on_windows_a_failed_try_that_left_the_tool_as_it_was_gets_its_launchers_back_and_nothing_put_back(self):
+        folder = self.windows_tool()
+        ran, run = self.fake([1] * len(helper.WAITS), bin_folder=(0, str(folder)))
+        found = helper.update(self.told, run=run, sleep=lambda _s: None, windows=True, find=lambda: [])
+        self.assertEqual(ran[-2:], [["--version"], ["server", "start"]], "cad runs: no put-back")
+        self.assertNotIn("restored", found)
+        self.assertEqual(((folder / "cad.exe").read_bytes(), (self.tmp / "Scripts" / "cad.exe").read_bytes()),
+                         (b"uv's launcher", b"the environment's launcher"), "each back where it was")
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["cad.exe"])
+
+    def test_on_windows_whether_cad_runs_is_asked_of_the_bin_folder_s_cad_and_restored_only_where_it_runs(self):
+        """After the tries and after a put-back, the launchers' folder's ``cad --version`` says whether cad runs, never
+        the environment's own command or a dist-info: a put-back that ended 0 on a cad that does not run (uv found the
+        release there already, half removed) is no restore, and says how to repair it."""
+        folder = self.windows_tool()
+        launchers = (folder / "cad.exe", self.tmp / "Scripts" / "cad.exe")
+        ran, run = self.fake([1] * len(helper.WAITS) + [0], removes=True, bin_folder=(0, str(folder)),
+                             launchers=launchers)
+        asked = []
+
+        def broken(line, timeout):
+            if line[1:] == ["--version"]:
+                asked.append(line[0])
+                return 1, "ImportError: cannot import name 'said' from 'cad_server.cli'"
+            return run(line, timeout)
+
+        found = helper.update(self.told, run=broken, sleep=lambda _s: None, windows=True, find=lambda: [],
+                              environ={"HOME": str(self.tmp), "XDG_CONFIG_DIRS": str(self.tmp / "none")})
+        self.assertEqual(set(asked), {str(folder / "cad.exe")}, "the bin folder's cad, and no other")
+        self.assertEqual(ran.count(["install", "cad==0.1.0"]), 1)
+        self.assertEqual((found["outcome"], found["restored"], found["cause"]), ("failed", False, "broken"))
+        self.assertIn("install command", auto_update.in_words("broken"))
+        # The same put-back where cad then runs: restored.
+        for path in launchers:
+            path.write_bytes(b"a launcher")
+        ran, run = self.fake([1] * len(helper.WAITS) + [0], removes=True, bin_folder=(0, str(folder)),
+                             launchers=launchers)
+        found = helper.update(self.told, run=run, sleep=lambda _s: None, windows=True, find=lambda: [])
+        self.assertEqual((found["outcome"], found["restored"]), ("failed", True))
+        self.assertEqual(ran[-4:], [["--version"], ["install", "cad==0.1.0"], ["--version"], ["server", "start"]])
+
+    def test_an_upgrade_that_ended_well_on_a_cad_that_does_not_run_is_no_install(self) -> None:
+        ran, run = self.fake([0, 0])
+        said = iter([(1, "ModuleNotFoundError: No module named 'cad.registry'"), (1, "still not"), (0, "cad 0.1.0")])
+
+        def broken(line, timeout):
+            return next(said) if line[1:] == ["--version"] else run(line, timeout)
+
+        found = helper.update(self.told, run=broken, sleep=lambda _s: None, windows=False)
+        self.assertEqual((found["outcome"], found["restored"], found["release"]), ("failed", True, "0.2.0"))
+        self.assertEqual(found["detail"], "cad 0.2.0 was installed, but `cad --version` did not run: "
+                                          "ModuleNotFoundError: No module named 'cad.registry'")
+        self.assertEqual(ran[1:], [["install", BOUNDED], ["install", "cad==0.1.0"], ["server", "start"]])
+        self.assertIsNone(next(said, None), "asked after the upgrade, before the put-back and after it")
 
     def test_on_windows_a_set_aside_that_fails_is_skipped_and_the_install_still_tried(self) -> None:
         folder = self.windows_tool()
@@ -1623,16 +1732,112 @@ class HelperTest(unittest.TestCase):
             self.assertEqual(helper.set_aside(self.told, folder), [])
         (self.tmp / "Scripts" / "cad.exe").unlink()
         moved = helper.set_aside(self.told, folder)
-        self.assertEqual(([path.parent for path in moved], (folder / "cad.exe").read_bytes()),
-                         ([folder], b"uv's launcher"))
+        self.assertEqual(([(aside.parent, was) for aside, was in moved], (folder / "cad.exe").exists()),
+                         ([(folder, folder / "cad.exe")], False))
         # A file still running refuses to be deleted (here a folder by that name): left for the next run, no error.
         (folder / ".cad.exe.2-2.1.old").mkdir()
         helper.tidy(folder)
-        self.assertEqual(sorted(path.name for path in folder.iterdir()), [".cad.exe.2-2.1.old", "cad.exe"])
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), [".cad.exe.2-2.1.old"])
         # uv cannot say where its bin folder is: nothing set aside, the install tried all the same.
+        ran, run = self.fake([0], launchers=(self.tmp / "Scripts" / "cad.exe",))
+        self.assertEqual(helper.update(self.told, run=run, sleep=lambda _s: None, windows=True,
+                                       find=lambda: [])["outcome"], "installed")
+        self.assertEqual(ran, [["dir"], ["server", "stop"], ["install", BOUNDED], ["--version"], ["server", "start"]])
+
+    def test_a_dist_info_with_no_record_is_deleted_before_each_try_and_counts_for_no_release(self) -> None:
+        """An uninstall that stopped midway (on Windows, a file of the old cad held as uv removed it) leaves a
+        ``dist-info`` with no ``RECORD``, which every later uv run fails on: deleted before each try, and only such
+        a folder. Neither it nor one without ``METADATA`` counts as a release installed (a false ``current``)."""
+        half = self.site / "cad-0.1.0.dist-info"
+        for name in ("METADATA", "RECORD"):
+            (half / name).unlink()
+        (half / "licenses").mkdir()
+        (half / "licenses" / "LICENSE").write_text("MIT\n", encoding="utf-8")
+        leftover = self.site / "cad-0.3.0.dist-info"
+        (leftover / "licenses").mkdir(parents=True)
+        metadata_only = dist_info(self.site, "0.4.0")
+        (metadata_only / "METADATA").unlink()  # its RECORD there: kept, though it counts for nothing
+        self.assertIsNone(helper.installed(self.tmp), "no release is installed")
+        log = self.tmp / "auto-update.log"
         ran, run = self.fake([0])
-        self.assertEqual(helper.update(self.told, run=run, sleep=lambda _s: None, windows=True)["outcome"], "installed")
-        self.assertEqual(ran, [["dir"], ["server", "stop"], ["install", BOUNDED], ["server", "start"]])
+        before_uv = []
+
+        def looking(line, timeout):
+            if line[0] == "uv":
+                before_uv.append(sorted(path.name for path in self.site.glob("cad-*.dist-info")))
+            return run(line, timeout)
+
+        found = helper.update({**self.told, "log": str(log)}, run=looking, sleep=lambda _s: None, windows=False)
+        self.assertEqual(before_uv, [["cad-0.4.0.dist-info"]], "the two with no RECORD gone before uv ran")
+        self.assertEqual(found["outcome"], "installed")
+        self.assertIn("deleted cad-0.1.0.dist-info: it had no RECORD", log.read_text(encoding="utf-8"))
+        self.assertEqual(helper.repair(self.tmp / "no such environment"), [])
+
+    def test_on_windows_the_processes_of_this_cad_are_stopped_before_each_try_and_never_another(self) -> None:
+        """What runs from cad's environment or is its launcher, given its time, then stopped, looked for again until none
+        is left; never this helper or what it runs under, a command that waits for the update, uv or anything else
+        in the bin folder, or a Python another program started."""
+        folder = self.windows_tool()
+        env, base = str(self.tmp), "C:\\py\\python.exe"
+        found = [
+            (10, 1, f"{env}/Scripts/python.exe", f'"{env}/Scripts/python.exe" -P -m cad.engine.daemon'),  # a server
+            (11, 10, base, f'"{base}" -P -m cad.engine.daemon'),  # the Python the environment's python.exe started
+            (12, 1, str(folder / "cad.exe"), "cad mcp"),  # an app's own `cad mcp`
+            (13, 1, str(folder / ".cad.exe.9-9.0.old"), "cad --version"),  # one running from a cad.exe set aside
+            (14, 1, "C:\\other\\tool.exe", f'tool.exe --about "{folder / "cad.exe"}"'),  # it only names our cad.exe
+            (15, 1, "C:\\apps\\code.exe", f'code "{env}/Lib/site-packages/cad/x.py"'),  # an editor of a file of cad's
+            (16, 1, base, f'"{base}" "{folder / "cad.exe"}" --version'),  # a Python running cad's launcher
+            (20, 1, str(folder / "cad.exe"), "cad update"),  # a person's `cad update`, waiting
+            (21, 20, f"{env}/Scripts/python.exe", f'"{env}/Scripts/python.exe" "{folder / "cad.exe"}" update'),
+            (22, 21, base, f'"{base}" "{folder}\\cad.exe" update'),
+            (23, 1, str(folder / "cad.exe"), f'"{folder / "cad.exe"}" server start'),  # a start that waits
+            (24, 23, f"{env}/Scripts/python.exe", f'"{env}/Scripts/python.exe" -P -m cad.engine.daemon'),  # its server
+            (30, 1, str(folder / "uv.exe"), "uv tool list"),  # uv, and another tool, in the bin folder
+            (31, 1, str(folder / "ruff.exe"), "ruff check"),
+            (32, 1, base, f'"{base}" -c pass'),  # a Python of another program's
+            (40, 41, base, f'"{base}" -I -S helper.py {{"prefix": "{env}"}}'),  # this helper, and what it runs under
+            (41, 1, f"{env}/Scripts/python.exe", f'"{env}/Scripts/python.exe" -m cad_server.cli update'),
+        ]
+        self.assertEqual([each[0] for each in helper.cads(found, self.tmp, folder, me=40)], [10, 11, 12, 13, 16, 24])
+        running, looks, stopped = list(found), [], []
+
+        def find():
+            looks.append(len(looks))
+            return list(running)
+
+        def end(each):
+            if each not in running:
+                return False  # gone already
+            stopped.append(each[0])
+            running.remove(each)
+            if each[0] == 10:
+                running.remove(next(other for other in running if other[0] == 11))  # it ends with its launcher
+            return True
+
+        with mock.patch.object(helper.os, "getpid", return_value=40):
+            left = helper.clear(self.told | {"prefix": str(self.tmp)}, folder, find, end, lambda _s: None,
+                                helper.Log(None))
+        self.assertEqual((left, stopped), ([], [10, 12, 13, 16, 24]))
+        self.assertEqual(len(looks), helper.SETTLE + 2, "given its time, then stopped, then none left")
+        # One that will not stop: tried at each look, then said, and the try's refusal is cad's own (cad_running).
+        stuck = [(10, 1, f"{env}/Scripts/python.exe", "python -m cad.engine.daemon")]
+        left = helper.clear(self.told | {"prefix": str(self.tmp)}, folder, lambda: stuck, lambda _each: False,
+                            lambda _s: None, helper.Log(None))
+        self.assertEqual(left, stuck)
+        denied = "error: failed to remove directory `C:\\tools\\cad\\Scripts`: Access is denied. (os error 5)\n"
+        ran, run = self.fake([1] * len(helper.WAITS), said=denied, bin_folder=(0, str(folder)))
+        record = helper.update(self.told, run=run, sleep=lambda _s: None, windows=True, find=lambda: stuck,
+                               end=lambda _each: False, environ={"HOME": str(self.tmp)})
+        self.assertEqual(record["cause"], "cad_running")
+
+    def test_a_command_that_waits_for_the_update_is_told_by_its_command_line(self) -> None:
+        for line, waits in (("cad update", True), ("cad.exe update --major", True), ('"C:\\b\\cad.exe" update', True),
+                            ("C:\\b\\.cad.exe.1-2.0.old server start", True), ("cad server start --port 1", True),
+                            ("cad server stop", False), ("cad mcp", False), ("cad --version", False),
+                            ("cad update auto off", True), ("python -m cad.engine.daemon", False), ("", False),
+                            ("uv tool install --upgrade cad", False)):
+            with self.subTest(line=line):
+                self.assertEqual(helper.waiter(line), waits)
 
     def test_pipx_s_command_lines_run_as_handed_its_launchers_set_aside_and_its_release_put_back(self) -> None:
         """The helper knows no installer: pipx's upgrade, put-back and launchers' folder are the lines it is handed,
@@ -1650,17 +1855,21 @@ class HelperTest(unittest.TestCase):
             if line[0] == "pipx":
                 aside.append(len([path for path in folder.iterdir() if path.name != "cad.exe"]))
                 for found in present:  # a failed upgrade that leaves no cad; the put-back installs its release
-                    found.rmdir()
+                    shutil.rmtree(found)
                 if line == told["put_back"]:
-                    (self.site / "cad-0.1.0.dist-info").mkdir()
+                    dist_info(self.site, "0.1.0")
                     return 0, "installed package cad 0.1.0"
                 return 1, "pipx said no"
+            if line[1:] == ["--version"]:
+                return (0, f"cad {held(self.site)}") if present else (1, "ModuleNotFoundError: No module named 'cad'")
             return (0, "done") if present else (127, "cad: not found")
 
-        found = helper.update(told, run=run, sleep=lambda _s: None, windows=True)
+        found = helper.update(told, run=run, sleep=lambda _s: None, windows=True, find=lambda: [])
+        bin_cad = [str(folder / "cad.exe"), "--version"]
         self.assertEqual(ran, [told["launchers"], [told["cad"], "server", "stop"], *[told["upgrade"]] * len(helper.WAITS),
-                               [told["cad"], "--version"], told["put_back"], [told["cad"], "server", "start"]])
-        self.assertEqual(aside, [2 * tries for tries in range(1, len(helper.WAITS) + 2)], "both set aside at each try")
+                               bin_cad, told["put_back"], bin_cad, [told["cad"], "server", "start"]])
+        self.assertEqual(aside, [2] * (len(helper.WAITS) + 1), "both set aside at the first try, and again before the "
+                                                              "put-back, once put back where they were")
         self.assertEqual((found["outcome"], found["restored"], found["detail"]), ("failed", True, "pipx said no"))
         self.assertEqual(helper.installed(self.tmp), (0, 1, 0))
 
@@ -1703,7 +1912,8 @@ class HelperTest(unittest.TestCase):
         self.assertEqual(helper.NO_WINDOW, 0x08000000 if os.name == "nt" else 0)
 
     def stand_ins(self, log: Path, uv: str) -> None:
-        for name, body in (("cad", f'echo "cad $*" >> {log}'), ("uv", f'echo "uv $*" >> {log}; {uv}')):
+        version = f'[ "$1" = --version ] && ls {self.site} | sed -n "s/^cad-\\(.*\\)\\.dist-info$/cad \\1/p"'
+        for name, body in (("cad", f'echo "cad $*" >> {log}; {version}; true'), ("uv", f'echo "uv $*" >> {log}; {uv}')):
             (self.tmp / name).write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
             (self.tmp / name).chmod(0o755)
         (self.tmp / "bin").mkdir()
@@ -1721,14 +1931,16 @@ class HelperTest(unittest.TestCase):
         env = {**os.environ, "PYTHONPATH": "/nowhere-at-all"}
         subprocess.run(line, check=True, env=env, cwd=self.tmp, timeout=60)
         self.assertEqual(log.read_text(encoding="utf-8").splitlines(),
-                         ["cad server stop", "uv tool install --upgrade cad>=0.1.0,<1", "cad server start"])
+                         ["cad server stop", "uv tool install --upgrade cad>=0.1.0,<1", "cad --version",
+                          "cad server start"])
         kept = json.loads(record.read_text(encoding="utf-8"))
         self.assertEqual((kept["outcome"], kept["release"], kept["installer"], kept["asked"]),
                          ("installed", "0.2.0", "uv", False))
         self.assertNotIn("cause", kept, "it installed what it was for")
         said = (self.tmp / auto_update.LOG).read_text(encoding="utf-8")
         self.assertEqual([each.split()[2:] for each in said.splitlines() if each.startswith("$ ")],
-                         [["server", "stop"], ["tool", "install", "--upgrade", "cad>=0.1.0,<1"], ["server", "start"]])
+                         [["server", "stop"], ["tool", "install", "--upgrade", "cad>=0.1.0,<1"], ["--version"],
+                          ["server", "start"]])
         self.assertRegex(said, r"\n  exit 0 after \d+\.\d s\n")
         self.assertRegex(said.splitlines()[-1], r"^ended .+: installed$")
 
@@ -1774,8 +1986,9 @@ class HelperTest(unittest.TestCase):
         register(state)
         self.addCleanup(lambda: mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)})(api.stop)())
         (self.tmp / "cad").write_text(f'#!/bin/sh\nexec "{sys.executable}" -m cad_server.cli "$@"\n', encoding="utf-8")
-        (self.tmp / "uv").write_text(f"#!/bin/sh\nmv {self.site}/cad-0.1.0.dist-info {self.site}/cad-0.2.0.dist-info\n",
-                                     encoding="utf-8")
+        # cad here is this tree's, which says its own release: the stand-in uv leaves that one.
+        (self.tmp / "uv").write_text(
+            f"#!/bin/sh\nmv {self.site}/cad-0.1.0.dist-info {self.site}/cad-{version()}.dist-info\n", encoding="utf-8")
         for name in ("cad", "uv"):
             (self.tmp / name).chmod(0o755)
         (self.tmp / "bin").mkdir()
@@ -1803,13 +2016,13 @@ class HelperTest(unittest.TestCase):
 
         def run(line, timeout):
             if line[0] != "uv":
-                return 0, "done"
+                return (0, f"cad {held(self.site)}") if line[1:] == ["--version"] else (0, "done")
             ran.append(line[3:])
             code, said, leaves = answers.pop(0)
             if leaves is not None:
                 for found in self.site.glob("cad-*.dist-info"):
-                    found.rmdir()
-                (self.site / f"cad-{leaves}.dist-info").mkdir()
+                    shutil.rmtree(found)
+                dist_info(self.site, leaves)
             if whole_after is not None and len(ran) == whole_after:
                 (self.tmp / "pyvenv.cfg").unlink()
             return code, said
@@ -1955,6 +2168,9 @@ class CauseTest(unittest.TestCase):
                       "\\\\Scripts\\\\cad.exe'\n"),
         ("denied", 2, "error: failed to remove directory `C:\\Users\\me\\AppData\\Roaming\\uv\\tools\\cad\\Lib\\"
                       "site-packages\\cad_server`: Access is denied. (os error 5)\n"),
+        # A program that runs, which Windows refuses to remove as access denied: in use.
+        ("in_use", 2, "WARN Failed to remove executable C:/Users/me/.local/bin/cad.exe: Access is denied. (os error 5)\n"
+                      "error: Failed to install entrypoint\n"),
         ("denied", 1, "ERROR: Could not install packages due to an OSError: [WinError 5] Access is denied: "
                       "'C:\\\\Users\\\\me\\\\pipx\\\\venvs\\\\cad\\\\Lib\\\\site-packages\\\\cad_server'\n"),
         ("denied", 2, "error: failed to create directory `/opt/uv/tools/cad`: Permission denied (os error 13)\n"),
@@ -1971,6 +2187,23 @@ class CauseTest(unittest.TestCase):
         told = {word for word, _code, _said in self.SAID}
         self.assertLessEqual(told, set(helper.CAUSES))
         self.assertIsNone(helper.classify(0, "Resolved 1 package in 1ms\nChecked 1 package in 0.06ms\n"))
+
+    def test_the_installer_s_first_error_is_its_words_never_the_rollback_s_after_it(self) -> None:
+        """uv's rollback of a failed install prints an error of its own last (a folder it could not remove as it took
+        the tool away); the first error, what caused it and the warnings naming a file it could not remove say why."""
+        said = ("Resolved 12 packages in 40ms\n"
+                "WARN Failed to remove executable C:/Users/me/.local/bin/cad.exe: Access is denied. (os error 5)\n"
+                "warning: an unrelated note\n"
+                "error: Failed to install entrypoint\n"
+                "  Caused by: Executable already exists: cad.exe (use `--force` to overwrite)\n"
+                "error: failed to remove directory `C:\\Users\\me\\AppData\\Roaming\\uv\\tools\\cad\\Scripts`: "
+                "Access is denied. (os error 5)\n")
+        self.assertEqual(helper.why(said), "WARN Failed to remove executable C:/Users/me/.local/bin/cad.exe: Access is "
+                                           "denied. (os error 5) error: Failed to install entrypoint Caused by: "
+                                           "Executable already exists: cad.exe (use `--force` to overwrite)")
+        self.assertEqual(helper.classify(2, said), "in_use")
+        self.assertEqual(helper.why("pipx said no\nthe last line\n"), "the last line", "no error line: the last")
+        self.assertEqual(helper.why(""), "")
 
     def test_a_command_that_never_ended_or_never_started_is_said_from_the_system_s_error(self) -> None:
         """Through the helper's own ``run``: a program that is not there, one that outlives its time."""

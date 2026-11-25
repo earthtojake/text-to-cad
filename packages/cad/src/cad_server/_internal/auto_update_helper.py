@@ -24,9 +24,11 @@ so; and the outcome written to ``record`` (``keep``: written beside it, then mov
 newer release, ``current`` for the one that ran (nothing newer it may take), ``failed`` for anything else, as every
 failure is -- and for ``major``, a release of ``from``'s major where ``target``, PyPI's newest, is of a higher one. The
 release the record names is the one installed after the upgrade, where it ended well; the one asked for where it did
-not. Where the upgrade ended 0 and kept a release below ``target`` (uv's ``kept``), it is tried again in the same run,
-another way each time (``escalate``: the index read afresh, then ``target`` asked for by name, whose error says why it
-cannot be had, then the upgrade from ``target`` so the installer keeps a range), where the trigger handed those ways
+not. An upgrade ended well only where cad runs after it and says that release (``runs``); where cad does not run, it
+failed, and the release before is put back. Where the upgrade ended 0 and kept a release below ``target`` (uv's
+``kept``), it is tried again in the same run, another way each time (``escalate``: the index read afresh, then
+``target`` asked for by name, whose error says why it cannot be had, then the upgrade from ``target`` so the installer
+keeps a range), where the trigger handed those ways
 (``pin``). No installer command runs on an environment that is half made (``whole``: a folder with no ``pyvenv.cfg``,
 which an install the disk filled under, or one stopped midway, leaves): uv run on one acts on the Python it was made
 from and removes that Python's packages; the attempt stops there, ``half_made``. As it runs, the helper writes the time
@@ -44,13 +46,25 @@ library alone, and nothing else of cad.
 Left as it is: a ``cad server start`` that arrives while this runs (a person's, an agent's, an app's server line) starts
 whatever cad is there at that moment; this helper's own start at the end meets it as any start meets a running server.
 
-On Windows an installer cannot remove a ``cad.exe`` that runs (a ``cad update`` waiting, a ``cad server start``), and an
-install that meets one fails halfway. A running ``cad.exe`` can be renamed, though, once cad holds it only as a running
-program (``cad_server/__init__.py`` takes it off ``sys.path``). So before each try, each ``cad.exe`` of the tool, the
-launchers' folder's and the environment's own, is renamed to a name of its own in the launchers' folder, never inside
-the environment, which uv deletes when an install fails, and a copy is put back where it was (``set_aside``). The
-process keeps running from the renamed file. The renamed files are deleted where they can be, at the start and the end
-of each run; one whose process still runs is left for the next (``tidy``). Every command runs with no console window.
+Before each try of an installer command (``prepare``), on every system: each ``cad-*.dist-info`` of the environment
+that has no ``RECORD`` deleted (``repair``), never one that has: an uninstall that stopped midway leaves one (on
+Windows, a file of the old cad held as uv removed it), and every later uv run on the tool fails on it, the install
+command's too. On Windows an installer cannot remove a ``cad.exe`` that runs (a ``cad update`` waiting, a ``cad server
+start``), nor a file a running cad holds, and an install that meets one fails halfway, its rollback too. So each
+``cad.exe`` of the tool, the launchers' folder's and the environment's own, is renamed to a name of its own in the
+launchers' folder, never inside the environment, which uv deletes when an install fails (``set_aside``), and no copy is
+put back: a copy put back is what the agents and apps that call ``cad`` all the time started during the install,
+restarting the old server and holding the copy and the environment's Python. A ``cad`` typed while uv runs is not
+found, and fails at once. A running ``cad.exe`` can be renamed once cad holds it only as a running program
+(``cad_server/__init__.py`` takes it off ``sys.path``); the process keeps running from the renamed file. Then every
+process of this cad still running (``cads``: its program or its command line in the environment, or the launchers'
+folder's ``cad.exe``), but one that waits for the update (``waiter``: ``cad update``, ``cad server start``), is given
+a few seconds to end, then stopped, until none is left (``clear``). Where every try failed and the tool is as it was,
+the launchers set aside go back where nothing took their place (``back``). Whether cad runs is asked of cad itself,
+the launchers' folder's ``cad --version`` (``runs``), never of a file: after the upgrade, before a put-back, and after
+it; ``restored`` is true only where cad runs then. The renamed files are deleted where they can be, at the start and
+the end of each run; one whose process still runs is left for the next (``tidy``). Every command runs with no console
+window.
 """
 
 import json
@@ -87,13 +101,32 @@ def named(held):
     return ".".join(map(str, held))
 
 
+def records(prefix):
+    """The ``cad-*.dist-info`` folders of the tool environment at ``prefix`` (POSIX's layout and Windows')."""
+    return [path for pattern in ("lib/python*/site-packages/cad-*.dist-info", "Lib/site-packages/cad-*.dist-info")
+            for path in Path(prefix).glob(pattern)]
+
+
 def installed(prefix):
     """The release of cad the tool environment at ``prefix`` holds now (the newest, after an install that failed
-    midway), or None."""
-    found = [release(path.name[len("cad-"):-len(".dist-info")]) for pattern in
-             ("lib/python*/site-packages/cad-*.dist-info", "Lib/site-packages/cad-*.dist-info")
-             for path in Path(prefix).glob(pattern)]
+    midway), or None. A ``dist-info`` counts only with its ``METADATA`` and its ``RECORD``: an install or an uninstall
+    that stopped midway leaves one with neither, named for a release that is not there. Read from the files, not by
+    asking the environment's Python, which would be one more process started in the environment uv replaces."""
+    found = [release(path.name[len("cad-"):-len(".dist-info")]) for path in records(prefix)
+             if (path / "METADATA").is_file() and (path / "RECORD").is_file()]
     return max((held for held in found if held is not None), default=None)
+
+
+def repair(prefix):
+    """Each ``cad-*.dist-info`` of the environment at ``prefix`` with no ``RECORD`` deleted, and only those: uv reads
+    the ``RECORD`` of the release it replaces, and fails on one that has none, every time. Their names."""
+    gone = []
+    for path in records(prefix):
+        if path.is_dir() and not (path / "RECORD").exists():
+            shutil.rmtree(path, ignore_errors=True)
+            if not path.exists():
+                gone.append(path.name)
+    return gone
 
 
 def whole(prefix):
@@ -131,9 +164,9 @@ def bin_folder(told, run):
 
 
 def set_aside(told, folder):
-    """Windows, before a try of the install: the launchers' folder's ``cad.exe`` and the environment's own
-    (``told["cad"]``) each renamed to a name of its own in ``folder``, the launchers' folder, and a copy put back where
-    it was. A rename that fails (no such file, another volume) is skipped. What was set aside."""
+    """Windows, before a try of an installer command: the launchers' folder's ``cad.exe`` and the environment's own
+    (``told["cad"]``) each renamed to a name of its own in ``folder``, the launchers' folder; no copy put back. A rename
+    that fails (no such file, another volume) is skipped. What was set aside, each ``(where it is, where it was)``."""
     stamp = f"{os.getpid()}-{time.time_ns()}"
     moved = []
     for n, exe in enumerate((folder / "cad.exe", Path(told["cad"]))):
@@ -142,12 +175,23 @@ def set_aside(told, folder):
             os.replace(exe, aside)
         except OSError:
             continue
-        moved.append(aside)
+        moved.append((aside, exe))
+    return moved
+
+
+def back(moved):
+    """The launchers ``set_aside`` moved, each renamed back where it was where nothing took its place (a try that
+    failed and left the tool as it was): the first moved from each place, the one that was there."""
+    done = set()
+    for aside, exe in moved:
+        if exe in done:
+            continue
+        done.add(exe)
         try:
-            shutil.copy2(aside, exe)
+            if not exe.exists():
+                os.replace(aside, exe)
         except OSError:
             pass
-    return moved
 
 
 def tidy(folder):
@@ -160,6 +204,214 @@ def tidy(folder):
             pass
 
 
+def runs(told, folder, run):
+    """Whether cad runs: the launchers' folder's ``cad --version`` (on Windows; elsewhere, and where that folder is not
+    known, the environment's own ``cad``), which reads its release beside the code that runs. ``(the release it says,
+    or None where it did not run or said none, its last line)``."""
+    command = folder / "cad.exe" if folder is not None else Path(told["cad"])
+    code, said = run([str(command), "--version"], 60)
+    match = re.search(r"\bcad (\d+\.\d+\.\d+)\b", said or "") if code == 0 else None
+    return (release(match[1]) if match else None), (last_line(said) if code is not None else said)
+
+
+# --- the processes of this cad, on Windows, before each try ------------------------------------------------------
+
+# How many times ``clear`` looks, half a second apart: the processes of cad it finds end by themselves in the first
+# ``SETTLE`` looks, or are stopped; it gives up after ``LOOKS``.
+SETTLE, LOOKS = 6, 60
+
+
+def _flat(text):
+    """A Windows path or command line, compared as Windows does: case and the two slashes alike."""
+    return (text or "").replace("/", "\\").lower()
+
+
+def _words(line):
+    """A Windows command line's words, each quoted one without its quotes."""
+    return [quoted or bare for quoted, bare in re.findall(r'"([^"]*)"|(\S+)', line or "")]
+
+
+def _runs(line):
+    """What a command line runs: its program, and the script a Python runs (``python.exe <script>``)."""
+    words = _words(line)
+    python = words and re.search(r"(^|\\)pythonw?(\.exe)?$", _flat(words[0]))
+    return words[:2] if python else words[:1]
+
+
+def waiter(line):
+    """Whether the command line ``line`` is a ``cad`` command that waits for the update: ``cad update`` (a person's,
+    which asks for it and says how it ended) or ``cad server start`` (which waits for the server the update starts).
+    Neither is stopped: each ends when the update does."""
+    words = _words(line)
+    for n, word in enumerate(words):
+        name = re.split(r"[\\/]", word)[-1].lower()
+        if name in ("cad", "cad.exe") or re.fullmatch(r"\.cad\.exe\..+\.old", name):
+            rest = words[n + 1:]
+            return rest[:1] == ["update"] or rest[:2] == ["server", "start"]
+    return False
+
+
+def cads(found, prefix, folder, me=None):
+    """Of ``found`` (each process as ``(id, its parent's id, its program, its command line)``), the processes of this
+    cad: its program in the environment ``prefix``, or the launchers' folder's ``cad.exe`` or one set aside, or what
+    its command line runs (``_runs``) is one of them; and a Python one of those started (the environment's ``python.exe`` starts the
+    Python it was made from, whose program and command line name neither). Never this helper or a process it runs
+    under (``me``: this one), and never one that waits for the update (``waiter``)."""
+    parents = {pid: parent for pid, parent, _, _ in found}
+    under, pid = set(), os.getpid() if me is None else me
+    while pid and pid not in under:
+        under.add(pid)
+        pid = parents.get(pid)
+    marks = [_flat(str(prefix)).rstrip("\\") + "\\"]
+    if folder is not None:
+        marks += [_flat(str(folder / "cad.exe")), _flat(str(folder)).rstrip("\\") + "\\.cad.exe."]
+    mine = {each[0] for each in found
+            if any(_flat(path).startswith(mark) for path in (each[2], *_runs(each[3])) for mark in marks)}
+    spared = {each[0] for each in found if each[0] in mine and waiter(each[3])}
+    pythons = [each for each in found if re.search(r"(^|\\)pythonw?\.exe$", _flat(each[2]))]
+    while True:  # a Python one of them started is theirs, and waits where it does
+        more = [each for each in pythons if each[1] in mine and each[0] not in mine]
+        if not more:
+            break
+        mine |= {each[0] for each in more}
+        spared |= {each[0] for each in more if each[1] in spared}
+    return [each for each in found if each[0] in mine and each[0] not in under | spared]
+
+
+def clear(told, folder, find, end, sleep, log):
+    """Windows, before a try: every process of this cad (``cads``) given ``SETTLE`` looks to end by itself, then stopped
+    (``end``), looked for again until none is left, at most ``LOOKS`` times. ``find()``: every process, or None where
+    it cannot look. Those it could not stop."""
+    for look in range(LOOKS):
+        found = find()
+        mine = cads(found, told["prefix"], folder) if found is not None else []
+        if not mine:
+            return []
+        if look >= SETTLE:
+            for each in mine:
+                stopped = end(each)
+                log.write(f"{'stopped' if stopped else 'could not stop'} a process of cad's, {each[0]}: "
+                          f"{each[3] or each[2]}")
+        sleep(0.5)
+    return mine
+
+
+def processes():
+    """Windows: every process this user can see, as ``(id, parent's id, program, command line)``: read through the
+    Win32 API (``_listed``), else from PowerShell's ``Get-CimInstance Win32_Process``; None where neither can look."""
+    try:
+        return _listed()
+    except Exception:  # noqa: BLE001 - the other way, then none
+        pass
+    code, said = run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                      "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-CimInstance Win32_Process | "
+                      "Select-Object ProcessId, ParentProcessId, ExecutablePath, CommandLine | "
+                      "ConvertTo-Json -Compress"], 60)
+    try:
+        listed = json.loads(said) if code == 0 else None
+    except ValueError:
+        return None
+    listed = [listed] if isinstance(listed, dict) else listed
+    if not isinstance(listed, list):
+        return None
+    return [(int(each.get("ProcessId") or 0), int(each.get("ParentProcessId") or 0), each.get("ExecutablePath") or "",
+             each.get("CommandLine") or "") for each in listed if isinstance(each, dict)]
+
+
+def _kernel():
+    import ctypes
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+                                                  ctypes.POINTER(wintypes.DWORD)]
+    return kernel
+
+
+def _program(kernel, handle):
+    import ctypes
+    from ctypes import wintypes
+
+    buffer, size = ctypes.create_unicode_buffer(32768), wintypes.DWORD(32768)
+    return buffer.value if kernel.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)) else ""
+
+
+def _line(handle):
+    """A process's command line: ``NtQueryInformationProcess``'s ProcessCommandLineInformation (60, Windows 8.1 on)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class Text(ctypes.Structure):  # UNICODE_STRING, at the start of what the call returns
+        _fields_ = [("length", wintypes.USHORT), ("maximum", wintypes.USHORT), ("buffer", ctypes.c_void_p)]
+
+    query = ctypes.WinDLL("ntdll").NtQueryInformationProcess
+    query.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.ULONG, ctypes.POINTER(wintypes.ULONG)]
+    query.restype = ctypes.c_long
+    size = wintypes.ULONG(0)
+    query(handle, 60, None, 0, ctypes.byref(size))
+    if not size.value:
+        return ""
+    buffer = ctypes.create_string_buffer(size.value)
+    if query(handle, 60, buffer, size, ctypes.byref(size)) != 0:
+        return ""
+    text = Text.from_buffer(buffer)
+    return ctypes.wstring_at(text.buffer, text.length // 2) if text.buffer else ""
+
+
+def _listed():
+    import ctypes
+    from ctypes import wintypes
+
+    class Entry(ctypes.Structure):  # PROCESSENTRY32W
+        _fields_ = [("size", wintypes.DWORD), ("usage", wintypes.DWORD), ("pid", wintypes.DWORD),
+                    ("heap", ctypes.c_size_t), ("module", wintypes.DWORD), ("threads", wintypes.DWORD),
+                    ("parent", wintypes.DWORD), ("priority", ctypes.c_long), ("flags", wintypes.DWORD),
+                    ("name", ctypes.c_wchar * 260)]
+
+    kernel = _kernel()
+    kernel.Process32FirstW.argtypes = kernel.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
+    snapshot = kernel.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+    if not snapshot or snapshot == wintypes.HANDLE(-1).value:
+        raise OSError("no snapshot of the processes")
+    found, entry = [], Entry()
+    entry.size = ctypes.sizeof(Entry)
+    try:
+        more = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
+        while more:
+            handle = kernel.OpenProcess(0x1000, False, entry.pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if handle:
+                try:
+                    found.append((int(entry.pid), int(entry.parent), _program(kernel, handle), _line(handle)))
+                finally:
+                    kernel.CloseHandle(handle)
+            more = kernel.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        kernel.CloseHandle(snapshot)
+    return found
+
+
+def end_process(each):
+    """The process ``each`` (as ``processes`` gives it) stopped, where it still runs the program it ran when it was
+    found (an id Windows gave to another process since is left alone): whether it was."""
+    pid, _parent, program, _line = each
+    try:
+        kernel = _kernel()
+    except Exception:  # noqa: BLE001 - no Win32 API: Windows' own command
+        return run(["taskkill", "/F", "/PID", str(pid)], 30)[0] == 0
+    handle = kernel.OpenProcess(0x1001, False, pid)  # PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return False
+    try:
+        return (not program or _flat(_program(kernel, handle)) == _flat(program)) \
+            and bool(kernel.TerminateProcess(handle, 1))
+    finally:
+        kernel.CloseHandle(handle)
+
+
 def accepted(held, before, major):
     """Whether the upgrade may end on release ``held``: never older than ``before``, the release that ran, and, but for
     ``major`` (``cad update --major``), of ``before``'s major. Any release where ``before`` is not known."""
@@ -168,24 +420,25 @@ def accepted(held, before, major):
     return before is None or (held >= before and (major or held[0] == before[0]))
 
 
-def install(told, command, wanted, run, sleep, folder=None, accept=lambda held: held is not None, settle=False,
+def install(told, command, wanted, run, sleep, prepare=None, accept=lambda held: held is not None, settle=False,
             enough=lambda held: False, waits=WAITS, early=False):
-    """``command`` run, tried at each of ``waits``, each ``cad.exe`` set aside first where ``folder`` (the launchers'
-    folder, on Windows) is given, until it ends 0 with a release of cad installed that ``accept`` takes, ``wanted`` or
-    newer where it is given, or one ``enough`` takes (``major``: a higher major than ``from``'s): ``(the release
-    installed, or None, the installer's last line, (the last try's exit status, all it printed, the release it left))``.
-    With ``settle``, where the last try ended 0 on a release ``accept`` takes, below ``wanted``, that release: nothing
-    newer is to be had; with ``early`` too, at the first such try, which another way follows (``escalate``). None, and
-    nothing more run, where the environment is half made (``whole``): the last line of the try that left it so."""
+    """``command`` run, tried at each of ``waits``, ``prepare()`` first where it is given (``update``'s: what is in the
+    installer's way moved out of it), until it ends 0 with a release of cad installed that ``accept`` takes, ``wanted``
+    or newer where it is given, or one ``enough`` takes (``major``: a higher major than ``from``'s): ``(the release
+    installed, or None, why in the installer's words (``why``), (the last try's exit status, all it printed, the
+    release it left))``. With ``settle``, where the last try ended 0 on a release ``accept`` takes, below ``wanted``,
+    that release: nothing newer is to be had; with ``early`` too, at the first such try, which another way follows
+    (``escalate``). None, and nothing more run, where the environment is half made (``whole``): the words of the try
+    that left it so."""
     detail, settled, last = "not tried", None, (None, "", None)
     for wait in waits:
         sleep(wait)
         if not whole(told["prefix"]):
             return None, detail if last[1] else HALF_MADE, last  # the words of the try that left it so, where one did
-        if folder is not None:
-            set_aside(told, folder)
+        if prepare is not None:
+            prepare()
         code, said = run(command, INSTALL_SECONDS)
-        detail = last_line(said) if code is not None else said
+        detail = why(said) if code is not None else said
         held = installed(told["prefix"])
         last = (code, said, held)
         if code == 0 and accept(held) and (wanted is None or held >= wanted or enough(held)):
@@ -199,7 +452,28 @@ def install(told, command, wanted, run, sleep, folder=None, accept=lambda held: 
     return settled, detail, last
 
 
-def escalate(told, target, run, sleep, folder, accept, environ=None):
+def why(text):
+    """Why an installer's run failed, in its own words: its first ``error:`` line with the ``Caused by:`` lines under
+    it, after each warning before it that names a file it could not remove or replace; else its last line. uv's
+    rollback of a failed install prints an error of its own last, which says nothing of the first."""
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    first = next((n for n, line in enumerate(lines) if line.lower().startswith("error:")), None)
+    if first is None:
+        return lines[-1] if lines else ""
+    said = [line for line in lines[:first] if line.lower().startswith("warn") and FILE_WORDS.search(line)]
+    said.append(lines[first])
+    for line in lines[first + 1:]:
+        if not line.lower().startswith("caused by:"):
+            break
+        said.append(line)
+    return " ".join(said)[:1000]
+
+
+# A warning that names a file the installer could not act on (``why``).
+FILE_WORDS = re.compile(r"os error \d+|failed to (remove|replace|rename|write|copy|open)", re.IGNORECASE)
+
+
+def escalate(told, target, run, sleep, prepare, accept, environ=None):
     """The upgrade, which ended 0 and kept a release below ``target``, tried again in the same run, once each way: with
     ``refresh`` (uv's ``--refresh``: the index read afresh, not from its cache), then ``pin`` (``cad==<target>``,
     whose error names why where it cannot be had: no such release, the Python, the platform) and, where that installed
@@ -215,13 +489,13 @@ def escalate(told, target, run, sleep, folder, accept, environ=None):
                              for command in (told["upgrade"], told["pin"], told["bounded"]))
     detail, last = "not tried", (None, "", None)
     for command in (upgrade, pin):
-        got, detail, last = install(told, command, target, run, sleep, folder, accept=accept, settle=True,
+        got, detail, last = install(told, command, target, run, sleep, prepare, accept=accept, settle=True,
                                     waits=(0,))
         if last[0] != 0:
             break
         if got is not None and got >= target:
             if command is pin:
-                again = install(told, bounded, target, run, sleep, folder, accept=accept, settle=True, waits=(0,))
+                again = install(told, bounded, target, run, sleep, prepare, accept=accept, settle=True, waits=(0,))
                 if again[2][0] != 0:
                     detail, last = again[1], again[2]
             break
@@ -229,9 +503,10 @@ def escalate(told, target, run, sleep, folder, accept, environ=None):
     return (held if accept(held) and whole(told["prefix"]) else None), detail, last
 
 
-def update(told, run=run, sleep=time.sleep, windows=WINDOWS, environ=None):
+def update(told, run=run, sleep=time.sleep, windows=WINDOWS, environ=None, find=None, end=None):
     """The update ``told`` asks for; its outcome as the record keeps it, with its ``cause`` where it did not install
-    what it was for (``cause_of``). Each command it runs is written to the log (``Log``, where ``told`` names one)."""
+    what it was for (``cause_of``). Each command it runs is written to the log (``Log``, where ``told`` names one).
+    ``find`` and ``end``: how Windows' processes are listed and stopped (``processes``, ``end_process``)."""
     log = Log(told.get("log"))
     log.begin(told)
     run = log.running(run)
@@ -241,6 +516,21 @@ def update(told, run=run, sleep=time.sleep, windows=WINDOWS, environ=None):
     if folder is not None:
         tidy(folder)
     stopped = run([told["cad"], "server", "stop"], 120)[0]
+    moved, left = [], []
+
+    def repaired():
+        for name in repair(told["prefix"]):
+            log.write(f"deleted {name}: it had no RECORD, which an uninstall that stopped midway leaves")
+
+    def prepare():
+        """Before each try: on Windows each ``cad.exe`` set aside (``set_aside``) and the processes of this cad
+        stopped (``clear``); the dist-info folders with no ``RECORD`` deleted (``repair``)."""
+        if windows:
+            if folder is not None:
+                moved.extend(set_aside(told, folder))
+            left[:] = clear(told, folder, find or processes, end or end_process, sleep, log)
+        repaired()
+
     held = installed(told["prefix"])
     above = held is not None and before is not None and not major and held[0] > before[0]
     last = None
@@ -254,16 +544,26 @@ def update(told, run=run, sleep=time.sleep, windows=WINDOWS, environ=None):
         # higher major was the target (none is out, or PyPI could not say), it ends as a bounded update does.
         crossed = lambda found: major and found is not None and before is not None and found[0] > before[0]  # noqa: E731
         second = "pin" in told and target is not None and not major
-        got, detail, last = install(told, told["upgrade"], target, run, sleep, folder, accept=accept, enough=crossed,
+        got, detail, last = install(told, told["upgrade"], target, run, sleep, prepare, accept=accept, enough=crossed,
                                     settle=not (major and crossed(target)), early=second)
         if second and got is not None and got < target:
-            got, detail, last = escalate(told, target, run, sleep, folder, accept, environ)
+            got, detail, last = escalate(told, target, run, sleep, prepare, accept, environ)
+        if got is not None:  # what was installed runs, and is that release: else it is no install
+            ran, said = runs(told, folder, run)
+            if ran != got:
+                detail = f"cad {named(got)} was installed, but `cad --version` " + (
+                    f"says cad {named(ran)}" if ran else f"did not run: {said}")
+                got = None
         outcome = "failed" if got is None else "installed" if before is None or got > before else "current"
-        if got is None and whole(told["prefix"]) and run([told["cad"], "--version"], 60)[0] != 0:
-            restored = install(told, told["put_back"], before, run, sleep, folder)[0] is not None
+        if got is None and whole(told["prefix"]):
+            repaired()
+            back(moved)
+            if runs(told, folder, run)[0] is None:
+                install(told, told["put_back"], before, run, sleep, prepare)
+                restored = runs(told, folder, run)[0] is not None
     cause = None
     try:
-        cause = cause_of(told, outcome, got, last, stopped, run, environ, log)
+        cause = cause_of(told, outcome, got, last, stopped, run, environ, log, restored=restored, left=left)
     except Exception as error:  # noqa: BLE001 - a cause that cannot be told leaves the record as it was
         log.write(f"the cause could not be told: {type(error).__name__}: {error}")
     start = told.get("start", True) is not False
@@ -290,15 +590,18 @@ def update(told, run=run, sleep=time.sleep, windows=WINDOWS, environ=None):
 # that tells it. Each word is said in plain words by ``auto_update.SAID``.
 CAUSES = ("timeout", "no_program", "in_use", "denied", "disk_full", "half_made", "network", "offline", "no_release",
           "python", "platform", "config_exclude", "config_index", "config_tls", "uv_old", "kept", "server_running",
-          "helper_start", "helper_crash", "lost", "no_installer", "no_python", "packaged", "unknown")
+          "cad_running", "broken", "helper_start", "helper_crash", "lost", "no_installer", "no_python", "packaged",
+          "unknown")
 
 # What an installer's output says, tried in order, the first match winning: uv's and pip's own words (pipx prints
 # pip's), and the system's for an error of the file system (``os error N`` is uv's spelling, ``[Errno N]`` and
 # ``[WinError N]`` Python's). Read with each run of white space made one space: uv wraps its messages.
 SAYS = (
     ("uv_old", (r"unexpected argument '", r"unrecognized subcommand", r"unexpected value '")),
+    # Windows refuses to remove a program that runs as access denied (os error 5): in use, not denied.
     ("in_use", (r"os error 32\b", r"WinError 32\b", r"being used by another process", r"os error 16\b",
-                r"resource busy", r"text file busy", r"os error 26\b")),
+                r"resource busy", r"text file busy", r"os error 26\b",
+                r"failed to remove executable [^()]*\(os error 5\)")),
     ("disk_full", (r"os error 28\b", r"Errno 28\b", r"os error 112\b", r"WinError 112\b", r"no space left on device",
                    r"not enough space on the disk", r"disk quota exceeded", r"os error 122\b")),
     ("offline", (r"network was disabled", r"network is disabled")),
@@ -452,17 +755,21 @@ def uv_release(text):
     return tuple(int(part) for part in match.groups()) if match else None
 
 
-def cause_of(told, outcome, got, last, stopped, run, environ=None, log=None):
+def cause_of(told, outcome, got, last, stopped, run, environ=None, log=None, restored=None, left=()):
     """Why the attempt did not install what it was for, one of ``CAUSES``, or None where it did (or nothing newer was
     asked: the environment already held it). The environment half made (``whole``), ``half_made``, whatever came
-    before; ended 0 on the release that ran, though a newer one was wanted, ``kept``; else what the upgrade's last try
-    said (``classify``), where ``cad server stop`` did not end 0 and the try was refused a file, ``server_running``;
-    where uv's words say nothing known and uv is older than cad asks (``told["uv_floor"]``), ``uv_old``; then what the
-    installer's settings explain (``refine``)."""
+    before; cad left not running though the release before was put back (``restored`` false), ``broken``; ended 0 on
+    the release that ran, though a newer one was wanted, ``kept``; else what the upgrade's last try said
+    (``classify``), where ``cad server stop`` did not end 0 and the try was refused a file, ``server_running``, and
+    where a process of cad's could not be stopped before it (``left``, ``clear``'s), ``cad_running``; where uv's words
+    say nothing known and uv is older than cad asks (``told["uv_floor"]``), ``uv_old``; then what the installer's
+    settings explain (``refine``)."""
     if outcome != "installed" and not whole(told["prefix"]):
         return "half_made"
     if last is None or outcome == "installed":
         return None
+    if restored is False:
+        return "broken"
     code, output, held = last
     if code == 0:  # it ended well on a release it did not end on: the one that ran (kept), or one it may not take
         cause = "kept" if held is not None and held == release(told["from"]) else "unknown"
@@ -470,6 +777,8 @@ def cause_of(told, outcome, got, last, stopped, run, environ=None, log=None):
         cause = classify(code, output)
     if cause in ("in_use", "denied", "unknown") and stopped not in (0, None):
         cause = "server_running"
+    elif cause in ("in_use", "denied") and left:
+        cause = "cad_running"
     floor = release(told.get("uv_floor") or "")
     if cause == "unknown" and told.get("installer", "uv") == "uv" and floor is not None:
         said = run([told["upgrade"][0], "--version"], 60)

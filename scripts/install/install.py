@@ -16,7 +16,10 @@ plugin install``, which carries the one table of them. It does these things alon
    no second cad. First the ``cad`` command 0.10.0-0.11.11 wrote in uv's bin folder goes, where it is
    provably ours (``old_launcher``); another program's ``cad`` there stops this step, in one line. On Windows a
    ``cad.exe`` that runs is renamed out of uv's way (``set_aside``), never a reason to stop; what a run set aside and
-   could not delete, a later run deletes (``tidy``);
+   could not delete, a later run deletes (``tidy``). Before uv runs, a ``cad-*.dist-info`` of uv's cad that has no
+   ``RECORD`` is deleted (``repair``): an uninstall that stopped midway (on Windows, a file of the old cad held as uv
+   removed it) leaves one, and every later uv run on the tool fails on it, cad's own update and this command's
+   reinstall alike, so this is what repairs a computer left so;
 3. brings a ``cad`` that was here already, and starts, up to date, only where a person ran this (``update``): that
    tool's own ``cad update`` (never PATH's), ``UPDATE_SECONDS`` at most (cad's server begins an update only once
    nothing is in flight, and the command waits for it). It stays inside cad's major version, as ``cad update`` does:
@@ -727,6 +730,31 @@ def repair_pipx(here: Here, piped: Tool) -> Cad:
     return Cad(release, 0, piped.commands["cad"], pipx=True, env=piped.env)
 
 
+def cad_env(here: Here, uv: str, tool: Optional[Tool]) -> Optional[Path]:
+    """The environment of uv's cad: the tool's, or where uv keeps it (``uv tool dir``), as a tool uv cannot read is not
+    listed; None where uv cannot say."""
+    if tool is not None and tool.env:
+        return Path(tool.env)
+    said = here.run([uv, "tool", "dir"], timeout=60)
+    lines = said.out.strip().splitlines() if said.ok else []
+    return Path(lines[-1].strip()) / "cad" if lines else None
+
+
+def repair(env: Path) -> List[str]:
+    """Each ``cad-*.dist-info`` of the tool environment ``env`` that has no ``RECORD`` deleted, and only those (one with
+    its ``RECORD`` is an install uv can read): the names of those deleted."""
+    gone = []
+    for pattern in ("lib/python*/site-packages/cad-*.dist-info", "Lib/site-packages/cad-*.dist-info"):
+        for path in env.glob(pattern):
+            if path.is_dir() and not (path / "RECORD").exists():
+                try:
+                    _rmtree(path)
+                except OSError:
+                    continue
+                gone.append(path.name)
+    return gone
+
+
 def install_cad(here: Here) -> Cad:
     """Step 2 (see the module): the ``cad`` command, a uv tool at PyPI's newest release, only where uv has no ``cad``
     tool, or one whose command does not start (installed again); one that starts, at any release, is not installed
@@ -746,6 +774,10 @@ def install_cad(here: Here) -> Cad:
     tidy(here, folder)
     tools = uv_tools(here, uv)
     tool = tools.get("cad")
+    env = cad_env(here, uv, tool)
+    for name in repair(env) if env is not None else ():
+        print(f"Removed {name} from cad's environment: an install that stopped midway left it without its RECORD.",
+              flush=True)
     piped = pipx_cad(here, folder) if tool is None else None
     if piped is not None:
         if here.run([piped.commands["cad"], "--version"], timeout=60).ok:
