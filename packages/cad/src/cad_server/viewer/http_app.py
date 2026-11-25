@@ -387,7 +387,7 @@ class CadApp:
 
     def _file_of(self, ident: str) -> str | None:
         """A file's path by its id: one registered here, else one in Recents (a page reloaded after
-        the engine restarted)."""
+        the engine restarted) -- a model's ``.xbf`` among them, its document."""
         found = self.file_of(ident)
         if found is not None:
             return found
@@ -395,11 +395,32 @@ class CadApp:
             record = self.recents.registry.get(ident)
         except OSError:
             record = None
-        if record is not None and record.get("kind") == "file":
-            from cad_server.engine.registry import home
+        if record is not None:
+            from cad_server.engine.registry import xbf
 
-            return self.file_of(self.remember(home(self.recents.registry, record)))
+            path = xbf(self.recents.registry, record)
+            if path is not None and (record.get("kind") == "file" or path.is_file()):
+                return self.file_of(self.remember(path))
         return None
+
+    def _record(self, ident: str) -> dict | None:
+        """The registry's record of document ``ident``, or None."""
+        try:
+            return self.recents.registry.get(ident)
+        except OSError:
+            return None
+
+    def _modelled(self, ident: str) -> bool:
+        """Whether id ``ident`` is a model's or a shape's (its record says so), or a ``.xbf``'s a page opened: the
+        engine is asked whether a worker holds it live before its file is read (``_catalog``)."""
+        path = self.file_of(ident)
+        if path is not None:
+            return path.lower().endswith(".xbf")
+        try:
+            record = self.recents.registry.get(ident)
+        except OSError:
+            return False
+        return record is None or record.get("kind") in ("model", "shape")
 
     def _reached(self, file, entry) -> str | None:
         """The path the file of catalog row ``entry`` was reached by: the one a page names (``file``) where it is not
@@ -445,29 +466,34 @@ class CadApp:
         if ident:
             if not is_id(ident):
                 raise ValueError(f"{ident} is not a document id")
-            path = self._file_of(ident)
-            if path is not None:
+            # A model a live worker holds is the model; else its .xbf, read as the file it is.
+            model, why, found_state = held(ident) if self._modelled(ident) else (None, "", "")
+            path = self._file_of(ident) if model is None else None
+            if model is not None:
+                entry = row(ident, model)
+            elif path is not None:
                 entry = catalog_entry(path)
+            elif self.engine_documents.server is not None and why:
+                missing, state = why, found_state
             else:
-                model, why, found_state = held(ident)
-                if model is not None:
-                    entry = row(ident, model)
-                elif self.engine_documents.server is not None:
-                    missing, state = why, found_state
-                else:
-                    missing = f"no document {ident} is held"
+                missing = f"no document {ident} is held"
         elif file:
             path = absolute_path(file)
             entry = catalog_entry(path)
             if entry is not None:
-                self.remember(path)
+                found = self.remember(path)
+                if path.lower().endswith(".xbf"):
+                    model = held(found)[0]  # opened by its path: the model, live, while a worker holds it
+                    if model is not None:
+                        entry = row(found, model)
         if entry is not None and "id" not in entry:
             entry["id"] = file_id(entry["file"])
         if entry is not None:
-            # The project it is in (``projects.py``): a model's by its script; a file's by the path it was reached by (the
+            # The project it is in (``projects.py``): a model's by its .xbf; a file's by the path it was reached by (the
             # page's, else the one its record keeps: a file in a linked folder inside a project's is that project's),
             # else by where it is.
-            source = entry["file"] if model is None else (model.get("source") or {}).get("script")
+            source = entry["file"] if model is None else (model.get("source") or {}).get("xbf") \
+                or (model.get("source") or {}).get("script")
             reached = self._reached(file, entry) if model is None else None
             found = self.projects.holding(reached, canonical(source) if source else None)
             entry["project"] = {key: value for key, value in public(found).items() if key in ("id", "name", "root")} if found else None
@@ -725,7 +751,7 @@ class CadApp:
             if len(rest) == 1:
                 return self._methods(request, {"GET": lambda: send_json(response, 200, self.documents(request.query, first))})
             return self._kind_route(request, response, first, rest[1], rest[2:])
-        ident = first
+        ident = self._resolved(first)
         if PREVIEW_MARK in ident:
             # A page's preview is no document: it has no envelope, version, thumbnail or export.
             raise ApiError(404, f"no route {request.path}", f"a preview's routes are {_PREVIEW_ROUTES}, "
@@ -748,8 +774,8 @@ class CadApp:
         built (``recents.py``), each its row with its document's ``id``, ``kind`` and ``api`` (the
         record's own kind, ``file``, ``model`` or ``shape``, is ``record``) and the id of the project it is
         in (``project``: ``projects.py``; null for a standalone one) -- of one ``kind``, whose
-        name or path holds ``q``, at most ``limit``, an ``.xbf`` that is a model's document left out where the model is listed
-        (``recents.fold``). With ``path``, the file at that absolute path
+        name or path holds ``q``, at most ``limit``: a model and its ``.xbf`` one row, one record. With ``path``, the file at
+        that absolute path
         alone, as its envelope (``envelope``), known by its id from then on; none for a file no page
         reads."""
         kind = kind or query.get("kind") or None
@@ -774,12 +800,8 @@ class CadApp:
             if needle and needle not in f"{row['name']}\n{row['path']}".lower():
                 continue
             found = self.projects.holding(entry.reached, entry.path, projects) if entry.kind == "file" \
-                else self.projects.of(entry.script, projects)
+                else self.projects.of(entry.file or entry.script, projects)
             rows.append({**row, "project": found["id"] if found else None})
-        from .recents import fold
-
-        # An .xbf the engine wrote from a model, unchanged since, is the model's card where it is listed (``recents.fold``).
-        rows = fold(rows)
         return {"documents": rows[:int(limit)] if limit is not None else rows}
 
     def envelope(self, ident) -> dict:
@@ -899,12 +921,13 @@ class CadApp:
 
     def _forget(self, response, ident) -> None:
         """``DELETE /api/v1/documents/<id>``: a model's document deleted (``delete_document``: its
-        record and its document in the engine's cache), a file's record forgotten, the file untouched."""
+        record; its ``.xbf`` stays), a file's record forgotten, the file untouched."""
         kind = self.kind_of(ident)
         if kind is None:
             self.envelope(ident)  # its 404, the engine's reason
             raise ApiError(404, f"no document {ident}", _ROUTES_HINT)
-        if kind == MODEL and self._file_of(ident) is None:  # built from code; its .xbf is a file's record
+        record = self.recents.registry.get(ident)
+        if record is None or record.get("kind") in ("model", "shape"):  # built from code: its record, its .xbf stays
             self.delete_document(ident)
         else:
             self.recents.registry.delete(ident)
@@ -958,7 +981,19 @@ class CadApp:
 
         return held(ident)[0] is not None
 
+    def _resolved(self, ident: str) -> str:
+        """The id a document is known by now (a pose's, ``<id>~<digest>``, its document's): an id from before a
+        model's id was its ``.xbf``'s answers as the model's (``Registry.resolve``)."""
+        base, mark, rest = str(ident).partition("~")
+        if not is_id(base):
+            return ident
+        try:
+            return self.recents.registry.resolve(base) + mark + rest
+        except OSError:
+            return ident
+
     def _kind_route(self, request, response, kind, ident, rest) -> None:
+        ident = self._resolved(ident)
         actual = self.kind_of(ident)
         if actual is None:
             self.envelope(ident.split("~", 1)[0])  # its 404, the engine's reason
@@ -966,12 +1001,16 @@ class CadApp:
         if actual != current_kind(kind):
             raise ApiError(404, f"{ident} is a {actual}", f"read it at {document_api(actual, ident)}")
         kind = actual  # an earlier kind (``xbf``) answers as the one it names now: the same bodies
-        # A pose's id (``<id>~<digest>``) reads its document's file; a model built from code has none.
+        # A pose's id (``<id>~<digest>``) reads its document's file: a model's its .xbf.
         path = self._file_of(ident.split("~", 1)[0])
         if rest == ["source"] and path is not None:
             return self._methods(request, {"GET": lambda: self._stream(response, path)})
         if kind in ENGINE_KINDS:
-            return self._engine_route(request, response, kind, ident, rest, path is None)
+            # A model's parameters are set and previewed through the engine, which refuses them while no live worker
+            # holds its build (``no_worker``); a file's .xbf has none to set.
+            model = rest in (["parameters"], ["preview"]) and kind == MODEL and (
+                self._holds_model(ident) or (self._record(ident) or {}).get("kind") == "model")
+            return self._engine_route(request, response, kind, ident, rest, model)
         if kind == "dxf" and rest == ["drawing"]:
             return self._methods(request, {"GET": lambda: self._handle_drawing(request, response, path)})
         if kind == "kicad_pcb" and rest in (["plot"], ["drc"]):
@@ -987,9 +1026,10 @@ class CadApp:
         raise ApiError(404, f"no route {request.path}", f"a {kind}'s routes are {_KIND_ROUTES[kind]}")
 
     def _engine_route(self, request, response, kind, ident, rest, built=False) -> None:
-        """A model's (built from code, or its ``.xbf``) or a STEP's read, answered by the engine that serves it
-        (``cad/engine/serve.py``'s routes, in process: ``_relay``); a model ``built`` from code alone has its
-        parameters set and previewed."""
+        """A model's (live, or its ``.xbf``) or a STEP's read, answered by the engine that serves it
+        (``cad/engine/serve.py``'s routes, in process: ``_relay``); a model (``built``: one built from code, whose
+        record says so) alone has its parameters set and previewed, which the engine refuses while no live worker holds
+        it."""
         doc = f"/api/doc/{ident}"
         query = request.query
         if PREVIEW_MARK in ident and not (rest in (["structure"], ["measure"]) or (len(rest) >= 2 and rest[0] == "parts")):
@@ -1451,7 +1491,7 @@ class CadApp:
 
     def delete_document(self, ident):
         """A model's Delete: the one deletion ``cad delete`` is too (``cad_server.engine.models.delete``)
-        -- its record and its document in the engine's cache, and, from the engine's own page
+        -- its record, and, from the engine's own page
         (``engine_app.ViewerApp``), what the engine holds of it first. Never a file of the person's."""
         from cad_server.engine.models import delete
 

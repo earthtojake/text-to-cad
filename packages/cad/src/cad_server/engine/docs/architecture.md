@@ -32,23 +32,15 @@ request; a failed making of the environment is remembered until something could 
 model**).
 
 Every document has one id (law 6), a lower-case UUID string (the library's `cad.engine.ids`), by one formula
-(`derived_id`: uuid5 of a scope's canonical path, `::` and a name): a model's scope is its script
-and its name its function's (`model_id`), worked out in the script's own process (`Model.id`) as in
-the engine; a file's is its canonical path and no name (`file_id`), inside the engine only; a shape
-handed over is its calling script's (or the working folder's) and its name. Identity is namespace
-plus name: a model's namespace is its script's folder, with no project detection.
-A model's name is its identity within its namespace, the function's name by default, `name=` gives
-it another. `@model(name="arm")` and `@step("arm.step", name="arm")` use the folder and explicit
-name in the same formula, independent of the declaring file. An explicit name is refused at
-declaration while another declaration holds it -- another function in this process (`model.claim`),
-or another file of the folder whose last run declared it, as the name's record says
-(`identity.claimed`) -- naming both `file:line` locations. A function renamed keeps its name and its
-document; so does a name moved to another file of its folder, once the file it left is gone or has
-run again without it: each run records the explicit names its script declares (`declares`) and gives
-up those it declares no more (`identity.released`), and no script but the run's own is read (law
-22). The same explicit name in two folders is two documents, and there are no global names. Two unnamed functions in different files may share a name:
-their ids still include their script paths. A name holding `::`, the formula's separator, is refused
-at declaration. The canonical path (`ids.canonical`) is `realpath` and, on
+(`derived_id`: uuid5 of a scope's canonical path, `::` and a name): a file's is its canonical path and no name
+(`file_id`), and a model's document is its `.xbf`, so its id is that file's -- at `@model`'s path, else
+`<name>.xbf` beside its script (`Model.xbf`, `Model.id`) -- worked out in the script's own process as in the
+engine; so is a shape handed over's (its `.xbf` at the path given, else `<name>.xbf` beside its calling script or
+in the working folder). A model's name, the function's by default, `name=` gives it another, is the name of the
+file it writes where no path is given. Two models that write one file share its id: the last build wins. Before,
+a model's id was the formula over its script and its function, or its folder and an explicit name
+(`identity.former`): a record of such an id is carried to its file's id, and the old id answers as an alias
+(**Identity migration**). The canonical path (`ids.canonical`) is `realpath` and, on
 macOS, the name as the file system spells it, so a symlink and a case variant of one file are one
 document; the viewer's document reads (by id) and its Recents key by the same function, so it
 serves one document and keeps one Recents entry for it too, while a page names a file by the path
@@ -57,9 +49,9 @@ the models registered to be served, their watchers and syncs, their builds, the 
 holds; its API takes it (`/api/v1/documents/<id>`, `/api/v1/documents/<kind>/<id>/...`: **Wire
 format**), and a document served at a pose is `<id>~<digest>`. The
 daemon keys by it the worker that built each model document (`builders`, from which `connected`
-asks the server's watched ids; a file the build wrote is no key there) and the live models' book
-(`models.py`); a worker keys by it what its builds named (`build._BUILT`, which `made_by` answers
-from).
+asks the server's watched ids) and the live models' book (`models.py`); a worker keys by it what its builds named
+(`build._BUILT`, which `made_by` answers from), and by `script::function` the documents it holds (`build._WRITTEN`),
+a process's key, not a document's.
 The workers alone are keyed otherwise: by the canonical path of the script a worker runs, and the
 environment and cad release of the Python a build of it named where that is not the base's (**Running a
 model**), a process's key, not a document's.
@@ -67,13 +59,12 @@ model**), a process's key, not a document's.
 The daemon maps each built document to its worker. HTTP watcher accounting has its
 own lock, independent of document reads and the supervisor's leases. A page watches a document (law 18)
 while it has a version wait outstanding or completed a sync within `serve.LIVE` seconds; its heartbeats
-name the document by its id (`ids`): a file's `file_id`, a model's `model_id`, never turning
-a model into a file path. To admit a new script at the worker-count cap, the
+name the document by its id (`ids.file_id`: a file's, a model's its `.xbf`'s). To admit a new script at the worker-count cap, the
 standby goes first, then the least recently used unwatched idle worker. When every idle worker is
 watched, the new worker starts past the cap instead: a build never waits on an open page, and never
 costs one its warm worker. The workers' memory cap retires a watched worker only when no unwatched one
-is left to retire. A retired worker's documents stay served: the daemon takes them from it first, and
-holds them under one memory budget that never evicts a watched one (**Document lifetime**).
+is left to retire. A retired worker's documents stay served: each is its `.xbf`, read as any file is from then on, under one memory
+budget that never evicts a watched one (**Document lifetime**).
 
 The installation's door (**The door**) supplies its HTTP token, which programmatic clients send as a
 Bearer header; no URL carries it. A page URL the engine prints or opens carries a link instead, good

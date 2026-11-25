@@ -237,8 +237,10 @@ class DeclaredFileTest(unittest.TestCase):
             after = answers[0]
             stat = self.path.stat()
             self.assertEqual(after.version, f"{stat.st_mtime_ns}-{stat.st_size}", "the file's own version")
+            read = document.Loaded(self.path)
             self.assertEqual(json.loads(json.dumps(after.structure)),
-                             json.loads(json.dumps(document.Loaded(self.path).structure())))
+                             json.loads(json.dumps({**read.structure(), "closure": read.closure})),
+                             "the file's structure, and the build closure its head holds")
             self.assertIs(server.document(ident), after, "the file, unchanged since, is not read again")
             kept = {p["key"] for p in before.structure["prototypes"]} & {p["key"] for p in after.structure["prototypes"]}
             self.assertTrue(kept, "the parts the edit left alone keep their keys")

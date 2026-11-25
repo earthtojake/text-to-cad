@@ -315,23 +315,23 @@ class MemoTest(MemoCase):
             probe.build(verify=True)
         self.assertEqual([message["verify"] for message in asked], [True, False, True])
 
-    def test_the_restart_cache_folds_a_memo_function_into_the_model_key(self) -> None:
-        from tests.python.support import engine_cache
+    def test_a_restart_s_take_keys_a_memo_function_into_the_model_key(self) -> None:
+        from tests.python.support import engine_restart
 
-        cache = self.folder / "cache"
+        state = self.folder / "state"
 
         def build() -> dict:
-            report = engine_build.build(self.folder / "root.py", None, cwd=self.folder, cache=str(cache))[-1]
+            report = engine_restart.build(state, self.folder / "root.py", None, cwd=self.folder)[-1]
             self.assertTrue(report["ok"], report)
             return report
 
         build()
-        engine_cache.restart(cache)
+        engine_restart.restart(state)
         report = build()
-        self.assertEqual(report["cache"], {"used": True, "from": "cache"})
+        self.assertEqual(report["cache"], {"used": True, "from": "xbf"})
         self.assertEqual(report["memo"]["bodies_loaded"], 6)
         self.write("parts.py", PARTS.format(thickness=3))
-        engine_cache.restart(cache)
+        engine_restart.restart(state)
         report = build()
         self.assertEqual(report["cache"]["reason"], "../parts.py: plate changed")
 

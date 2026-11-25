@@ -24,8 +24,8 @@ kept one patched, only its changed prototypes made again.
 Before a model's body runs or is replayed, its document is asked (``_previous``): one holding
 the key the model has now is what the body would make, and the body is neither run nor
 replayed. A warm worker asks its own record of the document it built or took; a fresh one, the
-engine's cache file of it -- every model alike, whatever files it declares, which play no part:
-a model taken still writes them, from the document taken (``_taken_outputs``).
+model's ``.xbf`` while it is the file the engine wrote -- every model alike, whatever other files it declares,
+which play no part: a model taken still writes them, from the document taken (``_taken_outputs``).
 """
 
 from __future__ import annotations
@@ -65,9 +65,8 @@ class BuildError(Exception):
 
 
 class Unreadable(ValueError):
-    """Bytes the engine held of a document -- its cache file's, a retired worker's -- that do not
-    read as one (``held_source``): answered by this type, so the daemon drops that cache file
-    (``models.Models.unreadable``) and the next build writes it again."""
+    """Bytes handed over as a document -- a shape's, an ``.xbf``'s the engine read -- that do not read as one
+    (``held_source``): answered by this type."""
 
 
 @dataclass
@@ -81,14 +80,14 @@ class _Written:
     record: str | None = None
     # The tree the kept document was made from: what a derived file is translated from.
     tree: Any = None
-    # The document's bytes as taken from the engine's cache (``_previous``): what it answers with.
+    # The document's bytes as taken from its ``.xbf`` (``_previous``): what it answers with.
     data: bytes | None = None
-    # A document taken from a cache file built where its script was before a move: that script and
+    # A document taken from an ``.xbf`` built where its script was before a move: that script and
     # its module (its record's ``relocated``), what its closure is compared as (``identity.relocated``).
     relocated: dict[str, Any] | None = None
     # A model declaring an xbf: the document's xbf bytes as its build made them, before any export
     # (a mesh export leaves the shapes meshed, which a later serialisation would write too): what
-    # its declared xbf is written from on every run, and what the engine's cache keeps of it.
+    # its xbf is written from on every run.
     xbf: bytes | None = None
     # The parameters the document records (``parameters.record``, as text), or None: a model whose script
     # declares others now is built again, though its key stands (``_taken``).
@@ -450,22 +449,21 @@ def _refused(error: BaseException) -> dict[str, str]:
 
 def build(script: Path, functions: list[str] | None = None, *, log: Callable[[str], None] = lambda _line: None,
           cwd: Path | None = None, verify: bool = False, profile: bool = False,
-          run: str | None = None, cache: str | None = None) -> list[dict[str, Any]]:
+          run: str | None = None, take: bool = False) -> list[dict[str, Any]]:
     """Run a build, optionally profiling this execution in its worker (or explicit cold caller).
 
     The profile covers the whole request, including child models and output processing.
     Each top-level report carries that same request-wide profile, never a cached profile.
     ``run`` names the calling process's run: its later calls may be served from this one's load
-    (``_Load``); None loads the script afresh. ``cache`` is the engine's cache of documents (the
-    daemon's ``documents`` folder there), which every model is taken from when
-    it holds the key the model has now (``_previous``).
+    (``_Load``); None loads the script afresh. ``take``: the engine's build, whose fresh worker takes a model
+    from its ``.xbf`` when the file is the one the engine wrote and holds the key the model has now (``_previous``).
     """
     if not profile:
-        return _build(script, functions, log=log, cwd=cwd, verify=verify, run_token=run, cache=cache)
+        return _build(script, functions, log=log, cwd=cwd, verify=verify, run_token=run, take=take)
     from cad.engine.profiling import Profile
 
     with Profile(project=Path(script).parent) as measured:
-        reports = _build(script, functions, log=log, cwd=cwd, verify=verify, run_token=run, cache=cache)
+        reports = _build(script, functions, log=log, cwd=cwd, verify=verify, run_token=run, take=take)
     summary = measured.report()
     for report in reports:
         report["profile"] = summary
@@ -474,7 +472,7 @@ def build(script: Path, functions: list[str] | None = None, *, log: Callable[[st
 
 def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[str], None] = lambda _line: None,
           cwd: Path | None = None, verify: bool = False, run_token: str | None = None,
-          cache: str | None = None) -> list[dict[str, Any]]:
+          take: bool = False) -> list[dict[str, Any]]:
     """Build the script's models (``functions``, or every model it defines); one report
     per model, holding those of the child models its run ran, each of which wrote its own
     files (``child_models``). Raises BuildError for a script or function that is not there;
@@ -490,7 +488,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
     differs runs on every call for the worker's life (``memo.always``)."""
     from cad.engine import parameters, previous
     from cad.engine.kernel import determinism, memo
-    from cad.engine.model import _FINGERPRINTS, _MODELS, _NAMES, BuildContext, models_in
+    from cad.engine.model import _FINGERPRINTS, _MODELS, BuildContext, models_in
 
     script = Path(script).resolve()
     if not script.is_file():
@@ -518,7 +516,6 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             reader.session():
         run.verify = verify
         _MODELS.clear()  # the models this build defines, known by name to what its replays ran
-        _NAMES.clear()  # and the names their declarations claim (``model.claim``)
         _FINGERPRINTS.clear()  # and their scripts' fingerprints, read again once
         load_key = (run_token, str(script), str(cwd))
         kept = _kept_load(load_key) if run_token and not verify else None
@@ -571,8 +568,6 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
         context.base = script.parent
         context.script = script
         models = models_in(vars(module), script)
-        # The explicit names the script declares now, what its run tells the engine (``identity.released``).
-        own, declared = set(models), sorted({model.explicit_name for model in models if model.explicit_name is not None})
         if functions:
             by_name = {model.name: model for model in models}
             missing = [name for name in functions if name not in by_name]
@@ -600,9 +595,9 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                     found.append((child, made))
             return found
 
-        if cache is not None:
+        if take:
             try:
-                _reattach(models, Path(cache))
+                _reattach(models)
             except Exception as error:  # noqa: BLE001 - identity never fails a build: a new document
                 print(f"cad: re-attachment failed: {type(error).__name__}: {error}", file=sys.stderr)
         for model in models:
@@ -616,9 +611,9 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                 if verify:
                     verdict, previous_report = {"used": False, "reason": "verifying"}, None
                 else:
-                    verdict, previous_report = _previous(model, context, shown, cache)
-            except Exception as error:  # noqa: BLE001 - the cache never fails a build: the body runs
-                verdict, previous_report = {"used": False, "reason": f"the cache failed: {error}"}, None
+                    verdict, previous_report = _previous(model, context, shown, take)
+            except Exception as error:  # noqa: BLE001 - a take never fails a build: the body runs
+                verdict, previous_report = {"used": False, "reason": f"the take failed: {error}"}, None
             if previous_report is not None:
                 timings = previous_report["timings"]
                 timings["load"] = round(loaded - started, 4)
@@ -695,8 +690,6 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                 _taken_outputs(model, report, log)
             except Exception as error:  # noqa: BLE001 - a file that cannot be written is the build's error
                 _output_failed(report, error)
-        if model in own:
-            report["source"]["declares"] = declared
         # Each child that ran writes the files it declares, from its own document, after its
         # target's: its report is the target's, under its identity (``child_models``).
         for child, made in children:
@@ -722,7 +715,7 @@ def preview(script: Path, name: str, values: dict[str, Any], *, cwd: Path | None
     a value tried before, and every stage the values do not reach, is a hit. Nothing a build keeps is touched:
     no file is written (no declared xbf, no export), no document is kept (``_WRITTEN``, ``_BUILT``), no load
     is kept for a run (``_LOAD`` is dropped, as any fresh load drops it), no closure is made and nothing is
-    taken from the engine's cache; the report is the answer alone. Answered as ``result`` answers a held
+    taken from an ``.xbf``; the report is the answer alone. Answered as ``result`` answers a held
     model: ``{"ok", "structure", "shapes": [[key, size]], "timings", "memo"}`` with the bytes of each part
     whose key is not in ``known`` (the parts the daemon holds already), in order -- or ``{"ok": false,
     "error", ...}``, the model's own error at those values, and no bytes."""
@@ -731,7 +724,7 @@ def preview(script: Path, name: str, values: dict[str, Any], *, cwd: Path | None
     from cad.engine.kernel import determinism, memo
     from cad.engine.kernel.trace import first_party_file
     from cad.engine.mesh import shape_bytes
-    from cad.engine.model import _FINGERPRINTS, _MODELS, _NAMES, BuildContext, models_in
+    from cad.engine.model import _FINGERPRINTS, _MODELS, BuildContext, models_in
 
     script = Path(script).resolve()
     if not script.is_file():
@@ -742,7 +735,6 @@ def preview(script: Path, name: str, values: dict[str, Any], *, cwd: Path | None
     started = time.perf_counter()
     with memo.run(script, model=("preview", name)) as run, BuildContext() as context, reader.session():
         _MODELS.clear()
-        _NAMES.clear()
         _FINGERPRINTS.clear()
         _LOAD.clear()  # its modules are about to be replaced: a run's next call loads again
         try:
@@ -1014,15 +1006,12 @@ def _outputs(plan: list, report: dict[str, Any], log: Callable[[str], None],
 def _taken_outputs(model: Any, report: dict[str, Any], log: Callable[[str], None]) -> None:
     """A model taken from its key (``_previous``) writes its declared files as an export of the
     document taken, its body not run (``_outputs``): from the document this worker holds, or the
-    bytes the engine's cache gave it (the xbf those bytes themselves)."""
+    bytes its ``.xbf`` gave it (that file those bytes themselves, kept)."""
     from cad.engine import document
 
     plan = model.plan()
     name = f"{model.script}::{model.name}"
     written = _WRITTEN[name]
-    if any(target.kind == "xbf" for target in plan) and written.xbf is None and written.data is None:
-        # Taken by a worker that built it when it declared no xbf: its bytes, made now.
-        written.xbf = document.to_bytes(written.kept.doc, [part.shape for part in written.tree.parts])
     data = written.xbf if written.xbf is not None else written.data or b""
     _outputs(plan, report, log, lambda path: document.write_bytes(path, data, written.tree),
              lambda: held(model.script, model.name))
@@ -1039,7 +1028,7 @@ def held(script: Path | None = None, name: str | None = None) -> Any:
         model_script, _sep, function = key.rpartition("::")
         if script is not None and (model_script != canonical(script) or (name is not None and function != name)):
             continue
-        found.append((written, function))  # each holds its document: built and kept, or the cache's bytes
+        found.append((written, function))  # each holds its document: built and kept, or its .xbf's bytes
     if len(found) != 1:
         return None
     written, function = found[0]
@@ -1049,7 +1038,7 @@ def held(script: Path | None = None, name: str | None = None) -> Any:
 
 
 def taken(script: Path, name: str) -> bytes | None:
-    """The bytes model ``name`` of ``script`` was taken from the engine's cache with, while this
+    """The bytes model ``name`` of ``script`` was taken from its ``.xbf`` with, while this
     process holds it as taken (``_previous``), else the xbf bytes its build made of it (a model that
     declares an xbf: ``_Written.xbf``); None for any other, or one it holds none of. A document read
     is never written again (**Build closure**): what is asked of it whole is these bytes."""
@@ -1068,8 +1057,7 @@ held_reads = 0
 
 
 def held_source(payload: bytes, name: str, origin: dict[str, Any] | None = None) -> Any:
-    """A document's xbf bytes -- the ones its worker made of it before it retired
-    (``models.Models.drain``), or the engine's cache file of it (``cache``) -- as an
+    """A document's xbf bytes -- an ``.xbf``'s, a shape's handed over, a model's as its worker made them -- as an
     ``export.Source``, read in memory as an on-disk xbf is (``document.read_bytes``): its mechanism,
     its assemblies' placements and its animations' record with it, named as the document is
     (``name``). The source has no path: it is no file. The last few read are kept (``_HELD``)."""
@@ -1154,48 +1142,66 @@ def _identity(name: str) -> str:
     return f"{Path(script).name}::{function}"
 
 
-def _previous(model: Any, context: Any, shown: str, cache: str | None = None) -> tuple[dict, dict | None]:
+def _previous(model: Any, context: Any, shown: str, take: bool = False) -> tuple[dict, dict | None]:
     """The model's previous document asked before its body runs (``previous``): the verdict, and
     the model's report where the document is what the body would make -- the key the model has now
     is the one the document holds -- so the body is neither run nor replayed. The key alone decides,
     asked of this worker's own record of the document it last built or took (``"from": "memory"``),
-    else of the engine's cache file of it (``cache``: ``<id>/document.xbf`` there, ``"from":
-    "cache"``) -- the one take-up of every model, with or without declared files, warm and after a
-    restart. A model's declared files play no part: they are written after it, from the document
-    taken, as an export of it is (``_taken_outputs``).
+    else, in the engine's build (``take``), of the model's ``.xbf`` (``"from": "xbf"``) while that file is the
+    one the engine wrote (``_written_by_engine``) -- the one take-up of every model, warm and after a restart.
+    Its other declared files play no part: they are written after it, from the document taken, as an
+    export of it is (``_taken_outputs``).
 
-    A worker whose own record holds another key asks the cache too: its script's worker of another
-    environment (a check with another header) may have built this very state since, and the document
-    it saved is this model's whoever built it. Where the cache holds another key as well, the verdict
+    A worker whose own record holds another key asks the ``.xbf`` too: its script's worker of another
+    environment (a check with another header) may have built this very state since, and the file it
+    wrote is this model's whoever built it. Where the file holds another key as well, the verdict
     is the one against this worker's record: what changed since it last built."""
     name = f"{model.script}::{model.name}"
     remembered = _WRITTEN.get(name)
-    verdict, report = _taken(model, context, shown, cache, remembered)
-    if report is None and remembered is not None and cache is not None and verdict.get("changed"):
-        other, report = _taken(model, context, shown, cache, None)
+    if remembered is None and not take:
+        return {"used": False, "reason": "no document of it is held"}, None
+    verdict, report = _taken(model, context, shown, remembered)
+    if report is None and remembered is not None and take and verdict.get("changed"):
+        other, report = _taken(model, context, shown, None)
         if report is not None:
             return other, report
     return verdict, report
 
 
-def _taken(model: Any, context: Any, shown: str, cache: str | None, remembered: Any) -> tuple[dict, dict | None]:
+def _written_by_engine(model: Any, xbf: Path) -> str | None:
+    """Why the model's ``.xbf`` is not the file the engine last wrote of it, or None when it is: its record
+    (``records``) names the file's version as written (``version``, ``mtime_ns-size``), and the file is that
+    version still. A file edited, replaced or copied over since, or one no record names, is not taken."""
+    from cad.engine import records
+
+    try:
+        found = xbf.stat()
+    except OSError:
+        return "it has no .xbf"
+    record = records.current().get(model.id) or {}
+    if record.get("kind") != "model" or record.get("version") != f"{found.st_mtime_ns}-{found.st_size}":
+        return "its .xbf is not the one the engine wrote" if record.get("kind") == "model" else \
+            "the engine wrote no .xbf of it"
+    return None
+
+
+def _taken(model: Any, context: Any, shown: str, remembered: Any) -> tuple[dict, dict | None]:
     """``_previous`` asked of one holder: this worker's record of the model (``remembered``), else,
-    with None, the engine's cache file of it."""
+    with None, the model's ``.xbf``."""
     from cad.engine import document, previous
     from cad.engine.kernel import memo
 
-    targets = model.targets()
-    xbf = next((Path(path) for kind, path in targets if kind == "xbf"), None)
+    xbf = model.xbf
     name = f"{model.script}::{model.name}"
     if not memo.enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
         return {"used": False, "reason": "retention is off"}, None
-    folder = xbf.parent if xbf is not None else model.script.parent  # what the closure's paths are relative to
+    folder = xbf.parent  # what the closure's paths are relative to
     clock = time.perf_counter()
     always = memo.always()
     impure = sorted(_identity(family) for family in _FAMILIES.get(name, ()) if family in always)
     if impure:
         return {"used": False, "reason": f"it calls {', '.join(impure)}, which a verification found impure"}, None
-    cached = None
+    from_file = remembered is None
     if remembered is not None:
         where = "memory"  # the document this process last built or took: its record is in memory
         text = remembered.record
@@ -1203,23 +1209,19 @@ def _taken(model: Any, context: Any, shown: str, cache: str | None, remembered: 
         if text is None:
             return {"used": False, "reason": "its last build wrote no key"}, None
     else:
-        where = "cache"
-        if cache is None:
-            return {"used": False, "reason": "the engine keeps no cache to take it from"}, None
-        from cad.engine.records import FILE
-
-        cached = Path(cache) / model.id / FILE
-        if not cached.is_file():
-            return {"used": False, "reason": "the engine's cache holds none of it"}, None
-        writer, text = previous.scan(cached)
+        where = "xbf"
+        why = _written_by_engine(model, xbf)
+        if why is not None:
+            return {"used": False, "reason": why}, None
+        writer, text = previous.scan(xbf)
         if document.written_format(writer) != previous.FORMAT:
-            return {"used": False, "reason": f"its cache was written by {writer or 'another program'}"}, None
+            return {"used": False, "reason": f"its .xbf was written by {writer or 'another program'}"}, None
         if text is None:
-            return {"used": False, "reason": "its cache holds no key"}, None
+            return {"used": False, "reason": "its .xbf holds no key"}, None
         moved = _relocation(model)
     found = json.loads(text)
     if found.get("key") is None:
-        return {"used": False, "reason": "its cache holds no key" if where == "cache" else "its last build wrote no key"}, None
+        return {"used": False, "reason": "its .xbf holds no key" if from_file else "its last build wrote no key"}, None
     modules, _unkeyable = context.modules(model)
     compared = found
     if moved is not None:
@@ -1244,28 +1246,26 @@ def _taken(model: Any, context: Any, shown: str, cache: str | None, remembered: 
 
     declared = context.parameters(model)
     wanted = parameters.record(declared)
-    if cached is None and remembered.parameters != wanted:
+    if not from_file and remembered.parameters != wanted:
         return {"used": False, "reason": "its parameters changed", "changed": ["its parameters changed"]}, None
     timings = {"key": round(keyed - clock, 4)}
-    if cached is not None:
+    if from_file:
         # Taken read whole, and kept as its bytes: a document read is never written again (the
         # class's note), so what is asked of it is answered from them (``held``).
         try:
-            data = cached.read_bytes()
+            data = xbf.read_bytes()
             doc = document.read_bytes(data)
             held = previous.read_record(doc)
-        except Exception as error:  # noqa: BLE001 - a cache that does not read is built again
-            # ``unreadable``: the daemon drops the file, so this build's document is cached again.
-            return {"used": False, "reason": f"its cache does not read: {error}", "unreadable": True}, None
+        except Exception as error:  # noqa: BLE001 - a file that does not read is built again, and written
+            return {"used": False, "reason": f"its .xbf does not read: {error}"}, None
         recorded = document._label_text(doc.Main(), document.PARAMETERS_GUID)
         del doc
         if document.written_format(held[0]) != previous.FORMAT or held[1] != text:
-            return {"used": False, "reason": "its cache does not hold the closure its head shows",
-                    "unreadable": True}, None
+            return {"used": False, "reason": "its .xbf does not hold the closure its head shows"}, None
         if recorded != wanted:
             return {"used": False, "reason": "its parameters changed", "changed": ["its parameters changed"]}, None
         timings["read"] = round(time.perf_counter() - keyed, 4)
-        _WRITTEN[name] = _Written(("loaded", found["key"]), None, None, text, data=data, relocated=moved,
+        _WRITTEN[name] = _Written(("loaded", found["key"]), xbf, None, text, data=data, relocated=moved,
                                   parameters=recorded)
     else:
         # What the bodies made stays the memo's, as a replay would keep it: an edit after
@@ -1286,7 +1286,7 @@ def _taken(model: Any, context: Any, shown: str, cache: str | None, remembered: 
 
 
 def _relocation(model: Any) -> dict[str, Any] | None:
-    """Where the cache file of ``model``'s document was built, when that is where its script was
+    """Where the ``.xbf`` of ``model``'s document was built, when that is where its script was
     before a move (its record's ``relocated``: ``{script, module}``); else None. One record read."""
     from cad.engine import records
 
@@ -1294,27 +1294,24 @@ def _relocation(model: Any) -> dict[str, Any] | None:
     return found if isinstance(found, dict) and isinstance(found.get("script"), str) else None
 
 
-def _reattach(models: list, cache: Path) -> None:
+def _reattach(models: list) -> None:
     """Before a build takes its models from anything: each model with nothing to take up -- no
-    document this worker built or took, and no cache file at its id, or a named model whose record
-    points at another file -- is asked of the engine in one request (``op: reattach``), which
-    re-attaches the record of its script moved (``identity.reattach``) before its cache is read. A
-    model this worker holds, or whose cache file is there, costs a stat, and nothing is asked. Asked
+    document this worker built or took, and no record at its id, or a record of another script -- is
+    asked of the engine in one request (``op: reattach``), which re-attaches the record of its script
+    moved, or of its id before its id was its ``.xbf``'s (``identity.reattach``), before its file is read. A
+    model this worker holds, or whose record is its own, costs a record's read, and nothing is asked. Asked
     of the engine that runs this worker, never of one it would start."""
     from cad.engine import records
-    from cad.engine.records import FILE
 
     held = records.current()
     asked = []
     for model in models:
         if _WRITTEN.get(f"{model.script}::{model.name}") is not None:
             continue
-        if (cache / model.id / FILE).is_file():
-            if model.explicit_name is None:
-                continue  # its id is its script's own: that file is its document
-            record = held.get(model.id)
-            if record is None or records.home(held, record) == model.script:
-                continue
+        record = held.get(model.id)
+        if record is not None and record.get("kind") == "model" and records.home(held, record) == model.script \
+                and record.get("entry") == model.name:
+            continue  # its own record: nothing moved
         asked.append(model.source)
     if not asked:
         return

@@ -210,7 +210,7 @@ which the distribution makes as `places.KERNEL`): a model's worker but one in it
 the documents worker, the standby, the render processes, and the meshing and reading pools, whose spawned
 processes start on the base's own import path, which the marker records (`serve._spawn_in`). **It is made on
 first need**, by the server, for any cad of its release: a release just installed, or a base that was removed. The engine starts and
-serves with none made -- pages, the home, documents held in the cache, `status` -- and `cad doctor` reports
+serves with none made -- pages, the home, `status` -- and `cad doctor` reports
 one that is missing without making it. The first thing that needs it makes it: a `cad run` of a script whose
 environment it is, or the start of one of the engine's kernel processes -- a build's worker, or a view or
 an operation that opens or draws a STEP or an xbf, or meshes one (`places.kernel`, `base.kernel`) --, by

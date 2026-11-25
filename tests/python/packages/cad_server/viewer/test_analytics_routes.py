@@ -143,7 +143,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
 
     def test_a_models_page_is_counted_apart_from_an_xbf_file_once_a_day(self) -> None:
         # A model and an actual XBF file are counted separately, each once a day, and never as builds.
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
         from cad_server.engine.registry import Registry
 
         script = self.root / "parts.py"

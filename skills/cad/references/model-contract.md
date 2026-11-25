@@ -262,9 +262,9 @@ def rig():
   beside a film) that records the key can tell whether the document has been built from
   other sources since. The key is `None` where the model's code cannot be keyed.
 - **A document is kept until it is deleted**, across server restarts: its id answers
-  every command as last built, and one the server has lost is refused with the `cad run`
+  every command as last built, and one whose `.xbf` is gone is refused with the `cad run`
   that brings it back. `cad delete <id>` (or a script's path, for every document of it)
-  removes the record and the kept document, never a file of yours. Delete only what the
+  removes the record, never a file of yours. Delete only what the
   person asked to delete, with `--yes`.
 - **A shape with no script** (a notebook cell, a REPL, a script that only holds a
   shape) is handed over: `model(shape, name="plate")` makes a document of it, served on
@@ -272,9 +272,9 @@ def rig():
   and sequences on the shape go with it; a GLB's animations are passed as
   `animations=[...]`. Nothing builds it again but the program that handed it over. A
   decorated function in no saved file is refused, with these words.
-- `cad server status` lists each document as `live` (its worker holds it), `held` (the
-  server answers it without one, and a ref's `made_by` is null), `unsaved` (lost: run
-  its script) or `detached` (its script is gone).
+- `cad server status` lists each document its workers hold, `live`. One no worker holds is
+  `held` (the server answers it from its `.xbf`, and a ref's `made_by` is null), `unsaved` (its
+  `.xbf` is gone: run its script) or `detached` (its script is gone too).
 - **A build that runs away on memory is stopped.** A worker past
   `CAD_ENGINE_WORKER_CEILING_MB` (default: half the machine's memory) at two of the server's
   checks, half a minute apart, is stopped, and the build's error says so. The server reads

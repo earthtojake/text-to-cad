@@ -42,14 +42,13 @@ A worker whose resident memory alone is over the workers' memory cap after a bui
 (``CAD_ENGINE_WORKER_RSS_MB``, by default a quarter of the machine's memory, which the daemon holds
 all its processes to together: ``Supervisor.shed``; each request carries the daemon's,
 ``rssCapMb``, so a run's own environment never moves it: ``request_cap``) is retired: its reports
-say so (``retired``), its answer says ``retire``, and the daemon, once it has taken the worker's
-documents from it (``models.Models.drain``), closes its stdin. The daemon starts a fresh one for
+say so (``retired``), its answer says ``retire``, and the daemon closes its stdin: its documents are their
+``.xbf`` files from then on (``models.Models.drain``). The daemon starts a fresh one for
 the next build, a restart: a model whose xbf holds its closure unchanged is taken in seconds.
 
 A request may carry bytes after its line (``{"bytes": N}``, the frame's form): an export of a
-document the daemon holds and no worker does (``{"document", "name"}``: the whole document's xbf
-bytes, which its worker made of it before it retired: a ``result`` request with ``whole``) reads
-them as an on-disk xbf, so the documents worker exports, inspects and draws it, kinematics and
+document's bytes (``{"document", "name"}``: the whole document's xbf bytes, as a ``result`` request with
+``whole`` answers them) reads them as an on-disk xbf, so the documents worker exports, inspects and draws it, kinematics and
 all, with no worker of its script started.
 
 A ``build`` or ``export`` request carries its caller's environment (``env``), and the worker adopts it
@@ -58,14 +57,8 @@ interpreter (``places.RESTARTS``, which a request shares with its worker or is g
 what the worker set for itself. A run is the script in its caller's environment, as under
 ``python SCRIPT``; the worker is the interpreter, kept warm across them.
 
-A ``{"id", "op": "save", "ident", "script", "name", "generation"}`` request asks for a document
-this worker built as the engine's cache keeps it (``cache``): the whole document's xbf bytes
-(``document.to_bytes``), answered ``{"id", "saved": {"ident", "generation"}, "bytes"}`` and the
-bytes, or ``{"id", "saved": {"ident", "generation", "error"}}``. It is never on the run path: the
-worker does it only when no other request waits (a request that comes meanwhile waits for the one
-serialisation), and it answers no ``done``. A ``result`` request with ``document``
-reads the bytes after its line (the cache's file) as ``export`` does a held document's: its
-structure and shape bytes, as a built document's.
+A ``result`` request with ``document`` reads the bytes after its line (an ``.xbf``'s, a shape's handed
+over) as ``export`` does a held document's: its structure and shape bytes, as a built document's.
 
 A ``{"id", "op": "preview", "script", "name", "values", "digest", "known", "cwd", "env"}`` request asks for
 one model of the script at other values of its declared parameters, which a page is trying
@@ -609,7 +602,7 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
         files.append({"path": str(target), "kind": kind, "bytes": size,
                       "seconds": round(seconds, 4), "written": before is None or _stat(target) != before,
                       # An xbf's parts' occurrences, of the document it was written from: the engine records them for
-                      # the file, which it then never reads to count (``Models.written``).
+                      # the file, which it then never reads to count (``Models.exported``).
                       **({"parts": len((getattr(source, "structure", None) or {}).get("instances") or [])} if kind == "xbf" else {}),
                       **({"tolerance": tolerance} if tolerance is not None else {}),
                       **({"angle": angle} if angle is not None else {}),
@@ -671,7 +664,7 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     from cad.engine import build as engine_build
 
     if request.get("document"):
-        # The engine's cache file of a document no worker holds: read as a held document's bytes are.
+        # The bytes of a document no worker holds (an .xbf's, a shape's handed over): read as a file's are.
         source = engine_build.held_source(request.get("payload") or b"", str(request.get("name") or "document"))
     else:
         source = engine_build.held(Path(request["script"]), request["name"])
@@ -686,8 +679,8 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
               "shapes": [[key, len(part)] for key, part in zip(keys, data)],
               "placements": [[list(path), matrix] for path, matrix in source.locals().items()]}
     if request.get("whole"):
-        # The drain's: the whole document as the xbf bytes ``@model('….xbf')`` writes, after the shapes -- for
-        # one taken from the engine's cache, the bytes it was taken with (a read is never written).
+        # A check's: the whole document as the xbf bytes ``@model('….xbf')`` writes, after the shapes -- for
+        # one taken from its .xbf, the bytes it was taken with (a read is never written).
         from cad.engine import document
 
         whole = (None if request.get("document") else engine_build.taken(Path(request["script"]), request["name"])) \
@@ -712,22 +705,6 @@ def _preview(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
                                     known=request.get("known") or ())
     except ParameterRefused as refused:
         return {"ok": False, "code": refused.code, "error": str(refused), "hint": refused.hint}, b""
-
-
-def _save(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
-    """A ``save`` request: the document of a model this worker built, as the xbf bytes the engine's
-    cache keeps (``document.to_bytes``, the drain's bytes)."""
-    from cad.engine import build as engine_build
-    from cad.engine import document
-
-    header = {"ident": request.get("ident"), "generation": request.get("generation")}
-    taken = engine_build.taken(Path(request["script"]), request["name"])
-    if taken is not None:
-        return header, taken  # taken from the cache: those bytes, never the read document written again
-    source = engine_build.held(Path(request["script"]), request["name"])
-    if source is None:
-        return {**header, "error": f"no model named {request['name']!r} is built in this worker"}, b""
-    return header, document.to_bytes(source.xcaf, source.shapes.values())
 
 
 # --- a manufacturing check, in a checks process ---------------------------------------------------------
@@ -963,11 +940,8 @@ def main() -> int:
     gc.disable()
     threading.Thread(target=read, daemon=True).start()
     owed = False  # a collection, since the last request answered
-    deferred: list[dict[str, Any]] = []  # saves, done when no other request waits
     while True:
-        if deferred and requests.empty():
-            request = deferred.pop(0)
-        elif owed:
+        if owed:
             try:
                 request = requests.get(timeout=COLLECT_IDLE)
             except queue.Empty:
@@ -982,18 +956,6 @@ def main() -> int:
             break
         ident = request.get("id")
         op = request.get("op")
-        if op == "save":
-            if not requests.empty():
-                deferred.append(request)  # never on the run path: after what waits
-                continue
-            try:
-                header, payload = _save(request)
-            except BaseException as error:  # noqa: BLE001 - a save never fails the worker
-                header, payload = {"ident": request.get("ident"), "generation": request.get("generation"),
-                                   "error": f"{type(error).__name__}: {error}"}, b""
-            send({"id": ident, "saved": header}, payload)
-            owed = True
-            continue
         if op in ("export", "result", "preview"):
             try:
                 told_display(request.get("display"), own)
@@ -1069,7 +1031,7 @@ def main() -> int:
                 reports = build(script, request.get("functions") or None,
                                 log=lambda text: send({"id": ident, "log": text}), cwd=Path(cwd) if cwd else None,
                                 verify=bool(request.get("verify")), profile=bool(request.get("profile")),
-                                run=request.get("run"), cache=request.get("cache"))
+                                run=request.get("run"), take=bool(request.get("take")))
             said.attach(reports)
             cap = request_cap(request)
             resident = resident_after_build(cap)

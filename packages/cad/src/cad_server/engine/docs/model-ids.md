@@ -20,29 +20,32 @@ if __name__ == "__main__":
     handle = bracket()
 ```
 
-The document's id is `bracket.id` (and `handle.id`): uuid5 of the script's canonical path and the
-function's name, the same in every process (**Architecture**), or `@model(name="bracket")`'s
-folder/name id from that same formula. Different scripts can use the same function name; in one folder
-each then gives its file a path or `name=`, as both would write `<name>.xbf`. Running the
-script again with changed code updates the same document and open viewers; `python parts.py`
-prints each model's `id:` and `view:` lines (`<engine>/<id>`), and `handle.url` is the page. No list
-of ids is saved.
+A model's document is its `.xbf`, and its id is that file's (`ids.file_id` of its canonical path): `bracket.id`
+(and `handle.id`), worked out from the script's folder and the declared path, or `<name>.xbf`, the same in every
+process without asking the engine (**Architecture**). Different scripts can use the same function name; in one
+folder each then gives its file a path or `name=`, as both would write `<name>.xbf` -- two models that write one
+file share its id, and the last build wins. Running the script again with changed code updates the same document
+and open viewers; `python parts.py` prints each model's `id:` and `view:` lines (`<engine>/<id>`), and `handle.url`
+is the page. No list of ids is saved. An id from before ids were the `.xbf`'s (its script and function, or its
+folder and `name=`) answers as the model's (**Identity migration**).
 
 `cad serve ID`, `cad model snapshot ID view.png`, `cad model export ID part.step`, and `cad
 inspect ID 'face 1'` take the id; `cad <type> inspect 'ID#face 1'` uses the same reference syntax.
-Each reads the document the engine holds, as it is: editing the script changes nothing until
-Python runs it again, and no verb imports, runs or builds a script. Only the viewer's Save of a model's
+Each reads the document as it is -- the live worker's, else its `.xbf` -- and so does the `.xbf`'s path:
+editing the script changes nothing until Python runs it again, and no verb imports, runs or builds a script. Only the viewer's Save of a model's
 parameters, which a person asks for in a page, writes the script and runs its last run again
-(**Parameters**). An id the engine no longer
-holds (unsaved, detached) is refused with its state and the command that builds it again
+(**Parameters**). An id whose `.xbf` is gone
+(unsaved, detached) is refused with its state and the command that builds it again
 (`cad run <the script that defines it>`; **Document lifetime**).
 `--query build` returns saved-file metadata/closure or live-build metadata; `--query closure` and
 `--query geometry` select the other queries explicitly. In the viewer a model's page is
-`/<id>`; it is no file's page, so its ⋯ menu acts on the document and on the script that builds it
-(Export among them), and it is in the project its script is in, where a person opened one (`viewer/projects.py`).
+`/<id>`, and opening its `.xbf` by path opens that page: the model, live -- its parameters editable, its
+provenance asked -- while a worker holds its build, else the file read as any file is. Its ⋯ menu acts on the
+document and on the script that builds it (Export among them), and it is in the project its `.xbf` is in, where a
+person opened one (`viewer/projects.py`).
 
 A shape with no function -- a REPL's, a notebook cell's -- is handed over instead: `model(shape,
-name="bracket")` returns the same kind of handle (**Shapes handed over**).
+name="bracket")` returns the same kind of handle, its id its `.xbf`'s too (**Shapes handed over**).
 
 Ids live in the library's `cad.engine.ids`, document names (a CAD file's path or an id) in
 `cad.engine.addresses`; the daemon's transient book of live models, by id, lives in [models.py](../models.py).

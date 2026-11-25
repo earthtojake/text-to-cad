@@ -200,8 +200,8 @@ $ cad model inspect "$ID" "bracket/face 7"
 
 The bore's wall is face 1 of the cylinder `hole`, modified by the cut whose result `body` took.
 `made_by` comes from the worker that built the document: it is `null` once that worker has retired
-(the summary's `state` reads `held`, not `live`), and running the script again brings it back. A
-file's element has none: a file names no model. A ref of several selectors answers a list; one that
+(the summary's `state` reads `file`, not `live`), and running the script again brings it back. Another
+file's element has none: a file names no model, but a model's own `.xbf` is the model. A ref of several selectors answers a list; one that
 names nothing is refused (exit 2) with the nearest names.
 
 Without a ref, `cad model inspect "$ID"` prints what the document holds, then the closure it was

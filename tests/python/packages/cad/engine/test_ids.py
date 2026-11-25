@@ -1,7 +1,6 @@
-"""Document ids: one formula for every document -- uuid5 of a scope's canonical path and a name: a
-model's script and function, or its folder and the explicit ``name=`` it is given, a file's path and
-no name, a shape's calling script (or working folder) and its name -- the same in every process, and
-the one key the engine's server and the viewer agree on."""
+"""Document ids: one formula for every document -- uuid5 of a file's canonical path, with no name: a file's, and so
+a model's, whose document is its ``.xbf`` (at ``@model``'s path, else ``<name>.xbf`` beside its script), and a shape's
+handed over -- the same in every process, and the one key the engine's server and the viewer agree on."""
 
 from __future__ import annotations
 
@@ -25,7 +24,8 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 from cad.engine.addresses import document_id  # noqa: E402
 from cad.engine import model as declaring  # noqa: E402
-from cad.engine.ids import NAMESPACE, canonical, derived_id, file_id, is_id, model_id  # noqa: E402
+from cad.engine.ids import NAMESPACE, canonical, derived_id, file_id, is_id  # noqa: E402
+from tests.python.support.ids import model_id  # noqa: E402
 
 SCRIPT = """
 from cad.engine import model
@@ -70,52 +70,43 @@ class IdsTest(unittest.TestCase):
         self.assertEqual(json.loads(done.stdout.strip().splitlines()[-1]), model_id(self.script, "part"))
         self.assertFalse((self.folder / "no-engine").exists(), "no engine was asked or started")
 
-    def test_one_formula_names_a_model_a_file_and_a_shape_with_no_prefix(self) -> None:
-        def formula(scope: Path, name: str = "") -> str:
-            return str(uuid.uuid5(NAMESPACE, canonical(scope) + "::" + name))
-
-        self.assertEqual(model_id(self.script, "part"), formula(self.script, "part"))
-        self.assertEqual(file_id(self.script), formula(self.script), "a file: its path, no name")
-        self.assertEqual(derived_id(self.folder, "plate"), formula(self.folder, "plate"),
-                         "a shape handed over from a REPL: the working folder and its name")
-        older = {str(uuid.uuid5(NAMESPACE, "model\0" + canonical(self.script) + "\0part")),
-                 str(uuid.uuid5(NAMESPACE, "file\0" + canonical(self.script)))}
-        self.assertFalse(older & {model_id(self.script, "part"), file_id(self.script)}, "the prefixes are gone")
-
-    def test_unnamed_ids_equal_the_original_formula_over_generated_paths_and_names(self) -> None:
-        import random
-        import string
-
-        rng = random.Random(568)
-        for _ in range(300):
-            segments = ["".join(rng.choices(string.ascii_letters + " _é", k=12)) for _ in range(rng.randrange(1, 5))]
-            script = self.folder.joinpath(*segments, "parts.py")
-            function = "f_" + "".join(rng.choices(string.ascii_letters + "_0123456789", k=20))
-            self.assertEqual(model_id(script, function), str(uuid.uuid5(NAMESPACE, canonical(script) + "::" + function)))
-
-    def test_explicit_names_belong_to_folders_and_collisions_name_both_locations(self) -> None:
+    def load(self, path: Path, function: str, decorator: str = "@model"):
         import importlib.util
 
-        def load(path: Path, function: str, decorator: str = "@model"):
-            path.parent.mkdir(exist_ok=True)
-            path.write_text(f"from cad.engine import model\n{decorator}\ndef {function}():\n    return None\n", encoding="utf-8")
-            spec = importlib.util.spec_from_file_location(f"ids_{path.stem}", path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            return getattr(module, function)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"from cad.engine import model, step\n{decorator}\ndef {function}():\n    return None\n",
+                        encoding="utf-8")
+        spec = importlib.util.spec_from_file_location(f"ids_{path.parent.name}_{path.stem}", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return getattr(module, function)
 
-        self.addCleanup(declaring._NAMES.clear)
-        left = load(self.folder / "left.py", "left", "@model(name='arm')")
-        self.assertEqual(left.id, derived_id(self.folder, "arm"))
-        with self.assertRaises(ValueError) as collision:
-            load(self.folder / "right.py", "right", "@model('r.xbf', name='arm')")
-        self.assertIn(f"{canonical(self.folder / 'left.py')}:2", str(collision.exception))
-        self.assertIn(f"{canonical(self.folder / 'right.py')}:2", str(collision.exception))
-        another = load(self.folder / "other" / "right.py", "right", "@model('r.xbf', name='arm')")
-        self.assertNotEqual(another.id, left.id)
-        a = load(self.folder / "a.py", "duplicate")
-        b = load(self.folder / "b.py", "duplicate")
-        self.assertNotEqual(a.id, b.id)
+    def test_a_model_s_id_is_its_xbf_s_file_id(self) -> None:
+        def formula(path: Path) -> str:
+            return str(uuid.uuid5(NAMESPACE, canonical(path) + "::"))
+
+        cases = [("bare.py", "bare", "@model", "bare.xbf"),
+                 ("named.py", "named", "@model(name='arm')", "arm.xbf"),
+                 ("given.py", "given", "@model('XBF/given part.xbf')", "XBF/given part.xbf"),
+                 ("out.py", "out", "@model(out='../up.xbf')", "../up.xbf"),
+                 ("stepped.py", "stepped", "@step('stepped.step')", "stepped.xbf"),
+                 ("deep/inner.py", "inner", "@model('inner.xbf')", "deep/inner.xbf")]
+        for script, function, decorator, xbf in cases:
+            with self.subTest(decorator=decorator):
+                declared = self.load(self.folder / script, function, decorator)
+                path = Path(os.path.normpath(self.folder / xbf))
+                self.assertEqual(declared.xbf, Path(os.path.normpath(os.path.abspath(canonical(self.folder) + "/" + xbf))))
+                self.assertEqual(declared.id, file_id(path))
+                self.assertEqual(declared.id, formula(path), "the one formula: the file's path, no name")
+                self.assertEqual(declared.id, document_id(str(path)), "its .xbf's path names the model")
+        self.assertEqual(derived_id(self.folder, "plate"), str(uuid.uuid5(NAMESPACE, canonical(self.folder) + "::plate")))
+
+    def test_models_that_write_one_xbf_share_its_id_and_nothing_is_refused(self) -> None:
+        left = self.load(self.folder / "left.py", "left", "@model(name='arm')")
+        right = self.load(self.folder / "right.py", "right", "@model('arm.xbf')")
+        self.assertEqual(left.id, right.id, "one file, one id: the last build wins")
+        self.assertEqual(self.load(self.folder / "a.py", "duplicate").id, self.load(self.folder / "b.py", "duplicate").id)
+        self.assertNotEqual(self.load(self.folder / "other" / "left.py", "left", "@model(name='arm')").id, left.id)
         for bad in ("", " arm", "arm\n", 7, "x::y"):
             with self.subTest(name=bad), self.assertRaises(ValueError):
                 declaring.model(name=bad)
@@ -123,24 +114,10 @@ class IdsTest(unittest.TestCase):
             with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'key'"):
                 decorate(key="removed")
 
-    def test_a_windows_link_to_a_missing_target_is_spelled_once(self) -> None:
-        # Windows' realpath gives such a link's target as the link names it, its folders unresolved;
-        # the canonical spelling asks again, so a canonical path is its own spelling.
-        from unittest import mock
-
-        from cad.engine import ids
-
-        answers = {"C:/models/alias.xbf": "C:/USERS~1/models/part.xbf",
-                   "C:/USERS~1/models/part.xbf": "C:/Users/models/part.xbf"}
-        with mock.patch.object(ids, "WINDOWS", True), \
-                mock.patch("os.path.realpath", lambda path: answers.get(path, path)):
-            self.assertEqual(canonical("C:/models/alias.xbf"), "C:/Users/models/part.xbf")
-            self.assertEqual(canonical("C:/Users/models/part.xbf"), "C:/Users/models/part.xbf")
-
-    def test_two_scripts_with_one_function_name_are_two_models(self) -> None:
+    def test_two_scripts_with_one_function_name_and_their_own_files_are_two_models(self) -> None:
         other = self.folder / "other.py"
         other.write_text(textwrap.dedent(SCRIPT), encoding="utf-8")
-        self.assertNotEqual(model_id(self.script, "part"), model_id(other, "part"))
+        self.assertNotEqual(model_id(self.script, "part"), model_id(other, "part", xbf="other.xbf"))
         self.assertNotEqual(model_id(self.script, "part"), model_id(self.script, "other"))
         self.assertNotEqual(model_id(self.script, "part"), file_id(self.script), "a model is not its script's file")
 
@@ -151,7 +128,8 @@ class IdsTest(unittest.TestCase):
         for spelling in spellings:
             with self.subTest(spelling=str(spelling)):
                 self.assertEqual(model_id(spelling, "part"), model_id(self.script, "part"))
-                # A script's name never names its model through the address: `parts.py::part` is a file name.
+                # A script's name never names its model through the address: `parts.py::part` is a file name; its
+                # .xbf's path does.
                 self.assertNotEqual(document_id(f"{spelling}::part"), model_id(self.script, "part"))
 
     def test_a_symlinked_or_case_variant_file_is_one_file(self) -> None:

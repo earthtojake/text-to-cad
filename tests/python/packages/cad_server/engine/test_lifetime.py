@@ -1,5 +1,5 @@
-"""Document lifetime: a document outlives its worker (drained before the worker goes), everything
-the daemon holds lives under one memory budget -- files the engine reads again itself evicted
+"""Document lifetime: a document outlives its worker (its ``.xbf``, read as any file is once the worker goes),
+everything the daemon holds lives under one memory budget -- files the engine reads again itself evicted
 before every other document, least recently used first, a watched document never -- the system's
 memory-pressure signal evicts down to the low-water mark, and a document no longer held names the
 command that builds it again, which nothing runs."""
@@ -25,7 +25,7 @@ from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
-from cad.engine.ids import model_id  # noqa: E402
+from tests.python.support.ids import model_id  # noqa: E402
 from cad.engine.serve import LOW_WATER, Server  # noqa: E402
 
 MIB = 1 << 20
@@ -69,18 +69,14 @@ class BudgetTest(unittest.TestCase):
 
     def test_the_least_recently_used_goes_first_a_file_or_a_model_alike_and_a_watched_one_never(self) -> None:
         server = self.server
-        left: list[tuple[str, object, bytes]] = []
-        server.leaving = lambda ident, version, xbf: left.append((ident, version, xbf))
         server.cache.put("mesh", b"x" * (4 * MIB))
-        older = self.model("older", 26)
-        server.keep(older, _document("older"), {"older-key": b"m" * (26 * MIB)}, "g1", b"the older xbf")
+        self.model("older", 26)
         file = self.file("file", 26)
         self.assertEqual(len(server.served), 2, "under the budget nothing goes")
         newer = self.model("newer", 10)  # 66 MiB: past the budget, trimmed to 80 % of it
         self.assertNotIn("mesh", server.cache.items, "a tessellation goes first: it is remade from the shape")
         self.assertEqual(set(server.served), {file, newer},
                          "the least recently used, a model before a newer file: one order, nothing ranked above it")
-        self.assertEqual(left, [(older, "g1", b"the older xbf")], "its bytes handed to the cache as it leaves")
         self.assertLessEqual(server.holding(), int(64 * MIB * 0.8))
         server.sync(newer)  # a page watches it
         third = self.model("third", 30)
@@ -88,7 +84,6 @@ class BudgetTest(unittest.TestCase):
         fourth = self.model("fourth", 30)
         self.assertEqual(set(server.served), {newer, fourth}, "a watched document is never evicted")
         self.assertEqual(server.memory()["evictions"], 3)
-        self.assertEqual(len(left), 1, "a document with no bytes of its own held (a live worker's) hands none")
 
     def test_a_pressure_signal_evicts_down_to_the_low_water_mark(self) -> None:
         server = self.server
@@ -127,18 +122,6 @@ class BudgetTest(unittest.TestCase):
         self.assertIn(ident, self.server.served)
 
 
-    def test_a_held_documents_xbf_bytes_count_against_the_budget_and_go_with_it(self) -> None:
-        ident = model_id(self.folder / "lid.py", "lid")
-        self.server.keep(ident, _document("lid"), {"lid-key": b"m" * MIB}, 1, b"x" * 1000)
-        bare = self.server.served[ident].size
-        # Its animations' record is in the xbf bytes: a longer document is counted whole, again.
-        self.server.keep(ident, _document("lid"), {"lid-key": b"m" * MIB}, 2, b"x" * 1500)
-        self.assertEqual(self.server.served[ident].size, bare + 500)
-        self.assertEqual(self.server.holding(), self.server.served[ident].size)
-        self.assertEqual(self.server.trim(0), [ident])
-        self.assertEqual(self.server.holding(), 0, "evicted, its xbf bytes go with it")
-
-
 class NotHeldRefusalTest(unittest.TestCase):
     """An id the daemon does not hold is refused as ``NotHeld``, its state and rebuild with it."""
 
@@ -154,7 +137,12 @@ class NotHeldRefusalTest(unittest.TestCase):
         engine = daemon.Daemon()
         self.addCleanup(engine.supervisor.stop)
         ident = model_id(script, "cell")
-        # Built before, its worker crashed before anything kept it: no worker, no bytes, no cache file.
+        # Built before, its worker gone and its .xbf with it: no worker, no file.
+        from cad_server.engine import registry
+
+        registry.current().put({"id": ident, "kind": "model", "root": str(folder), "home": "cell.py", "entry": "cell",
+                                "namespace": str(folder), "name": "cell", "revision": "r1", "built": 0,
+                                "saved": "cell.xbf"})
         engine.models.records[ident] = {"id": ident, "source": {"script": str(script), "name": "cell"}, "worker": None,
                                         "program": str(script), "kind": "model", "version": "g1", "builtAt": 0,
                                         "files": [], "revision": "r1"}
@@ -172,10 +160,12 @@ class NotHeldRefusalTest(unittest.TestCase):
 
 
 class ListingTest(unittest.TestCase):
-    """The engine's list of its model documents: one that declares files is listed like any other,
-    since a declared file is an export of it, never a tie between the two."""
+    """The engine's list of the model documents its workers hold: one that declares files is listed like any
+    other, since a declared file is an export of it, never a tie between the two."""
 
     def test_a_model_that_declares_outputs_is_listed_like_any_other(self) -> None:
+        from types import SimpleNamespace
+
         from cad_server.engine import daemon
 
         folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-listing-")))
@@ -189,7 +179,10 @@ class ListingTest(unittest.TestCase):
             ident = model_id(script, name)
             idents.append(ident)
             engine.models.records[ident] = {"id": ident, "source": {"script": str(script), "name": name},
-                                            "worker": None, "program": str(script), "kind": "model",
+                                            "worker": SimpleNamespace(alive=lambda: True, service=SimpleNamespace(name="worker"),
+                                                                      key=str(script), retired=False),
+                                            "program": str(script),
+                                            "kind": "model",
                                             "version": "g1", "builtAt": 0, "files": files, "revision": "r1"}
         for op in ("models", "status"):
             answers: list[dict] = []
@@ -348,13 +341,14 @@ class LifetimeDaemonTest(unittest.TestCase):
 
         return request(message, start=False) or {}
 
-    def row(self, ident: str, state: str | None = None) -> dict:
-        """The status row of document ``ident``; with ``state``, once it is in that state."""
-        def found() -> dict:
-            return next((row for row in self.ask({"op": "status"}).get("models") or [] if row["id"] == ident), {})
+    def known(self, ident: str, state: str) -> dict:
+        """What the engine says of document ``ident`` (its ``state`` op), once it is in ``state``."""
+        return await_(lambda: (lambda found: found if found.get("state") == state else None)(
+            self.ask({"op": "state", "id": ident})), f"{ident} {state}")
 
-        return await_(lambda: (lambda row: row if row.get("state") == state else None)(found()),
-                      f"{ident} {state}") if state else found()
+    def row(self, ident: str) -> dict:
+        """The status row of document ``ident`` a live worker holds; ``{}`` for none."""
+        return next((row for row in self.ask({"op": "status"}).get("models") or [] if row["id"] == ident), {})
 
     def built(self, name: str, env: dict | None = None, script: str = SCRIPT) -> str:
         """``python caller_NAME.py`` builds model ``name`` of ``NAME.py``: its id, once its worker retired."""
@@ -386,7 +380,7 @@ class LifetimeDaemonTest(unittest.TestCase):
 
     def test_a_held_document_exports_by_id_with_no_worker_of_its_script(self) -> None:
         ident = self.built("bracket")
-        self.row(ident, "held")  # its worker gone, its document drained first
+        self.known(ident, "held")  # its worker gone: its .xbf is the document
         out = self.folder / "bracket.stl"
         answer = self.ask({"op": "export", "source": {"id": ident}, "destinations": [str(out), str(out.with_suffix(".step"))],
                            "cwd": str(self.folder), "env": dict(os.environ)})
@@ -396,17 +390,16 @@ class LifetimeDaemonTest(unittest.TestCase):
         inspected = engine_daemon.run([sys.executable, "-m", "cad_server.engine", "inspect", ident, "--json"],
                                       cwd=self.folder, env=self.env)
         self.assertEqual(inspected.returncode, 0, inspected.stderr)
-        self.assertIn("source", json.loads(inspected.stdout)["closure"], "its closure, from the held document")
-        # The documents worker read the held bytes (it may have retired since: the memory cap is 1 MB).
+        self.assertIn("source", json.loads(inspected.stdout)["closure"], "its closure, from its .xbf")
+        # The documents worker read its .xbf (it may have retired since: the memory cap is 1 MB).
         self.assertNotIn("bracket.py", [Path(w["script"]).name for w in self.ask({"op": "status"})["workers"]],
                          "no worker of its script started")
         self.assertFalse((self.folder / "bracket.ran").exists(), "nothing ran the script")
-        # Its author's run builds it again: the same id, a new generation (a token, never a count).
-        first = self.row(ident)["version"]
+        # Its author's run takes it again from its .xbf: the same id, nothing ran.
         again = engine_daemon.run([sys.executable, "caller_bracket.py"], cwd=self.folder, env=self.env)
         self.assertEqual(again.returncode, 0, again.stderr)
-        self.assertEqual(self.row(ident)["id"], ident)
-        self.assertNotEqual(self.row(ident)["version"], first)
+        self.assertIn(f"id: {ident}", again.stdout)
+        self.assertIn("its .xbf holds the model's key", again.stdout)
 
     def test_a_child_model_is_live_and_answers_by_its_id_from_the_worker_that_built_it(self) -> None:
         (self.folder / "part.py").write_text(textwrap.dedent(PART), encoding="utf-8")
@@ -430,12 +423,12 @@ class LifetimeDaemonTest(unittest.TestCase):
         self.assertEqual(programs, {plate: str(self.folder / "assembly.py"), assembly: str(self.folder / "assembly.py")},
                          "the parent's program builds both again")
 
-    def test_a_held_mechanism_exports_whole_from_the_hold(self) -> None:
+    def test_a_held_mechanism_exports_whole_from_its_xbf(self) -> None:
         from cad.engine import document
         from tests.python.packages.cad.engine.test_kinematics import _arm_tip, _has_point, _vertices
 
         ident = self.built("hinge", script=HINGE)
-        self.row(ident, "held")
+        self.known(ident, "held")
         out = {kind: self.folder / f"held.{kind}" for kind in ("xbf", "step")}
 
         # The document as built, mechanism and all: a posed file is a model of its own.
@@ -449,29 +442,28 @@ class LifetimeDaemonTest(unittest.TestCase):
                          ({"elbow": (30.0,)}, {"raised": {"elbow": (90.0,)}}), "the xbf carries the mechanism")
         self.assertTrue(_has_point(_vertices(document.Loaded(out["step"]), "arm"), _arm_tip(30)),
                         "the STEP places the arm as built")
-        # The viewer's export of the page's revision reads the hold too.
+        # The viewer's export of the page's version reads its file too.
         _status, shown = self.page(ident)
-        viewed = self.folder / "viewed.xbf"
-        answer = self.ask({"op": "export", "source": {"id": ident},
-                           "expected": {"id": ident, "digest": shown["exportRevision"],
-                                        "modelRevision": shown["version"]}, "destinations": [str(viewed)]})
+        viewed = self.folder / "viewed.step"
+        answer = self.ask({"op": "export", "source": {"path": str(self.folder / "hinge.xbf")},
+                           "expected": {"version": shown["version"]}, "destinations": [str(viewed)]})
         self.assertIn("done", answer, answer)
-        self.assertIsNotNone(document.Loaded(viewed).mechanism)
+        self.assertTrue(_has_point(_vertices(document.Loaded(viewed), "arm"), _arm_tip(30)))
         self.assert_documents_worker_alone("hinge.py")
         self.assertFalse((self.folder / "hinge.ran").exists(), "nothing ran the script")
 
-    def test_a_glb_from_the_hold_and_from_its_xbf_file_is_the_live_one(self) -> None:
+    def test_a_glb_of_a_model_no_worker_holds_and_of_its_xbf_is_the_live_one(self) -> None:
         from cad.engine import document
         from tests.python.packages.cad.engine.test_kinematics import _arm_tip, _has_point, _vertices
 
         ident = self.built("hinge", script=ANIMATED)
-        self.row(ident, "held")
+        self.known(ident, "held")
         live, held, step = self.folder / "live.glb", self.folder / "held.glb", self.folder / "held.step"
         saved, from_file = self.folder / "held.xbf", self.folder / "file.glb"
         answer = self.ask({"op": "export", "source": {"id": ident}, "destinations": [str(held), str(step), str(saved)],
                            "cwd": str(self.folder), "env": dict(os.environ)})
         self.assertIn("done", answer, answer)
-        # The hold's xbf bytes are its Save As: a GLB of that file, read as any xbf is, bakes the record.
+        # Its xbf, saved as: a GLB of that file, read as any xbf is, bakes the record.
         answer = self.ask({"op": "export", "source": {"path": str(saved)}, "destinations": [str(from_file)],
                            "cwd": str(self.folder), "env": dict(os.environ)})
         self.assertIn("done", answer, answer)
@@ -481,34 +473,33 @@ class LifetimeDaemonTest(unittest.TestCase):
             gltf = json.loads(data[20:20 + int.from_bytes(data[12:16], "little")])
             return [clip["name"] for clip in gltf.get("animations") or []]
 
-        self.assertEqual(clips(held), ["lift", "show"], "the sequence and the animation, from the hold")
+        self.assertEqual(clips(held), ["lift", "show"], "the sequence and the animation, from its .xbf")
         self.assertEqual(held.read_bytes(), live.read_bytes(), "the GLB the build's worker wrote, byte for byte")
         self.assertEqual(from_file.read_bytes(), live.read_bytes(), "and the GLB of its xbf file, byte for byte")
         self.assertEqual(sorted(document.Loaded(saved).animations), ["show"], "the xbf records the animation")
         self.assertNotIn(b'"tracks"', step.read_bytes(), "a STEP is AP242 alone: no record of ours")
         self.assertTrue(_has_point(_vertices(document.Loaded(step), "arm"), _arm_tip(30)),
-                        "a STEP of the same hold, as built: it never carried an animation")
+                        "a STEP of the same document, as built: it never carried an animation")
         self.assert_documents_worker_alone("hinge.py")
         self.assertFalse((self.folder / "hinge.ran").exists(), "nothing ran the script")
 
-    def test_a_document_no_cache_keeps_names_its_rebuild_and_nothing_runs_it(self) -> None:
-        # Every document leaves memory once drained, and no cache can keep it on disk (``test_cache_keeping``'s).
+    def test_a_document_whose_xbf_is_gone_names_its_rebuild_and_nothing_runs_it(self) -> None:
+        # Every document leaves memory and its worker, and the cache folder can keep nothing: its .xbf is its store.
         tiny = {**self.env, "CAD_ENGINE_MEMORY_MB": "0.001", "CAD_CACHE_DIR": engine_daemon.unwritable(self.folder)}
         self.restart(tiny)
         unsaved = self.built("arm", env=tiny)
+        self.known(unsaved, "held")
+        (self.folder / "arm.xbf").unlink()
         command = f"cad run {self.folder / 'arm.py'}"
-        row = self.row(unsaved, "unsaved")
-        self.assertEqual(row["rebuild"], command, "the script that defines it, not the program that called it")
+        found = self.known(unsaved, "unsaved")
+        self.assertEqual(found["rebuild"], command, "the script that defines it, not the program that called it")
         status, body = self.page(unsaved)
         self.assertEqual((status, body["state"], body["rebuild"]), (404, "unsaved", command))
-        self.assertEqual(body["error"], f"arm ({unsaved}) is not saved: the engine's cache holds no file of its last "
-                                        f"build; run `{command}` to build it again")
+        self.assertEqual(body["error"], f"arm ({unsaved}) is not saved: its .xbf is gone; run `{command}` to build it again")
         inspected = engine_daemon.run([sys.executable, "-m", "cad_server.engine", "inspect", unsaved],
                                       cwd=self.folder, env=self.env)
         self.assertEqual(inspected.returncode, 2, "a document not held is a refusal, not a failure")
         self.assertIn(f"run `{command}`", inspected.stderr)
-        listed = engine_daemon.run([sys.executable, "-m", "cad_server.engine", "status"], cwd=self.folder, env=self.env)
-        self.assertIn(f"unsaved   arm  {unsaved}  run `{command}`", listed.stdout)
         from cad_server.mcp.server import ToolFailed, _say_not_held
 
         with self.assertRaisesRegex(ToolFailed, re.escape(f"run `{command}`")):

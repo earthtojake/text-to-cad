@@ -101,9 +101,9 @@ class DaemonRenderTest(unittest.TestCase):
         self.assertEqual((render["version"], render["held"]["made"], render["held"]["kept"]), (version, 1, 1))
         self.assertNotEqual((self.folder / "edited.png").read_bytes(), (self.folder / "first.png").read_bytes())
         # A model, by its id, is drawn from the document its worker holds, in that worker.
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
 
-        done = self.cli("snapshot", model_id(self.folder / "pair.py", "pair"), "model.png", "--width", "200", "--height",
+        done = self.cli("snapshot", model_id(self.folder / "pair.py", "pair", xbf="XBF/pair.xbf"), "model.png", "--width", "200", "--height",
                         "150", "--json")
         self.assertEqual(done.returncode, 0, done.stderr)
         model = json.loads(done.stdout.strip().splitlines()[-1])
@@ -159,10 +159,10 @@ class EngineDisplayTest(unittest.TestCase):
 
     def pictures(self, env: dict[str, str]) -> dict[str, np.ndarray]:
         """The model and its file drawn through the engine, asked with ``env``: each picture's pixels."""
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
 
         found = {}
-        for name, source in (("model", model_id(self.folder / "pair.py", "pair")), ("file", "XBF/pair.xbf")):
+        for name, source in (("model", model_id(self.folder / "pair.py", "pair", xbf="XBF/pair.xbf")), ("file", "XBF/pair.xbf")):
             done = self.run_in(env, "-m", "cad_server.engine", "snapshot", source, f"{name}.png", "--width", "200",
                                "--height", "150", "--json")
             self.assertEqual(done.returncode, 0, done.stderr)

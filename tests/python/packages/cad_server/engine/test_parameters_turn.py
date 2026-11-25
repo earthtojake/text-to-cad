@@ -20,7 +20,7 @@ from tests.python.support.paths import add_sources
 add_sources()
 
 from cad.engine import api, client  # noqa: E402
-from cad.engine.ids import model_id  # noqa: E402
+from tests.python.support.ids import model_id  # noqa: E402
 from cad.engine.parameters import ParameterRefused  # noqa: E402
 
 GATED = """\

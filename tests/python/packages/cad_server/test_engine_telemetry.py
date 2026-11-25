@@ -520,7 +520,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
 
     def spooled(self, lines: int) -> list[dict]:
         """The spool once it holds ``lines`` lines: the daemon keeps a build's count after its answer is sent."""
-        from tests.python.support.cache_fixtures import await_
+        from tests.python.support.store_fixtures import await_
 
         spool = self.state / analytics.SPOOL
 
@@ -598,7 +598,8 @@ class ThroughTheDaemonTest(unittest.TestCase):
     def test_a_telemetry_batch_holds_no_id_and_no_path(self) -> None:
         """Verbs by document id -- a pointer model's and a shape's handed over, one refused, one whose body
         raised -- count kinds, outcomes and times: no id, script or state folder reaches the spool or the batch."""
-        from cad.engine.ids import canonical, model_id
+        from cad.engine.ids import canonical
+        from tests.python.support.ids import model_id
 
         (self.folder / "part.py").write_text(textwrap.dedent("""
             import build123d as bd

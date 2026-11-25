@@ -85,17 +85,12 @@ export interface CadRecent {
   size?: number | null;
   /**
    * How many part occurrences its document holds, where the engine knows: a model's or a shape's from its last build,
-   * an `.xbf` the engine wrote from the document it wrote, another file from the engine's read of it for a page; a
-   * file's while the file is that version; null where it does not.
+   * while its `.xbf` is the version the engine wrote; an `.xbf` exported, from the document it was written from; another
+   * file from the engine's read of it for a page; a file's while the file is that version; null where it does not.
    */
   parts?: number | null;
-  /** A model's (and a shape's): the path of its own `.xbf`, while that file is the model (unchanged, of its revision now). */
-  saved?: string;
-  /**
-   * A file's: the id of the model whose document it is, an `.xbf` the engine wrote from it, while the file is unchanged
-   * and the model the revision written. A list that holds the model's row leaves such a file out: one card.
-   */
-  of?: string;
+  /** A model's (and a shape's): its `.xbf`, its document, whose id is the model's: a model and its file are one row. */
+  file?: string;
   /** A CAD file on disk, or a document built from code: a model's, or a shape a program handed over. */
   kind: 'file' | 'model' | 'shape';
   /** A model's or a shape's: the script it was built from (a shape's home). */

@@ -6,10 +6,6 @@ starts from, bounded so that no folder -- a home, a whole disk -- can hold a req
 number of matches, a depth and a deadline, says when it stopped early, skips hidden and build
 folders, and never walks a folder twice (a link back into one is how a walk would never end).
 
-The one hidden folder both reads reach is the engine's cache (``places.cache_dir``: by default
-``~/.cache/cad``), and every folder on the way to it: it holds each model's ``document.xbf``
-(``documents/<id>/``), an xbf being as much a CAD file of the viewer's as any other.
-
 Paths are absolute in and out, with ``/`` separators on every platform. A path comes in by the one
 rule every route applies to a path it is named (``backend.absolute_path``), so a relative path, a
 ``~`` and a UNC path are refused: a GET must never send this machine out to the network.
@@ -47,19 +43,6 @@ def absolute_folder(path: object) -> str:
     return folder
 
 
-def _cache() -> str:
-    """The engine's cache folder, resolved: the hidden folder both reads list all the same."""
-    from cad.engine.places import cache_dir
-
-    return os.path.realpath(cache_dir())
-
-
-def _toward_cache(path: str, cache: str) -> bool:
-    """Whether ``path`` is the cache folder, a folder on the way to it, or one inside it."""
-    real = os.path.realpath(path)
-    return real == cache or cache.startswith(real.rstrip(os.sep) + os.sep) or real.startswith(cache + os.sep)
-
-
 def _skipped(name: str) -> bool:
     return is_hidden_name(name) or name in VIEWER_SKIPPED_DIRECTORIES
 
@@ -68,15 +51,14 @@ def _listed(name: str) -> bool:
     return not is_hidden_name(name) and extension_of(name) in VIEWER_EXTENSIONS
 
 
-def _entries(folder: str, cache: str | None = None):
-    """``(name, kind)`` for each subfolder worth walking and each CAD file in ``folder``, unsorted: a
-    hidden or build folder only where it leads to the engine's cache (``cache``)."""
-    cache = _cache() if cache is None else cache
+def _entries(folder: str):
+    """``(name, kind)`` for each subfolder worth walking and each CAD file in ``folder``, unsorted: no hidden or
+    build folder."""
     with os.scandir(folder) as found:
         for entry in found:
             try:
                 if entry.is_dir():
-                    if not _skipped(entry.name) or _toward_cache(entry.path, cache):
+                    if not _skipped(entry.name):
                         yield entry.name, "directory"
                 elif entry.is_file() and _listed(entry.name):
                     yield entry.name, "file"
@@ -106,7 +88,6 @@ def search_folder(path: object, query: object, *, limit: int = SEARCH_LIMIT, sec
     truncated = False
     walked: set[str] = set()
     queue = deque([(folder, 0)])
-    cache = _cache()
     while queue:
         current, level = queue.popleft()
         if clock() > deadline:
@@ -117,7 +98,7 @@ def search_folder(path: object, query: object, *, limit: int = SEARCH_LIMIT, sec
             if real in walked:
                 continue
             walked.add(real)
-            entries = sorted(_entries(current, cache), key=lambda item: (item[1] != "directory", collation_key(item[0])))
+            entries = sorted(_entries(current), key=lambda item: (item[1] != "directory", collation_key(item[0])))
         except OSError:  # a folder that cannot be read is passed over, as a person would
             continue
         for name, kind in entries:

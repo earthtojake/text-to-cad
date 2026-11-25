@@ -21,7 +21,7 @@ from unittest import mock
 from cad_server import analytics
 from cad_server._internal import file_lock, telemetry_send
 from tests.python.support import engine_daemon
-from tests.python.support.cache_fixtures import await_
+from tests.python.support.store_fixtures import await_
 from tests.python.support.paths import add_sources
 
 SRC = add_sources()

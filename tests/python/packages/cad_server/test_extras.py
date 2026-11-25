@@ -688,7 +688,7 @@ class RunWithTest(unittest.TestCase):
     def test_a_program_s_header_names_the_packages_a_model_it_calls_is_built_again_with(self) -> None:
         # The header is the check script's; the model is model_part.py's, whose own script names no package.
         from cad.engine import records
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
 
         (self.project / "model_part.py").write_text(PLATE.format(header=""), encoding="utf-8")
         (self.project / "check.py").write_text(f"# /// script\n# dependencies = ['{self.wheel}']\n# ///\n"

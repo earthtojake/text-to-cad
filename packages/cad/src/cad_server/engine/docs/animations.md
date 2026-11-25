@@ -20,7 +20,7 @@ mechanism subtree, which stays AP242's alone (law 12), and only a GLB reads it:
 `document.Loaded.animations`, and so `Source.read`, give the tracks back as the harvest made them,
 so a GLB exported from the xbf (`cad model export model.xbf model.glb`), from a held document by its
 id (**Document lifetime**) and by the build's own worker are byte for byte one GLB, and a model
-taken from the cache after a restart (**Build closure**) writes that GLB too. Every other reader
+taken from its `.xbf` after a restart (**Build closure**) writes that GLB too. Every other reader
 ignores it: `model.read` imports a part, never a child's record (a parent's GLB bakes its own
 animations alone), the viewer's page shows the document's structure, and STEP is AP242 with nothing
 of ours. For now a model with an animation declares its GLB beside its xbf, the two decorators

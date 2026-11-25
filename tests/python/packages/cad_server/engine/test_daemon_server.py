@@ -1217,10 +1217,9 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
             self.assertEqual(picture.size, (200, 150))
         self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["bracket.png", "bracket.py"])
 
-    def test_a_served_declared_xbf_follows_its_file_when_its_model_runs_again(self) -> None:
-        """A model's declared xbf opened as a file is a file: a run that rewrites it sends the page
-        nothing, and the page's version moves because the file's bytes did -- its version is the
-        file's, and its parts are read from it."""
+    def test_a_served_xbf_is_its_model_and_follows_its_runs(self) -> None:
+        """A model's .xbf opened by its path is the model, live while its worker holds the build: the page's id is the
+        model's, a run that changes it moves the page to the build's new generation, and its parts are the build's."""
         self.script = self.folder / "pair.py"
         self.script.write_text(textwrap.dedent(PAIR.format(size=10)), encoding="utf-8")
         self.assertEqual(self.run_script("pair.py").returncode, 0)
@@ -1238,16 +1237,18 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
         ran = self.run_script("pair.py")
         self.assertEqual(ran.returncode, 0, ran.stderr)
         answer = get_json(f"{base}/api/v1/documents/{ident}/version?after={before['version']}&wait=60", token)
+        from cad.engine.ids import file_id
+
+        self.assertEqual(ident, file_id(self.folder / "XBF/pair.xbf"), "the model's id, its .xbf's")
         stat = (self.folder / "XBF/pair.xbf").stat()
-        self.assertEqual(answer["version"], f"{stat.st_mtime_ns}-{stat.st_size}", "the file's own version")
-        self.assertNotIn("patch", answer, "nothing of the run reached the page")
+        self.assertNotEqual(answer["version"], f"{stat.st_mtime_ns}-{stat.st_size}", "the build's generation, not a file's")
         after = get_json(f"{api}/structure", token)
         keys = lambda s: {p["name"]: p["key"] for p in s["prototypes"]}  # noqa: E731
         self.assertNotEqual(keys(after)["block"], keys(before)["block"])
         self.assertEqual(keys(after)["peg"], keys(before)["peg"])
         self.assertEqual(get(f"{api}/parts/{keys(after)['block']}", token)[:4], b"XBM2")
 
-    def test_the_viewer_moves_before_a_derived_file_is_written(self) -> None:
+    def test_the_viewer_hears_the_build_before_a_derived_file_is_written(self) -> None:
         # An STL writer held until the test lets it go, put in place in the worker by the model's own module.
         gate = self.folder / "gate"
         gate.touch()  # the first build writes at once
@@ -1275,20 +1276,27 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
         url = urlsplit(served.stdout.strip())
         base, query = f"{url.scheme}://{url.netloc}", parse_qs(url.query)
         ident, token = url.path.strip("/"), query["token"][0]
-        before = get_json(f"{base}/api/v1/documents/xbf/{ident}/structure", token)
+        version = f"{base}/api/v1/documents/{ident}/version"
+        idle = get_json(f"{version}?wait=0", token)
         stl = self.folder / "pair.stl"
         written = stl.stat().st_mtime_ns
         self.script.write_text(slow.format(size=12), encoding="utf-8")
         gate.unlink()
+        self.addCleanup(gate.touch)  # however the test ends, the writer is let go before the build is waited on
         building = subprocess.Popen([sys.executable, "pair.py"], cwd=self.folder, env=self.env,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(building.wait)
-        answer = get_json(f"{base}/api/v1/documents/{ident}/version?after={before['version']}&wait=60", token)
-        self.assertNotEqual(answer["version"], before["version"])
-        self.assertEqual(stl.stat().st_mtime_ns, written, "the viewer moved before the STL was written")
+        # Its .xbf's page is the model's: it hears the build as it goes, the STL held.
+        answer = idle
+        while (answer.get("building") or {}).get("stage") != "write" or (answer.get("building") or {}).get("detail") != "pair.stl":
+            answer = get_json(f"{version}?after={idle['version']}&progress={answer['progress']}&wait=60", token)
+            self.assertEqual(answer["version"], idle["version"], "the version moves only when the build is done")
+        self.assertEqual(stl.stat().st_mtime_ns, written, "the page heard the build before the STL was written")
         gate.touch()
         self.assertEqual(building.wait(timeout=300), 0)
         self.assertNotEqual(stl.stat().st_mtime_ns, written)
+        moved = get_json(f"{version}?after={idle['version']}&wait=60", token)
+        self.assertNotEqual(moved["version"], idle["version"])
 
     def test_exports_and_a_model_s_document_through_the_daemon(self) -> None:
         self.script = self.folder / "pair.py"
@@ -1299,7 +1307,7 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
         workers = json.loads(self.cli("status", "--json").stdout)["workers"]
         self.assertEqual(([Path(row["script"]).name for row in self.mine(workers)],
                           [row["script"] for row in workers if row["script"] == "documents"]), (["pair.py"], ["documents"]),
-                         "a declared xbf is a file: the documents worker read it, never the model's worker")
+                         "an export of an .xbf by its path reads the file: the documents worker, never the model's worker")
         done = self.cli("export", "pair.step", "back.xbf")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertTrue((self.folder / "back.xbf").is_file())

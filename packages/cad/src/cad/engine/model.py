@@ -6,9 +6,8 @@ model is saved as, and the file decorators ``@step``, ``@glb``, ``@stl``, ``@thr
 (the drawing of a planar result: a sketch, a face, wires or edges); the same kind twice is refused.
 Whatever declares it, a model always writes its ``.xbf``: at ``@model``'s path, else ``<name>.xbf`` beside
 the script (``Model.files``). ``@xbf`` is an earlier spelling of ``@model``, an alias of it
-(``cad._internal.aliases``). By default its id
-uses ``script.py::function``. An explicit ``name=`` uses the script folder and that name instead,
-independent of the declaring file. A path is optional on every one, positional or ``out=``
+(``cad._internal.aliases``). A model's document is its ``.xbf``, and its id is that file's (``Model.id``,
+``ids.file_id``): ``name=`` names the model, and so the file it writes where no path is given. A path is optional on every one, positional or ``out=``
 (``@model("XBF/part.xbf")``, ``@step(out="part.step")``), relative to the script; omitted
 (``@step``, ``@step()``, ``@glb(tolerance=0.1)``), it is the model's name and the kind's suffix beside
 the script (``Model.plan``): bare ``@model`` writes ``<name>.xbf``, as does ``@step`` alone. Everything else is the
@@ -18,8 +17,8 @@ states, couplings and configuration sequences (``mechanism_state``, ``gear_pair`
 ``configuration_sequence``). A picture is the ``snapshot`` verb's, never a declaration. The outputs
 are kept in the order the decorators are written, top to bottom, and the xbf is always written first.
 
-The decorated function is a ``Model``: the function, its id (``.id``: ``ids.model_id`` of its
-script and function, or its folder and explicit ``name=``) and the debug seam
+The decorated function is a ``Model``: the function, its id (``.id``: ``ids.file_id`` of its ``.xbf``,
+``Model.xbf``) and the debug seam
 ``.build(verify=, profile=)``. Decoration only declares: imports and definitions never build or
 exit the caller. A call builds the model through the engine and returns its document's handle
 (``api.Document``: ``.id``, ``.url``, ``.name``, ``.shape``, ``.export``, ``.snapshot``), never a
@@ -51,7 +50,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from cad.engine.ids import canonical, check_name, model_id
+from cad.engine.ids import canonical, check_name, file_id
 
 __all__ = ["KINDS", "Memo", "Model", "Output", "Target", "configuration_sequence", "dxf", "glb", "mechanism_state", "memo",
            "model", "paint", "read_step", "read_xbf", "step", "stl", "threemf", "models_in"]
@@ -165,15 +164,20 @@ class Model:
                              f"REPL), build the shape and hand it over: model(shape, name={self.name!r})")
         self.script = Path(canonical(filename))
         self.outputs: list[Output] = []
-        # The name within the script folder; None keeps the script/function id.
+        # The name ``name=`` gives it, which its files take where no path is given; None: its function's.
         self.explicit_name: str | None = None
         self.__xbf_model__ = True
         _MODELS[f"{self.script}::{self.name}"] = self
 
     @property
+    def xbf(self) -> Path:
+        """The ``.xbf`` this model writes, its document: at ``@model``'s path, else ``<name>.xbf`` beside the script."""
+        return next(target.path for target in self.plan() if target.kind == "xbf")
+
+    @property
     def id(self) -> str:
-        """The script/function id by default, or the folder/name id of an explicit name."""
-        return model_id(self.script, self.name, self.explicit_name)
+        """Its document's id: its ``.xbf``'s (``ids.file_id``), worked out without asking the engine."""
+        return file_id(self.xbf)
 
     @property
     def fingerprint(self) -> str | None:
@@ -189,10 +193,10 @@ class Model:
     @property
     def source(self) -> dict[str, Any]:
         """What a build's report says of this model's declaration: its script and function, its
-        first line, its explicit name, its script's fingerprint and its module."""
+        first line, its explicit name, its script's fingerprint, its module and its ``.xbf``."""
         return {"script": str(self.script), "name": self.name,
                 "line": self.function.__code__.co_firstlineno, "explicit_name": self.explicit_name,
-                "fingerprint": self.fingerprint, "module": self.function.__module__}
+                "fingerprint": self.fingerprint, "module": self.function.__module__, "xbf": str(self.xbf)}
 
     def declare(self, output: Output) -> "Model":
         """One file more on this function, its declaration's (``_declare``, bare ``@model``): declarations
@@ -205,21 +209,12 @@ class Model:
         return self
 
     def named(self, name: str | None) -> "Model":
-        """The explicit ``name=`` a declaration gives: this model's name in its script's folder, its
-        id the folder's and the name's. One declaration per name in a folder: in this process
-        (``claim``), and against the file the registry's record of it points at
-        (``identity.claimed``); refused naming both ``file:line``."""
+        """The ``name=`` a declaration gives: this model's name, which its files take where no path is given."""
         if name is None:
             return self
         check_name(name)
         if self.explicit_name is not None and self.explicit_name != name:
             raise TypeError(f"model {self.name!r} declares two names, {self.explicit_name!r} and {name!r}")
-        line = self.function.__code__.co_firstlineno
-        claim(str(self.script.parent), name, str(self.script), self.name, line)
-        from cad.engine import records
-        from cad.engine.identity import claimed
-
-        claimed(records.current(), {"script": str(self.script), "name": self.name, "line": line}, name)
         self.explicit_name = name
         return self
 
@@ -375,29 +370,8 @@ def as_package_module(main: Any) -> None:
     main.__spec__, main.__package__ = spec, package
 
 
-# Where a model's document is kept: ``pointer``, a model in a saved file, which the engine's registry
-# points at and knows the program that builds it again; ``memory``, kept in its worker's memory only,
-# gone when the worker is. A shape handed over (``model(shape, name=...)``) is a third, ``shape``: its
-# document is the bytes handed over, held and cached as a drained document is, with nothing to run.
-
-# Each explicit name a declaration in this process gives, by its namespace (the script's folder),
-# and the declaration that gave it: its script, its function and its first line. A build forgets
-# them before it loads the script, as it forgets the models (``_MODELS``).
-_NAMES: dict[tuple[str, str], tuple[str, str, int]] = {}
-# Each script's fingerprint (``Model.fingerprint``), read once a build: forgotten with ``_NAMES``.
+# Each script's fingerprint (``Model.fingerprint``), read once a build.
 _FINGERPRINTS: dict[str, str | None] = {}
-
-
-def claim(namespace: str, name: str, script: str, function: str, line: int) -> None:
-    """``script``'s function ``function`` takes the explicit name ``name`` in ``namespace``; refused,
-    naming both ``file:line``, when another declaration of this process has it -- another function,
-    in this file or another. The same function declared again (a module loaded again, its line
-    moved) keeps it."""
-    other = _NAMES.setdefault((namespace, name), (script, function, line))
-    if other[:2] != (script, function):
-        raise ValueError(f"name {name!r} in namespace {namespace} is claimed by {other[0]}:{other[2]} and "
-                         f"{script}:{line}; give one declaration another name")
-    _NAMES[(namespace, name)] = (script, function, line)
 
 
 def _no_animations(animations: Any) -> None:

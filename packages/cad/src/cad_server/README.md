@@ -19,7 +19,7 @@ The mechanisms its laws constrain are the engine's pages: [`engine/README.md`](e
 cad_server/
   engine/                # the engine's server half: the daemon, its supervisor and the services it
                          #   declares (its workers, its render processes), its registry of documents,
-                         #   the live models' book, the document cache, the verbs as commands
+                         #   the live models' book, the verbs as commands
                          #   (cli), and the engine's README and pages (docs/), the mechanisms the laws
                          #   constrain
   cli/                   # the `cad` command: a module per command and per document type
@@ -74,8 +74,8 @@ cad_server/
 
 - **Document types**: `cad <document_type> <operation> <file>`, one id per type as the library's registry
   names it: `cad model export <id>`, `cad step snapshot`, `cad glb inspect`,
-  `cad urdf validate`. `model` is a model the engine holds, by its document id, or the `.xbf` file a model
-  is saved as, read as the file it is (`cad model export arm.xbf arm.glb`). `export`,
+  `cad urdf validate`. `model` is a model, by its document id or by its `.xbf`, the file that is its document and
+  whose id is the model's (`cad model export arm.xbf arm.glb`). `export`,
   `snapshot` and `inspect` are shared by every type that has them; every other operation is named for
   what it does -- `dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate` -- each a check whose
   findings carry a severity, a code and a location (`--json`). `cad <type> --help` lists a type's
@@ -293,8 +293,9 @@ says so and updates nothing.
 The data folder (the state folder, `cad.engine.places.state_dir`) is `cad` in the platform's place for state (`~/Library/Application Support/cad` on macOS,
 `~/.local/state/cad` on Linux and Windows) or the folder `CAD_STATE_DIR` names: settings, Recents, the
 documents' records, the page token and port, the telemetry spool and the feed's last answer. The cache
-folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: the documents' bytes, the
-environments, bytecode and the integrations' private homes, all made again on demand. On Windows neither
+folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: what the engine derived of a
+document (a board's plots, kept checks), the environments, bytecode and the integrations' private homes, all made
+again on demand. A model's document is its `.xbf`, which the engine keeps no copy of. On Windows neither
 is in the local application data, which Windows virtualizes for every process an app package (the Claude
 desktop app) starts. A release reads what the release before wrote and migrates it on first touch, once
 (`cad.engine.identity.migrate`); nothing in the cache is converted.

@@ -94,7 +94,7 @@ built src/bracket.py::bracket cold in 2.61s: bodies 1 run; 6 misses, 0 hits; bod
 ```
 
 Each call prints how its model built, what it holds, its document's `id:` and its page, `view:`. The
-id comes from the script's path and the function's name, so it is the same on every run: use it for
+id is that of the `.xbf` the run saves it as, so it is the same on every run: use it for
 every command, and give the person the page once ([Show the model](#show-the-model)).
 
 - **A model function takes no arguments.** Dimensions are arguments of a plain helper, and each

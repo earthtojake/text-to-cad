@@ -1,6 +1,7 @@
-"""Shared fixtures for the engine's document cache suite (``tests/python/packages/cad_server/engine/
-test_cache_*.py``): the models its tests build, and ``CacheCase``, the class engine each file's tests
-run through, with a state and a cache folder of its own.
+"""Shared fixtures for the engine's store suite (``tests/python/packages/cad_server/engine/test_xbf_store.py``,
+``test_store_keeping.py``): the models its tests build, and ``StoreCase``, the class engine each file's tests run
+through, with a state and a cache folder of its own. A model's store is its ``.xbf``; the cache folder holds no copy
+of it (``copies``).
 
 Importing this puts the packages' sources on ``sys.path``."""
 
@@ -24,10 +25,8 @@ from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
-from cad.engine.ids import model_id  # noqa: E402
+from tests.python.support.ids import model_id  # noqa: E402
 from cad_server.engine.registry import Registry  # noqa: E402
-
-IDLE = 0.3  # the cache's idle seam (``CAD_ENGINE_CACHE_IDLE``), in seconds
 
 SCRIPT = """
 import pathlib
@@ -87,7 +86,7 @@ def get(url: str, token: str) -> tuple[int, dict]:
         return error.code, json.loads(error.read())
 
 
-class CacheCase(unittest.TestCase):
+class StoreCase(unittest.TestCase):
     """Through a real daemon. The class shares one engine, with a state and a cache folder of its
     own (so its workers' bytecode is compiled once), and each test starts with nothing recorded in
     it; a test whose engine needs another environment, or folders of its own, starts that engine
@@ -97,7 +96,7 @@ class CacheCase(unittest.TestCase):
     def setUpClass(cls) -> None:
         from cad.engine import places
 
-        cls.root = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-cache-")))
+        cls.root = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-store-")))
         cls.addClassCleanup(shutil.rmtree, cls.root, True)
         cls.shared = cls.root / "state", cls.root / "cache"
         cls.bytecode = str(cls.shared[1] / places.PYCACHE / places.bytecode_tag())  # the class engine's own
@@ -113,8 +112,7 @@ class CacheCase(unittest.TestCase):
         given = {name: value for name, value in os.environ.items() if name != "PYTHONPYCACHEPREFIX"}
         env = engine_daemon.watched({**given, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(engine),
                                      "CAD_STATE_DIR": str(state), "CAD_CACHE_DIR": str(cache),
-                                     "CAD_ENGINE_MESH": "inline", "CAD_ENGINE_CACHE_IDLE": str(IDLE),
-                                     **extra}, cleanup)
+                                     "CAD_ENGINE_MESH": "inline", **extra}, cleanup)
         cleanup(lambda: engine_daemon.run([sys.executable, "-m", "cad_server.engine", "stop"], env=dict(env)))
         return env
 
@@ -168,17 +166,13 @@ class CacheCase(unittest.TestCase):
     def record(self, ident: str) -> dict:
         return Registry(self.state).get(ident) or {}
 
-    def file(self, ident: str) -> Path:
-        return self.cache / "documents" / ident / "document.xbf"
+    def xbf(self, name: str) -> Path:
+        """Model ``name``'s ``.xbf``, beside its script: its document, its store."""
+        return self.project / f"{name}.xbf"
 
-    def cached(self, ident: str, revision: str | None = None) -> dict:
-        """The record's ``cache`` field, once its file is there (at ``revision``, when given)."""
-        def found():
-            meta = self.record(ident).get("cache")
-            ok = meta and self.file(ident).is_file() and (revision is None or meta["revision"] == revision)
-            return meta if ok else None
-
-        return await_(found, f"{ident}'s cache file")
+    def copies(self) -> list[Path]:
+        """Every copy of a document in the cache folder (``documents/<id>/document.xbf``): none, ever."""
+        return sorted((self.cache / "documents").glob("*/document.xbf"))
 
     def page(self, ident: str) -> tuple[int, dict]:
         serving = self.ask({"op": "status"})["serving"]

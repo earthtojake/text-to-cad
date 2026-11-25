@@ -18,7 +18,7 @@ from unittest import mock
 from cad.engine import build as engine_build
 from cad.engine import said
 from cad.engine import document
-from tests.python.support import engine_cache
+from tests.python.support import engine_restart
 
 KIT = """
 import build123d as bd
@@ -260,11 +260,11 @@ class ReadsTest(unittest.TestCase):
         bd.export_stl(bd.Box(length, 30, 2), str(self.stl))
 
     def restart(self) -> None:
-        """What a new worker holds: nothing but what the engine's cache kept (``engine_cache``)."""
-        engine_cache.restart(self.folder / "cache")
+        """What a new worker holds: nothing but the models' .xbf files, as the engine recorded them (``engine_restart``)."""
+        engine_restart.restart(self.folder / "state")
 
     def built(self, name: str) -> dict:
-        (report,) = engine_build.build(self.folder / "reads.py", [name], cwd=self.folder, cache=str(self.folder / "cache"))
+        (report,) = engine_restart.build(self.folder / "state", self.folder / "reads.py", [name], cwd=self.folder)
         self.assertTrue(report["ok"], report)
         return report
 
@@ -362,11 +362,11 @@ class ReadsTest(unittest.TestCase):
             self.assertIsNotNone(closure["key"], name)
             self.assertIn(f"../{path}", [row[1] for row in closure["inputs"]], name)
             self.restart()
-            self.assertEqual(self.built(name)["cache"], {"used": True, "from": "cache"}, name)
+            self.assertEqual(self.built(name)["cache"], {"used": True, "from": "xbf"}, name)
 
-    def test_a_model_reading_its_inputs_beside_it_restarts_from_the_cache_wherever_it_is_copied(self) -> None:
+    def test_a_model_reading_its_inputs_beside_it_restarts_from_its_xbf_wherever_it_is_copied(self) -> None:
         # tom reads vendor parts past the engine (import_brep) from beside its sources: copied
-        # elsewhere with them, it is another document (its id is its script's), built once there;
+        # elsewhere with them, it is another document (its id is its .xbf's), built once there;
         # then a restart with nothing changed takes the document, and an edited input builds it.
         self.built("by_occt")
         moved = Path(tempfile.mkdtemp(prefix="engine-reads-moved-")).resolve() / "copy"
@@ -375,12 +375,12 @@ class ReadsTest(unittest.TestCase):
         self.restart()
 
         def build() -> dict:
-            (report,) = engine_build.build(moved / "reads.py", ["by_occt"], cwd=moved, cache=str(self.folder / "cache"))
+            (report,) = engine_restart.build(self.folder / "state", moved / "reads.py", ["by_occt"], cwd=moved)
             return report
 
-        self.assertEqual(build()["cache"]["reason"], "the engine's cache holds none of it", "a copy is a document of its own")
+        self.assertEqual(build()["cache"]["reason"], "the engine wrote no .xbf of it", "a copy is a document of its own")
         self.restart()
-        self.assertEqual(build()["cache"], {"used": True, "from": "cache"})
+        self.assertEqual(build()["cache"], {"used": True, "from": "xbf"})
         import build123d as bd
 
         bd.export_brep(bd.Box(12, 10, 10), str(moved / "part.brep"))

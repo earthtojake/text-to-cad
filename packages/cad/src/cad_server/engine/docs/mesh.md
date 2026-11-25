@@ -103,8 +103,8 @@ path and grams), pointMasses (each part's, by name, in grams), scaled (the parts
 mass)}`, or `{mass: null, refused}` in the description's words.
 A ref of several selectors answers a list. A ref that names nothing, or several things where
 it names one, is refused by name (exit 2). Without a REF it serves the document the same way and
-summarises it before its closure (`api._summary`, `query="summary"`): its state (`model_info`'s, with
-`cached` when the engine's cache holds it at its revision; `file` for a file's document), its parts,
+summarises it before its closure (`api._summary`, `query="summary"`): its state (`model_info`'s for a model a
+live worker holds; `file` for a document read from its file, a model's `.xbf` among them), its parts,
 its bounds (each part's box beside its volume placed where its occurrences stand), its
 volume, its materials and their masses (`declared`, as a ref's: as the robot description weighs a
 declared mass and point masses), its joints, mechanism states, configuration sequences and
@@ -119,7 +119,7 @@ solids, how many of them are inside out (`inverted`) and its box in its own fram
 -- are the part's facts, kept by its geometry
 key beside its tessellation (`serve.FactCache`), under the same memory budget and evicted after the
 tessellations (**Document lifetime**), and written nowhere: a memo of them beside the document or
-in the cache folder would be a derived file (law 2), and the cache holds a document's bytes alone.
+in the cache folder would be a derived file (law 2).
 They are measured once, whichever document or version holds the part, so an edit measures only
 the parts whose key it changed. `GET /api/v1/documents/<kind>/<id>/measure` (`?keys=K,...` for some;
 the engine's `/api/doc/<id>/volumes`) answers every part's at once, and `.../parts/<key>/volume`

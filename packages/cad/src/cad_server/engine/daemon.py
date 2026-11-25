@@ -7,7 +7,7 @@ no one can reach it (``tend``), and with the machine. Idleness sheds memory inst
 Every process it starts is a service it declares (``services``): a model script's warm worker (the
 documents worker among them) and a served document's render process. One supervisor runs them by
 those declarations (``supervisor.Supervisor``, ``Daemon.supervisor``), and the daemon binds its hooks
-to them by name: the drain, what a page watches, the progress that wakes pages, the cache's ``saved``.
+to them by name: the drain, what a page watches, the progress that wakes pages.
 A request leases its service's process for itself, one request at a time per process, first come
 first served, keyed as the service declares: a worker by its script's path, a render process by its
 document's id. A build names the Python its script was run with (``contract.interpreter``): one whose
@@ -35,11 +35,10 @@ request is done. A busy one is never retired, but one whose memory, as the syste
 the ceiling on one process (``CAD_ENGINE_WORKER_CEILING_MB``, ``worker.memory_ceiling_mb``) at two
 ``tend`` rounds running, during one request, is killed, and its request fails saying why, as a build
 out of memory (``Supervisor.overrun``, ``_overran``): a build in native code cannot stop itself, and
-one that runs away would take the machine. Before a worker is stopped,
-every document of it the server does not hold is taken from it (``models.Models.drain``): a document
-outlives its worker. A retired script's next build is a
-fresh worker's, a restart. Each such document is also kept in the engine's cache once it is idle, at
-its drain and at shutdown (``cache``), so a restart of the daemon opens it at once.
+one that runs away would take the machine. A document outlives its worker: it is its ``.xbf``, which
+its build wrote, and once its worker is stopped its page and every verb read that file
+(``models.Models.drain``). A retired script's next build is a fresh worker's, a restart, which takes an
+unchanged model from its ``.xbf``.
 
 The workers keep a standby with the kernel loaded (``services.WORKER``, ``Supervisor.stand``): started
 once the installation's default environment, the base, exists -- with the daemon when it is made already,
@@ -221,7 +220,6 @@ SERVING = frozenset({"serve", "viewer", "http", "read", "warm"})
 UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update", "plugin_auto_update", "update"})
 # The type a worker answers bytes of a held document that do not read with (``build.Unreadable``),
 # as ``worker.refusal`` names it.
-UNREADABLE = "cad.engine.build:Unreadable"
 
 
 def refused(error: Exception) -> dict[str, Any]:
@@ -636,14 +634,12 @@ class Daemon:
         # ``CAD_ENGINE_PRESSURE`` says, where it is set (``Pressure.from_environment``).
         self.pressure = Pressure.from_environment()
         # Every process the daemon starts, by its service's declaration (``services``), its hooks bound
-        # here by name: the drain (a worker's documents taken from it before it stops), what a page
-        # watches, the progress that wakes pages, and the cache's ``saved``.
+        # here by name: the drain (a worker's documents its files from then on), what a page watches, and the
+        # progress that wakes pages.
         self.supervisor = Supervisor(cap or worker_cap(), SERVICES, watched=self.connected,
                                      drain=lambda process: self.models.drain(process), memory=rss_cap_mb,
                                      ceiling=memory_ceiling_mb, measure=footprint_mb,
-                                     pressed=self.pressure.under, on_progress=self.progressed,
-                                     on_event={"saved": lambda process, header, payload:
-                                               self.models.cache.saved(process, header, payload)})
+                                     pressed=self.pressure.under, on_progress=self.progressed)
         self.workers_lock = threading.Lock()  # each worker's ``held``
         self.born = time.time()
         # What the startup identity migration did (``identity.migrate``), which ``status`` says when it
@@ -676,7 +672,7 @@ class Daemon:
         # on another -- the one an updater hands on, which pages were on --, and the one it served on before.
         self.listeners: list[Any] = []
         self.token = secrets.token_hex(16) if WINDOWS else ""
-        # Per model document a build made (its ``model_id``), the worker that built it last: the one
+        # Per model document a build made (its id, its .xbf's), the worker that built it last: the one
         # that holds its provenance (``provenance``). A file the build wrote is no key: it names no model.
         self.builders: dict[str, Process] = {}
         self.renders = None  # the served documents' pictures, by their render processes (``renders.Renders``)
@@ -1042,7 +1038,6 @@ class Daemon:
         """The daemon's server, started on the first request that needs one."""
         from cad.engine.serve import MESHES, Server, memory_budget
 
-        started = False
         with self.serving:
             if self.refusal is not None:
                 raise self.refusal  # stopping: its port is another's
@@ -1089,8 +1084,8 @@ class Daemon:
                 self.server.pressure = self.pressure
                 self.server.pressed = lambda: self.supervisor.shed(True)
                 self.server.lost = self.models.rebuild
-                self.server.revive = self.models.adopt
-                self.server.leaving = self.models.leaving
+                self.server.revive = self.models.revive
+                self.server.modelled = lambda ident: self.models.file_of(ident) is not None
                 self.server.delete = self.models.delete
                 # A model's parameters as its live worker recorded them, and their ``set`` (``parameters``).
                 self.server.parameters = self.models.live
@@ -1100,7 +1095,6 @@ class Daemon:
                 if application is not None:
                     application.worked = self.stamp  # an agent's tool call is a command too (``mcp.http.Sessions``)
                 self.server.start()
-                started = True
             elif request.get("port") and int(request["port"]) != self.server.port and request.get("op") == "http" \
                     and not (request.get("host") and request["host"] != self.server.http.server_address[0]):
                 self._take_port(int(request["port"]))  # an updater handing the pages' port on
@@ -1108,8 +1102,6 @@ class Daemon:
                   or (request.get("host") and request["host"] != self.server.http.server_address[0])):
                 raise ValueError("the installation's engine already serves another host/port; stop it before changing its bind")
             server = self.server
-        if started:
-            self.models.attach(server)  # the documents taken up from the cache before it ran: registered with it
         return server
 
     def resume(self, port: int) -> bool:
@@ -1170,31 +1162,27 @@ class Daemon:
                 pass
 
     def document(self, ident: str) -> tuple[dict[str, Any], bytes]:
-        """What the document ``ident`` is while this engine holds it, as an export reads it, and the
+        """What the document ``ident`` is while this engine knows it, as an export reads it, and the
         bytes it carries: a model a live worker holds (``{"script", "function", "held"}``, read from
-        that worker, never built); one whose worker is gone but whose whole document the server
-        holds (``{"document", "name"}``, its xbf bytes after it: the documents worker reads them as
-        an on-disk xbf, and no worker of its script starts); a file this engine serves or served
-        (``{"path"}``). Refused (``Models.not_held``), naming its state and the command that
-        builds it again, for any other id: the engine runs nothing. A model document held on disk
-        alone (the engine's cache) is its cache file's bytes, read as a held document's."""
+        that worker, never built); a model no worker holds, its ``.xbf`` (``{"path"}``: the file is the
+        document); a file this engine serves or served (``{"path"}``). Refused (``Models.not_held``), naming its
+        state and the command that builds it again, for any other id: the engine runs nothing."""
         self.models.prune()
         record = self.models.held(ident)
         server = self.server
-        if record is not None:
-            self.models.cache.touch(ident)  # a read: its idle timer starts again
+        if record is not None and self.supervisor.holds(record["worker"]):
             worker = record["worker"]
-            if worker is not None and self.supervisor.holds(worker):
-                # Asked of the worker that built it (``via``: a child model's is its parent's script's).
-                return {"script": record["source"]["script"], "function": record["source"]["name"], "held": ident,
-                        "via": worker.label, **({"python_key": worker.python_key} if worker.python_key else {})}, b""
-            held = self.held_document(ident)
-            if held is not None:
-                source, data = held
-                # Historical caches did not persist the folder relative closure paths used.
-                # Keep the known identity/source anchor without inventing that missing base.
-                return {**source, "origin": {"kind": "document", "id": ident,
-                                             "script": record["source"]["script"], "closure_base": None}}, data
+            # Asked of the worker that built it (``via``: a child model's is its parent's script's).
+            return {"script": record["source"]["script"], "function": record["source"]["name"], "held": ident,
+                    "via": worker.label, **({"python_key": worker.python_key} if worker.python_key else {})}, b""
+        found = self.models.file_of(ident)
+        if found is not None:
+            return {"path": str(found)}, b""
+        if self.models.recorded(ident) is not None:
+            # A model's (or a shape's) whose .xbf is gone: no longer held, whatever a page read of it before.
+            if server is not None:
+                server.forget_model(ident)
+            raise self.models.not_held(ident)
         if server is not None and ident in server.served and not isinstance(server.served[ident].path, str):
             return {"path": str(server.served[ident].path)}, b""
         known = server.file_of(ident) if server is not None else None
@@ -1202,75 +1190,67 @@ class Daemon:
             return {"path": known}, b""
         raise self.models.not_held(ident)
 
-    def held_document(self, ident: str) -> tuple[dict[str, Any], bytes] | None:
-        """A model document the server holds whole and no worker does, as an export reads it: its
-        source and its xbf bytes -- in memory, else its cache file's. ``ValueError`` for one held for
-        viewing alone (its worker exited before it was drained, and no cache file has it), naming the
-        command that builds it again. None when it is not held."""
-        server = self.server
-        doc = None
-        if server is not None:
-            with server.load_lock:
-                doc = server.served.get(ident)
-        if doc is None or doc.xbf is None:
-            data = self.models.disk_bytes(ident)
-            if data is not None:
-                with self.models.lock:
-                    record = self.models.records.get(ident)
-                return {"document": ident, "name": record["source"]["name"] if record else ident}, data
-        if doc is None:
-            return None
-        if doc.xbf is None:
-            with self.models.lock:
-                record = self.models.records.get(ident)
-            name = record["source"]["name"] if record else ident
-            raise ValueError(f"{name} ({ident}) is held for viewing only: its worker exited before the engine "
-                             f"took it whole; run `{self.models.command(ident)}` to build it again")
-        return {"document": ident, "name": doc.structure.get("name") or ident}, doc.xbf
+    def known(self, ident: str) -> str:
+        """The id document ``ident`` is known by now: itself, or, for an id from before a model's id was its
+        ``.xbf``'s, the id whose record keeps it (``Registry.resolve``)."""
+        with self.models.lock:
+            if ident in self.models.records:
+                return ident
+        held = self.models.registry()
+        return held.resolve(ident) if held is not None else ident
 
     def _checks_folder(self) -> Any:
         """The engine's registry, in whose cache folder the kept checks' results are written under its lock of
         their document (``checks.Disk``), or None: no cache folder."""
-        held = self.models.cache.registry()
+        held = self.models.registry()
         return None if held is None or held.cache is None else held
 
     def _check_version(self, ident: str) -> str | None:
-        """Model document ``ident``'s generation, as its record has it -- one held on disk alone taken up
-        first; None for no record."""
-        self.models.adopt(ident)
+        """Model document ``ident``'s generation, as its row has it, else its ``.xbf``'s version (the file is the
+        document); None for neither."""
         with self.models.lock:
             record = self.models.records.get(ident)
-        return None if record is None else str(record["version"])
+        if record is not None:
+            return str(record["version"])
+        found = self.models.file_of(ident)
+        if found is None:
+            return None
+        from cad_server.engine.registry import file_version
+
+        return file_version(found)
 
     def _durable(self, ident: str, version: str | None) -> tuple[str, str] | None:
         """Model document ``ident``'s version that outlives the engine, while its generation is ``version``: its
-        revision, its build closure's key (``models.revision``), with its id; None for a build with no key (a
-        token of its own), or another generation."""
-        with self.models.lock:
-            record = self.models.records.get(ident)
-        if record is None or version is None or str(record["version"]) != version:
-            return None
+        revision, its build closure's key (``models.revision``), with its id -- of one no worker holds, while its
+        ``.xbf`` is the version the engine wrote; None for a build with no key (a token of its own), or another
+        generation."""
         from cad_server.engine.models import durable
 
+        with self.models.lock:
+            record = self.models.records.get(ident)
+        if record is None:
+            # No worker holds it: its .xbf, while that file is the one the engine wrote at the revision recorded.
+            held = self.models.registry()
+            found = held.get(ident) if held is not None and version is not None else None
+            if found is None or found.get("version") != version or self.models.file_of(ident) is None:
+                return None
+            return (ident, found["revision"]) if durable(found.get("revision")) else None
+        if version is None or str(record["version"]) != version:
+            return None
         revision = record.get("revision")
         return (ident, revision) if durable(revision) else None
 
     def _check_document(self, ident: str) -> tuple[dict[str, Any], bytes]:
-        """Document ``ident`` as a checks process reads it (``checks_runner.Runner``'s ``read``): a file's path,
-        or a model's whole document as xbf bytes (``{"document", "name"}``) -- the server's or the cache's, else
-        the bytes its worker's ``result`` gives (protocol 1's, which every release answers): one short request of
-        that worker, as its drain asks, so a check never runs there. A worker retired meanwhile is no refusal:
-        the document is read once more, from the server or the cache that holds it now. ``ValueError``
-        (``Models.not_held``) for a document the engine does not hold."""
+        """Document ``ident`` as a checks process reads it (``checks_runner.Runner``'s ``read``): a file's path
+        (a model's ``.xbf`` where no worker holds it), or a model's whole document as xbf bytes (``{"document",
+        "name"}``) that its worker's ``result`` gives (protocol 1's, which every release answers): one short request
+        of that worker, so a check never runs there. A worker retired meanwhile is no refusal: the document is read
+        once more, from its file now. ``ValueError`` (``Models.not_held``) for a document the engine does not
+        hold."""
         for attempt in (1, 2):
             source, payload = self.document(ident)
             if "script" not in source:
                 return source, payload
-            with self.models.lock:
-                record = self.models.records.get(ident)
-            data = self.models.held_bytes(ident, str(record["version"])) if record is not None else None
-            if data is not None:
-                return {"document": ident, "name": source["function"]}, data
             python_key = source.get("python_key")
             key = canonical(source.get("via") or source["script"])
             owner = self.supervisor.live("worker", key, python_key)
@@ -1366,14 +1346,10 @@ class Daemon:
                             send({"failed": "The source changed. Open Export again to use the displayed revision."})
                             return
                     answer = worker.request(ordered, send, payload)
-                    held = (request.get("source") or {}).get("document")
-                    if held and answer.get("kind") == UNREADABLE:
-                        # The bytes a held document was read from (its cache file's) do not read.
-                        answer = refused(self.models.unreadable(str(held), str(answer.get("failed"))))
                     if order.get("op") == "export" and not request.get("expected"):
-                        # Each .xbf it wrote: counted, and, of a model's document, that model. The viewer's export
-                        # (``expected``) writes a download, a file of its own wherever the browser saves it: never recorded.
-                        self.models.exported(answer, request.get("_from"))
+                        # Each .xbf it wrote: counted, a file of its own. The viewer's export (``expected``) writes a
+                        # download, a file of its own wherever the browser saves it: never recorded.
+                        self.models.exported(answer)
                     returned = answer.pop("payload", b"")
                     if returned:
                         import base64
@@ -1426,7 +1402,7 @@ class Daemon:
         self.touch()
         op = request.get("op")
         if op == "reattach":
-            # A worker's models with nothing to take up, before it reads their cache (``build._reattach``).
+            # A worker's models with nothing to take up, before it reads their .xbf (``build._reattach``).
             sources = request.get("models")
             if not isinstance(sources, list) or not all(
                     isinstance(row, dict) and isinstance(row.get("script"), str) and isinstance(row.get("name"), str)
@@ -1443,52 +1419,40 @@ class Daemon:
             return
         if op == "delete":
             # ``cad delete`` (``cli.delete``): each id deleted by the one deletion (``models.delete``).
-            deleted = [self.models.delete(str(ident)) for ident in request.get("ids") or []]
+            deleted = [self.models.delete(self.known(str(ident))) for ident in request.get("ids") or []]
             for ident in request.get("ids") or []:
                 self.checks.store.forget(f"model:{ident}")
                 self.checks.built(str(ident))  # a check of it measures a document that is gone: stopped
             send({"ok": True, "deleted": [found for found in deleted if found is not None]})
             return
         if op == "model_info":
+            # The model a live worker holds by this id; one no worker holds is its .xbf, a file's document, or
+            # refused with its state and the command that builds it again.
             self.models.prune()
-            ident = str(request.get("id"))
-            with self.models.lock:
-                record = self.models.records.get(ident)
-            if record is None:
-                self.models.adopt(ident)  # held on disk (the engine's cache), after a restart
-                with self.models.lock:
-                    record = self.models.records.get(ident)
+            ident = self.known(str(request.get("id")))
+            record = self.models.held(ident)
             if record is None:
                 send(refused(self.models.not_held(ident)))
             else:
                 model = {key: record.get(key) for key in ("id", "source", "program", "builtAt", "version", "files",
                                                           "kind", "python", "with")}
                 model["state"] = self.models.state(ident)
-                # On disk in the engine's cache, at its revision: a restart reopens it as last built.
-                model["cached"] = (self.models.where(ident) or "").endswith("disk")
-                if model["state"] == "held":
-                    model["held"] = self.models.where(ident)
-                lost = self.models.rebuild(ident)
-                if lost is not None:
-                    model["rebuild"] = lost["rebuild"]
                 send({"model": model})
             return
         if op == "document":
             # What an id names while this engine holds it (``document``), asked without building.
             try:
-                send({"ok": True, "document": self.document(str(request.get("id")))[0]})
+                send({"ok": True, "document": self.document(self.known(str(request.get("id"))))[0]})
             except ValueError as error:
                 send(refused(error))
             return
         if op == "state":
             # What the engine knows of a document by its id: held or not, and what builds it again.
-            ident = str(request.get("id"))
+            ident = self.known(str(request.get("id")))
             self.models.prune()
             lost = self.models.rebuild(ident)
             state = self.models.state(ident) if lost is None else lost["state"]
-            held = {"held": self.models.where(ident)} if state == "held" else {}
-            send({"ok": True, "state": state, **held,
-                  **({"rebuild": lost["rebuild"], "error": lost["error"]} if lost else {})})
+            send({"ok": True, "state": state, **({"rebuild": lost["rebuild"], "error": lost["error"]} if lost else {})})
             return
         if op == "export" and request.get("check") is not None:
             # A manufacturing check (``checks_runner``): no worker's, so it counts toward no drain.
@@ -1498,36 +1462,29 @@ class Daemon:
                 self.touch()
         payload = b""
         if op == "export" and "id" in (request.get("source") or {}):
-            ident = str(request["source"]["id"])
+            ident = self.known(str(request["source"]["id"]))
             try:
-                cached = self.models.cache.registry()
-                if cached is not None:
-                    original = cached.cache.path(self.models.cache.inside(ident)).resolve()
-                    if any(Path(path).resolve() == original for path in request["destinations"]):
-                        from cad.engine.export import ExportRefused
-
-                        raise ExportRefused("export to a different path; the engine's cached document is preserved")
-                # The revision of the model document it reads, as the export begins: each .xbf it writes is that
-                # model as of it (``Models.exported``).
-                revision = self.models.revision_of(ident)
                 source, payload = self.document(ident)
             except ValueError as error:
                 send(refused(error))
                 return
-            expected = request.get("expected") or {}
-            if "document" in source and "modelRevision" in expected:
-                # The viewer's export of a model whose worker is gone reads the whole document the
-                # server holds, at the revision the page shows: checked here, as no worker holds it.
-                with self.models.lock:
-                    record = self.models.records.get(ident)
-                served = self.server.served.get(ident) if self.server is not None else None
-                if served is None and self.server is not None and self.server.holds(ident):
-                    served = self.server.document(ident)  # held on disk: read again to check its revision
-                if (record is None or served is None or record["version"] != expected["modelRevision"]
-                        or served.structure.get("exportRevision") != expected.get("digest")):
-                    send({"failed": "The source changed. Open Export again to use the displayed revision."})
+            if "path" in source and "modelRevision" in (request.get("expected") or {}):
+                # The viewer's export of a model whose worker is gone since the page showed it: its file now.
+                send({"failed": "The source changed. Open Export again to use the displayed revision."})
+                return
+            if "path" in source and self.models.file_of(ident) is not None and not any(
+                    Path(given).resolve() == Path(source["path"]).resolve() for given in request.get("destinations") or ()):
+                # A model no worker holds, by its id: its .xbf's bytes, read as a held document's, so it exports to any
+                # format, another .xbf among them, as the document it is (over its own file, as a file would: refused).
+                path = Path(source["path"])
+                try:
+                    payload = path.read_bytes()
+                except OSError as error:
+                    send({"failed": str(error)})
                     return
-            request = {**request, "source": source, "_from": (ident, revision) if revision is not None else None}
+                source = {"document": ident, "name": path.stem,
+                          "origin": {"kind": "file", "path": str(path), "closure_base": str(path.parent)}}
+            request = {**request, "source": source}
         if op == "export" and "script" in (request.get("source") or {}) and not request["source"].get("held") \
                 and not request.get("expected"):
             # A model is exported by its call's document (``api._called``): never built by an export.
@@ -1550,12 +1507,16 @@ class Daemon:
             # A handle's shape (``api.Document.shape``): the document its id names, as the engine
             # holds it -- asked of the worker that holds it, or read from the bytes the engine holds --
             # and never built.
-            ident = str(request["id"])
+            ident = self.known(str(request["id"]))
             try:
                 self.contracted(request)  # its shapes are read in its caller's Python
                 source, payload = self.document(ident)
-            except ValueError as error:
-                send(refused(error))
+                if Path(source.get("path") or "").suffix.lower() == ".xbf":
+                    # A model no worker holds: its .xbf, read as a held document's bytes are.
+                    payload = Path(source["path"]).read_bytes()
+                    source = {"document": ident, "name": Path(source["path"]).stem}
+            except (OSError, ValueError) as error:
+                send(refused(error) if isinstance(error, ValueError) else {"failed": str(error)})
                 return
             if "document" in source:
                 order = {"id": 1, "op": "result", "document": True, "name": source["name"], "cwd": request.get("cwd")}
@@ -1571,8 +1532,8 @@ class Daemon:
                      "cwd": request.get("cwd")}
             return self._call(request, order, send)
         if op == "shape":
-            # A shape handed over (``api.hand_over``): held as a drained document is, nothing to run; its
-            # document was written in its caller's Python, and is read in the server's.
+            # A shape handed over (``api.hand_over``): written as its .xbf, nothing to run; its document was made in
+            # its caller's Python, and is read in the server's.
             try:
                 self.contracted(request)
                 handed = self.models.hand_over(request)
@@ -1632,9 +1593,8 @@ class Daemon:
                                  "profile": bool(request.get("profile")), "run": request.get("run")}
                         if request.get("env"):
                             order["env"] = request["env"]  # the run's own (``worker.adopt``)
-                        cached = self.models.cache.folder()
-                        if cached is not None:
-                            order["cache"] = cached  # what a fresh worker takes a model from, by its key
+                        if self.models.registry() is not None:
+                            order["take"] = True  # a fresh worker takes a model from its .xbf, by its key
                         answer = worker.request(order, send)
                         from cad_server.engine.parameters import ran
 
@@ -1711,6 +1671,7 @@ class Daemon:
         elif op == "serve":
             server = self.serve(request)
             named = str(request["path"])
+            named = self.known(named) if is_id(named) else named
             try:
                 if not is_id(named):
                     ident = server.add(Path(named))
@@ -1934,7 +1895,6 @@ class Daemon:
                                                              "documents": self.server.listing(every=True),
                                                              "memory": self.server.memory()},
                 "models": self.models.listing(),
-                "cache": self.models.cache.status(),
                 "checks": self.checks.status(),
                 "identity": self.identity if self.identity and any(self.identity.values()) else None,
                 "renders": [] if self.renders is None else self.renders.status(),
@@ -1972,10 +1932,10 @@ class Daemon:
     def tend(self) -> None:
         """What the engine looks after, each ``TEND_SECONDS``: never the process, and nothing by how
         long anything has been idle. A killed client's pipes are swept, and the processes' memory is
-        held to its cap and the system's pressure (``Supervisor.shed``: a worker's documents drained
-        first, so they stay held), and a busy one to the ceiling on one process (``Supervisor.overrun``);
+        held to its cap and the system's pressure (``Supervisor.shed``: a worker's documents its files from
+        then on), and a busy one to the ceiling on one process (``Supervisor.overrun``);
         the memory budget sends unwatched documents out of memory, least recently used
-        first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
+        first, each read again from where it is when next asked (``serve.Server.trim``); telemetry's spool is handed to a sender
         once it has waited a window (``_send_counts``); the version check's feed is read in the background where it
         is due (``updates.refresh``), and cad updated where that is due and nothing is in flight
         (``auto_update.tend``: the update stops this server and starts the next); then, BRIDGE-ONLY, the install
@@ -1984,8 +1944,7 @@ class Daemon:
         global cad's); then, where nothing is in flight, what follows cad's update (``caught_up``). The engine stops on
         ``stop``, a terminate, another installation's
         retiring it (``bind``), and here when its door is gone (its folder removed, a temporary
-        folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving
-        what it holds to the cache."""
+        folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does."""
         if self.address is not None and _identity(self.address) != self.address_id:
             self.stopping.set()
             return
@@ -2067,8 +2026,6 @@ class Daemon:
         self.checks.halt()  # every check answered that the engine stopped, its checks process killed
         if self.checks.store.deleted in registry.FORGOTTEN:
             registry.FORGOTTEN.remove(self.checks.store.deleted)
-        # The documents built or read in the last idle window, saved first, best effort (``cache``).
-        self.models.cache.final()
         _halt()  # a making of the base under way: its uv goes with the engine
         self.supervisor.stop()  # its workers, the standby and the render processes
         display.stop()  # the Xvfb it started for their stills, if it did

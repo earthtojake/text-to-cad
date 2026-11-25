@@ -25,7 +25,7 @@ add_sources()
 
 import cad.model  # noqa: E402
 from cad.engine import api, client  # noqa: E402
-from cad.engine.ids import model_id  # noqa: E402
+from tests.python.support.ids import model_id  # noqa: E402
 from cad.engine.parameters import ParameterRefused  # noqa: E402
 
 SCRIPT = """\
@@ -58,7 +58,7 @@ class SetCase(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.folder, True)
         cls.script = cls.folder / "bracket.py"
         (cls.folder / "spec.py").write_text(SPEC, encoding="utf-8")
-        cls.ident = model_id(cls.script, "bracket")
+        cls.ident = model_id(cls.script, "bracket", xbf="XBF/bracket.xbf")
 
     def setUp(self) -> None:
         self.script.write_text(SCRIPT, encoding="utf-8")
@@ -101,11 +101,15 @@ class SetTest(SetCase):
         self.assertEqual([round(value, 6) for value in summary["bounds"]["size"]], [30.0, 18.0, 2.5])
         self.assertEqual({name: row["value"] for name, row in self.served().items()},
                          {"pitch": 30.0, "wall": 2.5, "holes": 8, "twice": 5.0})
-        # The declared xbf is the document's: its record read from the file alone, every parameter read-only.
-        listed = cad.model.inspect(self.folder / "XBF" / "bracket.xbf", query="structure")["summary"]["parameters"]
-        self.assertEqual({(row["name"], row["value"], row["writable"], row["reason"], row["source"]) for row in listed},
-                         {("pitch", 30.0, False, "file", None), ("wall", 2.5, False, "file", None),
-                          ("holes", 8, False, "file", None), ("twice", 5.0, False, "file", None)})
+        # Its .xbf by its path is the model, live: its parameters as its worker recorded them.
+        rows = lambda source: {(row["name"], row["value"], row["writable"], row["reason"], row["source"])  # noqa: E731
+                               for row in cad.model.inspect(source, query="structure")["summary"]["parameters"]}
+        self.assertEqual(rows(self.folder / "XBF" / "bracket.xbf"), rows(self.ident))
+        # An .xbf exported is a file of its own: its record read from the file alone, every parameter read-only.
+        copy = self.folder / "copy.xbf"
+        cad.model.export(self.ident, copy)
+        self.assertEqual(rows(copy), {("pitch", 30.0, False, "file", None), ("wall", 2.5, False, "file", None),
+                                      ("holes", 8, False, "file", None), ("twice", 5.0, False, "file", None)})
         self.assertEqual(save(self.ident, wall=2.5), {"id": self.ident, "written": [], "rebuilt": []})
 
     def test_each_refusal_says_its_code_and_writes_nothing(self) -> None:
@@ -353,7 +357,7 @@ class BusyTest(unittest.TestCase):
 class NoWorkerTest(SetCase):
     def test_a_document_no_live_worker_built_lists_its_parameters_read_only(self) -> None:
         self.assertTrue(api.stop())
-        engine_daemon.start()  # the engine again, the document read from its cache: no worker built it
+        engine_daemon.start()  # the engine again, the document read from its .xbf: no worker built it
         self.assertEqual({(row["value"], row["writable"], row["reason"]) for row in self.served().values()} >=
                          {(2.0, False, "no_worker"), (6, False, "no_worker")}, True)
         self.refused("no_worker", wall=3.0)

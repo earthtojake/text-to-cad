@@ -501,9 +501,9 @@ class DaemonProgressTest(unittest.TestCase):
         self.assertIn("wrote XBF/slow.xbf", err)
         self.assertFalse({"\r", "▕", "✓"} & set(err), err)
 
-    def test_a_page_waiting_on_a_model_is_woken_by_its_build_s_progress_and_its_file_s_page_hears_nothing(
+    def test_a_page_waiting_on_a_model_is_woken_by_its_build_s_progress_its_xbf_s_page_being_the_model_s(
             self) -> None:
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
 
         self.write()
         for name in ("one", "two", "three"):
@@ -526,8 +526,8 @@ class DaemonProgressTest(unittest.TestCase):
                     return json.loads(response.read())
             return get
 
-        get = route(model_id(self.folder / "slow.py", "slow"))  # the model's page
-        file = route("XBF/slow.xbf")  # the xbf it declares, opened as a file
+        get = route(model_id(self.folder / "slow.py", "slow", xbf="XBF/slow.xbf"))  # the model's page
+        file = route("XBF/slow.xbf")  # its .xbf, opened by its path: the model's page too
         quiet = {"building": None, "failed": None}
 
         def heard(answer: dict) -> dict:
@@ -549,8 +549,7 @@ class DaemonProgressTest(unittest.TestCase):
                 seen.append(answer["building"])
         self.assertEqual((seen[-1]["kind"], seen[-1]["job"]), ("build", "slow.py::slow"))
         self.assertIn(str(self.folder / "XBF" / "slow.xbf"), seen[-1]["outputs"])
-        self.assertEqual((heard(file("")), file("")["progress"]), (quiet, before["progress"]),
-                         "a file's page hears nothing of the model writing it")
+        self.assertEqual(heard(file("")), heard(get("")), "its .xbf's page is the model's: it hears the build")
         for name in ("one", "two", "three"):
             (self.folder / f"{name}.go").touch()
         moved = False
@@ -562,7 +561,7 @@ class DaemonProgressTest(unittest.TestCase):
         self.assertIsNone(answer["failed"])
         engine_daemon.communicate(building, self.env)
         self.assertEqual(building.returncode, 0)
-        # A build that fails says so to the model's page, and where it was; the file's, nothing.
+        # A build that fails says so to the model's page, and where it was, whichever way it was opened.
         self.write(size=5, last="seal", fail=True)
         for name in ("one", "two", "three"):
             (self.folder / f"{name}.go").touch()
@@ -576,7 +575,7 @@ class DaemonProgressTest(unittest.TestCase):
         self.assertEqual(answer["failed"]["progress"]["detail"], "seal")
         engine_daemon.communicate(failed, self.env)
         self.assertEqual(failed.returncode, 1)
-        self.assertEqual((heard(file("")), file("")["progress"]), (quiet, before["progress"]))
+        self.assertEqual(heard(file(""))["failed"]["model"], "slow.py::slow")
 
 
 def setUpModule() -> None:

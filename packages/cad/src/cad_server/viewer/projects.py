@@ -8,15 +8,15 @@ one, and nothing is written to the folder. A project is one record in the state 
 canonical path, its id derived from it, ``ids.derived_id``). Remove forgets that record alone: the
 folder and everything in it stay as they are, and its documents are standalone again.
 
-A document belongs to the nearest project above it (``Projects.of``): a file by its path, a model by
-its script, a shape by where it was handed over. A file is in the project it is reached in: one in a linked folder
+A document belongs to the nearest project above it (``Projects.of``): a file by its path, a model or a shape
+by its ``.xbf`` (by its script, or where it was handed over, for a record from before one named its file). A file is in the project it is reached in: one in a linked folder
 inside a project's is that project's, as one stored there is (``Projects.holding``: the path the walk or a page
 reached it by, before its canonical path). So a folder opened inside a project is that
 project (``Projects.add`` answers it and makes no record: projects do not nest by accident), and a
 project opened around another leaves the inner one its own, with its documents.
 
-A project's documents (``Projects.documents``) are its models -- the registry's, whose script is in
-it -- then its CAD files (but an ``.xbf`` that is one of those models, which its card stands for: ``recents.fold``),
+A project's documents (``Projects.documents``) are its models -- the registry's, whose ``.xbf`` is in
+it -- then its CAD files (but a model's ``.xbf``: its id is the model's, whose row is its one card),
 found by a walk of its folder that no folder can hold up: it stops at ``WALK_LIMIT`` files, ``WALK_DEPTH``
 folders down and ``WALK_SECONDS``, says when it stopped early (``truncated``), skips hidden and build folders
 and the folders of the projects inside it, and never walks a folder twice (a link back into one is how a walk
@@ -46,7 +46,7 @@ from cad.engine.ids import canonical, derived_id, is_id
 from .backend import absolute_path
 from .content_types import extension_of
 from .natural_sort import collation_key
-from .recents import Recent, _on_disk, fold
+from .recents import Recent, _on_disk
 from .scanner import VIEWER_EXTENSIONS, VIEWER_SKIPPED_DIRECTORIES, is_hidden_name, to_posix_path
 
 PROJECTS = "projects"
@@ -196,11 +196,11 @@ class Projects:
 
     def documents(self, record: dict[str, Any], entries, records: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         """The project ``record`` as the routes answer it (``public``), with its ``documents``: its models
-        (``entries``, Recents' ``Recent``s, whose script or home is in it and in no project inside it),
+        (``entries``, Recents' ``Recent``s, whose ``.xbf`` is in it and in no project inside it),
         by name, then its CAD files, by folder then name (each Recents' entry where it has one), then the
         files in it a page opened that the walk did not list (the module docstring), by path, as Recents' rows
-        with their ``project``, but an ``.xbf`` that is one of those models (``recents.fold``);
-        ``truncated`` where the walk stopped early."""
+        with their ``project``: a model's ``.xbf`` is the model's row, once; ``truncated`` where the walk stopped
+        early."""
         records = self.list() if records is None else records
         ident = record["id"]
 
@@ -208,14 +208,17 @@ class Projects:
             found = self.holding(reached, path, records) if path else None
             return found is not None and found["id"] == ident
 
-        models, recorded = [], {}
+        models, recorded, own = [], {}, set()
         for entry in entries:
             if entry.kind == "file":
                 recorded[_key(entry.path)] = entry
                 if entry.reached:
                     recorded.setdefault(_key(entry.reached), entry)
-            elif mine(entry.script):
-                models.append(entry)
+            else:
+                if entry.file is not None:
+                    own.add(_key(entry.file))  # its .xbf: the model's row stands for it, wherever it is listed
+                if mine(entry.file or entry.script):
+                    models.append(entry)
         models.sort(key=lambda entry: collation_key(entry.name or ""))
         nested = tuple(sorted(other["root"] for other in records
                               if other["id"] != ident and inside(other["root"], record["root"])))
@@ -225,6 +228,8 @@ class Projects:
         linked = any(not inside(key, record["root"]) for key in recorded)
         files, taken = [], set()
         for path in paths:
+            if _key(path) in own or (linked and _key(canonical(path)) in own):
+                continue  # a model's .xbf: the model's row
             entry = recorded.get(_key(path))
             if entry is None and linked:
                 entry = recorded.get(_key(canonical(path)))
@@ -243,8 +248,7 @@ class Projects:
                          and entry.opened is not None and mine(entry.path, entry.reached)}.values(),
                         key=lambda entry: collation_key(_key(entry.path)))
         rows = [{**row, "project": ident} for row in (entry.row() for entry in [*models, *files]) if row is not None]
-        # An .xbf the engine wrote from one of these models, unchanged since, is that model's card (``recents.fold``).
-        return {**public(record), "documents": fold(rows), "truncated": truncated}
+        return {**public(record), "documents": rows, "truncated": truncated}
 
     def _walk(self, root: str, nested: tuple[str, ...]) -> tuple[list[str], bool]:
         """The CAD files under ``root``, but those under ``nested`` (the projects inside it), by folder

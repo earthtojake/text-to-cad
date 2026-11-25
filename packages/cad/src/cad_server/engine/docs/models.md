@@ -55,7 +55,7 @@ if __name__ == "__main__":
 ```
 
 A program that holds a shape -- a script with no model, a REPL, a notebook -- hands it over with
-`model(shape, name="plate")` (**Shapes handed over**): a document made of it, held and served by
+`model(shape, name="plate")` (**Shapes handed over**): a document made of it, its `.xbf` written and served by
 the engine, exportable, and returned as a handle whose `.shape` is the shape passed.
 
 `import build123d as bd` binds at once: the library makes the import of `build123d` and `OCP` lazy

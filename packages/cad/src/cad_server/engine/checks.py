@@ -23,12 +23,12 @@ assembly left untouched by an edit is measured again with the rest: a check meas
 findings, build volume and rules are the document's), so per-part reuse would be a second, finer key, not
 this one.
 
-**On disk** (``Disk``): each kept result is written beside the engine's model cache, under its document's
-folder there as every view derived from a document is (``<cache>/documents/<id>/checks/``: a model's id, a
-file's document id, ``ids.file_id``), so deleting the document removes them with it
+**On disk** (``Disk``): each kept result is written in the engine's cache folder, under its document's
+folder there as every view derived from a document is (``<cache>/documents/<id>/checks/``: a document's id,
+``ids.file_id``, a model's its ``.xbf``'s), so deleting the document removes them with it
 (``registry.Registry.delete``), and a restarted engine answers the same check of the same document from it.
 Its version there is one that outlives the engine: a model's revision (its build closure's key, the same code
-and inputs the same revision in any process: the key its cache file is kept by; a build with no key has none,
+and inputs the same revision in any process; a build with no key has none,
 and keeps nothing on disk), a file's bytes' digest. A file's name is the digest of that version and of the
 check; it holds both, the result and what measured it. Each is written whole (``registry.Folder.write``), a
 document keeps one version's (a result of another version is removed as one of the new is written), and the
@@ -36,8 +36,8 @@ whole store is held to ``DISK_LIMIT`` results and ``DISK_BYTES``, the least rece
 set again by each read) going first. One that does not read -- not JSON, not the shape written, another
 version's or check's under its name -- is removed, never served, and a document's ``checks/`` folder left empty
 goes with its last. The files are listed once, at the store's first use (the half-written ones a stopped engine
-left, ``*.json.*.tmp``, swept then); one found gone since -- its folder wiped, or removed with its document's
-unreadable cache file -- leaves the list as it is asked for. A cache folder that cannot be written keeps nothing
+left, ``*.json.*.tmp``, swept then); one found gone since -- its folder wiped -- leaves the list as it is asked
+for. A cache folder that cannot be written keeps nothing
 on disk: each result kept tries its own write, and nothing is remembered of the failure. A result is written
 under the registry's lock of its document (``Registry.lock``), which its deletion holds, and a document deleted
 since its check began (``Checks.deleted``, told by ``Registry.delete``) keeps nothing.

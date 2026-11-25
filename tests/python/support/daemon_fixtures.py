@@ -131,7 +131,7 @@ class DaemonCase(unittest.TestCase):
 
     def _bare(self) -> str:
         """``bracket.py``: one bare ``@model``, saved as ``bracket.xbf`` beside it, and its id."""
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
 
         script = self.folder / "bracket.py"
         script.write_text(textwrap.dedent(BARE.format(size=1)), encoding="utf-8")

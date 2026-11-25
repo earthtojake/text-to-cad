@@ -286,16 +286,14 @@ def _handed_bytes(shape: Any, name: str, animations: Any) -> bytes:
 
 def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = None, out: Any = None) -> Document:
     """``model(shape, name=...)``: a document made of a shape this program holds -- from a script or a
-    REPL, no function, no body -- handed to the engine, which holds it as a drained document is (in
-    memory, and in its cache), serves its page and exports it, and records that a program it did not
-    run showed it: there is no command that builds it again. Its id is ``ids.derived_id`` of the
-    calling script (``frame``'s file), or the working folder where there is none, and ``name``. The handle's ``shape`` is ``shape`` itself.
-    A model always writes its ``.xbf`` (law 10): at ``out`` where given, else ``<name>.xbf``, relative to the calling
-    script's folder, or a REPL's or a notebook's working folder, once the engine holds it, only where it differs or is
-    missing -- the engine writes it and records it as the shape's (``Models._save``), so the home shows the two as one
-    card."""
+    REPL, no function, no body -- handed to the engine, which writes it as its ``.xbf``, serves its page from
+    that file and exports it, and records that a program it did not run showed it: there is no command that
+    builds it again. A model's document is its ``.xbf`` (law 10): at ``out`` where given, else ``<name>.xbf``,
+    relative to the calling script's folder (``frame``'s file), or a REPL's or a notebook's working folder,
+    written only where it differs or is missing; its id is that file's (``ids.file_id``). The handle's ``shape``
+    is ``shape`` itself."""
     from cad.engine import model as declaring
-    from cad.engine.ids import canonical, check_name, derived_id
+    from cad.engine.ids import canonical, check_name, file_id
 
     if getattr(declaring._CONTEXT, "build", None) is not None:
         raise TypeError("model(shape, name=...) hands a shape over from a script or a REPL; a model's body returns "
@@ -310,14 +308,14 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     # notebook the working folder: no document is left without its file.
     base = Path(scope).parent if script is not None else Path(scope)
     saved = Path(os.path.abspath(base / (os.fspath(out) if out is not None else f"{name}.xbf")))
-    ident = derived_id(scope, name)
+    ident = file_id(saved)
     data = _handed_bytes(shape, name, animations)
     answer = _ask({"op": "shape", "id": ident, "name": name, "scope": scope, "program": _program(),
-                   "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii"),
-                   **({"saved": str(saved)} if saved is not None else {}), **_interpreter()})
+                   "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii"), "saved": str(saved),
+                   **_interpreter()})
     # The engine writes it, as it writes a build's .xbf, and records it as the shape's (``Models._save``); where it
     # did not (a folder that refuses it), it is written here, which says why.
-    if saved is not None and not (answer.get("done") or {}).get("saved"):
+    if not (answer.get("done") or {}).get("saved"):
         from cad.engine.atomic_replace import put
 
         saved.parent.mkdir(parents=True, exist_ok=True)
@@ -663,7 +661,7 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
 
 def _called(source: Any, daemon: bool) -> Any:
     """A ``Model`` source through the engine is its call's document: the model is built as a call
-    of it builds -- its run, its program, the engine's cache and the served documents with it, so
+    of it builds -- its run, its program, its ``.xbf`` and the served documents with it, so
     an unchanged model is taken from its key or replayed by the program's one memo pass -- and the
     export or the snapshot reads that document by its handle. Any other source as it is."""
     from cad.engine.model import Model
@@ -1216,8 +1214,8 @@ def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
 def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any], ident: str,
              progress: Callable[[dict], None] | None = None, *, measured: bool = True) -> dict[str, Any]:
     """What a served document holds, at a glance (``cad model inspect DOC``): its name and id; its
-    state -- a model's (``live``, ``held``, ...: ``ModelDocuments.state``), where the engine holds
-    it and whether its cache has it, or ``file`` for a file's document; its parts (occurrences,
+    state -- a model's a live worker holds (``live``, ``building``, ``failed``: ``Models.state``), or ``file``
+    for a document read from its file; its parts (occurrences,
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the
     engine's facts of every part, kept by geometry key and measured together) placed where its
     occurrences stand, and the occurrences of a part with a solid inside out (``inverted``); its
@@ -1232,14 +1230,15 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     from cad.engine.weights import declares, weigh
 
     model = None
-    if not isinstance(path, Path):
+    if not isinstance(path, Path) or path.suffix.lower() == ".xbf":
+        # A model by its id, or by its .xbf, which is the model while a live worker holds it.
         from cad.engine.client import request
 
-        answer = request({"op": "model_info", "id": str(path)}, start=False) or {}
+        answer = request({"op": "model_info", "id": str(ident)}, start=False) or {}
         model = answer.get("model")
     if model is not None:
-        state = {"state": model.get("state"), "held": model.get("held"), "cached": bool(model.get("cached")),
-                 "builtAt": model.get("builtAt"), "script": (model.get("source") or {}).get("script")}
+        state = {"state": model.get("state"), "builtAt": model.get("builtAt"),
+                 "script": (model.get("source") or {}).get("script")}
     else:
         state = {"state": "file", "path": str(path) if isinstance(path, Path) else structure.get("path")}
     prototypes, instances = structure.get("prototypes") or [], structure.get("instances") or []

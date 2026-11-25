@@ -2903,7 +2903,7 @@
   },
   {
    "command": "cad delete",
-   "summary": "delete documents: record, cached document, the engine's copy",
+   "summary": "delete documents: record and the engine's copy; never a file of yours",
    "usage": "cad delete [--dry-run] [--yes] [--json] DOC [DOC ...]",
    "description": 127,
    "arguments": [
@@ -3336,7 +3336,7 @@
   "Print where cad's cache is.",
   "Remove what this release of cad cannot use: environments made for other releases, and the release folders of 0.11.11 and earlier.",
   "Remove all of cad's cache, and what prune removes; cad makes it again as it needs it. Refused while the cad server runs.",
-  "delete documents: each one's record and its document in the engine's cache, and what the engine holds of it; never a file of yours",
+  "delete documents: each one's record and what the engine holds of it; never a file of yours",
   "a document's id, a model's script (every document recorded of it), or a CAD file a page opened; your own files -- a script, its declared files, an opened file -- are never touched",
   "say which documents would be deleted, and how many, and delete nothing",
   "delete them without asking; where nobody can be asked (an agent, a pipe, --json) the command does nothing without it",

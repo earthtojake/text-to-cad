@@ -564,10 +564,9 @@ class DaemonPoolTest(unittest.TestCase):
         # A retired script's next build is a fresh worker's: a restart, which takes its xbf whole.
         self.assertTrue(self.build("a").startswith("took a.py::a cold"))
 
-    def test_a_page_watching_a_model_s_declared_xbf_keeps_no_worker_of_the_model(self) -> None:
-        """A declared xbf opened as a file is a file: a page watching it keeps no model's worker
-        warm, so at the count cap (one, here) the next script's build retires the worker that wrote
-        it, exactly as with no page open."""
+    def test_a_page_watching_a_model_s_xbf_keeps_the_model_s_worker_warm(self) -> None:
+        """A model's .xbf opened by its path is the model: a page watching it keeps the model's worker warm, so at the
+        count cap (one, here) the next script's build starts past the cap rather than retire it (law 18)."""
         from urllib.parse import parse_qs, urlsplit
         import urllib.request
 
@@ -584,8 +583,9 @@ class DaemonPoolTest(unittest.TestCase):
             self.assertIn("version", json.loads(response.read()))
         self.build("b")
         status = self.status()
-        self.assertEqual([Path(w["script"]).name for w in status["workers"]], ["b.py"], "the cap holds")
-        self.assertEqual([(Path(row["script"]).name, row["reason"]) for row in status["retired"]], [("a.py", "LRU")])
+        self.assertEqual(sorted(Path(w["script"]).name for w in status["workers"]), ["a.py", "b.py"],
+                         "the watched model's worker stays: the cap is exceeded rather than retire it")
+        self.assertEqual(status["retired"], [])
 
     def test_a_new_script_s_first_build_takes_the_standby_and_another_stands_by(self) -> None:
         # The runners' standby is off; and the host's memory pressure, which keeps a standby from

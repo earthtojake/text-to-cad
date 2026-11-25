@@ -154,7 +154,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   `cad viewer <folder>`. Nothing else makes one: a run never does, and nothing is written to the folder. Removing one
   forgets it, and nothing on disk changes.
 - A document is in the nearest project above it: a file by its path as reached (a file in a linked folder inside a
-  project's is that project's, as one stored there is), a model by its script. A folder opened inside a
+  project's is that project's, as one stored there is), a model by its `.xbf`. A folder opened inside a
   project is that project (they do not nest by accident). Every other document is standalone.
 - Nothing browses the disk outside a project: a document is picked up by a `cad` command or by Import.
 - **A project has a page of its own on the home**, and a row in its sidebar. Why: a project is a place a person goes
@@ -200,23 +200,19 @@ chrome that floats over the picture. The home is the navbar over the library: it
   robot (`DOCUMENT_KINDS`: by the row's document type, else its file's extension). Why: a person calls a STEP, an STL
   or a GLB a model too; "built from code" against "a file on disk" was the implementation showing. A model and the
   files exported from it stay cards of their own.
-- **A model and its `.xbf` are one card.** An `.xbf` the engine wrote from a model's document is that model, saved:
-  its own (every model has one: `<name>.xbf` beside its script, or the path `@model("arm.xbf")` gives it), which every
-  run writes or keeps, a shape's handed over, and one exported of it (`cad model export ID x.xbf`). The model's card stands for them, and they have no card beside it in Recents, Pinned, a project's page,
-  Standalone or the search. Why: one document, one identity, one "model" type; two Assembly cards of the same thing
-  asked the person which to open. The server leaves a file's row out (its record says which model's document it is,
-  the file's version and the model's revision as written) only where the model's own card is in the same place, its
-  script there, the file still that version, the model still that revision, and the file unpinned; the model's row
-  says where its own `.xbf` is (`saved`). Rebuilt into something else, a model's own `.xbf` is written
-  again and stays its card, while an export no one wrote again holds an older model and is a card of its own. An
-  `.xbf` copied, got from elsewhere or edited since, or whose model is deleted or elsewhere, is a card of its own, as
-  every other file is, and STEP, GLB and the other exports always are.
+- **A model is its `.xbf`, one card.** A model's document is its `.xbf` (every model has one: `<name>.xbf` beside its
+  script, or the path `@model("arm.xbf")` gives it; a shape's handed over too), and its id is that file's: one record,
+  one row, one card, in Recents, Pinned, a project's page, Standalone and the search. Opening the file opens the
+  model, live while the engine holds its build, else read from the file. Why: one document, one identity, one
+  "model" type; two Assembly cards of the same thing asked the person which to open. An `.xbf` exported to another
+  path, or copied, is another file, so a card of its own, and STEP, GLB and the other exports always are. A model
+  whose `.xbf` is gone is listed missing, as a file is.
 - **Its documents**, all of them: the first 120, then "Show N more". Cards in columns at least 232px wide (the picture
   on the light gradient with its format's badge, then the name and one line), or 44px rows. A document built from
   code or an `.xbf` file is badged "Part" when its document holds one part and "Assembly" when it holds more (the
   row's `parts`: its parts' occurrences, as `cad model inspect` counts them and the Model tree shows them), and "XBF", its format,
-  where the engine does not know (an `.xbf` it neither wrote nor read for a page since it changed, a model last built
-  before the count was kept): never a guess, and never a read to find out. Why: desktop CAD names its own documents that way, a part or an assembly, and a person
+  where the engine does not know (an `.xbf` it neither wrote nor read for a page since it changed, a model's `.xbf`
+  edited since its build, a model last built before the count was kept): never a guess, and never a read to find out. Why: desktop CAD names its own documents that way, a part or an assembly, and a person
   reads a card the same way; an xbf is the engine's own document saved as a file, the same thing a model's page
   shows, so it is named as a model is. STEP, STL, 3MF, GLB and the rest are other formats and keep their format's
   name, whatever they hold. Only the label: an xbf is still a file (its menu, its size and path, what Delete and Pin
@@ -224,7 +220,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   - A card's line is its last activity ("Edited now", "Viewed 7h ago"), after its project's name in Recents and
     Pinned ("Standalone" for one in none). A card has no glyph, script or size. Why: the picture and its badge say
     what it is, and a script's path and a size are for the list, where they are columns to read down. A list's columns are Name, then the same as a column (Project, or in a project's page
-    Where: a model's script, a file's folder), Kind (its format, as the badge: "Part", "Assembly", "STEP", "KiCad PCB"), Size,
+    Where: a model's or a file's folder), Kind (its format, as the badge: "Part", "Assembly", "STEP", "KiCad PCB"), Size,
     Updated and Created.
   - Each has a pin and a ⋯ (Open, Open in new tab, Copy path, Copy link, Reveal, Pin, Delete, which asks first), shown
     on hover or focus and always on touch; a project's file, listed for being in its folder, has no Delete, and a Pin

@@ -9,10 +9,9 @@ person may be using a page or the CAD app for hours without a build. It stops in
 release's start or cad's own update (**Starting and updating**); when
 its door is gone -- its folder removed, a
 temporary folder cleaned up, or another file put in the door's place -- so that no one can reach it
-(`Daemon.tend` sees it within a round, and it stops as `stop` does, saving what it holds to the
-cache); and with the machine. **No timer retires a worker either**: memory alone does. Idle
-documents are saved to the cache, past the memory budget what no page watches leaves memory for it
-(**Document lifetime**), and past the workers' memory cap, or under the system's memory pressure,
+(`Daemon.tend` sees it within a round, and it stops as `stop` does); and with the machine. **No timer retires a
+worker either**: memory alone does. A model's document is its `.xbf`, which its build wrote; past the memory budget
+what no page watches leaves memory (**Document lifetime**), and past the workers' memory cap, or under the system's memory pressure,
 idle workers go (below). It holds a pool of warm workers, one per model script and Python (and one for
 the documents no worker built), each a process whose memo lives as long as it does, and one standby.
 Its rules are a standard pool's and one ceiling on a busy process (below): no admission guess, no
@@ -23,8 +22,8 @@ tessellations, is under one memory budget: **Document lifetime**.)
   cores). A build for a script whose worker is alive goes to it, waiting while it builds
   something else: one build at a time per worker, builds of different scripts at once.
 - **First come, first served.** A build for a script with no worker starts one under the cap.
-  At the cap, the least recently used idle worker no page watches is retired first (drained of
-  its documents, then its stdin closed, so it exits), and its slot is the new one's. With every worker busy, the build waits
+  At the cap, the least recently used idle worker no page watches is retired first (its documents their
+  `.xbf` files from then on, its stdin closed, so it exits), and its slot is the new one's. With every worker busy, the build waits
   for the first to come free, and every build that needs a slot after it waits behind it. A
   build that waits for its own script's busy worker takes no slot.
 - **The cap never retires a watched worker.** When every idle worker has a document a page
@@ -56,12 +55,12 @@ tessellations, is under one memory budget: **Document lifetime**.)
   `0` for no cap; `Supervisor.shed`). After each build and picture, and each `Daemon.tend` round, past
   it idle processes are retired, least recently used first within each rank: the standby, render
   processes, the workers no page watches, then the watched ones, only when no other is left; a
-  worker is drained first, so its documents stay held. Under the system's memory pressure (the server's
+  worker's documents are their `.xbf` files from then on. Under the system's memory pressure (the server's
   `serve.Pressure`, polled every two seconds), the standby goes at once, none starts while it lasts, and
   the rest go down to half the cap (`CAD_ENGINE_PRESSURE`: `0` never under it, `1` always, unset
   measured; a test's seam, `Pressure.from_environment`). A busy process is never retired, and an idle worker under the cap lives as long as the
   engine. A worker alone over the cap after a build is retired at once: the report says so
-  (`retired`), and once it has answered the daemon drains it and closes its stdin.
+  (`retired`), and once it has answered the daemon closes its stdin.
 - **A busy process has a ceiling.** Retiring never takes a busy process, and a build in native code
   (an OCCT boolean that runs away, say) cannot stop itself, so a process past
   `CAD_ENGINE_WORKER_CEILING_MB` (default: half the machine's memory, at least 4 GiB; `0` for none;
@@ -69,7 +68,7 @@ tessellations, is under one memory budget: **Document lifetime**.)
   (`Supervisor.overrun`). Two readings, so a peak that comes back down is never taken for a runaway: a
   runaway runs up to two rounds, a minute by default, past the ceiling. A reading under it, or another
   request, starts the count again, and a process whose request ended while it was measured is never
-  killed: an idle worker is drained before it stops. Its memory is read from outside, as the system
+  killed: an idle worker is retired instead. Its memory is read from outside, as the system
   counts it (`worker.footprint_mb`: compressed and swapped pages too), since a busy worker says its own
   only when it answers; a platform that will not say has no ceiling. Its build fails as a build out of
   memory (`MemoryError`, `daemon._overran`): the error says the engine stopped it, at what size and
@@ -94,15 +93,15 @@ caller's (`interpreter`: the worker's), what one process serves (its key: a scri
 document's id; with a Python a lease named, that Python too), what binds a process to its caller's
 interpreter (`places.RESTARTS`), whether it
 counts toward the count cap, its rank when memory is shed (the standby 0, a render process 1, a
-worker 2, a watched worker 3), whether the daemon drains it before it stops, whether its retirements
+worker 2, a watched worker 3), whether the daemon lets go of its documents before it stops, whether its retirements
 are listed in `status`, whether it keeps a standby and how long its start may take: a process that
 has not said it is ready by then -- a worker in 300 s, the standby in 600, a render process in 120 --
 is killed, and the request that waited for it refused in one line saying so, never asked again (a
 standby is simply not there, and the daemon's log says why, once). The rules above
 are the supervisor's, for every service alike: a new kind of process is a declaration, and no code of
 the daemon's. A new service's large outputs go by path, a file on disk its caller reads, and its small
-answers in frames; today's children keep their bulk in frames as they always have (a drained
-document's xbf, a version's meshes sent to a render process, a picture). Not services: the build's
+answers in frames; today's children keep their bulk in frames as they always have (a document's xbf for a
+check, a version's meshes sent to a render process, a picture). Not services: the build's
 STEP reader (the worker's own child for one build), the meshing and reading pools (the library's,
 which run with no daemon too) and the processes that outlive the engine (the telemetry sender, a new release's
 setup an update runs). A known limit: the meshing and reading pools' memory, and the STEP reader's
@@ -146,8 +145,8 @@ document's measurement after its next build), then tessellations. A fact waits f
 at most, never queued meshes.
 
 A retired script's next build is a fresh worker's: a restart, which takes each model's document
-whole from the cache when its key is unchanged (**Build closure**, **The cache**), and else builds
-the model cold. A render
+whole from its `.xbf` when its key is unchanged and the file is the one the engine wrote (**Build closure**,
+**The store**), and else builds the model cold. A render
 process (**The viewer and the snapshot**) is no worker and does not count toward the count cap; its
 memory counts toward the workers' memory cap, which retires an idle one before any worker, and one
 alone over it after a picture is retired at once.
@@ -235,11 +234,8 @@ the header gives against the cap (`--json`: `standby`, `rssMb`, `rssCapMb`). A r
 that shape the interpreter's import system: its worker is replaced in its slot) or `exited` (it died).
 A render process's retirement is listed too, by its document (`--json`: `document` where a worker's
 row says `script`; `retired: part.xbf's renderer (RSS) 2m ago`). The `documents:` lines are each model
-document, its state and, for one not held, the command that builds it again (**Document
-lifetime**), and a held one where it is held: in memory, on disk (the cache), or both. The
-`cache` line is the cache folder, the documents and bytes in it -- no cap: they stay until a person
-deletes them -- and the last save that failed. `--json` lists the documents as `models`, the cache as
-`cache`, and `serving.documents` the files served, each `held` or `evicted` (out of memory for its
+document a live worker holds and its state (**Document lifetime**). `--json` lists them as `models`, and
+`serving.documents` the files served, each `held` or `evicted` (out of memory for its
 budget: read again from its file when asked), with the bytes it holds. It
 also says its `version` (its release), its `installation` (the version it runs as) and what uses it -- `holders`, `watched` (the documents pages watch), `busy`
 (builds and draws running) and `active` (HTTP work underway) -- what a later release's engine asks of

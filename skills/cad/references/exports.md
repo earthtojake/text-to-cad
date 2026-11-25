@@ -62,7 +62,7 @@ The model's page is the default. A project can instead revolve around its export
 the person asks to iterate on the file or the project already works that way (an `exports.py`, a
 consumer reading the files, a 0.7-era layout). Each run then writes the file too, by a file
 decorator (`@step("../STEP/bracket.step")`, relative to the script; `@glb`,
-`@stl`, `@threemf` and `@dxf` alike; an `.xbf` by `@model("...")`), by `exports.py` or by
+`@stl`, `@threemf` and `@dxf` alike; an `.xbf` by `@model("...")`, whose page is the model's), by `exports.py` or by
 `cad <type> export` after the run; the person looks at the file's page; and checks read the file
 (`cad <type> snapshot` or `inspect` with its path, or `step.read` in a check).
 
@@ -130,7 +130,7 @@ The `.xbf` is text-to-cad's own document: the parts and placements, names, colou
 materials, element names and mechanism, read back losslessly, and the compiled tracks of
 the model's animations, which only a GLB exported from it reads. Export one only to share a model
 without its code, or to compose it in another project, where `model.read` reads it as an input. A
-server restart needs none: the server keeps each document it built.
+server restart needs none: each model's own `.xbf`, which every run writes, is its document.
 
 ## Formats
 

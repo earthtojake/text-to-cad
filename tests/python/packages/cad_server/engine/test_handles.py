@@ -28,7 +28,7 @@ from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
-from cad.engine.ids import derived_id, model_id  # noqa: E402
+from tests.python.support.ids import model_id  # noqa: E402
 from cad_server.engine.registry import Registry  # noqa: E402
 
 PARTS = """
@@ -287,7 +287,7 @@ class HandleTest(unittest.TestCase):
     def test_a_call_returns_a_handle_whose_shape_loads_on_first_access_and_a_child_s_composes(self) -> None:
         project = self.project("parts", {"parts.py": PARTS, "caller.py": CALLER})
         found = self.run_python("caller.py", cwd=project)
-        ident = model_id(project / "parts.py", "base")
+        ident = model_id(project / "parts.py", "base", xbf="XBF/base.xbf")
         self.assertEqual((found["type"], found["id"], found["name"]), ("Document", ident, "base"))
         self.assertTrue(found["url"].split("?")[0].endswith(f"/{ident}"), found["url"])
         self.assertEqual((found["kernel_before"], found["kernel_after"]), (False, True),
@@ -301,9 +301,9 @@ class HandleTest(unittest.TestCase):
 
     def test_a_model_exported_by_its_function_is_built_as_its_call_is_never_cold(self) -> None:
         """``export(model, path)`` is the model's call, then its handle's export: eight in one program
-        run once, replay in the next run, and after a restart are taken from the engine's cache --
+        run once, replay in the next run, and after a restart are taken from their .xbf files --
         no body runs again -- and write what the handle form writes, byte for byte. (A document taken
-        from the cache writes its STEP as read back, a signed zero apart from the live build's: the
+        from its .xbf writes its STEP as read back, a signed zero apart from the live build's: the
         handle form's the same.)"""
         from cad.engine.render import context
         from tests.python.support import opengl
@@ -320,20 +320,23 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(len(runs.read_text(encoding="utf-8").split()), 8, "a second program's run replays")
         self.restart()
         self.run_python("exporter.py", *draw, cwd=project)
-        self.assertEqual(len(runs.read_text(encoding="utf-8").split()), 8, "after a restart: taken from the cache")
+        self.assertEqual(len(runs.read_text(encoding="utf-8").split()), 8, "after a restart: taken from each .xbf")
         self.assertEqual((project / "out/m0.step").read_bytes(), (project / "out/handle.step").read_bytes(),
-                         "from the cache too, the function form writes the handle form's bytes")
+                         "taken from its .xbf too, the function form writes the handle form's bytes")
 
-    def test_a_shape_handed_over_is_a_document_held_served_exported_and_never_rebuilt(self) -> None:
+    def test_a_shape_handed_over_is_its_xbf_served_exported_and_never_rebuilt(self) -> None:
+        from cad.engine.ids import file_id
+
         project = self.project("handed", {"hand.py": HANDED})
         found = self.run_python("hand.py", cwd=project)
-        ident = derived_id(project / "hand.py", "crate")
-        self.assertEqual((found["id"], found["tag"], found["same"]), (ident, derived_id(project / "hand.py", "tag"), True))
+        ident = file_id(project / "crate.xbf")
+        self.assertEqual((found["id"], found["tag"], found["same"]), (ident, file_id(project / "tag.xbf"), True),
+                         "a shape's id is its .xbf's")
         self.assertEqual(_served(found["url"], ident)["name"], "crate", "its page serves it")
         self.assertEqual([clip["name"] for clip in _glb_json(project / "crate.glb").get("animations") or []],
                          ["lift"], "the animations passed are baked into its GLB")
         self.assertTrue((project / "crate.step").is_file())
-        # A model always writes its .xbf: handed over from a script, <name>.xbf beside it, the document the engine holds.
+        # A model always writes its .xbf: handed over from a script, <name>.xbf beside it, its document.
         from cad.engine import document
 
         self.assertEqual(sorted(path.name for path in project.glob("*.xbf")), ["crate.xbf", "tag.xbf"])
@@ -342,51 +345,46 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(((project / "pegs" / "peg-v1.xbf").is_file(), (project / "peg.xbf").exists()), (True, False))
         record = Registry(self.state).get(ident)
         self.assertEqual((record["kind"], record["entry"], record["program"]), ("shape", "crate", "hand.py"))
-        self.assertEqual(set(record) - {"cache"}, {"schema", "id", "kind", "root", "home", "entry", "program",
-                                                   "revision", "built", "created", "namespace", "name", "facts",
-                                                   "saved"},
-                         "a model's shape, the program that showed it, and the .xbf it is saved as")
-        from cad.engine.ids import file_id
-        from cad_server.viewer.recents import RecentStore, fold
-
-        # The engine wrote its .xbf and recorded it as the shape's, as it does a build's: one card on the home.
+        self.assertEqual(set(record), {"schema", "id", "kind", "root", "home", "entry", "program", "revision", "built",
+                                       "created", "namespace", "name", "facts", "saved", "version"},
+                         "a model's shape, the program that showed it, and the .xbf that is its document")
         self.assertEqual(record["saved"], "crate.xbf")
-        saved = Registry(self.state).get(file_id(str(project / "crate.xbf")))
-        self.assertEqual((saved["of"]["id"], saved["of"]["revision"], saved["facts"]["parts"]), (ident, record["revision"], 2))
+        from cad_server.viewer.recents import RecentStore
+
+        # Its .xbf opened on a page is the shape's record: one row, one card.
         store = RecentStore(self.state)
         store.opened(str(project / "crate.xbf"))
-        rows = [{**entry.row(), "project": None} for entry in store.list()]
-        self.assertEqual([row["record"] for row in rows if row["path"] == str(project / "crate.xbf")], ["file"])
-        self.assertNotIn(str(project / "crate.xbf"), [row["path"] for row in fold(rows)],
-                         "its .xbf is the shape's card, not a card beside it")
+        rows = [entry.row() for entry in store.list()]
+        self.assertEqual([row["record"] for row in rows if row["id"] == ident], ["shape"])
+        self.assertNotIn(str(project / "crate.xbf"), [row["path"] for row in rows])
         listed = {entry.path: entry.public() for entry in store.list()}
         shown = listed[ident]
+        self.assertEqual(shown["file"], (project / "crate.xbf").as_posix())
         # Its parts' occurrences, counted from the structure handed over: the crate and its lid; the tag is one part.
         self.assertEqual((record["facts"], shown["parts"], listed[found["tag"]]["parts"]), ({"parts": 2}, 2, 1))
         self.assertIn(f"a shape handed over by {project / 'hand.py'}, a program the engine did not run", shown["shown"],
                       "its words, from its program")
-        # From a REPL: the working folder is its scope.
+        # From a REPL: its .xbf in the working folder.
         repl = self.run_python("-", cwd=project, input="import json, build123d as bd\nfrom cad import model\n"
                                "h = model(bd.Box(2, 2, 2), name='scratch')\nmodel('kept/kept.xbf', shape=bd.Box(1, 1, 1), name='kept')\n"
                                "print('RESULT ' + json.dumps(h.id))\n")
-        self.assertEqual(repl, derived_id(project, "scratch"))
+        self.assertEqual(repl, file_id(project / "scratch.xbf"))
         self.assertEqual(sorted(path.name for path in project.glob("*.xbf")), ["crate.xbf", "scratch.xbf", "tag.xbf"],
                          "from a REPL, which has no script, <name>.xbf in its working folder: no document without its file")
         self.assertTrue((project / "kept" / "kept.xbf").is_file(), "and where a path is given, relative to that folder")
-        # Exported by its id, as any document the engine holds; after a restart, from the cache.
+        # Exported by its id, as any document; after a restart, from its .xbf.
         self.assertEqual(self.cli("export", ident, str(project / "again.stl")).returncode, 0)
         self.restart()
         self.assertEqual(self.cli("export", ident, str(project / "restarted.stl")).returncode, 0)
-        # With its cache file gone, nothing builds it again, and the words say so.
+        # With its .xbf gone, nothing builds it again, and the words say so.
         self.assertEqual(self.cli("stop").returncode, 0)
-        shutil.rmtree(self.cache / "documents" / ident)
+        (project / "crate.xbf").unlink()
         engine_daemon.start(self.env)
         refused = self.cli("export", ident, str(project / "gone.stl"))
         self.assertEqual(refused.returncode, 2, refused.stderr)
         self.assertIn("a program the engine did not run: no script to rerun", refused.stderr)
         answer = self.ask({"op": "state", "id": ident})
         self.assertEqual((answer["state"], answer["rebuild"]), ("unsaved", None))
-
 
     def test_a_handle_is_posed_where_the_engine_holds_its_mechanism(self) -> None:
         # From a plain script, the handle is posed (its .shape carries no joints, and says what to pass
@@ -413,7 +411,7 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(elbow["location"][3], 100.0, "the elbow stands where the body put it, turned")
         self.maxDiff = None
         self.assertEqual(found["caller"], found["inside"])
-        # After a restart the document comes from the engine's cache, read as its xbf: the same tree.
+        # After a restart the document is its .xbf, read as it is: the same tree.
         self.restart()
         self.assertEqual(self.run_python("nested.py", cwd=project)["caller"], found["inside"])
 

@@ -14,7 +14,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cad.engine.ids import derived_id, file_id, model_id
+from cad.engine.ids import derived_id, file_id
+from tests.python.support.ids import model_id
 from cad_server.engine.registry import Folder, Registry
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer import projects as projects_module
@@ -164,6 +165,27 @@ class ProjectsTest(unittest.TestCase):
         self.assertEqual((documents[3]["id"], documents[3]["opened"]), (file_id(self.work / "STEP" / "heart_tag.step"), None))
         # The project inside it has its own.
         self.assertEqual([row["name"] for row in self.projects.documents(inner, store.entries())["documents"]], ["part.stl"])
+
+    def test_a_project_lists_one_row_per_model_and_an_exported_or_copied_xbf_as_its_own(self) -> None:
+        from cad_server.engine.registry import file_version
+
+        store = RecentStore(self.state)
+        record, _ = self.projects.add(str(self.work))
+        script = self.work / "src" / "heart_tag.py"
+        own, out, copy = script.parent / "heart_tag.xbf", self.work / "share" / "x.xbf", script.parent / "copy.xbf"
+        for path in (own, out, copy):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"not read here")
+        store.registry.put({"id": model_id(script, "heart_tag"), "kind": "model", "root": str(script.parent),
+                            "home": script.name, "entry": "heart_tag", "namespace": str(script.parent), "name": "heart_tag",
+                            "built": 1_700_000_000.0, "saved": "heart_tag.xbf", "version": file_version(own)})
+        store.opened(str(own))  # opened by its path: the model's record
+        documents = self.projects.documents(record, store.entries())["documents"]
+        rows = [(row["name"], row["record"], row["id"]) for row in documents if row["name"].endswith(("tag", ".xbf"))]
+        self.assertEqual(rows, [("heart_tag", "model", file_id(own)), ("x.xbf", "file", file_id(out)),
+                                ("copy.xbf", "file", file_id(copy))],
+                         "the model is its .xbf, one row; an export and a copy are files of their own")
+        self.assertNotIn(slashed(own), [row["path"] for row in documents])
 
     def test_a_file_a_page_opened_is_listed_whatever_the_walk_found(self) -> None:
         store = RecentStore(self.state)

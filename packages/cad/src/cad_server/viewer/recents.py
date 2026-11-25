@@ -8,7 +8,8 @@ Recents is a view of the registry (``cad_server.engine.registry``, ``<state>/doc
 a CAD file opened on a page is a record of its own (``kind: "file"``: its path, when it was first
 opened, ``created``, and last, ``opened``, whether it is pinned), and every model a script built is one already (``kind: "model"``, which the
 engine writes when it registers the build), as is every shape a program handed over (``kind:
-"shape"``). The home's picture of each is UI state on its record (``preview``), the PNG under
+"shape"``). A model's document is its ``.xbf``, and its record is that file's: one record, one row, one card,
+whether a page opened the file or the model. The home's picture of each is UI state on its record (``preview``), the PNG under
 ``recents/thumbnails`` named by the record and its content: the light viewport's, which the home
 shows in both themes. A project's file the home pictures before any page opened it (``projects.py``)
 is given a record to keep its picture on, with no ``opened`` and no ``created``, which the first page to
@@ -17,31 +18,25 @@ lists its files whatever their records (``RecentStore.entries``).
 
 A row says how many part occurrences its document holds (``parts``: what ``cad model inspect`` counts as its
 parts' occurrences) where its record says, and null where it does not: a model's and a shape's from its last build
-(the record's ``facts``, which the engine writes when it registers the build or the hand-over); an ``.xbf`` the
-engine wrote (a build's declared file, an export) from the document it wrote it from, as it wrote it
-(``Models.written``); any other file the engine read because a page opened it (an ``.xbf``, a STEP) from that read
-(``RecentStore.counted``) -- a file's only while the file is the version counted. A listing reads records alone:
-nothing is read to count them, a model's script never, a file's bytes never.
-
-An ``.xbf`` the engine wrote from a model's document -- the build's own (every model writes one), a shape's handed
-over, an export of the model's id -- is that model, and a listing shows one card of them (``fold``): its record names the model, the
-file's version as written and the document's revision (``of``: ``Models.written``), and while the file is still
-that version and the model's record still that revision, the file's row says whose it is (``of``) and is left out of
-any list that holds the model's row (``fold``). A file edited or copied since, or one whose model was built into
-another revision since (an export the build did not write again: an older model now), is a file of its own. A
-model's (or a shape's) row says where its own ``.xbf`` is (``saved``) while that file is the model so.
+(the record's ``facts``, which the engine writes when it registers the build or the hand-over), while its ``.xbf``
+is the version the engine wrote (the record's ``version``); an ``.xbf`` exported (``Models.exported``) from the
+document it was written from; any other file the engine read because a page opened it (an ``.xbf``, a STEP) from that
+read (``RecentStore.counted``) -- a file's only while the file is the version counted. A listing reads records alone:
+nothing is read to count them, a model's script never, a file's bytes never. An ``.xbf`` exported to another path, or
+copied, is another file, so another card. A model's (or a shape's) row names its ``.xbf`` (``file``), and is
+``missing`` once that file is gone, as a file's is.
 
 A record keeps its picture until the record is removed or the picture replaced, however many records there are and
 however often a document is edited: a record names one, a new picture replaces it at once (``RecentStore.thumbnail``:
 the old one goes as the new is named), a forgotten record's go with it (``Registry.delete``), and a PNG no record names
 goes once no writer can still be about to name it (``THUMBNAIL_GRACE_SECONDS``: a crash's, or an earlier release's). Removing a file's entry forgets its record, the file
-untouched; a model's entry is deleted with its document (``cad_server.engine.models.delete``: its record
-and its document in the engine's cache). Nothing goes on its own: a model whose script is gone stays
-listed, ``missing``, until the person deletes it.
+untouched; a model's entry is deleted with its record (``cad_server.engine.models.delete``), its ``.xbf`` and its
+script untouched. Nothing goes on its own: a model whose ``.xbf`` is gone stays listed, ``missing``, until the person
+deletes it.
 
 A file is named by its canonical path (``cad.engine.ids.canonical``), the engine's, and its
 record by that path's id, so a symlink and its target, or two spellings of one file, are one
-entry. A model is named by its id, which is also the ``path`` the home opens it by (``/<id>``).
+entry. A model is named by its id -- its ``.xbf``'s -- which is also the ``path`` the home opens it by (``/<id>``).
 
 Every write goes through the registry's one owner of the state folder (``registry.Folder``), and
 lands whole. Each record is its own file, so two processes opening different files never meet; a
@@ -114,13 +109,9 @@ class Recent:
     shown: str | None = None
     # How many part occurrences its document holds, where its record says (the module): None where it does not.
     parts: int | None = None
-    # A model and an .xbf the engine wrote from its document (the module): the file's, that model's id (``of``) and
-    # the revision written (``written``), while the file is the version written; a model's (and a shape's), its
-    # revision now (``revision``) and the path of its declared .xbf while that file is the model so (``saved``).
-    of: str | None = None
-    written: str | None = None
-    revision: str | None = None
-    saved: str | None = None
+    # A model's (and a shape's): its .xbf, its document (the record's ``saved``); None for a record from before one
+    # named it.
+    file: str | None = None
     # A file's: the path a page last reached it by, where that is not its canonical path (a file in a linked folder):
     # the project it is in is the one it was reached in (``projects.Projects.holding``).
     reached: str | None = None
@@ -155,23 +146,24 @@ class Recent:
         script in a run alone."""
         if self.kind == "file":
             present, folder = self.updated is not None, os.path.dirname(self.path)
+        elif self.file is not None:
+            # A model's document is its .xbf: where it is, and missing once it is gone, as a file is.
+            present, folder = os.path.isfile(self.file), os.path.dirname(self.file)
         else:
-            # A shape's document is the engine's, not its home's: a folder home (a REPL's) is where it
-            # came from, and nothing of it goes missing (``registry.detached``).
             present = self.kind == "shape" or bool(self.script and os.path.isfile(self.script))
             folder = self.script if self.script and self.kind == "shape" and os.path.isdir(self.script) \
                 else os.path.dirname(self.script or "")
         found = {
             "path": self.path,
             "name": self.name or os.path.basename(self.path),
-            # Where it is, as the person reads it: a file's folder, a model's script's.
+            # Where it is, as the person reads it: a file's folder, a model's .xbf's.
             "folder": folder,
             "namespace": self.namespace or folder,
             "opened": self.opened,
             "updated": self.updated,
             "created": self.created,
             "pinned": self.pinned,
-            # A file that is gone, or a model whose script is (``detached``): listed, and removable.
+            # A file that is gone, a model's .xbf among them: listed, and removable.
             "missing": not present,
             "thumbnail": self.thumbnail,
             "pictured": self.pictured,
@@ -179,12 +171,10 @@ class Recent:
             "parts": self.parts,
         }
         found["kind"] = self.kind
-        if self.kind == "file" and self.of is not None:
-            found["of"] = self.of
         if self.kind != "file":
             found.update(id=self.path, script=self.script, rebuild=self.rebuild)
-            if self.saved is not None:
-                found["saved"] = self.saved.replace(os.sep, "/")
+            if self.file is not None:
+                found["file"] = self.file.replace(os.sep, "/")
         if self.kind == "shape":
             found.update(shown=self.shown or "a shape handed over: no script to rerun")
         return found
@@ -239,6 +229,8 @@ class RecentStore:
         found = canonical(path)
 
         def change(record):
+            if record is not None and record.get("kind") != "file":
+                return {**record, "opened": now}  # a model's .xbf: the model's record, which a run wrote
             # Where it is now, as its record says it (``root``, ``home``): one an earlier release wrote is
             # said again as this one says it. Made now (``created``) where no page opened it before: a new
             # record, or one the home's picture made. A record from before ``created`` was kept stays without.
@@ -330,29 +322,26 @@ class RecentStore:
                 path = str(registering.home(self.registry, record))
                 updated, size, version = _on_disk(path)
                 opened = record.get("opened")
-                of = record.get("of") if isinstance(record.get("of"), dict) else {}
                 entries.append(Recent(path=path, opened=float(opened) if isinstance(opened, (int, float)) and opened else None,
                                       updated=updated, size=size, parts=_parts(record.get("facts"), version)
                                       if version else None,
-                                      of=of.get("id") if version and of.get("version") == version
-                                      and isinstance(of.get("id"), str) else None,
-                                      written=of.get("revision") if isinstance(of.get("revision"), str) else None,
                                       reached=_still(record.get("reached"), path),
                                       **common))
             elif record.get("kind") in ("model", "shape"):
                 program = registering.program(self.registry, record)
+                found = registering.xbf(self.registry, record)
+                _updated, _size, version = _on_disk(str(found)) if found is not None else (None, None, None)
                 entries.append(Recent(path=record["id"], kind=record["kind"], name=record.get("name") or record.get("entry"),
                                       namespace=record.get("namespace") or record.get("root"),
                                       script=str(registering.home(self.registry, record)),
                                       rebuild=registering.command(self.registry, record),
                                       shown=Models.shown(str(program) if program else None)
                                       if record["kind"] == "shape" else None, updated=record.get("built"),
-                                      opened=record.get("opened"), parts=_parts(record.get("facts")),
-                                      saved=os.path.normpath(self.registry.root(record) / record["saved"])
-                                      if isinstance(record.get("saved"), str) else None,
-                                      revision=record.get("revision") if isinstance(record.get("revision"), str)
+                                      opened=record.get("opened"), file=str(found) if found is not None else None,
+                                      # Its count while its .xbf is the version the engine wrote (``version``).
+                                      parts=_parts(record.get("facts")) if record.get("version") in (None, version)
                                       else None, **common))
-        return _linked(entries)
+        return entries
 
     def _sweep_thumbnails(self, replaced: set[str] | frozenset[str] = frozenset()) -> None:
         """The pictures no record names any more removed (the module): ``replaced`` (a record's pictures a new one
@@ -368,47 +357,6 @@ class RecentStore:
                     self.state.remove(f"{THUMBNAILS}/{name}")
             except OSError:
                 continue
-
-
-def _linked(entries: list[Recent]) -> list[Recent]:
-    """``entries`` with each ``.xbf`` the engine wrote from a model's document linked to that model (``Recent.of``)
-    only while the model's record is still the revision it was written from -- the file's version was checked as it
-    was read -- and each model's declared ``.xbf`` named (``Recent.saved``) only while that file is linked to it;
-    unlinked anywhere else: a model deleted, or built into another revision since."""
-    def key(path: str) -> str:
-        return os.path.normcase(os.path.normpath(path))
-
-    models = {entry.path: entry for entry in entries if entry.kind in ("model", "shape")}
-    files: dict[str, Recent] = {}
-    for entry in entries:
-        if entry.kind != "file" or entry.of is None:
-            continue
-        model = models.get(entry.of)
-        if model is None or model.revision is None or model.revision != entry.written:
-            entry.of = None
-        else:
-            files[key(entry.path)] = entry
-    for entry in models.values():
-        found = files.get(key(entry.saved)) if entry.saved else None
-        if found is None or found.of != entry.path:
-            entry.saved = None
-    return entries
-
-
-def fold(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """A listing's ``rows`` (Recents', a project's) with each ``.xbf`` that is a model's document left out where the
-    model's own row stands for it: a file row the person has not pinned whose ``of`` (``Recent.of``: unchanged since
-    the engine wrote it from the model's document, and the model still that revision) names a model's (or a shape's)
-    row of the same list, in the same project, whose script is there. Anything else is listed as any file is: a file
-    edited or copied, a model built into another revision since, deleted or not in this list. Records alone are
-    read: no file's bytes, no script."""
-    models = {row["id"]: row for row in rows if row.get("record") in ("model", "shape") and not row.get("missing")}
-
-    def folded(row: dict[str, Any]) -> bool:
-        model = models.get(row.get("of")) if row.get("record") == "file" else None
-        return model is not None and not row.get("pinned") and model.get("project") == row.get("project")
-
-    return [row for row in rows if not folded(row)]
 
 
 def _reached(record: dict[str, Any], path: str) -> dict[str, Any]:

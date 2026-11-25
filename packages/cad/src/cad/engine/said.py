@@ -92,7 +92,7 @@ def describe(report: dict[str, Any], wall: float, fresh: bool | None) -> str:
     worker = "" if fresh is None else (" cold" if fresh else " warm")
     if memo.get("bodies_loaded"):
         taken = (report.get("cache") or {}).get("from")
-        holder = "the engine's cache" if taken == "cache" else "its document in memory"
+        holder = "its .xbf" if taken == "xbf" else "its document in memory"
         loaded = memo.get("bodies_loaded", 0)
         line = (f"took {report['model']}{worker} in {wall:.2f}s: {holder} holds the model's key, "
                 f"{loaded} bod{'y' if loaded == 1 else 'ies'} loaded, nothing ran") + _waited(report, "took")

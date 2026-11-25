@@ -480,20 +480,21 @@ that is not there shows "File does not exist".
 A file is opened by its path (the home, the search) and shown by its id: the page asks the
 server for the file's envelope (`GET /api/v1/documents?path=<abs>`), whose row carries the document's `id`,
 and moves to `/<id>`. Rows join by that id (`client.entryOf`), so a symlinked or case-variant
-spelling of one file is one row. A model (a document with no file of its own): its ⋯ menu
+spelling of one file is one row. A model, whose file is its `.xbf`: its ⋯ menu
 acts on the document and on the script that builds it ([Export and job status](#export-and-job-status)), and it is
-in the project its script is in. A document's row says its project (`project`: the nearest project above its file as
-reached, a linked folder's inside a project's too, or a model's script), which the navbar follows as the row is read again.
+in the project its `.xbf` is in. A document's row says its project (`project`: the nearest project above its file as
+reached, a linked folder's inside a project's too, a model's its `.xbf`), which the navbar follows as the row is read again.
 
 The home reads the projects over `GET /api/v1/projects` and the library over `GET /api/v1/documents`, each row
 with the project it is in (`project`) and three times, `updated` (a
 file's time on disk, a model's run), `opened` (when a page last opened it) and `created` (when the
 engine first made its record: a model's first run, a file's first open; null for a record from before
 it was kept), which the home orders by the person's Sort (by default the later of the first two, newest first), and
-`parts`, how many part occurrences its document holds where the server knows it (a model's or a shape's last build;
-an `.xbf` the engine wrote, from the document it wrote; another file the engine read for a page; a file's only while it
-is that version; null where it does not), which names a model's card Part or Assembly, and, of a model, its own
-`.xbf` (`saved`, its path; an `.xbf` that is a model's document says whose it is, `of`, where a list has its row); it pins, unpins, removes a file's record (`remove`) and
+`parts`, how many part occurrences its document holds where the server knows it (a model's or a shape's last build,
+while its `.xbf` is the version the engine wrote; an `.xbf` exported, from the document it was written from; another
+file the engine read for a page; a file's only while it is that version; null where it does not), which names a
+model's card Part or Assembly, and, of a model, its `.xbf` (`file`): a model's id is its `.xbf`'s, so a model and its
+file are one row; it pins, unpins, removes a file's record (`remove`) and
 deletes a model's document (`delete`) over `PATCH /api/v1/documents`, and draws each card's picture
 from `GET /api/v1/documents/<id>/thumbnail`. A model's script is never read for any of it. The document on
 screen says it was opened once the catalog has it (`{action: "open"}`: a file joins the
@@ -589,16 +590,16 @@ composer has no camera action: its note to the agent is Quick Edit.
 
 ## Live models
 
-A model's page is `/<id>`, its document's id, which `cad run SCRIPT.py` prints (`view:`). The
-page reads the document the engine holds, by id (`GET /api/v1/documents/<id>`); it never builds or
-imports a script, and no project lists one. A model has no file of its own: its ⋯ menu has the
-document's actions and its script's ([Export and job status](#export-and-job-status)), and it is in the project its
-script is in, if any, whose page lists it with the project's files. It is in the
+A model's page is `/<id>`, its document's id -- its `.xbf`'s -- which `cad run SCRIPT.py` prints (`view:`), and the
+page opening that `.xbf` by its path opens. The page reads the document by id (`GET /api/v1/documents/<id>`); it
+never builds or imports a script, and no project lists one. Its ⋯ menu has the document's actions and its script's
+([Export and job status](#export-and-job-status)), and it is in the project its `.xbf` is in, if any, whose page
+lists it, once, with the project's files. It is in the
 library by its id (the engine's record), and its picture is taken by
 its id as a file's is: on screen once it settles, once per build, and on the home only while
 the engine holds it. Once its worker retires or
-the engine restarts, its page shows it from the engine's cache, as last built; only once the cache
-holds no file of it (deleted by hand, or never saved: the engine's state `unsaved`) does its page
-say it is not saved and name the command that builds it again. The page shows the engine's last
+the engine restarts, its page shows its `.xbf`, read as a file is (no parameters to edit, no provenance); only once
+that file is gone (deleted by hand: the engine's state `unsaved`) does its page say it is not saved and name the
+command that builds it again. The page shows the engine's last
 build and says nothing of the script it came from: an edit not yet built is no state of the page's;
 what it shows is the engine's own run, building or failed. Rebuilding the model updates the same view through the document version stream.

@@ -109,9 +109,8 @@ no library) and no destinations.
 One class owns a check's life ([checks_runner.py](../checks_runner.py), whose docstring is the mechanism), and
 every check is measured in a checks process (`services.CHECKS`), never in a model's worker: a STEP's or an xbf's
 from its path, read once while its bytes stay as they were (by their digest, four files and 256 MB of them at
-most, `worker._file`); a document the engine holds from its bytes -- the server's or the cache's, else the ones
-its worker's protocol-1 `result` gives, one short request of that worker (`Daemon._check_document`) -- read once
-per version (four and 256 MB at most, `worker._document`). So a build, an inspection, a snapshot or a view of a
+most, `worker._file`); a model a live worker holds from the bytes its worker's protocol-1 `result` gives, one short request of that
+worker (`Daemon._check_document`), and one no worker holds from its `.xbf`, as a file -- read once per version (four and 256 MB at most, `worker._document`). So a build, an inspection, a snapshot or a view of a
 model waits for no check of it, a build has no check to cancel, and a long check or its crash costs no document
 anything. The engine measures only for a caller of its own release whose code and libraries are the checks
 processes' (`contract.measures_for`; theirs is the base's: the server's own, read at each check, where the kernel
@@ -231,17 +230,17 @@ store, with no process asked and no bytes asked of a worker (`reused`) -- a mode
 record says before any of its document's bytes are read; a version that differs after the check
 keeps nothing, and only a clean result is kept: never a document that did not read, a refused check or a family not
 measured. A document holds one version's results, so none outlives the document it describes. In memory the store
-holds 128 results and 64 MB at most, least recently used first; each is written beside the engine's cache too
-(`checks.Disk`: `<cache>/documents/<id>/checks/`, a file's under its document id, so deleting a document removes its
+holds 128 results and 64 MB at most, least recently used first; each is written to the engine's cache folder too
+(`checks.Disk`: `<cache>/documents/<id>/checks/`, under its document id, so deleting a document removes its
 results with it), under the version that outlives the engine -- a model's revision, its build closure's key (with
-its parameters' record where it has one, **Parameters**), the revision its cache file is kept by (a build with no key keeps nothing on disk), a file's digest -- so a restarted engine
+its parameters' record where it has one, **Parameters**; a build with no key keeps nothing on disk), a file's digest -- so a restarted engine
 answers the same check of the same document without measuring, and a model built again from the same code and
 inputs is the same document there. Each is written whole, a document keeps one version's, the store holds 1024
 results and 256 MB at most, least recently used (by its time on disk, set again by a read) first, and an entry that
 does not read -- not the JSON written, another version's or check's under its name -- is removed, never served,
 and a document's `checks/` folder left empty goes with its last. The files are listed once, at the store's first
-use, the half-written ones a stopped engine left swept then; one gone since (its folder wiped, or removed with its
-document's unreadable cache file) leaves the list as it is asked for; and a cache folder that cannot be written
+use, the half-written ones a stopped engine left swept then; one gone since (its folder wiped) leaves the list as
+it is asked for; and a cache folder that cannot be written
 keeps nothing there, each result trying its own write. Each is written under the registry's lock of its
 document, which its deletion holds (`Registry.lock`, `FORGOTTEN`): a deleted document's results leave memory and
 the index, and a check of it that began before keeps nothing.

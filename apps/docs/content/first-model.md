@@ -59,7 +59,7 @@ cad run src/bracket.py
   view: http://127.0.0.1:54360/0dc50a92-a21f-5895-a245-ebdeb5352f3b?token=...
 ```
 
-The `id:` names the model's document. It comes from the script's path and the function's name, so it is the same on every run. The `view:` line is its page in the viewer. Your port and token will differ.
+The `id:` names the model's document, its `.xbf`, which the run saves beside the script. It is the file's, so it is the same on every run. The `view:` line is its page in the viewer. Your port and token will differ.
 
 > [!NOTE]
 > The first build downloads the CAD kernel, about 240 MB, and a first model waits for it. It is made once, in a cache folder, and every later build reuses it. [What it needs](/docs/install#what-it-needs) has the sizes, and [Removing](/docs/install#removing) says where the folders are.

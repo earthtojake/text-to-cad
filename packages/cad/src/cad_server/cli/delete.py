@@ -1,5 +1,5 @@
-"""``cad delete``: documents deleted -- each one's record, its document in the engine's cache and
-what the engine holds of it; never a file of the person's (``cad_server.engine.cli``).
+"""``cad delete``: documents deleted -- each one's record and what the engine holds of it; never a file
+of the person's (``cad_server.engine.cli``).
 
 The parser and the run are the engine's (``cad_server.engine.cli.parser_for``, ``run``), the same
 verb ``python -m cad_server.engine delete`` takes.

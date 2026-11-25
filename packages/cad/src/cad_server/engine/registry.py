@@ -2,24 +2,21 @@
 (``places.state_dir``), called ``<state>`` here.
 
 ``<state>/documents/<id>/document.json`` is a document's record, one shape for every kind:
-``{schema, id, kind, root, home, entry, namespace, name, fingerprint?, module?, line?, declares?, relocated?,
-revision, built, facts?, saved?, of?, program?, cache?, opened?, pinned?, preview?}`` (identity's fields: ``identity``). ``kind`` is ``model``, a model built from a script (``home`` and ``entry``: the
-script and the function it points at; the command that builds it again is always ``cad run``
-of its home); ``shape``, a shape a program handed over (``home``: the script that handed it over,
-or the folder it was handed over in; ``program``: that program, where there is one; nothing builds
-it again); or ``file``, an on-disk CAD file the person opened (``home`` and ``opened`` alone, and
-``pinned``, ``preview`` and, where the engine wrote it from a document or read it for a page, ``facts``: its
-parts' occurrences and the file's version they are of, ``{parts, version}`` (``Registry.counted``); where the engine
-wrote it as an ``.xbf`` from a model's document (a build's own, a shape's handed over, an export of the model's id), ``of``:
-that model's id, the file's version as written and the document's revision, ``{id, version, revision}``; never a
-``revision`` of its own, never bytes). A model's or a shape's record names its own ``.xbf`` (``saved``: its path). The registry POINTS: no geometry, no
-mesh, no xbf and no memo is ever written here. A model's record may say that the engine's cache
-holds its document (``cache``: ``{revision, bytes, read}``), whose bytes live in the
-cache folder, not here (``Registry.cache``: ``<cache>/documents/<id>/document.xbf``, the engine's
-``cache`` module): regenerable, wiped at no loss, never the source of anything; the record is
-authoritative, and a cache file missing or unreadable is simply not cached. Ids are the
-documents' own (``ids``: one formula of the canonical path and the name); the
-registry is their reverse map, never their authority.
+``{schema, id, kind, root, home, entry, namespace, name, fingerprint?, module?, relocated?, revision, built,
+created?, facts?, saved?, version?, aliases?, program?, opened?, pinned?, preview?}`` (identity's fields:
+``identity``). A model's document is its ``.xbf``, and its record is that file's (its id ``ids.file_id`` of it):
+``kind`` is ``model``, a model built from a script (``home`` and ``entry``: the script and the function it points
+at; the command that builds it again is always ``cad run`` of its home; ``saved``: its ``.xbf``; ``version``: that
+file's version as the engine last wrote or kept it, ``mtime_ns-size``, which a run takes it from while the file is
+that version: ``build._written_by_engine``); ``shape``, a shape a program handed over (``home``: the script that
+handed it over, or the folder it was handed over in; ``program``: that program, where there is one; ``saved``: its
+``.xbf``; nothing builds it again); or ``file``, any other CAD file the person opened (``home`` and ``opened``
+alone, and ``pinned``, ``preview`` and, where the engine wrote it or read it for a page, ``facts``: its parts'
+occurrences and the file's version they are of, ``{parts, version}``, ``Registry.counted``; never a ``revision``,
+never bytes). A record from before a model's id was its ``.xbf``'s is carried to that id, its old id one of its
+``aliases`` (``identity.carry``, ``Registry.resolve``). The registry POINTS: no geometry, no mesh, no xbf and no
+memo is ever written here. Ids are the documents' own (``ids``: one formula of the canonical path and the name);
+the registry is their reverse map, never their authority.
 
 A record is relocatable: ``root`` is the one absolute folder in it, and ``home`` (the script, or
 the file) and a shape's ``program`` are relative to it.
@@ -31,8 +28,9 @@ through ``Folder``, and every write commits through ``atomic_replace.replace_ato
 made only where none is (``Folder.create``: the page token), which is linked into place. A record is
 written synchronously, and only when a field differs from the one on disk; then
 each of ``OBSERVERS`` is told (a mirror uploads in the background: nothing waits on the network).
-The cache folder is a second ``Folder``, written the same way; forgetting a document
-(``delete``) forgets its cache file too, and its Recents pictures (``preview``: PNGs under
+The cache folder is a second ``Folder``, written the same way, which holds the views derived from a file's
+bytes (a KiCad board's plots, kept checks: ``documents/<id>/...``); forgetting a document (``delete``) forgets
+them too, and its Recents pictures (``preview``: PNGs under
 ``PICTURES``, which Recents writes and bounds, ``cad_server.viewer.recents``) that no other record names.
 
 Beside the documents, ``<state>/engines/token`` is the user's page token, which the version's engine
@@ -59,10 +57,11 @@ from typing import Any, Callable
 
 from cad.engine.atomic_replace import replace_atomic
 from cad.engine.ids import is_id
-from cad.engine.records import (DOCUMENTS, RECORD, SCHEMA, command, detached, home, parse, program, relative, rerun)
+from cad.engine.records import (DOCUMENTS, RECORD, SCHEMA, command, detached, home, parse, program, relative, rerun,
+                                 xbf)
 
 __all__ = ["DOCUMENTS", "ENGINES", "ENGINE_FIELDS", "ENGINE_SCHEMA", "FACTORY", "FORGOTTEN", "Folder", "OBSERVERS", "PICTURES", "RECORD", "Registry", "SCHEMA", "TOKEN",
-           "command", "current", "detached", "file_record", "file_version", "home", "pictures", "program", "relative"]
+           "command", "current", "detached", "file_record", "file_version", "home", "pictures", "program", "relative", "xbf"]
 
 ENGINES = "engines"
 # The engine records' own schema: 3 holds, while the default port is another's, the port the
@@ -119,6 +118,8 @@ _TOKEN = re.compile(r"[A-Za-z0-9_-]{32,256}")
 
 _LOCKS: dict[str, threading.RLock] = {}
 _LOCKS_LOCK = threading.Lock()
+# Per state folder, each alias a record keeps and that record's id (``Registry.resolve``).
+_ALIASES: dict[str, dict[str, str]] = {}
 
 
 def current() -> "Registry | None":
@@ -222,7 +223,7 @@ class Registry:
 
     def __init__(self, state: Folder | Path | str, cache: Folder | Path | str | None = None) -> None:
         self.state = state if isinstance(state, Folder) else Folder(state)
-        # Where the engine's cache keeps documents' bytes (``cache``), or None: nothing is cached.
+        # Where the engine's cache keeps what it derived of documents (``documents/<id>/...``), or None: nothing is.
         self.cache = cache if isinstance(cache, Folder) or cache is None else Folder(cache)
 
     # --- records ----------------------------------------------------------------------------
@@ -245,6 +246,10 @@ class Registry:
                 return False
             text = json.dumps(record, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
             self.state.write(f"{DOCUMENTS}/{ident}/{RECORD}", text.encode("utf-8"))
+            with _LOCKS_LOCK:
+                index = _ALIASES.get(str(self.state.root))
+                if index is not None:
+                    index.update({alias: ident for alias in record.get("aliases") or [] if is_id(alias)})
         for observer in list(OBSERVERS):
             try:
                 observer(record)
@@ -262,37 +267,61 @@ class Registry:
                 self.put(found)
             return self.get(ident)
 
-    def counted(self, ident: str, parts: int | None, version: str, make: str | None = None,
-                of: str | None = None, revision: str | None = None) -> None:
+    def counted(self, ident: str, parts: int, version: str, make: str | None = None) -> None:
         """How many part occurrences the CAD file of id ``ident`` holds, and the file's ``version`` they are of,
-        on its record (``facts``: ``{parts, version}``; ``parts`` None: its facts left as they are), written only
-        when it differs; with ``make`` (the file's canonical path), on a record made for it (``file_record``: no
-        ``opened``, so Recents does not list it) where it has none. The count is always one the engine had in hand:
-        the document it wrote the file from, or its read of the file. Nothing is read for it here. With ``of`` and
-        ``revision`` (a model's or a shape's id and its document's revision: the engine wrote the ``.xbf`` from that
-        document, a build's declared file or an export), the file is that document as of ``version`` (``of``:
-        ``{id, version, revision}``), which a listing folds into the model's row while the file is that version
-        and the model that revision (``cad_server.viewer.recents.fold``); without, any ``of`` it has is kept."""
-        facts = {"parts": int(parts), "version": str(version)} if type(parts) is int else None
-        saved = {"id": str(of), "version": str(version), "revision": str(revision)} \
-            if of is not None and revision is not None else None
+        on its record (``facts``: ``{parts, version}``), written only when it differs; with ``make`` (the file's
+        canonical path), on a record made for it (``file_record``: no ``opened``, so Recents does not list it) where
+        it has none. The count is always one the engine had in hand: the document it wrote the file from (an
+        export), or its read of the file. Nothing is read for it here. A model's or a shape's record is its build's:
+        never counted here."""
+        facts = {"parts": int(parts), "version": str(version)}
 
         def change(record: dict[str, Any] | None) -> dict[str, Any] | None:
             if record is None and make is not None:
                 record = file_record(make)
             if record is None or record.get("kind") != "file":
                 return None
-            found = {**record, **({"facts": facts} if facts is not None else {}), **({"of": saved} if saved else {})}
+            found = {**record, "facts": facts}
             return None if found == record else found
 
         self.update(ident, change)
+
+    def resolve(self, ident: str) -> str:
+        """The id document ``ident`` is known by now: ``ident`` itself where a record is there, or no record keeps
+        it; else the id of the record that keeps it among its ``aliases`` -- an id from before a model's id was its
+        ``.xbf``'s, or from before its script moved (``identity.carry``). Asked only of an id no record has: the
+        records are read once for it, those whose text holds an alias, and then kept up as records are written."""
+        if not is_id(ident) or self.state.path(f"{DOCUMENTS}/{ident}/{RECORD}").exists():
+            return ident
+        found = self._aliases().get(ident)
+        record = self.get(found) if found is not None else None
+        return found if record is not None and ident in (record.get("aliases") or []) else ident
+
+    def _aliases(self) -> dict[str, str]:
+        """Each alias a record keeps, and that record's id: read once a state folder, then kept up (``put``)."""
+        key = str(self.state.root)
+        with _LOCKS_LOCK:
+            index = _ALIASES.get(key)
+        if index is not None:
+            return index
+        index = {}
+        for name in self.state.names(DOCUMENTS):
+            data = self.state.read(f"{DOCUMENTS}/{name}/{RECORD}") if is_id(name) else None
+            if data is None or b'"aliases"' not in data:
+                continue
+            record = parse(name, data)
+            for alias in (record or {}).get("aliases") or []:
+                if is_id(alias):
+                    index[alias] = name
+        with _LOCKS_LOCK:
+            return _ALIASES.setdefault(key, index)
 
     def list(self) -> list[dict[str, Any]]:
         """Every record the registry holds, in no order."""
         return [record for record in (self.get(name) for name in self.state.names(DOCUMENTS)) if record is not None]
 
     def delete(self, ident: str) -> bool:
-        """Forget document ``ident``: its folder, whole, its cache file in the cache folder, and its
+        """Forget document ``ident``: its folder, whole, what the cache folder keeps of it (``documents/<id>``), and its
         Recents pictures that no other record names (``forget_pictures``: a record re-pointed under a
         new id keeps the pictures it names)."""
         if not is_id(ident):

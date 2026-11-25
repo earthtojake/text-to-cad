@@ -1,6 +1,6 @@
 """Every kind of process the daemon starts, declared (``supervisor.Service``); the supervisor runs
 each by its declaration, and the daemon binds its hooks to them by name (``drain``, ``watched``,
-``on_progress``, the ``saved`` event).
+``on_progress``).
 
 ``WORKER``: a model script's warm worker, one per script and Python (and one for the documents no
 worker built, keyed ``documents``), in the installation's base -- or in the Python the script was run
@@ -53,7 +53,7 @@ WORKER = Service(
     key="path",
     binding=RESTARTS,
     stderr="relay",
-    events=("saved", "collected"),
+    events=("collected",),
     words=Words(unstarted="the worker for {label} did not start",
                 exited="the worker for {name} exited ({code}) during the build",  # read by api._DIED
                 broken="{error}"),

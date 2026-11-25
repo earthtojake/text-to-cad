@@ -60,9 +60,9 @@ These words mean one thing each, in the code, the commands and every document.
   id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`, `step`,
   `glb`, `stl`, `threemf`, `dxf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
-  and `.stp` are `step`). `model` is a model built from code: held in the engine's memory, addressed by its
-  document id or the handle its call returns, and saved as a file, its `.xbf`, which names it (`.xbf` is
-  `model`). A model always writes its `.xbf` (law 10); `model.read` reads one. `xbf`, the earlier id of that
+  and `.stp` are `step`). `model` is a model built from code, and its document is its `.xbf` (`.xbf` is `model`),
+  which every run writes (law 10) and whose id is the model's, addressed by that id, the handle its call returns
+  or the file's path; the engine's live build makes it live while a worker holds it. `model.read` reads one. `xbf`, the earlier id of that
   file's type, is an alias of `model` wherever a type is looked up, deprecated and listed nowhere (law 26). A
   document type is a file cad shows: each has a view. A file cad writes or checks and never
   shows is none, whatever cad does with it: an MJCF, MuJoCo's own model file, is an export's destination and
@@ -177,8 +177,8 @@ renumbers the list and every citation in the same change.
    agent asks to set a parameter it declares (law 30), and nothing beside a model or an input: no
    sidecar, index, memo, mesh or record of a build. What it keeps for itself lives in three folders of
    the user's own, the same whatever release runs: state (settings and the records of documents, never
-   geometry or source), cache (each document's bytes as last built, a file document's views keyed by
-   its bytes, bytecode and the environments it installs, every one regenerable) and the engine's folder
+   geometry or source), cache (the views it derived of a document, keyed by its bytes, bytecode and the
+   environments it installs, every one regenerable; never a copy of a model's `.xbf`) and the engine's folder
    (its door and lock). The code stays the only source of truth: a document is what its last run made,
    and nothing reruns (the server's **Folders**; `cad.engine.places`).
 3. **Three sides, by where the code runs.** *The package.* The library (`cad`: what a model imports
@@ -199,15 +199,16 @@ renumbers the list and every citation in the same change.
    them: law 30).
    STEP, GLB, STL, 3MF and, of a planar document, DXF are translations of it, which `cad <type> export`
    writes from the xbf alone. A file document is its file, read by its type (law 23).
-5. **The memo is the only build cache, and it lives in the worker.** *Models.* Every kernel operation
-   a model runs is keyed by its inputs, as is every question it asks of what they made. A hit hands
-   back what the first run made, and a miss makes everything downstream of it miss, so an edit costs
-   what it changed and an element keeps its name across edits. Across a restart a build is cold but for
-   its document in the cache, taken whole by its key or not at all; a declared file is never a source.
-6. **One document per model, with one id.** *Every document.* A called model makes one document and
-   returns its handle, never a bare shape. Every id is one formula over a scope and a name
-   (`ids.derived_id`): a model's script and function, an opened file's path, a handed-over shape's
-   calling script and name; the same in every process, worked out without asking the engine. A model always
+5. **The memo is the only build cache, and it lives in the worker; a model's `.xbf` is its store.** *Models.*
+   Every kernel operation a model runs is keyed by its inputs, as is every question it asks of what they made. A
+   hit hands back what the first run made, and a miss makes everything downstream of it miss, so an edit costs
+   what it changed and an element keeps its name across edits. Across a restart a build is cold but for its
+   `.xbf`, taken whole by its key or not at all, and only while the file is the one the engine wrote; edited or
+   replaced since, it is built and written again. No other declared file is ever a source.
+6. **One document per model, with one id: its `.xbf`'s.** *Every document.* A called model makes one document
+   and returns its handle, never a bare shape. Every id is one formula over a path (`ids.file_id`): a file's, and
+   so a model's and a handed-over shape's, whose document is its `.xbf`; the same in every process, worked out
+   without asking the engine. Two models that write one file share its id, and the last build wins. A model always
    writes its `.xbf`, whatever declares it; its decorators may be combined, each adding its file (`@model` its
    `.xbf`, a file decorator any other), one kind once. A document lives until a person
    deletes it: neither its worker retiring nor memory ends it, and one that is not held names the
@@ -341,9 +342,9 @@ renumbers the list and every citation in the same change.
 26. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot`
     are shared by every type that has them (`inspect` and `read` where a type has them); every other
     operation is named for what it does and means one thing: `dfm`, `interference`, `solve`, `ranges`,
-    `drc`, `erc`, `validate`. `model` is the one type that is two things, in the library and the command
-    alike: a model the engine holds, by its id or its handle, and a model saved as a file, its `.xbf`, which
-    is read as the file it is (it names no `made_by`: law 7). One type, one word, everywhere -- the registry,
+    `drc`, `erc`, `validate`. `model` is a model, in the library and the command alike, by its id, its handle or
+    its `.xbf`, which is its document: live while the engine holds its build, else read as the file it is (it names
+    no `made_by` then: law 7). One type, one word, everywhere -- the registry,
     the server's kinds, the viewer: `@model` writes the file, `model.read` reads it, `cad.model.*` and `cad
     model` take it, and an `.xbf` opened is a `model` document. The `xbf` spellings (`cad.xbf`, `@xbf`, `cad
     xbf`) are the model's under that name, each saying it is deprecated, and the HTTP API's `xbf` kind answers

@@ -1,7 +1,7 @@
 """Serving documents over HTTP: the structure as JSON, each part as one binary buffer.
 
-``GET /api/docs`` lists the documents served, each by its id (``ids``: a file's ``file_id``,
-a model's ``model_id``, by which every map here is keyed); ``GET /api/doc/<id>`` is one document's
+``GET /api/docs`` lists the documents served, each by its id (``ids.file_id``: a file's, and so a
+model's, its ``.xbf``'s, by which every map here is keyed); ``GET /api/doc/<id>`` is one document's
 structure (``document.Loaded.structure``): its parts with their names, keys, colours,
 materials and element names, its instances with world matrices, its tree, and its version, and
 for each part already meshed the faces its mesher left without triangles
@@ -936,9 +936,6 @@ class Served:
     shapes: dict[str, Any]
     names: dict[str, str]
     data: dict[str, bytes] = field(default_factory=dict)  # shape bytes made from live shapes
-    # A model's whole document, as the xbf bytes its worker made of it before it retired (the
-    # drain): what an export, a snapshot or an inspection of it reads once no worker holds it.
-    xbf: bytes | None = None
     _size: int | None = field(default=None, repr=False, compare=False)
 
     @property
@@ -948,12 +945,11 @@ class Served:
     @property
     def size(self) -> int:
         """The bytes it holds, as the memory budget counts them: its structure as JSON, its shape
-        bytes, the bytes made from its live shapes (a live shape itself is not counted) and its
-        whole document's xbf bytes (its animations' record among them)."""
+        bytes and the bytes made from its live shapes (a live shape itself is not counted)."""
         if self._size is None:
             self._size = (len(json.dumps(self.structure, separators=(",", ":"), default=str))
                           + sum(len(shape) for shape in self.shapes.values() if isinstance(shape, (bytes, bytearray)))
-                          + sum(len(made) for made in self.data.values()) + len(self.xbf or b""))
+                          + sum(len(made) for made in self.data.values()))
         return self._size
 
     def shape_data(self, key: str) -> bytes | None:
@@ -993,6 +989,20 @@ def reachable_host(host: str) -> str:
     return f"[{host}]" if ":" in host else host
 
 
+def _closed(structure: dict[str, Any], path: Path) -> dict[str, Any]:
+    """An ``.xbf``'s structure with the build closure its file holds (``previous.scan``: its head alone), as a model's
+    document served by its worker carries it: a model's ``.xbf`` no worker holds says what built it."""
+    if path.suffix.lower() != ".xbf" or structure.get("closure") is not None:
+        return structure
+    from cad.engine import previous
+
+    try:
+        _writer, closure = previous.scan(path)
+    except OSError:
+        return structure
+    return {**structure, "closure": json.loads(closure) if closure else None}
+
+
 class Server:
     def __init__(self, port: int = 0, touch: Callable[[], None] = lambda: None,
                  host: str = "127.0.0.1", mesh_mode: str | None = None,
@@ -1002,7 +1012,7 @@ class Server:
         # The page token its HTTP application admits (``daemon.bind``: the installation's, kept
         # across restarts), or None: the application makes one of its own.
         self.token = token
-        # Every document by its id (``ids``): a file's ``file_id``, a model's ``model_id``. A model
+        # Every document by its id (``ids.file_id``: a file's, a model's its ``.xbf``'s). A model a worker holds,
         # registered but not opened yet is a loader (its name, its load and its version) until
         # a page asks for it.
         self.served: dict[str, Served] = {}
@@ -1039,15 +1049,14 @@ class Server:
         self.stopping = threading.Event()
         # What the engine knows of a document it no longer holds (``NotHeld.payload``), else None.
         self.lost: Callable[[str], dict[str, Any] | None] = lambda _ident: None
-        # A document id this server does not hold yet, taken up from the engine's cache where it has
-        # it (``models.Models.adopt``): registered, and read when it is asked for.
+        # A document id this server does not hold yet, a model's no worker holds: its ``.xbf`` known as a file
+        # (``models.Models.revive``), read when it is asked for.
         self.revive: Callable[[str], None] = lambda _ident: None
-        # Told of a model document as the budget takes it out of memory, its id, its generation and
-        # its xbf bytes (``Served.xbf``): the daemon's cache keeps them when it does not hold them
-        # yet (``models.Models.leaving``), so the document is read again from there.
-        self.leaving: Callable[[str, Any, bytes], None] = lambda _ident, _version, _xbf: None
+        # Whether a document served from its file is a model's ``.xbf`` (the daemon's ``models.Models.file_of``): its
+        # parameters are a model's no live worker holds (``no_worker``), not a file's.
+        self.modelled: Callable[[str], bool] = lambda _ident: False
         # A document deleted (the home's Delete): the daemon's ``models.Models.delete``, which drops what
-        # the engine holds of it and then its record and its cached document; None for a server of
+        # the engine holds of it and then its record; None for a server of
         # its own (a test's), whose application deletes the record alone.
         self.delete: Callable[[str], dict[str, Any] | None] | None = None
         # What the live worker that built a model document recorded of its parameters at the generation served
@@ -1188,6 +1197,8 @@ class Server:
                 raise ValueError(f"no document {path} is held")
             return ident
         self.remember(path)
+        if ident in self.model_loaders:
+            return ident  # a model's .xbf while a worker holds the model: the model, live
         if path.suffix.lower() in FOREIGN:
             # Read outside the lock: a STEP's read is long, and every other document is served
             # meanwhile. Two first opens of one file share its one read (``_foreign``).
@@ -1223,19 +1234,6 @@ class Server:
             self._grown(ident)
         return ident
 
-    def keep(self, ident: str, structure: dict[str, Any], shapes: dict[str, Any], version: int,
-             xbf: bytes) -> None:
-        """A model's document, version ``version``, held from now on whatever becomes of its worker
-        (the daemon's drain: ``models.Models.drain``): its served structure and shapes, and the whole
-        document as ``xbf`` bytes, its animations' record with it. Evicted, all of it goes."""
-        lock = self.model_locks.setdefault(ident, threading.Lock())
-        with lock:
-            with self.load_lock:
-                doc = self.served[self.put(ident, structure, shapes, grow=False)]
-                doc.xbf, doc._size = xbf, None  # counted again, its xbf bytes with it
-                self.model_versions[ident] = version
-        self._grown()
-
     def keep_preview(self, ident: str, structure: dict[str, Any], shapes: dict[str, bytes]) -> None:
         """A preview of a model at other values (``parameters.Previewing``), held for the page that asked
         under its own id: its structure and its parts' shape bytes, never the model's document, its
@@ -1270,13 +1268,6 @@ class Server:
                 if isinstance(shape, (bytes, bytearray)) and key not in found:
                     found[key] = bytes(shape)
         return found
-
-    def has(self, ident: str, version: int, whole: bool = False) -> bool:
-        """Whether a model's document is held at ``version`` (``whole``: with its xbf bytes)."""
-        with self.load_lock:
-            found = self.served.get(ident)
-            return (found is not None and self.model_versions.get(ident) == version
-                    and (not whole or found.xbf is not None))
 
     def holds(self, ident: str) -> bool:
         """Whether a document of this id is served, or registered to be (a live model's), or is a
@@ -1320,7 +1311,9 @@ class Server:
         return ident
 
     def forget_model(self, ident: str) -> None:
+        """What this server holds of document ``ident`` forgotten: its served copy, its loader, the file it knew it by."""
         with self.load_lock:
+            self.files.pop(ident, None)
             self.served.pop(ident, None)
             self.inspected.discard(ident)
             self.model_loaders.pop(ident, None)
@@ -1368,10 +1361,9 @@ class Server:
         lifetime**): tessellations first, least recently used first, then the parts' facts, then
         documents, least recently used first -- never a document a page watches, nor its
         tessellations or facts, nor ``spare``. Every
-        document is read again from where it is kept (a file from its file, a model's from the
-        engine's cache, which is handed its bytes as it leaves: ``leaving``). The ids evicted."""
+        document is read again from where it is kept (a file from its file, a model's from its worker,
+        or its ``.xbf`` once no worker holds it). The ids evicted."""
         evicted: list[str] = []
-        leaving: list[tuple[str, Any, bytes]] = []
         with self.trim_lock:
             watched = self.watched()
             with self.load_lock:
@@ -1397,8 +1389,6 @@ class Server:
                     if total <= target:
                         break
                     doc = self.served.pop(ident)
-                    if doc.xbf is not None:
-                        leaving.append((ident, self.model_versions.get(ident), doc.xbf))
                     self.model_versions.pop(ident, None)
                     self.used.pop(ident, None)
                     self.evictions += 1
@@ -1408,11 +1398,6 @@ class Server:
                     # A STEP read is held by its bytes for the documents served of it: theirs go with them.
                     with self.foreign_lock:
                         self.foreign.clear()
-        for ident, version, xbf in leaving:
-            try:
-                self.leaving(ident, version, xbf)
-            except Exception:  # noqa: BLE001 - a save never fails the trim that asked it
-                pass
         if evicted:
             self._changed()
         return evicted
@@ -1427,12 +1412,12 @@ class Server:
                 with self.foreign_lock:
                     self.reader = None  # the next read starts a reader afresh
                 raise ValueError(f"the reader exited reading {path.name}") from None
-            return Served(ident, path, structure, version, shapes, names)
+            return Served(ident, path, _closed(structure, path), version, shapes, names)
         from cad.engine.document import Loaded
 
         loaded = Loaded(path)
-        return Served(ident, path, loaded.structure(), loaded.version, {p.key: p.shape for p in loaded.prototypes},
-                      {p.key: p.name for p in loaded.prototypes})
+        return Served(ident, path, _closed(loaded.structure(), path), loaded.version,
+                      {p.key: p.shape for p in loaded.prototypes}, {p.key: p.name for p in loaded.prototypes})
 
     def _read_step(self, ident: str, path: Path) -> Served:
         """A STEP served: its read (``_foreign``), named and versioned as this file."""
@@ -1617,19 +1602,17 @@ class Server:
                     if doc is not None:
                         self.used[ident] = next(self.uses)
                 if doc is None:
-                    # Its structure and shapes; and, read from the engine's cache, its xbf bytes third.
-                    loaded = load()
-                    structure, shapes = loaded[0], loaded[1]
+                    structure, shapes = load()
                     with self.load_lock:  # held at its version before it can be evicted
                         doc = self.served[self.put(ident, structure, shapes, grow=False)]
-                        if len(loaded) > 2:
-                            doc.xbf, doc._size = loaded[2], None
                         self.model_versions[ident] = version
                     self._grown(ident)
             return doc
         if ident not in self.served and ident in self.files:
             self.add(Path(self.files[ident]))  # an evicted file, read again: reading runs no code
         with self.load_lock:
+            if ident not in self.served and ident in self.files:  # evicted again meanwhile, by another's trim
+                self.served[ident] = self._read(ident, Path(self.files[ident]))
             doc = self.served[ident]
             self.used[ident] = next(self.uses)
             stat = _stat(doc.path)
@@ -1708,12 +1691,13 @@ class Server:
         found = dict(doc.structure)
         model = doc.ident in self.model_loaders
         live = None
+        modelled = model or self.modelled(doc.ident)
         if model:
             try:
                 live = self.parameters(doc.ident, doc.version)
             except Exception:  # noqa: BLE001 - what no worker can say is said not writable, never a failed read
                 live = None
-        found["parameters"] = parameters.served(doc.structure.get("parameters"), model=model, live=live)
+        found["parameters"] = parameters.served(doc.structure.get("parameters"), model=modelled, live=live)
         found["prototypes"] = prototypes = []
         for prototype in doc.structure["prototypes"]:
             unmeshed = self.cache.unmeshed(prototype["key"])
@@ -2093,8 +2077,11 @@ class Server:
             if len(parts) >= 3 and parts[:2] == ["api", "doc"] and "~preview-" in parts[2]:
                 return self._preview_route(handler, parts, query)
             ident, pose = self.poses.get(parts[2], (parts[2], None)) if len(parts) >= 3 else ("", None)
+            if parts[:2] == ["api", "doc"] and ident in self.files and ident not in self.model_loaders \
+                    and not os.path.isfile(self.files[ident]) and self.lost(ident) is not None:
+                self.forget_model(ident)  # a model's .xbf gone: no longer held, its command said below
             if parts[:2] == ["api", "doc"] and ident and not self.holds(ident) and is_id(ident):
-                self.revive(ident)  # a document the engine's cache holds, after a restart
+                self.revive(ident)  # a model no worker holds: its .xbf
             if parts[:2] == ["api", "doc"] and ident and not self.holds(ident):
                 lost = self.lost(ident)  # a document the engine knows but holds no more: what rebuilds it
                 if lost is not None:
@@ -2161,7 +2148,7 @@ class Server:
             self.error(handler, 404, "not found")
         except (BrokenPipeError, ConnectionResetError):
             pass
-        except NotHeld as error:  # no worker, no bytes, no cache file: the command that builds it again
+        except NotHeld as error:  # no worker, no .xbf: the command that builds it again
             self.send(handler, 404, json.dumps(error.payload()).encode(), "application/json")
         except ValueError as error:  # a pose refused by name (``mechanism.KinematicsError``), a body not JSON
             self.error(handler, 400, str(error))

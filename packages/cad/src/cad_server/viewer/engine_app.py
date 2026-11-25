@@ -194,7 +194,7 @@ class ViewerApp(CadApp):
 
     def delete_document(self, ident):
         # The engine's own deletion (``Server.delete``, the daemon's ``Models.delete``): what it holds
-        # of the document, then its record and its cached document.
+        # of the document, then its record.
         if self.server.delete is None:
             return super().delete_document(ident)
         return self.server.delete(ident)
@@ -213,9 +213,8 @@ class ViewerApp(CadApp):
         return self.server.preview_parameters(ident, values, page)
 
     def _holds_model(self, ident):
-        # Held by this engine's server, and no file: a model's (or a shape's). Else the engine's
-        # records, which know a model it holds on disk only.
-        if self.server.holds(ident) and not self.server.file_of(ident):
+        # A model a live worker holds is registered with this engine's server (its loader); else the engine is asked.
+        if ident in self.server.model_loaders:
             return True
         return super()._holds_model(ident)
 
@@ -382,7 +381,7 @@ class EngineApp:
 
         if is_id(name):
             if not self.server.holds(name):
-                self.server.revive(name)  # a document the engine's cache holds, after a restart
+                self.server.revive(name)  # a model no worker holds: its .xbf
             if not (self.server.holds(name) or self.server.file_of(name)):
                 raise Unopened(f'no document {name} is held', 'not_found')
             return {'id': name, 'file': self.server.file_of(name)}

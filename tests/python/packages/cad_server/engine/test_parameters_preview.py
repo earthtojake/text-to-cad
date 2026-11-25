@@ -24,7 +24,7 @@ from tests.python.support.paths import add_sources
 add_sources()
 
 from cad.engine import api, client  # noqa: E402
-from cad.engine.ids import model_id  # noqa: E402
+from tests.python.support.ids import model_id  # noqa: E402
 from cad.engine.parameters import ParameterRefused  # noqa: E402
 
 SCRIPT = """\
@@ -186,7 +186,7 @@ class PreviewTest(PreviewCase):
 
     def test_a_document_no_live_worker_built_is_not_previewed(self) -> None:
         self.assertTrue(api.stop())
-        engine_daemon.start()  # the document read from the engine's cache, served: no worker built it
+        engine_daemon.start()  # the document read from its .xbf, served: no worker built it
         client.request({"op": "serve", "path": self.ident}, start=False)
         self.serving = client.request({"op": "status"}, start=False)["serving"]
         self.token = client.request({"op": "http"}, start=False)["token"]

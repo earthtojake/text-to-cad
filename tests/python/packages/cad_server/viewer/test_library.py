@@ -120,7 +120,7 @@ class LibraryTest(unittest.TestCase):
         self.assertEqual(RecentStore().list(), [])
 
     def test_a_built_model_is_listed_by_its_id_pinned_and_deleted_by_it(self) -> None:
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
         from cad_server.engine.registry import Registry
 
         script = self.tmp / "parts.py"

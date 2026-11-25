@@ -2,11 +2,11 @@
 
 Each document the engine knows has one record, ``<state>/documents/<id>/document.json`` in the state folder
 (``places.state_dir``), which the engine's registry writes (``cad_server.engine.registry``, the server's).
-A model's script and its worker read a record of it now and then -- the file that claims an explicit name
-(``identity.claimed``), where a moved script's document was built (``build._relocation``) -- and write none:
-so the library reads them here, by the registry's one shape (``parse``), and the words the engine says of a
-record (``home``, ``rerun``) are worked out here too. A model's document's bytes, as the engine's cache keeps
-them, are ``<cache>/documents/<id>/document.xbf`` (``FILE``), regenerable and never a record.
+A model's worker reads a record of it now and then -- whether its ``.xbf`` is the file the engine wrote
+(``build._written_by_engine``), where a moved script's document was built (``build._relocation``) -- and
+writes none: so the library reads them here, by the registry's one shape (``parse``), and the words the engine
+says of a record (``home``, ``xbf``, ``rerun``) are worked out here too. A model's document is its ``.xbf``,
+which its record names (``saved``).
 """
 
 from __future__ import annotations
@@ -20,14 +20,12 @@ from typing import Any
 
 from cad.engine.ids import is_id
 
-__all__ = ["DOCUMENTS", "FILE", "RECORD", "SCHEMA", "Records", "command", "current", "detached", "home", "parse",
-           "program", "relative", "rerun"]
+__all__ = ["DOCUMENTS", "RECORD", "SCHEMA", "Records", "command", "current", "detached", "home", "parse",
+           "program", "relative", "rerun", "xbf"]
 
 SCHEMA = 1
 DOCUMENTS = "documents"
 RECORD = "document.json"
-# A model document's bytes in the engine's cache folder (``cache``): ``documents/<id>/document.xbf``.
-FILE = "document.xbf"
 WINDOWS = os.name == "nt"
 # What cmd.exe reads as an operator in a word outside double quotes: ``pandas>=2`` bare is a redirection.
 _OPERATORS = frozenset("<>|&^")
@@ -88,6 +86,15 @@ def relative(path: Path | str, root: Path | str) -> str:
 def home(registry: Any, record: dict[str, Any]) -> Path:
     """A record's script (a model's) or file (a file's), absolute."""
     return Path(os.path.normpath(registry.root(record) / record["home"]))
+
+
+def xbf(registry: Any, record: dict[str, Any]) -> Path | None:
+    """A model's or a shape's ``.xbf``, its document, absolute (its record's ``saved``); a file's own path; None for a
+    record from before a model's record named its file."""
+    if record.get("kind") == "file":
+        return home(registry, record)
+    given = record.get("saved")
+    return Path(os.path.normpath(registry.root(record) / given)) if isinstance(given, str) and given else None
 
 
 def program(registry: Any, record: dict[str, Any]) -> Path | None:

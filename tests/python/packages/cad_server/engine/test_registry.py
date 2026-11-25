@@ -1,10 +1,9 @@
 """The registry: a record per document the engine built (or a page opened), in the user's state
-folder, pointing and never caching; read again after a restart, so an id is known with the command
-that builds it again and nothing is run; a moved script's record detached, listed, and removable; a
-``memory`` document with none; a shape handed over recorded with no command, never detached. And
-the declarations: a function in a saved file points; one in no file is refused, with the words
-that hand its shape over instead; ``@model`` stacked with a file decorator is refused, saying which
-to drop; a ``name=`` another declaration's record holds is refused, naming it."""
+folder, pointing and never caching -- a model's at its ``.xbf``'s id; read again after a restart, so an id
+is known, its file the document, and with the file gone the command that builds it again, and nothing is run;
+a moved script's record detached, listed, and removable; a shape handed over recorded with no command, never
+detached. And the declarations: a function in a saved file points; one in no file is refused, with the words that
+hand its shape over instead; two declarations of one ``name=`` write one file and share its record."""
 
 from __future__ import annotations
 
@@ -27,7 +26,7 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 from cad.engine import records
 from cad_server.engine import registry  # noqa: E402
-from cad.engine.ids import model_id  # noqa: E402
+from tests.python.support.ids import model_id  # noqa: E402
 from cad.engine.model import Model  # noqa: E402
 from cad_server.engine.registry import Registry  # noqa: E402
 
@@ -194,7 +193,7 @@ def cube():
     return bd.Box(3, 2, 1)
 """
 
-# Two scripts whose models claim one explicit name.
+# Two scripts whose models give one name, and so write one file.
 NAMED = """
 import build123d as bd
 from cad import model
@@ -263,11 +262,11 @@ class RegistryDaemonTest(unittest.TestCase):
         cube = model_id(project / "parts.py", "cube")
         record = self.records()[cube]
         self.assertEqual((record["kind"], record["home"], Path(record["root"])), ("model", "parts.py", project))
-        # What a restart needs and no more: no closure (the document's own), no versions, no stamps,
-        # no command (always `cad run` of its home), no record of the files it declared.
-        # Every model writes its .xbf, which its record names (``saved``).
-        self.assertEqual(set(record), {"schema", "id", "kind", "root", "home", "entry", "revision", "built", "created", "facts", "namespace", "name", "fingerprint", "module", "declares", "saved"})
-        self.assertEqual(record["declares"], [], "the explicit names its script declares: none")
+        # What a restart needs and no more: no closure (the document's own), no stamps, no command (always `cad run`
+        # of its home), no record of the files it declared but its .xbf, its document, which its record names
+        # (``saved``) with that file's version as written (``version``).
+        self.assertEqual(set(record), {"schema", "id", "kind", "root", "home", "entry", "revision", "built", "created",
+                                       "facts", "namespace", "name", "fingerprint", "module", "saved", "version"})
         self.assertEqual((record["namespace"], record["name"]), (str(project), "cube"))
         self.assertEqual(record["created"], record["built"], "a first build is when the model was created")
         self.assertEqual(sorted(os.listdir(self.state / "documents" / cube)), ["document.json"], "it points: no geometry")
@@ -277,9 +276,12 @@ class RegistryDaemonTest(unittest.TestCase):
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertEqual((self.state / "documents" / cube / "document.json").stat().st_mtime_ns, written,
                          "an unchanged build rewrites nothing")
-        # A restart: the id is known, not held, with the command that builds it again; nothing runs it.
+        # A restart: the id is known, its .xbf the document; with the file gone, not held, with the command that
+        # builds it again; nothing runs it.
         self.assertEqual(self.cli("stop").returncode, 0)
         engine_daemon.start(self.env)
+        self.assertEqual(self.cli("inspect", cube).returncode, 0)
+        (project / "cube.xbf").unlink()
         inspected = self.cli("inspect", cube)
         self.assertEqual(inspected.returncode, 2, inspected.stderr)
         self.assertIn(f"run `cad run {project / 'parts.py'}`", inspected.stderr)
@@ -288,33 +290,31 @@ class RegistryDaemonTest(unittest.TestCase):
         from cad_server.viewer.recents import RecentStore
 
         listed = {entry.path: entry.public() for entry in RecentStore(self.state).list()}
-        self.assertEqual((listed[cube]["name"], listed[cube]["missing"]), ("cube", False))
-        # The script moved: detached, listed and saying so, until it is removed.
+        self.assertEqual((listed[cube]["name"], listed[cube]["missing"]), ("cube", True), "its .xbf gone: missing")
+        # The script moved too: detached, listed and saying so, until it is removed.
         (project / "parts.py").rename(project / "moved.py")
         self.assertEqual(self.ask({"op": "state", "id": cube})["state"], "detached")
         self.assertTrue({entry.path: entry.public() for entry in RecentStore(self.state).list()}[cube]["missing"])
         RecentStore(self.state).remove(cube)
         self.assertFalse((self.state / "documents" / cube).exists())
 
-    def test_a_name_another_declaration_s_record_holds_is_refused_naming_it(self) -> None:
+    def test_two_declarations_of_one_name_write_one_xbf_and_share_its_record_the_last_build_wins(self) -> None:
         project = self.project("keyed", {"left.py": NAMED.format(name="left"), "right.py": NAMED.format(name="right")})
         first = self.run_python("left.py", cwd=project)
         self.assertEqual(first.returncode, 0, first.stderr)
-        from cad.engine.ids import derived_id
+        from cad.engine.ids import file_id
 
-        record = self.records()[derived_id(project, "arm")]
-        self.assertEqual((record["line"], record["entry"]), (6, "left"))
-        self.assertEqual((record["namespace"], record["name"]), (str(project), "arm"))
+        ident = file_id(project / "arm.xbf")
+        record = self.records()[ident]
+        self.assertEqual((record["entry"], record["namespace"], record["name"]), ("left", str(project), "arm"))
         from cad_server.viewer.recents import RecentStore
 
         recent = next(row.public() for row in RecentStore(self.state).list() if row.path == record["id"])
         self.assertEqual((recent["namespace"], recent["name"]), (str(project), "arm"))
         second = self.run_python("right.py", cwd=project)
-        self.assertNotEqual(second.returncode, 0)
-        self.assertIn(f"{project / 'left.py'}:6", second.stderr)
-        self.assertEqual(self.records()[derived_id(project, "arm")]["entry"], "left", "the record stays the first's")
-        again = self.run_python("left.py", cwd=project)
-        self.assertEqual(again.returncode, 0, again.stderr)
+        self.assertEqual(second.returncode, 0, "nothing refused: " + second.stderr)
+        self.assertEqual(self.records()[ident]["entry"], "right", "one file, one record: the last build's")
+        self.assertEqual(sorted(self.records()), [ident])
 
 
 def setUpModule() -> None:

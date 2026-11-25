@@ -9,8 +9,8 @@ ordinary Python scripts call decorated models explicitly.
         [--size-profile P] [--json]
     cad serve DOC [--port N]
     cad server status [--json] | stop [--json]      (``cad_server.cli.server``, which starts it too)
-    cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]   documents deleted: record, cached document, the
-                                                  engine's copy; asked first, or --yes
+    cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]   documents deleted: record, what the engine derived
+                                                  and holds of it; asked first, or --yes
     cad <type> inspect DOC [REF] [--query Q] [--json]   what a document holds and its build closure, or what a ref names (``refs``)
 
 SRC and DOC are an on-disk CAD file's path, for the file's own type (``cad step``, ``cad stl``, ...), or, for
@@ -627,9 +627,6 @@ def summary_text(summary: dict[str, Any]) -> str:
         said = f"file {state.get('path')}"
     else:
         said = state["state"]
-        if state.get("held"):
-            said += f" (in {state['held']})"
-        said += ", cached" if state.get("cached") else ", not cached"
         if state.get("builtAt"):
             said += f", built {_span(time.time() - state['builtAt'])} ago"
     lines.append(f"state       {said}")
@@ -793,12 +790,13 @@ def planned(documents: Any) -> list[dict[str, Any]]:
     for named in [str(document) for document in documents]:
         found: list[str] = []
         if held is not None and is_id(named):
+            named = held.resolve(named)  # an id from before a model's id was its .xbf's: its alias
             found = [named] if held.get(named) is not None else []
         elif held is not None:
             path = canonical(os.path.abspath(os.path.expanduser(named)))
             record = held.get(file_id(path))
-            if record is not None and record.get("kind") == "file":
-                found = [record["id"]]
+            if record is not None:
+                found = [record["id"]]  # a file's, or a model's .xbf: its document
             else:
                 listed = held.list() if listed is None else listed
                 found = sorted(row["id"] for row in listed if row.get("kind") != "file"
@@ -820,8 +818,9 @@ def planned(documents: Any) -> list[dict[str, Any]]:
 def delete(documents: Any) -> list[dict[str, Any]]:
     """``cad delete``: documents deleted, each by the one deletion the home's Delete is too
     (``models.delete``): what the engine holds of it, when one runs (never started for it), then its
-    record and its document in the engine's cache. Each of ``documents`` is a document's id, a model's
-    script or a shape's home (every document recorded of it), or a CAD file's path a page opened; the
+    record and what its cache derived of it. Each of ``documents`` is a document's id, a model's
+    script or a shape's home (every document recorded of it), or a CAD file's path (a model's ``.xbf`` among them)
+    a page opened or a build wrote; the
     person's own files are never touched. One that names nothing recorded is refused (``planned``),
     naming each, before anything is deleted. What was deleted, ``{"id", "name", "kind"}`` each, in
     the order named."""
@@ -851,16 +850,15 @@ def _delete(args: argparse.Namespace, prog: str) -> int:
         if args.json:
             print(json.dumps({"ok": True, "dryRun": True, "planned": rows}, indent=2))
             return 0
-        print(f"would delete {count}: each one's record, its document in the engine's cache and what the engine "
-              "holds of it (your own files stay)")
+        print(f"would delete {count}: each one's record and what the engine holds of it (your own files stay)")
         for row in rows:
             print(f"  {row['name']} {row['id']}")
         return 0
     confirm(f"deleting {count}", f"Delete {'it' if len(rows) == 1 else 'them'}?", yes=bool(args.yes),
             as_json=bool(args.json), command=retry(prog, [*map(str, args.documents), *(["--json"] if args.json else [])]),
-            preview=[f"{prog} deletes {count}: each one's record, its document in the engine's cache and what the "
-                     "engine holds of it; your own files -- a script, its declared files, an opened file -- stay, and "
-                     "a model's next run makes its document again:", *(f"  {row['name']} {row['id']}" for row in rows)])
+            preview=[f"{prog} deletes {count}: each one's record and what the engine holds of it; your own files "
+                     "-- a script, its .xbf and its other declared files, an opened file -- stay, and a model's next "
+                     "run records it again:", *(f"  {row['name']} {row['id']}" for row in rows)])
     deleted = delete(args.documents)
     if args.json:
         print(json.dumps({"ok": True, "deleted": deleted}, indent=2))
@@ -906,14 +904,6 @@ def _port(serving: dict[str, Any]) -> str:
         return f" (rolled from {default} because {serving.get('portBecause') or 'another process'} holds it)"
     return " (" + {"--port": "the port --port named", "CAD_ENGINE_PORT": "the port CAD_ENGINE_PORT names",
                    "handed": "the port pages were on before this server started"}.get(source, f"not the default {default}") + ")"
-
-
-def cache_text(root: Any, documents: Any, size: Any) -> str:
-    """The engine's document cache as ``cad status`` and ``cad doctor`` say it, after the word
-    ``cache``: its folder, and the documents and bytes it keeps, which stay until a person deletes
-    them (no cap)."""
-    return (f"{root}: {documents or 0} document{'' if documents == 1 else 's'} · {_said.size(size)}, "
-            "kept until deleted")
 
 
 def workers_text(answer: dict[str, Any]) -> str:
@@ -1014,13 +1004,6 @@ def status_text(answer: dict[str, Any]) -> str:
                      + (f" · {_gb(held / 2**20)} of {_gb(memory['budget'] / 2**20)} held" if memory.get("budget") else ""))
         # What this engine's start said: a move of its port.
         lines.extend(f"  {said}" for said in (serving.get("portNotice") or "").splitlines())
-    cache = answer.get("cache") or {}
-    if cache.get("enabled"):
-        failures = cache.get("failures") or []
-        lines.append("cache " + cache_text(cache.get("root"), cache.get("documents"), cache.get("bytes"))
-                     + (f" · last save failed: {failures[0]['error']}" if failures else ""))
-    elif cache:
-        lines.append("cache off: no cache folder")
     identity = answer.get("identity")
     if identity:
         # What this engine's start brought to namespace/name identity (``identity.migrate``).
@@ -1034,8 +1017,6 @@ def status_text(answer: dict[str, Any]) -> str:
         lines.append("documents:")
         for row in models:
             line = f"  {row.get('state', ''):<8}  {str(row.get('name')):<{width}}  {row.get('id')}"
-            if row.get("held"):
-                line += f"  {row['held']}"  # where: memory, disk (the cache), or both
             if row.get("rebuild"):
                 line += f"  run `{row['rebuild']}`"
             elif row.get("kind") == "shape":
@@ -1062,8 +1043,8 @@ VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, st
     "status": ("the cad server's workers, what each is building, and its served documents", _status_arguments,
                _status),
     "stop": ("stop the cad server", _stop_arguments, _stop),
-    "delete": ("delete documents: each one's record and its document in the engine's cache, and what the engine "
-               "holds of it; never a file of yours", _delete_arguments, _delete),
+    "delete": ("delete documents: each one's record and what the engine holds of it; never a file of yours",
+               _delete_arguments, _delete),
 }
 
 

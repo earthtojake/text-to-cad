@@ -231,7 +231,7 @@ def _said_no(settings: Path) -> dict[str, Any] | None:
 
 
 def cache_dir() -> Path:
-    """Where cad caches what it can make again -- documents' bytes (``documents/<id>/document.xbf``), hulls,
+    """Where cad caches what it can make again -- what it derived of a document (``documents/<id>/...``), hulls,
     MJCF assets, integrations' homes, the kernel environments, the engine's bytecode --: the platform's cache
     location, which the system and the person treat as disposable -- wiping it loses no state, the records
     stay in ``state_dir``. ``CAD_CACHE_DIR`` when set (a relative one made absolute once, and written back, so

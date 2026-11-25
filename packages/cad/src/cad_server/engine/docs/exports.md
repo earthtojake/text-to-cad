@@ -235,9 +235,8 @@ every build is a second model function with other joint values.
 calls, in its file or another -- writes the files it declares after its target's are written,
 once per build, from its own document: the result its body returned, before its caller placed
 or labelled it, its closure the one a build of its own script makes (its folder, the modules its
-script imports). So its xbf is the one its own build writes, byte for byte, and the engine's cache
-keeps its document as any (a later build of it takes that, **Build closure**); a file whose bytes are
-unchanged is kept. A declared file is an export appended to the run: translated from the document
+script imports). So its xbf is the one its own build writes, byte for byte, and a later build of it takes that
+file while it is the one the engine wrote (**Build closure**); a file whose bytes are unchanged is kept. A declared file is an export appended to the run: translated from the document
 every time the model runs or is taken -- an xbf from the document's own bytes, serialised before any
 export meshes its shapes -- compared with the file, and written only where it differs or is missing
 (`atomic_replace.put`, the one writer `cad <type> export` writes its files with too), nothing remembered

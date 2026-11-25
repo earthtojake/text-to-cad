@@ -540,7 +540,7 @@ class ChildFilesTest(EngineCase):
 
     def test_a_child_s_files_are_its_own_build_s_and_a_taken_parent_writes_its_own_alone(self) -> None:
         from cad.engine import api
-        from tests.python.support import engine_cache
+        from tests.python.support import engine_restart
 
         self.rig("rig")
         written = (self.folder / "XBF/bracket.xbf").read_bytes()
@@ -552,19 +552,18 @@ class ChildFilesTest(EngineCase):
         self.assertEqual({Path(path).name: row["written"] for path, row in api.Report([warm]).files.items()},
                          {"rig.xbf": False})
         self.assertFalse((self.folder / "bracket.stl").exists())
-        # The bracket's own build, in a fresh worker, takes the document its parent's build made (the
-        # engine's cache keeps a child's as any document), writing the file that went, nothing run.
-        cache = self.folder / "cache"
-        engine_cache.restart(cache)
-        [own] = engine_build.build(self.folder / "bracket.py", None, cwd=self.folder, cache=str(cache))
-        self.assertEqual((own["cache"], own["memo"]["bodies_run"]), ({"used": True, "from": "cache"}, 0))
+        # The bracket's own build, in a fresh worker, takes the document its parent's build made (its
+        # .xbf, a child's as any model's), writing the file that went, nothing run.
+        state = self.folder / "state"
+        engine_restart.restart(state)
+        [own] = engine_restart.build(state, self.folder / "bracket.py", None, cwd=self.folder)
+        self.assertEqual((own["cache"], own["memo"]["bodies_run"]), ({"used": True, "from": "xbf"}, 0))
         self.assertEqual({Path(path).name: row["written"] for path, row in own["files"].items()},
                          {"bracket.xbf": False, "bracket.stl": True})
         # Built cold, it writes the same bytes.
-        engine_cache.restart(cache)
-        (cache / own["id"] / "document.xbf").unlink()
+        engine_restart.restart(state)
         (self.folder / "XBF/bracket.xbf").unlink()
-        engine_build.build(self.folder / "bracket.py", None, cwd=self.folder, cache=str(cache))
+        engine_restart.build(state, self.folder / "bracket.py", None, cwd=self.folder)
         self.assertEqual((self.folder / "XBF/bracket.xbf").read_bytes(), written)
 
 
