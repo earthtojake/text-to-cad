@@ -130,7 +130,10 @@ anyone to install cad, and it never changes. Every skill's Setup block runs it w
 tool install --force cad`, where `cad` is missing or older than 0.11.12, the first release installed
 this way
 ([The shared blocks](writing-a-skill.md#the-shared-blocks), held by
-`tests/python/global/test_skill_requirements.py`); cad updates itself, so no skill updates it. No
+`tests/python/global/test_skill_requirements.py`). Where cad is older than the release a skill was
+written for, the block has the agent run `cad update` (the owner's word, November 2026: a plugin store
+updates the skills before cad restarts onto the release, and a cad whose updates are off or failing
+never catches up by itself); `cad update` stays inside cad's major and says why where it fails. No
 skill runs the install command. cad's `requires-python` has a floor and no upper bound.
 
 **Why.** A skill deals with cad alone: the install command changes every agent app on the computer,

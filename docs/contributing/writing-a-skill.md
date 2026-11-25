@@ -195,7 +195,8 @@ for word, and tests keep the copies from drifting:
 
   ```text
   Written for `cad==<VERSION>`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
-  0.11.12, run `uv tool install --force cad`.
+  0.11.12, run `uv tool install --force cad`. If it is older than the release this skill was written for, run
+  `cad update`.
 
   If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
   https://github.com/earthtojake/text-to-cad
@@ -207,7 +208,11 @@ for word, and tests keep the copies from drifting:
   0.11.12 is fixed: the first release installed by uv. `--force` makes the line install the newest
   release whatever is there: without it uv leaves a cad it installed earlier as it is, saying only
   that `cad` is already installed, and stops at a `cad` file it did not write (the launcher 0.10.0
-  to 0.11.11 wrote). cad updates itself, so the block never has the agent update it. No skill runs the
+  to 0.11.11 wrote). cad updates itself, but a skill can be newer than the cad that runs: a plugin store
+  updates the skills on its own schedule, cad's restart onto a release waits for a quiet moment, and
+  automatic updates can be off or failing. So where cad is older than the release the skill was written
+  for, the block has the agent run `cad update`, which never crosses a major and says why where it
+  fails; a new major's own skills say how to reach it. No skill runs the
   install script, and no skill pre-approves a tool (`allowed-tools`). A new skill copies the block
   from one beside it.
   It changes only with a person's approval ([below](#what-changes-only-with-a-persons-approval)).
