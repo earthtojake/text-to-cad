@@ -57,8 +57,9 @@ THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
 #
 # For the install command: each call also notes the variables FAKE_LOG_ENV names and whether the file FAKE_LOG_EXISTS
 # names is there. `cad update` says a line on each stream and the lines FAKE_UPDATE_SAID names (split at `|`), waits
-# FAKE_UPDATE_SLEEP seconds, makes the tool FAKE_CAD_UPDATES (uv's record of it, else pipx's) and exits
-# FAKE_UPDATE_EXIT. `cad plugin install`, and `uv tool run ... plugin install`
+# FAKE_UPDATE_SLEEP seconds, makes the tool FAKE_CAD_UPDATES (uv's record of it, else pipx's), or, as cad's own update
+# does, leaves those records and has `cad --version` say FAKE_CAD_SWITCHES from then on (a file beside FAKE_UV_STATE),
+# and exits FAKE_UPDATE_EXIT. `cad plugin install`, and `uv tool run ... plugin install`
 # (the newest cad's), says a line on each stream, writes FAKE_PLUGIN_APPS as the report CAD_PLUGIN_REPORT names (no
 # report without it, nor from a cad with no such command: exit 2) and exits FAKE_PLUGIN_EXIT_CAD, or
 # FAKE_PLUGIN_EXIT_UV. `cad plugin install --help` exits FAKE_PLUGIN_HELP_CAD, else 2 (argparse's usage error, on
@@ -129,7 +130,9 @@ STAND_IN = textwrap.dedent('''\
         time.sleep(float(os.environ.get("FAKE_UPDATE_SLEEP", "0")))
         state = Path(os.environ["FAKE_UV_STATE"])
         tools = json.loads(state.read_text()) if state.exists() else {{}}
-        if os.environ.get("FAKE_CAD_UPDATES") and "cad" in tools:
+        if os.environ.get("FAKE_CAD_SWITCHES"):
+            state.with_suffix(".runs").write_text(os.environ["FAKE_CAD_SWITCHES"], encoding="utf-8")
+        elif os.environ.get("FAKE_CAD_UPDATES") and "cad" in tools:
             state.write_text(json.dumps({{**tools, "cad": os.environ["FAKE_CAD_UPDATES"]}}))
         elif os.environ.get("FAKE_CAD_UPDATES"):
             metadata = Path(os.environ["FAKE_PIPX_VENVS"]) / "cad" / "pipx_metadata.json"
@@ -165,7 +168,8 @@ STAND_IN = textwrap.dedent('''\
             (tools_dir / "cad" / "uv-receipt.toml").write_text("editable = 1" if "--editable" in sys.argv else "")
         state.write_text(json.dumps(tools))
     if name == "cad" and sys.argv[1:] == ["--version"]:
-        print("cad (stand-in)")
+        runs = Path(os.environ["FAKE_UV_STATE"]).with_suffix(".runs")
+        print(f"cad {{runs.read_text(encoding='utf-8')}}" if runs.is_file() else "cad (stand-in)")
     if name == "pipx" and sys.argv[1] == "environment" and os.environ.get("FAKE_PIPX_1_0"):
         print("pipx: error: argument command: invalid choice: 'environment'")
         sys.exit(2)

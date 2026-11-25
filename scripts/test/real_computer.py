@@ -745,7 +745,10 @@ def rewrite(wheel: Path, out: Path, version: str, *, replace: dict[str, bytes] |
                 text = re.sub(r"(?m)^Version: .*$", f"Version: {version}", text, count=1)
                 text = re.sub(r"(?m)^(Requires-Dist: cad(?:\[[^\]]*\])?) ?==" + re.escape(old) + r"\b",
                               rf"\g<1>=={version}", text)
-                text = text.rstrip("\n") + "\n" + "".join(f"Requires-Dist: {line}\n" for line in requires or [])
+                # Among the headers, before the description a built wheel carries after the first empty line.
+                head, gap, body = text.partition("\n\n")
+                text = head.rstrip("\n") + "\n" + "".join(f"Requires-Dist: {line}\n" for line in requires or []) \
+                    + (gap[1:] + body if gap else "")
                 data = text.encode("utf-8")
             elif relative == "entry_points.txt" and not commands:
                 data = re.sub(r"(?ms)^\[console_scripts\]\n.*?(?=^\[|\Z)", "", data.decode("utf-8")).encode("utf-8")
@@ -775,15 +778,15 @@ def stamp(patch: int = 9999, version: str | None = None) -> str:
 
 
 def publish(wheels: Path, version: str, out: Path, *, replace: dict[str, bytes] | None = None,
-            commands: bool = True) -> list[Path]:
+            commands: bool = True, requires: list[str] | None = None) -> list[Path]:
     """Every wheel of one release in ``wheels`` (cad's and its aliases': cad-server, cad-mcp, cadgen) written into
-    ``out`` as release ``version`` (``rewrite``; ``replace`` and ``commands`` apply to cad's own wheel). The wheels
-    written."""
+    ``out`` as release ``version`` (``rewrite``; ``replace``, ``commands`` and ``requires`` apply to cad's own wheel).
+    The wheels written."""
     found = sorted(Path(wheels).glob("*.whl"))
     releases = {path.name.split("-")[1] for path in found}
     if len(releases) != 1 or not any(path.name.startswith("cad-") for path in found):
         raise Failed(f"{wheels}: expected the wheels of one release, cad's among them: {[path.name for path in found]}")
-    return [rewrite(path, out, version, **({"replace": replace, "commands": commands}
+    return [rewrite(path, out, version, **({"replace": replace, "commands": commands, "requires": requires}
                                             if path.name.startswith("cad-") else {})) for path in found]
 
 

@@ -254,9 +254,12 @@ its pull request. The tier holds:
   computer makes, unattended or by the install command, on Linux, macOS and Windows. On private
   computers it installs the real releases 0.11.11, 0.11.0 and 0.10.4 from PyPI (and 0.10.0, on
   Windows) and brings each to this tree's build by the route it takes (where the new server runs the
-  install command once, that command hands the apps to the cad it installed); then cad's own update,
-  automatic and typed, inside its major and across one only by `cad update --major`; and after an
-  update, the new server's one `cad plugin install`, read from cad's record of it. One more route
+  install command once, that command hands the apps to the cad it installed); then cad's own update
+  through the store, automatic and typed, inside its major and across one only by `cad update --major`,
+  back by itself from a release whose server does not start, untouched by one that cannot be built or does
+  not run, while `cad` is called every 50 ms and while its files are held open, after a person's own
+  reinstall, after its worker was stopped midway, and from the shipped 0.11.17's update in place; and after
+  an update, the new server's one `cad plugin install`, read from cad's record of it. One more route
   starts on the real 0.11.13 (`plugin-update`, on shard 1/2 of each system): its own `cad plugin
   update` runs this tree's install command, which finds no `cad plugin install` there and has the
   newest release's do the work (`uv tool run ... cad@latest plugin install`: this tree's), then turns

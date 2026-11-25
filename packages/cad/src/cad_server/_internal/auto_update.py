@@ -32,9 +32,9 @@ the bounded build with no release named, so a feed without ``lines`` never stran
 (``wanted``) is due by the schedule (``next_try``): after its ``n``-th automatic try it waits ``min(2 ** (n - 1),
 WAIT_HOURS)`` hours, and no automatic attempt begins where ``DAILY`` began in the last day, of any release. The tries
 are kept by release (``tries``, ``TRIED``), so a newer release starts afresh and a server of another release never
-sets them back. One exception: a release whose last automatic try ended ``start_failed`` (its server did not start,
-and the release before runs again) is not tried again by itself (``given_up``): a server restarting for nothing once a
-day is worse than waiting for the next release; ``cad update`` still tries it. Not due either where the environment
+sets them back. One exception: a release an attempt at which ended ``start_failed`` (its server did not start, and
+the release before runs again), automatic or a person's own, is not tried again by itself (``given_up``): a server
+restarting for nothing once a day is worse than waiting for the next release; ``cad update`` still tries it. Not due either where the environment
 already runs ``wanted`` or newer while this older server runs (``stale``): ``cad server start`` replaces the server.
 Where an update is due and none can begin (``blocked``: no uv, or an environment that does not read the pointer), the
 check counts it once for that release (``BLOCKED``). The check is asked as the server tends itself (``tend``, with
@@ -570,8 +570,9 @@ def _counted(book: dict[str, Any], found: dict[str, Any] | None, now: float) -> 
     """``book`` (``tries``) with the attempt ``found`` (the record) counted in where it is not yet (its ``at`` is not
     ``seen``): its begin among the ``recent``, and, where it was automatic, its release's tries -- one more than kept,
     or the record's own count where that is more (a release before kept them there alone) --; the record's cause the
-    last try's where it is that try; then the ``recent`` of the last ``DAY`` alone (a clock set back counts as long
-    ago)."""
+    last try's where it is that try, and ``start_failed`` that release's whoever asked (a person's own update that
+    ended so holds the release back from the automatic one as an automatic try does: ``given_up``); then the
+    ``recent`` of the last ``DAY`` alone (a clock set back counts as long ago)."""
     wanted = _wanted(found) if found is not None else None
     if found is not None and isinstance(wanted, str):
         at, entry = found["at"], book["tried"].get(wanted)
@@ -587,6 +588,9 @@ def _counted(book: dict[str, Any], found: dict[str, Any] | None, now: float) -> 
             word = cause(found, now)
             if word is not None:
                 entry["cause"] = word
+        elif found.get("cause") == "start_failed":
+            # A person's own update, which spends no try, showed it too: the release's server does not start here.
+            book["tried"][wanted] = {**(entry or {"tries": 0, "first": at, "at": at}), "cause": "start_failed"}
     book["recent"] = sorted(at for at in book["recent"] if 0 <= now - at < DAY)
     return book
 
@@ -645,8 +649,9 @@ def due(*, fetch: bool = False, now: float | None = None) -> Due | None:
 
 
 def given_up(wanted: str, book: dict[str, Any]) -> bool:
-    """Whether ``wanted``'s last automatic try (``book``: ``tries``) ended with its server not starting
-    (``start_failed``): it is not tried again by itself, only by ``cad update`` (see the module)."""
+    """Whether an attempt at ``wanted`` (``book``: ``tries``), its last automatic try or a person's own update since,
+    ended with its server not starting (``start_failed``): it is not tried again by itself, only by ``cad update``
+    (see the module)."""
     return (book["tried"].get(wanted) or {}).get("cause") == "start_failed"
 
 

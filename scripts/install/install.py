@@ -26,8 +26,9 @@ plugin install``, which carries the one table of them. It does these things alon
    a higher major is the person's to ask for. What it prints is captured, never shown: one line says the update
    begins, and one line what came of it, over the first in a terminal (after it on a pipe or in a file). Its exit
    status says little (0 where it updated and where nothing is newer, non-zero where the update may still be
-   queued), so the tool's release is read again from uv or pipx; where cad was not updated, that line gives cad's
-   own most telling line as the reason, and the run goes on: cad updates itself. Never where cad ran this
+   queued), so the release the tool runs is read again, by its ``cad --version`` (uv's and pipx's listings name the
+   release they installed, not a newer one cad's update installed beside it); where cad was not updated, that line
+   gives cad's own most telling line as the reason, and the run goes on: cad updates itself. Never where cad ran this
    (``BY_CAD``), and never for a cad this run installed;
 4. hands over (``hand_over``): ``<cad> plugin install`` by that tool's own command, on this process's own output, so a
    person's terminal shows what cad draws there. cad is told who began the run (``CAD_PLUGIN_BY=script``) and where
@@ -629,6 +630,15 @@ def find_uv(here: Here) -> Optional[str]:
     return here.environ.get("UV") or here.which("uv")
 
 
+def says(ran: Ran) -> Optional[str]:
+    """The release a ``cad --version`` that ended well says it runs (``cad X.Y.Z``), or None. That is the release a
+    cad updated by its own update runs: its installer's listing (``uv tool list``, pipx's metadata) keeps naming the
+    release the installer installed, since that update installs the newer one beside it."""
+    lines = [line.strip() for line in ran.out.splitlines() if line.strip()] if ran.ok else []
+    found = re.fullmatch(r"cad (\d+\.\d+\.\d+\S*)", lines[-1]) if lines else None
+    return found.group(1) if found else None
+
+
 def already(here: Here, release: str) -> None:
     """The line for a cad that is here and starts, where cad ran this: it is left as it is. Where a person did, the
     update's own line says it (``update``), and none here."""
@@ -780,9 +790,11 @@ def install_cad(here: Here) -> Cad:
               flush=True)
     piped = pipx_cad(here, folder) if tool is None else None
     if piped is not None:
-        if here.run([piped.commands["cad"], "--version"], timeout=60).ok:
-            already(here, piped.version)
-            return Cad(piped.version, 0, piped.commands["cad"], there=True, pipx=True, env=piped.env)
+        ran = here.run([piped.commands["cad"], "--version"], timeout=60)
+        if ran.ok:
+            release = says(ran) or piped.version
+            already(here, release)
+            return Cad(release, 0, piped.commands["cad"], there=True, pipx=True, env=piped.env)
         return repair_pipx(here, piped)
     problem, moved = make_room(here, folder, tools)
     if problem:
@@ -791,10 +803,12 @@ def install_cad(here: Here) -> Cad:
     again = False
     if tool is not None:
         tool_command = tool.commands.get("cad") or command
-        if here.run([tool_command, "--version"], timeout=60).ok:
+        ran = here.run([tool_command, "--version"], timeout=60)
+        if ran.ok:
             settle(here, moved, True)
-            already(here, tool.version)
-            return Cad(tool.version, 0, tool_command, there=True, env=tool.env)
+            release = says(ran) or tool.version
+            already(here, release)
+            return Cad(release, 0, tool_command, there=True, env=tool.env)
         # There, but it does not start (a tool Windows left half-replaced, say): installed again.
         print(f"cad {tool.version} is installed but does not start: installing it again with uv.", flush=True)
         again = True
@@ -831,17 +845,18 @@ def over_line(stream: Any, line: str) -> bool:
 
 def update(here: Here, cad: Cad) -> None:
     """Step 3 (see the module): the cad that was here already brought up to date by its own ``cad update``,
-    ``UPDATE_SECONDS`` at most, what it prints captured; then its release read again from uv or pipx, whatever the
-    command's exit status. Said in one line as it begins, then one line of what came of it, over the first where the
+    ``UPDATE_SECONDS`` at most, what it prints captured; then the release it runs read again, whatever the command's
+    exit status: as its ``cad --version`` says it (``says``), else from uv or pipx. Said in one line as it begins, then one line of what came of it, over the first where the
     terminal allows (``over_line``): updated, the newest already, or not updated now, with cad's own most telling
     line (``Ran.last``) as the reason. Never a failure of the run."""
     first = f"Updating cad {cad.release} to the newest release..."
     over = over_line(sys.stdout, first)
     print(first, end="" if over else "\n", flush=True)
     ran = here.run([cad.command, "update"], timeout=UPDATE_SECONDS, apart=False)
-    if cad.pipx:
+    release = says(here.run([cad.command, "--version"], timeout=60))
+    if release is None and cad.pipx:
         release = pipx_release(Path(cad.env))
-    else:
+    elif release is None:
         uv = find_uv(here)
         tool = uv_tools(here, uv).get("cad") if uv else None
         release = tool.version if tool else None

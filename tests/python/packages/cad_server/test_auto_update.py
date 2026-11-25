@@ -3365,6 +3365,36 @@ class StartFailedRuleTest(Case):
             self.assertEqual(auto_update.due(now=time.time() + 2 * auto_update.DAY), auto_update.Due("0.2.1", "0.2.1"),
                              "the next release is tried by itself")
 
+    def test_a_person_s_own_update_that_ended_so_holds_the_release_back_as_an_automatic_try_does(self) -> None:
+        """A typed update spends no try, and what it showed stands all the same: the server restored a moment ago is
+        not stopped again for the same release."""
+        now = 1_000_000.0
+        typed = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": now, "tries": 1, "asked": True,
+                 "outcome": "failed", "cause": "start_failed", "restored": True, "reported": True}
+        with self.feed("0.2.0", {"0": "0.2.0"}), mock.patch.object(auto_update.subprocess, "Popen"):
+            auto_update._keep(self.state / auto_update.RECORD, typed)
+            book = auto_update.tries(now + 2)
+            self.assertEqual(book["tried"]["0.2.0"], {"tries": 0, "first": now, "at": now, "cause": "start_failed"},
+                             "no try spent")
+            self.assertTrue(auto_update.given_up("0.2.0", book))
+            self.assertIsNone(auto_update.due(now=now + 2), "not two seconds later")
+            self.assertIsNone(auto_update.due(now=now + 2 * auto_update.DAY), "nor days later")
+            self.assertIsNone(auto_update.waiting(now=now + 2), "never tried by itself: no next try to name")
+            # Its automatic tries before stand as they were, and the cause is the release's now.
+            auto_update._keep(self.state / auto_update.TRIED, {"tried": {"0.2.0": {
+                "tries": 2, "first": now - 9000, "at": now - 5000, "cause": "network"}}, "recent": [], "seen": now - 5000})
+            self.assertEqual(auto_update.tries(now + 2)["tried"]["0.2.0"],
+                             {"tries": 2, "first": now - 9000, "at": now - 5000, "cause": "start_failed"})
+            # Any other cause of a person's update changes nothing of the automatic one's.
+            auto_update._keep(self.state / auto_update.RECORD, {**typed, "cause": "network"})
+            self.assertFalse(auto_update.given_up("0.2.0", auto_update.tries(now + 2)))
+            # Kept past the record: the next attempt, of whatever release, writes the tries with it.
+            auto_update._keep(self.state / auto_update.RECORD, typed)
+            (self.state / auto_update.TRIED).unlink()
+            self.assertEqual(auto_update.begin("0.2.0")["outcome"], "underway", "`cad update` tries it again")
+            kept = json.loads((self.state / auto_update.TRIED).read_text(encoding="utf-8"))
+            self.assertEqual(kept["tried"]["0.2.0"]["cause"], "start_failed")
+
 
 class NoticeTest(Case):
     """A global install with automatic updates on that has stayed behind a release of its own major for three days

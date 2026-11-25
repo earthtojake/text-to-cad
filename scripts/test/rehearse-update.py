@@ -12,14 +12,16 @@ the index (``UV_FIND_LINKS``, ``CAD_UPDATE_FIND_LINKS``), and the version feed i
 (``CAD_ENGINE_DEFAULT_PORT``: the true default, 3245, on CI alone). This build's servers tend themselves every two
 seconds, not every half minute (``CAD_ENGINE_TEND_SECONDS``), and so wait two of those tendings, not a minute, after
 they start before the plugin first catches up; nothing else of their timing changes, so a step that waits for a minute
-with nothing run still waits that minute. No real agent app is on any PATH.
+with nothing run still waits that minute. Where a route needs time to pass beyond that, it sets back the stamp that
+time is read from, while nothing writes it: the feed's (an hour, ``an_hour_passes``) and, in ``self-stopped-midway``,
+the last beat of a worker it stopped (twenty minutes). No real agent app is on any PATH.
 
 Every computer has a folder of releases of its own, holding only those that are out (``Box.out``): the install command
-installs PyPI's newest, and an upgrade the newest of a major (``uv tool install --upgrade "cad>=X,<N"``; ``cad update
---major``'s ``uv tool install --upgrade "cad>=X"`` the newest of all), so a release not out yet must not be there. What is out,
-the feed names (``latest``, and each major's newest as ``lines``) and the stand-in PyPI lists (each release, its file not
-yanked). Releases of a higher major (``above``) have a minor and a patch of 9000 and more, past anything PyPI holds of
-that major.
+installs PyPI's newest, and cad's own update the newest of a major, or the release the feed or PyPI names (``uv pip
+install --target``, which reads that folder as ``uv tool install`` does), so a release not out yet must not be there.
+What is out, the feed names (``latest``, and each major's newest as ``lines``) and the stand-in PyPI lists (each
+release, its file not yanked). Releases of a higher major (``above``) have a minor and a patch of 9000 and more, past
+anything PyPI holds of that major.
 
 The install command counts the runs cad starts of it on every computer (``Box.runs``): the bridge's (install mode,
 a shipped release's own setup, a server's one run on a computer our setup reached), and the one the ``cad plugin
@@ -30,55 +32,104 @@ keeps which address each cad read it at (``addresses``): this build's the new on
 release's the old, ``/v1/versions``; a route where one read the other's fails, ``self-update`` checks this build read
 the new one and ``updater`` the shipped release the old.
 
-**cad updating itself** (a computer the install command set up: cad a uv tool, its automatic updates on).
+**cad updating itself** (a computer the install command set up: cad a uv tool, its automatic updates on). cad's update
+never changes the installed cad: it installs the newer release whole in a folder of the store, in the state folder
+(``<state>/store/<release>-<what it is built for>``, whose marker ``cad-store.json`` names the release), runs it once,
+and then writes the environment's pointer (``<state>/store/pointer-<8 hex>.json``), which every process of the
+environment reads as its Python starts. So an
+update ends, wherever it is checked (``through_store``), with ``cad --version`` and the server saying the new release;
+a process of the environment running the stored release, whole, which the pointer names; and what uv made exactly as uv
+made it: ``uv tool list`` and the tool's own ``cad-<release>.dist-info`` naming the release uv installed, uv's receipt
+byte for byte, and every file of the environment by size and time (Python's bytecode caches aside, which Python writes
+itself). An update that fails before the switch changes nothing that runs; one whose new server does not start goes
+back by itself.
 
 - ``self-update``: with ``cad plugin update auto on``, the feed names the next release and an hour passes; the running
-  server, idle, stops, uv installs the next release, and its server answers; then that server, newer than the release
-  the plugin is up to date for, runs its own ``cad plugin install`` once: exit 0, kept in its record
+  server, idle, updates cad at its first try, and the next release's server answers, through the store as above, its
+  record ``installed``; that server serves the viewer it carries (``viewer``: ``GET /`` the page of the wheel the route
+  built, its module script, and a process of the environment finding the viewer inside the stored release, where this
+  run's wheels carry the built viewer; ``GET /api/v1/server`` alone where they carry none); then that server, newer than
+  the release the plugin is up to date for, runs its own ``cad plugin install`` once: exit 0, kept in its record
   (``install-command.json``: up to date for the next release, at its first try), its output in
   ``install-command.log``; the helper ran none, and no install command ran.
 - ``self-typed``: with ``cad update auto off`` and the plugin's switch on, ``cad update`` is typed with nothing newer on
   PyPI: it says so and nothing restarts; then PyPI names the next release and ``cad update`` is typed again: the
-  server asks PyPI at once and updates cad to it; the command, a running ``cad`` of the tool, waits and says so; the uv
-  tool is the next release, its server answers, and the plugin catches up: that server runs ``cad plugin install``
-  once, as after an automatic update.
+  server asks PyPI at once and updates cad to it; the command, a running ``cad`` of the tool, waits, says each step once
+  on stderr (the release installed beside this one, then the server restarted on it) and ``cad <new> updated to
+  <next>``; cad is the next release through the store, its server answers, and the plugin catches up: that server runs
+  ``cad plugin install`` once, as after an automatic update.
 - ``self-typed-stopped``: the same with no server running: ``cad update`` with nothing newer says so and starts no
-  server; with the next release out it says ``cad <new> updated to <next>`` (exit 0, nothing on stderr), the record
-  says no server is started (``"start": false``, no ``started``), the uv tool is the next release, no server and no
-  process of the computer runs afterwards, automatic updates stay off, and no ``cad plugin install`` runs (no server
-  runs to catch the plugin up).
+  server; with the next release out it says ``cad <new> updated to <next>`` (exit 0, its steps on stderr: the second,
+  ``cad: switching to it``, only where the command saw it begin, a switch with no server being over in a moment), the
+  record says no server is started (``"start": false``, no ``started``),
+  ``cad --version`` says the next release through the store, no server and no process of the computer runs
+  afterwards, automatic updates stay off, and no ``cad plugin install`` runs (no server runs to catch the plugin up).
 - ``self-at-start``: the plugin's switch off, the server stopped, the feed's file already naming the next release, then
-  ``cad server start``: the server it spawns hands its start to the update, and the starter, a running ``cad`` of the
-  tool, waits for the update's server. It exits 0, the uv tool is the next release and serves, the attempt installed
-  at its first try (on Windows this failed every time until cad's update set the running ``cad.exe`` aside), and no
-  ``cad plugin install`` runs.
+  ``cad server start``: the server starts at once as the release installed, and the start says so; then, idle, it
+  updates cad in the background at its first try, and the next release's server answers; no ``cad plugin install``
+  runs.
 - ``self-off``: with ``cad update auto off``, the server reads the feed naming the next release, and a start of the
   server starts the same cad: nothing updates.
-- ``self-broken``: an update to a release whose server cannot start (its daemon module raises): cad is that release, its
-  server down; the feed then names the next, and ``cad server start``, failing, updates cad to it, whose server answers.
-- ``self-uninstallable``: an update to a release uv cannot install as a tool (no command: "No executables are
-  provided"): uv takes the tool away with the failed attempt, the helper puts the release before back, and its server
-  answers, and counts the failure once; the plugin's switch on, no ``cad plugin install`` runs after the failed update
-  (cad is no newer).
+- ``self-rollback``: ``cad update`` to a release whose server cannot start (its engine module,
+  ``cad_server/_internal/engine_daemon.py``, raises): cad goes back by itself. The command exits non-zero with one line
+  that names both releases and says the release before runs again; the record is ``failed``, cause ``start_failed``,
+  ``restored``; the release before serves the pages' port again with their token, the environment runs its own cad, and
+  no pointer is left; the failure is counted. It is not tried again by itself: an hour passes with the feed naming it,
+  and two tendings later no attempt has begun. Then the feed names the release after it, an hour passes, and the
+  automatic update installs that one at its first try.
+- ``self-broken``: the release whose server cannot start installed by uv as the tool itself: its ``cad server start``
+  fails, begins the update itself (``cad: updating cad to <after>``), and the next release's server answers, through
+  the store.
+- ``self-unbuildable``: ``cad update`` to a release uv cannot install (it requires a package no index has): it fails
+  with a cause read from uv's words (``no_release``, or ``config_index`` where an index setting of uv's is there, as the
+  computer's folder of releases is), its log naming the package, and nothing that runs was touched: the same server
+  process answers before and after, never restarted; the record ``failed``; the environment runs its own cad, as uv
+  made it; no pointer; the store holds no release and no ``.building-`` folder.
+- ``self-unrunnable``: the same for a release that installs but does not pass its own check (its
+  ``cad_server/_internal/selftest.py`` raises): cause ``broken``.
 - ``self-major``: the rule that a new major never installs itself. With the next release and a release a major up out,
-  the server, idle, updates to the next release (``uv tool install --upgrade "cad>=<new>,<N>"``), never the higher
-  major, and uv keeps that range; then, automatic updates off, a typed ``cad update`` says the next release is the
-  newest of its major and names the higher one in one line, beginning nothing; ``cad update --major`` installs the
-  higher major (``uv tool install --upgrade "cad>=<next>"``: uv keeps the floor alone); then, automatic updates on,
-  with a newer release of that major and one two majors up out, the server updates inside the new major alone, and uv
-  keeps the new range.
+  the server, idle, updates to the next release, never the higher major; then, automatic updates off, a typed ``cad
+  update`` says the next release is the newest of its major and names the higher one in one line, beginning nothing;
+  ``cad update --major`` installs the higher major; then, automatic updates on, with a newer release of that major and
+  one two majors up out, the server updates inside the new major alone. Each through the store: uv's receipt stays
+  byte for byte as the install wrote it, and cad writes no range there.
 - ``self-pipx``: cad installed by ``pipx install cad`` (pipx itself a uv tool of the computer's, on pip's backend, its
   folders in the home, pip offered this tree's releases by ``PIP_FIND_LINKS``): the install command, a person's run,
   finds nothing newer for pipx's cad (its own ``cad update``), installs no uv tool, hands over to that cad's ``cad
   plugin install`` and turns the plugin's switch on by that cad (``cad plugin update auto on``); the next release
-  and a release a major up out and an hour passed, the server, idle, updates it to the next release by ``pipx
-  upgrade cad --pip-args=cad>=<new>,<N>``, never the higher major, and the new cad's server runs ``cad plugin install`` once; then, automatic updates off, a typed ``cad
-  update`` with nothing newer in its major says so and names the higher major, and with the release after out updates
-  pipx's cad to it, whose server runs ``cad plugin install`` once more; ``cad update --major`` installs the higher major
-  (``pipx upgrade cad --pip-args=cad>=<installed>``: pipx 1.18 keeps the range of an upgrade for the next), and,
-  automatic updates on, the server then updates inside the new major alone, never two
-  majors up. Each time pipx's cad serves the new release, and the new cad's server runs ``cad plugin install`` once; an
+  and a release a major up out and an hour passed, the server, idle, updates it to the next release through the store
+  as uv's cad updates, never the higher major, and the new cad's server runs ``cad plugin install`` once; then,
+  automatic updates off, a typed ``cad update`` with nothing newer in its major says so and names the higher major, and
+  with the release after out updates pipx's cad to it, whose server runs ``cad plugin install`` once more; ``cad
+  update --major`` installs the higher major, and, automatic updates on, the server then updates inside the new major
+  alone, never two majors up. No ``pipx upgrade`` runs: pipx's own record of its environment (``pipx_metadata.json``)
+  stays byte for byte and ``pipx list`` names the first release throughout, while pipx's ``cad`` says each new one; an
   open page's port and token reach the last.
+- ``self-called``: the acceptance test of the switch. While the update runs (its record underway), three callers each
+  run the bin folder's ``cad`` every 50 ms, rotating ``cad --version``, ``cad server status`` and ``cad server
+  start``, as agent apps call it. The update installs at its first try, and the next release's server answers and
+  serves the viewer. No call fails but with cad's own one line that it updated itself while the command ran, and those
+  only from 10 s before the switch (the pointer's ``at``) to 1 s after it; the run says how many calls ran, how many
+  failed, and with what. On the shipped mechanism, which upgraded uv's tool in place, this destroyed the install on
+  Windows.
+- ``self-held``: ``cad update`` twice, the second while a file of the installed cad (its ``cad_server/__init__.py``)
+  and the same file of the release that runs (the stored one) are held open by another process, as long as the update
+  takes (on Windows a held file cannot be deleted or replaced): it installs all the same.
+- ``self-reinstall``: after an update through the store, a person's ``uv tool install --reinstall cad`` (with this
+  computer's releases) runs what uv installed, at once, from the environment's own packages: the pointer of the
+  install before means nothing; the next ``cad update`` points cad at the newest again. On a second computer, after an
+  update through the store, ``uv tool upgrade cad`` by hand puts the newest release in the tool, and cad runs it.
+- ``self-stopped-midway``: the update's worker (its command line names ``-m cad_server._internal.auto_update_helper``)
+  and its uv are stopped, by force, while uv builds the next release in a ``.building-`` folder of the store: the
+  server never stopped (the same process answers), cad is still the release installed and runs, and no pointer was
+  written; twenty minutes pass with no beat from the worker and the attempt is counted as lost; then a typed ``cad
+  update`` installs the release, and the release's tries keep the one before as lost.
+- ``self-hop``: the shipped ``SHIPPED`` (0.11.17), the newest release whose update upgrades uv's tool in place,
+  installed from PyPI as a uv tool, its server running: its own ``cad update``, typed, updates it the old way into
+  this tree (its helper runs uv's upgrade of the tool: uv lists this tree's release, which runs from the environment's
+  own packages, no pointer), and from there this tree's ``cad update`` updates through the store (uv's tool stays,
+  the pointer appears). Every computer of a shipped release arrives this way. The shipped release reads this tree's
+  release from the stand-ins as it reads PyPI's: the feed's ``/v1/releases`` and ``CAD_PYPI_URL``.
 
 **The bridge** from a shipped release (``--old``, 0.11.11 by default; 0.11.0 to 0.11.11 and 0.10.0 to 0.10.4 have the
 updater), installed by its own ``cad setup`` through uvx, its server serving pages on the computer's port:
@@ -138,7 +189,7 @@ Usage::
 
     scripts/test/rehearse-update.py [ROUTE ...] [--old RELEASE] [--wheels DIR] [--uv-cache DIR]
 
-``all`` (the default) is every route; ``self`` the nine of cad updating itself; ``bridge`` the ten from a shipped
+``all`` (the default) is every route; ``self`` the sixteen of cad updating itself; ``bridge`` the ten from a shipped
 release; ``plugin-update`` is of neither group, and runs with ``all`` or by its name. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
 are built from the source (``tests/python/support/machine.py``, no packaged runtime: no route opens a page).
 ``--uv-cache``: one folder for uv's cache and Pythons, shared by every computer of the run (default: a new one of the
@@ -167,6 +218,7 @@ import sys
 import tempfile
 import threading
 import time
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -178,10 +230,13 @@ OLD = "0.11.11"
 # The newer of the two releases whose own `cad plugin update` runs the install command (0.11.12, 0.11.13): what
 # ``plugin-update`` starts on.
 RUNS_IT = "0.11.13"
+# The newest shipped release whose own update upgrades uv's tool in place: what ``self-hop`` starts on.
+SHIPPED = "0.11.17"
 _BASE = 9000 + os.getpid() % 800
-# This tree as releases no index holds: the one installed first, the next, one whose server cannot start, the one after
-# it, and one uv cannot install as a tool.
-NEW, NEXT, BROKEN, AFTER, NOCMD = (rc.stamp(_BASE + step) for step in range(5))
+# This tree as releases no index holds: the one installed first, the next, one whose server cannot start by the
+# shipped switch (the bridge's ``rollback``), one whose server cannot start by its own command, the one after them,
+# one uv cannot install (it requires a package no index has), and one that does not pass its own check.
+NEW, NEXT, BROKEN, NOSTART, AFTER, UNBUILDABLE, UNRUNNABLE = (rc.stamp(_BASE + step) for step in range(7))
 MAJOR = int(NEW.split(".", 1)[0])
 
 
@@ -193,11 +248,15 @@ def above(majors: int, step: int) -> str:
 
 
 # This tree as releases of higher majors: one a major up, the next of that major, and one two majors up.
-HIGH, HIGH2, HIGHER = above(1, 5), above(1, 6), above(2, 7)
+HIGH, HIGH2, HIGHER = above(1, 7), above(1, 8), above(2, 9)
 # What `cad update` and `cad doctor` say where a release of a higher major is out (``auto_update.MAJOR_LINE``).
 MAJOR_LINE = ("cad {release}, a new major version, is out and does not install itself: `cad update --major` installs it "
               "(what changes: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations)")
 BROKEN_DAEMON = b"raise SystemExit('cad: this build cannot start its server (a rehearsal of a release that cannot)')\n"
+# What the release that does not pass its own check (``UNRUNNABLE``) has for that check, and what the release uv
+# cannot install (``UNBUILDABLE``) requires.
+BROKEN_CHECK = b"raise SystemExit('cad: this build does not pass its own check (a rehearsal of one that does not)')\n"
+MISSING = "a-package-that-does-not-exist-anywhere==9.9.9"
 # How long each wait may take: an install from uv's cache, a switch, a tending or two of a server.
 SECONDS = 600.0
 # How often this build's servers tend themselves on these computers (``CAD_ENGINE_TEND_SECONDS``; a person's every
@@ -390,22 +449,29 @@ class Box:
                 raise Failed(f"{self.label}: {what}, not within {seconds:.0f} s\n{self.said()}")
             time.sleep(0.5)
 
-    def http(self, method: str, path: str, *, body: bytes | None = None, headers: dict | None = None
-             ) -> tuple[int | None, dict]:
+    def fetch(self, path: str, method: str = "GET", *, body: bytes | None = None, headers: dict | None = None
+              ) -> tuple[int | None, bytes]:
+        """``path`` asked of the computer's port with the page token: its status and body; None where none answers."""
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
         try:
             connection.request(method, path, body=body, headers={"Authorization": f"Bearer {self.token}",
                                                                  **(headers or {})})
             response = connection.getresponse()
-            data = response.read()
+            return response.status, response.read()
         except (OSError, http.client.HTTPException):
-            return None, {}
+            return None, b""
         finally:
             connection.close()
+
+    def http(self, method: str, path: str, *, body: bytes | None = None, headers: dict | None = None
+             ) -> tuple[int | None, dict]:
+        status, data = self.fetch(path, method, body=body, headers=headers)
+        if status is None:
+            return None, {}
         try:
-            return response.status, json.loads(data or b"{}")
+            return status, json.loads(data or b"{}")
         except ValueError:
-            return response.status, {"body": data[:200].decode("utf-8", "replace")}
+            return status, {"body": data[:200].decode("utf-8", "replace")}
 
     def read(self, name: str) -> dict:
         """A JSON file of the state folder (the data folder of 0.11.11 and of a uv tool's cad alike), or {}."""
@@ -497,6 +563,15 @@ class Box:
                 return {"version": found[1], "env": found[2],
                         "command": next((match[1] for match in commands if match), "")}
         return None
+
+    def taken(self, env: Path) -> dict | None:
+        """What a process of the environment ``env`` runs, as its interpreter says (``TAKEN``); None where it cannot."""
+        done = self.run([rc.interpreter(env), "-c", TAKEN], check=False, timeout=60)
+        try:
+            found = json.loads(done.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            return None
+        return found if isinstance(found, dict) else None
 
     def ask(self, python: Path, op: str) -> dict | None:
         """The server's answer to ``op`` asked by the client of the release whose Python is ``python``, never
@@ -611,6 +686,10 @@ class Box:
         if f"cad {NEW}" not in started:
             raise Failed(f"{self.label}: cad server start said {started!r}")
         self.token = (self.ask(rc.interpreter(Path(self.tool()["env"])), "http") or {}).get("token", "")
+        # The feed read at its first tending, naming nothing newer: a release the route puts out next is the
+        # automatic update's only once an hour passes (``hour_later``).
+        self.until(lambda: (self.read("releases.json").get("feed") or {}).get("latest") == NEW,
+                   "the server reading the feed at its first tending")
 
     def is_tool(self, version: str, *, kept: tuple[str, ...] = ()) -> dict:
         """uv's tool ``cad`` at ``version``, its command in uv's bin folder (never the shipped launcher, but one named
@@ -633,15 +712,12 @@ class Box:
             raise Failed(f"{self.label}: the state folder holds versions/: {sorted(os.listdir(self.state / 'versions'))}")
 
     def tool_serves(self, version: str) -> dict:
-        """The uv tool's server answering as ``version``, from the tool's environment: its status."""
-        def found():
-            tool = self.tool()
-            if tool is None or tool["version"] != version:
-                return None
-            status = self.ask(rc.interpreter(Path(tool["env"])), "status")
-            return status if status and status.get("version") == version and rc._within(
-                Path(status.get("prefix") or "/nowhere"), Path(tool["env"])) else None
-        status = self.until(found, f"the uv tool's server answering as {version}")
+        """The uv tool's server answering as ``version``, from the tool's environment, whatever uv lists there (after
+        an update through the store, the release uv installed): its status."""
+        tool = self.tool()
+        if tool is None:
+            raise Failed(f"{self.label}: uv lists no cad tool\n{self.said()}")
+        status = serves(self, Path(tool["env"]), version)
         self.flat()
         return status
 
@@ -704,6 +780,22 @@ def launcher(path: Path) -> bool:
 
 # --- cad updating itself ----------------------------------------------------------------------------------------
 
+# What a process of an environment runs, asked of the module every interpreter of it imports as it starts
+# (``_cad_release``, by the wheel's ``cad.pth``): where the environment's pointer is, the stored release the process
+# took (None: the environment's own packages), and where that release finds the viewer it serves.
+TAKEN = ("import json, _cad_release as taken\nfrom cad_server import assets\n"
+         "print(json.dumps({'pointer': taken.pointer(), 'stored': taken.STORED, "
+         "'viewer': str(assets.viewer_dist_dir())}))")
+# What the server's environment holds of the update's book, asked of the release that runs: why the last attempt did
+# not install what it was for (``auto_update.cause``: ``lost`` once its worker has been silent too long).
+CAUSE = "from cad_server._internal import auto_update as a\nprint(a.cause(a.last() or {}) or '')"
+# How long an attempt's worker may be silent before the attempt is taken for lost (``auto_update.LOST_SECONDS``),
+# and a minute more: how far ``self-stopped-midway`` sets the last beat of a worker it stopped back.
+LOST_SECONDS = 21 * 60.0
+# The words a ``cad`` command says where the server it reached is the next release's, which cad's own update started
+# while the command ran (``cli_errors.classify``).
+UPDATED_LINE = "cad updated itself to {release} while this command ran: run it again"
+
 
 def updated(box: Box, target: str, outcome: str = "installed") -> dict:
     """cad's own update to ``target`` ended (its record, ``auto-update.json``) with ``outcome``: the record."""
@@ -764,78 +856,237 @@ def addresses(box: Box) -> str:
     return ", ".join(f"{agent or 'no agent'} read /{address}" for address, agent in reads) or "nothing read the feed"
 
 
+def files(env: Path) -> dict[str, tuple[int, int]]:
+    """Every file and link of the environment ``env`` by its path there, with its size and modification time; never
+    Python's bytecode caches (``__pycache__``), which Python writes itself as a module is first imported from there."""
+    found: dict[str, tuple[int, int]] = {}
+    for folder, folders, names in os.walk(env):
+        folders[:] = [name for name in folders if name != "__pycache__"]
+        for name in names:
+            path = Path(folder) / name
+            try:
+                stat = path.lstat()
+            except OSError:
+                continue
+            found[path.relative_to(env).as_posix()] = (stat.st_size, stat.st_mtime_ns)
+    return found
+
+
+class Installed:
+    """What an installer made of cad's environment ``env`` (its ``release``), as it was when taken: what the installer
+    lists (``listing``, run in the computer: ``uv tool list --show-paths``, ``pipx list --short``), its own record of
+    the environment, byte for byte (``record``: uv's receipt, pipx's metadata), and every file there by size and time
+    (``files``). An update through the store changes none of it (``changed``)."""
+
+    def __init__(self, box: Box, env: Path, release: str, listing: list[str], record: str) -> None:
+        self.box, self.env, self.release, self.listing, self.record = box, Path(env), release, listing, record
+        self.listed = self.lists()
+        self.recorded = (self.env / record).read_bytes()
+        self.files = files(self.env)
+
+    def lists(self) -> str:
+        done = self.box.run(self.listing, check=False, timeout=60)
+        return done.stdout.strip() or f"(exit {done.returncode}: {done.stderr.strip()})"
+
+    def changed(self) -> list[str]:
+        """What changed since it was taken: a file of the environment (changed, added or gone), the installer's
+        record, or what the installer lists."""
+        now = files(self.env)
+        found = [f"{path}: {self.files[path]} -> {now.get(path)}" for path in self.files
+                 if now.get(path) != self.files[path]]
+        found += [f"{path}: added" for path in now if path not in self.files]
+        if (self.env / self.record).read_bytes() != self.recorded:
+            found.append(f"{self.record}: written again")
+        listed = self.lists()
+        if listed != self.listed:
+            found.append(f"`{' '.join(self.listing)}` said {self.listed!r}, now {listed!r}")
+        return found
+
+
+def uv_installed(box: Box) -> Installed:
+    """uv's tool ``cad`` as uv installed it (``Installed``)."""
+    tool = box.tool()
+    if tool is None:
+        raise Failed(f"{box.label}: uv lists no cad tool\n{box.said()}")
+    return Installed(box, Path(tool["env"]), tool["version"], ["uv", "tool", "list", "--show-paths"], "uv-receipt.toml")
+
+
+def serves(box: Box, env: Path, version: str) -> dict:
+    """The server answering as ``version``, run from the environment ``env`` (its ``prefix``), whatever its installer
+    lists there: its status."""
+    def found():
+        status = box.ask(rc.interpreter(env), "status")
+        return status if status and status.get("version") == version and rc._within(
+            Path(status.get("prefix") or "/nowhere"), env) else None
+    return box.until(found, f"the server of {env} answering as {version}")
+
+
+def through_store(box: Box, before: Installed, release: str, *, server: bool = True) -> Path:
+    """cad updated to ``release`` through the store, as the update leaves it (see the module): ``cad --version`` says
+    ``release``; a process of the environment takes a stored release, a folder of ``<state>/store`` whose marker
+    (``cad-store.json``) names ``release``, by the environment's pointer, which names it; the cad installed there is
+    still the installer's release (its one ``cad-<release>.dist-info``), and nothing ``before`` took of the environment
+    changed; with ``server``, the server answers as ``release`` from the environment. The stored release."""
+    taken = box.taken(before.env) or {}
+    stored = Path(taken.get("stored") or "/nowhere")
+    marker = read_json(stored / "cad-store.json")
+    pointer = read_json(Path(taken.get("pointer") or "/nowhere"))
+    infos = dist_infos(before.env)
+    problems = []
+    if box.version() != f"cad {release}":
+        problems.append(f"cad --version says {box.version()!r}")
+    if os.path.realpath(stored.parent) != os.path.realpath(box.state / "store") or marker.get("release") != release:
+        problems.append(f"a process of the environment runs {taken} (its marker {marker})")
+    if (pointer.get("release"), pointer.get("path")) != (release, str(stored)):
+        problems.append(f"the pointer {taken.get('pointer')} holds {pointer}")
+    if infos != [f"cad-{before.release}.dist-info"]:
+        problems.append(f"the environment's own cad is {infos}, not the installer's {before.release}")
+    problems += before.changed()
+    if problems:
+        raise Failed(f"{box.label}: cad updated to {release} through the store:\n  " + "\n  ".join(problems)
+                     + f"\n{box.said()}")
+    if server:
+        serves(box, before.env, release)
+    return stored
+
+
+def runs_its_own(box: Box, env: Path, release: str) -> None:
+    """The environment ``env`` runs its own packages, ``release``, as its installer installed them: a process there
+    takes no stored release, its one ``cad-<release>.dist-info``, and ``cad --version`` says ``release``."""
+    taken = box.taken(env) or {}
+    if taken.get("stored") is not None or dist_infos(env) != [f"cad-{release}.dist-info"] \
+            or box.version() != f"cad {release}":
+        raise Failed(f"{box.label}: not {release} as installed: a process there runs {taken}, the environment holds "
+                     f"{dist_infos(env)}, cad --version says {box.version()!r}\n{box.said()}")
+
+
+def dist_infos(env: Path) -> list[str]:
+    """The ``cad-<release>.dist-info`` folders of the environment ``env``."""
+    return sorted(path.name for pattern in ("lib/python*/site-packages/cad-*.dist-info",
+                                            "Lib/site-packages/cad-*.dist-info") for path in env.glob(pattern))
+
+
+def read_json(path: Path) -> dict:
+    try:
+        found = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def no_pointer(box: Box, env: Path) -> None:
+    """No pointer for the environment ``env``, and a process there takes no stored release."""
+    taken = box.taken(env) or {}
+    if taken.get("stored") is not None or not taken.get("pointer") or Path(taken["pointer"]).exists():
+        raise Failed(f"{box.label}: a pointer was written: {taken}, {read_json(Path(taken.get('pointer') or '.'))}\n"
+                     f"{box.said()}")
+
+
+def viewer(box: Box, release: str, env: Path, stored: Path) -> str:
+    """The viewer served by the server of ``release``, which runs the stored release ``stored`` in the environment
+    ``env``: ``GET /api/v1/server`` names ``release``; and where this run's wheels carry the built viewer (cad's wheel
+    of ``release`` holds ``cad_server/_runtime/viewer/index.html``), a process of the environment finds it inside
+    ``stored`` and nowhere else, ``GET /`` answers 200 with that page (it names the page's module script) and that
+    script answers 200: a stored release finds the files it ships beside its own code. The route's line."""
+    box.until(lambda: box.serving(release), f"{release}'s server answering GET /api/v1/server with the page token",
+              seconds=90)
+    wheel = next(box.wheels.glob(f"cad-{release}-*.whl"), None)
+    try:
+        with zipfile.ZipFile(wheel) as archive:
+            page = archive.read("cad_server/_runtime/viewer/index.html").decode("utf-8")
+    except (TypeError, OSError, KeyError, zipfile.BadZipFile):
+        return (f"`GET /api/v1/server` answered by {release}; the page itself not asked: this run's wheels carry no "
+                "built viewer (built from the source: pass --wheels)")
+    script = re.search(r'<script type="module"[^>]*src="\.?/?([^"]+)"', page)
+    if script is None:
+        raise Failed(f"{box.label}: the built viewer in {wheel.name} names no module script")
+    found = Path((box.taken(env) or {}).get("viewer") or "/nowhere")
+    status, body = box.fetch("/")
+    asset, _ = box.fetch(f"/{script[1]}")
+    if not rc._within(found, stored) or status != 200 or script[1] not in body.decode("utf-8", "replace") \
+            or asset != 200:
+        raise Failed(f"{box.label}: the viewer of {release}: found at {found} (not in {stored}), GET / answered "
+                     f"{status} {body[:200]!r}, GET /{script[1]} {asset}\n{box.said()}")
+    return f"GET / served {release}'s viewer ({script[1]}, 200), found in the stored release"
+
+
+def typed_update(box: Box, was: str, target: str, *, server: bool = True) -> dict:
+    """``cad update`` typed, PyPI naming ``target``: it says each step once on stderr as it sees it begin -- the
+    release installed beside the one that runs, then the switch, with the server restarted where one runs
+    (``server``; with none, a switch can be over before the command looks again, and is then not said) -- and ``cad
+    <was> updated to <target>`` on stdout, exit 0. The record, ``installed`` and typed."""
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
+    steps = [f"cad: installing cad {target} beside cad {was}",
+             "cad: restarting the cad server on it, once nothing is running" if server else "cad: switching to it"]
+    said = done.stderr.strip().splitlines()
+    if (done.returncode, done.stdout.strip()) != (0, f"cad {was} updated to {target}") \
+            or said not in (steps, steps[:1] if not server else steps):
+        raise Failed(f"{box.label}: cad update exited {done.returncode}:\n{done.stdout}\n{done.stderr}\n{box.said()}")
+    record = updated(box, target)
+    if (record.get("asked"), record.get("from")) != (True, was):
+        raise Failed(f"{box.label}: the record of a typed update: {record}")
+    return record
+
+
 def self_update(box: Box) -> None:
     box.set_up("on")
+    before = uv_installed(box)
     box.out(NEXT)
     box.hour_later()
-    updated(box, NEXT)
+    record = updated(box, NEXT)
     read_feed(box, "releases", "cad")
-    box.tool_serves(NEXT)
-    box.is_tool(NEXT)
+    stored = through_store(box, before, NEXT)
+    if (record.get("tries"), record.get("asked"), record.get("installer")) != (1, False, "uv"):
+        raise Failed(f"{box.label}: the record of the automatic update: {record}")
     # Then `cad plugin install`, once, by the new cad's server: kept in its record, its output in the log.
     caught_up(box, NEXT)
     if (box.state / "versions.json").exists():
         raise Failed(f"{box.label}: this build wrote versions.json, the feed's file of 0.10.0 to 0.11.11")
-    say(f"        {NEW} -> {NEXT} by itself, idle, as `uv tool install --upgrade \"{bounded(NEW)}\"` got it; then the "
-        "new server ran `cad plugin install`, once, exit 0; no versions.json written")
+    say(f"        {NEW} -> {NEXT} by itself, idle, at its first try: cad --version and the server {NEXT}, run from "
+        f"{stored.name} by the pointer; uv still lists {NEW}, its receipt and the environment's files as they were; "
+        "then the new server ran `cad plugin install`, once, exit 0; no versions.json written")
+    say(f"        {viewer(box, NEXT, before.env, stored)}")
     pages(box, NEXT)
-
-
-def bounded(version: str) -> str:
-    """The requirement cad's own update bounds an upgrade from ``version`` by: its major, never below it."""
-    return f"cad>={version},<{int(version.split('.', 1)[0]) + 1}"
-
-
-def recorded(box: Box) -> str:
-    """The requirement uv keeps for the cad tool (its receipt's ``specifier``; '' for none: the newest of all)."""
-    import tomllib
-
-    receipt = Path(box.tool()["env"]) / "uv-receipt.toml"
-    first = tomllib.loads(receipt.read_text(encoding="utf-8"))["tool"]["requirements"][0]
-    return first.get("specifier", "") if isinstance(first, dict) else str(first)[len("cad"):]
 
 
 def self_major(box: Box) -> None:
     """cad installs by itself any newer release of its major, never a higher major: the automatic update to the newer
     release of this major with a higher major out; a typed ``cad update`` that stays and names the higher major;
-    ``cad update --major`` installs it; then the automatic update stays inside the new major."""
+    ``cad update --major`` installs it; then the automatic update stays inside the new major. uv's receipt stays as
+    uv wrote it throughout."""
     box.set_up("off")
+    before = uv_installed(box)
     box.out(NEXT)
     box.out(HIGH)  # both out: the feed's `lines` name each, its `latest` the higher major's
     box.hour_later()
     record = updated(box, NEXT)
     read_feed(box, "releases", "cad")
-    box.tool_serves(NEXT)
-    box.is_tool(NEXT)
-    if (record.get("wanted"), record.get("major"), recorded(box).replace(" ", "")) != (NEXT, False,
-                                                                                         bounded(NEW)[len("cad"):]):
-        raise Failed(f"{box.label}: the automatic update: {record}, uv keeps {recorded(box)!r}\n{box.said()}")
-    say(f"        {HIGH} and {NEXT} out: {NEW} -> {NEXT} by itself (`uv tool install --upgrade \"{bounded(NEW)}\"`), "
-        f"never {HIGH}; uv keeps {recorded(box)!r}")
+    through_store(box, before, NEXT)
+    if (record.get("wanted"), record.get("major")) != (NEXT, False):
+        raise Failed(f"{box.label}: the automatic update: {record}\n{box.said()}")
+    say(f"        {HIGH} and {NEXT} out: {NEW} -> {NEXT} by itself, never {HIGH}; uv's receipt as uv wrote it")
     # Typed: nothing newer in this major; the higher major named in one line, nothing begun.
     switched = box.run([box.cad(), "update", "auto", "off"]).stdout.strip()
     if switched != "update auto: off":
         raise Failed(f"{box.label}: cad update auto off said {switched!r}")
-    before = box.read("auto-update.json")
+    begun = box.read("auto-update.json")
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
     said = [f"cad {NEXT} is the newest {MAJOR}.x release", MAJOR_LINE.format(release=HIGH)]
     if (done.returncode, done.stdout.strip().splitlines(), done.stderr.strip()) != (0, said, "") \
-            or box.read("auto-update.json").get("at") != before.get("at") or box.version() != f"cad {NEXT}":
+            or box.read("auto-update.json").get("at") != begun.get("at") or box.version() != f"cad {NEXT}":
         raise Failed(f"{box.label}: cad update with a higher major out exited {done.returncode}: {done.stdout}"
                      f"{done.stderr}, {box.read('auto-update.json')}\n{box.said()}")
     say(f"        `cad update`: {' / '.join(said)!r}; nothing begun")
-    # `cad update --major`: the higher major, and the range uv kept gone.
+    # `cad update --major`: the higher major.
     done = box.run([box.cad(), "update", "--major"], check=False, timeout=SECONDS + 60)
-    if (done.returncode, done.stdout.strip(), done.stderr.strip()) != (0, f"cad {NEXT} updated to {HIGH}", ""):
+    if (done.returncode, done.stdout.strip()) != (0, f"cad {NEXT} updated to {HIGH}"):
         raise Failed(f"{box.label}: cad update --major exited {done.returncode}: {done.stdout}{done.stderr}\n"
                      f"{box.said()}")
     record = updated(box, HIGH)
-    box.tool_serves(HIGH)
-    box.is_tool(HIGH)
-    if (record.get("asked"), record.get("major"), recorded(box).replace(" ", "")) != (True, True, f">={NEXT}"):
-        raise Failed(f"{box.label}: the update across majors: {record}, uv keeps {recorded(box)!r}\n{box.said()}")
-    say(f"        `cad update --major`: {NEXT} -> {HIGH} (`uv tool install --upgrade \"cad>={NEXT}\"`); uv keeps "
-        f"{recorded(box)!r}")
+    through_store(box, before, HIGH)
+    if (record.get("asked"), record.get("major")) != (True, True):
+        raise Failed(f"{box.label}: the update across majors: {record}\n{box.said()}")
+    say(f"        `cad update --major`: {NEXT} -> {HIGH}; uv's receipt as uv wrote it")
     # Afterwards the automatic update stays inside the new major.
     switched = box.run([box.cad(), "update", "auto", "on"]).stdout.strip()
     if switched != "update auto: on":
@@ -844,13 +1095,11 @@ def self_major(box: Box) -> None:
     box.out(HIGHER)
     box.hour_later()
     record = updated(box, HIGH2)
-    box.tool_serves(HIGH2)
-    box.is_tool(HIGH2)
-    if record.get("wanted") != HIGH2 or recorded(box).replace(" ", "") != bounded(HIGH)[len("cad"):]:
-        raise Failed(f"{box.label}: the automatic update in the new major: {record}, uv keeps {recorded(box)!r}\n"
-                     f"{box.said()}")
-    say(f"        {HIGH2} and {HIGHER} out: {HIGH} -> {HIGH2} by itself (`\"{bounded(HIGH)}\"`), never {HIGHER}; "
-        f"uv keeps {recorded(box)!r}")
+    through_store(box, before, HIGH2)
+    if record.get("wanted") != HIGH2:
+        raise Failed(f"{box.label}: the automatic update in the new major: {record}\n{box.said()}")
+    say(f"        {HIGH2} and {HIGHER} out: {HIGH} -> {HIGH2} by itself, never {HIGHER}; uv's receipt as uv wrote it, "
+        f"uv still lists {NEW}")
     pages(box, HIGH2)
 
 
@@ -865,6 +1114,7 @@ def pages(box: Box, version: str) -> None:
 def self_typed(box: Box) -> None:
     # Automatic updates off, the plugin's switch on: a typed update needs neither; the plugin catches up all the same.
     box.set_up("on")
+    before = uv_installed(box)
     switched = box.run([box.cad(), "update", "auto", "off"]).stdout.strip()
     if switched != "update auto: off":
         raise Failed(f"{box.label}: cad update auto off said {switched!r}")
@@ -874,22 +1124,18 @@ def self_typed(box: Box) -> None:
         raise Failed(f"{box.label}: cad update with nothing newer exited {done.returncode}: {done.stdout}{done.stderr}, "
                      f"{box.read('auto-update.json')}")
     box.out(NEXT)  # out on PyPI; the feed's hour has not passed for the server
-    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
-    said = f"cad {NEW} updated to {NEXT}"
-    if (done.returncode, done.stdout.strip()) != (0, said):
-        raise Failed(f"{box.label}: cad update exited {done.returncode}: {done.stdout}{done.stderr}\n{box.said()}")
-    record = updated(box, NEXT)
-    if (record.get("asked"), record.get("installer")) != (True, "uv"):
+    record = typed_update(box, NEW, NEXT)
+    if record.get("installer") != "uv":
         raise Failed(f"{box.label}: the record of a typed update: {record}")
-    box.tool_serves(NEXT)
-    box.is_tool(NEXT)
+    through_store(box, before, NEXT)
     if (box.read("settings.json").get("auto_update") or {}).get("on") is not False:
         raise Failed(f"{box.label}: after cad update: switches {box.read('settings.json').get('auto_update')}")
     caught_up(box, NEXT)
     say(f"        `cad update` with nothing newer: 'cad {NEW} is the newest release', nothing restarted; then {NEW} -> "
-        f"{NEXT} with automatic updates off ({said!r}); then the new server ran `cad plugin install`, once, exit 0")
+        f"{NEXT} with automatic updates off, each step said once on stderr, through the store; then the new server "
+        "ran `cad plugin install`, once, exit 0")
     pages(box, NEXT)
-    tendings(box, Path(box.tool()["env"]), 2)
+    tendings(box, before.env, 2)
     caught_up(box, NEXT)  # and only once: still its first try
 
 
@@ -897,34 +1143,26 @@ def self_typed_stopped(box: Box) -> None:
     """``cad update`` typed with no server running: cad updates in the command's own process, the helper starts no
     server, and ``cad plugin install`` never runs."""
     box.set_up("on")  # the plugin's switch on: a typed update still never runs `cad plugin install`
+    before = uv_installed(box)
     switched = box.run([box.cad(), "update", "auto", "off"]).stdout.strip()
     if switched != "update auto: off":
         raise Failed(f"{box.label}: cad update auto off said {switched!r}")
-    python = rc.interpreter(Path(box.tool()["env"]))
+    python = rc.interpreter(before.env)
     box.run([box.cad(), "server", "stop"])
     box.until(lambda: box.ask(python, "status") is None, "no server running")
     # Nothing newer on PyPI: said, nothing begun, no server started.
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
-    say(f"        typed, nothing newer: exit {done.returncode}, stdout {done.stdout.strip()!r}, "
-        f"stderr {done.stderr.strip()!r}")
     if (done.returncode, done.stdout.strip()) != (0, f"cad {NEW} is the newest release") \
             or box.read("auto-update.json") or box.ask(python, "status") is not None:
         raise Failed(f"{box.label}: cad update with nothing newer exited {done.returncode}: "
                      f"{done.stdout}{done.stderr}, {box.read('auto-update.json')}\n{box.said()}")
     box.out(NEXT)  # out on PyPI
     began = time.monotonic()
-    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
-    say(f"        typed, {NEXT} out: exit {done.returncode} after {time.monotonic() - began:.0f} s, "
-        f"stdout {done.stdout.strip()!r}, stderr {done.stderr.strip()!r}")
-    said = f"cad {NEW} updated to {NEXT}"
-    if (done.returncode, done.stdout.strip(), done.stderr.strip()) != (0, said, ""):
-        raise Failed(f"{box.label}: cad update exited {done.returncode}: {done.stdout}{done.stderr}\n{box.said()}")
-    record = updated(box, NEXT)
-    say(f"        the record: {record}")
+    record = typed_update(box, NEW, NEXT, server=False)
+    took = time.monotonic() - began
     if record.get("start") is not False or "started" in record:
         raise Failed(f"{box.label}: the helper was to start no server: {record}")
-    box.is_tool(NEXT)
-    python = rc.interpreter(Path(box.tool()["env"]))
+    through_store(box, before, NEXT, server=False)
     # No server afterwards: none answers, and nothing of the computer runs once the helper has exited.
     box.until(lambda: not box.computer.processes(), "nothing of the computer running", seconds=60)
     if box.ask(python, "status") is not None or box.computer.processes():
@@ -932,29 +1170,34 @@ def self_typed_stopped(box: Box) -> None:
     if (box.read("settings.json").get("auto_update") or {}).get("on") is not False:
         raise Failed(f"{box.label}: switches {box.read('settings.json').get('auto_update')}")
     never_installed(box, record, "a typed cad update")
-    say(f"        no server ran: {NEW} -> {NEXT} by a typed `cad update` ({said!r}); no server after it, no "
-        f"`cad plugin install`, processes {box.computer.processes()} (looked: {box.computer.looked})")
+    say(f"        no server ran: {NEW} -> {NEXT} by a typed `cad update` in {took:.0f} s, through the store, cad "
+        f"--version {NEXT}; no server after it, no `cad plugin install`, processes {box.computer.processes()} "
+        f"(looked: {box.computer.looked})")
 
 
 def self_at_start(box: Box) -> None:
     box.set_up("off")
+    before = uv_installed(box)
     box.run([box.cad(), "server", "stop"])
     # The feed as the server last read it, naming the next release, read within the hour: due at the next start.
     box.out(NEXT)
     (box.state / "releases.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": NEXT}}),
                                              encoding="utf-8")
+    began = time.monotonic()
     done = box.run([box.cad(), "server", "start"], check=False)
-    if done.returncode != 0 or f"cad {NEXT}" not in done.stdout:
+    took = time.monotonic() - began
+    # It started at once, as the release installed, and said so: the update comes after, in the background.
+    if done.returncode != 0 or done.stdout.strip() != f"started the cad server (cad {NEW})":
         raise Failed(f"{box.label}: cad server start exited {done.returncode}: {done.stdout}{done.stderr}\n"
                      f"{box.said()}")
     record = updated(box, NEXT)
-    if record.get("tries") != 1 or "restored" in record:
-        raise Failed(f"{box.label}: cad's own update at the start: {record}\n{box.said()}")
-    box.tool_serves(NEXT)
-    box.is_tool(NEXT)
+    if (record.get("tries"), record.get("asked")) != (1, False) or "restored" in record:
+        raise Failed(f"{box.label}: cad's own update after the start: {record}\n{box.said()}")
+    through_store(box, before, NEXT)
     never_installed(box, record, "the plugin's switch off")
-    say(f"        {NEW} -> {NEXT} as `cad server start` started, the starter waiting: {done.stdout.strip()!r}; the "
-        "plugin's switch off: no `cad plugin install`")
+    say(f"        `cad server start` answered at once as {NEW} ({took:.1f} s: {done.stdout.strip()!r}); then, idle, "
+        f"{NEW} -> {NEXT} in the background at its first try, whose server answers; the plugin's switch off: no "
+        "`cad plugin install`")
 
 
 def self_off(box: Box) -> None:
@@ -975,41 +1218,386 @@ def self_off(box: Box) -> None:
     say(f"        switched off: the feed named {NEXT}, the server started as {NEW}, nothing attempted")
 
 
-def self_broken(box: Box) -> None:
+def self_rollback(box: Box) -> None:
     box.set_up("off")
-    box.out(BROKEN)
+    env = Path(box.tool()["env"])
+    box.out(NOSTART)  # out on PyPI
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
+    record = updated(box, NOSTART, "failed")
+    line = done.stderr.strip().splitlines()[-1:]
+    # One line: what failed, that the release before runs again, what to do and where the log is.
+    said = f"cad update: could not update cad {NEW} to {NOSTART}, as "
+    if done.returncode == 0 or not line or not line[0].startswith(said) \
+            or f"so the release before runs again (cad {NEW})" not in line[0]:
+        raise Failed(f"{box.label}: cad update to a release whose server cannot start exited {done.returncode}:\n"
+                     f"{done.stdout}\n{done.stderr}\n{box.said()}")
+    if (record.get("cause"), record.get("restored")) != ("start_failed", True) \
+            or str(record.get("started", "")).startswith("not started"):
+        raise Failed(f"{box.label}: the way back: {record}\n{box.said()}")
+    # The release before serves again, on the pages' port with their token, and the environment runs its own cad.
+    box.until(lambda: box.serving(NEW), f"{NEW} serving again on the pages' port with their token")
+    serves(box, env, NEW)
+    runs_its_own(box, env, NEW)
+    no_pointer(box, env)
+    box.until(lambda: box.read("auto-update.json").get("reported") is True,
+              "the failed update counted by the old server")
+    say(f"        `cad update` to {NOSTART}, whose server cannot start: {line[0]!r} (exit {done.returncode}); cause "
+        f"start_failed, restored; {NEW} serves the pages' port again, no pointer; the failure counted")
+    # Not tried again by itself: an hour passes with the feed naming it, and two tendings later no attempt began.
+    typed = box.read("auto-update.json")
     box.hour_later()
-    record = updated(box, BROKEN)
-    if not str(record.get("started", "")).startswith("not started"):
-        raise Failed(f"{box.label}: {BROKEN}'s server started: {record}")
-    if box.version() != f"cad {BROKEN}":
-        raise Failed(f"{box.label}: cad --version says {box.version()!r}, not cad {BROKEN}")
-    # The next release: `cad server start`, failing, updates cad to it (no server runs to write the feed's file).
+    box.until(lambda: (box.read("releases.json").get("feed") or {}).get("latest") == NOSTART and
+              time.time() - box.read("releases.json").get("checked", 0) < 600, "the server reading the feed")
+    tendings(box, env, 2)
+    if box.read("auto-update.json").get("at") != typed.get("at"):
+        raise Failed(f"{box.label}: {NOSTART}, whose server did not start, was tried again by itself: "
+                     f"{box.read('auto-update.json')}\n{box.said()}")
+    say(f"        an hour later, the feed naming {NOSTART}: not tried again by itself")
+    # The next good release, by itself: the one the feed names, not the one that failed.
+    before = uv_installed(box)
     box.out(AFTER)
-    box.an_hour_passes()
-    done = box.run([box.cad(), "server", "start"], check=False)
-    if done.returncode == 0 or f"updating cad to {AFTER}" not in done.stderr:
-        raise Failed(f"{box.label}: cad server start on {BROKEN} exited {done.returncode}: {done.stdout}{done.stderr}")
-    updated(box, AFTER)
-    box.tool_serves(AFTER)
-    box.is_tool(AFTER)
-    say(f"        {NEW} -> {BROKEN} (its server down) -> {AFTER} by a failed cad server start")
-
-
-def self_uninstallable(box: Box) -> None:
-    box.set_up("on")
-    box.out(NOCMD)
     box.hour_later()
-    record = updated(box, NOCMD, "failed")
-    if record.get("restored") is not True:
-        raise Failed(f"{box.label}: the release before was not put back: {record}\n{box.said()}")
-    box.tool_serves(NEW)
+    record = updated(box, AFTER)
+    if (record.get("wanted"), record.get("asked"), record.get("tries")) != (AFTER, False, 1):
+        raise Failed(f"{box.label}: the automatic update after the way back: {record}\n{box.said()}")
+    through_store(box, before, AFTER)
+    say(f"        then {AFTER} out: {NEW} -> {AFTER} by itself at its first try, through the store")
+    pages(box, AFTER)
+
+
+def self_broken(box: Box) -> None:
+    # A release whose server cannot start, installed by uv as the tool: its own `cad server start` begins the update.
+    box.out(NOSTART)
+    box.run(["uv", "tool", "install", "--managed-python", "--python", "3.14", "cad"], timeout=SECONDS)
+    before = uv_installed(box)
+    if before.release != NOSTART or box.version() != f"cad {NOSTART}":
+        raise Failed(f"{box.label}: uv's cad is {before.release}, cad --version says {box.version()!r}")
+    box.out(AFTER)
+    done = box.run([box.cad(), "server", "start"], check=False)
+    if done.returncode == 0 or f"cad: updating cad to {AFTER}" not in done.stderr:
+        raise Failed(f"{box.label}: cad server start on {NOSTART} exited {done.returncode}: {done.stdout}{done.stderr}")
+    record = updated(box, AFTER)
+    if (record.get("asked"), record.get("from")) != (False, NOSTART):
+        raise Failed(f"{box.label}: the update a failed start began: {record}")
+    through_store(box, before, AFTER)
+    say(f"        {NOSTART} installed by uv, its server down: `cad server start` failed and began the update, and "
+        f"{AFTER}'s server answers, through the store")
+
+
+def unswitched(box: Box, release: str, causes: tuple[str, ...]) -> dict:
+    """A typed ``cad update`` to ``release``, which fails before anything switches, with a cause of ``causes``:
+    nothing that runs was touched. The command exits non-zero and says so in one line; the same server process
+    answers before and after, never restarted; the environment runs its own cad, unchanged, no pointer written, and
+    the store holds no release and nothing half built. The record."""
+    box.set_up("off")
+    before = uv_installed(box)
+    python = rc.interpreter(before.env)
+    first = box.ask(python, "status") or {}
+    box.out(release)  # out on PyPI
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
+    record = updated(box, release, "failed")
+    after = box.ask(python, "status") or {}
+    line = done.stderr.strip().splitlines()[-1:]
+    store = box.state / "store"
+    held = sorted(os.listdir(store)) if store.is_dir() else []
+    if done.returncode == 0 or not line \
+            or not line[0].startswith(f"cad update: could not update cad {NEW} to {release}, as "):
+        raise Failed(f"{box.label}: cad update to {release} exited {done.returncode}:\n{done.stdout}\n{done.stderr}")
+    if record.get("cause") not in causes or "restored" in record:
+        raise Failed(f"{box.label}: the record of the update to {release}: {record}\n{box.said()}")
+    if (first.get("pid"), first.get("version")) != (after.get("pid"), NEW) or not first.get("pid") \
+            or after.get("up", 0) <= first.get("up", 0):
+        raise Failed(f"{box.label}: the server before the update {first}, after {after}\n{box.said()}")
+    if held or before.changed():
+        raise Failed(f"{box.label}: after a failed update the store holds {held}; the environment: {before.changed()}")
+    runs_its_own(box, before.env, NEW)
+    no_pointer(box, before.env)
+    return record
+
+
+def self_unbuildable(box: Box) -> None:
+    # uv's words name the cause: a requirement the index does not have (where an index setting of uv's is there, as
+    # the computer's folder of releases is, its name).
+    record = unswitched(box, UNBUILDABLE, ("no_release", "config_index"))
+    log = (box.state / "auto-update.log").read_text(encoding="utf-8", errors="replace")
+    if MISSING.split("==")[0] not in log:
+        raise Failed(f"{box.label}: the update's log names nothing of what uv could not find:\n{log[-3000:]}")
+    say(f"        {UNBUILDABLE}, which requires {MISSING}: not built (cause {record['cause']}: {record['detail']!r}); "
+        f"the same {NEW} server process answered throughout, no pointer, nothing in the store")
+
+
+def self_unrunnable(box: Box) -> None:
+    record = unswitched(box, UNRUNNABLE, ("broken",))
+    say(f"        {UNRUNNABLE}, which fails its own check: built, never switched to (cause broken: "
+        f"{record['detail']!r}); the same {NEW} server process answered throughout, no pointer, nothing in the store")
+
+
+class Callers:
+    """Agents and apps calling ``cad`` while an update runs (``self-called``): ``count`` threads, each running the bin
+    folder's ``cad`` every ``every`` seconds once the attempt is underway (its record) and until it has ended, each
+    rotating through ``CALLS`` from a place of its own. ``calls``: each call's begin and end (``time.time``), what it
+    ran, its exit status (or what stopped it) and the last line it said on stderr."""
+
+    CALLS = (["--version"], ["server", "status"], ["server", "start"])
+
+    def __init__(self, box: Box, count: int = 3, every: float = 0.05) -> None:
+        self.box, self.every, self.done, self.lock = box, every, threading.Event(), threading.Lock()
+        self.calls: list[tuple[float, float, str, object, str]] = []
+        self.threads = [threading.Thread(target=self.call, args=(first,), daemon=True) for first in range(count)]
+        for thread in self.threads:
+            thread.start()
+
+    def underway(self) -> bool:
+        return self.box.read("auto-update.json").get("outcome") == "underway"
+
+    def call(self, at: int) -> None:
+        while not self.done.is_set() and not self.underway():
+            time.sleep(self.every)
+        while not self.done.is_set() and self.underway():
+            command = self.CALLS[at % len(self.CALLS)]
+            at += 1
+            began = time.time()
+            try:
+                done = subprocess.run([str(self.box.cad()), *command], env=self.box.env, cwd=self.box.work,
+                                      stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
+                                      errors="replace", timeout=120)
+                how, said = done.returncode, (done.stderr.strip().splitlines() or [""])[-1]
+            except FileNotFoundError:
+                how, said = "not found", ""
+            except (OSError, subprocess.TimeoutExpired) as error:
+                how, said = type(error).__name__, str(error)
+            with self.lock:
+                self.calls.append((began, time.time(), " ".join(command), how, said))
+            time.sleep(self.every)
+
+    def stop(self) -> list[tuple[float, float, str, object, str]]:
+        self.done.set()
+        for thread in self.threads:
+            thread.join(150)
+        return list(self.calls)
+
+
+# How far from the switch (the pointer's ``at``) a command may meet the next release's server: one that began just
+# before it, of the release before, and found the next release's server (``UPDATED_LINE``).
+SWITCH_WINDOW = (-10.0, 1.0)
+
+
+def self_called(box: Box) -> None:
+    box.set_up("off")
+    before = uv_installed(box)
+    box.out(NEXT)
+    callers = Callers(box)
+    try:
+        box.hour_later()
+        record = box.until(lambda: (lambda found: found if found.get("release") == NEXT and "ended" in found
+                                    else None)(box.read("auto-update.json")), f"cad's own update to {NEXT} ended")
+    finally:
+        calls = callers.stop()
+    pointer = read_json(Path((box.taken(before.env) or {}).get("pointer") or "/nowhere"))
+    switch = pointer.get("at") if isinstance(pointer.get("at"), (int, float)) else 0.0
+    failed = [call for call in calls if call[3] != 0]
+    met = UPDATED_LINE.format(release=NEXT)
+    wrong = [call for call in failed if not call[4].endswith(met)
+             or not SWITCH_WINDOW[0] <= call[0] - switch <= SWITCH_WINDOW[1]]
+    said: dict[str, int] = {}
+    for call in failed:
+        key = f"{call[2]}: exit {call[3]}: {call[4]}"
+        said[key] = said.get(key, 0) + 1
+    tally = f"{len(calls)} calls, {len(failed)} failed" + "".join(f"\n          {count} x {key}"
+                                                                   for key, count in sorted(said.items()))
+    # The calls ran across the switch: one began before it, and one ended after it.
+    across = bool(calls) and min(call[0] for call in calls) < switch < max(call[1] for call in calls)
+    if record.get("outcome") != "installed" or record.get("tries") != 1 or "restored" in record or not across \
+            or wrong:
+        raise Failed(f"{box.label}: the update while cad was called: {record}; {tally}; out of place:\n"
+                     + "\n".join(f"  {call[0] - switch:+.2f} s from the switch: {call[2]}: {call[3]}: {call[4]}"
+                                 for call in wrong) + f"\n{box.said()}")
+    stored = through_store(box, before, NEXT)
+    say(f"        {NEW} -> {NEXT} at its first try with three callers of `cad` every 50 ms all along, from "
+        f"{min(call[0] for call in calls) - switch:+.1f} s to {max(call[1] for call in calls) - switch:+.1f} s around "
+        f"the switch: {tally}")
+    if failed:
+        say("        each failure within " + ", ".join(f"{call[0] - switch:+.2f} s" for call in failed)
+            + " of the switch")
+    say(f"        {viewer(box, NEXT, before.env, stored)}")
+
+
+# A child Python that opens the files it is given and keeps them open until its input ends (``self-held``): on Windows
+# a file a process holds open cannot be deleted or replaced.
+HOLD = "import sys\nheld = [open(path, 'rb') for path in sys.argv[1:]]\nprint('held', flush=True)\nsys.stdin.read()\n"
+
+
+def self_held(box: Box) -> None:
+    box.set_up("off")
+    before = uv_installed(box)
+    box.out(NEXT)
+    typed_update(box, NEW, NEXT)
+    stored = through_store(box, before, NEXT)
+    # A file of the installed cad, and one of the release that runs, held open by another process for the whole update.
+    held = [next(path for pattern in ("lib/python*/site-packages/cad_server/__init__.py",
+                                      "Lib/site-packages/cad_server/__init__.py") for path in before.env.glob(pattern)),
+            stored / "cad_server" / "__init__.py"]
+    holder = subprocess.Popen([sys.executable, "-I", "-c", HOLD, *map(str, held)], env=box.env, cwd=box.work,
+                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    try:
+        if holder.stdout.readline().strip() != "held":
+            raise Failed(f"{box.label}: the files could not be held: exit {holder.poll()}")
+        box.out(AFTER)
+        typed_update(box, NEXT, AFTER)
+        through_store(box, before, AFTER)
+        if holder.poll() is not None:
+            raise Failed(f"{box.label}: the process holding the files ended before the update did")
+    finally:
+        holder.stdin.close()
+        holder.wait(60)
+    say(f"        {NEW} -> {NEXT}, then {NEXT} -> {AFTER} while {held[0].relative_to(box.work)} and "
+        f"{held[1].relative_to(box.work)} were held open: installed all the same")
+
+
+def self_reinstall(box: Box) -> None:
+    box.set_up("off")
+    before = uv_installed(box)
+    box.out(NEXT)
+    typed_update(box, NEW, NEXT)
+    through_store(box, before, NEXT)
+    # A person's own reinstall: uv's command, with this computer's releases. What uv installed runs, at once.
+    box.run(["uv", "tool", "install", "--reinstall", "cad"], timeout=SECONDS)
+    again = uv_installed(box)
+    runs_its_own(box, again.env, again.release)
+    say(f"        {NEW} -> {NEXT} through the store; then `uv tool install --reinstall cad` installed {again.release}, "
+        "which runs at once from the environment's own packages: the pointer means nothing any more")
+    # The next update points cad at the newest again.
+    box.out(AFTER)
+    typed_update(box, again.release, AFTER)
+    through_store(box, again, AFTER)
+    say(f"        then {again.release} -> {AFTER} through the store again")
+    # A second computer: `uv tool upgrade cad` by hand over an update through the store.
+    other = Box(f"{box.label}-2", box.feed, box.wheels, box.computer.uv, pypi=box.pypi, counted=True)
+    say(f"  a second computer in {other.work}")
+    try:
+        other.computer.isolation(say)
+        other.set_up("off")
+        first = uv_installed(other)
+        other.out(NEXT)
+        typed_update(other, NEW, NEXT)
+        through_store(other, first, NEXT)
+        other.out(AFTER)
+        other.run(["uv", "tool", "upgrade", "cad"], timeout=SECONDS)
+        upgraded = uv_installed(other)
+        if upgraded.release != AFTER:
+            raise Failed(f"{other.label}: `uv tool upgrade cad` left uv's cad at {upgraded.release}, not {AFTER}")
+        runs_its_own(other, upgraded.env, AFTER)
+        say(f"        on it, {NEW} -> {NEXT} through the store, then `uv tool upgrade cad` by hand: uv's cad {AFTER}, "
+            "which runs")
+    finally:
+        left = other.stop()
+        if left:
+            say(f"note    {other.label}: ended what was still running:\n" + "\n".join(left))
+        shutil.rmtree(other.work, ignore_errors=True)
+
+
+def worker_and_uv(box: Box, building: str) -> list[int]:
+    """The update's worker (its command line names ``-m cad_server._internal.auto_update_helper``) and the uv it runs,
+    building into the store's folder ``building``: their process ids, the worker's first."""
+    found = []
+    for pid, command in box.computer.processes():
+        line = (rc.windows_command_line(pid) or "") if WINDOWS else command
+        if "-m cad_server._internal.auto_update_helper" in line:
+            found.insert(0, pid)
+        elif building in line and "pip" in line:
+            found.append(pid)
+    return found
+
+
+def self_stopped_midway(box: Box) -> None:
+    box.set_up("off")
+    before = uv_installed(box)
+    python = rc.interpreter(before.env)
+    box.out(NEXT)
+    box.hour_later()
+    first = box.ask(python, "status") or {}
+    store = box.state / "store"
+    # The worker and its uv, stopped once uv builds the release in a folder of the store (looked for at once, often:
+    # a build from uv's cache takes seconds).
+    deadline, ended = time.monotonic() + SECONDS, []
+    while not ended:
+        if time.monotonic() > deadline:
+            raise Failed(f"{box.label}: uv never seen building the next release\n{box.said()}")
+        building = next((path.name for path in (store.glob(".building-*") if store.is_dir() else [])), None)
+        found = worker_and_uv(box, building) if building else []
+        if len(found) >= 2:
+            for pid in found:
+                try:
+                    if WINDOWS:
+                        subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True)
+                    else:
+                        os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+            ended = found
+        time.sleep(0.02)
+    box.until(lambda: not worker_and_uv(box, building), "the update's worker and its uv gone", seconds=60)
+    record = box.read("auto-update.json")
+    if (record.get("outcome"), record.get("phase"), record.get("release")) != ("underway", "building", NEXT):
+        raise Failed(f"{box.label}: the update was not stopped while uv built: {record}\n{box.said()}")
+    # Nothing that runs was touched: the same server process answers, the release installed, no pointer.
+    after = box.ask(python, "status") or {}
+    if (after.get("pid"), after.get("version")) != (first.get("pid"), NEW) or not first.get("pid"):
+        raise Failed(f"{box.label}: the server before the worker was stopped {first}, after {after}\n{box.said()}")
+    runs_its_own(box, before.env, NEW)
+    no_pointer(box, before.env)
+    # Twenty minutes pass with no beat from the stopped worker: the attempt is lost (its last beat set back, as the
+    # feed's stamp is set back for an hour).
+    _keep(box.state / "auto-update.json", {**record, "beat": time.time() - LOST_SECONDS})
+    cause = box.run([python, "-c", CAUSE], check=False, timeout=60).stdout.strip()
+    if cause != "lost":
+        raise Failed(f"{box.label}: the stopped attempt, silent past the wait, is taken as {cause!r}, not lost")
+    # A typed `cad update` then installs the release, and counts the attempt before as lost.
+    typed_update(box, NEW, NEXT)
+    through_store(box, before, NEXT)
+    tried = (box.read("tried").get("tried") or {}).get(NEXT) or {}
+    if tried.get("cause") != "lost":
+        raise Failed(f"{box.label}: the tries of {NEXT}: {tried}")
+    say(f"        the worker and its uv stopped while uv built {NEXT} (processes {ended}): the {NEW} server "
+        f"(pid {first.get('pid')}) never stopped, no pointer, cad {NEW} runs; silent past the wait, the attempt is "
+        f"lost; then a typed `cad update` installed {NEXT}, the try before kept as lost")
+
+
+def _keep(path: Path, record: dict) -> None:
+    """``record`` written whole in place of ``path``, as cad writes its records."""
+    staged = path.with_name(f".{path.name}.{os.getpid()}")
+    staged.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
+    os.replace(staged, path)
+
+
+def self_hop(box: Box) -> None:
+    """``SHIPPED``, installed from PyPI as uv's tool, updates itself the old way into this tree (its helper runs
+    uv's upgrade of the tool), and from there this tree updates through the store."""
+    box.out(SHIPPED)  # out on PyPI, whose own file it is
+    box.run(["uv", "tool", "install", "--managed-python", "--python", "3.14", f"cad=={SHIPPED}"], timeout=1500)
+    box.is_tool(SHIPPED)
+    started = box.run([box.cad(), "server", "start"]).stdout
+    if f"cad {SHIPPED}" not in started:
+        raise Failed(f"{box.label}: {SHIPPED}'s cad server start said {started!r}")
+    env = Path(box.tool()["env"])
+    box.out(NEW)
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 300)
+    if done.returncode != 0 or f"cad {SHIPPED} updated to {NEW}" not in done.stdout:
+        raise Failed(f"{box.label}: {SHIPPED}'s cad update exited {done.returncode}:\n{done.stdout}\n{done.stderr}\n"
+                     f"{box.said()}")
+    # The old way: uv's tool itself is this tree's release now, and nothing points anywhere.
     box.is_tool(NEW)
-    never_installed(box, record, "a failed update, the plugin's switch on")
-    # The failure is counted, once, by the server of the release put back.
-    box.until(lambda: box.read("auto-update.json").get("reported") is True, "the failed update counted by the old server")
-    say(f"        {NOCMD} could not be installed ({record.get('detail')!r}); {NEW} put back and serving, the failure "
-        "counted")
+    runs_its_own(box, env, NEW)
+    no_pointer(box, env)
+    serves(box, env, NEW)
+    say(f"        {SHIPPED}'s own `cad update` upgraded uv's tool in place to {NEW}: uv lists {NEW}, no pointer, "
+        f"its server answers")
+    # From there, through the store.
+    before = uv_installed(box)
+    box.out(NEXT)
+    typed_update(box, NEW, NEXT)
+    stored = through_store(box, before, NEXT)
+    say(f"        then {NEW} -> {NEXT} through the store ({stored.name}): uv still lists {NEW}")
 
 
 # --- cad installed by pipx ----------------------------------------------------------------------------------------
@@ -1047,9 +1635,10 @@ def pipx_said(box: Box) -> str:
     return f"  pipx's tools: {listed.stdout.strip() or listed.stderr.strip()}\n{box.said()}"
 
 
-def pipx_is(box: Box, env: Path, version: str) -> None:
-    """pipx's cad at ``version``: its metadata says so, the ``cad`` command in the bin folder is pipx's (a link into its
-    environment; on Windows pipx's copy), it says ``cad <version>``, and uv has no cad tool beside it."""
+def pipx_is(box: Box, env: Path, version: str) -> Installed:
+    """pipx's cad at ``version``, as pipx installed it: its metadata says so, the ``cad`` command in the bin folder is
+    pipx's (a link into its environment; on Windows pipx's copy), it says ``cad <version>``, and uv has no cad tool
+    beside it. What pipx made (``Installed``)."""
     try:
         held = json.loads((env / "pipx_metadata.json").read_text(encoding="utf-8"))["main_package"]["package_version"]
     except (OSError, ValueError, KeyError) as error:
@@ -1059,22 +1648,14 @@ def pipx_is(box: Box, env: Path, version: str) -> None:
     if held != version or not command.exists() or not linked or box.version() != f"cad {version}" or box.tool():
         raise Failed(f"{box.label}: pipx's cad is {held}, its command {command} (linked {linked}), cad --version says "
                      f"{box.version()!r}, uv's cad tool {box.tool()}; not {version}\n{pipx_said(box)}")
-
-
-def pipx_serves(box: Box, env: Path, version: str) -> dict:
-    """pipx's cad's server answering as ``version``, from pipx's environment of cad: its status."""
-    def found():
-        status = box.ask(rc.interpreter(env), "status")
-        return status if status and status.get("version") == version and rc._within(
-            Path(status.get("prefix") or "/nowhere"), env) else None
-    return box.until(found, f"pipx's cad's server answering as {version}")
+    return Installed(box, env, version, ["pipx", "list", "--short"], "pipx_metadata.json")
 
 
 def self_pipx(box: Box) -> None:
     """cad installed by ``pipx install cad``: the install command, a person's run, finds nothing newer for it,
-    installs no second cad, and has it turn the plugin's switch on; it updates itself by ``pipx upgrade cad`` inside its
-    major (then ``cad plugin install`` once), and a typed ``cad update`` updates it the same way; ``cad update --major``
-    takes it across."""
+    installs no second cad, and has it turn the plugin's switch on; it updates itself through the store inside its
+    major, as uv's does, never by pipx (then ``cad plugin install`` once), and a typed ``cad update`` the same way;
+    ``cad update --major`` takes it across."""
     env = with_pipx(box)
     box.out(NEW)
     box.run(["pipx", "install", "cad"])
@@ -1085,7 +1666,7 @@ def self_pipx(box: Box) -> None:
     if f"Updating cad {NEW} to the newest release..." not in said or f"cad {NEW} is the newest " not in said \
             or "another program's" in said:
         raise Failed(f"{box.label}: the install command with pipx's cad said:\n{said}\n{pipx_said(box)}")
-    pipx_is(box, env, NEW)
+    before = pipx_is(box, env, NEW)
     switches = box.read("settings.json")
     if (switches.get("plugin") or {}).get("auto_update") is not True or (switches.get("auto_update") or {}).get("on") \
             is False:
@@ -1094,19 +1675,21 @@ def self_pipx(box: Box) -> None:
     if f"cad {NEW}" not in started:
         raise Failed(f"{box.label}: cad server start said {started!r}")
     box.token = (box.ask(rc.interpreter(env), "http") or {}).get("token", "")
-    pipx_serves(box, env, NEW)
+    serves(box, env, NEW)
     say(f"        `pipx install cad` gave {NEW}; the install command found nothing newer for it (no uv tool), and it "
         "turned the plugin's switch on")
     # By itself: an hour passes with the next release out, and a release of a higher major.
     box.out(NEXT)
     box.out(HIGH)
     box.hour_later()
-    updated(box, NEXT)
-    pipx_serves(box, env, NEXT)
-    pipx_is(box, env, NEXT)
+    record = updated(box, NEXT)
+    through_store(box, before, NEXT)
+    if record.get("installer") != "pipx" or box.tool():
+        raise Failed(f"{box.label}: the update of pipx's cad: {record}, uv's cad tool {box.tool()}")
     caught_up(box, NEXT)
-    say(f"        {HIGH} and {NEXT} out: {NEW} -> {NEXT} by itself, idle, as `pipx upgrade cad --pip-args="
-        f"{bounded(NEW)}` got it, never {HIGH}; then the new server ran `cad plugin install`, once, exit 0")
+    say(f"        {HIGH} and {NEXT} out: {NEW} -> {NEXT} by itself, idle, through the store, never {HIGH}; pipx still "
+        f"lists {NEW}, its metadata and the environment as pipx left them; then the new server ran `cad plugin "
+        "install`, once, exit 0")
     pages(box, NEXT)
     # Typed, with automatic updates off: nothing newer in this major (the higher major named), then the release after.
     switched = box.run([box.cad(), "update", "auto", "off"]).stdout.strip()
@@ -1123,25 +1706,21 @@ def self_pipx(box: Box) -> None:
     if (done.returncode, done.stdout.strip().splitlines()) != (0, [typed, higher]):
         raise Failed(f"{box.label}: cad update exited {done.returncode}: {done.stdout}{done.stderr}\n{pipx_said(box)}")
     updated(box, AFTER)
-    pipx_serves(box, env, AFTER)
-    pipx_is(box, env, AFTER)
+    through_store(box, before, AFTER)
     caught_up(box, AFTER)
     say(f"        `cad update` with nothing newer: 'cad {NEXT} is the newest {MAJOR}.x release' and {HIGH} named; then "
         f"{typed!r}, automatic updates off; then the new server ran `cad plugin install`, once more, exit 0")
-    # `cad update --major`: `pipx upgrade cad --pip-args=cad>=<installed>`, the newest of all (the range pipx 1.18 kept
-    # from the last upgrade replaced: a plain `pipx upgrade cad` would stay inside it).
+    # `cad update --major`: the newest of all.
     done = box.run([box.cad(), "update", "--major"], check=False, timeout=SECONDS + 60)
     if (done.returncode, done.stdout.strip()) != (0, f"cad {AFTER} updated to {HIGH}"):
         raise Failed(f"{box.label}: cad update --major exited {done.returncode}: {done.stdout}{done.stderr}\n"
                      f"{pipx_said(box)}")
     record = updated(box, HIGH)
-    pipx_serves(box, env, HIGH)
-    pipx_is(box, env, HIGH)
+    through_store(box, before, HIGH)
     caught_up(box, HIGH)
     if (record.get("major"), record.get("installer")) != (True, "pipx"):
         raise Failed(f"{box.label}: the update across majors: {record}")
-    say(f"        `cad update --major`: {AFTER} -> {HIGH} (`pipx upgrade cad --pip-args=cad>={AFTER}`); the new server "
-        "ran `cad plugin install`")
+    say(f"        `cad update --major`: {AFTER} -> {HIGH} through the store; the new server ran `cad plugin install`")
     # Afterwards, automatic updates on: inside the new major, never two majors up.
     switched = box.run([box.cad(), "update", "auto", "on"]).stdout.strip()
     if switched != "update auto: on":
@@ -1150,10 +1729,9 @@ def self_pipx(box: Box) -> None:
     box.out(HIGHER)
     box.hour_later()
     updated(box, HIGH2)
-    pipx_serves(box, env, HIGH2)
-    pipx_is(box, env, HIGH2)
+    through_store(box, before, HIGH2)
     caught_up(box, HIGH2)
-    say(f"        {HIGH2} and {HIGHER} out: {HIGH} -> {HIGH2} by itself (`--pip-args={bounded(HIGH)}`), never {HIGHER}")
+    say(f"        {HIGH2} and {HIGHER} out: {HIGH} -> {HIGH2} by itself, never {HIGHER}; pipx still lists {NEW}")
     pages(box, HIGH2)
 
 
@@ -1571,8 +2149,10 @@ def plugin_update(box: Box) -> None:
 
 
 SELF = {"self-update": self_update, "self-typed": self_typed, "self-typed-stopped": self_typed_stopped,
-        "self-at-start": self_at_start, "self-off": self_off, "self-broken": self_broken,
-        "self-uninstallable": self_uninstallable, "self-major": self_major, "self-pipx": self_pipx}
+        "self-at-start": self_at_start, "self-off": self_off, "self-rollback": self_rollback,
+        "self-broken": self_broken, "self-unbuildable": self_unbuildable, "self-unrunnable": self_unrunnable,
+        "self-major": self_major, "self-pipx": self_pipx, "self-called": self_called, "self-held": self_held,
+        "self-reinstall": self_reinstall, "self-stopped-midway": self_stopped_midway, "self-hop": self_hop}
 BRIDGE = {"updater": updater, "automatic": automatic, "updater-fallback": updater_fallback, "store-only": store_only,
           "rollback": rollback, "install-command": install_command, "typed": typed, "store-typed": store_typed,
           "uv-line": uv_line, "store-uv-line": store_uv_line}
@@ -1595,7 +2175,9 @@ def publish_all(source: Path | None, out: Path) -> None:
     for version in (NEW, NEXT, AFTER, HIGH, HIGH2, HIGHER):
         rc.publish(base, version, out)
     rc.publish(base, BROKEN, out, replace={"cad_server/engine/daemon.py": BROKEN_DAEMON})
-    rc.publish(base, NOCMD, out, commands=False)
+    rc.publish(base, NOSTART, out, replace={"cad_server/_internal/engine_daemon.py": BROKEN_DAEMON})
+    rc.publish(base, UNBUILDABLE, out, requires=[MISSING])
+    rc.publish(base, UNRUNNABLE, out, replace={"cad_server/_internal/selftest.py": BROKEN_CHECK})
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1626,8 +2208,9 @@ def main(argv: list[str] | None = None) -> int:
     publish_all(args.wheels.resolve() if args.wheels else None, wheels)
     feed = rc.Feed(NEW)
     pypi = PyPI(feed)
-    say(f"rehearse-update: {', '.join(chosen)}; this tree as {NEW} (and {NEXT}, {BROKEN} whose server cannot start, "
-        f"{AFTER}, {NOCMD} with no command; {HIGH} and {HIGH2} a major up, {HIGHER} two); the bridge from {args.old}")
+    say(f"rehearse-update: {', '.join(chosen)}; this tree as {NEW} (and {NEXT}, {BROKEN} and {NOSTART} whose server "
+        f"cannot start, {AFTER}, {UNBUILDABLE} uv cannot install, {UNRUNNABLE} failing its own check; {HIGH} and "
+        f"{HIGH2} a major up, {HIGHER} two); the bridge from {args.old}")
     failed = 0
     began_all = time.monotonic()
     try:

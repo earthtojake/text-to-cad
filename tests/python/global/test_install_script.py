@@ -324,7 +324,7 @@ class InstallScriptTests(AgentApps):
         # A person's run brings it up to date by pipx's own cad, and reads pipx's record of it again.
         done = self.run_install(FAKE_CAD_UPDATES="0.14.0", FAKE_UPDATE_EXIT="1", **said)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ["--version"], ASKED, HANDED, AUTO_ON])
         self.assertNotIn("cad was not updated", done.stdout)
         self.assertEqual(self.installs(), [])
         # pipx 1.0, which has no `pipx environment`, and no link in ~/.local/bin: its list says where its cad is.
@@ -340,7 +340,7 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
         self.assertIn("Updating cad 0.14.0 to the newest release...", done.stdout)
-        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ["--version"], ASKED, HANDED, AUTO_ON])
         # uv's cad is there too: uv's is the one, and pipx is not asked.
         self.programs("pipx")
         (self.root / "uv.json").write_text(json.dumps({"cad": "0.12.0"}), encoding="utf-8")
@@ -578,8 +578,8 @@ class InstallScriptTests(AgentApps):
             self.assertEqual(0, done.returncode, done.stdout + done.stderr)
             self.assertEqual(self.installs(), [], there)
             self.assertEqual([(call["argv"], call["path"]) for call in self.logged("cad")],
-                             [(argv, str(self.uv_bin / "cad")) for argv in (["--version"], ["update"], ASKED, HANDED,
-                                                                                 AUTO_ON)])
+                             [(argv, str(self.uv_bin / "cad")) for argv in (["--version"], ["update"], ["--version"],
+                                                                                 ASKED, HANDED, AUTO_ON)])
             self.assertIn(f"cad {there} is the newest release\n", done.stdout)
         # Its exit status says little: 0 with nothing newer (above), non-zero with the update done all the same. What
         # uv holds afterwards is what counts.
@@ -587,6 +587,19 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertIn("cad 99.0.0 updated to 99.1.0\n", done.stdout)
         self.assertEqual(self.calls("cad")[-2:], [HANDED, AUTO_ON])
+
+    def test_a_cad_updated_beside_its_install_is_read_by_the_release_it_runs(self) -> None:
+        # cad's own update installs the newer release beside the one uv installed, which uv goes on listing: what
+        # came of the update, and the release a later run starts from, are what `cad --version` says.
+        self.programs("cad")
+        self.tools(cad="0.13.0")
+        done = self.run_install(FAKE_CAD_SWITCHES="0.13.1")
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertIn("Updating cad 0.13.0 to the newest release...\ncad 0.13.0 updated to 0.13.1\n", done.stdout)
+        uv = json.loads((self.root / "uv.json").read_text(encoding="utf-8"))
+        self.assertEqual(uv["cad"], "0.13.0")  # uv's record, as uv left it
+        done = self.run_install()
+        self.assertIn("Updating cad 0.13.1 to the newest release...\ncad 0.13.1 is the newest release\n", done.stdout)
 
     def test_before_cad_takes_over_a_person_s_run_says_one_line_of_its_own_and_one_of_the_update(self) -> None:
         """What a person sees before cad's ``cad plugin install`` takes over (and plays its logo): the line that a
@@ -613,7 +626,7 @@ class InstallScriptTests(AgentApps):
                                                        result])
                 self.assertEqual(done.stderr, "cad (stand-in): the plugin, on stderr\n")
                 self.assertNotIn("stand-in): update", done.stdout + done.stderr)
-                self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
+                self.assertEqual(self.calls("cad"), [["--version"], ["update"], ["--version"], ASKED, HANDED, AUTO_ON])
 
     def test_in_a_terminal_the_update_s_result_takes_the_place_of_its_first_line(self) -> None:
         self.tools(cad="0.13.0")
@@ -645,7 +658,7 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertIn("cad 0.13.0 was not updated now (cad (stand-in): update, on stderr): it updates itself.\n",
                       done.stdout)
-        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ["--version"], ASKED, HANDED, AUTO_ON])
         # No answer in the time it has: stopped, said, and the run goes on.
         here = install.Here(self.environ(FAKE_UPDATE_SLEEP="30"))
         said = io.StringIO()
@@ -737,8 +750,9 @@ class InstallScriptTests(AgentApps):
                 self.assertEqual(code, done.returncode, done.stdout + done.stderr)
                 steps = [(call["name"], call["argv"]) for call in map(json.loads, self.log.read_text(
                     encoding="utf-8").splitlines()) if call["name"] == "cad" or call["argv"][:2] == ["tool", "run"]]
-                self.assertEqual(steps, [("cad", ["--version"]), *([] if began else [("cad", ["update"])]),
-                                         ("cad", ASKED), ("uv", NEWEST), ("cad", AUTO_ON)])
+                updating = [] if began else [("cad", ["update"]), ("cad", ["--version"])]
+                self.assertEqual(steps, [("cad", ["--version"]), *updating, ("cad", ASKED), ("uv", NEWEST),
+                                         ("cad", AUTO_ON)])
                 # Of `cad plugin`, that cad saw the question alone before the newest cad's step, and the person
                 # none of its answer: one line of this command's own.
                 self.assertNotIn("invalid choice", done.stdout + done.stderr)
