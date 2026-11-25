@@ -12,7 +12,9 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -209,6 +211,58 @@ class WindowsTest(Folders):
                          {"telemetry": {"choice": "off"}})
         self.assertFalse((state / "installations").exists() or (cache / "base").exists())
         self.assertEqual(places.adopt_earlier(), [], "once")
+
+
+class StoredTest(unittest.TestCase):
+    """The release cad's update keeps beside the installed one, where this process runs it (``places.stored``), and
+    whether a process this one starts must be handed the engine's folder (``places.handed``): never the stored
+    release, which every process of the environment takes by itself as it starts."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory(prefix="stored-")
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name).resolve()
+        self.release, self.source = self.root / "store" / "1.0.1-tag", self.root / "checkout" / "src"
+        self.release.mkdir(parents=True)
+        self.source.mkdir(parents=True)
+        self.enterContext(mock.patch.dict(sys.modules))
+
+    def bootstrap(self, stored: str | None) -> None:
+        sys.modules["_cad_release"] = types.SimpleNamespace(STORED=stored)  # type: ignore[assignment]
+
+    def test_read_of_the_bootstrap_as_it_ran_and_never_imported(self) -> None:
+        sys.modules.pop("_cad_release", None)
+        self.assertIsNone(places.stored())
+        self.assertNotIn("_cad_release", sys.modules)
+        self.assertTrue(places.handed(str(self.source)))
+        self.bootstrap(None)
+        self.assertIsNone(places.stored())
+        self.bootstrap("")
+        self.assertIsNone(places.stored())
+        self.bootstrap(str(self.release))
+        self.assertEqual(places.stored(), str(self.release))
+
+    def test_handed_but_where_the_folder_is_the_stored_release(self) -> None:
+        self.bootstrap(None)
+        self.assertTrue(places.handed(str(self.release)), "nothing stored runs: a folder outside is a source tree")
+        self.bootstrap(str(self.release))
+        self.assertFalse(places.handed(str(self.release)))
+        self.assertFalse(places.handed(str(self.release) + os.sep))
+        self.assertTrue(places.handed(str(self.source)))
+        with mock.patch.object(places, "engine_root", return_value=str(self.release)):
+            self.assertFalse(places.handed(), "the engine's folder, by default")
+        with mock.patch.object(places, "engine_root", return_value=str(self.source)):
+            self.assertTrue(places.handed())
+
+    @unittest.skipIf(os.name == "nt", "a symbolic link to a folder needs a privilege on Windows")
+    def test_the_stored_release_is_known_through_a_symbolic_link_either_way(self) -> None:
+        link = self.root / "linked"
+        os.symlink(self.release, link, target_is_directory=True)
+        self.bootstrap(str(link))
+        self.assertFalse(places.handed(str(self.release)))
+        self.bootstrap(str(self.release))
+        self.assertFalse(places.handed(str(link)))
+        self.assertTrue(places.handed(str(self.source)))
 
 
 if __name__ == "__main__":
