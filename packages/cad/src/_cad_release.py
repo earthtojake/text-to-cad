@@ -78,10 +78,19 @@ def pointer(prefix=None):
 
 def _pointed():
     """The stored release the pointer names for this install of cad, or None. Raises for a pointer it cannot read."""
-    try:
-        handle = open(pointer(), encoding="utf-8")
-    except OSError:
-        return None  # no pointer: an environment that runs its own packages
+    path, handle = pointer(), None
+    for wait in (0.0, 0.002, 0.01, 0.05):
+        try:
+            handle = open(path, encoding="utf-8")
+            break
+        except FileNotFoundError:
+            return None  # no pointer: an environment that runs its own packages
+        except OSError:  # Windows refuses a reader for the moment a new pointer is moved into place
+            import time
+
+            time.sleep(wait)
+    if handle is None:
+        return None
     import json
 
     with handle:
