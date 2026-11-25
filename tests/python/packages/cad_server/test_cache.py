@@ -116,21 +116,22 @@ class CacheTest(unittest.TestCase):
         """The store is in the state folder, not the cache: ``prune`` tidies it as cad's update does
         (``store.clean``), each release removed said with the room that freed; one a process runs is kept and said,
         one a pointer names kept for what it is; and nothing while an update is underway."""
-        import fcntl
-
         from cad_server._internal import auto_update, store
 
-        if os.name == "nt":
-            self.skipTest("a release in use is told by its marker's lock here, by a refused rename on Windows")
         old, running, named = self.stored("0.0.1", 2 * MB), self.stored("0.0.2", MB), self.stored("0.0.3")
         building = store.root() / f"{store.BUILDING}1-dead"
         building.mkdir()
         os.utime(building, (0, 0))
         auto_update._keep(store.root() / "pointer-00000000.json", {"pointer": 1, "path": str(named), "previous": None})
         theirs = self.environment("theirs00", OTHER, MB)
-        held = open(running / store.MARKER, "rb")  # noqa: SIM115 - as a process that runs the release holds it
+        # As a process that runs the release holds it (``store``, "In use"): its marker open, which on Windows
+        # refuses the folder's rename, and elsewhere under the marker's shared lock.
+        held = open(running / store.MARKER, "rb")  # noqa: SIM115 - held until the test lets go of it
         self.addCleanup(held.close)
-        fcntl.flock(held, fcntl.LOCK_SH)
+        if os.name != "nt":
+            import fcntl
+
+            fcntl.flock(held, fcntl.LOCK_SH)
         record = self.state / auto_update.RECORD
         auto_update._keep(record, {"release": "0.0.4", "from": version(), "at": time.time(), "beat": time.time(),
                                    "outcome": "underway", "phase": "building"})
