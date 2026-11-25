@@ -210,9 +210,10 @@ the agents running them reach for them, and nothing shipped later can change wha
    its own files beside its code (package data), never under the environment (`sys.prefix`), which
    still holds the release that was installed; and a dependency that keeps files where a wheel's data
    files go under an environment, or finds a program in the environment's scripts folder, finds the
-   installed release's after an update, or nothing. The one program cad's update runs from a stored
-   release is uv, found beside the `uv` package (`auto_update.carried_uv`). A module that must import on
-   every computer is listed in the release's check of itself (`selftest.MODULES`).
+   installed release's after an update, or nothing. cad's own calls to uv take the uv it carries from
+   beside the `uv` package (`auto_update.carried_uv`), never from the environment's scripts folder. A
+   module that must import on every computer is listed in the release's check of itself
+   (`selftest.MODULES`).
 
 **Everything else follows one rule: a new release carries the old ones, and an old release never
 needs to know a new one.** A name, a place or a layout may change in any release, on the condition
@@ -279,7 +280,7 @@ No higher major exists today, and none of this is done. Before the first one shi
   install cad`, but keeps the one 0.11.12 to 0.11.17 gave it as they updated (`cad>=<release>,<1`),
   and cad's own update never rewrites it. On such a computer switched to 1.x by `cad update --major`,
   that command installs the newest 0.x where one is newer than uv's, and an install runs what it
-  installed. `cad update --major` and `cad doctor` say so on such a computer, with the command that
+  installed. `cad update` and `cad doctor` say so on such a computer, with the command that
   clears the range (`auto_update.outgrown`: `uv tool install --force cad`); the migration guide to the
   new major says it too.
 

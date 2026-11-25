@@ -96,24 +96,27 @@ cad_server/
   integrations its imports use (`_internal/extras.py`, `_internal/scan.py`), in an environment the engine
   makes.
 - **`cad viewer`** opens a page of the running server; `cad delete` deletes documents.
-- **`cad doctor`**: one read-only report: this cad's release, its Python and where it is installed, its
-  data and cache folders and what `cad cache prune` would free, the CAD kernel environment and whether it
-  loads, the integrations, whether the server runs and its release, and cad's own update (the switches,
-  whether this cad is a global install and by which installer, whether that installer is found, when the version
-  feed was last asked for, the last attempt with the installer's words for it, why in plain words where it did not
-  install what it was for, and its log, a warning where it failed, kept the release that ran or never said how it
-  ended, where the newest release has had its tries, or where no update can begin; on Windows, a uv folder in an
-  app's private copy of AppData). It changes nothing. Exit 1 when the
-  kernel is installed and does not load; `--json` gives the report as one document.
+- **`cad doctor`**: one read-only report: this cad's release, its Python, where it runs from (the environment,
+  the release installed there and who installed it, and the stored release it runs), whether the release that
+  runs passes its own check (`store.checks`), its data and cache folders and what `cad cache prune` would free,
+  the CAD kernel environment and whether it loads, the integrations, whether the server runs and its release, and
+  cad's own update (the switches, whether an update can begin, the feed's newest release, the uv it builds with,
+  the last attempt with uv's words, why in plain words, a release held back, and its log); on Windows, a uv folder
+  in an app's private copy of AppData. Under a line that warns, what to do (`auto_update.advice`); where cad or
+  its update is not working, a last check, `fix`, says the one thing to do next. It changes nothing. Exit 1 where
+  the kernel is installed and does not load, or the release that runs fails its check; `--json` gives the report
+  as one document.
 - **`cad cache dir|prune|clean`**, as `uv cache` treats uv's: `dir` prints the cache folder, `prune`
-  removes what this release cannot use (environments made for other releases, and the release folders
-  0.11.11 and earlier left), `clean` removes all of it, refused while the server runs. Nothing else of cad
-  deletes a past release's files.
+  removes what this release cannot use (environments made for other releases, the release folders 0.11.11 and
+  earlier left, and the stored releases nothing runs or points at, which it leaves alone while an update is
+  underway), `clean` removes all of the cache, refused while the server runs. Only these, cad's update and the
+  server's start delete a past release's files.
 - **`cad update`**: cad, and only cad, updated now to the newest release of its major version on PyPI, by the
   server that runs, or by the command itself where none runs (below), even with automatic updates off; where a
   release of a higher major is out, one more line names it. **`cad update --major`**: the newest release of all,
   a new major version included, which never installs itself. It never starts a server, and is refused unless
-  this cad is a global install. It waits until the update ends and says how, in one line, on Windows too.
+  this cad is a global install. It waits until the update ends and says how in one line: where it failed, why
+  in plain words, what to do (`auto_update.advice`) and where the log is.
   **`cad update auto [status|on|off]`**: whether cad updates itself (below), on by
   default. `on` is refused unless this cad is a global install, and `status` says when it is not. Where a
   server runs, it keeps the switch (`{"op": "auto_update"}`), as it does every other command's writing, so a
@@ -203,7 +206,8 @@ stored release is one folder of the import path.
 which the system refuses while a file in it is open; elsewhere by taking the marker's lock, which each process
 that runs it shares. The tidying (`store.clean`) keeps what a pointer names and the release it ran before, and
 removes pointers that mean nothing (once ten minutes old), builds that died (an hour old) and every other release
-no process runs. The worker tidies as it ends, a server as it starts where no attempt is underway.
+no process runs. The worker tidies as it ends; a server as it starts, and `cad cache prune`, where no attempt is
+underway.
 
 **When** (`due`). The server reads the version feed (`updates.py`, at most once an hour, in the background):
 `api.texttocad.dev/v1/releases`, `latest` and the newest of each major (`lines`), kept in the state folder's
@@ -211,13 +215,17 @@ no process runs. The worker tidies as it ends, a server as it starts where no at
 either. An update is due where the switch is on, this cad is a global install, no attempt is underway, of any
 release, and the feed names a newer release of this cad's major: exactly that release, or, where it names none
 of this major and its `latest` is of a higher one, PyPI's newest of this major (`cad>=<this>,<<major + 1>`). Not
-where the environment runs it already under this older server (`stale`: `cad server start` replaces the
-server), nor for a release whose last automatic try ended `start_failed` (`given_up`: a server restarting for
-nothing once a day is worse than waiting; `cad update` still tries it). The server asks as it tends itself with
-nothing in flight (nothing run for a minute, or since it started), and `cad server start` asks when its start
-fails. One due that cannot begin (`blocked`: `no_switch`, the environment does not read the pointer or its cad
-is damaged; `no_installer`, no uv) is counted once for its release. `CAD_UPDATE_CHECK=0` turns the check off for
-a process; with no answer from the feed, nothing happens.
+where the environment runs it already under this older server (`stale`: `cad server start` replaces the server),
+nor for a release whose last automatic try ended `start_failed` (`given_up`: a server restarting for nothing
+once a day is worse than waiting; `cad doctor` says it is held back, and `cad update` tries it). The server asks
+as it tends itself with nothing in flight (nothing run for a minute, or since it started), and `cad server
+start` asks when its start fails. One due that cannot begin (`blocked`: `no_switch`, the environment does not
+read the pointer or its cad is damaged; `no_installer`, no uv) is counted once for its release.
+`CAD_UPDATE_CHECK=0` turns the check off for a process; with no answer from the feed, nothing happens. A global
+install behind a release of its major for three days, the switch on, says so at most once a day on stderr after
+a command's output (`auto_update.notice`, kept in `auto-update-notice.json`; not after `cad update`, `cad
+doctor`, `cad run`, `cad plugin`, the server's commands, help or `--json`): both releases, what to do, and why where an attempt failed or none can begin
+(`advice`: the line `cad doctor` and a failed `cad update` give).
 
 **The schedule and the record.** A release that does not install is tried again an hour after its first
 automatic try, then 2, 4, 8 and 16 hours, then a day after each (`next_try`), counted for that release in
@@ -310,7 +318,8 @@ release` where a higher major is out, with one more line naming it, `cad update 
 guides' address), and otherwise begins the same update at once, with the switch off too and whatever the
 schedule says (it spends no automatic try, and counts among the day's four), or joins the one underway, another
 process's too. `cad update --major` (`{"op": "update", "major": true}`) builds PyPI's newest of all, never below
-the release that runs; the next automatic update keeps to the new major. Where PyPI cannot be reached it builds
+the release that runs; the next automatic update keeps to the new major. Where uv's own record keeps the install
+below the major it then runs (`outgrown`), it says so in one more line, with `uv tool install --force cad`. Where PyPI cannot be reached it builds
 all the same. It waits for the end, up to 30 minutes, saying each step once on stderr (`cad: installing cad X
 beside cad Y`, then `cad: restarting the cad server on it, once nothing is running`, or `cad: switching to it`
 with no server). It never runs `cad plugin`. Where no server runs, the command judges and begins the update

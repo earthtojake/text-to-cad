@@ -386,9 +386,10 @@ cad update
 That updates cad alone; the install command, run again, does the same and then updates the plugin.
 The viewer and the CAD app show a blue update button while a newer release of your major is out;
 clicking it does what `cad update` does. Where an update fails, the viewer says why and what to do.
-Where it keeps failing, or cad no longer runs, run `cad update`, then `cad doctor`, then install cad
-again, which always gives a clean cad: `uv tool install --force cad`, or the install command where cad
-does not start.
+With automatic updates on, a `cad` command also says once a day when cad has stayed behind for three
+days, and what to do. Where it keeps failing, or cad no longer runs: run `cad update`, which says why and
+what to do; then `cad doctor`, which ends with the one thing to do next; then install cad again, which
+always gives a clean cad: `uv tool install --force cad`, or the install command where cad does not start.
 A new major version never installs itself, because it may need changes on your side: `cad update` and `cad doctor` say when one is out, and this installs it:
 
 ```bash
@@ -416,8 +417,8 @@ cad server start
 ```
 
 cad's own update leaves uv's record of cad as it is, so `uv tool upgrade cad` takes the newest of all, a
-new major version included, unless an update by 0.11.17 or earlier left uv a range: `uv tool install
-cad@latest` takes the newest of all there.
+new major version included, unless an update by 0.11.17 or earlier left uv a range there; where that
+range is below the cad that runs, `cad doctor` says so, and `uv tool install --force cad` clears it.
 
 ### The plugin
 
@@ -518,7 +519,8 @@ folders, which you can delete by hand:
 `cad doctor` and `cad cache dir` print where they are on your computer; run them before you remove
 cad. What uv downloaded stays in uv's cache until you run `uv cache prune`. The data folder also
 holds, in `store`, the releases cad's own update installed, the one that runs and the one before it:
-about 180 MB each, less where they share their files with uv's cache.
+about 180 MB each, less where they share their files with uv's cache. `cad cache prune` removes those
+nothing runs.
 
 ## What it needs
 

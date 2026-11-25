@@ -115,8 +115,8 @@ say which runs. uv's record of the install stays as the install made it. A plain
 cad` keeps no range, so a person's own `uv tool upgrade cad` takes the newest of all, a higher major
 included. A computer that 0.11.12 to 0.11.17 updated keeps the range their update wrote there
 (`cad>=X,<1`), which cad never rewrites: once `cad update --major` has taken it past that range, uv's
-own upgrade would put an older cad over the newer one, so `cad update --major` and `cad doctor` say
-so there, with the command that clears it (`uv tool install --force cad`). A second copy of cad's
+own upgrade would put an older cad over the newer one, so `cad update` and `cad doctor` say so
+there, with the command that clears it (`uv tool install --force cad`). A second copy of cad's
 packages is on disk (linked from uv's cache
 where the file system links), and a third for a while after an update. `uv tool uninstall cad` leaves
 the store in the state folder ([Removing](../install.md#removing)). A release needs the installed
@@ -211,7 +211,8 @@ with pip into a project's own Python, never updates itself, and shows no button.
 
 On the command line, a global install with automatic updates on that has stayed behind a release of
 its own major for three days says so: one line on standard error, after a command's own output and
-at most once a day, with both releases, why, and what to do. Never in a command's output, never under
+at most once a day, with both releases, what to do, and why where an attempt failed or none can
+begin. Never in a command's output, never under
 `--json`, and never with automatic updates off. `cad doctor` says where cad runs from, whether the
 release that runs passes its own check, and why its update is not working, and ends with the one
 thing to do next. Each cause has one line of what to do, the same in `cad doctor`, in that line and
