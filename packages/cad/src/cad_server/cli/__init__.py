@@ -11,7 +11,8 @@ and the installation's (``requirement``, ``setup``, ``doctor``, ``cache``, ``vie
 ``update auto`` is cad's own switch, and ``plugin``). ``cad --help`` lists them all but ``_UNLISTED``'s.
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
-release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
+release is refused in one line, but one that finds none, or an older one, while cad's own update switches releases
+waits for the next (``client.SWITCHING``). The server's own commands are not held to it (``_ANY_RELEASE``).
 
 Every command is also reachable as ``python -m <module>``; this is the friendly front door, not a
 second implementation. A command's parser lives in its own module and owns its arguments, so the
@@ -294,10 +295,13 @@ def _main(argv: list[str]) -> int:
 
 
 def _hold_to_release(client) -> None:
-    """This command's client holds the server it reaches to this release (``cad.engine.client.RELEASE``)."""
+    """This command's client holds the server it reaches to this release (``cad.engine.client.RELEASE``), and waits
+    for the next where cad's own update is switching releases (``client.SWITCHING``: ``auto_update.switching``)."""
     from cad.engine.previous import version
+    from cad_server._internal.auto_update import switching
 
     client.RELEASE = version()
+    client.SWITCHING = switching
 
 
 def _unknown(word: str, rest: list[str]) -> int:

@@ -19,17 +19,16 @@ is forced, and ``Failed`` carries uv's last line. Bounded: a uv that hangs is st
 make one install: uv locks its tool folder, the others wait, then find cad installed and say so (exit status 0).
 
 **Never down** (``_refuse_higher``): ``cad<N`` moves a tool of a higher major down to this major, with exit status 0,
-so the install never runs where uv's tool ``cad`` already holds a release of a higher major -- read from the
-``cad-<release>.dist-info`` folder in its environment (``auto_update_helper.installed``), so it is seen where its
-launcher is missing and ``auto_update.installed_tool`` finds none -- nor where uv cannot say where its tools are
-(``uv tool dir``): ``Failed``, and nothing moved or run. A tool folder with no release to read (half made) is no reason
-to refuse: uv repairs it.
+so the install never runs where uv's tool ``cad`` already runs a release of a higher major -- the release its
+processes run (``store.active``: the stored release its pointer names, else the cad installed in it), so it is seen
+where its launcher is missing and ``auto_update.installed_tool`` finds none -- nor where uv cannot say where its tools
+are (``uv tool dir``): ``Failed``, and nothing moved or run. A tool folder with no release to read (half made) is no
+reason to refuse: uv repairs it.
 
 BRIDGE-ONLY, the one exception: the ``cad`` command 0.10.0 to 0.11.11 wrote in uv's bin folder (``old_launcher``),
 which uv would refuse to replace. Where uv's bin folder holds it (``uv tool dir --bin``; on Windows its ``cad.exe``),
-it is renamed beside itself first, under the name cad's own update gives a ``cad.exe`` it sets aside
-(``auto_update_helper.ASIDE``). It is deleted once uv ends 0 (one that still runs on Windows stays, harmless, for cad's
-next update or the install command to delete), and put back where uv did not, unless uv left a ``cad`` there. Nothing
+it is renamed beside itself first (``ASIDE``). It is deleted once uv ends 0 (one that still runs on Windows stays,
+harmless, for the install command to delete), and put back where uv did not, unless uv left a ``cad`` there. Nothing
 else is moved: another program's ``cad`` still makes uv refuse. This is how a computer of those releases gets cad
 installed globally, by this bridge (``cli.setup``) or by an app's server line.
 
@@ -54,6 +53,8 @@ ASK_SECONDS = 15.0
 # BRIDGE-ONLY: the mark in the first lines of the ``cad`` command 0.10.0 to 0.11.11 wrote, with its revision: ``# `` in
 # the sh script and in the ``__main__.py`` of the zip behind 0.11's cad.exe (Windows), ``rem `` in 0.10's cad.cmd.
 OLD_LAUNCHER = re.compile(r"(#|rem) cad proxy: \d+")
+# BRIDGE-ONLY: the name the old ``cad`` command is renamed to (``_set_aside``): ``<stamp>`` names the run.
+ASIDE = ".cad.exe.{stamp}.{n}.old"
 
 
 class Failed(Exception):
@@ -135,15 +136,16 @@ def _tools(uv: str) -> Path | None:
 
 
 def _held(uv: str) -> tuple[int, ...] | None:
-    """The release uv's tool ``cad`` holds, read from the ``cad-<release>.dist-info`` folder in its environment's
-    site-packages (``auto_update_helper.installed``: found with no launcher, a receipt or a ``cad`` that runs), or None
-    where it holds none (no tool, or one half made). ``Failed`` where uv cannot say where its tools are."""
-    from cad_server._internal.auto_update_helper import installed
+    """The release uv's tool ``cad`` runs (``store.active``: found with no launcher, a receipt or a ``cad`` that
+    runs), as numbers, or None where it holds none (no tool, or one half made). ``Failed`` where uv cannot say where its
+    tools are."""
+    from cad_server._internal import store
 
     folder = _tools(uv)
     if folder is None:
         raise Failed("uv could not say where its tools are, so cad was left as it is")
-    return installed(folder / "cad")
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", store.active(folder / "cad") or "")
+    return tuple(int(part) for part in match.groups()) if match else None
 
 
 def _refuse_higher(uv: str) -> None:
@@ -193,8 +195,6 @@ def _set_aside(uv: str) -> tuple[Path, Path] | None:
     path = folder / ("cad.exe" if os.name == "nt" else "cad")
     if not old_launcher(path):
         return None
-    from cad_server._internal.auto_update_helper import ASIDE
-
     aside = path.with_name(ASIDE.format(stamp=f"{os.getpid()}-{time.time_ns()}", n=0))
     try:
         os.replace(path, aside)

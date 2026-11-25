@@ -1,37 +1,32 @@
 """``cad update`` -- cad, and only cad, updated now to the newest release of its major version, by the server that runs
 (``{"op": "update"}``, ``Daemon.update``): it asks PyPI for the newest release of this cad's major that is not yanked
-and, where it is newer, begins cad's own update as soon as nothing is in flight (``cad_server._internal.auto_update``:
-``asked``, ``begin``), even with automatic updates off; where nothing in this major is newer, it says so. Where a
-release of a higher major is out, it adds one line naming it and how to get it (``auto_update.MAJOR_LINE``). ``cad
-update --major`` installs the newest release of all, of whatever major (``{"op": "update", "major": true}``): a new
-major version is the person's to ask for, and never arrives by itself. Where PyPI cannot be reached, the update runs
-all the same, and says what it got. It never runs the install command. The server does the work where one runs: an
-agent's shell may not reach the network or change cad's folders, and the server, outside that sandbox, may; so the
-command asks no permission.
+and, where it is newer, begins cad's own update at once (``cad_server._internal.auto_update``: ``asked``, ``begin``),
+even with automatic updates off; where nothing in this major is newer, it says so. Where a release of a higher major is
+out, it adds one line naming it and how to get it (``auto_update.MAJOR_LINE``). ``cad update --major`` installs the
+newest release of all, of whatever major (``{"op": "update", "major": true}``): a new major version is the person's to
+ask for, and never arrives by itself. Where PyPI cannot be reached, the update runs all the same, and says what it got.
+It never runs the install command. The server does the work where one runs: an agent's shell may not reach the network
+or change cad's folders, and the server, outside that sandbox, may; so the command asks no permission.
 
-Where no server runs, the command judges and begins the update itself, in this process, the same way. Its helper then
+Where no server runs, the command judges and begins the update itself, in this process, the same way. Its worker then
 starts no server: an update typed with none running leaves none running. In a shell whose sandbox cannot start a server
 (``client._sandboxed``) it does not try, and says so in the one line ``client.SANDBOXED``. It never starts a server
-first to update through it: a start may begin an automatic update, which can run the install command.
+first to update through it.
 
-Then it waits for the update to end and says how it ended, as the server that answers afterwards tells it
-(``{"op": "update", "begin": false}``), else as the attempt's record in the state folder does; ``WAIT_SECONDS`` at
-most. On Windows too: this command is a running ``cad.exe`` of the tool, which the update renames aside before the
-installer runs (``cad_server._internal.auto_update_helper``). Everything the wait uses is imported before the update
-begins: from then on the files of this cad's environment change under it.
+Then it waits for the update to end, saying each step once on stderr as the attempt's record names it (its ``phase``:
+the release installed beside this one, then the server restarted on it), and says how it ended, as the server that
+answers afterwards tells it (``{"op": "update", "begin": false}``), else as the attempt's record in the state folder
+does; ``WAIT_SECONDS`` at most. Nothing of this cad changes under it meanwhile: the update builds the release in a
+folder of its own and switches to it by a pointer, which this process, started before, never reads again.
 
-A cad that is no global install does not update itself, and is refused. So is an update asked for while a run of
-``cad plugin install`` is going (``auto_update.INSTALLING``): it would replace this
-environment's files under that run.
-
-``cad update auto [status|on|off]`` shows or changes whether cad updates itself (``cad_server.cli.auto_update``);
-``--major`` is no option of it.
+A cad that is no global install does not update itself, and is refused. ``cad update auto [status|on|off]`` shows or
+changes whether cad updates itself (``cad_server.cli.auto_update``); ``--major`` is no option of it.
 """
 
 from __future__ import annotations
 
 import argparse
-import threading  # noqa: F401 - the client's bounded request (``client._within``) imports it: before the update begins
+import sys
 import time
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -39,8 +34,9 @@ from typing import Any
 DEFAULT_PROG = "cad update"
 # How long the server may take to judge it: PyPI asked now (5 s at most) and the rest.
 ASK_SECONDS = 30.0
-# How long the command waits for the update to end, and how often it looks.
-WAIT_SECONDS = 600.0
+# How long the command waits for the update to end, and how often it looks: past the longest build and the server's
+# drain.
+WAIT_SECONDS = 1800.0
 LOOK_SECONDS = 0.5
 NOT_A_TOOL = ("refused: this cad is not a global install, so it does not update itself: update it the way it was "
               "installed (for pip, `pip install --upgrade cad`), or install it globally with `uv tool install cad`")
@@ -57,9 +53,9 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
                             description=(
         "cad installs every newer release of its major version by itself, and a new major version only when you run "
         "`cad update --major`. `cad update` updates cad now to the newest release of its major version, even with "
-        "automatic updates off: cad asks PyPI and, once nothing is running, installs it. A cad server that was "
-        "running starts again; with none running, none is started. `cad update auto` shows or changes whether cad "
-        "updates itself."))
+        "automatic updates off: cad asks PyPI, installs it beside the cad that runs, and switches to it. A cad server "
+        "that was running restarts on it once nothing is running; with none running, none is started. `cad update "
+        "auto` shows or changes whether cad updates itself."))
     parser.add_argument("--major", action="store_true",
                         help="install the newest release of all, a new major version included, which may ask for "
                              f"changes ({MIGRATIONS})")
@@ -108,7 +104,8 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
             and isinstance(since, (int, float))):
         return write(Failure(f"the cad server's answer was not understood: {answer}"), prog=prog, as_json=False)
     code = wait(lambda: look(client, auto_update), was, float(since),
-                said=lambda words: write(Failure(words), prog=prog, as_json=False), higher=higher)
+                said=lambda words: write(Failure(words), prog=prog, as_json=False), higher=higher,
+                server=not answer.get("here"))
     if code == 0 and higher:
         print(auto_update.MAJOR_LINE.format(release=higher))
     return code
@@ -129,7 +126,7 @@ def here(auto_update: Any, *, major: bool = False) -> dict[str, Any]:
     found = auto_update.begin(judged["updating"], start=False, major=major)
     if found is None:
         return {"failed": f"the update could not begin, so cad {judged['from']} stays as it is"}
-    return {**judged, "updating": found["release"], "since": found["at"]}
+    return {**judged, "updating": found["release"], "since": found["at"], "here": True}
 
 
 def look(client: Any, auto_update: Any) -> tuple[str | None, Any, Any, bool]:
@@ -157,16 +154,20 @@ def look(client: Any, auto_update: Any) -> tuple[str | None, Any, Any, bool]:
 def wait(looked: Callable[[], tuple[str | None, Any, Any, bool]], was: str, since: float, *,
          said: Callable[[str], int], seconds: float = WAIT_SECONDS, every: float = LOOK_SECONDS,
          clock: Callable[[], float] | None = None, sleep: Callable[[float], None] | None = None,
-         higher: str | None = None) -> int:
+         higher: str | None = None, server: bool = True) -> int:
     """The update that began at ``since`` (by the server's clock: an attempt begun then or later serves it) waited for
-    until its record says it ended, and that said in one line (``higher``: a release of a higher major is out):
-    its exit status."""
+    until its record says it ended, each step said once on stderr as it begins (``step``; ``server``: one was running,
+    and is restarted), and the end said in one line (``higher``: a release of a higher major is out): its exit
+    status."""
     clock, sleep = clock or time.monotonic, sleep or time.sleep
     deadline = clock() + seconds
+    told_of: set[str] = set()
     while True:
         running, record, waiting, told = looked()
         attempt = record if isinstance(record, dict) and isinstance(record.get("at"), (int, float)) \
             and record["at"] >= since else None
+        if attempt is not None and attempt.get("outcome") == "underway":
+            step(attempt, was, told_of, server=server)
         if attempt is not None and attempt.get("outcome") not in (None, "underway"):
             return ended(attempt, was, running, said, higher=higher)
         if told and attempt is None and not waiting:
@@ -175,6 +176,20 @@ def wait(looked: Callable[[], tuple[str | None, Any, Any, bool]], was: str, sinc
             return said(f"the update of cad {was} is still underway after {seconds / 60:.0f} minutes: run "
                         "`cad --version` later to see where it ended")
         sleep(every)
+
+
+def step(attempt: dict[str, Any], was: str, told_of: set[str], *, server: bool) -> None:
+    """The step the attempt underway is at (its ``phase``), said once on stderr: the release installed beside this one
+    (``building``), then the switch to it, with the server restarted (``switching``). ``told_of``: the steps said."""
+    phase = attempt.get("phase")
+    if phase in told_of or phase not in ("building", "switching"):
+        return
+    told_of.add(phase)
+    target = attempt.get("release")
+    named = "the newest release" if target in (None, "latest") else f"cad {target}"
+    print(f"cad: installing {named} beside cad {was}" if phase == "building" else
+          "cad: restarting the cad server on it, once nothing is running" if server else "cad: switching to it",
+          file=sys.stderr, flush=True)
 
 
 def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable[[str], int], *,

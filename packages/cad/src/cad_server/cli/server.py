@@ -76,8 +76,6 @@ def _start(args: argparse.Namespace, prog: str) -> int:
     if args.rotate_token:
         _rotate(args, prog.removesuffix(" start"))
     if args.command == "start" and not args.foreground:
-        # Imported before the server is spawned: an update it begins changes this cad's files under this process, and a
-        # start that fails still says its one line.
         from cad_server._internal import auto_update
         from cad_server.cli.doctor import private_folders
 
@@ -86,7 +84,8 @@ def _start(args: argparse.Namespace, prog: str) -> int:
         except Exception:
             target = auto_update.after_failed_start()
             if target is not None:
-                print(f"cad: updating cad to {target}, which then starts the server", file=sys.stderr, flush=True)
+                print(f"cad: updating cad to {target}: it is installed beside this cad, then its server is started",
+                      file=sys.stderr, flush=True)
             raise
         for line in private_folders():  # Windows: uv's folder in an app's private copy, named, never deleted
             print(f"cad: {line}", file=sys.stderr, flush=True)

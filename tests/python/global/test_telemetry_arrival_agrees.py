@@ -156,7 +156,7 @@ class ArrivalSenderAndReceiverAgree(unittest.TestCase):
             "source": analytics.source(), "update": before}))
         with mock.patch.object(telemetry_send, "start_now"):
             for outcome, cause, tries in (("installed", "network", 1), ("current", "lost", 1), ("lost", "none", 1),
-                                          ("blocked", "no_python", 1), ("current", "eaccess", 1),
+                                          ("blocked", "no_switch", 1), ("current", "eaccess", 1),
                                           ("failed", "uv could not reach the index", 1)):
                 with self.subTest(outcome=outcome, cause=cause):
                     self.assertFalse(analytics.update(earlier="0.11.12", outcome=outcome, tries=tries, installer="uv",

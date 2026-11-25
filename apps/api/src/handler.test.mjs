@@ -703,8 +703,8 @@ test('schema 12 reads everything schema 11 does, its rows keyed alike, and a sch
 
 // Schema 13: schema 12 with why an update did not install a newer cad (`cause`), and two more outcomes.
 const CAUSING = { ...INSTALLING, schema: 13 };
-const ENDED = ['timeout', 'no_program', 'in_use', 'denied', 'disk_full', 'half_made', 'network', 'offline', 'no_release', 'python', 'platform',
-  'config_exclude', 'config_index', 'config_tls', 'uv_old', 'kept', 'server_running', 'helper_start', 'packaged', 'unknown', 'none'];
+const ENDED = ['timeout', 'no_program', 'in_use', 'denied', 'disk_full', 'network', 'offline', 'no_release', 'python', 'platform',
+  'config_exclude', 'config_index', 'config_tls', 'broken', 'start_failed', 'helper_start', 'packaged', 'unknown', 'none'];
 
 test('schema 13 says why an update did not install a newer cad, and counts the ones lost and the ones that could not begin', async () => {
   const shapes = [
@@ -714,7 +714,7 @@ test('schema 13 says why an update did not install a newer cad, and counts the o
     ...ENDED.map(cause => ({ outcome: 'restored', reason: 'older', cause })),
     { outcome: 'failed', reason: 'put_back', cause: 'disk_full', tries: 2, asked: true, installer: 'pipx' },
     ...['lost', 'helper_crash'].map(cause => ({ outcome: 'lost', cause, tries: 2 })),
-    ...['no_installer', 'no_python'].map(cause => ({ outcome: 'blocked', cause, tries: 0 })),
+    ...['no_installer', 'no_switch'].map(cause => ({ outcome: 'blocked', cause, tries: 0 })),
   ];
   const store = memory();
   const batch = { ...CAUSING, events: shapes.map(update) };
@@ -731,11 +731,12 @@ test('schema 13 says why an update did not install a newer cad, and counts the o
     update({ outcome: 'failed', reason: 'upgrade', cause: 'error: Failed to fetch: https://pypi.org/simple/cad/' }), // never its words
     update({ outcome: 'failed', reason: 'upgrade', cause: 'already' }), // only nothing installed held it already
     update({ outcome: 'failed', reason: 'upgrade', cause: 'lost' }), // a word of another outcome's
-    update({ outcome: 'current', cause: 'no_python' }),
+    update({ outcome: 'current', cause: 'no_switch' }),
+    ...['half_made', 'uv_old', 'kept', 'server_running', 'no_python'].map(cause => update({ outcome: 'failed', reason: 'upgrade', cause })), // words schema 13 no longer has
     update({ outcome: 'lost', cause: 'network' }), update({ outcome: 'lost', cause: 'none' }),
     update({ outcome: 'blocked', cause: 'lost', tries: 0 }), update({ outcome: 'blocked', cause: 'none', tries: 0 }),
     update({ outcome: 'blocked', cause: 'no_installer' }), // an update that could not begin made no try
-    update({ outcome: 'current', cause: 'kept', tries: 0 }), // and every other made one
+    update({ outcome: 'current', cause: 'broken', tries: 0 }), // and every other made one
     update({ outcome: 'lost', cause: 'lost', reason: 'upgrade' }), // a reason only with a failure
     update({ outcome: 'blocked', cause: 'no_installer', tries: 0, plugin: 'ok' }),
     ...[null, 7, ''].map(cause => update({ outcome: 'current', cause })),
@@ -744,7 +745,7 @@ test('schema 13 says why an update did not install a newer cad, and counts the o
     assert.equal((await send(memory(), 'POST', '/v1/events', body)).status, 400, JSON.stringify(bad));
   }
   // No schema before 13 names a cause, `lost` or `blocked`.
-  for (const event of [update({ outcome: 'current', cause: 'kept' }), update({ outcome: 'lost', cause: 'lost' }),
+  for (const event of [update({ outcome: 'current', cause: 'unknown' }), update({ outcome: 'lost', cause: 'lost' }),
     update({ outcome: 'blocked', cause: 'no_installer', tries: 0 }), update({ outcome: 'blocked', tries: 0 })]) {
     for (const older of [INSTALLING, ARRIVING]) {
       const body = JSON.parse(JSON.stringify({ ...older, events: [event] }));

@@ -154,7 +154,7 @@ def _update() -> tuple[str, str]:
         return INFO, f"this cad is not a global install, so it never updates itself; {plugin}"
     kept = auto.switches()
     earlier = " (turned off in an earlier release)" if kept.get("earlier") else ""
-    return INFO, (f"update auto {word[kept['on']]}{earlier}, {plugin}; a global install by {found.installer.name} "
+    return INFO, (f"update auto {word[kept['on']]}{earlier}, {plugin}; a global install by {found.installer} "
                   f"({found.prefix})")
 
 
@@ -204,14 +204,14 @@ def _asked(at: float | None, now: float | None = None) -> str:
 
 
 def _installer() -> dict:
-    """The installer cad's update runs, as the update finds it: the global install's (uv, pipx), and uv where this cad
-    is none; the line named after it."""
+    """The uv cad's update builds with, as the update finds it (``auto_update.global_install``: the one cad carries,
+    else the person's), and uv where this cad is no global install."""
     try:
         auto = _auto()
         found = auto.global_install()
         if found is None:
             return _check("uv", INFO, auto.find_uv() or "not found")
-        return _check(found.installer.name, INFO, " ".join(found.program) if found.program else "not found")
+        return _check("uv", INFO, found.uv or "not found")
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return _check("uv", WARNING, f"unknown ({type(error).__name__}: {error})")
 
@@ -237,7 +237,7 @@ def _attempt() -> tuple[str, str]:
         restored = {True: f"; {last.get('from')} put back",
                     False: f"; {last.get('from')} not put back: cad is missing"}
         said = (f"{last.get('from')} to {last['release']} on {when}: {outcome}" + (f" ({detail})" if detail else "")
-                + (f": {auto.in_words(word, last.get('installer'))}" if word else "")
+                + (f": {auto.in_words(word)}" if word else "")
                 + restored.get(last.get("restored"), ""))
         warn = outcome == "failed" or word is not None
         wait = auto.waiting() if outcome != "underway" or word is not None else None
@@ -251,7 +251,7 @@ def _attempt() -> tuple[str, str]:
     found = auto.global_install()
     blocked = auto.blocked(found) if found is not None else None
     if blocked is not None:
-        said += f"; {auto.in_words(blocked, found.installer.name)}"
+        said += f"; {auto.in_words(blocked)}"
         warn = True
     log = state_dir() / auto.LOG
     if log.is_file():
