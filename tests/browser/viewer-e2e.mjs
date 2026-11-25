@@ -19,7 +19,7 @@ const { chromium } = createRequire(path.join(REPO, "packages/core/package.json")
 const { PNG } = createRequire(path.join(REPO, "apps/web/package.json"))("pngjs");
 
 function parseArgs(argv) {
-  const args = { url: "", dir: "", out: "", only: "", bundle: "", share: "", shareAgain: "" };
+  const args = { url: "", dir: "", out: "", only: "", bundle: "", share: "", shareAgain: "", plate: "", prompt: "" };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === "--url") args.url = argv[++i] || "";
@@ -29,6 +29,10 @@ function parseArgs(argv) {
     // What `cad share` printed, sharing the model and then sharing it again unchanged.
     else if (flag === "--share") args.share = argv[++i] || "";
     else if (flag === "--share-again") args.shareAgain = argv[++i] || "";
+    // The bundle fixture's model, by its document id, for the prompt gate on the engine's page; and the file the
+    // prompt gate writes the prompt it copied to, for the share gate to compare the shared page's with.
+    else if (flag === "--plate") args.plate = argv[++i] || "";
+    else if (flag === "--prompt") args.prompt = argv[++i] || "";
     else if (flag === "--out") args.out = argv[++i] || "";
     // One gate at a time while working on it: --only camera.
     else if (flag === "--only") args.only = argv[++i] || "";
@@ -844,6 +848,45 @@ const CLIPBOARD_SCRIPT = () => {
   } });
 };
 
+// A copied prompt as its parts: its lines but the snapshot's JSON block, and that packet (null without one).
+function promptParts(message) {
+  const block = /```json\n([\s\S]*?)\n```/.exec(message);
+  return { text: block ? message.replace(block[0], "<packet>") : message, packet: block ? JSON.parse(block[1]) : null };
+}
+// A packet with each view's framing left out (its camera, and its picture's size): what the page's layout decides.
+function framed(packet) {
+  if (!packet) return packet;
+  return { ...packet, jobs: (packet.jobs || []).map(({ camera, outputs, ...job }) => ({ ...job,
+    outputs: (outputs || []).map(({ width, height, ...output }) => output) })) };
+}
+
+// The engine's page: a Quick Edit on the bundle fixture's model, copied, names the model by its document id and
+// carries its snapshot inline (no file, no path), and is kept for the share gate to compare.
+async function promptGate() {
+  const context = await browser.newContext({ viewport, deviceScaleFactor: 1, extraHTTPHeaders: process.env.VIEWER_TEST_TOKEN ? { Authorization: `Bearer ${process.env.VIEWER_TEST_TOKEN}` } : {} });
+  try {
+    const page = await context.newPage();
+    page.setDefaultTimeout(60_000);
+    await page.addInitScript(CLIPBOARD_SCRIPT);
+    await page.goto(`${args.url.replace(/\/$/, "")}/${args.plate}`, { waitUntil: "domcontentloaded" });
+    await page.locator('[data-slot="cad-file-view"] [aria-busy="false"]').first().waitFor({ timeout: 120_000 });
+    await page.locator("[data-quick-edit-note]").click();
+    await page.keyboard.type("Make the plate thicker.");
+    await page.locator('[data-quick-edit-action="copy"]').click();
+    await page.waitForFunction(() => window.__copied.length > 0, null, { timeout: 30_000 });
+    const prompt = await page.evaluate(() => window.__copied.at(-1));
+    const said = promptParts(prompt);
+    const outputs = (said.packet?.jobs || []).flatMap(job => job.outputs || []);
+    if (!prompt.startsWith("Make the plate thicker.") || !prompt.includes(`File: ${args.plate}`) || said.packet?.input !== args.plate
+      || !outputs.length || outputs.some(output => "path" in output) || /\.snapshot\.json/.test(prompt)) {
+      failures.push(`prompt: the copied prompt does not carry its snapshot inline: ${JSON.stringify(prompt)}`);
+    }
+    if (args.prompt) fs.writeFileSync(args.prompt, prompt);
+  } finally {
+    await context.close();
+  }
+}
+
 async function shareGate() {
   // A model shared as a person's agent shares one: `cad share --yes` (the runner's), against this checkout's
   // share service run locally (`apps/share/serve.mjs`, the Worker itself over Node's http), which also serves
@@ -946,9 +989,18 @@ async function shareGate() {
     await view.waitForFunction(() => window.__copied.length > 0, null, { timeout: 30_000 });
     const prompt = await view.evaluate(() => window.__copied.at(-1));
     const link = `${origin}/${id}`;
-    if (!prompt.startsWith("Make the plate thicker.") || !prompt.includes(`File: ${link}`) || !prompt.includes(`\`cad fork ${link}\``)
-      || prompt.includes(shared.document.id)) {
-      failures.push(`share: the copied prompt does not name the share and how to fork it: ${JSON.stringify(prompt.replaceAll(id, "<id>"))}`);
+    const said = promptParts(prompt);
+    if (!prompt.startsWith("Make the plate thicker.") || !prompt.includes(`File: ${link}`) || prompt.includes(shared.document.id)
+      || said.packet?.input !== link) {
+      failures.push(`share: the copied prompt does not name the share as its file: ${JSON.stringify(prompt.replaceAll(id, "<id>"))}`);
+    }
+    // What the engine's page copied for the same model (the prompt gate's), with this page's address for its own:
+    // the same lines and the same packet, but for each view's framing, which each page's layout makes.
+    if (args.prompt && fs.existsSync(args.prompt)) {
+      const local = promptParts(fs.readFileSync(args.prompt, "utf8").replaceAll(shared.document.id, link));
+      if (local.text !== said.text || JSON.stringify(framed(local.packet)) !== JSON.stringify(framed(said.packet))) {
+        failures.push(`share: the shared page's prompt is not the engine page's with the share's address: ${JSON.stringify({ local: local.text, shared: said.text })}`);
+      }
     }
     // The id stays where the address holds it: in no storage, and in no other history entry.
     const kept = await view.evaluate(() => ({ history: history.length, href: location.href,
@@ -1021,6 +1073,7 @@ async function shareGate() {
 const gates = [
   ["format", formatGate, "url"],
   ["camera", modeCameraGate, "url"],
+  ["prompt", promptGate, "plate"],
   ["bundle", bundleGate, "bundle"],
   ["share", shareGate, "share"],
 ];

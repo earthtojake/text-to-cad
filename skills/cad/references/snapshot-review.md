@@ -126,30 +126,32 @@ cad model snapshot "$ID" tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_
 
 ## Annotations and Quick Edit views
 
-A Quick Edit prompt carries a snapshot packet: inline JSON up to 1 KiB (save it to a
-`.snapshot.json` first), or the path of a `.snapshot.json` in a folder of the server's under
-`/tmp`. The prompt names files relative to your workspace, else from `~/`; `cad <type> snapshot`
-reads either from the workspace. The packet holds:
+A Quick Edit prompt carries a snapshot packet, inline JSON after its references. The prompt names
+files relative to your workspace, else from `~/`, or a shared model by its cad.fun link (`cad fork
+LINK` first: then `cad <type> snapshot` reads the link as the copy it wrote). The packet holds:
 
-- `input`: what the person looked at: a model's id, or a file's path;
+- `input`: what the person looked at: a model's id, a file's path, or a cad.fun link;
 - `jobs`: one per view they captured (the current view and each view they drew
   in), each with the view's `camera`, its `display` (the parts that view hid and isolated among
-  it, as `hidden` and `isolated` refs) and an output `label`; a posed document's or a robot's
-  carries its pose as `jointValues`;
+  it, as `hidden` and `isolated` refs) and an output `label`, `width` and `height`; a posed
+  document's or a robot's carries its pose as `jointValues`;
 - `annotation`: their ink, when they drew any. Each mark is in model coordinates,
   on the part it was drawn on, and its `touches` lists what it was drawn over, most
-  first: faces and edges as refs where the viewer could name them, each with its
-  part. Read those to know what a mark is about;
+  first: faces and edges as refs within the file, where the viewer could name them.
+  Read those to know what a mark is about;
 - `hidden` and `isolated`: with ink, the parts the view it was last drawn in hid
   and isolated, which `--annotation` leaves out of the picture unless `--display` says otherwise.
 
-Draw the view a person drew their ink in, with the ink on the model:
+Draw the view a person drew their ink in, with the ink on the model, the packet on standard input:
 
 ```bash
-cad model snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
+cad model snapshot "$ID" tmp/quick_edit.png --annotation - --camera authored <<'JSON'
+<the packet>
+JSON
 ```
 
-`--annotation FILE` takes the packet or an annotation file and draws each mark on its part,
+`--annotation` takes the packet or an annotation file (JSON, a file, or `-` for standard input)
+and draws each mark on its part,
 wherever the picture places that part (posed or exploded). `--camera authored` draws exactly the
 view the last mark was drawn in (no fit), at its size and projection unless other flags say
 otherwise. Pass a job's `display` object as `--display` to draw in the person's mode with the
@@ -158,17 +160,21 @@ parts they hid left out, and its `jointValues` as `--pose`. A view without ink i
 over the model, a JSON list of `{start, end, label, color}` or a file of it.
 
 `--job` replays the whole packet in one call (every view, each with its own camera, display and
-pose, the ink over each) into the files its outputs name:
+pose, the ink over each). A Quick Edit's outputs name no file: each goes to `--out DIR` (the
+current folder unless given) as `<input>-<label>.png`, and the command says each path it wrote:
 
 ```bash
-cad model snapshot --job tmp/bracket.snapshot.json
-cad model snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
+cad model snapshot --job - --out tmp <<'JSON'
+<the packet>
+JSON
 ```
 
+Give a SRC (`cad model snapshot --job - "$ID"`) to draw the same views of the document as it is now.
 `--job` also takes a job (`{input, camera, display, preview, jointValues, output, outputs}`) or a
-list of jobs, as a file or JSON, so one command draws many pictures. A job's `jointValues` takes
+list of jobs, as JSON, a file or `-`, so one command draws many pictures. A job's `jointValues` takes
 what `--pose` does, so a list of jobs is a sequence's frames. Its `outputs` are its pictures
-(`path`, and `width`, `height`, `camera` of their own; a folder `path` takes a generated name). A
+(`path`, and `width`, `height`, `camera` of their own; a folder `path` takes a generated name; no
+`path`, a name in `--out`). A
 SRC given is drawn in place of every job's input, and any other flag overrides every job. Every
 job is checked before anything renders, and a failure writes none of its pictures. A job's
 `output` settings finish its pictures:

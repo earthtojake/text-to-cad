@@ -41,7 +41,7 @@ while [ "$#" -ne 0 ]; do
       fi
       if [ "$1" = "--out" ]; then out_dir="$2"; else only_gate="$2"; fi
       shift 2 ;;
-    # --only: one gate while working on it: format, camera, bundle, share.
+    # --only: one gate while working on it: format, camera, prompt, bundle, share.
     *) echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE]" >&2; exit 2 ;;
   esac
 done
@@ -255,6 +255,11 @@ if ! (cd "$project/.bundles" && "$PYTHON" plate.py) >"$log" 2>&1 \
   exit 1
 fi
 
+# The bundle fixture's model by its document id: the prompt gate copies a Quick Edit of it from the engine's page,
+# and the share gate compares the shared page's with it.
+plate_id="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["document"]["id"])' \
+  "$project/.bundles/plate.view/manifest.json")"
+
 # The share gate's share: the same model, shared by `cad share --yes` as a person's agent shares one, against
 # this checkout's share service run locally (apps/share/serve.mjs: the Worker itself, over Node's http, with
 # stand-ins for its bucket and limiter), which serves the bundled client too. The command runs while the
@@ -274,8 +279,6 @@ if [ -z "$only_gate" ] || [ "$only_gate" = share ]; then
     sed 's/^/    /' "$project/share.log" >&2
     exit 1
   fi
-  plate_id="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["document"]["id"])' \
-    "$project/.bundles/plate.view/manifest.json")"
   if ! (cd "$project" && CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli share "$plate_id" --yes --json) \
        >"$project/share.json" 2>"$log"; then
     echo "FAIL: cad share did not share the bundle fixture's model" >&2
@@ -315,9 +318,9 @@ fi
 (cd "$project" && "$PYTHON" -m cad_server.viewer --json) >"$log"
 url="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["apiUrl"])' "$log")"
 export VIEWER_TEST_TOKEN="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$log")"
-e2e_args=(--dir "$project" --url "$url")
+e2e_args=(--dir "$project" --url "$url" --plate "$plate_id" --prompt "$project/prompt-local.txt")
 # (An empty array expanded under `set -u` is an error in the bash macOS ships, hence the `+`.)
-bundle_args=(--bundle "$project/.bundles" ${share_args[@]+"${share_args[@]}"})
+bundle_args=(--bundle "$project/.bundles" --prompt "$project/prompt-local.txt" ${share_args[@]+"${share_args[@]}"})
 [ -n "$out_dir" ] && e2e_args+=(--out "$out_dir") && bundle_args+=(--out "$out_dir")
 [ -n "$only_gate" ] && e2e_args+=(--only "$only_gate") && bundle_args+=(--only "$only_gate")
 echo "  [setup] $(( $(date +%s) - started_at ))s to fixtures, viewer and port"
