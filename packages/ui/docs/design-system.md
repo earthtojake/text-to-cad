@@ -256,7 +256,7 @@ One component for each job. A renderer brings its tools, rows, tabs and state, b
 | Picking one value from a list | `ValueDropdown` | `primitives/value-dropdown.jsx` |
 | A menu of actions | `DropdownMenu`; a tree row's right-click, `ContextMenu` | `primitives/dropdown-menu.jsx`, `primitives/context-menu.jsx` |
 | A row of a list | `TreeRowSurface` and its parts | `primitives/tree-row.jsx` |
-| A way to a place, as a row (the Home's places, a folder) | `PlaceLink` | `library/LibraryPlaces.jsx` |
+| A way to a place, as a row (the Home's places in its sidebar) | `PlaceLink` | `library/LibraryPlaces.jsx` |
 | A document's picture | `PICTURE_CLASS`, `ROW_PICTURE_CLASS` | `library/thumbnails.ts` |
 | A labelled setting in the panel | `PanelSelectRow`, `PanelSwitchRow` | `kit/inspector/panelRows.jsx` |
 | A number a slider sets | `SliderField` | `kit/inspector/SliderField.jsx` |
@@ -369,10 +369,10 @@ Why: a fix to the row lands in every list. What a row does: [Trees](viewer-ux.md
   name fades out under them.
 - **A heading** (`TreeRowHeading`) is a muted line the control tall, on the inset, at regular weight. **Placeholder
   rows** (`TreeRowsLoading`) stand on the rows' lines while a tab loads, in the muted colour at 20%.
-- **Outside the panel** the same primitive draws a way to a place (`PlaceLink`: the Home's places in its sidebar, and a
-  folder on a project's page), the row tall in `text-ui`, its glyph on the line and its fill hanging 8px past it. Why a
-  folder is a row and not a tile: a glyph and a name that is pressed is what a row is, and a border round it adds
-  nothing a row lacks.
+- **Outside the panel** the same primitive draws a way to a place (`PlaceLink`: the Home's places in its sidebar), the
+  row tall, its glyph on the line and its fill hanging 8px past it. A folder on a project's page is not one of these:
+  among cards it is a tile of the cards' family ([the project's page](viewer-ux.md#the-home)), since a row there read
+  as a different surface beside the cards.
 - **A row with a picture** (a document in the search's results and in the Home's list) is the control + 16 tall (44px;
   a phone's 52) with a row's corners, its picture the control + 4 tall at 3:2, 8px before its name. The Home's has
   columns after the name, 16px apart, and its pin and ⋯ (small icon buttons, 4px apart) over its right end.

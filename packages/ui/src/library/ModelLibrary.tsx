@@ -365,6 +365,10 @@ const ROW_OPEN_CLASS = cn("cad-library-open w-full cursor-pointer rounded-md px-
   "focus-visible:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-inset group-data-opening/entry:bg-brand-subtle",
   "group-data-from/entry:ring-2 group-data-from/entry:ring-brand group-data-from/entry:ring-inset");
 const CAPTION_CLASS = "flex min-w-0 flex-col p-3 group-data-missing/entry:opacity-50";
+// A folder among the cards: a card's box (its own name, so a card is still a file's), a card's inset all round its glyph
+// and its name, so its name stands where a card's does.
+const FOLDER_TILE_CLASS = CARD_CLASS.replace("cad-library-card", "cad-library-folder");
+const FOLDER_OPEN_CLASS = "cad-library-open flex w-full min-w-0 cursor-pointer items-center gap-2 p-3 text-left text-inherit no-underline outline-none";
 /** A placeholder's bar on the line its text will stand on (`TreeRowsLoading`'s bar). */
 const bar = (line: string, width: string) => <span className={cn("flex items-center", line)}><span className={cn("block h-2 rounded-full bg-muted-foreground/20", width)} /></span>;
 
@@ -887,9 +891,9 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     </li>;
   };
   // A subfolder of the folder on screen: its glyph and its name, a way into it (a real link where the host gives places
-  // an address), and nothing else. Among cards it is a row of the list primitive (`primitives/tree-row.jsx`): the row
-  // tall, its fill hanging past the place's line so its glyph stands on it. In the list it is a row of the list, its
-  // glyph where a file's picture stands and a dash in each column.
+  // an address), and nothing else. Among cards it is a tile of the cards' own family: a card's box, column, corner and
+  // inset, its name a card's name, as tall as its one line needs. In the list it is a row of the list, its glyph on the
+  // picture tile a file's picture stands on, and a dash in each column.
   const folderPlace = (folder: LibraryFolderRef): HomeLocation => projectFolder(place.view === "project" ? place.project : "", folder.path);
   const folderLink = (folder: LibraryFolderRef) => {
     const href = hrefOf?.({ home: folderPlace(folder) }) ?? null;
@@ -897,15 +901,19 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   };
   const folderTile = (folder: LibraryFolderRef) => {
     const { href, label, onPress } = folderLink(folder);
-    return <li key={folder.path} className="min-w-0" data-folder="">
-      <PlaceLink href={href} label={folder.name} Icon={Folder} onPress={onPress} aria-label={label} className="cad-library-open cursor-pointer" /></li>;
+    return <li key={folder.path} className={FOLDER_TILE_CLASS} data-folder="">
+      <PressTarget className={FOLDER_OPEN_CLASS} href={href} aria-label={label} onPress={onPress}>
+        <Folder className="size-glyph flex-none text-muted-foreground" strokeWidth={TREE_GLYPH_STROKE} aria-hidden="true" />
+        <span className="truncate font-medium text-foreground" data-library-label="">{folder.name}</span>
+      </PressTarget>
+    </li>;
   };
   const folderRow = (folder: LibraryFolderRef) => {
     const { href, label, onPress } = folderLink(folder);
     return <li key={folder.path} className={ROW_CLASS} data-folder="">
       <PressTarget className={ROW_OPEN_CLASS} href={href} aria-label={label} onPress={onPress}>
         <span className={NAME_COLUMN_CLASS} data-library-name="">
-          <span className="grid aspect-[3/2] h-[calc(var(--cad-control)+4px)] flex-none place-items-center text-muted-foreground"><Folder className="size-glyph" strokeWidth={TREE_GLYPH_STROKE} aria-hidden="true" /></span>
+          <span className={ROW_PICTURE_CLASS} data-library-folder-picture=""><Folder className="size-glyph" strokeWidth={TREE_GLYPH_STROKE} aria-hidden="true" /></span>
           <span className="truncate text-foreground" data-library-label="">{folder.name}</span>
         </span>
         {whereColumn ? cell("where", "") : null}
@@ -913,14 +921,14 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       </PressTarget>
     </li>;
   };
-  // The place's folders and files: in the list, rows under their header, the folders first; else the folders, rows in
+  // The place's folders and files: in the list, rows under their header, the folders first; else the folders, tiles in
   // the cards' columns, over the cards.
   const documents = (list: readonly Model[]) => layout === "list"
     ? <div className="cad-library-table" data-where={whereColumn ? "" : undefined}><Columns where={whereColumn} /><ul className={LIST_CLASS} aria-label={t("home.filesAria")}>
       {folders.map(folderRow)}
       {list.map(item => entry(item, true, <>{name(item)}{columns(item)}</>))}</ul></div>
     : <>
-      {folders.length ? <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-x-4 p-0" aria-label={t("home.foldersAria")} data-library-folders="">
+      {folders.length ? <ul className={GRID_CLASS} aria-label={t("home.foldersAria")} data-library-folders="">
         {folders.map(folderTile)}</ul> : null}
       {list.length ? <ul className={GRID_CLASS} aria-label={t("home.filesAria")}>{list.map(item => entry(item, false, <>
         <Picture item={item} load={load} opening={opening === item.path} badge={format(item) || null} />

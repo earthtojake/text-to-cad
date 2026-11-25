@@ -131,14 +131,14 @@ test("a card and a place are real links: a plain click stays in this view, and â
     await project.click();
     await page.locator('[data-library-title]:text-is("gearbox")').waitFor();
     assert.deepEqual([page.url(), await project.getAttribute("aria-current"), context.pages().length], [`${origin}/?`, "page", 1]);
-    // Its page: its folder from the home folder beside its name; its folders first, each a link to its own page, a row
-    // of the list primitive (the row tall) in the cards' columns, then its files.
+    // Its page: its folder from the home folder beside its name; its folders first, each a link to its own page, a tile
+    // of the cards' family (a card's box: its 1px border round a card's 12px inset round one line, 46px) in the cards' columns, then its files.
     assert.equal(await page.locator("[data-library-path]").textContent(), "~/work/gearbox");
     const folder = page.getByRole("link", { name: "Open dxf", exact: true });
     assert.equal(await folder.getAttribute("href"), "/?place=gearbox&path=dxf");
     const tiles = await page.locator("[data-library-folders] > li").evaluateAll((nodes) => nodes.map((node) => { const { x, width, height } = node.getBoundingClientRect(); return [x, width, height]; }));
     const columns = await page.locator(".cad-library-card").evaluateAll((nodes) => nodes.map((node) => { const { x, width } = node.getBoundingClientRect(); return [x, width]; }));
-    assert.deepEqual([tiles.length, tiles.every(([, , height]) => height === 28)], [3, true]);
+    assert.deepEqual([tiles.length, tiles.every(([, , height]) => height === 46)], [3, true]);
     assert.deepEqual(tiles.map(([x, width]) => [x, width]), columns.slice(0, tiles.length));
     const [folderTab] = await Promise.all([context.waitForEvent("page"), folder.click({ modifiers: ["ControlOrMeta"] })]);
     assert.equal(folderTab.url(), `${origin}/?place=gearbox&path=dxf`);
@@ -501,20 +501,23 @@ test("the kinds' chips wrap on a narrow page, and at a phone's scale every chip 
 const px = (locator, ...names) => style(locator, ...names);
 const type = async (locator) => (await style(locator.first(), "fontSize", "lineHeight", "fontWeight")).join(" ");
 
-test("the place is padded by the panel's inset on every side, its blocks 16px apart; a card has a card's corners and inset, a folder is a row, and a list's row is the search's", async () => {
+test("the place is padded by the panel's inset on every side, its blocks 16px apart; a card has a card's corners and inset, a folder is a tile of the cards' family, and a list's row is the search's", async () => {
   const { context, page } = await home("place=gearbox");
   try {
     const line = 232 + 16;
-    // One inset on all four sides (16px), and the heading's glyph, a folder's glyph and the first card all on its line.
+    // One inset on all four sides (16px), and the heading's glyph, a folder's tile and the first card all on its line.
     assert.deepEqual(await px(page.locator("[data-library-content]"), "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"), ["16px", "16px", "16px", "16px"]);
     const folders = page.locator("[data-library-folders] > li");
     const cards = page.locator(".cad-library-card");
-    assert.deepEqual([(await box(page.locator("[data-library-toolbar] svg").first())).x, (await box(folders.first().locator("svg"))).x, (await box(cards.first())).x], [line, line, line]);
-    // A folder: the list primitive's row, 28px with a row's corners and no box of its own, its fill hanging 8px past the
-    // line; 16px over the cards.
-    const folder = folders.first().locator("[data-tree-row]");
-    assert.deepEqual([(await box(folder)).height, (await box(folder)).x, ...(await px(folder, "borderTopWidth", "borderTopLeftRadius", "backgroundColor"))], [28, line - 8, "0px", "8px", "rgba(0, 0, 0, 0)"]);
-    assert.equal(await type(folder), "13px 20px 400");
+    assert.deepEqual([(await box(page.locator("[data-library-toolbar] svg").first())).x, (await box(folders.first())).x, (await box(cards.first())).x], [line, line, line]);
+    // A folder: a tile of the cards' family, a card's box and 10px corners in a card's column, a card's 12px inset round
+    // its glyph and its name, in a card's 1px border (46px tall), its name a card's name in size and weight, its glyph where a card's name
+    // starts; 16px apart and 16px over the cards.
+    const folder = folders.first();
+    assert.deepEqual([(await box(folder)).height, (await box(folder)).width, ...(await px(folder, "borderTopWidth", "borderTopLeftRadius"))],
+      [46, (await box(cards.first())).width, "1px", "10px"]);
+    assert.deepEqual([await type(folder.locator("[data-library-label]")), await type(cards.first().locator("[data-library-label]"))], ["13px 20px 500", "13px 20px 500"]);
+    assert.equal((await box(folder.locator("svg"))).x, (await box(cards.first().locator("[data-library-label]"))).x);
     assert.equal((await box(cards.first())).y - (await box(folders.first())).bottom, 16);
     // A card: a card's 10px corners, the picture at 3:2 edge to edge, the caption padded by a card's 12px inset all round;
     // 16px between cards, across and down.
@@ -564,15 +567,15 @@ test("the place is padded by the panel's inset on every side, its blocks 16px ap
   } finally { await bare.context.close(); }
 });
 
-test("at a phone's scale the home's rows, texts and gutters are the phone's: 36px folders, 52px list rows, each text 2px up, the same 16px inset", async () => {
+test("at a phone's scale the home's rows, texts and gutters are the phone's: 46px folders, 52px list rows, each text 2px up, the same 16px inset", async () => {
   const { context, page } = await home("place=gearbox", { width: 390, height: 844 });
   try {
     await page.locator('[data-viewer-layout="mobile"]').waitFor();
     await still(page);
     assert.deepEqual(await px(page.locator("[data-library-content]"), "paddingTop", "paddingLeft", "paddingRight"), ["16px", "16px", "16px"]);
     const card = page.locator(".cad-library-card").first();
-    assert.deepEqual([(await box(page.locator("[data-library-folders] [data-tree-row]").first())).height, await type(page.locator("[data-library-title]")), await type(card.locator("[data-library-label]")),
-      await type(card.locator("[data-library-status]")), (await box(card.locator("[data-library-format]"))).height], [36, "17px 22px 600", "15px 20px 500", "13px 18px 400", 28]);
+    assert.deepEqual([(await box(page.locator("[data-library-folders] > li").first())).height, await type(page.locator("[data-library-title]")), await type(card.locator("[data-library-label]")),
+      await type(card.locator("[data-library-status]")), (await box(card.locator("[data-library-format]"))).height], [46, "17px 22px 600", "15px 20px 500", "13px 18px 400", 28]);
     await page.getByRole("button", { name: "List" }).click();
     const row = page.locator(".cad-library-row").filter({ has: page.locator("[data-library-picture]") }).first();
     await row.waitFor();

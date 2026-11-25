@@ -236,14 +236,14 @@ chrome that floats over the picture. The home is the navbar over the library: it
   project, with no setting or switch between ways. And a project's folder holds an engineer's other files too
   (datasheets, drawings, scripts, another tool's native files): the page shows the folder as it is and hands each
   file to the app that opens it.
-  - A subfolder is the plainest thing that reads as a folder: its glyph and its name, a row of the list primitive
-    (`PlaceLink`, the sidebar's row: the row tall, its glyph on the place's line, its fill hanging 8px past it, no box).
-    Among cards the folders are rows in the cards' columns, in a list of their own 16px over the cards (Drive's
-    folders over its files); in the list, a row of the list, its glyph where a file's picture stands and a dash in each
-    column. It has no picture, count, pin or menu: it is a way into the folder, a real link where the host gives places
-    an address. Why a row, not a tile: [a row is the system's box for a glyph and a name](design-system.md#rows), and a
-    border round each folder was a box that said nothing; what a folder holds is found by opening it, and nothing is
-    read to say more.
+  - A subfolder is its glyph and its name, drawn in the family of the files beside it. Among cards it is a tile of the
+    cards' own: a card's box, corners and column, a card's 12px inset round one line inside a card's border (46px tall), its name a card's
+    name in size and weight, its glyph where a card's name starts; the folders are a grid of their own, 16px over the
+    cards (Drive's folders over its files). In the list it is a row of the list, its glyph on the picture tile where a
+    file's picture stands, and a dash in each column. It has no picture, count, pin or menu: it is a way into the
+    folder, a real link where the host gives places an address. Why a tile of the cards' family: a folder and a file
+    on one page are read as one set, so they share a box, a column and a name's type; the sidebar's row drawn among
+    cards read as a different surface, its folders a line of small labels beside large cards.
   - **A file the viewer does not open** (a PDF, a script, notes, another CAD tool's native file) is a card or a row
     like the rest: the plain tile with its kind's glyph, its extension as its name writes it for a badge and a Kind,
     upper case (`PDF`, `PY`, `F3D`; none with no extension), its name, and when it was edited. Nothing about it is
@@ -270,8 +270,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
     gradient in both themes. Why: one picture, one shape; a card's, a row's and the search's had three.
   - **A row** is the search's: the control + 16 tall (44px; a phone's 52), its picture the control + 4 tall, then its
     name and its facts in one size, the name in the foreground and the facts muted, under a header of muted labels the
-    control tall with no rule under it. Its fill hangs 8px past the place's line, so the header's labels, the pictures
-    and the folders' glyphs stand on the line; its pin and ⋯ float over its right end. A narrower place drops Created
+    control tall with no rule under it. Its fill hangs 8px past the place's line, so the header's labels and the pictures,
+    a folder's tile among them, stand on the line; its pin and ⋯ float over its right end. A narrower place drops Created
     (under 820px), then Where (680), Kind (560) and Size (440). Why that tall: a row with a picture is as tall as its
     picture needs, the same in the search; a list's emphasis is colour, never a second size.
   - An `.xbf` file is badged "Part" when its document holds one part and
