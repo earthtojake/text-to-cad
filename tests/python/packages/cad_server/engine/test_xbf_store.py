@@ -1,8 +1,9 @@
 """A model's store is its ``.xbf``: a build records the file's id and its version as written, and writes no copy of
 the document anywhere; a restarted engine answers every verb of a model from its ``.xbf`` -- page, export, snapshot,
 inspect, cad_show -- with nothing run; an unchanged run after a restart is taken from the file's own key while the
-file is the one the engine wrote, and one edited or replaced by hand is built and written again. On a class engine of
-the file's own (``store_fixtures.StoreCase``), with an engine, a state and a cache folder of its own
+file is the one the engine wrote, and one edited or replaced by hand is built and written again; a function with a
+file decorator alone writes that file alone, is no document, and says each run that a restart builds it again. On a
+class engine of the file's own (``store_fixtures.StoreCase``), with an engine, a state and a cache folder of its own
 (``CAD_ENGINE_DIR``, ``CAD_STATE_DIR``, ``CAD_CACHE_DIR``)."""
 
 from __future__ import annotations
@@ -17,8 +18,9 @@ from unittest import mock
 from tests.python.support import engine_daemon, opengl, store_fixtures
 
 from cad.engine.ids import file_id
+from cad_server.engine.registry import Registry
 
-# A model declaring a STEP and no xbf, whose body says on stderr that it ran.
+# A function declaring a STEP and no xbf, whose body says on stderr that it ran.
 STEPPED = """
 import sys
 import build123d as bd
@@ -184,39 +186,32 @@ class XbfStoreTest(store_fixtures.StoreCase):
         self.start()
         self.assert_taken()
 
-    def test_a_model_declaring_a_step_is_taken_by_its_key_after_a_restart_and_its_file_written_from_it(self) -> None:
+    def test_a_step_alone_writes_its_file_alone_says_so_and_builds_again_after_a_restart(self) -> None:
         (self.project / "plate.py").write_text(textwrap.dedent(STEPPED.format(width=4)), encoding="utf-8")
-        ident = file_id(self.xbf("plate"))
-        self.assertIn("the body ran", self.run_script("plate").stderr)
-        self.assertEqual(self.record(ident)["saved"], "plate.xbf", "a model declared by @step alone writes its .xbf")
         declared = self.project / "plate.step"
-        first = declared.read_bytes()
-        self.assertEqual(self.cli("stop").returncode, 0)
-        # Unchanged after a restart: taken by its key, nothing run; its STEP is the document's export, as
-        # `cad <type> export` writes it of the document taken (OCCT's xbf read gives a -0. back for a 0.:
-        # the first run after a restart may write it once, the same geometry).
-        self.start()
-        self.assert_taken("plate")
-        exported = self.folder / "exported.step"
-        self.assertEqual(self.cli("export", ident, str(exported)).returncode, 0)
-        taken = declared.read_bytes()
-        self.assertEqual(taken, exported.read_bytes(), "exactly an export of the document")
-        # Unchanged, it is compared and left as it is: its bytes and its time.
-        stamp = declared.stat().st_mtime_ns
-        done = self.run_script("plate")
-        self.assertIn("took plate.py::plate warm in", done.stdout)
-        self.assertEqual((declared.read_bytes(), declared.stat().st_mtime_ns), (taken, stamp))
-        # Deleted: the next run writes it again from the document, and still runs nothing.
-        declared.unlink()
-        done = self.run_script("plate")
-        self.assertIn("took plate.py::plate warm in", done.stdout)
-        self.assertNotIn("the body ran", done.stderr)
-        self.assertEqual(declared.read_bytes(), taken)
-        # A key change runs the body.
-        (self.project / "plate.py").write_text(textwrap.dedent(STEPPED.format(width=5)), encoding="utf-8")
+        warning = ("warning: plate saves no .xbf (no @model): once the CAD server restarts, its next run builds it again "
+                   "from scratch; add @model to save it")
         done = self.run_script("plate")
         self.assertIn("the body ran", done.stderr)
-        self.assertNotEqual(declared.read_bytes(), first)
+        self.assertIn(warning, done.stdout)
+        ident = file_id(declared)
+        self.assertIn(f"id: {ident}", done.stdout, "its id is its file's")
+        self.assertIn(f"/{ident}?", done.stdout, "its page is its file's")
+        self.assertEqual(sorted(path.name for path in self.project.iterdir()), ["plate.py", "plate.step"], "no .xbf")
+        self.assertEqual(Registry(self.state).list(), [], "no document: no record")
+        # Warm: taken from the worker's memory, nothing ran, and said again.
+        warm = self.run_script("plate")
+        self.assertIn("took plate.py::plate warm in", warm.stdout)
+        self.assertIn(warning, warm.stdout)
+        # After a restart, built from nothing: no .xbf to take it from.
+        self.assertEqual(self.cli("stop").returncode, 0)
+        self.start()
+        cold = self.run_script("plate")
+        self.assertIn("the body ran", cold.stderr)
+        self.assertIn(warning, cold.stdout)
+        # With @model, no warning.
+        self.write("cube")
+        self.assertNotIn("warning:", self.run_script("cube").stdout)
 
 
 if __name__ == "__main__":

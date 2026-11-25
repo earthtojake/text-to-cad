@@ -118,6 +118,7 @@ def describe(report: dict[str, Any], wall: float, fresh: bool | None) -> str:
         listed.append(f"retired: {report['retired']}")
     return (line + "".join(f"\n  {text}" for text in listed) + children
             + "".join(f"\n  warning: kinematics: {text}" for text in report.get("kinematics", {}).get("warnings", ()))
+            + "".join(f"\n  warning: {text}" for text in report.get("warnings") or ())
             + _verified(report.get("verify")))
 
 

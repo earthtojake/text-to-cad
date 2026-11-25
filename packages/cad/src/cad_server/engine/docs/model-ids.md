@@ -4,8 +4,8 @@ A page of [the engine's documentation](../README.md). A name in bold in parenthe
 
 `@model` declares a model and its `.xbf`, `<name>.xbf` beside the script unless given a path
 (`@model("….xbf")`); the file decorators (`@step` and the others) declare its other files, alone or
-with it (**A file decorator's path is optional**); declared by `@step` alone, a model still writes
-`<name>.xbf`. A declaration does no work. Call the
+with it (**A file decorator's path is optional**). A function declared by `@step` alone writes its STEP alone: no
+`.xbf`, so no model document; its id is its first file's, and its page that file's. A declaration does no work. Call the
 function explicitly to build it:
 
 ```python

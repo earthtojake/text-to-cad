@@ -194,15 +194,17 @@ class RecentStoreTest(unittest.TestCase):
         store.remove(ident)
         self.assertEqual((store.list(), Registry(self.tmp).get(ident)), ([], None))
 
-    def test_a_shape_handed_over_from_a_folder_is_present_and_says_what_it_is(self) -> None:
-        from cad.engine.ids import derived_id
+    def test_a_shape_handed_over_is_where_its_xbf_is_and_says_what_it_is(self) -> None:
+        from cad.engine.ids import file_id
 
-        ident, built = derived_id(self.tmp, "plate"), time.time() - 60
+        xbf, built = self.tmp / "plate.xbf", time.time() - 60
+        xbf.write_bytes(b"not read here")
+        ident = file_id(xbf)
         Registry(self.tmp).put({"id": ident, "kind": "shape", "root": str(self.tmp), "home": ".",
-                                "entry": "plate", "revision": "h1", "built": built})
+                                "entry": "plate", "revision": "h1", "built": built, "saved": "plate.xbf"})
         [entry] = [recent.public() for recent in RecentStore(self.tmp).list()]
         self.assertEqual((entry["id"], entry["missing"], entry["rebuild"], entry["kind"], entry["updated"], entry["folder"]),
-                         (ident, False, None, "shape", built, str(self.tmp)), "a folder home is where it came from, not a lost file")
+                         (ident, False, None, "shape", built, str(self.tmp)), "its folder is its .xbf's")
         self.assertIn("a shape handed over", entry["shown"])
         self.assertIn("no script to rerun", entry["shown"])
 

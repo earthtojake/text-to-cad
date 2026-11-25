@@ -206,11 +206,15 @@ class Document:
         return self._shape
 
     def _transferred(self) -> Any:
-        """The document as the engine holds it, asked by its id (``result``): its structure and each
-        part's shape bytes, as an ``export.Source`` of this process. Nothing is built."""
+        """The document as the engine holds it, asked by its id (``result``) -- a function with file decorators alone,
+        of the worker that built it -- its structure and each part's shape bytes, as an ``export.Source`` of this
+        process. Nothing is built."""
         from cad.engine.export import Source
 
-        answer = _ask({"op": "result", "id": self.id, "cwd": str(self.cwd), **_interpreter()})
+        # A model's by its id; a function with file decorators alone, which is no document, of its script's worker.
+        asked = {"id": self.id} if (self.report.get("source") or {}).get("xbf") or self.report.get("kind") == "shape" \
+            else {"script": str(self.script), "name": self.name}
+        answer = _ask({"op": "result", **asked, "cwd": str(self.cwd), **_interpreter()})
         payload = base64.b64decode(answer.get("payload") or "")
         done = answer["done"]
         shapes, at = {}, 0
@@ -284,13 +288,38 @@ def _handed_bytes(shape: Any, name: str, animations: Any) -> bytes:
     return document.to_bytes(doc, [part.shape for part in tree.parts])
 
 
+def _beside(frame: Any, path: Any) -> Path:
+    """``path`` as a shape's file is written: relative to the calling script's folder (``frame``'s file), or the working
+    folder where there is no script."""
+    filename = frame.f_code.co_filename if frame is not None else ""
+    base = Path(filename).parent if filename and os.path.isfile(filename) else Path.cwd()
+    return Path(os.path.abspath(base / os.fspath(path)))
+
+
+def write_shape(shape: Any, kind: str, out: Any, name: Any, frame: Any = None, tolerance: float | None = None,
+                angle: float | None = None) -> Path:
+    """``step(shape, "crate.step")`` and its siblings: that one file of a shape this program holds, written now, in this
+    process, as a declared file is (``export.translate`` of the shape's document: ``_handed_bytes``), at ``out``, else
+    ``<name>`` and the kind's suffix, relative to the calling script's folder, or the working folder (``_beside``). No
+    ``.xbf``, no record, nothing of the engine's: the path written."""
+    from cad.engine import build, export
+    from cad.engine.model import SUFFIXES
+
+    if out is None and not name:
+        raise TypeError(f"{kind}(shape, 'path{SUFFIXES[kind]}'): a file of a shape takes its path, or name=")
+    path = _beside(frame, out if out is not None else name + SUFFIXES[kind])
+    label = name or path.stem
+    export.translate(build.held_source(_handed_bytes(shape, label, None), label), kind, path, tolerance, None, angle)
+    return path
+
+
 def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = None, out: Any = None) -> Document:
     """``model(shape, name=...)``: a document made of a shape this program holds -- from a script or a
     REPL, no function, no body -- handed to the engine, which writes it as its ``.xbf``, serves its page from
     that file and exports it, and records that a program it did not run showed it: there is no command that
     builds it again. A model's document is its ``.xbf`` (law 10): at ``out`` where given, else ``<name>.xbf``,
-    relative to the calling script's folder (``frame``'s file), or a REPL's or a notebook's working folder,
-    written only where it differs or is missing; its id is that file's (``ids.file_id``). The handle's ``shape``
+    resolved as every path is (``_beside``), written only where it differs or is missing; its id is that file's
+    (``ids.file_id``). The handle's ``shape``
     is ``shape`` itself."""
     from cad.engine import model as declaring
     from cad.engine.ids import canonical, check_name, file_id
@@ -302,12 +331,9 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
         raise TypeError("model(shape, name=...): a shape handed over takes its document's name")
     check_name(name)
     filename = frame.f_code.co_filename if frame is not None else ""
-    script = filename if filename and os.path.isfile(filename) else None
-    scope = canonical(script or os.getcwd())
-    # Its .xbf: at ``out`` where given, else ``<name>.xbf``, relative to the calling script's folder, or from a REPL or a
-    # notebook the working folder: no document is left without its file.
-    base = Path(scope).parent if script is not None else Path(scope)
-    saved = Path(os.path.abspath(base / (os.fspath(out) if out is not None else f"{name}.xbf")))
+    scope = canonical(filename if filename and os.path.isfile(filename) else os.getcwd())
+    # Its .xbf: at ``out`` where given, else ``<name>.xbf``, resolved as every path is (``_beside``).
+    saved = _beside(frame, out if out is not None else f"{name}.xbf")
     ident = file_id(saved)
     data = _handed_bytes(shape, name, animations)
     answer = _ask({"op": "shape", "id": ident, "name": name, "scope": scope, "program": _program(),

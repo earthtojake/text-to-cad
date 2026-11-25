@@ -149,10 +149,9 @@ class Recent:
         elif self.file is not None:
             # A model's document is its .xbf: where it is, and missing once it is gone, as a file is.
             present, folder = os.path.isfile(self.file), os.path.dirname(self.file)
-        else:
+        else:  # a record from before one named its .xbf
             present = self.kind == "shape" or bool(self.script and os.path.isfile(self.script))
-            folder = self.script if self.script and self.kind == "shape" and os.path.isdir(self.script) \
-                else os.path.dirname(self.script or "")
+            folder = os.path.dirname(self.script or "")
         found = {
             "path": self.path,
             "name": self.name or os.path.basename(self.path),

@@ -258,8 +258,8 @@ def {name}():
 # The hinge with a configuration sequence (the document's) and an animation (the GLB's, recorded in
 # the xbf), its GLB declared: the build writes it live, the export of its hold writes it again.
 ANIMATED = HINGE.replace("from cad.engine import model", """from cad.build123d import configuration_sequence
-from cad.engine import glb
-from cad.build123d import animation""").replace("@model", '@glb("live.glb")').replace("    return root", """\
+from cad.engine import glb, model
+from cad.build123d import animation""").replace("@model", '@model\n@glb("live.glb")').replace("    return root", """\
     configuration_sequence(root, "lift", [(0, {{"elbow": 30}}), (1, "raised")])
     show = animation(root, "show", duration=2)
     show.pose(at={{0: {{}}, 1: "raised", 2: {{}}}})

@@ -240,9 +240,11 @@ if __name__ == '__main__':
 
         from tests.python.support.ids import model_id
 
-        # Each model reports its id, the one the script's own process derives (its .xbf's), and
-        # its page is that id's.
-        expected = [model_id(self.script, "block", xbf="XBF/block.xbf"), model_id(self.script, "peg")]
+        from cad.engine.ids import file_id
+
+        # Each model reports its id, the one the script's own process derives (its .xbf's; the peg, an STL
+        # alone, its file's), and its page is that id's.
+        expected = [model_id(self.script, "block", xbf="XBF/block.xbf"), file_id(self.folder / "peg.stl")]
         self.assertEqual([line.removeprefix("  id: ") for line in done.stdout.splitlines() if line.startswith("  id: ")],
                          expected)
         views = [line for line in done.stdout.splitlines() if line.startswith("  view: ")]
@@ -254,7 +256,7 @@ if __name__ == '__main__':
                                  env=self.env)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(sorted(path.relative_to(self.folder).as_posix() for path in self.folder.rglob("*") if path.is_file()),
-                         ["XBF/block.xbf", "block.py", "peg.stl", "peg.xbf"])
+                         ["XBF/block.xbf", "block.py", "peg.stl"])
 
     def test_decoration_only_declares_and_main_calls_only_its_selected_model(self) -> None:
         self.own()

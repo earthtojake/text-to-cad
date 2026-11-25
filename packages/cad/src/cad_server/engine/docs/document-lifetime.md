@@ -24,7 +24,8 @@ lists):
   nothing builds it again.
 
 **Two kinds.** A function in a file is a model: the registry points at its script, and its document is
-its `.xbf`. A shape is handed over (**Shapes handed over**), and its document is its `.xbf` too. Nothing
+its `.xbf`, which `@model` declares; one with file decorators alone writes those files and is no document
+(`Models.unsaved`: no record, its page its first file's; law 6). A shape is handed over (**Shapes handed over**), and its document is its `.xbf` too. Nothing
 else is kept, and how is not the author's to choose: every document is recorded alike, and the decorators and
 `model(shape, ...)` take no store (`store=` is an unexpected keyword argument, as any other). A function in no
 saved file (a notebook cell, a REPL, `python -c`) is refused, with the words that hand its shape over instead
@@ -37,7 +38,8 @@ the declarations on it with it -- its joints, mechanism states, configuration se
 couplings -- and its GLB animations, passed as `animations=[...]` (the `animation()` builders, each
 on the shape or a part of it), since there is no body to declare them in. The daemon (`{"op":
 "shape"}`, `Models.hand_over`) reads the bytes through the documents worker, writes them as its `.xbf` (at
-the path given, else `<name>.xbf` beside the calling script or in a REPL's working folder; the caller writes it
+the path given second, `model(shape, "crate.xbf", name=...)`, else `<name>.xbf`, relative to the calling script's
+folder or, where there is none, the working folder; the caller writes it
 where the engine could not), serves its page from that file, and records it as `kind: "shape"`, its scope as
 `home` and the program that handed it over as `program` (none from a REPL or a notebook), from which every
 surface words it: a program the engine did not run showed it, so no command builds it again. `name=` is

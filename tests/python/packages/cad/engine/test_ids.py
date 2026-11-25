@@ -89,16 +89,19 @@ class IdsTest(unittest.TestCase):
                  ("named.py", "named", "@model(name='arm')", "arm.xbf"),
                  ("given.py", "given", "@model('XBF/given part.xbf')", "XBF/given part.xbf"),
                  ("out.py", "out", "@model(out='../up.xbf')", "../up.xbf"),
-                 ("stepped.py", "stepped", "@step('stepped.step')", "stepped.xbf"),
+                 ("stepped.py", "stepped", "@step('stepped.step')", "stepped.step"),
                  ("deep/inner.py", "inner", "@model('inner.xbf')", "deep/inner.xbf")]
         for script, function, decorator, xbf in cases:
             with self.subTest(decorator=decorator):
                 declared = self.load(self.folder / script, function, decorator)
                 path = Path(os.path.normpath(self.folder / xbf))
-                self.assertEqual(declared.xbf, Path(os.path.normpath(os.path.abspath(canonical(self.folder) + "/" + xbf))))
+                if xbf.endswith(".xbf"):
+                    self.assertEqual(declared.xbf, Path(os.path.normpath(os.path.abspath(canonical(self.folder) + "/" + xbf))))
+                else:
+                    self.assertIsNone(declared.xbf, "a file decorator alone writes no .xbf: its id is its first file's")
                 self.assertEqual(declared.id, file_id(path))
                 self.assertEqual(declared.id, formula(path), "the one formula: the file's path, no name")
-                self.assertEqual(declared.id, document_id(str(path)), "its .xbf's path names the model")
+                self.assertEqual(declared.id, document_id(str(path)), "its file's path names it")
         self.assertEqual(derived_id(self.folder, "plate"), str(uuid.uuid5(NAMESPACE, canonical(self.folder) + "::plate")))
 
     def test_models_that_write_one_xbf_share_its_id_and_nothing_is_refused(self) -> None:

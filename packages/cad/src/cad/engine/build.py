@@ -686,6 +686,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             _written(model, result, run, report, log, model.plan(), context)
         elif report.get("ok") and (report.get("cache") or {}).get("used"):
             # Taken from its key, nothing run: its declared files are exports of the document taken.
+            _unsaved(model, report)
             try:
                 _taken_outputs(model, report, log)
             except Exception as error:  # noqa: BLE001 - a file that cannot be written is the build's error
@@ -787,9 +788,19 @@ def _keep_load(load: _Load | None, reports: list[dict[str, Any]], context: Any) 
     _LOAD.append(load)
 
 
+def _unsaved(model: Any, report: dict[str, Any]) -> None:
+    """A function with file decorators alone saves no ``.xbf``: its report says so once a build (``warnings``), as its
+    run's lines do (``said.describe``), since no restart of the engine finds its document."""
+    if model.xbf is None:
+        report.setdefault("warnings", []).append(
+            f"{model.name} saves no .xbf (no @model): once the CAD server restarts, its next run builds it again "
+            "from scratch; add @model to save it")
+
+
 def _written(model: Any, result: Any, run: Any, report: dict[str, Any], log: Callable[[str], None], plan: list,
              context: Any) -> None:
     """``_finish``, a file that cannot be written its model's error."""
+    _unsaved(model, report)
     try:
         _finish(model, result, run, report, log, plan, context)
     except Exception as error:  # noqa: BLE001 - a file that cannot be written is the build's error
@@ -1168,12 +1179,14 @@ def _previous(model: Any, context: Any, shown: str, take: bool = False) -> tuple
     return verdict, report
 
 
-def _written_by_engine(model: Any, xbf: Path) -> str | None:
+def _written_by_engine(model: Any, xbf: Path | None) -> str | None:
     """Why the model's ``.xbf`` is not the file the engine last wrote of it, or None when it is: its record
     (``records``) names the file's version as written (``version``, ``mtime_ns-size``), and the file is that
     version still. A file edited, replaced or copied over since, or one no record names, is not taken."""
     from cad.engine import records
 
+    if xbf is None:
+        return "it saves no .xbf (no @model)"
     try:
         found = xbf.stat()
     except OSError:
@@ -1195,7 +1208,7 @@ def _taken(model: Any, context: Any, shown: str, remembered: Any) -> tuple[dict,
     name = f"{model.script}::{model.name}"
     if not memo.enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
         return {"used": False, "reason": "retention is off"}, None
-    folder = xbf.parent  # what the closure's paths are relative to
+    folder = xbf.parent if xbf is not None else model.script.parent  # what the closure's paths are relative to
     clock = time.perf_counter()
     always = memo.always()
     impure = sorted(_identity(family) for family in _FAMILIES.get(name, ()) if family in always)
@@ -1306,8 +1319,8 @@ def _reattach(models: list) -> None:
     held = records.current()
     asked = []
     for model in models:
-        if _WRITTEN.get(f"{model.script}::{model.name}") is not None:
-            continue
+        if _WRITTEN.get(f"{model.script}::{model.name}") is not None or model.xbf is None:
+            continue  # held in this worker, or no .xbf: no record to re-attach
         record = held.get(model.id)
         if record is not None and record.get("kind") == "model" and records.home(held, record) == model.script \
                 and record.get("entry") == model.name:

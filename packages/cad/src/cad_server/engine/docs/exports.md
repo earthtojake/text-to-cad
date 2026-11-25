@@ -213,17 +213,20 @@ samplers shared, above). A sparsely keyed eased bake (a small model's) can take 
 than it had CUBICSPLINE ones, each a third the bytes.
 
 **A file decorator's path is optional.** `@model` declares the native document, the `.xbf`
-the model is saved as; `@step`, `@glb`, `@stl`, `@threemf` and `@dxf` declare translations, and each declares a
-model on its own. Any may be combined, each adding its file, one kind once. A model always writes its `.xbf`,
-whatever declares it (`Model.files`). A path given, positionally or `out=`
+the model is saved as; `@step`, `@glb`, `@stl`, `@threemf` and `@dxf` declare translations, each its own file and
+nothing else, alone or beside `@model`, one kind once (`Model.files`). A function with file decorators alone writes no
+`.xbf`: it is no model document (`Models.unsaved`: no record, its page its first file's), and after a restart its run
+builds it from nothing, which each of its runs says (`build._unsaved`: `plate saves no .xbf (no @model): once the CAD
+server restarts, its next run builds it again from scratch; add @model to save it`). A path given, positionally or `out=`
 (`@model("XBF/arm.xbf")`, `@step(out="arm.step")`), is relative to the script. With none (`@step`,
 `@step()`, `@glb(tolerance=0.1)`) the file is the model's name -- `name=`, else its function's -- and
-the format's extension beside the script (`Model.plan`): bare `@model` on `arm` writes `arm.xbf`, a
-model declared by `@step` alone writes `arm.step` and `arm.xbf`; a `name=` with a folder in it
-(`arms/left`) writes `arms/left.xbf`. A shape handed over (`model(shape, name=...)`) writes its `.xbf` at the path given
-(`model("crate.xbf", shape=shape, name=...)`), relative to the calling script, else `<name>.xbf` beside the
-script, or in a REPL's or a notebook's working folder, once the engine holds it, only where it differs or is missing
-(`api.hand_over`).
+the format's extension beside the script (`Model.plan`): bare `@model` on `arm` writes `arm.xbf`, `@step` alone
+`arm.step`; a `name=` with a folder in it (`arms/left`) writes `arms/left.xbf`. Each decorator is a function of the
+same arguments too, given a shape first, the path second: `model(shape, "crate.xbf", name=...)` hands it over as a
+model, its `.xbf` written once the engine holds it (`api.hand_over`), and `step(shape, "crate.step")` writes that
+file of it now, in the calling process, through the same translation (`api.write_shape`); else `<name>` and the
+format's extension. Either path is relative to the calling script's folder, or the working folder where there is
+none. A path given first is the path; else the one given second; else `out=`.
 Nothing compares the files two models write: two that write one file are their author's to tell apart.
 Beyond its path, an optional `name=` and a mesh's `tolerance=` and `angle=`, no file decorator
 takes anything else: a model's material, colours, joints, the pose its joints connect its parts at, its

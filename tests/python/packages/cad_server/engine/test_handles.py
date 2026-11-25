@@ -123,7 +123,10 @@ handle = model(crate, name="crate", animations=[lift])
 handle.export("crate.glb", "crate.step")
 tag = model(bd.Box(1, 1, 1), name="tag")
 model(bd.Box(2, 2, 2), name="spare/pin")  # its .xbf is <name>.xbf joined to the script's folder, whatever the name
-model("pegs/peg-v1.xbf", shape=bd.Box(1, 1, 3), name="peg")  # a path given: there, relative to the script
+model(bd.Box(1, 1, 3), "pegs/peg-v1.xbf", name="peg")  # a path given second: there, relative to the script
+from cad import step
+
+step(crate, "loose/crate.step")  # that one file of the shape, now: no .xbf, no document
 print("RESULT " + json.dumps({"id": handle.id, "url": handle.url, "same": handle.shape is crate, "tag": tag.id}))
 """
 
@@ -343,6 +346,10 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(document.Loaded(project / "crate.xbf").structure()["name"], "crate")
         self.assertTrue((project / "spare" / "pin.xbf").is_file())
         self.assertEqual(((project / "pegs" / "peg-v1.xbf").is_file(), (project / "peg.xbf").exists()), (True, False))
+        # step(shape, path) writes that file of it alone, as @step's run writes it: the crate's two parts, no .xbf.
+        self.assertEqual(sorted(path.name for path in (project / "loose").iterdir()), ["crate.step"])
+        self.assertEqual(sorted(document.Loaded(project / "loose" / "crate.step").structure()["name"]
+                                for _ in (0,)), ["crate"])
         record = Registry(self.state).get(ident)
         self.assertEqual((record["kind"], record["entry"], record["program"]), ("shape", "crate", "hand.py"))
         self.assertEqual(set(record), {"schema", "id", "kind", "root", "home", "entry", "program", "revision", "built",
@@ -366,7 +373,7 @@ class HandleTest(unittest.TestCase):
                       "its words, from its program")
         # From a REPL: its .xbf in the working folder.
         repl = self.run_python("-", cwd=project, input="import json, build123d as bd\nfrom cad import model\n"
-                               "h = model(bd.Box(2, 2, 2), name='scratch')\nmodel('kept/kept.xbf', shape=bd.Box(1, 1, 1), name='kept')\n"
+                               "h = model(bd.Box(2, 2, 2), name='scratch')\nmodel(bd.Box(1, 1, 1), 'kept/kept.xbf', name='kept')\n"
                                "print('RESULT ' + json.dumps(h.id))\n")
         self.assertEqual(repl, file_id(project / "scratch.xbf"))
         self.assertEqual(sorted(path.name for path in project.glob("*.xbf")), ["crate.xbf", "scratch.xbf", "tag.xbf"],

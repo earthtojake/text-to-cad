@@ -265,7 +265,7 @@ class DrawingEditTest(unittest.TestCase):
         self.assertEqual([Path(path).name for path in report["child_models"]["bracket.py::bracket"]["files"]],
                          ["bracket.xbf"])
         self.assertEqual(sorted(path.relative_to(self.folder).as_posix() for path in self.folder.rglob("*")
-                                if path.is_file()), ["XBF/bracket.xbf", "bracket.py", "flat.dxf", "flat.py", "flat.xbf"])
+                                if path.is_file()), ["XBF/bracket.xbf", "bracket.py", "flat.dxf", "flat.py"])
         self.assertEqual(_entities(self.folder / "flat.dxf"), Counter({("LINE", "CUT"): 4, ("CIRCLE", "CUT"): 1}))
 
 

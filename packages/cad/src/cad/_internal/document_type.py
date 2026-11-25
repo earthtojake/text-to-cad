@@ -52,11 +52,12 @@ class DocumentType(types.ModuleType):
 
         return DOCUMENT_TYPES[self.__name__.rpartition(".")[2]]
 
-    def __call__(self, out: Any = None, *, name: str | None = None, tolerance: float | None = None,
-                 angle: float | None = None) -> Any:
+    def __call__(self, target: Any = None, file: Any = None, /, *, out: Any = None, name: str | None = None,
+                 tolerance: float | None = None, angle: float | None = None) -> Any:
         """``@<type>("out.<ext>", name=...)`` (or ``@<type>(out="out.<ext>")``, the decorator's 0.10 signature):
-        declare the file a model writes, of this type; with no path (``@<type>``, ``@<type>()``), ``<name>.<ext>``
-        beside the script, the model's ``name=`` or its function's."""
+        declare the file a model writes, of this type, and nothing else; with no path (``@<type>``, ``@<type>()``),
+        ``<name>.<ext>`` beside the script, the model's ``name=`` or its function's. Given a shape first
+        (``<type>(shape, "out.<ext>")``), write that file of it now (``cad.engine.api.write_shape``)."""
         entry = self.entry
         if not entry.decorator:
             how = (f"; a file of it is changed in place with `with cad.{entry.id}.edit(path) as {entry.edit.noun}:`"
@@ -67,7 +68,8 @@ class DocumentType(types.ModuleType):
 
         # A GLB's, an STL's or a 3MF's own mesh tolerance and angle go to the engine's decorator, which alone
         # takes them.
-        return getattr(model, entry.id)(out, name=name, **({} if tolerance is None else {"tolerance": tolerance}),
+        return getattr(model, entry.id)(target, file, out=out, name=name,
+                                        **({} if tolerance is None else {"tolerance": tolerance}),
                                         **({} if angle is None else {"angle": angle}))
 
     def __getattr__(self, name: str) -> Any:
@@ -196,15 +198,15 @@ class ModelType(DocumentType):
             return param
         return super().__getattr__(name)
 
-    def __call__(self, out: Any = None, *, name: str | None = None, shape: Any = None,  # type: ignore[override]
-                 animations: Any = None) -> Any:
+    def __call__(self, target: Any = None, file: Any = None, /, *, out: Any = None,  # type: ignore[override]
+                 name: str | None = None, animations: Any = None) -> Any:
         """``@model``, ``@model(name=...)`` or ``@model("XBF/arm.xbf")``: declare a model and the ``.xbf`` each
         run saves it as, at its path relative to the script, else ``<name>.xbf`` beside it; ``model(shape,
-        name=...)`` (``model(out, shape=shape, name=...)`` with a path): hand a shape over as a named model
+        name=...)`` (``model(shape, "crate.xbf", name=...)`` with a path): hand a shape over as a named model
         (``cad.engine.model.model``)."""
         from cad.engine import model
 
-        return model.model(out, name=name, shape=shape, animations=animations)
+        return model.model(target, file, out=out, name=name, animations=animations)
 
 
 def _operation(document_type: str, name: str) -> Any:

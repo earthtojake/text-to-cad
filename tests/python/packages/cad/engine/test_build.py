@@ -105,8 +105,8 @@ class DecoratorTest(unittest.TestCase):
                 kind = "xbf" if suffix == ".xbf" else [k for k, s in SUFFIXES.items() if s == suffix][0]
 
                 def files(name: str, path: Path) -> list:
-                    # A model always writes its .xbf: a file decorator alone, its file and <name>.xbf beside the script.
-                    return [(kind, path)] if kind == "xbf" else [("xbf", here / f"{name}.xbf"), (kind, path)]
+                    # Each declaration writes its own file: a file decorator alone, that file alone.
+                    return [(kind, path)]
 
                 # Bare, with empty parentheses, and with None: each the model's name and the kind's suffix.
                 for declared in (decorator(arm), decorator()(arm), decorator(None)(arm)):
@@ -120,25 +120,19 @@ class DecoratorTest(unittest.TestCase):
         for decorator in (step, glb, stl, threemf, dxf):
             with self.subTest(kind=decorator.__name__), self.assertRaises(TypeError):
                 decorator(7)
-        # A model's own .xbf is @model's to name: a path, ending in .xbf. Anything else first is a shape handed over,
-        # which takes its document's name.
-        with self.assertRaisesRegex(TypeError, r"@model\('…\.xbf'\) takes a path"):
-            model(out="")
-        with self.assertRaisesRegex(TypeError, r"a shape handed over takes its document's name"):
-            model(out=7)
+        # A model's own .xbf is @model's to name: a path, ending in .xbf.
+        for given in ("", 7):
+            with self.assertRaisesRegex(TypeError, r"@model\('…\.xbf'\) takes a path"):
+                model(out=given)
         # Any other file: the suffix check every declaration makes.
         with self.assertRaisesRegex(ValueError, r"@model\('…\.xbf'\): the file must end in \.xbf, not 'arm\.step'"):
             model("arm.step")
-        # The path is positional, as every file decorator's is, or out=; not both.
+        # The path is positional, as every file decorator's is, or out=; given both, the positional one is the path.
         self.assertEqual([output.kind for output in model("XBF/a.xbf")(lambda: None).outputs], ["xbf"])
-        with self.assertRaisesRegex(TypeError, r"got multiple values for argument 'out'"):
-            model("a.xbf", out="b.xbf")  # Python's own refusal, as for every file decorator
-        with self.assertRaisesRegex(TypeError, r"got multiple values for argument 'out'"):
-            step("a.step", out="b.step")
+        self.assertEqual(model("a.xbf", out="b.xbf")(lambda: None).targets(), [("xbf", here / "a.xbf")])
+        self.assertEqual(step("a.step", out="b.step")(lambda: None).targets(), [("step", here / "a.step")])
         # A file with no path is <name>.<ext> joined to the script's folder, whatever the name.
-        here = Path(__file__).resolve().parent
-        self.assertEqual(step(name="arms/left")(lambda: None).targets(),
-                         [("xbf", here / "arms" / "left.xbf"), ("step", here / "arms" / "left.step")])
+        self.assertEqual(step(name="arms/left")(lambda: None).targets(), [("step", here / "arms" / "left.step")])
 
     def test_declarations_stack_each_adding_its_file_and_one_kind_twice_is_refused(self) -> None:
         from cad import model
@@ -150,8 +144,7 @@ class DecoratorTest(unittest.TestCase):
         self.assertIsInstance(plain, Model)
         here = Path(__file__).resolve().parent
         self.assertEqual(plain.targets(), [("xbf", here / "plain.xbf")])
-        # Over a file decorator, @model gives its .xbf a path; a model declared by a file decorator alone writes that
-        # file and its .xbf beside the script: a model always writes its .xbf.
+        # Over a file decorator, @model gives its .xbf a path; a file decorator alone writes that file alone.
         both = model("XBF/plain.xbf")(step("STEP/plain.step")(lambda: None))
         self.assertEqual(both.targets(), [("xbf", here / "XBF/plain.xbf"), ("step", here / "STEP/plain.step")])
 
@@ -160,7 +153,7 @@ class DecoratorTest(unittest.TestCase):
             raise AssertionError("decoration must not execute the body")
 
         self.assertIsInstance(filed, Model)
-        self.assertEqual(filed.targets(), [("xbf", here / "filed.xbf"), ("step", here / "filed.step")])
+        self.assertEqual(filed.targets(), [("step", here / "filed.step")])
         self.assertEqual([output.kind for output in filed.outputs], ["step"], "declared: the STEP alone")
         # One kind twice: nothing says which file is the model's.
         with self.assertRaisesRegex(TypeError, r"model 'plain' declares its \.xbf twice: keep one @model$"):
@@ -401,11 +394,13 @@ class BuildTest(EngineCase):
         self.write(text=DEFAULTS)
         reports = self.build()
         self.assertTrue(all(report["ok"] for report in reports.values()), reports)
-        # Bare @model its .xbf; @step alone its STEP and its .xbf, as every model writes its own; name= the
+        # Bare @model its .xbf; @step alone its STEP alone, a file decorator writing its own file; name= the
         # default's name; @model over a given path both files.
-        self.assertEqual(_files(self.folder), {"frame.py", "plate.xbf", "peg.step", "peg.xbf", "pin.xbf", "pin.stl",
+        self.assertEqual(_files(self.folder), {"frame.py", "plate.xbf", "peg.step", "pin.xbf", "pin.stl",
                                                "arm.xbf", "STEP/arm.step"})
-        self.assertEqual(document.Loaded(self.folder / "peg.xbf").structure()["name"], "peg")
+        self.assertEqual(reports["peg"]["warnings"], ["peg saves no .xbf (no @model): once the CAD server restarts, "
+                                                      "its next run builds it again from scratch; add @model to save it"])
+        self.assertTrue(all("warnings" not in reports[name] for name in reports if name != "peg"), "@model: none")
         self.assertEqual(document.Loaded(self.folder / "plate.xbf").structure()["name"], "plate")
         # A run that changes nothing keeps every file and its time.
         before = {name: (self.folder / name).stat().st_mtime_ns for name in _files(self.folder)}
@@ -519,13 +514,13 @@ class ChildFilesTest(EngineCase):
     def test_every_model_that_runs_writes_its_files_once(self) -> None:
         [report] = self.rig("rig")
         # A child of another file and one of the same file with no @model, the bracket called twice:
-        # each written once, after the target, reported under it, and only declared files and each model's .xbf.
+        # each written once, after the target, reported under it, and only the files each declares.
         children = report["child_models"]
         self.assertEqual(list(children), ["bracket.py::bracket", "rig.py::peg"])
         self.assertEqual([Path(path).name for path in children["bracket.py::bracket"]["files"]],
                          ["bracket.xbf", "bracket.stl"])
         self.assertEqual(_files(self.folder), {"bracket.py", "rig.py", "XBF/rig.xbf", "XBF/bracket.xbf", "bracket.stl",
-                                               "peg.stl", "peg.xbf"})
+                                               "peg.stl"})
         self.assertEqual(document.load(self.folder / "XBF/bracket.xbf").name, "bracket", "its own document")
         # A target the build also runs as a child writes once, as the target (the rig edited, so it runs).
         self.write(text=RIG.replace("{last}", "right.label = 'right'"))

@@ -154,7 +154,7 @@ class BuildAsksTest(Fixture):
 
         def model(name, written=False):
             found = SimpleNamespace(script=script, name=name, explicit_name=None, id=model_id(script, name),
-                                    source={"script": str(script), "name": name})
+                                    xbf=script.parent / f"{name}.xbf", source={"script": str(script), "name": name})
             if written:
                 self.addCleanup(build._WRITTEN.pop, f"{script}::{name}", None)
                 build._WRITTEN[f"{script}::{name}"] = object()

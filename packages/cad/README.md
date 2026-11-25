@@ -208,9 +208,10 @@ renumbers the list and every citation in the same change.
 6. **One document per model, with one id: its `.xbf`'s.** *Every document.* A called model makes one document
    and returns its handle, never a bare shape. Every id is one formula over a path (`ids.file_id`): a file's, and
    so a model's and a handed-over shape's, whose document is its `.xbf`; the same in every process, worked out
-   without asking the engine. Two models that write one file share its id, and the last build wins. A model always
-   writes its `.xbf`, whatever declares it; its decorators may be combined, each adding its file (`@model` its
-   `.xbf`, a file decorator any other), one kind once. A document lives until a person
+   without asking the engine. Two models that write one file share its id, and the last build wins. `@model` writes
+   the model's `.xbf`, a file decorator its own file and nothing else, alone or combined, one kind once; a function
+   with file decorators alone writes no `.xbf`, so it is no model document, and after a restart it is built from
+   nothing. A document lives until a person
    deletes it: neither its worker retiring nor memory ends it, and one that is not held names the
    command that builds it again (the engine's **Document lifetime**).
 7. **Provenance is served live, never written.** *Models.* What made an element (the feature, its
@@ -223,11 +224,12 @@ renumbers the list and every citation in the same change.
 9. **Names are the durable tie to code.** *Models.* An element's name is spelled from the function
    that made its feature and the author's name for that feature, never from a line or a file: moving
    code renames nothing, and the file holds no line to go stale.
-10. **A model always writes its `.xbf`, and a file decorator's path is optional.** *Models.* Whatever
-    declares a model (`@model`, or a file decorator alone), each run writes its `.xbf`: at `@model`'s path,
-    else beside the script; a shape handed over writes its `.xbf` at the path given, else `<name>.xbf`
-    beside its script, or in a REPL's or a notebook's working folder. A path given is relative to the script; omitted, it is the
-    model's name and the format's extension joined to the script's folder (`arm.xbf`, `arm.step`).
+10. **Each declaration writes its own file, and its path is optional.** *Models.* `@model` writes the model's `.xbf`;
+    `@step`, `@glb`, `@stl`, `@threemf` and `@dxf` each their own file, alone or beside it. Each is a function of
+    the same arguments too, given a shape first: `model(shape, "crate.xbf", name=...)` hands it over as a model,
+    `step(shape, "crate.step")` writes that file of it. A path given is relative to the script (the calling script,
+    or the working folder where there is none); omitted, it is the model's name and the format's extension joined to
+    that folder (`arm.xbf`, `arm.step`).
     Whenever its model runs in a build, or is taken from its key, each file is written once, from the
     model's own document, exactly as an export writes it, and only where it differs or is missing.
 11. **A model script is Python, and decoration only declares.** *Models.* Decorated functions declare

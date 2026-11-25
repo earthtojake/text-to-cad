@@ -221,19 +221,19 @@ class SnapshotTest(unittest.TestCase):
         self.assertNotEqual(pictures["pair"], pictures["iso"])
 
     def test_what_a_model_does_not_offer_is_refused_by_the_model_s_own_name(self) -> None:
-        # A model's refusals name the document by its own .xbf, which every model writes, a model declared by its
-        # STEP alone too; never by the stand-in made from OUT (they once said "review.xbf places 1 part").
+        # A refusal names the document by its own name: a function declared by its STEP alone, which writes no .xbf,
+        # by its name; never by the stand-in made from OUT (they once said "review.xbf places 1 part").
         from cad.engine import api
 
         folder = Path(tempfile.mkdtemp(prefix="engine-named-")).resolve()
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         script = folder / "plate.py"
-        # Declared by its STEP alone: its .xbf is plate.xbf beside the script, as bare @model's is.
+        # Declared by its STEP alone: no .xbf.
         script.write_text("import build123d as bd\nfrom cad import step\n\n\n@step\ndef plate():\n"
                           "    return bd.Box(10, 10, 2)\n", encoding="utf-8")
         with self.assertRaises(SnapshotRefused) as refused:
             api.snapshot(_model(script, "plate"), folder / "review.png", display="parts", daemon=False)
-        self.assertEqual(str(refused.exception), "display.mode parts colours each placed part apart; plate.xbf places 1 "
+        self.assertEqual(str(refused.exception), "display.mode parts colours each placed part apart; plate places 1 "
                                                  "part. Use solid.")
         self.assertFalse((folder / "review.png").exists())
 

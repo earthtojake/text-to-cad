@@ -164,6 +164,9 @@ class Models:
                 if not report.get("ok") or not ident or not source:
                     continue
                 recorded = revision(report, rows)
+                if not source.get("xbf"):
+                    self.unsaved(report)
+                    continue
                 facts, before = self.facts(ident, report, recorded)
                 mine = _given(given, header, source.get("script"))
                 self.record(report, recorded, facts, python, mine)
@@ -193,6 +196,22 @@ class Models:
                 self.daemon.builders[ident] = worker
                 server = self.register_page(ident)
                 report["url"] = self.url(server, ident)
+
+    def unsaved(self, report: dict[str, Any]) -> None:
+        """A function with file decorators alone, built: no ``.xbf``, so no model document -- no record, no row, no
+        page of its own. Its page is its first file's, served as that file (a STEP opened as a file)."""
+        from cad.engine.delta import delta
+        from cad.engine.ids import file_id
+
+        facts = report.pop("facts", None)
+        if facts is not None:
+            report["delta"] = delta(facts, None)
+        first = next((path for path in report.get("files") or {}), None)
+        if first is None:
+            return
+        server = self.daemon.serve({})
+        server.remember(first)
+        report["url"] = self.url(server, file_id(first))
 
     def reattach(self, sources: list[dict[str, Any]], pid: int | None = None) -> list[str]:
         """A worker's models with nothing to take up (``build._reattach``: each its ``source``), each
@@ -359,7 +378,7 @@ class Models:
         program = request.get("program")
         held = self.registry()
         if held is not None:
-            root = scope if os.path.isdir(scope) else str(Path(scope).parent)
+            root = str(Path(canonical(saving)).parent)  # its .xbf's folder: its paths are relative to it
             previous = held.get(ident) or {}
             found: dict[str, Any] = {
                 "id": ident, "kind": "shape", "root": root,

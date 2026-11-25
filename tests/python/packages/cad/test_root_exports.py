@@ -212,33 +212,34 @@ class RootExports(unittest.TestCase):
                              ("bpy comes with cad's blender integration: add `cad[blender]` to the script's header", "bpy"))
 
     def test_model_declares_a_function_or_hands_a_shape_over_and_a_decorator_takes_its_path(self):
-        """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``, ``@model('….xbf')``:
-        the ``.xbf`` each run saves it as) and the shape form (``model(shape, name=, animations=)``, or
-        ``model('….xbf', shape=, name=)`` with a path: saved as its ``.xbf`` there or as ``<name>.xbf``); its first
-        positional is ``out``, as every file decorator's is, so a path given twice is Python's own refusal; a file
-        decorator takes its path and its name, and an STL's or a 3MF's its mesh tolerance. No ``id=``: an id is
-        derived; no ``store=``: every document is kept alike."""
+        """``model`` writes to disk as a model, a decorator or a function of the same arguments: on a function
+        (``@model``, ``@model(name=)``, ``@model('….xbf')``: the ``.xbf`` each run saves it as), or given a shape first
+        (``model(shape, name=, animations=)``, and ``model(shape, '….xbf', name=)`` with a path). The function, the
+        shape or the path first, an optional path second, ``out=`` by keyword: a path given first is the path, else the
+        one given second, else ``out=``. A file decorator takes the same, and its name, and a mesh's tolerance. No
+        ``id=``: an id is derived; no ``store=``: every document is kept alike; no ``shape=``."""
         import inspect
 
+        positional, keyword = inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.KEYWORD_ONLY
         for declare in (cad.engine.model.model, cad.model.__call__):
             parameters = inspect.signature(declare).parameters
-            self.assertEqual([(name, p.kind) for name, p in parameters.items()], [
-                ("out", inspect.Parameter.POSITIONAL_OR_KEYWORD), ("name", inspect.Parameter.KEYWORD_ONLY),
-                ("shape", inspect.Parameter.KEYWORD_ONLY), ("animations", inspect.Parameter.KEYWORD_ONLY)])
-            with self.assertRaisesRegex(TypeError, r"got multiple values for argument 'out'"):
-                declare("a.xbf", out="b.xbf")
-            # A shape handed over takes its .xbf's path as a declaration does, checked as every one is.
-            with self.assertRaisesRegex(ValueError, r"model\(out, shape=\.\.\., name=\.\.\.\): the file must end in "
+            self.assertEqual([(name, p.kind) for name, p in parameters.items() if name != "self"], [
+                ("target", positional), ("file", positional), ("out", keyword), ("name", keyword),
+                ("animations", keyword)])
+            self.assertEqual(declare("a.xbf").__name__, "apply", "a path first: the decorator of that path")
+            # A shape handed over takes its .xbf's path second, checked as every one is.
+            with self.assertRaisesRegex(ValueError, r"model\(shape, '….xbf', name=...\): the file must end in "
                                                     r"\.xbf, not 'arm\.step'"):
-                declare("arm.step", shape=object(), name="arm")
+                declare(object(), "arm.step", name="arm")
         for kind in ("step", "glb", "stl", "threemf", "dxf"):
             with self.subTest(kind=kind):
+                tolerant = ["tolerance", "angle"] if kind in ("glb", "stl", "threemf") else []
                 self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters),
-                                 ["out", "name", *(["tolerance", "angle"] if kind in ("glb", "stl", "threemf") else [])])
+                                 ["target", "file", "out", "name", *tolerant])
                 # The type's decorator passes a GLB's, an STL's or a 3MF's mesh tolerance and angle to the engine's;
                 # any other type's engine decorator refuses them, as Python refuses an unknown keyword.
-                self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters),
-                                 ["out", "name", "tolerance", "angle"])
+                self.assertEqual([name for name in inspect.signature(getattr(cad, kind).__call__).parameters
+                                  if name != "self"], ["target", "file", "out", "name", "tolerance", "angle"])
 
     def test_a_types_decorator_takes_its_path_by_position_or_by_out_as_0_10s_did(self):
         """``@step(out="...")`` is the engine README's own spelling: the type's decorator takes ``out`` either
@@ -254,11 +255,13 @@ class RootExports(unittest.TestCase):
         built = model("XBF/arm.xbf")(step(out="arm.step", name="arm_named")(arm))
         self.assertEqual(sorted(output.kind for output in built.outputs), ["step", "xbf"])
         self.assertEqual("plate", step("plate.step")(plate).name)
-        # A model always writes its .xbf: @step alone writes plate.xbf beside its STEP.
-        self.assertEqual([path.name for _kind, path in step()(plate).targets()], ["plate.xbf", "plate.step"])
-        for call in (lambda: step("a.step", "b"), lambda: step(path="a.step")):
-            with self.subTest(call=call), self.assertRaises(TypeError):
-                call()
+        # A file decorator writes its own file alone: @step alone writes plate.step and no .xbf.
+        self.assertEqual([path.name for _kind, path in step()(plate).targets()], ["plate.step"])
+        with self.assertRaises(TypeError):
+            step(path="a.step")
+        # A file of a shape is named by its path, else name=: with neither, nothing names it.
+        with self.assertRaisesRegex(TypeError, r"step\(shape, 'path\.step'\): a file of a shape takes its path, or name="):
+            step(object())
 
     def test_a_name_the_root_never_had_is_pythons_own_error(self):
         # No backwards compatibility: a retired name is no name, and says nothing about history.
