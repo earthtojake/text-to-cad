@@ -102,8 +102,9 @@ class RealInstallNeeds(unittest.TestCase):
 
 
 class Sentinels(unittest.TestCase):
-    """Claude Desktop rewrites its config by itself (its preferences) while it runs: the watch on the machine's own
-    files compares what an install could change there, its MCP servers, and every other file by its time."""
+    """Claude Desktop rewrites its config by itself (its preferences), and Claude refreshes its marketplaces, while they
+    run: the watch on the machine's own files compares what an install could change there, the MCP servers and the
+    marketplaces, and every other file by its time."""
 
     def test_claude_desktop_config_is_watched_by_its_mcp_servers_alone(self):
         config = {"mcpServers": {"x": {"command": "x"}}, "preferences": {"sidebarMode": "chat"}}
@@ -116,6 +117,19 @@ class Sentinels(unittest.TestCase):
         # A file that is not a JSON object is compared by its bytes.
         self.assertEqual(rc.servers_of(b"{broken"), rc.servers_of(b"{broken"))
         self.assertNotEqual(rc.servers_of(b"{broken"), rc.servers_of(b"{broken!"))
+
+    def test_claude_s_marketplaces_are_watched_without_the_time_the_app_refreshed_them(self):
+        # The running app refreshes its own marketplace by itself (its lastUpdated); a marketplace added, removed or
+        # moved is what an install could do.
+        known = {"claude-plugins-official": {"source": {"source": "github", "repo": "a/b"}, "installLocation": "/m",
+                                             "lastUpdated": "2026-11-21T00:00:00.000Z"}}
+        refreshed = {"claude-plugins-official": {**known["claude-plugins-official"], "lastUpdated": "2026-11-25T22:25:38.789Z"}}
+        self.assertEqual(rc.marketplaces_of(json.dumps(known).encode()), rc.marketplaces_of(json.dumps(refreshed, indent=2).encode()))
+        for changed in ({**known, "other": {"source": {"source": "github", "repo": "c/d"}}}, {},
+                        {"claude-plugins-official": {**known["claude-plugins-official"], "installLocation": "/n"}}):
+            with self.subTest(changed=changed):
+                self.assertNotEqual(rc.marketplaces_of(json.dumps(known).encode()), rc.marketplaces_of(json.dumps(changed).encode()))
+        self.assertNotEqual(rc.marketplaces_of(b"{broken"), rc.marketplaces_of(b"{broken!"))
 
     def test_a_rewrite_of_the_preferences_moves_nothing_and_a_server_or_another_file_does(self):
         with temporary_directory(prefix="rehearsal-") as root:

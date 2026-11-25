@@ -653,12 +653,16 @@ class Sentinels:
 
     Claude Desktop's ``claude_desktop_config.json`` is watched by what an install could change there, its
     ``mcpServers`` section, parsed (``servers_of``), not by its time: the running app rewrites the file by itself
-    (its ``preferences``) every few minutes."""
+    (its ``preferences``) every few minutes. Claude's ``known_marketplaces.json`` is watched by its marketplaces, each
+    without the time the app last refreshed it (``marketplaces_of``), not by its time: the running app refreshes its
+    own marketplace there by itself."""
 
     times: dict[str, object]
 
-    # The files watched by their MCP servers alone (``servers_of``), by name.
-    BY_SERVERS = ("claude_desktop_config.json",)
+    # The files watched by what an install could change in them alone, by name: Claude Desktop's MCP servers
+    # (``servers_of``), Claude's marketplaces (``marketplaces_of``).
+    BY_CONTENT = {"claude_desktop_config.json": lambda data: servers_of(data),
+                  "known_marketplaces.json": lambda data: marketplaces_of(data)}
 
     @classmethod
     def here(cls) -> "Sentinels":
@@ -683,7 +687,7 @@ class Sentinels:
         times: dict[str, object] = {}
         for path in paths:
             try:
-                times[str(path)] = (servers_of(path.read_bytes()) if path.name in cls.BY_SERVERS
+                times[str(path)] = (cls.BY_CONTENT[path.name](path.read_bytes()) if path.name in cls.BY_CONTENT
                                     else path.stat().st_mtime)
             except OSError:
                 times[str(path)] = None
@@ -705,6 +709,21 @@ def servers_of(data: bytes) -> str:
     if not isinstance(config, dict):
         return "unparsed sha256:" + hashlib.sha256(data).hexdigest()
     return json.dumps(config.get("mcpServers", {}), sort_keys=True, separators=(",", ":"))
+
+
+def marketplaces_of(data: bytes) -> str:
+    """What an install could change in Claude's ``known_marketplaces.json`` (``data``, the file's bytes): each
+    marketplace and where it comes from, as canonical JSON, without ``lastUpdated``, which the running app sets as it
+    refreshes a marketplace by itself. A file that is not a JSON object is compared whole, by its bytes' digest."""
+    try:
+        known = json.loads(data.decode("utf-8"))
+    except ValueError:
+        known = None
+    if not isinstance(known, dict):
+        return "unparsed sha256:" + hashlib.sha256(data).hexdigest()
+    return json.dumps({name: ({key: value for key, value in entry.items() if key != "lastUpdated"}
+                              if isinstance(entry, dict) else entry) for name, entry in known.items()},
+                      sort_keys=True, separators=(",", ":"))
 
 
 # --- this tree's wheels as another release -----------------------------------------------------------------
