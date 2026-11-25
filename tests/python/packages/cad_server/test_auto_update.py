@@ -382,6 +382,28 @@ class CarriedUvTest(Case):
         with mock.patch.dict(sys.modules, {"uv": None}):
             self.assertIsNone(CARRIED_UV(), "no uv package: none")
 
+    def test_the_kernel_s_environments_are_made_with_the_same_uv_where_the_person_has_none(self) -> None:
+        """``base.find_uv``: the person's uv on PATH, else the one this release carries, never an environment's own
+        older one first."""
+        from cad_server._internal import base
+
+        stored = self.tmp / "store" / "0.2.0-cp314"
+        beside = stored / "bin" / ("uv.exe" if os.name == "nt" else "uv")
+        beside.parent.mkdir(parents=True)
+        (stored / "uv").mkdir()
+        beside.write_text("", encoding="utf-8")
+        older = self.tmp / "env" / "bin" / "uv"
+        package = types.SimpleNamespace(__file__=str(stored / "uv" / "__init__.py"), find_uv_bin=lambda: str(older))
+        carried = mock.patch.object(auto_update, "carried_uv", CARRIED_UV)  # the real one: ``Case`` stands in for it
+        with carried, mock.patch.dict(sys.modules, {"uv": package}), mock.patch.object(shutil, "which", return_value=None):
+            self.assertEqual(base.find_uv(), str(beside))
+        with carried, mock.patch.dict(sys.modules, {"uv": package}), \
+                mock.patch.object(shutil, "which", return_value="/on/path/uv"):
+            self.assertEqual(base.find_uv(), "/on/path/uv", "the person's first")
+        with carried, mock.patch.dict(sys.modules, {"uv": None}), mock.patch.object(shutil, "which", return_value=None), \
+                self.assertRaises(base.Refused):
+            base.find_uv()
+
 
 class FindUvTest(Case):
     def test_path_first_then_the_installers_folders_and_never_this_environment_s(self) -> None:

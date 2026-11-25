@@ -525,16 +525,17 @@ TOLD: contextvars.ContextVar[Callable[[str], None]] = contextvars.ContextVar("ca
 
 
 def find_uv() -> str:
-    """uv: the one on ``PATH``, else the one cadgen's ``uv`` dependency carries."""
+    """uv: the one on ``PATH``, else the one cad's ``uv`` dependency carries, of the release this process runs
+    (``auto_update.carried_uv``: beside the ``uv`` package it imports, never the older one an environment keeps once
+    cad has updated itself)."""
     found = shutil.which("uv")
     if found:
         return found
-    try:
-        from uv import find_uv_bin
+    from cad_server._internal.auto_update import carried_uv
 
-        return find_uv_bin()
-    except (ImportError, FileNotFoundError):
-        pass
+    found = carried_uv()
+    if found:
+        return found
     raise Refused("the server makes its environments with uv, and finds none: cad depends on the uv package, which "
                   "carries it, and this installation of cad lacks it", "uv")
 

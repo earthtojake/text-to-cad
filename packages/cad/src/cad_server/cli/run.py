@@ -5,7 +5,7 @@ It takes ``uv run``'s options and behaves as ``uv run`` does: a script's PEP 723
 its ``dependencies`` and ``requires-python``), ``--with`` (repeated, or a comma-separated list),
 ``--with-editable``, ``--with-requirements``, ``-m``, ``--python``, the indexes and find-links, a uv project
 around the working folder (or ``--project``, ``--no-project``), ``--directory``. An option it does not handle
-itself is handed straight to the uv cad-server ships (``uv.find_uv_bin``), which judges it, so ``cad run``
+itself is handed straight to uv (``base.find_uv``: the person's, else the one cad carries), which judges it, so ``cad run``
 never drifts from uv; an option of uv's that takes a value is read from uv's own list (``VALUED``), and any
 is taken as ``--option=value`` too.
 

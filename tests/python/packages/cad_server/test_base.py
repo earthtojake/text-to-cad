@@ -382,6 +382,19 @@ class BaseTest(unittest.TestCase):
                 self.assertEqual(found.requirement(), requirement)
 
 
+    def test_a_release_cad_s_update_keeps_installs_from_the_index_as_the_installed_one_does(self) -> None:
+        """A stored release lies outside its environment, as a checkout does, and is no source tree: the kernel's
+        environment takes that release from the index, by its number."""
+        environment = self.root / "tools" / "cad"
+        stored = self.root / "state" / "store" / "1.0.1-cp314-win_amd64" / "cad_server"
+        checkout = self.root / "checkout" / "packages" / "cad"
+        for folder in (environment, stored, checkout / "src" / "cad_server"):
+            folder.mkdir(parents=True)
+        (checkout / "pyproject.toml").write_text("", encoding="utf-8")
+        self.assertIsNone(base._source(stored, str(environment), "cad"))
+        self.assertEqual(base._source(checkout / "src" / "cad_server", str(environment), "cad"), str(checkout))
+
+
 class RunTest(unittest.TestCase):
     """``cad run``: a script whose imports use the build123d integration alone run by the base's Python, in
     the caller's folder, the program's own folder last on its path (the library's runner,
