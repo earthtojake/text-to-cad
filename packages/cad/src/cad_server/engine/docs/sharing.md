@@ -212,7 +212,7 @@ service stores them) and `kept` (whether the record was kept). `status --json` i
 
 | Value | Form |
 | --- | --- |
-| share id | 16 random bytes, 22 characters (`[A-Za-z0-9_-]{22}`): the capability, which the view link is |
+| share id | 16 random bytes, 22 characters (`[A-Za-z0-9_-]{22}`), drawn again while they begin with `-`, which a command line reads as an option: the capability, which the view link is |
 | write secret | 32 random bytes, 43 characters: upload again |
 | delete secret | 32 random bytes, 43 characters: delete |
 

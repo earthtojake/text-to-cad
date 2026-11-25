@@ -5,8 +5,8 @@ engine's **Sharing**).
 
 What is here is the client's half of the protocol, ``cad-share/2``, the standard library alone:
 
-- **names** (``Share.new``): a share's id (16 random bytes), its write secret and its delete secret (32 each), every
-  one from ``secrets``, base64url without padding. The id is the capability: the service derives from it the key it
+- **names** (``Share.new``): a share's id (16 random bytes, never text that begins with ``-``), its write secret and
+  its delete secret (32 each), every one from ``secrets``, base64url without padding. The id is the capability: the service derives from it the key it
   seals the share with, and keeps neither; of the two secrets it keeps only each one's SHA-256 (``digest``);
 - **links** (``Share.view``, ``Share.zip``, ``Share.remove``): ``<origin>/<id>``, ``<origin>/<id>.zip`` (its files),
   and ``<origin>/<id>#delete=<secret>``, whose part after ``#`` no browser sends to a server;
@@ -174,6 +174,14 @@ def _token(size: int) -> str:
     return base64.urlsafe_b64encode(secrets.token_bytes(size)).rstrip(b"=").decode("ascii")
 
 
+def _ident() -> str:
+    """A new share's id: 16 random bytes, drawn again while their text begins with ``-`` (one draw in 64), which a
+    command line reads as an option (``cad fork <id>``)."""
+    while (ident := _token(16)).startswith("-"):
+        pass
+    return ident
+
+
 def digest(secret: str) -> str:
     """A secret as the service keeps it: the lowercase hex SHA-256 of its 43-character text (its ASCII bytes), never
     of the bytes it decodes to; the service hashes an ``Authorization`` bearer's text the same way."""
@@ -191,7 +199,7 @@ class Share:
 
     @classmethod
     def new(cls, service: str) -> Share:
-        return cls(service, _token(16), _token(32), _token(32))
+        return cls(service, _ident(), _token(32), _token(32))
 
     @property
     def view(self) -> str:

@@ -67,7 +67,7 @@ the pages' and the files' too, carries `X-Robots-Tag: noindex, nofollow`; none c
 
 | Value | Made by | Form |
 | --- | --- | --- |
-| share id | the command | 16 random bytes, base64url without padding: 22 characters, `^[A-Za-z0-9_-]{22}$` |
+| share id | the command | 16 random bytes, base64url without padding: 22 characters, `^[A-Za-z0-9_-]{22}$`; the command draws again while they begin with `-`, which a command line reads as an option |
 | write secret | the command | 32 random bytes, base64url, 43 characters: upload again |
 | delete secret | the command | 32 random bytes, base64url, 43 characters: delete |
 | key | the service and the page | derived from the id: the AES-256-GCM key every stored object is sealed with |

@@ -1285,6 +1285,21 @@ class SendTest(unittest.TestCase):
         return sharing.send(share, sharing.view_files(folder), sources or sharing.Sources(), stored, name="arm",
                             **options)
 
+    def test_a_new_share_s_id_never_begins_with_a_dash_which_a_command_line_reads_as_an_option(self) -> None:
+        import base64
+
+        from cad_server import sharing
+
+        def text(data: bytes) -> str:
+            return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+        # 0xf8's top six bits are 62, base64url's "-": that id is drawn again, and the secrets are the next draws.
+        drawn = [b"\xf8" + bytes(15), bytes(16), b"\x01" * 32, b"\x02" * 32]
+        self.assertTrue(text(drawn[0]).startswith("-"))
+        with mock.patch.object(sharing.secrets, "token_bytes", side_effect=drawn):
+            share = sharing.Share.new(self.service.url)
+        self.assertEqual((share.id, share.write, share.delete), ("A" * 22, text(drawn[2]), text(drawn[3])))
+
     def test_new_files_go_as_gzip_members_in_reading_order_in_packs_closed_at_4_mib(self) -> None:
         from cad_server import sharing
 
