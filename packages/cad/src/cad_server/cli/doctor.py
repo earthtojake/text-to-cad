@@ -3,9 +3,11 @@ folder, its cache folder and how much ``cad cache prune`` would free there, whet
 (``cad_server._internal.base``) and loads -- where it is not, the environment ``cad run`` made for a program that a
 build ran in, if one was (``extras.last_with_kernel``) --, where each integration's operations run, whether the server runs and
 its release, and cad's own update (``cad_server._internal.auto_update``: the switches, whether this cad is a global
-install and by which installer, the newest release of this cad's major the version feed as last read names and,
-where it names a release of a higher major, the one line that says how to get it (``auto_update.MAJOR_LINE``), whether
-that installer is found, and the last attempt) and the plugin's
+install and by which installer, the newest release of this cad's major the version feed as last read names, and when
+it was last asked for, and, where it names a release of a higher major, the one line that says how to get it
+(``auto_update.MAJOR_LINE``), whether that installer is found, and the last attempt: its outcome and the installer's
+words, why in plain words where it did not install what it was for, and where the helper's log of it is) and the
+plugin's
 record (``cad_server._internal.plugin_catch_up``: the release of cad the plugin in the agent apps is up to date for,
 and the last run of ``cad plugin install`` the server began for a newer cad, and how it went); on Windows, uv's folder in
 an app's private copy of AppData, a copy of cad or uv's leftovers, to delete (``private_folders``). It repairs,
@@ -170,14 +172,35 @@ def _newest() -> dict:
         if known is None:
             return _check("newest", INFO, "the version feed has not been read on this computer yet")
         if numbers is None:
-            return _check("newest", INFO, f"cad {known['latest']} is the newest release the version feed names")
+            return _check("newest", INFO, f"cad {known['latest']} is the newest release the version feed names"
+                                          + _asked(updates.asked()))
         named = updates.newest_of_major(numbers[0], known)
         said = (f"cad {named} is the newest {numbers[0]}.x release the version feed names" if named else
                 f"the version feed names no {numbers[0]}.x release; its newest is cad {known['latest']}")
+        said += _asked(updates.asked())
         higher = auto.higher(known, version)
         return _check("newest", INFO, said, [auto.MAJOR_LINE.format(release=higher)] if higher else None)
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return _check("newest", WARNING, f"unknown ({type(error).__name__}: {error})")
+
+
+def _asked(at: float | None, now: float | None = None) -> str:
+    """How long ago the version feed was last asked for, in words, as the end of the newest line: `` (asked 3 hours
+    ago)``; nothing where it never was, or the clock was set back since."""
+    import time
+
+    if at is None:
+        return ""
+    seconds = (time.time() if now is None else now) - at
+    if seconds < 0:
+        return ""
+    if seconds < 60:
+        return " (asked less than a minute ago)"
+    for unit, size, below in (("minute", 60, 120 * 60), ("hour", 3600, 48 * 3600), ("day", 86400, float("inf"))):
+        if seconds < below:
+            count = int(seconds // size)
+            return f" (asked {count} {unit}{'' if count == 1 else 's'} ago)"
+    return ""
 
 
 def _installer() -> dict:
@@ -194,17 +217,42 @@ def _installer() -> dict:
 
 
 def _attempt() -> tuple[str, str]:
-    """The last update attempt: from which release to which, when, and its outcome (a failure's last line)."""
+    """The last update attempt: from which release to which, when, its outcome and the installer's words for it
+    (its ``detail``, whatever the outcome), and, where it did not install what it was for, why in plain words
+    (``auto_update.cause``, ``auto_update.in_words``); where the release the feed calls for has had its tries
+    (``auto_update.spent``), and where no update can begin (``auto_update.blocked``), that too; then where the
+    helper's log of it is (``auto_update.LOG``), where there is one. A WARNING where it failed, did not install what it
+    was for, or was lost, where the tries are spent, or where none can begin."""
     import time
 
-    last = _auto().last()
-    if last is None:
-        return INFO, "none"
-    when = time.strftime("%Y-%m-%d %H:%M", time.localtime(last["at"]))
-    failed = last.get("outcome") == "failed" and last.get("detail")
-    restored = {True: f"; {last.get('from')} put back", False: f"; {last.get('from')} not put back: cad is missing"}
-    return INFO, (f"{last.get('from')} to {last['release']} on {when}: {last.get('outcome')}"
-                  + (f" ({last['detail']})" if failed else "") + restored.get(last.get("restored"), ""))
+    from cad.engine.places import state_dir
+
+    auto = _auto()
+    last = auto.last()
+    warn, said = False, "none"
+    if last is not None:
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(last["at"]))
+        outcome, detail, word = last.get("outcome"), last.get("detail"), auto.cause(last)
+        restored = {True: f"; {last.get('from')} put back",
+                    False: f"; {last.get('from')} not put back: cad is missing"}
+        said = (f"{last.get('from')} to {last['release']} on {when}: {outcome}" + (f" ({detail})" if detail else "")
+                + (f": {auto.in_words(word, last.get('installer'))}" if word else "")
+                + restored.get(last.get("restored"), ""))
+        warn = outcome == "failed" or word is not None
+        spent = auto.spent() if outcome != "underway" or word is not None else None
+        if spent is not None:
+            said += (f"; cad {spent} has been tried {auto.TRIES} times, and is not tried again by itself: "
+                     "`cad update` tries it")
+            warn = True
+    found = auto.global_install()
+    blocked = auto.blocked(found) if found is not None else None
+    if blocked is not None:
+        said += f"; {auto.in_words(blocked, found.installer.name)}"
+        warn = True
+    log = state_dir() / auto.LOG
+    if log.is_file():
+        said += f"; its log: {log}"
+    return (WARNING if warn else INFO), said
 
 
 def _catch_up() -> tuple[str, str]:

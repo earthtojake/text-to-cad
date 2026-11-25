@@ -99,8 +99,11 @@ cad_server/
 - **`cad doctor`**: one read-only report: this cad's release, its Python and where it is installed, its
   data and cache folders and what `cad cache prune` would free, the CAD kernel environment and whether it
   loads, the integrations, whether the server runs and its release, and cad's own update (the switches,
-  whether this cad is a global install and by which installer, whether that installer is found, the last
-  attempt; on Windows, a uv folder in an app's private copy of AppData). It changes nothing. Exit 1 when the
+  whether this cad is a global install and by which installer, whether that installer is found, when the version
+  feed was last asked for, the last attempt with the installer's words for it, why in plain words where it did not
+  install what it was for, and its log, a warning where it failed, kept the release that ran or never said how it
+  ended, where the newest release has had its tries, or where no update can begin; on Windows, a uv folder in an
+  app's private copy of AppData). It changes nothing. Exit 1 when the
   kernel is installed and does not load; `--json` gives the report as one document.
 - **`cad cache dir|prune|clean`**, as `uv cache` treats uv's: `dir` prints the cache folder, `prune`
   removes what this release cannot use (environments made for other releases, and the release folders
@@ -203,7 +206,14 @@ interpreter; tried again on failure, and the previous release put back where a f
 and starts the server with whatever cad is there. uv keeps the range, so a person's own `uv tool upgrade cad`
 stays inside the major too. The helper takes the result only where it is of the same major and not older:
 newer is `installed`, the same release `current`; anything else is a failure. The record keeps the release the
-upgrade got. On
+upgrade got and, where the attempt did not install what it was for, why in one word (`cause`, a closed list,
+`auto_update_helper.CAUSES`): told from the upgrade's last try (its exit status, all it printed, the system's error)
+and from which of the installer's settings are there (uv's `UV_*` variables and `uv.toml` keys, pip's for pipx), by
+name and never by value. The helper writes each command it runs, its exit status, how long it took and the last
+64 KiB of what it printed, then the outcome and its cause, to `auto-update.log` in the state folder, the attempt
+before's kept as `auto-update.1.log`. The log stays on the computer: nothing sends it. Neither the cause nor the log
+can stop an update: where either fails, the update runs and is recorded as without it. A release that does not know
+`cause` reads the record as before. On
 Windows uv cannot remove a `cad.exe` that is running, but it can rename one, so the helper renames each
 `cad.exe` of the tool aside before uv runs and puts a copy back. For that to work, cad takes its launcher
 off `sys.path` as it starts (`__init__.py`), so it never holds the file open. One release is tried at most

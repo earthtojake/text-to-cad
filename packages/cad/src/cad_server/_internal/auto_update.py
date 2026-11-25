@@ -66,7 +66,10 @@ because cad takes its launcher off ``sys.path`` as it starts (``cad_server/__ini
 command: the server of the newer cad does, by ``plugin_catch_up``'s rule, whatever brought cad there. The attempt is
 kept in the state folder (``RECORD``: ``release``, ``wanted``, ``from``, ``at``, ``tries``, ``installer``, ``asked`` -- a
 typed update --, ``major`` -- ``cad update --major`` --, then the helper's ``ended``, ``outcome``, ``detail``,
-``restored``, ``started``), which ``cad doctor`` shows.
+``restored``, ``started`` and, where it did not install what it was for, ``cause``: one word of a closed list,
+``auto_update_helper.CAUSES``, said in plain words by ``SAID``; ``helper_start`` where the trigger could not start the
+helper), which ``cad doctor`` shows, with the helper's log of each command it ran (``LOG``, the attempt before's
+``LOG_BEFORE``; on the computer alone, never sent). A release that does not know ``cause`` reads the record as before.
 
 Left as they are, on purpose: a ``cad server start`` that arrives while the helper upgrades starts whatever cad is
 there at that moment (the helper's own start at the end then meets it as any start meets a running server: a newer one
@@ -129,6 +132,7 @@ SECTION = "auto_update"
 PLUGIN_SECTION = "plugin"
 RECORD = "auto-update.json"  # the last attempt, in the state folder
 INSTALL_LOG = "install-command.log"  # the output of the last `cad plugin install` the server ran (``plugin_catch_up``)
+LOG, LOG_BEFORE = "auto-update.log", "auto-update.1.log"  # the helper's log of the last attempt and the one before
 IDLE_SECONDS = 60.0
 TRIES = 2  # how many times one release is tried: once, and once more at a later check
 RETRY_SECONDS = 60 * 60.0  # how long after an attempt (underway, or ended) its release may be tried again
@@ -635,10 +639,36 @@ def _installing() -> bool:
     return plugin_catch_up.running()
 
 
+def blocked(found: Global) -> str | None:
+    """Why no update can begin for the global install ``found``, as a cause (``SAID``): ``no_installer``, its installer
+    not found; ``no_python``, the Python this environment was made from inside it, so no helper can run outside it.
+    None where one can."""
+    if found.program is None:
+        return "no_installer"
+    python = getattr(sys, "_base_executable", None) or sys.executable
+    inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
+    return "no_python" if os.path.normcase(os.path.realpath(python)).startswith(inside) else None
+
+
+def uv_floor() -> str | None:
+    """The oldest uv cad asks for: the release its own requirement on ``uv`` names (``uv>=X``), or None."""
+    try:
+        from importlib.metadata import requires
+
+        for line in requires("cad") or ():
+            match = re.fullmatch(r"uv\s*>=\s*(\d+\.\d+\.\d+)", line.split(";")[0].strip())
+            if match:
+                return match[1]
+    except Exception:  # noqa: BLE001 - no floor known: the helper tells no uv too old
+        pass
+    return None
+
+
 def helper_command(target: str | None, *, now: float, version: str, prefix: str | None = None, uv: str = "uv",
                    base: str | None = None, record: str = RECORD, tries: int = 1, asked: bool = False,
                    windows: bool = os.name == "nt", install: Global | None = None, start: bool = True,
-                   major: bool = False, wanted: str | None = None) -> list[str]:
+                   major: bool = False, wanted: str | None = None, log: str | None = None,
+                   floor: str | None = None) -> list[str]:
     """The helper's command line: the Python this environment was made from (``base``: ``sys._base_executable``,
     never this environment's), isolated, running the helper's source, and its one argument: the commands of
     ``install``'s installer (by default uv's, its program ``uv``, for the environment ``prefix``), whose variables
@@ -647,8 +677,9 @@ def helper_command(target: str | None, *, now: float, version: str, prefix: str 
     ``LATEST`` by default); ``asked``, a typed update; ``major``, ``cad update --major``: the installer's crossing
     command for its upgrade, and a release of a higher major accepted; else its upgrade inside this release's major
     (``bound``), and only a release of this major accepted (``auto_update_helper``); ``start``, whether it starts the
-    server after the update. The installer's name, ``wanted``, ``asked`` and ``major`` the helper keeps in the
-    attempt's record."""
+    server after the update; ``log``, the file the helper writes each command it runs to (``LOG``; none, no log);
+    ``floor``, the oldest uv cad asks for (``uv_floor``), by which the helper tells a uv too old. The installer's name,
+    ``wanted``, ``asked`` and ``major`` the helper keeps in the attempt's record."""
     prefix = str(install.prefix) if install is not None else prefix or sys.prefix
     installer, program = (install.installer, install.program or [uv]) if install is not None else (UV, [uv])
     told = {"cad": str(tool_command(Path(prefix), windows)), "target": target, "prefix": prefix, "record": record,
@@ -656,7 +687,7 @@ def helper_command(target: str | None, *, now: float, version: str, prefix: str 
             "upgrade": installer.cross(program, version) if major else installer.upgrade(program, version),
             "put_back": installer.put_back(program, version), "launchers": installer.launchers(program),
             "installer": installer.name, "wanted": wanted or target or LATEST, "asked": asked, "major": major,
-            "start": start}
+            "start": start, **({"log": log} if log else {}), **({"uv_floor": floor} if floor else {})}
     python = base or getattr(sys, "_base_executable", None) or sys.executable
     return [python, "-I", "-S", "-c", HELPER.read_text(encoding="utf-8"), json.dumps(told)]
 
@@ -709,16 +740,12 @@ def _start(target: str | None, *, automatic: bool, start: bool, major: bool,
     from cad.engine.places import detached
 
     found = global_install()
-    if found is None or found.program is None:
-        return "", {}
+    if found is None or blocked(found) is not None:
+        return "", {}  # its installer not found, or no Python outside this environment to run the helper with
     version = _version()
     bound(version)  # a release cad can bound an upgrade by, or none begins (``ValueError``)
     named = target or LATEST
     found = Global(found.installer, found.prefix, outside_copy(found.program, str(found.prefix)))
-    python = getattr(sys, "_base_executable", None) or sys.executable
-    inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
-    if os.path.normcase(os.path.realpath(python)).startswith(inside):
-        return "", {}  # no Python outside this environment to run it with
     if _installing():
         return "", {}  # asked again as the update begins: a run may have begun since the check
     said, kept = _claim(release=named, wanted=wanted or named, version=version, installer=found.installer.name,
@@ -728,14 +755,15 @@ def _start(target: str | None, *, automatic: bool, start: bool, major: bool,
     record = _data() / RECORD
     try:
         command = helper_command(target, now=kept["at"], version=version, record=str(record), tries=kept["tries"],
-                                 asked=not automatic, install=found, start=start, major=major, wanted=kept["wanted"])
+                                 asked=not automatic, install=found, start=start, major=major, wanted=kept["wanted"],
+                                 log=str(record.with_name(LOG)), floor=uv_floor())
         env = {**{name: value for name, value in os.environ.items() if name not in _UNSET},
                **found.installer.environ(found.prefix)}
         subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          env=env, cwd=str(record.parent), **detached())
     except Exception as error:
         # Kept as underway, an attempt whose helper never started would hold every update for the hour: it failed.
-        _keep(record, {**kept, "outcome": "failed", "ended": time.time(),
+        _keep(record, {**kept, "outcome": "failed", "ended": time.time(), "cause": "helper_start",
                        "detail": f"the update's helper could not start: {type(error).__name__}: {error}"})
         raise
     return BEGUN, kept
@@ -855,6 +883,67 @@ def underway(now: float | None = None) -> dict[str, Any] | None:
     if found is None or found.get("outcome") != "underway":
         return None
     return found if 0 <= (time.time() if now is None else now) - float(found["at"]) < RETRY_SECONDS else None
+
+
+# Each cause an attempt's record keeps (``auto_update_helper.CAUSES``), or a reader tells (``lost``, ``blocked``), in
+# plain words: what ``cad doctor`` says. ``{installer}`` is the attempt's installer.
+SAID = {
+    "timeout": "{installer} did not end within 15 minutes",
+    "no_program": "{installer} could not be run",
+    "in_use": "a file of cad's was in use by another program",
+    "denied": "{installer} was refused access to a file",
+    "disk_full": "the disk is full",
+    "network": "{installer} could not reach the package index",
+    "offline": "{installer} is set to work offline",
+    "no_release": "the package index has no release the update may take",
+    "python": "the release asks for a newer Python than cad's environment has",
+    "platform": "the release has no build for this computer",
+    "config_exclude": "a setting of {installer}'s hides newer releases (exclude-newer)",
+    "config_index": "a package index named in {installer}'s settings did not give the release",
+    "config_tls": "a TLS setting of {installer}'s failed the connection to the package index",
+    "uv_old": "uv is older than cad asks for: `uv self update` updates it",
+    "kept": "{installer} kept the release that ran, though a newer one is out",
+    "server_running": "the cad server could not be stopped, and a file it holds could not be replaced",
+    "helper_start": "the update's helper could not start",
+    "helper_crash": "the update's helper stopped with an error",
+    "lost": "the update's helper ended without saying how",
+    "no_installer": "{installer} cannot be found, so no update can begin",
+    "no_python": "no Python outside cad's environment can run the update, so none can begin",
+    "packaged": "cad runs inside an app's private copy of AppData",
+    "unknown": "{installer}'s output names no cause cad knows",
+}
+
+
+def cause(found: dict[str, Any], now: float | None = None) -> str | None:
+    """Why the attempt ``found`` (a record) did not install what it was for: its ``cause``, where it is one of
+    ``SAID``; for a record a release before ``cause`` kept, ``kept`` where it is ``current`` and its detail says what
+    it installed in place of the release it was for; ``lost`` where it is still underway past ``RETRY_SECONDS`` with
+    none (its helper died without a word); else None (it installed, or it is underway)."""
+    kept, at, detail = found.get("cause"), found.get("at"), found.get("detail")
+    if kept in SAID:
+        return kept
+    if "cause" not in found and found.get("outcome") == "current" and isinstance(detail, str) \
+            and detail.startswith("it installed "):
+        return "kept"  # a release before ``cause``: the helper's words for the release that ran, kept
+    now = time.time() if now is None else now
+    if found.get("outcome") == "underway" and isinstance(at, (int, float)) and not 0 <= now - at < RETRY_SECONDS:
+        return "lost"
+    return None
+
+
+def in_words(word: str, installer: Any = None) -> str:
+    """A cause in plain words (``SAID``), naming the attempt's installer where the record names one."""
+    known = installer in {each.name for each in INSTALLERS}
+    return SAID[word].format(installer=installer if known else "the installer")
+
+
+def spent(known: Any = None, version: str | None = None) -> str | None:
+    """The release the version feed as last read (``known``) calls for from release ``version`` (this one's), where it
+    has been tried ``TRIES`` times and so is not tried again by itself (``cad update`` still tries it); else None."""
+    from cad_server import updates
+
+    chosen = choose(updates.feed(fetch=False) if known is None else known, version or _version())
+    return chosen.wanted if chosen is not None and _tries(chosen.wanted) >= TRIES else None
 
 
 def begin(target: str | None, *, start: bool = True, major: bool = False) -> dict[str, Any] | None:

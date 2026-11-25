@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -20,7 +21,7 @@ import tempfile
 import time
 import types
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -803,6 +804,30 @@ class RecordTest(Case):
                 self.assertEqual((said, kept["tries"], auto_update.last()["tries"]), (auto_update.BEGUN, 1, 1))
 
 
+class CauseOfARecordTest(Case):
+    def test_a_record_s_cause_is_its_own_and_an_older_record_s_is_read_as_it_was_kept(self) -> None:
+        """``cause`` is read where the record keeps one of the words; a record a release before it kept (no
+        ``cause``) reads as it did -- its outcome and detail, and ``kept`` where the detail says the release that ran
+        stayed --; an attempt still underway past its hour is ``lost``. Older releases read ``outcome`` as ever."""
+        base = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 1000.0, "tries": 1, "ended": 1010.0}
+        for record, cause in (({**base, "outcome": "failed", "detail": "uv said no", "cause": "network"}, "network"),
+                              ({**base, "outcome": "failed", "detail": "uv said no"}, None),
+                              ({**base, "outcome": "failed", "cause": "a word of a later release"}, None),
+                              ({**base, "outcome": "current", "detail": "it installed 0.1.0, not 0.2.0"}, "kept"),
+                              ({**base, "outcome": "current", "detail": "cad 0.2.0 is installed"}, None),
+                              ({**base, "outcome": "installed"}, None),
+                              ({**base, "outcome": "underway"}, None),
+                              ({**base, "outcome": "underway", "at": 1000.0 - auto_update.RETRY_SECONDS}, "lost"),
+                              ({**base, "outcome": "underway", "cause": "helper_crash"}, "helper_crash")):
+            with self.subTest(record=record):
+                auto_update._keep(self.state / auto_update.RECORD, record)
+                found = auto_update.last()
+                self.assertEqual(found, record, "read whole, a field it does not know included")
+                self.assertEqual(auto_update.cause(found, now=1020.0), cause)
+                self.assertEqual(auto_update.event(found) is None, record["outcome"] == "underway",
+                                 "counted as before: the cause is not sent")
+
+
 class SecondProcessTest(Case):
     """Starting an update is one step across processes: two processes that each start one at the same moment (two
     servers starting at once, each asking ``at_start``) begin one between them, the other none (automatic) or joining
@@ -909,7 +934,11 @@ class HelperCommandTest(Case):
 
     def test_the_trigger_starts_it_detached_with_nothing_of_this_environment_and_keeps_the_attempt(self) -> None:
         line, options = self.triggered()
-        self.assertEqual(os.path.normcase(json.loads(line[5])["upgrade"][0]), os.path.normcase(self.uv))
+        told = json.loads(line[5])
+        self.assertEqual(os.path.normcase(told["upgrade"][0]), os.path.normcase(self.uv))
+        self.assertEqual((told["log"], told["uv_floor"]), (str(self.state / auto_update.LOG), auto_update.uv_floor()),
+                         "the log beside the record, and the oldest uv cad asks for")
+        self.assertRegex(told["uv_floor"], r"^\d+\.\d+\.\d+$")
         self.assertNotIn("PYTHONPATH", options["env"])
         self.assertNotIn("VIRTUAL_ENV", options["env"])
         self.assertEqual(options["env"]["KEEP"], "1")
@@ -925,8 +954,8 @@ class HelperCommandTest(Case):
         with mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True), \
                 mock.patch.object(auto_update.subprocess, "Popen", side_effect=OSError("no such file")):
             self.assertFalse(auto_update.trigger("0.2.1"))
-        self.assertEqual((auto_update.last()["outcome"], auto_update.last()["detail"]),
-                         ("failed", "the update's helper could not start: OSError: no such file"),
+        self.assertEqual((auto_update.last()["outcome"], auto_update.last()["detail"], auto_update.last()["cause"]),
+                         ("failed", "the update's helper could not start: OSError: no such file", "helper_start"),
                          "a helper that never started holds nothing underway")
         self.assertIsNone(auto_update.underway())
 
@@ -969,16 +998,20 @@ class HelperTest(unittest.TestCase):
                      "launchers": ["uv", "tool", "dir", "--bin"], "installer": "uv", "asked": True}
 
     def fake(self, installs: list[int], removes: bool = False, bin_folder: tuple[int, str] = (1, "no tools"),
-             newest: str = "0.2.0"):
+             newest: str = "0.2.0", said: str = "uv said", stop: int = 0, uv_version: str = "uv 0.13.8"):
         """A stand-in for uv and cad: each install exits as ``installs`` says, putting its release in place when it
         succeeds (the upgrade's: ``newest``; a release put back: its own) and, with ``removes``, removing the whole tool
-        when it fails (as uv does once it has begun); ``uv tool dir --bin`` answers ``bin_folder``."""
+        when it fails (as uv does once it has begun), printing ``said``; ``uv tool dir --bin`` answers ``bin_folder``;
+        ``cad server stop`` exits ``stop``; ``uv --version`` says ``uv_version``."""
         ran: list[list[str]] = []
 
         def run(line, timeout):
             if line[1:3] == ["tool", "dir"]:
                 ran.append(["dir"])
                 return bin_folder
+            if line[1:] == ["--version"] and line[0] != self.told["cad"]:
+                ran.append(["uv", "--version"])
+                return 0, uv_version
             ran.append(line[1:3] if line[0] == self.told["cad"] else ["install", line[-1]])
             present = list(self.site.glob("cad-*.dist-info"))
             if line[0] == "uv":
@@ -991,7 +1024,9 @@ class HelperTest(unittest.TestCase):
                 elif not removes:
                     for found in present:
                         found.mkdir()
-                return code, "uv said"
+                return code, said
+            if line[1:3] == ["server", "stop"]:
+                return stop, "the cad server is not running"
             return (0, "done") if present else (127, "cad: not found")
         return ran, run
 
@@ -1107,6 +1142,108 @@ class HelperTest(unittest.TestCase):
         found = helper.update(self.told, run=run, sleep=lambda _s: None, windows=False)
         self.assertEqual((ran[0], ran[-1], found["outcome"], found["detail"], found["release"]),
                          (["server", "stop"], ["server", "start"], "failed", "uv said", "0.2.0"))
+
+    def clean(self, **names: str) -> dict[str, str]:
+        """An environment for the helper's look at the installer's settings with none of this computer's in it."""
+        return {"HOME": str(self.tmp), "USERPROFILE": str(self.tmp), "XDG_CONFIG_DIRS": str(self.tmp / "none"),
+                "APPDATA": str(self.tmp / "none"), **names}
+
+    def test_the_record_says_why_an_attempt_did_not_install_what_it_was_for(self) -> None:
+        """One word (``cause``) where it failed or kept the release that ran, from the upgrade's last try; none where it
+        installed, whatever release, or the environment already held the release asked for."""
+        in_use = ("error: Failed to install entrypoint\n  Caused by: failed to remove file `C:\\Users\\me\\.local\\"
+                  "bin\\cad.exe`: The process cannot access the file because it is being used by another process. "
+                  "(os error 32)\n")
+        denied = "error: failed to remove directory `C:\\tools\\cad`: Access is denied. (os error 5)\n"
+        tries = len(helper.WAITS)
+        for name, installs, options, told, outcome, cause in (
+                ("in use", [1] * tries, {"said": in_use}, {}, "failed", "in_use"),
+                ("kept", [0] * tries, {"newest": "0.1.0"}, {}, "current", "kept"),
+                ("kept, newer hidden", [0] * tries, {"newest": "0.1.0"}, {"UV_EXCLUDE_NEWER": "x"}, "current",
+                 "config_exclude"),
+                ("installed", [0], {}, {}, "installed", None),
+                ("installed, less than asked", [0] * tries, {"newest": "0.1.5"}, {}, "installed", None),
+                ("another major", [0] * tries, {"newest": "1.0.0"}, {}, "failed", "unknown"),
+                ("a server that would not stop", [1] * tries, {"said": denied, "stop": 1}, {}, "failed",
+                 "server_running"),
+                ("a server that would not stop, the network down", [1] * tries,
+                 {"said": "error: Failed to fetch: `https://pypi.org/simple/cad/`", "stop": 1}, {}, "failed",
+                 "network")):
+            with self.subTest(name):
+                for found in self.site.glob("cad-*.dist-info"):
+                    found.rename(self.site / "cad-0.1.0.dist-info")
+                ran, run = self.fake(installs, **options)
+                found = helper.update(self.told, run=run, sleep=lambda _s: None, windows=False,
+                                      environ=self.clean(**told))
+                self.assertEqual((found["outcome"], found.get("cause")), (outcome, cause))
+                if name == "in use":
+                    self.assertEqual(found["detail"], helper.last_line(in_use), "the detail stays the last line")
+        (self.site / "cad-0.1.0.dist-info").rename(self.site / "cad-0.3.0.dist-info")
+        _ran, run = self.fake([])
+        self.assertNotIn("cause", helper.update(self.told, run=run, windows=False, environ=self.clean()),
+                         "the environment already held it: nothing was asked of the installer")
+
+    def test_a_uv_older_than_cad_asks_for_is_said_where_its_words_name_nothing_known(self) -> None:
+        tries = len(helper.WAITS)
+        for version, cause in (("uv 0.9.2 (a1b2c3d 2025-10-01)", "uv_old"), ("uv 0.13.8", "unknown")):
+            with self.subTest(version=version):
+                ran, run = self.fake([1] * tries, said="error: Failed to read the receipt", uv_version=version)
+                found = helper.update({**self.told, "uv_floor": "0.13.8"}, run=run, sleep=lambda _s: None,
+                                      windows=False, environ=self.clean())
+                self.assertEqual((found["cause"], ran.count(["uv", "--version"])), (cause, 1))
+        ran, run = self.fake([1] * tries, said="error: Failed to read the receipt", uv_version="uv 0.9.2")
+        self.assertEqual(helper.update(self.told, run=run, sleep=lambda _s: None, windows=False,
+                                       environ=self.clean())["cause"], "unknown", "no floor told: uv not asked")
+        self.assertNotIn(["uv", "--version"], ran)
+
+    def test_each_command_is_logged_with_its_status_time_and_output_s_end_and_the_run_before_kept(self) -> None:
+        log = self.tmp / "auto-update.log"
+        told = {**self.told, "log": str(log)}
+        long = "x" * (helper.LOG_BYTES + 100) + "\nerror: the last words of a long output"
+        _ran, run = self.fake([1, 0], said=long)
+        helper.update(told, run=run, sleep=lambda _s: None, windows=False, environ=self.clean())
+        first = log.read_text(encoding="utf-8")
+        lines = first.splitlines()
+        self.assertRegex(lines[0], r"^cad's update, begun \S+ \S+ \S+: from 0\.1\.0 to 0\.2\.0, by uv, typed, try 1$")
+        self.assertEqual([line for line in lines if line.startswith("$ ")],
+                         ["$ cad server stop", f"$ uv tool install --upgrade {BOUNDED}",
+                          f"$ uv tool install --upgrade {BOUNDED}", "$ cad server start"])
+        self.assertRegex(first, r"\n  exit 1 after \d+\.\d s \(its first \d+ bytes left out\)\n  \| x+\n"
+                                r"  \| error: the last words of a long output\n")
+        self.assertLessEqual(len(max(lines, key=len)), helper.LOG_BYTES + 4, "the end of the output alone")
+        self.assertRegex(lines[-1], r"^ended .+: installed; error: the last words of a long output$")
+        (self.site / "cad-0.2.0.dist-info").rename(self.site / "cad-0.1.0.dist-info")
+        _ran, run = self.fake([1] * len(helper.WAITS), said="error: no space left on device (os error 28)")
+        helper.update({**told, "tries": 2}, run=run, sleep=lambda _s: None, windows=False, environ=self.clean())
+        self.assertEqual((self.tmp / "auto-update.1.log").read_text(encoding="utf-8"), first, "the run before, kept")
+        second = log.read_text(encoding="utf-8")
+        self.assertRegex(second.splitlines()[0], r", try 2$")
+        self.assertRegex(second.splitlines()[-1], r"^ended .+: failed, the cause: disk_full; error: no space left on "
+                                                  r"device \(os error 28\)$")
+        _ran, run = self.fake([0])
+        helper.update(told, run=run, sleep=lambda _s: None, windows=False, environ=self.clean())
+        self.assertEqual((self.tmp / "auto-update.1.log").read_text(encoding="utf-8"), second, "one run before alone")
+        self.assertEqual(sorted(path.name for path in self.tmp.glob("auto-update*")),
+                         ["auto-update.1.log", "auto-update.log"])
+
+    def test_an_update_whose_log_or_cause_fails_runs_and_is_recorded_as_without_them(self) -> None:
+        log = {"log": str(self.tmp / "auto-update.log")}
+        for told, patch in ((log, mock.patch.object(helper, "open", side_effect=OSError(28, "no space"), create=True)),
+                            ({"log": str(self.tmp / "no such folder" / "auto-update.log")}, None),
+                            ({}, mock.patch.object(helper, "cause_of", side_effect=RuntimeError("no words"))),
+                            ({}, mock.patch.object(helper, "settings", side_effect=OSError("unreadable")))):
+            with self.subTest(told=told, patch=patch):
+                for found in self.site.glob("cad-*.dist-info"):
+                    found.rename(self.site / "cad-0.1.0.dist-info")
+                logging = "log" in told
+                ran, run = self.fake([1, 0] if logging else [1] * len(helper.WAITS))
+                with patch or nullcontext():
+                    found = helper.update({**self.told, **told}, run=run, sleep=lambda _s: None, windows=False,
+                                          environ=self.clean())
+                self.assertEqual((found["outcome"], ran[0], ran[-1]),
+                                 ("installed" if logging else "failed", ["server", "stop"], ["server", "start"]))
+                self.assertNotIn("cause", found)
+                self.assertFalse((self.tmp / "auto-update.log").exists())
 
     def test_an_install_that_failed_and_took_the_tool_with_it_puts_back_the_release_that_ran_then_starts(self) -> None:
         ran, run = self.fake([1] * len(helper.WAITS) + [0], removes=True)
@@ -1288,7 +1425,8 @@ class HelperTest(unittest.TestCase):
         self.stand_ins(log, f"mv {self.site}/cad-0.1.0.dist-info {self.site}/cad-0.2.0.dist-info")
         record = self.tmp / "auto-update.json"
         line = auto_update.helper_command("0.2.0", now=1.0, version="0.1.0", prefix=str(self.tmp),
-                                          uv=str(self.tmp / "uv"), record=str(record), windows=False)
+                                          uv=str(self.tmp / "uv"), record=str(record), windows=False,
+                                          log=str(self.tmp / auto_update.LOG))
         env = {**os.environ, "PYTHONPATH": "/nowhere-at-all"}
         subprocess.run(line, check=True, env=env, cwd=self.tmp, timeout=60)
         self.assertEqual(log.read_text(encoding="utf-8").splitlines(),
@@ -1296,6 +1434,35 @@ class HelperTest(unittest.TestCase):
         kept = json.loads(record.read_text(encoding="utf-8"))
         self.assertEqual((kept["outcome"], kept["release"], kept["installer"], kept["asked"]),
                          ("installed", "0.2.0", "uv", False))
+        self.assertNotIn("cause", kept, "it installed what it was for")
+        said = (self.tmp / auto_update.LOG).read_text(encoding="utf-8")
+        self.assertEqual([each.split()[2:] for each in said.splitlines() if each.startswith("$ ")],
+                         [["server", "stop"], ["tool", "install", "--upgrade", "cad>=0.1.0,<1"], ["server", "start"]])
+        self.assertRegex(said, r"\n  exit 0 after \d+\.\d s\n")
+        self.assertRegex(said.splitlines()[-1], r"^ended .+: installed$")
+
+    @unittest.skipIf(os.name == "nt", "the stand-in uv and cad are shell scripts")
+    def test_a_helper_that_raises_keeps_the_attempt_underway_marked_as_its_crash_and_logs_why(self) -> None:
+        """The helper's own error (here a command it was never told): the attempt stays as the trigger kept it,
+        underway -- it holds and ends as an attempt whose helper died always has --, marked ``helper_crash`` with the
+        error, and the traceback in the log."""
+        self.stand_ins(self.tmp / "log", "true")
+        record = self.tmp / "auto-update.json"
+        kept = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 1.0, "tries": 1, "outcome": "underway"}
+        record.write_text(json.dumps(kept), encoding="utf-8")
+        line = auto_update.helper_command("0.2.0", now=1.0, version="0.1.0", prefix=str(self.tmp),
+                                          uv=str(self.tmp / "uv"), record=str(record), windows=False,
+                                          log=str(self.tmp / auto_update.LOG))
+        told = json.loads(line[5])
+        del told["upgrade"]
+        subprocess.run([*line[:5], json.dumps(told)], check=True, cwd=self.tmp, timeout=60)
+        self.assertEqual(json.loads(record.read_text(encoding="utf-8")),
+                         {**kept, "cause": "helper_crash", "detail": "KeyError: 'upgrade'"})
+        self.assertIn("the helper stopped with an error:\nTraceback",
+                      (self.tmp / auto_update.LOG).read_text(encoding="utf-8"))
+        record.write_text(json.dumps({**kept, "at": 2.0}), encoding="utf-8")  # another attempt's record: left alone
+        subprocess.run([*line[:5], json.dumps(told)], check=True, cwd=self.tmp, timeout=60)
+        self.assertEqual(json.loads(record.read_text(encoding="utf-8")), {**kept, "at": 2.0})
 
     @unittest.skipIf(os.name == "nt", "the stand-in uv and cad are shell scripts")
     def test_a_helper_run_outside_codex_s_sandbox_with_its_variables_still_set_ends_with_a_running_server(self):
@@ -1329,6 +1496,147 @@ class HelperTest(unittest.TestCase):
         self.assertEqual((kept["outcome"], kept["started"]), ("installed", f"started the cad server (cad {version()})"))
         with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)}):
             self.assertEqual(client.request({"op": "pid"}, start=False)["ok"], True, "a server answers")
+
+
+class CauseTest(unittest.TestCase):
+    """Why an attempt did not install what it was for, one word (``auto_update_helper.CAUSES``), told from the
+    installer's own words: uv's and pip's real output (pipx prints pip's), as each printed it; on Windows uv's and
+    pip's wrapping of the system's own message for the error."""
+
+    # (the cause, the installer's exit status, all it printed)
+    SAID = (
+        ("no_release", 1, "  × No solution found when resolving dependencies:\n"
+                          "  ╰─▶ Because only cad==0.1.0 is available and you require cad>=0.5.0,<1, we\n"
+                          "      can conclude that your requirements are unsatisfiable.\n"),
+        ("no_release", 1, "  × No solution found when resolving dependencies:\n"
+                          "  ╰─▶ Because cad was not found in the package registry and you require\n"
+                          "      cad>=0.5.0,<1, we can conclude that your requirements are unsatisfiable.\n"),
+        ("no_release", 1, "ERROR: Could not find a version that satisfies the requirement cad<1,>=0.5.0 (from "
+                          "versions: 0.1.0)\nERROR: No matching distribution found for cad<1,>=0.5.0\n"),
+        ("python", 1, "  × No solution found when resolving dependencies:\n"
+                      "  ╰─▶ Because only cad==0.2.0 is available and cad==0.2.0 requires Python\n"
+                      "      >=3.99, we can conclude that cad==0.2.0 cannot be used.\n"
+                      "      And because you require cad==0.2.0, we can conclude that your\n"
+                      "      requirements are unsatisfiable.\n"),
+        ("python", 1, "upgrading cad...\nERROR: Package 'cad' requires a different Python: 3.13.18 not in '>=3.99'\n"
+                      "'/home/me/.local/pipx/venvs/cad/bin/python -m pip --no-input install --upgrade cad>=0.2.0,<1\n"
+                      "cad -q' failed\n"),
+        ("platform", 1, "  × No solution found when resolving dependencies:\n"
+                        "  ╰─▶ Because only cad==0.3.0 is available and cad==0.3.0 has no wheels with a\n"
+                        "      matching Python implementation tag (e.g., `cp313`), we can conclude that\n"
+                        "      cad==0.3.0 cannot be used.\n"
+                        "      And because you require cad==0.3.0, we can conclude that your\n"
+                        "      requirements are unsatisfiable.\n\n"
+                        "hint: You require CPython 3.13 (`cp313`), but we only found wheels for `cad` (v0.3.0) with "
+                        "the following Python implementation tag: `cp399`"),
+        ("offline", 1, "  × No solution found when resolving dependencies:\n"
+                       "  ╰─▶ Because cad was not found in the cache and you require cad>=0.5.0,<1, we\n"
+                       "      can conclude that your requirements are unsatisfiable.\n\n"
+                       "hint: Packages were unavailable because the network was disabled. When the network is "
+                       "disabled, registry packages may only be read from the cache."),
+        ("network", 2, "error: Failed to fetch: `https://pypi.org/simple/cad/`\n"
+                       "  Caused by: error sending request for url (https://pypi.org/simple/cad/)\n"
+                       "  Caused by: client error (Connect)\n  Caused by: tcp connect error\n"
+                       "  Caused by: Connection refused (os error 111)\n"),
+        ("network", 2, "error: Failed to fetch: `https://pypi.org/simple/cad/`\n"
+                       "  Caused by: error sending request for url (https://pypi.org/simple/cad/)\n"
+                       "  Caused by: client error (Connect)\n  Caused by: tunnel error: unsuccessful\n"),
+        ("network", 2, "error: Failed to fetch: `https://pypi.org/simple/cad/`\n"
+                       "  Caused by: error sending request for url (https://pypi.org/simple/cad/)\n"
+                       "  Caused by: client error (Connect)\n"
+                       "  Caused by: invalid peer certificate: Other(OtherError(CaUsedAsEndEntity))\n"),
+        ("network", 1, "WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after "
+                       "connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPConnection "
+                       "object at 0x7fd5495a5160>: Failed to establish a new connection: [Errno 111] Connection "
+                       "refused')': /simple/cad/\nERROR: Could not find a version that satisfies the requirement "
+                       "cad<1,>=0.5.0 (from versions: none)\n"
+                       "ERROR: No matching distribution found for cad<1,>=0.5.0\n"),
+        ("disk_full", 2, "Resolved 1 package in 2ms\nerror: failed to write to file "
+                         "`/home/me/.local/share/uv/tools/cad/bin/activate_this.py`: No space left on device (os "
+                         "error 28)\n"),
+        ("disk_full", 2, "error: failed to write to file `C:\\Users\\me\\AppData\\Roaming\\uv\\tools\\cad\\Lib\\"
+                         "site-packages\\cad-0.2.0.dist-info\\RECORD`: There is not enough space on the disk. (os "
+                         "error 112)\n"),
+        ("disk_full", 1, "ERROR: Could not install packages due to an OSError: [Errno 28] No space left on device\n"),
+        ("in_use", 2, "Installed 1 package in 3.20s\nerror: Failed to install entrypoint\n"
+                      "  Caused by: failed to remove file `C:\\Users\\me\\.local\\bin\\cad.exe`: The process cannot "
+                      "access the file because it is being used by another process. (os error 32)\n"),
+        ("in_use", 1, "ERROR: Could not install packages due to an OSError: [WinError 32] The process cannot access "
+                      "the file because it is being used by another process: 'C:\\\\Users\\\\me\\\\pipx\\\\venvs\\\\cad"
+                      "\\\\Scripts\\\\cad.exe'\n"),
+        ("denied", 2, "error: failed to remove directory `C:\\Users\\me\\AppData\\Roaming\\uv\\tools\\cad\\Lib\\"
+                      "site-packages\\cad_server`: Access is denied. (os error 5)\n"),
+        ("denied", 1, "ERROR: Could not install packages due to an OSError: [WinError 5] Access is denied: "
+                      "'C:\\\\Users\\\\me\\\\pipx\\\\venvs\\\\cad\\\\Lib\\\\site-packages\\\\cad_server'\n"),
+        ("denied", 2, "error: failed to create directory `/opt/uv/tools/cad`: Permission denied (os error 13)\n"),
+        ("uv_old", 2, "error: unexpected argument '--managed-python' found\n\nUsage: uv tool install [OPTIONS] "
+                      "<PACKAGE>\n\nFor more information, try '--help'.\n"),
+        ("unknown", 1, "error: something nobody has seen before\n"),
+        ("unknown", 1, ""),
+    )
+
+    def test_each_cause_the_installer_s_words_tell(self) -> None:
+        for cause, code, said in self.SAID:
+            with self.subTest(cause=cause, said=said[:60]):
+                self.assertEqual(helper.classify(code, said), cause)
+        told = {word for word, _code, _said in self.SAID}
+        self.assertLessEqual(told, set(helper.CAUSES))
+        self.assertIsNone(helper.classify(0, "Resolved 1 package in 1ms\nChecked 1 package in 0.06ms\n"))
+
+    def test_a_command_that_never_ended_or_never_started_is_said_from_the_system_s_error(self) -> None:
+        """Through the helper's own ``run``: a program that is not there, one that outlives its time."""
+        self.assertEqual(helper.classify(*helper.run([str(Path(tempfile.gettempdir()) / "no-such-uv")], 5)),
+                         "no_program")
+        self.assertEqual(helper.classify(*helper.run([sys.executable, "-c", "import time; time.sleep(30)"], 0.5)),
+                         "timeout")
+
+    def test_every_cause_is_said_in_plain_words(self) -> None:
+        self.assertEqual(set(auto_update.SAID), set(helper.CAUSES))
+        self.assertEqual(len(helper.CAUSES), len(set(helper.CAUSES)))
+        self.assertEqual(auto_update.in_words("kept", "pipx"), "pipx kept the release that ran, though a newer one "
+                                                               "is out")
+        self.assertEqual(auto_update.in_words("network", None), "the installer could not reach the package index")
+
+    def test_the_installer_s_settings_are_found_by_name_and_never_read_for_their_value(self) -> None:
+        home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        (home / ".config" / "uv").mkdir(parents=True)
+        toml = home / ".config" / "uv" / "uv.toml"
+        toml.write_text('exclude-newer = "2026-01-01T00:00:00Z"\n[[index]]\nurl = "https://mirror.example/simple"\n'
+                        '[pip]\nindex-url = "https://other.example/simple"\n', encoding="utf-8")
+        for patch in (mock.patch.object(helper, "UV_SYSTEM", ()), mock.patch.object(helper, "PIP_SYSTEM", ())):
+            patch.start()  # none of this computer's own files
+            self.addCleanup(patch.stop)
+        environ = {"HOME": str(home), "XDG_CONFIG_DIRS": str(home / "none"), "UV_NATIVE_TLS": "1", "PATH": "/x"}
+        found = helper.settings("uv", environ, windows=False)
+        self.assertEqual(found, {"config_exclude": [f"exclude-newer ({toml})"], "config_index": [f"index ({toml})"],
+                                 "config_tls": ["UV_NATIVE_TLS"]})
+        self.assertNotIn("mirror.example", json.dumps(found), "names, never values")
+        self.assertEqual(helper.settings("uv", {**environ, "UV_NO_CONFIG": "1"}, windows=False),
+                         {"config_tls": ["UV_NATIVE_TLS"]})
+        (home / ".config" / "pip").mkdir()
+        (home / ".config" / "pip" / "pip.conf").write_text("[global]\nindex-url = https://mirror.example/simple\n",
+                                                          encoding="utf-8")
+        self.assertEqual(helper.settings("pipx", {"HOME": str(home)}, windows=False),
+                         {"config_index": [f"index-url ({home / '.config' / 'pip' / 'pip.conf'})"]})
+        toml.write_text("not toml [", encoding="utf-8")
+        self.assertEqual(helper.settings("uv", {"HOME": str(home), "XDG_CONFIG_DIRS": str(home)}, windows=False), {},
+                         "a file that cannot be read holds nothing known")
+
+    def test_a_setting_explains_a_cause_only_where_its_words_fit(self) -> None:
+        tls, index = {"config_tls": ["SSL_CERT_FILE"]}, {"config_index": ["UV_INDEX_URL"]}
+        certificate = "Caused by: invalid peer certificate: UnknownIssuer"
+        mirror = "error: Failed to fetch: `https://mirror.example/simple/cad/`\n  Caused by: tcp connect error"
+        for cause, said, found, then in (
+                ("network", certificate, tls, "config_tls"), ("network", "tcp connect error", tls, "network"),
+                ("network", certificate, {}, "network"), ("network", mirror, index, "config_index"),
+                ("network", mirror.replace("mirror.example", "pypi.org"), index, "network"),
+                ("no_release", "", index, "config_index"), ("kept", "", {"config_exclude": ["UV_EXCLUDE_NEWER"]},
+                                                            "config_exclude"),
+                ("no_release", "", {"offline": ["UV_OFFLINE"]}, "offline"), ("in_use", "", index, "in_use"),
+                ("python", "", index, "python"), ("unknown", "", index, "unknown")):
+            with self.subTest(cause=cause, found=found, said=said[:30]):
+                self.assertEqual(helper.refine(cause, said, found), then)
 
 
 class LauncherTest(unittest.TestCase):
@@ -1843,7 +2151,8 @@ class DoctorTest(Case):
         (self.state / updates.FILE).write_text(json.dumps(known), encoding="utf-8")
         with mock.patch.object(updates, "feed", wraps=updates.feed) as read:
             self.assertEqual(doctor._newest(), doctor._check(
-                "newest", doctor.INFO, "cad 0.3.0 is the newest 0.x release the version feed names", [line]))
+                "newest", doctor.INFO, "cad 0.3.0 is the newest 0.x release the version feed names (asked less than a "
+                                       "minute ago)", [line]))
             self.assertEqual(self.cli(), (0, f"update auto: on\n{line}\n", ""))
             self.assertEqual(self.cli("off"), (0, "update auto: off\n", ""), "said by the status alone")
         self.assertTrue(read.call_args_list and all(call.kwargs == {"fetch": False} for call in read.call_args_list),
@@ -1851,10 +2160,100 @@ class DoctorTest(Case):
         known["feed"] = {"latest": "0.3.0", "lines": {"0": "0.3.0"}}
         (self.state / updates.FILE).write_text(json.dumps(known), encoding="utf-8")
         self.assertEqual(doctor._newest(), doctor._check("newest", doctor.INFO,
-                                                         "cad 0.3.0 is the newest 0.x release the version feed names"))
+                                                         "cad 0.3.0 is the newest 0.x release the version feed names "
+                                                         "(asked less than a minute ago)"))
         known["feed"] = {"latest": "1.2.0"}  # none of this major named
         (self.state / updates.FILE).write_text(json.dumps(known), encoding="utf-8")
-        self.assertEqual(doctor._newest()["detail"], "the version feed names no 0.x release; its newest is cad 1.2.0")
+        self.assertEqual(doctor._newest()["detail"], "the version feed names no 0.x release; its newest is cad 1.2.0 "
+                                                     "(asked less than a minute ago)")
+
+    def test_doctor_says_why_each_attempt_ended_as_it_did_and_where_its_log_is(self) -> None:
+        """Each outcome's line: the installer's words whatever the outcome, and the cause in plain words, a warning
+        where it failed, kept the release that ran, or was lost; then the log, where there is one."""
+        from cad_server.cli import doctor
+
+        now = time.time()
+        base = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": now, "tries": 1, "installer": "uv"}
+        head = r"^0\.1\.0 to {release} on \S+ \S+: "
+        in_use = ("Caused by: failed to remove file `C:\\Users\\me\\.local\\bin\\cad.exe`: The process cannot access "
+                  "the file because it is being used by another process. (os error 32)")
+        for record, status, said in (
+                ({**base, "outcome": "installed", "detail": ""}, doctor.INFO, "installed$"),
+                ({**base, "release": "0.1.5", "outcome": "installed", "detail": "it installed 0.1.5, not 0.2.0"},
+                 doctor.INFO, r"installed \(it installed 0\.1\.5, not 0\.2\.0\)$"),
+                ({**base, "release": "0.1.0", "outcome": "current", "detail": "it installed 0.1.0, not 0.2.0",
+                  "cause": "kept"}, doctor.WARNING,
+                 r"current \(it installed 0\.1\.0, not 0\.2\.0\): uv kept the release that ran, though a newer one "
+                 r"is out$"),
+                ({**base, "release": "0.3.0", "outcome": "current", "detail": "cad 0.3.0 is installed"}, doctor.INFO,
+                 r"current \(cad 0\.3\.0 is installed\)$"),
+                ({**base, "outcome": "failed", "detail": in_use, "cause": "in_use", "restored": True}, doctor.WARNING,
+                 r"failed \(Caused by: .+ \(os error 32\)\): a file of cad's was in use by another program; 0\.1\.0 "
+                 r"put back$"),
+                ({**base, "outcome": "failed", "detail": "uv said no", "cause": "network", "installer": "pipx"},
+                 doctor.WARNING, r"failed \(uv said no\): pipx could not reach the package index$"),
+                ({**base, "outcome": "failed", "detail": "the update's helper could not start: OSError: x",
+                  "cause": "helper_start"}, doctor.WARNING, r"failed \(.+\): the update's helper could not start$"),
+                ({**base, "outcome": "underway"}, doctor.INFO, "underway$"),
+                ({**base, "outcome": "underway", "at": now - auto_update.RETRY_SECONDS - 60}, doctor.WARNING,
+                 r"underway: the update's helper ended without saying how$"),
+                ({**base, "outcome": "underway", "cause": "helper_crash", "detail": "KeyError: 'upgrade'"},
+                 doctor.WARNING, r"underway \(KeyError: 'upgrade'\): the update's helper stopped with an error$")):
+            with self.subTest(record=record):
+                auto_update._keep(self.state / auto_update.RECORD, record)
+                found = doctor._attempt()
+                self.assertEqual(found[0], status, found[1])
+                self.assertRegex(found[1], head.format(release=re.escape(record["release"])) + said)
+        log = self.state / auto_update.LOG
+        log.write_text("cad's update, begun ...\n", encoding="utf-8")
+        self.assertTrue(doctor._attempt()[1].endswith(f"; its log: {log}"))
+        auto_update._keep(self.state / auto_update.RECORD, {**base, "outcome": "failed", "detail": "x",
+                                                            "cause": "disk_full"})
+        self.assertEqual(self.json_check("attempt")["status"], "warning")
+
+    def json_check(self, name: str) -> dict:
+        from cad_server.cli import doctor
+
+        with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_OK, "/site/OCP.pyd")):
+            code, out, _err = self.cli("--json", main=doctor.main)
+        return next(check for check in json.loads(out)["checks"] if check["name"] == name)
+
+    def test_doctor_warns_where_the_release_the_feed_names_has_had_its_tries_or_no_update_can_begin(self) -> None:
+        from cad_server.cli import doctor
+
+        self.state.mkdir(parents=True, exist_ok=True)
+        (self.state / updates.FILE).write_text(json.dumps({"checked": time.time(), "feed": {
+            "latest": "0.2.0", "lines": {"0": "0.2.0"}}}), encoding="utf-8")
+        base = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 0.0, "outcome": "failed",
+                "detail": "uv said no", "cause": "unknown", "installer": "uv"}
+        auto_update._keep(self.state / auto_update.RECORD, {**base, "tries": 1})
+        self.assertNotIn("has been tried", doctor._attempt()[1], "a try left")
+        auto_update._keep(self.state / auto_update.RECORD, {**base, "tries": auto_update.TRIES})
+        self.assertEqual(doctor._attempt(), (doctor.WARNING, doctor._attempt()[1]))
+        self.assertTrue(doctor._attempt()[1].endswith(
+            ": uv's output names no cause cad knows; cad 0.2.0 has been tried 2 times, and is not tried again by "
+            "itself: `cad update` tries it"))
+        with mock.patch.object(auto_update, "find_uv", return_value=None), \
+                mock.patch.object(auto_update, "carried_uv", return_value=None):
+            (self.state / auto_update.RECORD).unlink()
+            self.assertEqual(doctor._attempt(), (doctor.WARNING, "none; uv cannot be found, so no update can begin"))
+            with mock.patch.object(sys, "_base_executable", str(self.tool / "bin" / "python"), create=True):
+                self.assertEqual(auto_update.blocked(auto_update.global_install()), "no_installer", "the first reason")
+        with mock.patch.object(sys, "_base_executable", str(self.tool / "bin" / "python"), create=True):
+            self.assertEqual(doctor._attempt()[1], "none; no Python outside cad's environment can run the update, "
+                                                   "so none can begin")
+        self.assertEqual(doctor._attempt(), (doctor.INFO, "none"))
+
+    def test_the_newest_line_says_when_the_feed_was_last_asked_for(self) -> None:
+        from cad_server.cli import doctor
+
+        for seconds, said in ((-5, ""), (0, " (asked less than a minute ago)"), (60, " (asked 1 minute ago)"),
+                              (119 * 60, " (asked 119 minutes ago)"), (2 * 3600, " (asked 2 hours ago)"),
+                              (47 * 3600, " (asked 47 hours ago)"), (3 * 86400 + 5, " (asked 3 days ago)")):
+            with self.subTest(seconds=seconds):
+                self.assertEqual(doctor._asked(1_000_000.0 - seconds, now=1_000_000.0), said)
+        self.assertEqual(doctor._asked(None), "")
+        self.assertIsNone(updates.asked(), "never asked on this computer")
 
     def test_doctor_shows_the_plugin_s_record(self) -> None:
         from cad_server._internal import plugin_catch_up

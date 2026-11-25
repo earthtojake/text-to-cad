@@ -154,6 +154,13 @@ def feed(*, fetch: bool = True, force: bool = False, now: float | None = None, p
     return known
 
 
+def asked(path: Path | None = None) -> float | None:
+    """When the feed was last asked for, by any process of the person's (read, never fetched): a time, or None where
+    it never was. An answer or not: each hour's attempt is spent before it is made."""
+    checked = _load(path or _cache()).get("checked")
+    return float(checked) if isinstance(checked, (int, float)) and not isinstance(checked, bool) else None
+
+
 def _read(path: Path, now: float, known: dict[str, Any] | None,
           get: Callable[[str], Any] | None) -> dict[str, Any] | None:
     """The feed read and kept: what it says, or None where it could not be read."""
