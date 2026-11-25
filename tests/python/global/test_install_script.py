@@ -24,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unittest
@@ -256,6 +257,39 @@ class InstallScriptTests(AgentApps):
         self.assertIn("cad: failed (uv tool install exit status 1; what uv said is above).", done.stdout)
         found = json.loads(report.read_text(encoding="utf-8"))
         self.assertEqual((found["release"], found["setup"]), ("1.0.0", 1))
+
+    def test_a_dist_info_left_with_no_record_is_deleted_before_cad_is_installed_again(self) -> None:
+        """An uninstall that stopped midway (on Windows, a file of the old cad held as uv removed it) leaves cad's
+        ``dist-info`` with no ``RECORD``, and every later uv run on the tool fails on it, cad's own update and this
+        reinstall alike: it is deleted first, and only such a folder, so the install command repairs the computer."""
+        self.tools(cad="1.0.0")
+        site = self.root / "uv.tools" / "cad" / "lib" / "python3.14" / "site-packages"
+        (site / "cad-1.0.0.dist-info" / "licenses").mkdir(parents=True)
+        (site / "cad-1.0.0.dist-info" / "licenses" / "LICENSE").write_text("MIT\n", encoding="utf-8")
+        whole = site / "numpy-2.0.0.dist-info"
+        whole.mkdir()
+        (whole / "RECORD").write_text("", encoding="utf-8")
+        done = self.run_install(FAKE_PYPI="5.0.0", FAKE_FAIL="cad:--version")
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        removed = "Removed cad-1.0.0.dist-info from cad's environment: an install that stopped midway left it without "
+        self.assertIn(removed, done.stdout)
+        self.assertLess(done.stdout.index(removed), done.stdout.index("installing it again with uv"), "before it")
+        self.assertEqual(self.installs(), [["--reinstall", *install.UV_TOOL_ARGS, "cad"]])
+        self.assertEqual(sorted(path.name for path in site.iterdir()), ["numpy-2.0.0.dist-info"])
+        # A cad that starts, but whose environment holds one: deleted too, before its own `cad update` runs uv.
+        (site / "cad-1.0.0.dist-info").mkdir()
+        done = self.run_install(FAKE_PYPI="5.0.0")
+        self.assertIn(removed, done.stdout)
+        self.assertFalse((site / "cad-1.0.0.dist-info").exists())
+        # Windows' layout; a folder with its RECORD stays.
+        with tempfile.TemporaryDirectory(dir=self.root) as root:
+            env = Path(root)
+            for name, record in (("cad-0.1.0.dist-info", False), ("cad-0.2.0.dist-info", True)):
+                (env / "Lib" / "site-packages" / name).mkdir(parents=True)
+                if record:
+                    (env / "Lib" / "site-packages" / name / "RECORD").write_text("", encoding="utf-8")
+            self.assertEqual(install.repair(env), ["cad-0.1.0.dist-info"])
+            self.assertEqual([path.name for path in (env / "Lib" / "site-packages").iterdir()], ["cad-0.2.0.dist-info"])
 
     def pipx_cad(self, version: str = "0.13.0", link: bool = True) -> dict:
         """cad as ``pipx install cad`` leaves it: pipx's environment of cad (its metadata, its own ``cad``, a stand-in)
