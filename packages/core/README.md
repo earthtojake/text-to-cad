@@ -217,11 +217,13 @@ by which rows join: one file however its path is spelled (a symlink, a case vari
 server lacks is an `isMissingFileError`, in the engine's words for an id it does not hold),
 `entryOf(file)` is the row the catalog has, and `createRenderSession({ file })` keeps the displayed
 file's entry current as polling refreshes it. A cancelled or older request
-cannot overwrite a newer file revision. `projects()` lists the folders a person opened as projects, each with its
-documents (rows as `recents()` reads them), `project(id)` reads one, `openProject(path)` opens a folder as one (the
-project it already is, or is inside, where it is), `removeProject(id)` forgets one, and `pick({ folder, start })`
-asks the desktop's chooser for a folder, opening in `start`. A row, and an entry, names the project it is in
-(`project`).
+cannot overwrite a newer file revision. `projects()` lists the folders a person opened as projects (no
+documents: a project is its folder), `projectFolder(id, { path, q })` reads one folder of one, below its root (its
+subfolders that hold a CAD file somewhere below, then its CAD files, rows as `recents()` reads them) or with words
+searches everything below that folder, `openProject(path)` opens a folder as one (the project it already is, or is
+inside, where it is), `removeProject(id)` forgets one, and `pick({ folder, start })` asks the desktop's chooser for a
+folder, opening in `start`. A row names the project it is in by its id (`project`); an entry names it in full, with
+the folder the document is in below the project's root (`project.folder`).
 
 `CadWorkspaceService` exposes a scoped `resources` provider and, where its host serves
 the engine, where the page reads a document the engine serves

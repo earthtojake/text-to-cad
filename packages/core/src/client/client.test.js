@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { createCadClient, isMissingFileError } from './client.js';
 
 function json(value) { return { ok: true, json: async () => value }; }
 // A file's envelope as `GET /api/v1/documents?path=` answers it (the API's), its catalog row inside.
 function docs(entries) { return json({ documents: entries.map(entry => ({ id: entry.id, entry, revision: entry.hash ?? '' })) }); }
 // A document the engine does not hold, as `GET /api/v1/documents/<id>` refuses it.
-function missing(error, state) {
-  return { ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error, hint: 'run the model\'s script again', ...(state ? { state } : {}) }) };
+function missing(error) {
+  return { ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error, hint: 'run the model\'s script again, or open the file from where it is now' }) };
 }
 function deferred() { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; }
 
@@ -133,27 +134,49 @@ test('a file the server does not have is a missing file, said so', async (t) => 
   assert.equal(isMissingFileError(new Error('offline')), false);
 });
 
-test('projects are read, opened by a folder and removed, each document a row as the library reads it', async (t) => {
+test('projects are read, opened by a folder and removed', async (t) => {
   const calls = [];
-  const project = { id: 'p1', name: 'tag', root: '/m/tag', created: 1, opened: 2, missing: false, truncated: true,
-    documents: [{ id: 'd1', path: '/m/tag/a.stl', kind: 'stl', record: 'file', project: 'p1' }] };
+  const project = { id: 'p1', name: 'tag', root: '/m/tag', created: 1, opened: 2, missing: false };
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
     const path = new URL(url).pathname;
     calls.push([path, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
-    if (path === '/api/v1/projects' && options.method === 'POST') return json({ project: { id: 'p1', name: 'tag', root: '/m/tag' }, made: false });
+    if (path === '/api/v1/projects' && options.method === 'POST') return json({ project, made: false });
     if (path === '/api/v1/projects/p1' && options.method === 'DELETE') return json({ projects: [] });
-    return json(path === '/api/v1/projects' ? { projects: [project] } : project);
+    return json({ projects: [project] });
   } });
   t.after(() => client.dispose());
-  const read = { ...project, documents: [{ id: 'd1', path: '/m/tag/a.stl', kind: 'file', record: 'file', documentKind: 'stl', project: 'p1' }] };
-  assert.deepEqual(await client.projects(), [read]);
-  assert.deepEqual(await client.project('p1'), read);
-  assert.deepEqual(await client.openProject('/m/tag/sub'), { project: { id: 'p1', name: 'tag', root: '/m/tag' }, made: false });
+  assert.deepEqual(await client.projects(), [project]);
+  assert.deepEqual(await client.openProject('/m/tag/sub'), { project, made: false });
   assert.deepEqual(await client.removeProject('p1'), []);
   assert.deepEqual(calls, [
-    ['/api/v1/projects', 'GET', null, null], ['/api/v1/projects/p1', 'GET', null, null],
-    ['/api/v1/projects', 'POST', '1', { path: '/m/tag/sub' }], ['/api/v1/projects/p1', 'DELETE', '1', null],
+    ['/api/v1/projects', 'GET', null, null], ['/api/v1/projects', 'POST', '1', { path: '/m/tag/sub' }], ['/api/v1/projects/p1', 'DELETE', '1', null],
   ]);
+});
+
+test("a project's folder is asked by its path and its words, and its rows are the library's", async (t) => {
+  const listing = JSON.parse(await readFile(new URL('./__fixtures__/projectFolder.json', import.meta.url), 'utf8'));
+  const search = JSON.parse(await readFile(new URL('./__fixtures__/projectSearch.json', import.meta.url), 'utf8'));
+  const asked = [];
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => {
+    const { pathname, searchParams } = new URL(url);
+    asked.push([pathname, Object.fromEntries(searchParams)]);
+    return json(searchParams.has('q') ? search : listing);
+  } });
+  t.after(() => client.dispose());
+  const id = listing.project.id;
+  const folder = await client.projectFolder(id, { path: 'housing/v3' });
+  assert.deepEqual(Object.keys(folder), ['project', 'path', 'folders', 'documents', 'truncated']);
+  assert.deepEqual([folder.project, folder.path, folder.folders, folder.truncated], [listing.project, 'housing/v3', listing.folders, false]);
+  // A row as the library reads it: the record's kind as `kind`, the document's as `documentKind`; the rest as answered.
+  assert.deepEqual(folder.documents, listing.documents.map((row) => ({ ...row, kind: 'file', documentKind: row.kind })));
+  assert.deepEqual(folder.documents.map((row) => [row.documentKind, row.opened, row.thumbnail]), [['model', 1764000100.0, '1764000100500'], ['step', null, null]]);
+  const found = await client.projectFolder(id, { path: 'housing', q: '  plan ' });
+  assert.deepEqual([found.folders, found.documents.map((row) => row.path)], [[], search.documents.map((row) => row.path)]);
+  // The root, with nothing typed: neither is sent.
+  await client.projectFolder(id, { path: '', q: '   ' });
+  await client.projectFolder(id);
+  const route = `/api/v1/projects/${id}`;
+  assert.deepEqual(asked, [[route, { path: 'housing/v3' }], [route, { path: 'housing', q: 'plan' }], [route, {}], [route, {}]]);
 });
 
 test('polling reads the files on screen again, and only those', async (t) => {
@@ -521,22 +544,12 @@ test('an id the engine does not hold is missing, in the engine\'s words', async 
   const calls = [];
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => {
     calls.push(String(url));
-    return missing(`no document ${id} is held: run \`python /m/parts.py\` to build it again`);
+    return missing(`no document ${id} is held`);
   } });
   const failure = await client.resolveEntry(id).catch((error) => error);
   assert.equal(isMissingFileError(failure), true);
-  assert.match(failure.message, /run `python \/m\/parts.py` to build it again/);
+  assert.equal(failure.message, `no document ${id} is held`);
   assert.equal(new URL(calls[0]).pathname, `/api/v1/documents/${id}`, 'a document id is asked for by id: its envelope');
-  assert.equal(failure.state, undefined, 'the engine named no state');
-  client.dispose();
-});
-
-test('an id the engine does not hold carries the state the engine names for it', async () => {
-  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
-  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => missing(
-    `cube (${id}) is detached: /m/parts.py is gone, and nothing builds it again; delete it from the home`, 'detached') });
-  const failure = await client.resolveEntry(id).catch((error) => error);
-  assert.deepEqual([isMissingFileError(failure), failure.state], [true, 'detached']);
   client.dispose();
 });
 
@@ -561,13 +574,13 @@ test('an id deleted while it is on screen leaves the catalog: asked again, it is
   let held = true;
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => (held
     ? json({ id, kind: 'model', entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
-    : missing(`no document ${id} is held`, 'unsaved')) });
+    : missing(`no document ${id} is held`)) });
   assert.equal((await client.resolveEntry(id)).id, id);
   held = false;  // `cad delete`
   await client.refresh({ file: id });
   assert.equal(client.entryOf(id), null, 'its row is gone');
   const failure = await client.resolveEntry(id).catch((error) => error);
-  assert.deepEqual([isMissingFileError(failure), failure.state], [true, 'unsaved']);
+  assert.deepEqual([isMissingFileError(failure), failure.message], [true, `no document ${id} is held`]);
   client.dispose();
 });
 

@@ -1,0 +1,23 @@
+{
+ "project": {"id": "3b2f6a0e-5c1d-5e7a-9b40-2f8e1c6d4a10", "name": "gearbox", "root": "/home/me/work/gearbox",
+             "created": 1764000000.0, "opened": 1764000100.0, "missing": false},
+ "path": "housing",
+ "folders": [],
+ "documents": [
+  {"id": "0d6a2c1e-7f3b-5a49-8e12-6c4b9d0f2a31", "kind": "model", "record": "file", "api": "/api/v1/documents/model/0d6a2c1e-7f3b-5a49-8e12-6c4b9d0f2a31",
+   "path": "/home/me/work/gearbox/housing/v3/housing.xbf", "name": "housing.xbf",
+   "folder": "/home/me/work/gearbox/housing/v3", "namespace": "/home/me/work/gearbox/housing/v3",
+   "opened": 1764000100.0, "updated": 1764000050.0, "created": 1764000000.0,
+   "pinned": false, "missing": false,
+   "thumbnail": "1764000100500", "pictured": 1764000100.5,
+   "size": 20480, "parts": 3, "project": "3b2f6a0e-5c1d-5e7a-9b40-2f8e1c6d4a10"},
+  {"id": "5c7d9e1f-3a2b-5d4c-9e8f-1a2b3c4d5e6f", "kind": "dxf", "record": "file", "api": "/api/v1/documents/dxf/5c7d9e1f-3a2b-5d4c-9e8f-1a2b3c4d5e6f",
+   "path": "/home/me/work/gearbox/housing/v3/drawings/housing-plan.dxf", "name": "housing-plan.dxf",
+   "folder": "/home/me/work/gearbox/housing/v3/drawings", "namespace": "/home/me/work/gearbox/housing/v3/drawings",
+   "opened": null, "updated": 1763980000.0, "created": null,
+   "pinned": false, "missing": false,
+   "thumbnail": null, "pictured": null,
+   "size": 4096, "parts": null, "project": "3b2f6a0e-5c1d-5e7a-9b40-2f8e1c6d4a10"}
+ ],
+ "truncated": false
+}
