@@ -62,6 +62,18 @@ class NamingTest(unittest.TestCase):
                 with self.subTest(argv=argv), contextlib.redirect_stderr(io.StringIO()) as err:
                     self.assertEqual((run.main(argv), err.getvalue()), (2, said))
 
+    def test_a_command_that_cannot_start_is_said_in_one_line_on_windows_as_elsewhere(self) -> None:
+        # Windows runs the command as a child (no exec): a child that cannot start is cad run's one line and exit 1,
+        # as an exec that fails is, never a traceback.
+        from cad_server.cli import run
+
+        for platform, failing in (("nt", "subprocess.call"), ("posix", "os.execv")):
+            with self.subTest(platform=platform), mock.patch.object(run.os, "name", platform), \
+                    mock.patch(failing, side_effect=PermissionError(13, "Access is denied")), \
+                    contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual((run._start(["C:/env/python.exe", "model.py"]), err.getvalue()),
+                                 (1, "cad run: cannot run C:/env/python.exe: Access is denied\n"))
+
     def test_a_script_s_header_names_its_packages_and_its_python(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="extras-header-"))
         self.addCleanup(shutil.rmtree, folder, True)
