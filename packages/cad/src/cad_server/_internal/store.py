@@ -14,11 +14,14 @@ environment's own packages -- and, written last, its marker (``MARKER``: ``{"sto
 "built"}``). Without its marker a folder is no release. Nothing writes into one after that but Python's own bytecode.
 The files are linked from uv's cache where the file system allows (``LINK``), so a release costs little room.
 
-**The pointer** (``POINTER``, in the environment: ``sys.prefix``) names the stored release the environment runs,
-and the install of cad it was written for (``own``: that cad's ``RECORD``, with its time and size). ``_cad_release``
-takes it only for that very install, so installing cad again, by its installer or by hand, always runs what was
-installed, and the pointer of the install before means nothing (``pointed``). With no pointer the environment runs
-its own packages: a fresh install, and the first release after one.
+**The pointer** (``pointer_path``: a file of the store named for the environment, ``pointer-<checksum of its
+folder>.json``) names the stored release the environment runs, the environment (``"prefix"``) and the install of cad
+it was written for (``own``: that cad's ``RECORD``, with its time and size). ``_cad_release`` takes it only for that
+very install, so installing cad again, by its installer or by hand, always runs what was installed, and the pointer
+of the install before means nothing (``pointed``). With no pointer the environment runs its own packages: a fresh
+install, and the first release after one. It is kept here, in the state folder, and never in the environment: on
+Windows an environment lies under AppData, where a file made by a process an app package started lands in a copy
+only that app sees.
 
 **In use.** Every process that runs a stored release keeps its marker open (``_cad_release.HELD``). ``remove`` takes
 a release only where no process does: on Windows by renaming its folder, which the system refuses while a file in
@@ -41,13 +44,14 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
-__all__ = ["BUILDING", "FOLDER", "Failed", "LINK", "MARKER", "POINTER", "TRASH", "active", "build", "clean", "folder",
-           "marker", "own", "packages", "point", "pointed", "pointer", "publish", "remove", "restore", "root",
-           "running", "switches", "tag", "verify"]
+__all__ = ["BUILDING", "FOLDER", "Failed", "LINK", "MARKER", "TRASH", "active", "build", "clean", "environment",
+           "folder", "marker", "own", "packages", "point", "pointed", "pointer", "pointer_path", "publish", "remove",
+           "restore", "root", "running", "switches", "tag", "verify"]
 
+# ``_cad_release``'s names and rules, which never change: the store's folder in the state folder, a stored release's
+# marker, and where an environment's pointer is (``environment``, ``pointer_path``). Kept here too, since nothing
+# imports that module; ``tests/python/packages/cad_server/test_store.py`` holds the two equal.
 FOLDER = "store"
-# ``_cad_release``'s names, which never change (``tests/python/packages/cad_server/test_store.py`` holds them equal).
-POINTER = "cad-pointer.json"
 MARKER = "cad-store.json"
 # A release being built, and one being removed: neither is a release.
 BUILDING, TRASH = ".building-", ".trash-"
@@ -98,6 +102,21 @@ def folder(release: str) -> Path:
     return root() / f"{release}-{tag()}"
 
 
+def environment(prefix: str | os.PathLike[str] | None = None) -> str:
+    """The environment at ``prefix`` (this one) as a pointer names it: its folder, resolved (``_cad_release``'s
+    rule)."""
+    return os.path.normcase(os.path.realpath(prefix or sys.prefix))
+
+
+def pointer_path(prefix: str | os.PathLike[str] | None = None) -> Path:
+    """Where the pointer of the environment at ``prefix`` (this one) is: in the store, named for the environment by
+    a checksum of its folder (``_cad_release``'s rule)."""
+    import binascii
+
+    key = binascii.crc32(environment(prefix).encode("utf-8", "surrogatepass")) & 0xFFFFFFFF
+    return root() / f"pointer-{key:08x}.json"
+
+
 def marker(path: str | os.PathLike[str]) -> dict[str, Any] | None:
     """The marker of the stored release at ``path``, or None for a folder that is none (not there, half built, made
     for another interpreter)."""
@@ -122,10 +141,10 @@ def packages() -> Path | None:
 
 def switches() -> bool:
     """Whether a pointer written now is read by the next process of this environment: ``_cad_release`` ran as this
-    interpreter started, from this environment's own packages. Where it did not, an update would build a release
-    nothing runs."""
+    interpreter started, from this environment's own packages, and the cad installed there has the ``RECORD`` a
+    pointer is tied to (``own``). Where either fails, an update would build a release nothing runs."""
     here = packages()
-    if here is None:
+    if here is None or own(here) is None:
         return False
     inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
     return os.path.normcase(os.path.realpath(here)).startswith(inside)
@@ -180,31 +199,45 @@ def _packages_of(prefix: str | os.PathLike[str]) -> Path | None:
 # --- the pointer -------------------------------------------------------------------------------------------------------
 
 
-def pointer(prefix: str | os.PathLike[str] | None = None) -> dict[str, Any] | None:
-    """The pointer as the environment at ``prefix`` (this one) keeps it, whatever it is for; None with none."""
+def _read(path: Path) -> dict[str, Any] | None:
     try:
-        found = json.loads((Path(prefix or sys.prefix) / POINTER).read_text(encoding="utf-8"))
+        found = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return found if isinstance(found, dict) else None
 
 
+def pointer(prefix: str | os.PathLike[str] | None = None) -> dict[str, Any] | None:
+    """The pointer of the environment at ``prefix`` (this one) as it is kept, whatever it is for; None with none."""
+    return _read(pointer_path(prefix))
+
+
+def _lasting(found: dict[str, Any]) -> bool:
+    """Whether the pointer ``found`` still means something, whatever interpreter reads it: its environment is there,
+    the install of cad it was written for is the one there (its ``RECORD``, by time and size), and the folder it names
+    holds a marker."""
+    try:
+        prefix = Path(found["prefix"])
+        here = _packages_of(prefix) if prefix.is_dir() else None
+        if here is None:
+            return False
+        installed = (here / str(found["record"])).stat()
+        return [installed.st_mtime_ns, installed.st_size] == found["stamp"] \
+            and (Path(found["path"]) / MARKER).is_file()
+    except (OSError, KeyError, TypeError, ValueError):
+        return False
+
+
 def pointed(prefix: str | os.PathLike[str] | None = None) -> dict[str, Any] | None:
     """The pointer of the environment at ``prefix`` (this one) where a process started there now would take it, by
-    ``_cad_release``'s own rules: its format, this interpreter, the install it was written for still the one there,
-    and the stored release it names whole. With ``"release"``, the release that marker names. Else None."""
-    prefix = Path(prefix or sys.prefix)
+    ``_cad_release``'s own rules: its format, that environment and this interpreter, the install it was written for
+    still the one there, and the stored release it names whole. With ``"release"``, the release that marker names.
+    Else None."""
     found = pointer(prefix)
-    here = _packages_of(prefix)
-    if found is None or here is None or found.get("pointer") != 1 or found.get("python") != tag():
+    if found is None or found.get("pointer") != 1 or found.get("python") != tag() \
+            or found.get("prefix") != environment(prefix) or not _lasting(found):
         return None
-    try:
-        installed = (here / str(found["record"])).stat()
-        if [installed.st_mtime_ns, installed.st_size] != found["stamp"]:
-            return None
-        kept = marker(found["path"])
-    except (OSError, KeyError, TypeError):
-        return None
+    kept = marker(found["path"])
     return {**found, "release": kept["release"]} if kept is not None else None
 
 
@@ -220,6 +253,19 @@ def active(prefix: str | os.PathLike[str] | None = None) -> str | None:
     return installed[0] if installed is not None else None
 
 
+def _write(path: Path, kept: dict[str, Any] | None) -> None:
+    from cad._internal.atomic_replace import write_bytes_atomic
+
+    if kept is None:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_bytes_atomic(path, json.dumps(kept, sort_keys=True).encode("utf-8"))
+
+
 def point(path: str | os.PathLike[str] | None, *, previous: str | None = None,
           prefix: str | os.PathLike[str] | None = None) -> dict[str, Any] | None:
     """The environment at ``prefix`` (this one) pointed at the stored release at ``path``, for the cad installed there
@@ -227,15 +273,9 @@ def point(path: str | os.PathLike[str] | None, *, previous: str | None = None,
     ``path``, the pointer removed: the environment runs its own packages. Written whole or not at all: a process
     starting meanwhile reads the pointer before or this one. What was written. ``OSError`` where it cannot be, or
     where ``path`` is no stored release or the environment holds no cad to write it for."""
-    from cad._internal.atomic_replace import write_bytes_atomic
-
     prefix = Path(prefix or sys.prefix)
-    target = prefix / POINTER
     if path is None:
-        try:
-            target.unlink()
-        except FileNotFoundError:
-            pass
+        _write(pointer_path(prefix), None)
         return None
     kept = marker(path)
     here = _packages_of(prefix)
@@ -246,25 +286,16 @@ def point(path: str | os.PathLike[str] | None, *, previous: str | None = None,
         raise OSError(f"{prefix} holds no cad to point from")
     record = installed[1]
     stamp = record.stat()
-    written = {"pointer": 1, "python": tag(), "record": record.relative_to(here).as_posix(),
-               "stamp": [stamp.st_mtime_ns, stamp.st_size], "path": str(Path(path)), "release": kept["release"],
-               "previous": previous, "at": time.time()}
-    write_bytes_atomic(target, json.dumps(written, sort_keys=True).encode("utf-8"))
+    written = {"pointer": 1, "python": tag(), "prefix": environment(prefix),
+               "record": record.relative_to(here).as_posix(), "stamp": [stamp.st_mtime_ns, stamp.st_size],
+               "path": str(Path(path)), "release": kept["release"], "previous": previous, "at": time.time()}
+    _write(pointer_path(prefix), written)
     return written
 
 
 def restore(kept: dict[str, Any] | None, *, prefix: str | os.PathLike[str] | None = None) -> None:
     """The pointer put back as it was read before a switch (``pointer``'s answer: None, none)."""
-    from cad._internal.atomic_replace import write_bytes_atomic
-
-    target = Path(prefix or sys.prefix) / POINTER
-    if kept is None:
-        try:
-            target.unlink()
-        except FileNotFoundError:
-            pass
-        return
-    write_bytes_atomic(target, json.dumps(kept, sort_keys=True).encode("utf-8"))
+    _write(pointer_path(prefix), kept)
 
 
 # --- a release built, run once, and named -----------------------------------------------------------------------------
@@ -392,23 +423,32 @@ def remove(path: str | os.PathLike[str]) -> bool:
 
 
 def clean(keep: Iterable[str | os.PathLike[str] | None] = (), *, now: float | None = None) -> list[str]:
-    """The store tidied. First a pointer of this environment that no process would take (``pointed``: written for
-    an install of cad that has been replaced since, or naming a release that is gone) is removed: it means nothing.
-    Then each stored release is removed that is not one of ``keep``, not the one this environment's pointer names
-    nor the one it ran before (``"previous"``), not the one this process runs, and that no process runs
-    (``remove``); each ``.trash-`` folder is deleted as far as it can be; and each ``.building-`` folder older than
-    ``ABANDONED_SECONDS``, whose build died. The names removed. Never raises."""
+    """The store tidied. First each pointer that means nothing any more is removed (``_lasting``: its environment
+    is gone, cad was installed there again since it was written, or the release it names is gone). Then each stored
+    release is removed that is not one of ``keep``, not one a pointer names, of whatever environment, nor one it ran
+    before (``"previous"``), not the one this process runs, and that no process runs (``remove``); each ``.trash-``
+    folder is deleted as far as it can be; and each ``.building-`` folder older than ``ABANDONED_SECONDS``, whose
+    build died. The names removed. Never raises."""
     now = time.time() if now is None else now
     removed: list[str] = []
     try:
-        if pointer() is not None and pointed() is None:
-            point(None)
-        found = pointer() or {}
-        kept = {os.path.normcase(os.path.abspath(str(path))) for path in
-                (*keep, found.get("path"), found.get("previous"), running()) if path}
         entries = sorted(os.scandir(root()), key=lambda entry: entry.name)
     except OSError:
         return removed
+    named: list[Any] = [*keep, running()]
+    for entry in entries:
+        if not (entry.name.startswith("pointer-") and entry.name.endswith(".json")):
+            continue
+        found = _read(Path(entry.path))
+        if found is not None and _lasting(found):
+            named += [found.get("path"), found.get("previous")]
+            continue
+        try:
+            os.unlink(entry.path)
+            removed.append(entry.name)
+        except OSError:
+            pass
+    kept = {os.path.normcase(os.path.abspath(str(path))) for path in named if path}
     for entry in entries:
         path = Path(entry.path)
         try:
