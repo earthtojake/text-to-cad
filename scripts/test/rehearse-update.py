@@ -67,8 +67,8 @@ cannot pass in seconds, and the server's own clock is not set back (the unit tes
 - ``self-typed``: with ``cad update auto off`` and the plugin's switch on, ``cad update`` is typed with nothing newer on
   PyPI: it says so and nothing restarts; then PyPI names the next release and ``cad update`` is typed again: the
   server asks PyPI at once and updates cad to it; the command, a running ``cad`` of the tool, waits, says each step once
-  on stderr (the release installed beside this one, then the server restarted on it) and ``cad <new> updated to
-  <next>``; cad is the next release through the store, its server answers, and the plugin catches up: that server runs
+  on stderr (the release installed beside this one, then the server restarted on it, where the command saw that
+  begin: a restart can be over in a moment) and ``cad <new> updated to <next>``; cad is the next release through the store, its server answers, and the plugin catches up: that server runs
   ``cad plugin install`` once, as after an automatic update.
 - ``self-typed-stopped``: the same with no server running: ``cad update`` with nothing newer says so and starts no
   server; with the next release out it says ``cad <new> updated to <next>`` (exit 0, its steps on stderr: the second,
@@ -1226,14 +1226,15 @@ def viewer(box: Box, release: str, env: Path, stored: Path) -> str:
 def typed_update(box: Box, was: str, target: str, *, server: bool = True) -> dict:
     """``cad update`` typed, PyPI naming ``target``: it says each step once on stderr as it sees it begin -- the
     release installed beside the one that runs, then the switch, with the server restarted where one runs
-    (``server``; with none, a switch can be over before the command looks again, and is then not said) -- and ``cad
-    <was> updated to <target>`` on stdout, exit 0. The record, ``installed`` and typed."""
+    (``server``) -- and ``cad <was> updated to <target>`` on stdout, exit 0. The command looks at the record every
+    moment, so a switch over before it looks again (with no server, or a server that stopped and started in a moment)
+    is not said. The record, ``installed`` and typed."""
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
     steps = [f"cad: installing cad {target} beside cad {was}",
              "cad: restarting the cad server on it, once nothing is running" if server else "cad: switching to it"]
     said = done.stderr.strip().splitlines()
     if (done.returncode, done.stdout.strip()) != (0, f"cad {was} updated to {target}") \
-            or said not in (steps, steps[:1] if not server else steps):
+            or said not in (steps, steps[:1]):
         raise Failed(f"{box.label}: cad update exited {done.returncode}:\n{done.stdout}\n{done.stderr}\n{box.said()}")
     record = updated(box, target)
     if (record.get("asked"), record.get("from")) != (True, was):
