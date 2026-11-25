@@ -510,7 +510,7 @@ it('the update button: from the launch, outermost in the navbar; a click through
   vi.stubGlobal('__cadShell', { reload });
   let reads = 0;
   server.answers['/api/v1/local/update'] = () => new Status(202, { release: version, instance: 'first',
-    cadUpdate: { version, latest: '99.0.0', state: 'waiting' } });
+    cadUpdate: { version, latest: '99.0.0', state: 'working', phase: 'building' } });
   server.answers['/api/v1/server'] = () => {
     reads += 1;
     if (reads === 1) return { release: version, instance: 'first', cadUpdate: { version, latest: '99.0.0', state: 'working', at: 5, asked: true } };
@@ -547,7 +547,7 @@ it('a launch that carries no update (cad cannot update itself) shows no button',
 
 it('a failed update the launch carries is the viewer\'s alert, put away through the host for every page', async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
-  const failed = { version, latest: '99.0.0', state: 'failed', at: 7, cause: 'helper_crash', installer: 'uv', log: '/s/auto-update.log' };
+  const failed = { version, latest: '99.0.0', state: 'failed', at: 7, cause: 'helper_crash', log: '/s/auto-update.log' };
   server.answers['/api/v1/local/update'] = () => new Status(200, { release: version, instance: 'first', cadUpdate: { ...failed, dismissed: true } });
   render(<App bridge={bridge as any} server={server as any} launch={{ ...home, surface: 'sidebar', cadUpdate: failed }} />);
   const alert = () => viewer.props!.alert!;

@@ -6,22 +6,21 @@ import type { UpdateFailure } from "./useUpdate.js";
 /** The command that updates cad in a terminal, the failure's way on: the same on every computer. */
 export const UPDATE_COMMAND = "cad update";
 /** The causes the page says in words of its own (`update.cause.<word>`); any other is said by the server's words. */
-export const UPDATE_CAUSES = ["timeout", "no_program", "in_use", "denied", "disk_full", "half_made", "network", "offline", "no_release",
-  "python", "platform", "config_exclude", "config_index", "config_tls", "uv_old", "kept", "server_running", "helper_start",
-  "helper_crash", "lost", "no_installer", "no_python", "packaged", "unknown"] as const;
+export const UPDATE_CAUSES = ["timeout", "no_program", "in_use", "denied", "disk_full", "network", "offline", "no_release", "python",
+  "platform", "config_exclude", "config_index", "config_tls", "broken", "start_failed", "helper_start", "helper_crash",
+  "lost", "no_installer", "no_switch", "packaged", "unknown"] as const;
 
 /**
  * The causes that are cad's own fault, which Report Issue is offered for: an update whose helper could not start,
- * raised, went silent, or met an installer failure cad does not recognize. Every other cause is the person's computer,
- * their installer or its settings, or the package index, and its words say what to do: no issue of the project's (as a
- * model's own error is none: `buildFailedAlert`'s `reportable`).
+ * raised, went silent, or met a uv failure cad does not recognize, or a new release that did not run or whose server
+ * did not start. Every other cause is the person's computer, their uv or its settings, or the package index, and its
+ * words say what to do: no issue of the project's (as a model's own error is none: `buildFailedAlert`'s `reportable`).
  */
-export const UPDATE_REPORTABLE = ["helper_start", "helper_crash", "lost", "unknown"] as const;
+export const UPDATE_REPORTABLE = ["helper_start", "helper_crash", "lost", "unknown", "broken", "start_failed"] as const;
 
 /** A failure in the person's language: why it did not install, and what to do. */
 export function failureWords(failure: UpdateFailure, t: (key: string, params?: Record<string, unknown>) => string): string {
-  const installer = failure.installer === "pipx" ? "pipx" : failure.installer === "uv" ? "uv" : t("update.installer");
-  if ((UPDATE_CAUSES as readonly string[]).includes(failure.cause)) return t(`update.cause.${failure.cause}`, { installer });
+  if ((UPDATE_CAUSES as readonly string[]).includes(failure.cause)) return t(`update.cause.${failure.cause}`);
   return failure.said || t("update.cause.other");
 }
 

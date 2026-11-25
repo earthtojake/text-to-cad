@@ -13,8 +13,10 @@ export interface UpdateState {
   version: string;
   /** The newer release of its own major the button offers, or null: the install is current (a higher major is never offered). */
   latest: string | null;
-  /** `waiting`: a person's update waits for the work in flight; `working`: an attempt is underway; `failed`: the last one did not install. */
-  state: "idle" | "waiting" | "working" | "failed";
+  /** `working`: an attempt is underway; `failed`: the last one did not install. */
+  state: "idle" | "working" | "failed";
+  /** While `working`: `building` (the release installs beside this one), then `switching` (the server restarts onto it); none from an older server. */
+  phase?: "building" | "switching";
   /** When the attempt began: what a failure is put away by. */
   at?: number;
   /** Whether a person asked for the attempt (the button, `cad update`), else cad's own automatic update. */
@@ -23,8 +25,6 @@ export interface UpdateState {
   cause?: string;
   /** The cause in the server's plain words, said where the page knows no words of its own for it. */
   said?: string;
-  /** The installer the update ran: `uv` or `pipx`. */
-  installer?: string;
   /** The helper's log of the attempt, where it kept one: its path on this computer. */
   log?: string;
   /** The person put the failure away (`dismiss`): every page keeps it behind its icon. */
@@ -59,7 +59,6 @@ export type UpdatePhase =
 export interface UpdateFailure {
   cause: string;
   said?: string;
-  installer?: string;
   /** The attempt it is of: put away on the server by it. None for a refusal no attempt began from. */
   at?: number;
   /** The helper's log of the attempt. */
@@ -71,24 +70,24 @@ export interface UpdateFailure {
 /** How often a page asks where an update it follows is. */
 export const UPDATE_POLL_MS = 500;
 /**
- * The ring's stages: asked (waiting for the work in flight), begun (the helper about to stop the server), and
- * installing (the server gone while the release installs); then the spinner, the server back and the page reloading.
+ * The ring's stages: building (the release installs beside this one: asked, and the server's `building` phase),
+ * switching (the server restarts onto it), and the server gone meanwhile; then the spinner, the server back and the
+ * page reloading.
  */
 export const UPDATE_STAGES = 3;
 
 const refusalOf = (error: unknown): UpdateFailure => {
   const payload = (error as { failure?: { payload?: Record<string, unknown> } } | null)?.failure?.payload;
   const text = (value: unknown) => (typeof value === "string" && value ? value : undefined);
-  return { cause: text(payload?.cause) ?? "", said: text(payload?.error) ?? (error instanceof Error ? error.message : undefined),
-    installer: text(payload?.installer) };
+  return { cause: text(payload?.cause) ?? "", said: text(payload?.error) ?? (error instanceof Error ? error.message : undefined) };
 };
 
 /**
  * The update button's state, from the host's server: what the host already read with the server's
  * description (`initial`, so the button draws with the page; none: read once), read again whenever the
  * person comes back to the page. `update()` is the click: the server begins a person's update
- * (`start`), and the page asks where it is (`read`) until it ends -- waiting, then begun, then, the
- * server gone while the release installs, still asking -- and once another start of the server answers
+ * (`start`), and the page asks where it is (`read`) until it ends -- building, then switching, then, the
+ * server gone while it restarts, still asking -- and once another start of the server answers
  * (`instance`), the server restarted: `restarting`, and the host's `onRestarted` (a page reloads into
  * it, once nothing it holds is unsaved). An automatic update the page finds underway is followed the
  * same way. A failure is the viewer's alert (`alert`, `CadViewer`'s: `updateAlert`'s card, its Try again the
@@ -150,17 +149,17 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
     server.current = { instance: reply.instance ?? mine.instance, version: mine.version || release };
     const update = reply.cadUpdate ?? null;
     setState(update);
-    if (update?.state === "working" || update?.state === "waiting") {
+    if (update?.state === "working") {
       following.current = true;
       setFailure(null);
       setPhase(after.current ? { phase: "restarting" }
-        : { phase: "working", done: update.state === "waiting" ? 0 : 1, total: UPDATE_STAGES });
+        : { phase: "working", done: update.phase === "building" ? 0 : 1, total: UPDATE_STAGES });
       return true;
     }
     following.current = false;
     if (update?.state === "failed") {
       const mine = chosen.current && chosen.current.at === update.at ? chosen.current.dismissed : undefined;
-      setFailure({ cause: update.cause ?? "", said: update.said, installer: update.installer, at: update.at,
+      setFailure({ cause: update.cause ?? "", said: update.said, at: update.at,
         ...(update.log ? { log: update.log } : {}), dismissed: mine ?? update.dismissed === true });
     } else {
       setFailure(current => (current && current.at === undefined ? current : null));
@@ -179,7 +178,7 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
       polling.current = null;
       void latest.current.calls.read().then(reply => { if (apply(reply)) follow(); }, () => {
         if (!alive.current || !following.current) return;
-        // The server gone while the update installs: the next stage, and asked again.
+        // The server gone while the update switches: the next stage, and asked again.
         if (!after.current) setPhase({ phase: "working", done: 2, total: UPDATE_STAGES });
         follow();
       });
