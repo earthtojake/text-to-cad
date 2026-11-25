@@ -186,7 +186,7 @@ need no engine: the clipboard, this build's links, the tab's appearance and the 
 this browser keeps (`src/host/browserLanguage.js`, [storage](docs/storage.md#localstorage)). It asks
 nothing of `/api/`: no server description, address link, library, Recents, telemetry, What's new, crash
 report or version to wait on, and no Export, Open in, Reveal or Copy path; parameters read as an `.xbf`'s
-do ("Edit these in the script."), and Quick Edit copies, its snapshot packet the page's as on the engine's page.
+do ("Edit these in the script."), and Quick Edit copies, carrying its snapshot packet as the engine's page does.
 What a bundle-backed view leaves out, and why, is
 [the host contract's](../../packages/ui/docs/viewer-host.md#a-view-bundles-host). A bundle the page
 cannot open (none named, another origin's, no manifest, another format) says why, on a page of its own.

@@ -175,8 +175,8 @@ renumbers the list and every citation in the same change.
    declares, the exports a command or a person asks for, and a model's own script only where a person or an
    agent asks to set a parameter it declares (law 30), and nothing beside a model or an input: no
    sidecar, index, memo, mesh or record of a build. What it keeps for itself lives in three folders of
-   the user's own, the same whatever release runs: state (settings and the records of documents and of
-   shares, never geometry or source), cache (each document's bytes as last built, a file document's views keyed by
+   the user's own, the same whatever release runs: state (settings and the records of documents, of
+   shares and of forks, never geometry or source), cache (each document's bytes as last built, a file document's views keyed by
    its bytes, each shared document's last view bundle, bytecode and the environments it installs, every one
    regenerable) and the engine's folder
    (its door and lock). The code stays the only source of truth: a document is what its last run made,
@@ -396,7 +396,8 @@ renumbers the list and every citation in the same change.
 ## Inspection
 
 `cad <type> inspect` and `cad.<type>.inspect()` read existing files or the
-documents the engine holds by id (`cad model inspect <id>`, `cad.model.inspect(handle)`). They never execute source to obtain a missing model or write
+documents the engine holds by id (`cad model inspect <id>`, `cad.model.inspect(handle)`); the command takes a
+share's link too, for this computer's copy of it (the engine's **Sharing**). They never execute source to obtain a missing model or write
 its declared outputs. An unbuilt or unsaved model requires an explicit build: one
 the engine built before names the command (`cad run` and the script that defines it). With no reference,
 `cad <type> inspect` prints what the document holds -- its state, parts, bounds, volume (and a part

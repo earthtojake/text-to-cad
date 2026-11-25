@@ -162,7 +162,7 @@ test("a stroke goes within half a pixel of its view, each point it keeps with it
 
 test("the same views and ink give the same packet whatever the file's address, and its text carries no quote a shell's single quotes end at", () => {
   const annotation = { units: 'mm', marks: [
-    { id: 'ink-t', kind: 'text', points: [0, 0, 0, 5, 0, 0, 5, 2, 0, 0, 2, 0], color: '#000000', text: "Jake's lid isn't ‘right’", fontPx: 14, view: 'view 1' },
+    { id: 'ink-t', kind: 'text', points: [0, 0, 0, 5, 0, 0, 5, 2, 0, 0, 2, 0], color: '#000000', text: "Jake's lid isn't \u2018right\u2019", fontPx: 14, view: 'view 1' },
     stroke({ touches: [{ part: 'i3', ref: `98427829-14ec-563f-a02d-9372a85cecef#"Jake's bracket"/f:base.make_box1.6` }] }),
   ] };
   const views = [view('view 1', { display: { mode: 'solid', grid: false, hidden: ["98427829-14ec-563f-a02d-9372a85cecef#\"O'Brien's arm\""] } })];
@@ -170,10 +170,10 @@ test("the same views and ink give the same packet whatever the file's address, a
   const shared = snapshotPacket({ input: 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-', type: 'model', views, annotation });
   assert.deepEqual({ ...local, input: shared.input }, shared);
   const text = snapshotPacketText(local);
-  assert.equal(/['‘-‛]/.test(text), false);
+  assert.equal(/['\u2018-\u201b]/.test(text), false);
   assert.ok(text.includes('Jake\\u0027s lid isn\\u0027t \\u2018right\\u2019'));
   // Compact, and the same values when read back.
-  assert.equal(text, JSON.stringify(local).replace(/['‘-‛]/g, quote => `\\u${quote.charCodeAt(0).toString(16).padStart(4, '0')}`));
+  assert.equal(text, JSON.stringify(local).replace(/['\u2018-\u201b]/g, quote => `\\u${quote.charCodeAt(0).toString(16).padStart(4, '0')}`));
   assert.equal(text.includes(' "') || text.includes('": '), false);
   assert.deepEqual(JSON.parse(text), local);
   assert.deepEqual([JSON.parse(text).annotation.marks[1].touches, JSON.parse(text).hidden], [[`"Jake's bracket"/f:base.make_box1.6`], [`"O'Brien's arm"`]]);

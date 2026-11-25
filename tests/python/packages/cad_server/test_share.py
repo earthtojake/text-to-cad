@@ -22,8 +22,10 @@ the two refusals; what is sent, the files a bundle's manifest lists as gzip memb
 files that made it, one member for identical bytes, in packs closed at 4 MiB with a file split over two, a 409 naming
 missing packs sending their files again (twice at most), one naming none committing again once, and a 429 waited out;
 and ``cad fork``: the files written as the zip holds them, the script that builds it and the next step said, where
-what built it differs from this computer, nothing run, a folder that holds files refused, a share gone said, and every
-entry refused that would land outside its folder. The fixtures are made in a temporary folder.
+what built it differs from this computer, nothing run, a folder that holds files refused, a share gone said, every
+entry refused that would land outside its folder, and its record kept. A share's link where inspect and snapshot take a
+document: the document this computer shared under it, else its fork's (a file's file, a model once built from its
+script), else refused in one line naming the fork to make. The fixtures are made in a temporary folder.
 """
 
 from __future__ import annotations

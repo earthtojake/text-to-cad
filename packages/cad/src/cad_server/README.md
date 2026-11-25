@@ -308,8 +308,8 @@ says so and updates nothing.
 
 The data folder (the state folder, `cad.engine.places.state_dir`) is `cad` in the platform's place for state (`~/Library/Application Support/cad` on macOS,
 `~/.local/state/cad` on Linux and Windows) or the folder `CAD_STATE_DIR` names: settings, Recents, the
-documents' records, the page token and port, the telemetry spool, the feed's last answer and the shares' records
-(`shares.json`, which this user alone may read). The cache
+documents' records, the page token and port, the telemetry spool, the feed's last answer, and the shares' and the
+forks' records (`shares.json`, `forks.json`, which this user alone may read). The cache
 folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: the documents' bytes, the
 environments, bytecode, the integrations' private homes and each shared document's last view bundle (`shares/`),
 all made again on demand. On Windows neither

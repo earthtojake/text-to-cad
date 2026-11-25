@@ -1250,7 +1250,7 @@ def _slug(text: str) -> str:
 def _unnamed_output(folder: Path, document: Path, label: Any, job: int, taken: set[Path]) -> Path:
     """Where an output that names no path is written: ``<the input's stem>-<its label>.png`` in ``folder``, each a
     slug (``_slug``; the label lower-cased, ``view-<n>`` for the ``n``-th job's output with none), and ``-2``, ``-3``
-    ... after it where another picture of the job is written there already (``taken``)."""
+    ... after it where an earlier output of the packet is written there already (``taken``)."""
     stem = _slug(stem_of(document)) or "snapshot"
     base = f"{stem}-{(_slug(label.lower()) if isinstance(label, str) else '') or f'view-{job + 1}'}"
     out, count = folder / f"{base}.png", 1

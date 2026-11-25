@@ -224,7 +224,7 @@ function drawnIn(annotation, views) {
 
 // What a single-quoted argument ends at, in bash (`'`) and in PowerShell (`'`, and its typographic quotes, U+2018 to
 // U+201B): each is written as its JSON escape, which only a string can hold.
-const QUOTES = /['‘-‛]/g;
+const QUOTES = /['\u2018-\u201b]/g;
 
 /**
  * A packet as a message carries it: compact JSON, no space, with no character a single-quoted argument ends at,
