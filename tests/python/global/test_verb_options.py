@@ -94,8 +94,9 @@ class SnapshotTakesThePicture(unittest.TestCase):
         self.assertEqual([(p.name, p.kind, p.default) for p in parameters[2:]],
                          [(name, inspect.Parameter.KEYWORD_ONLY, verb[name].default) for name in self.PICTURE],
                          "Document.snapshot(out, ...) spells out the snapshot verb's options")
-        self.assertEqual(set(verb) - {"source", "out", "job", "progress"}, set(self.PICTURE),
-                         "the verb takes no option Document.snapshot leaves out but its job and its progress seam")
+        self.assertEqual(set(verb) - {"source", "out", "job", "folder", "progress"}, set(self.PICTURE),
+                         "the verb takes no option Document.snapshot leaves out but its job, the job's pictures' "
+                         "folder and its progress seam")
         self.assertEqual(inspect.signature(cad.engine.api.inspect).parameters["progress"].default, None,
                          "inspect's progress is a seam about where the measurement is")
 
