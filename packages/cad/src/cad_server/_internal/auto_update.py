@@ -52,7 +52,7 @@ words by ``SAID``, and what to do about it by ``advice``, the one line ``cad doc
 give; ``dismissed`` once the person put its failure away), which ``cad doctor`` and the viewer's update
 button (``button``) show, with the worker's log (``LOG``; the attempt before's ``LOG_BEFORE``; never sent). While the
 worker switches releases (``switching``) a ``cad`` command that finds no server waits for the next
-(``cad.engine.client.SWITCHING``). A worker silent for ``LOST_SECONDS`` is taken for lost; should it wake, it writes
+(``cad.engine.client.SWITCHING``), and a server of the release being left starts none in its place (``leaving``). A worker silent for ``LOST_SECONDS`` is taken for lost; should it wake, it writes
 no outcome over another attempt's record.
 
 **Counted** (``report``), once per attempt that ended, by the server that runs after it (and by a trigger, before a new
@@ -114,7 +114,8 @@ RETRY_SECONDS = HOUR  # how long an attempt a release before the beat kept is be
 # What the record names as the release of a typed update begun with no answer from PyPI: whatever the build gets.
 LATEST = "latest"
 # The steps of an attempt underway, as its record's ``phase`` names them: the release built beside the one that runs,
-# then the switch to it (the server drained, the pointer written, the next server started).
+# then the switch to it (the server drained, the pointer written, the next server started). A switch that fails ends
+# in a third, ``restoring``, which no reader shows: the way back, while the release before starts again.
 PHASES = ("building", "switching")
 # Who makes a global install of cad (``global_install``), named in the record and its count.
 INSTALLERS = ("uv", "pipx")
@@ -948,6 +949,30 @@ def switching(now: float | None = None) -> bool:
     except Exception:  # noqa: BLE001 - a record that cannot be read is no switch
         return False
     return found is not None and found.get("phase") == "switching"
+
+
+# How fresh the worker's beat must be for a server's start to stand aside for its switch (``leaving``). It beats every
+# minute and as it begins the switch (``auto_update_helper.Beat``), so a worker that died holds a start back no longer.
+LEAVING_SECONDS = 150.0
+
+
+def leaving(now: float | None = None) -> bool:
+    """Whether cad's own update is switching away from the release this process runs, right now: the attempt underway
+    is in its ``switching`` phase, it began from this release (its ``from``), and its worker beat in the last
+    ``LEAVING_SECONDS``. The server the update drained is gone or going, and the next to start is the next release's:
+    a server of this release started in between (a ``cad server start`` at that moment) would take that place, be
+    taken by the update for the one it is waiting to see gone, and be stopped as the next one starts. So it starts
+    none (``cad_server.engine.daemon.main``), and its starter waits for the server that answers. Not on the way back
+    (the worker's phase is ``restoring`` then: the release before is the one to start). Never raises."""
+    try:
+        now = time.time() if now is None else now
+        found = underway(now)
+        if found is None or found.get("phase") != "switching" or found.get("from") != _version():
+            return False
+        beat = found.get("beat")
+        return _time(beat) and 0 <= now - beat < LEAVING_SECONDS
+    except Exception:  # noqa: BLE001 - what cannot be told is no reason for a server not to start
+        return False
 
 
 # Each cause an attempt's record keeps (``auto_update_helper.CAUSES``), or a reader tells (``lost``, ``blocked``), in

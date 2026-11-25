@@ -16,13 +16,14 @@ In order (``update``):
    judged: never older than ``from`` and, but for ``major``, of ``from``'s major (``accepted``); ``from`` itself is
    ``current``, nothing newer; then named (``store.publish``, which removes a stored release of that name that no
    longer runs). Nothing that runs is touched, so a failure here leaves cad as it was.
-2. **Switch** (``phase``: ``switching``, kept before anything stops). The pointer read as it is, for the way back.
+2. **Switch** (``phase``: ``switching``, kept before anything stops; while it lasts a server of the release being
+   left starts none in the next one's place, ``auto_update.leaving``). The pointer read as it is, for the way back.
    Where a server answers, it is asked to stop once nothing is in flight, and waited for (``client.drain``,
    ``DRAIN_SECONDS``); one still there after them is replaced by the new release's start all the same, its work cut
    short. Then the environment pointed at the release (``store.point``) and the release run: ``cad server start`` where
    a server ran or ``start`` asks for one, which must end 0 with a server whose greeting names the release; else ``cad
    --version``, which must say it.
-3. **Way back.** Where that fails, the pointer put back exactly as it was read (``store.restore``), a server of
+3. **Way back** (``phase``: ``restoring``). Where that fails, the pointer put back exactly as it was read (``store.restore``), a server of
    another release that answers by then stopped (``clear``: the new release's, come up late), and the server of the
    release before started where one is wanted: outcome ``failed``, cause ``start_failed`` (the server) or ``broken``
    (the command), ``restored`` whether the release before runs again. Where it is the pointer that could not be
@@ -116,7 +117,7 @@ def update(told, run=run, mark=lambda phase: None):
         built = found.pop("path", None)
         if built is not None:
             mark("switching")
-            found = switch(told, run, built, found, log)
+            found = switch(told, run, built, found, log, mark)
     store.clean(keep=[built] if found["outcome"] == "installed" else [])
     found = {**found, "from": told["from"], "at": told["at"], "tries": told.get("tries", 1), "ended": time.time(),
              **{name: told[name] for name in ("installer", "wanted", "asked", "major") if name in told}}
@@ -213,9 +214,10 @@ def started(wanted, ok, said):
     return {"started": last_line(said) if ok else f"not started: {last_line(said) or 'no server answered'}"}
 
 
-def switch(told, run, path, built, log):
+def switch(told, run, path, built, log, mark=lambda phase: None):
     """Steps 2 and 3 (see the module): the environment switched to the stored release at ``path`` (``built``: its
-    ``release``), and back where it does not run."""
+    ``release``), and back where it does not run (the record's phase ``restoring`` kept first, ``mark``: the release
+    before is the one to start again)."""
     from cad_server._internal import store
 
     kept = store.pointer()
@@ -233,6 +235,7 @@ def switch(told, run, path, built, log):
     if ok:
         return {**built, "outcome": "installed", "detail": f"cad {built['release']} runs from {path}",
                 **started(wanted, True, said)}
+    mark("restoring")
     try:
         store.restore(kept)
         clear(told["from"], log)

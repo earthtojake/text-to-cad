@@ -2382,6 +2382,17 @@ def resumed() -> int | None:
     return port if type(port) is int and 0 < port < 65536 else None
 
 
+def _leaving() -> bool:
+    """Whether cad's own update is switching away from this release right now (``auto_update.leaving``). Never raises:
+    what cannot be told is no reason for a server not to start."""
+    try:
+        from cad_server._internal import auto_update
+
+        return auto_update.leaving()
+    except Exception:  # noqa: BLE001 - see above
+        return False
+
+
 def main(argv: list[str] | None = None, *, port: int | None = None, foreground: bool = False,
          rotated: bool = False) -> int:
     """Run the engine here. ``port``: the HTTP port it must take (``cad server start --port``, which hands a server
@@ -2389,7 +2400,8 @@ def main(argv: list[str] | None = None, *, port: int | None = None, foreground: 
     before anything else, so a port another process holds fails the command at once (``bind``). One started
     detached binds on the first request that serves, which may name its own port (``cad viewer --port``) -- but where
     the server it replaced served pages (``resumed``), it serves them there at once, as one in the foreground does,
-    unless a port is named (``Daemon.resume``). The release it starts as is recorded (``started``)."""
+    unless a port is named (``Daemon.resume``). The release it starts as is recorded (``started``). It starts none
+    while cad's own update switches away from this release (``_leaving``): the next server is the update's to start."""
     from cad.engine.serve import Pressure
 
     if argv:
@@ -2406,6 +2418,13 @@ def main(argv: list[str] | None = None, *, port: int | None = None, foreground: 
     bytecode(os.environ)  # its own (``client.start`` set it), or made here: a daemon run in the foreground
     sys.pycache_prefix = os.environ.get("PYTHONPYCACHEPREFIX") or None
     sys.dont_write_bytecode = sys.pycache_prefix is None
+    if _leaving():
+        # cad's own update is between the server it drained and the next release's: this one starts none in its
+        # place, as where another daemon is up, and its starter waits for the server that answers (``client.start``).
+        if foreground:
+            print("cad: cad is updating itself, and its update starts the next release's server in a moment: "
+                  "`cad server status` says when it runs", file=sys.stderr)
+        return 0
     try:
         held = lock()
     except OSError as error:

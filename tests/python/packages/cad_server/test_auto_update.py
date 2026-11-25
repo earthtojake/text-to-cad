@@ -1474,6 +1474,7 @@ class WorkerTest(unittest.TestCase):
                          "the pointer written back exactly as it was read: none")
         self.assertEqual((found["outcome"], found["cause"], found["restored"], found["started"]),
                          ("failed", "start_failed", True, "started the cad server (cad 0.1.0)"))
+        self.assertEqual(self.phases, ["switching", "restoring"], "the way back named before the release before starts")
         self.assertEqual(found["detail"], "cad 0.2.0 did not start: cad server start: the engine server did not start: "
                                           "it exited with code 1")
         self.assertEqual((self.serving, self.pointer), ("0.1.0", None), "the release before runs, and its server")
@@ -3569,6 +3570,43 @@ class SwitchingTest(Case):
         self.assertFalse(auto_update.switching(), "lost: no longer believed")
         (self.state / auto_update.RECORD).write_text("not json", encoding="utf-8")
         self.assertFalse(auto_update.switching())
+
+    def test_a_server_of_the_release_being_left_starts_none_while_the_update_switches(self) -> None:
+        """``leaving``: between the server the update drained and the next release's, a start of the release being
+        left would take the next one's place, and be taken for the server the update waits to see gone."""
+        from cad_server.engine import daemon
+
+        self.assertFalse(auto_update.leaving(), "no record")
+        self.keep(phase="building")
+        self.assertFalse(auto_update.leaving(), "nothing has stopped yet")
+        self.keep(phase="switching")
+        self.assertTrue(auto_update.leaving(), "this release (0.1.0) is the one being left")
+        with mock.patch.object(cad_server, "__version__", "0.2.0"):
+            self.assertFalse(auto_update.leaving(), "the next release's server is the one to start")
+        self.keep(phase="restoring")
+        self.assertFalse(auto_update.leaving(), "on the way back the release before starts again")
+        self.keep(phase="switching", beat=time.time() - auto_update.LEAVING_SECONDS - 1)
+        self.assertFalse(auto_update.leaving(), "a worker that died holds no start back for long")
+        self.keep(phase="switching", outcome="installed")
+        self.assertFalse(auto_update.leaving(), "ended")
+        (self.state / auto_update.RECORD).write_text("not json", encoding="utf-8")
+        self.assertFalse(auto_update.leaving())
+        # The server's start: none while leaving, and nothing taken; as ever otherwise.
+        self.keep(phase="switching")
+        err = io.StringIO()
+        with mock.patch.object(daemon, "lock", side_effect=AssertionError("no lock is taken")), redirect_stderr(err):
+            self.assertEqual(daemon.main([]), 0, "left at once, as where another daemon is up")
+            self.assertEqual(err.getvalue(), "", "detached: nothing said")
+            self.assertEqual(daemon.main([], foreground=True), 0)
+        self.assertIn("cad is updating itself", err.getvalue())
+        self.keep(phase="restoring")
+        with mock.patch.object(daemon, "lock", return_value=None) as lock:  # another daemon holds it: left as ever
+            self.assertEqual(daemon.main([]), 0)
+        lock.assert_called_once()
+        with mock.patch.object(auto_update, "leaving", side_effect=RuntimeError("unreadable")), \
+                mock.patch.object(daemon, "lock", return_value=None) as lock:
+            self.assertEqual(daemon.main([]), 0, "what cannot be told is no reason not to start")
+        lock.assert_called_once()
 
     def test_the_cad_command_sets_the_hook_where_it_holds_its_release(self) -> None:
         from cad_server import cli
