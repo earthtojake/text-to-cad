@@ -111,8 +111,13 @@ pointer and the cleanup (`cad_server/_internal/store.py`), and the one module th
 (`_cad_release`). No update can replace that module, since it runs from the files uv installed: what
 it reads can never change ([What must stay the same](releases.md#what-must-stay-the-same)). `uv tool
 list` names the release uv installed, not the newer one that runs; `cad --version` and `cad doctor`
-say which runs. uv keeps no range for cad, so a person's own `uv tool upgrade cad` takes the newest
-of all, a higher major included. A second copy of cad's packages is on disk (linked from uv's cache
+say which runs. uv's record of the install stays as the install made it. A plain `uv tool install
+cad` keeps no range, so a person's own `uv tool upgrade cad` takes the newest of all, a higher major
+included. A computer that 0.11.12 to 0.11.17 updated keeps the range their update wrote there
+(`cad>=X,<1`), which cad never rewrites: once `cad update --major` has taken it past that range, uv's
+own upgrade would put an older cad over the newer one, so `cad update --major` and `cad doctor` say
+so there, with the command that clears it (`uv tool install --force cad`). A second copy of cad's
+packages is on disk (linked from uv's cache
 where the file system links), and a third for a while after an update. `uv tool uninstall cad` leaves
 the store in the state folder ([Removing](../install.md#removing)). A release needs the installed
 cad's Python: one that asks for a newer Python waits until the person installs cad again.
@@ -188,7 +193,8 @@ version ahead of them.
 **What it costs.** A person on an old major stays there until they run `cad update --major`, and gets
 no fixes made only in a later major. A minor that breaks reaches everyone by itself. The bound is
 cad's own and no longer the installer's: a person's own `uv tool upgrade cad` or `pipx upgrade cad`
-takes the newest of all.
+takes the newest of all, unless uv's record still holds the range an earlier release's update left
+there ([what that costs](#uv-installs-cad-and-cads-update-changes-none-of-it)).
 
 ## Who updates which copy
 
@@ -202,6 +208,15 @@ not, says why in the viewer's alert card, in plain words, and what to do, with `
 until another attempt begins; put away, it waits behind its icon in the navbar. A person's own update (the button, `cad update`) spends none of the
 tries the automatic update has for a release. A cad that is not a global install, such as one installed
 with pip into a project's own Python, never updates itself, and shows no button.
+
+On the command line, a global install with automatic updates on that has stayed behind a release of
+its own major for three days says so: one line on standard error, after a command's own output and
+at most once a day, with both releases, why, and what to do. Never in a command's output, never under
+`--json`, and never with automatic updates off. `cad doctor` says where cad runs from, whether the
+release that runs passes its own check, and why its update is not working, and ends with the one
+thing to do next. Each cause has one line of what to do, the same in `cad doctor`, in that line and
+at the end of a failed `cad update`; where the way out is to install cad again, it names the command
+of whoever installed it.
 
 An automatic update that does not install is tried again, and never given up on: an hour after a
 release's first try, then 2, 4, 8 and 16 hours, then once a day, and no more than four attempts in a
@@ -260,7 +275,11 @@ the update button, which the maintainer chose to bring back as 0.11.1 had it: au
 on some computers (a file in use, a full disk, an installer's setting that hides the release), and a
 person there, left behind with nothing to see, needs a way to see why and to fix it. It stands where
 the person already looks, offers the update the automatic one would make, blocks nothing, and is the
-only thing of ours that asks. A command does what it says: `cad
+only thing of ours that asks. The line on the command line is the same thing for a computer that
+never opens the viewer, where an agent reads it: it speaks only where cad was to update itself and
+has not for days, so it reports a fault and asks for nothing a person did not already choose. A
+person who turned automatic updates off chose the release they have, and an agent that read "run
+`cad update`" there might run it against that choice, so they are told nothing. A command does what it says: `cad
 update` updates cad, `cad plugin install` installs the plugin, and only the install command, which the
 person runs to have text-to-cad, opts them in to the plugin following cad. The plugin's update is the
 code of the installed cad, the release that was tested, and nothing is fetched from our website to
@@ -275,6 +294,9 @@ that never passes to a run a day.
 **What it costs.** The plugin's install is only as new as the cad that runs it (the first decision).
 The button is a standing blue icon on every page of a computer that is behind, which a person may
 ignore as they would any prompt; a failure it says stays on every page, put away behind its icon once closed.
+The line on the command line costs a `cad` command a few small files read, and one line a day in an
+agent's context on a computer that stays behind; with automatic updates off, a cad left behind says
+nothing on the command line at all.
 Released 0.11.12 and 0.11.13 still download the hosted install command and run it unattended, as their
 `cad plugin update` and after their own update, and so does the bridge:
 [SECURITY.md](../../SECURITY.md) says so, and nothing shipped later can change them. An app that

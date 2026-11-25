@@ -246,6 +246,15 @@ class WhereCadRunsFromTests(unittest.TestCase):
                 mock.patch.object(store, "pointed", return_value={"release": "0.12.4"}):
             self.assertNotIn("more", self.checks()[1]["install"], "a pointer taken: nothing under it")
 
+    def test_an_install_uv_s_own_record_keeps_below_the_release_it_runs_is_warned_of_with_what_clears_it(self) -> None:
+        from cad_server._internal import auto_update
+
+        line = "uv's own record keeps this install below cad 1, so a `uv tool upgrade` would put an older cad over cad 1.0.0"
+        with mock.patch.object(auto_update, "outgrown", return_value=line):
+            found = self.checks()[1]
+        self.assertEqual((found["install"]["status"], found["install"]["more"]), ("warning", [line]))
+        self.assertEqual(found["fix"], {"name": "fix", "status": "warning", "detail": line})
+
     def test_the_release_that_runs_passes_its_own_check(self) -> None:
         from cad_server._internal import store
 

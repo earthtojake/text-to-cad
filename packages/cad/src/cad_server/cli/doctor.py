@@ -136,7 +136,8 @@ def _install() -> tuple:
     (``store.own``) and who made it (``auto_update.global_install``); where this process runs a stored release
     (``store.running``), that release and its folder, the one cad's own update keeps; and, under it, a pointer the
     environment no longer takes (``store.pointer`` there, ``store.pointed`` None: cad was installed again since, which
-    always runs what was installed). Where the environment's own packages hold no installed cad (a checkout, whose
+    always runs what was installed). A WARNING where uv's own record keeps the install below the release it runs
+    (``auto_update.outgrown``), with the line that says what to do under it. Where the environment's own packages hold no installed cad (a checkout, whose
     ``store.packages`` is its source folder, or none), the folder ``cad_server`` is imported from."""
     import cad_server
     from cad_server._internal import store
@@ -150,6 +151,9 @@ def _install() -> tuple:
     running = store.running()
     if running is not None:
         said += f"; this cad is {cad_server.__version__}, kept by its own update in {running}"
+    bound = _auto().outgrown()
+    if bound is not None:
+        return WARNING, said, [bound]
     kept = store.pointer()
     if kept is None or store.pointed() is not None:
         return INFO, said
@@ -342,12 +346,12 @@ def _attempt() -> tuple:
 
 def _fix(checks: list[dict]) -> list[dict]:
     """The last check, ``fix``, only where cad or its update is not working: the one thing to do next, by the first of
-    the release, update and attempt lines that fails or warns (the line under it: the reinstall line,
+    the release, install, update and attempt lines that fails or warns (the line under it: the reinstall line,
     ``auto_update.advice``), else where this cad has stayed
     behind a release of its major for days by the rule of the line a cad command says then
     (``auto_update.stayed_behind``). Nothing where all is well."""
     for found in checks:
-        if found["name"] in ("release", "update", "attempt") and found["status"] in (WARNING, FAILED) \
+        if found["name"] in ("release", "install", "update", "attempt") and found["status"] in (WARNING, FAILED) \
                 and found.get("more"):
             return [_check("fix", WARNING, found["more"][0])]
     try:

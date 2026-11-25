@@ -196,7 +196,8 @@ def step(attempt: dict[str, Any], was: str, told_of: set[str], *, server: bool) 
 def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable[[str], int], *,
           higher: str | None = None) -> int:
     """An attempt that ended, said in one line: its exit status. The release it names is the one installed, where it
-    ended well (an update begun without PyPI's answer finds out only then). One that failed for a cause it names says
+    ended well (an update begun without PyPI's answer finds out only then), with one more line where uv's own record
+    keeps this install below the release cad now runs (``auto_update.outgrown``). One that failed for a cause it names says
     it in plain words (``auto_update.in_words``), then what to do (``auto_update.advice``, by who made the global
     install), then where the worker's log is; one whose new server did not start, that cad went back and runs the
     release before still. One that names no cause says uv's last words (its ``detail``) and the server, of which
@@ -210,6 +211,9 @@ def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable
         if str(attempt.get("started", "")).startswith("not started"):
             return said(f"{done}, but the cad server did not start again: run `cad server start`")
         print(done)
+        bound = auto_update.outgrown()  # a major crossed on an install uv's own record keeps below it
+        if bound:
+            print(bound)
         return 0
     newest = "the newest release" if target == "latest" else target
     word = auto_update.cause(attempt)

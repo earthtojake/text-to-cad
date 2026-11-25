@@ -124,6 +124,48 @@ class GlobalInstallTest(Case):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 auto_update.bound(version)
 
+class OutgrownTest(Case):
+    """uv's own record of an install may keep cad below a major (the update of 0.11.12 to 0.11.17 wrote ``cad>=X,<N``
+    there, and cad's update never rewrites it): harmless until ``cad update --major`` takes cad to that major, when
+    uv's own upgrade would put an older cad over it. ``outgrown`` is the one line that says so."""
+
+    def receipt(self, requirement: str) -> None:
+        (self.tool / "uv-receipt.toml").write_text(f"[tool]\nrequirements = [{requirement}]\n", encoding="utf-8")
+
+    def test_the_major_uv_s_record_keeps_cad_below(self) -> None:
+        for requirement, bound in (('{ name = "cad", specifier = ">=0.11.17,<1" }', 1),
+                                   ('{ name = "cad", specifier = ">=1.2.0, < 2" }', 2),
+                                   ('{ name = "cad", specifier = "<1.0" }', 1),
+                                   ('"cad>=0.11.17,<1"', 1),
+                                   ('{ name = "cad" }', None),
+                                   ('{ name = "cad", specifier = "==0.11.15" }', None),
+                                   ('{ name = "cad", specifier = ">=0.11.17,<=1" }', None),
+                                   ('{ name = "cad", specifier = ">=0.11.17,<0.12" }', None),
+                                   ('{ name = "cad", specifier = ">=0.11.17,<1.5" }', None)):
+            with self.subTest(requirement=requirement):
+                self.receipt(requirement)
+                self.assertEqual(auto_update.kept_below(), bound)
+        (self.tool / "uv-receipt.toml").unlink()
+        self.assertIsNone(auto_update.kept_below(), "no receipt: uv did not make this install")
+
+    def test_the_line_is_said_only_where_cad_runs_a_release_the_record_does_not_allow(self) -> None:
+        self.receipt('{ name = "cad", specifier = ">=0.11.17,<1" }')
+        for running, said in (("0.12.4", None), ("1.0.0", True), ("2.3.1", True), (None, None)):
+            with self.subTest(running=running), mock.patch.object(store, "active", return_value=running):
+                line = auto_update.outgrown()
+                if said:
+                    self.assertEqual(line, "uv's own record keeps this install below cad 1, so a `uv tool upgrade` would "
+                                           f"put an older cad over cad {running}: `uv tool install --force cad` installs "
+                                           "cad afresh and clears that")
+                else:
+                    self.assertIsNone(line)
+        self.receipt('{ name = "cad" }')
+        with mock.patch.object(store, "active", return_value="1.0.0"):
+            self.assertIsNone(auto_update.outgrown(), "a plain `uv tool install cad` keeps no bound")
+        with mock.patch.object(store, "active", side_effect=OSError("unreadable")):
+            self.assertIsNone(auto_update.outgrown(), "never a reason for what says it to fail")
+
+
 class SwitchesTest(Case):
     def test_on_by_default_for_a_global_install_and_off_and_on_kept(self) -> None:
         self.assertEqual(auto_update.switches(), {"on": True}, "nothing kept: on")
@@ -2167,6 +2209,10 @@ class UpdateCommandTest(Case):
                                              argv=["--major"])
         self.assertEqual((code, out, err), (0, "cad 0.1.0 updated to 1.0.0\n", ""))
         self.assertEqual(request.call_args.args[0], {"op": "update", "major": True})
+        # Where uv's own record keeps the install below the major it now runs: one more line, with what clears it.
+        with mock.patch.object(auto_update, "outgrown", return_value="uv's own record keeps this install below cad 1"):
+            out = self.typed(major, looks=[("1.0.0", {**record, "release": "1.0.0"}, None, True)], argv=["--major"])[1]
+        self.assertEqual(out, "cad 0.1.0 updated to 1.0.0\nuv's own record keeps this install below cad 1\n")
         self.assertEqual(self.typed({"ok": True, "newest": "1.0.0"}, argv=["--major"])[:3],
                          (0, "cad 1.0.0 is the newest release\n", ""))
 

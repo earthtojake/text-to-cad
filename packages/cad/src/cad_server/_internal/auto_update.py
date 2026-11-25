@@ -285,6 +285,45 @@ def uv_tool(prefix: str | None = None) -> Path | None:
     return folder if str(name).lower() == "cad" else None
 
 
+# What a person is told where uv's own record keeps this install below the release it runs (``outgrown``).
+OUTGROWN = ("uv's own record keeps this install below cad {major}, so a `uv tool upgrade` would put an older cad over cad "
+            "{release}: `uv tool install --force cad` installs cad afresh and clears that")
+
+
+def kept_below(prefix: str | None = None) -> int | None:
+    """The major version uv's own record of this install keeps cad below: the ``<N`` of the requirement its receipt
+    holds (``cad>=X,<N``, which the update of 0.11.12 to 0.11.17 wrote there as it ran uv's upgrade; a person's own
+    ``uv tool install "cad<N"`` writes one too). None where it holds no such bound, or uv did not make this install.
+    cad's update never rewrites the receipt (``outgrown``)."""
+    import tomllib
+
+    try:
+        receipt = tomllib.loads((Path(prefix or sys.prefix) / "uv-receipt.toml").read_text(encoding="utf-8"))
+        first = receipt["tool"]["requirements"][0]
+        said = str(first.get("specifier") or "") if isinstance(first, dict) else str(first)
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError):
+        return None
+    bound = re.search(r"(?<![<>=!~])<\s*(\d+)(?:\.0)*\s*(?:,|;|$)", said)
+    return int(bound[1]) if bound else None
+
+
+def outgrown(prefix: str | None = None) -> str | None:
+    """The one line (``OUTGROWN``) for an install that runs a release uv's own record does not allow: ``cad update
+    --major`` took cad to a major the receipt keeps it below (``kept_below``), and uv's own ``uv tool upgrade``, which
+    goes by the receipt, would install the newest release below that major over it -- and a cad installed again runs
+    what was installed. None where the release that runs (``store.active``) is inside the bound, or there is none.
+    Never raises."""
+    try:
+        from cad_server._internal import store
+
+        bound, running = kept_below(prefix), release(store.active(prefix))
+        if bound is None or running is None or running[0] < bound:
+            return None
+        return OUTGROWN.format(major=bound, release=".".join(map(str, running)))
+    except Exception:  # noqa: BLE001 - a line of advice, never a reason for what says it to fail
+        return None
+
+
 def pipx_tool(prefix: str | None = None) -> Path | None:
     """The environment of the pipx tool ``cad`` this process runs from: ``prefix`` (``sys.prefix``) where it is pipx's
     ``venvs/cad`` (pipx names each environment after its package, and a ``--suffix`` install, ``cad<suffix>``, is not
