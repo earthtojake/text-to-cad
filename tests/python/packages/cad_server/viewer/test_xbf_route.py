@@ -270,7 +270,7 @@ finally:
         self.assertEqual(own["id"], file_id(self.document))
         status, envelope = self.get(f"/api/v1/documents/{own['id']}")
         self.assertEqual((status, envelope["kind"], envelope["state"], envelope["source"]["type"],
-                          envelope["source"]["path"]), (200, "model", "live", "script", str(self.base / "models.py")))
+                          envelope["source"]["path"]), (200, "model", "live", "script", (self.base / "models.py").as_posix()))
         self.assertNotEqual(self.post(own["api"] + "/parameters", {"values": {}})[0], 404)
         status, server = self.get("/api/v1/server")
         self.assertEqual((status, "model" in server["kinds"]["reads"], "xbf" in server["kinds"]["reads"],

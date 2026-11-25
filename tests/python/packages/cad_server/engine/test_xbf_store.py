@@ -167,9 +167,9 @@ class XbfStoreTest(store_fixtures.StoreCase):
         self.assertEqual(self.cli("inspect", dropped_id).returncode, 0)
         self.assertEqual(self.cli("inspect", built).returncode, 0)
         status, found = envelope(built)
-        self.assertEqual((status, found["source"]["path"], found["entry"]["project"]), (200, str(self.xbf("cube")), None))
+        self.assertEqual((status, found["source"]["path"], found["entry"]["project"]), (200, self.xbf("cube").as_posix(), None))
         status, found = envelope(dropped_id)
-        self.assertEqual((status, found["source"]["path"], found["entry"]["project"]["folder"]), (200, str(dropped), "parts"))
+        self.assertEqual((status, found["source"]["path"], found["entry"]["project"]["folder"]), (200, dropped.as_posix(), "parts"))
         self.assertEqual(self.entry(dropped_id), None, "found, with no entry made for it")
         self.assertFalse((self.state / "documents").exists(), "and no record of either")
         # An unchanged run after the restart is taken from its file by its key.

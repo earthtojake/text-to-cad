@@ -786,7 +786,9 @@ class CadApp:
             found = {"name": str(source.get("name") or row.get("name") or ""),
                      "version": str(model.get("version") if model.get("version") is not None else row.get("hash") or ""),
                      "state": state,
-                     "source": {"type": "script", "path": source.get("script"), "function": source.get("name"),
+                     # `/`-separated, as a file's path is (its row's ``file``), whichever way its id was found.
+                     "source": {"type": "script", "path": to_posix_path(source["script"]) if source.get("script") else None,
+                                "function": source.get("name"),
                                 "present": _is_file(source.get("script"))},
                      "producers": [{"tool": "cad", "release": __version__ if state == "live" else None,
                                     "at": model.get("builtAt")}]}

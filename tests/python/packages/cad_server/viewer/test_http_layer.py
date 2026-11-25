@@ -333,7 +333,8 @@ class Documents(HttpLayerTestCase):
             self.assertEqual((found["kind"], found["name"], found["version"], found["state"], found["held"]),
                              ("model", "cube", "v1", "held", True))
             # Its script, and whether it is there now: one named but gone (or never kept) is not.
-            self.assertEqual(found["source"], {"type": "script", "path": script, "function": "cube", "present": False})
+            self.assertEqual(found["source"], {"type": "script", "path": script.replace(os.sep, "/"), "function": "cube",
+                                              "present": False})
             os.makedirs(os.path.dirname(script), exist_ok=True)
             Path(script).write_text("", encoding="utf-8")
             self.assertEqual(envelope()[1]["source"]["present"], True)
