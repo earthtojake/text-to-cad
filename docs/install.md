@@ -378,7 +378,7 @@ cad and the plugin update separately.
 cad updates itself to every new release of its major version (the first number: 0 in 0.12.3). While
 its server runs, it looks for a new release about once an hour and, once nothing has run for a
 minute, installs it beside the cad that runs, without restarting anything: the viewer's update
-button then offers the restart (a click asks first: Restart, or Later). Otherwise cad restarts its
+button then becomes a restart icon ("Restart to update"), and a click restarts. Otherwise cad restarts its
 server on the new release when nobody would notice: as the server next starts, once nothing has
 asked anything of it for an hour (a viewer page asks while it is shown), or, a day later, the next
 time nothing has run for a minute. To update it now:
@@ -388,8 +388,8 @@ cad update
 ```
 
 That updates cad alone; the install command, run again, does the same and then updates the plugin.
-The viewer and the CAD app show a blue update button while a newer release of your major is out, or
-installed and waiting for its restart; clicking it asks first, then does what `cad update` does.
+The viewer and the CAD app show a blue update button, at the top right, while a newer release of your
+major is out, or installed and waiting for its restart; clicking it does what `cad update` does.
 Where an update fails, the viewer says why and what to do.
 With automatic updates on, a `cad` command also says once a day when cad has stayed behind for three
 days, and what to do. Where it keeps failing, or cad no longer runs: run `cad update`, which says why and
