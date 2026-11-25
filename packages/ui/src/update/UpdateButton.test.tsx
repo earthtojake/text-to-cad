@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
 import { unavailablePromptContext } from '@cad/core/prompt';
+import { readFileSync } from 'node:fs';
 import en from '../i18n/locales/en.js';
 // The built package, as a host has it: the file viewer, the alert card and its context are one copy of each.
 import { UPDATE_CAUSES, UPDATE_POLL_MS, UPDATE_REPORTABLE, UpdateButton, failureWords, useUpdate } from '../../dist/update/index.js';
@@ -258,6 +259,42 @@ it('a refusal no attempt began from says why, from the answer, and is put away o
   await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Dismiss' })); });
   expect(server.dismiss).not.toHaveBeenCalled();  // nothing to put away on the server
   expect(cards()).toEqual([]);
+});
+
+it('the reinstall sentences name the command of whoever installed cad, from the server and from a refusal', async () => {
+  const t = (key: string, params?: Record<string, unknown>) => String((en as Record<string, string>)[key] ?? key)
+    .replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? ''));
+  const uv = '`uv tool install --force cad`', pipx = '`pipx install --force cad`';
+  for (const [cause, words] of [
+    ['python', 'The release needs a newer Python than this cad runs on: install cad again with COMMAND in a terminal.'],
+    ['no_installer', 'uv can’t be found, so cad can’t update itself: install cad again with COMMAND in a terminal.'],
+    ['no_switch', 'This install of cad can’t switch to a newer release by itself: install cad again with COMMAND in a terminal.'],
+  ]) {
+    expect(failureWords({ cause, installer: 'uv' }, t), cause).toBe(words.replace('COMMAND', uv));
+    expect(failureWords({ cause, installer: 'pipx' }, t), cause).toBe(words.replace('COMMAND', pipx));
+    expect(failureWords({ cause }, t), cause).toBe(words.replace('COMMAND', uv));
+  }
+  // From the server's record of a failed attempt.
+  show({ server: calls(), initial: failed('no_switch', 100, { installer: 'pipx' }) });
+  expect(cards()[0].textContent).toContain(pipx);
+  expect(cards()[0].textContent).not.toContain('uv tool install');
+  cleanup();
+  // From the refusal's answer.
+  const refusal = Object.assign(new Error('HTTP 409'), { failure: { payload: { error: 'x', cause: 'python', installer: 'pipx' } } });
+  show({ server: calls({ start: async () => { throw refusal; } }) });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Update to 0.9.1' })); });
+  expect(cards()[0].textContent).toContain(pipx);
+});
+
+it('every language\'s reinstall sentences take the command as a value, never spelling one', () => {
+  for (const locale of ['en', 'ja', 'ko', 'zh-CN', 'zh-TW']) {
+    const source = readFileSync(`src/i18n/locales/${locale}.js`, 'utf8');
+    for (const cause of ['python', 'no_installer', 'no_switch']) {
+      const line = source.split('\n').find(row => row.includes(`"update.cause.${cause}"`))!;
+      expect(line, `${locale} ${cause}`).toContain('`{command}`');
+      expect(line, `${locale} ${cause}`).not.toMatch(/uv tool install|pipx install/);
+    }
+  }
 });
 
 it('the server restarted on the release before (the update failed): the page goes on following it and says why', async () => {

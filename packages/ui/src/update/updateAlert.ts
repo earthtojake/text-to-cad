@@ -18,9 +18,12 @@ export const UPDATE_CAUSES = ["timeout", "no_program", "in_use", "denied", "disk
  */
 export const UPDATE_REPORTABLE = ["helper_start", "helper_crash", "lost", "unknown", "broken", "start_failed"] as const;
 
+/** The command that installs cad again, by who made the install: uv's unless pipx did. */
+export const reinstallCommand = (installer?: string): string => installer === "pipx" ? "pipx install --force cad" : "uv tool install --force cad";
+
 /** A failure in the person's language: why it did not install, and what to do. */
 export function failureWords(failure: UpdateFailure, t: (key: string, params?: Record<string, unknown>) => string): string {
-  if ((UPDATE_CAUSES as readonly string[]).includes(failure.cause)) return t(`update.cause.${failure.cause}`);
+  if ((UPDATE_CAUSES as readonly string[]).includes(failure.cause)) return t(`update.cause.${failure.cause}`, { command: reinstallCommand(failure.installer) });
   return failure.said || t("update.cause.other");
 }
 

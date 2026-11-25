@@ -27,6 +27,8 @@ export interface UpdateState {
   said?: string;
   /** The helper's log of the attempt, where it kept one: its path on this computer. */
   log?: string;
+  /** Who made this install, which a reinstall is told by: `uv` or `pipx`. */
+  installer?: string;
   /** The person put the failure away (`dismiss`): every page keeps it behind its icon. */
   dismissed?: boolean;
 }
@@ -63,6 +65,8 @@ export interface UpdateFailure {
   at?: number;
   /** The helper's log of the attempt. */
   log?: string;
+  /** Who made this install: `uv` or `pipx`. */
+  installer?: string;
   /** Put away: its card behind its icon in the navbar. */
   dismissed?: boolean;
 }
@@ -79,7 +83,8 @@ export const UPDATE_STAGES = 3;
 const refusalOf = (error: unknown): UpdateFailure => {
   const payload = (error as { failure?: { payload?: Record<string, unknown> } } | null)?.failure?.payload;
   const text = (value: unknown) => (typeof value === "string" && value ? value : undefined);
-  return { cause: text(payload?.cause) ?? "", said: text(payload?.error) ?? (error instanceof Error ? error.message : undefined) };
+  return { cause: text(payload?.cause) ?? "", said: text(payload?.error) ?? (error instanceof Error ? error.message : undefined),
+    ...(text(payload?.installer) ? { installer: text(payload?.installer) } : {}) };
 };
 
 /**
@@ -160,7 +165,7 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
     if (update?.state === "failed") {
       const mine = chosen.current && chosen.current.at === update.at ? chosen.current.dismissed : undefined;
       setFailure({ cause: update.cause ?? "", said: update.said, at: update.at,
-        ...(update.log ? { log: update.log } : {}), dismissed: mine ?? update.dismissed === true });
+        ...(update.log ? { log: update.log } : {}), ...(update.installer ? { installer: update.installer } : {}), dismissed: mine ?? update.dismissed === true });
     } else {
       setFailure(current => (current && current.at === undefined ? current : null));
       if (after.current && reply.release && reply.release !== followed) {
