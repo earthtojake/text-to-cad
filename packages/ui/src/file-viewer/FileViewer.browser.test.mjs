@@ -80,7 +80,7 @@ test("the renderer is not re-rendered by the frame's own chrome: a navbar action
 
 // A viewer that is not the page's own (`FileViewerProps.layout`), here out of sight at 480 × 360, is under the phone
 // breakpoint: the page's type must not follow it.
-test("a viewer drawn out of sight for a picture never changes the page: its layout pinned, no data-viewer-layout, the page's type its own", async () => {
+test("a viewer that is not the page's own never changes the page: its layout pinned, no data-viewer-layout, the page's type its own", async () => {
   await reset();
   await page.setViewportSize({ width: 1280, height: 800 });
   await settle();
@@ -93,13 +93,7 @@ test("a viewer drawn out of sight for a picture never changes the page: its layo
   await page.evaluate(() => window.harness.picture("pinned"));
   await page.getByTestId("picture").locator("[data-viewer-pinned-layout]").waitFor({ state: "attached" });
   await settle();
-  assert.deepEqual(await type(), desktop, "a pinned picture viewer leaves the page as it was");
+  assert.deepEqual(await type(), desktop, "a pinned viewer leaves the page as it was");
   assert.equal(await page.getByTestId("picture").locator("[data-viewer-pinned-layout]").getAttribute("data-viewer-pinned-layout"), "mobile");
-  // And a viewer in the picture's box that measured itself a phone's is still not the page's.
-  await page.evaluate(() => window.harness.picture("measured"));
-  await page.getByTestId("picture").locator('[data-viewer-layout="mobile"]').waitFor({ state: "attached" });
-  await settle();
-  const measured = await type();
-  assert.deepEqual([measured.xs, measured.name], [desktop.xs, desktop.name], "a phone-sized viewer out of sight never sets the page's type");
   await page.evaluate(() => window.harness.picture("none"));
 });

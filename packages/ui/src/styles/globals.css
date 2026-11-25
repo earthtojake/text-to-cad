@@ -94,10 +94,10 @@
  * control's padding 10px (an icon's inset in its tile), its radius 6px, the gap between neighbours still 4px, a Quick
  * Edit chip 28px, a switch 36x20 level with the controls, a slider's thumb and a checkbox 20px. The whole page follows,
  * so a menu, a dropdown or a hint portalled out of the viewer is the same size as the chrome it opened from. Only the
- * page's own viewer says so: a viewer drawn out of sight for a picture (`OffscreenPicture.tsx`) pins its layout, and
- * one inside `[data-offscreen-picture]` is never read, so Home's type never jumps while its cards get pictures. A field
+ * page's own viewer says so: a viewer that is not the page's own pins its layout (`FileViewerProps.layout`) and is not
+ * read. A field
  * keeps 15px: the page's viewport, not a 16px font, stops a phone zooming in on it. */
-:root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) {
+:root:has([data-viewer-layout="mobile"]) {
   --cad-text-tiny: 13px;
   --cad-text-xs: 14px;
   --cad-text-ui: 15px;
