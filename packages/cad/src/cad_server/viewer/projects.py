@@ -14,20 +14,20 @@ reached in: one in a linked folder inside a project's is that project's, as one 
 folder opened inside a project is that project (``Projects.add`` answers it and makes no entry: projects
 do not nest by accident), and a project opened around another leaves the inner one its own.
 
-A project's page is one folder of it (``Projects.folder``): the CAD files directly in it, each the
-library's row where it has an entry, and the subfolders that hold a CAD file somewhere below
-(``has_cad_below``, which stops at the first one it meets), never a hidden or a build folder. The folder is
-the disk's: a file another program drops in is listed, one deleted is gone, and no file is read to list
-it. A search (``Projects.search``) is the one place the levels are flattened: the CAD files anywhere below the
-folder whose path holds every word, found by a walk that no folder can hold up -- it stops at
-``WALK_LIMIT`` files, ``WALK_DEPTH`` folders down and ``WALK_SECONDS``, skips hidden and build folders, and
-never walks a folder twice (a link back into one is how a walk would never end). Either says when it
-stopped early (``truncated``), and is kept for ``WALK_KEPT_SECONDS`` after it ends -- longer than any page
-waits between two reads -- and read by one reader at a time, so the Home and every page asking again and
-again cost one read.
+A project's page is one folder of it (``Projects.folder``): every subfolder and every file directly in it
+whose name is not hidden, a CAD file the library's row where it has an entry, any other file a row with no
+kind: it is no document, and has no entry, no note and no page. The folder is the disk's: a file another
+program drops in is listed, one deleted is gone, and no file is read to list it. A search
+(``Projects.search``) is the one place the levels are flattened: the files anywhere below the folder whose
+path holds every word, found by a walk that no folder can hold up -- it stops at ``WALK_LIMIT`` files,
+``WALK_DEPTH`` folders down and ``WALK_SECONDS``, skips hidden and build folders, and never walks a folder
+twice (a link back into one is how a walk would never end). Either says when it stopped early
+(``truncated``), and is kept for ``WALK_KEPT_SECONDS`` after it ends -- longer than any page waits between
+two reads -- and read by one reader at a time, so the Home and every page asking again and again cost one
+read.
 
 An id names a file with no record of it (``locate``): the files the engine was named since it started, then
-the library's, then the project folders', walked.
+the library's, then the CAD files of the project folders, walked.
 
 The home folder, a folder above it and a disk's root are no project (``Refused``): a walk of one would
 be the whole disk's.
@@ -48,9 +48,9 @@ from cad_server.engine.state import stamp
 
 from .backend import absolute_path
 from .content_types import extension_of
-from .folders import LIST_LIMIT, _entries
+from .folders import LIST_LIMIT
 from .natural_sort import collation_key
-from .recents import present, row
+from .recents import row
 from .scanner import VIEWER_EXTENSIONS, VIEWER_SKIPPED_DIRECTORIES, is_hidden_name, to_posix_path
 
 # The most files a walk lists, how deep it goes, and for how long it walks.
@@ -199,20 +199,19 @@ class Projects:
         root is there and that is no folder in it."""
         answer, folder = self._place(record, path)
         if folder is not None:
-            level = answer["path"].count("/") + 1 if answer["path"] else 0
-            folders, files, answer["truncated"] = self._read("scan", folder, lambda: scan(folder, level))
+            folders, files, answer["truncated"] = self._read("scan", folder, lambda: scan(folder))
             answer["folders"] = [{"name": name, "path": f"{answer['path']}/{name}".lstrip("/")} for name in folders]
             answer["documents"] = self._rows(record["id"], ((os.path.join(folder, name), ident) for name, ident in files),
                                              notes)
         return answer
 
     def search(self, record: dict[str, Any], path: object, words: str, notes) -> dict[str, Any]:
-        """``folder``'s answer for a search: the CAD files anywhere below that folder whose path below it holds
+        """``folder``'s answer for a search: the files anywhere below that folder whose path below it holds
         every word of ``words``, whatever its case, in the walk's order; no folders."""
         answer, folder = self._place(record, path)
         if folder is not None:
             needles = words.casefold().split()
-            paths, answer["truncated"] = self._walk(folder)
+            paths, answer["truncated"] = self._read("search", folder, lambda: walk(folder, every=True))
             matched = [found for found in paths if all(
                 needle in to_posix_path(os.path.relpath(found, folder)).casefold() for needle in needles)]
             answer["documents"] = self._rows(record["id"], ((found, file_id(found)) for found in matched), notes)
@@ -232,19 +231,23 @@ class Projects:
         return answer, folder
 
     def _rows(self, project: str, files, notes) -> list[dict[str, Any]]:
-        """The row of each of ``files`` (its path as reached, its id) that is there now, this project's."""
+        """The row of each of ``files`` (its path as reached, its id) that is there now, this project's: a CAD
+        file's with its library entry and its note; any other file's with neither."""
         entries = self.library.read()["files"]
         rows = []
         for path, ident in files:
-            found = present(path)
-            if found is not None:
-                rows.append(row(ident, to_posix_path(path), entries.get(ident) or {}, notes.read(ident, stamp(found)),
-                                found, project))
+            try:
+                found = os.stat(path)
+            except OSError:
+                continue
+            document = extension_of(path) in VIEWER_EXTENSIONS
+            rows.append(row(ident, to_posix_path(path), entries.get(ident) or {} if document else {},
+                            notes.read(ident, stamp(found)) if document else {}, found, project))
         return rows
 
     def seek(self, ident: str) -> str | None:
-        """The file of id ``ident`` in a project's folder, the project opened last looked in first: its path as
-        the walk reached it, or None for none a walk lists."""
+        """The CAD file of id ``ident`` in a project's folder, the project opened last looked in first: its path
+        as the walk reached it, or None for none a walk lists."""
         for record in sorted(self.list(), key=lambda record: record.get("opened") or 0, reverse=True):
             ids = self._read("ids", record["root"], lambda root=record["root"]: {
                 file_id(path): path for path in self._walk(root)[0]})
@@ -288,67 +291,38 @@ def locate(ident: str, server, library, projects: Projects) -> str | None:
     return None
 
 
-def scan(folder: str, level: int = 0, *, seconds: float = WALK_SECONDS, clock: Callable[[], float] = time.monotonic
-         ) -> tuple[list[str], list[tuple[str, str]], bool]:
-    """What a project's page lists of ``folder`` (``level`` folders below its root): the names of its subfolders
-    that hold a CAD file somewhere below, each CAD file directly in it with its id, both in natural order, and
-    whether that is not all of it -- it holds more than ``LIST_LIMIT`` entries, of which the first are listed, or a
-    subfolder could not be read to the end within ``seconds`` (all of them share it), which is then listed."""
-    deadline = clock() + seconds
-    try:
-        entries = sorted(_entries(folder), key=lambda item: (item[1] != "directory", collation_key(item[0])))
-    except OSError:  # a folder that cannot be read lists nothing
-        entries = []
-    truncated = len(entries) > LIST_LIMIT
+def scan(folder: str) -> tuple[list[str], list[tuple[str, str]], bool]:
+    """What a project's page lists of ``folder``: the names of its subfolders, each file directly in it with its
+    id, both in natural order and none with a hidden name, and whether that is not all of it: it holds more than
+    ``LIST_LIMIT`` entries, of which the first are listed, folders first."""
     folders, files = [], []
-    for name, kind in entries[:LIST_LIMIT]:
-        if kind == "file":
-            files.append((name, file_id(os.path.join(folder, name))))
-            continue
-        found = has_cad_below(os.path.join(folder, name), deadline, level + 1, clock)
-        if found is not False:
-            folders.append(name)
-        truncated = truncated or found is None
-    return folders, files, truncated
+    try:
+        with os.scandir(folder) as found:
+            for entry in found:
+                try:
+                    if is_hidden_name(entry.name):
+                        continue
+                    if entry.is_dir():
+                        folders.append(entry.name)
+                    elif entry.is_file():
+                        files.append(entry.name)
+                except OSError:  # a broken link or an entry that went away while it was read
+                    continue
+    except OSError:  # a folder that cannot be read lists nothing
+        pass
+    folders.sort(key=collation_key)
+    files.sort(key=collation_key)
+    kept = max(LIST_LIMIT - len(folders), 0)
+    return (folders[:LIST_LIMIT], [(name, file_id(os.path.join(folder, name))) for name in files[:kept]],
+            len(folders) + len(files) > LIST_LIMIT)
 
 
-def has_cad_below(folder: str, deadline: float, level: int = 1, clock: Callable[[], float] = time.monotonic
-                  ) -> bool | None:
-    """Whether ``folder`` (``level`` folders below a project's root) holds a CAD file somewhere below: True at
-    the first one met, depth first, nothing counted or sorted; False once all of it was read and none found. Hidden
-    and build folders are never entered, no folder is read twice, and none deeper than ``WALK_DEPTH``. None where
-    it cannot say: ``deadline`` (the clock's) passed first, or a folder too deep was left unread."""
-    walked: set[str] = set()
-    unread = False
-    stack = [(folder, level)]
-    while stack:
-        if clock() > deadline:
-            return None
-        current, at = stack.pop()
-        try:
-            real = os.path.realpath(current)
-            if real in walked:
-                continue
-            walked.add(real)
-            children = []
-            for name, kind in _entries(current):
-                if kind == "file":
-                    return True
-                children.append(name)
-        except OSError:  # a folder that cannot be read is passed over, as a person would
-            continue
-        if at >= WALK_DEPTH:
-            unread = unread or bool(children)
-        else:
-            stack.extend((os.path.join(current, name), at + 1) for name in children)
-    return None if unread else False
-
-
-def walk(root: str, *, limit: int = WALK_LIMIT, depth: int = WALK_DEPTH,
+def walk(root: str, *, every: bool = False, limit: int = WALK_LIMIT, depth: int = WALK_DEPTH,
          seconds: float = WALK_SECONDS, clock: Callable[[], float] = time.monotonic) -> tuple[list[str], bool]:
-    """The CAD files under the folder ``root`` (the module docstring), ``/``-separated: the folder's own first,
-    then each folder's under it by its path below ``root``, each folder's in natural order; and whether it
-    stopped early: at ``limit`` files, past ``depth`` or past ``seconds``."""
+    """The CAD files under the folder ``root`` (the module docstring) -- with ``every``, every file --,
+    ``/``-separated: the folder's own first, then each folder's under it by its path below ``root``, each
+    folder's in natural order; and whether it stopped early: at ``limit`` files, past ``depth`` or past
+    ``seconds``."""
     deadline = clock() + seconds
     folders: list[tuple[str, list[str]]] = []
     count = 0
@@ -378,7 +352,8 @@ def walk(root: str, *, limit: int = WALK_LIMIT, depth: int = WALK_DEPTH,
                         if entry.is_dir():
                             if not (is_hidden_name(entry.name) or entry.name in VIEWER_SKIPPED_DIRECTORIES):
                                 children.append(entry.name)
-                        elif entry.is_file() and not is_hidden_name(entry.name) and extension_of(entry.name) in VIEWER_EXTENSIONS:
+                        elif entry.is_file() and not is_hidden_name(entry.name) \
+                                and (every or extension_of(entry.name) in VIEWER_EXTENSIONS):
                             names.append(entry.name)
                     except OSError:  # a broken link or an entry that went away while it was read
                         continue

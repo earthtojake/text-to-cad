@@ -285,7 +285,7 @@ class CadApp:
     is registered here (``remember``: by the launcher, or by the catalog's answer for its path).
     ``start`` is the folder of the most recent launch (the working folder by default): what its
     relative files were read from; it bounds nothing. Nothing here browses the disk: a page reads the
-    files it is named and the CAD files of the projects a person opened (``projects.py``).
+    files it is named and lists the folders of the projects a person opened (``projects.py``).
     """
 
     # The link for the engine's page (``GET /api/v1/local/link``): the page's own address
@@ -328,6 +328,8 @@ class CadApp:
         # A file a project's folder lists through a linked folder in it, by its id: the path it was reached by
         # (``projects.Projects.holding``), which its page and its library entry say it is in.
         self._reached_by: dict[str, str] = {}
+        # A file a project's folder lists that is no document, by its id: its path, for Open in alone (``open_in``).
+        self._listed: dict[str, str] = {}
         # Each document's kind, by its id, once known (``kind_of``): an id never changes kind.
         self._kinds: dict[str, str] = {}
         # The engine shares one recorder across its page and MCP sessions.
@@ -426,11 +428,8 @@ class CadApp:
             # A model a live worker holds is the model; else its .xbf, read as the file it is.
             if path is None or path.lower().endswith(".xbf"):
                 model = held(ident)
-            if model is not None:
-                entry = row(ident, model)
-            elif path is not None:
-                entry = catalog_entry(path)
-            else:
+            entry = row(ident, model) if model is not None else catalog_entry(path) if path is not None else None
+            if entry is None:
                 missing = f"no document {ident} is held"
         elif file:
             path = absolute_path(file)
@@ -1122,9 +1121,10 @@ class CadApp:
 
     def project(self, ident, query) -> dict:
         """``GET /api/v1/projects/<id>``: one folder of the project (``projects.Projects.folder``) -- ``path``,
-        below its root; none: the root -- or, with ``q``, the CAD files anywhere below that folder whose path
-        holds every word (``Projects.search``). Each file answered is known by its id from now on (``remember``):
-        a row's ``id`` opens its page and reads its envelope whether a page opened the file before or not."""
+        below its root; none: the root -- or, with ``q``, the files anywhere below that folder whose path
+        holds every word (``Projects.search``). Each CAD file answered is known by its id from now on
+        (``remember``): a row's ``id`` opens its page and reads its envelope whether a page opened the file before
+        or not. Any other file answered is no document, and its id names it to Open in alone (``_listed``)."""
         record = self.projects.get(ident)
         if record is None:
             raise ApiError(404, f"no project {ident}", "GET /api/v1/projects lists the projects")
@@ -1135,6 +1135,9 @@ class CadApp:
         except NoFolder as error:
             raise ApiError(404, str(error), "list the project's folder: leave path out") from None
         for row in found["documents"]:
+            if row["kind"] is None:
+                self._listed[row["id"]] = os.path.normpath(row["path"])
+                continue
             if self.file_of(row["id"]) is None:
                 self.remember(row["path"])
             reached = os.path.normpath(row["path"])
@@ -1224,8 +1227,13 @@ class CadApp:
         -- a model's script (kind ``script``), a file's own path -- then, for a model, one
         ``export:<kind>`` for each kind of file its last build wrote, as the engine holds the build
         (``model_info``'s ``files``: none for a model taken up from the cache, which no build wrote
-        yet). The paths are the server's own: a request only ever names one of these. 404 for an
-        id no document has."""
+        yet). A file a project's folder listed that is no document is its one target, its kind its
+        extension's (``apps.kind_of``). The paths are the server's own: a request only ever names one of
+        these. 404 for an id neither names."""
+        if ident in self._listed:
+            from cad_server._internal.apps import kind_of
+
+            return [{"target": "source", "kind": kind_of(self._listed[ident]), "path": self._listed[ident]}]
         catalog, model = self._known(ident)
         envelope = self._envelope(catalog, model)
         path = envelope["source"].get("path")
@@ -1239,29 +1247,30 @@ class CadApp:
         return targets
 
     def open_in(self, ident) -> dict:
-        """``GET /api/v1/local/open-in?id=<id>``: the document's files (``_open_targets``), each with
-        its ``name``, whether it is there now (``present``) and the apps this computer has that take
-        its kind (``apps``, as last found: never looked for on a request; a KiCad that cannot read the
-        file listed with ``refuses: "newer"``), whether the operating system's own handler may not open it
-        (``default: false``: a KiCad file's, ``apps.NEVER_OPENED``), and the desktop's file manager
-        (``fileManager``)."""
-        from cad_server._internal.apps import DETECTED, apps_for, file_manager, opens
+        """``GET /api/v1/local/open-in?id=<id>``: the document's files, or the one file a folder listed
+        (``_open_targets``), each with its ``name``, whether it is there now (``present``) and the apps this
+        computer has that take its kind (``apps``, as last found: never looked for on a request; a KiCad that
+        cannot read the file listed with ``refuses: "newer"``), whether the operating system's own handler may
+        not open it (``default: false``: every file but those ``apps.defaults`` lists by extension -- code, a
+        KiCad file, an extension no list names), and the desktop's file manager (``fileManager``)."""
+        from cad_server._internal.apps import DETECTED, apps_for, defaults, file_manager
 
         found = DETECTED.found()
         return {"targets": [{"target": target["target"], "kind": target["kind"],
                              "name": node_basename(target["path"]) if target["path"] else "",
                              "present": _is_file(target["path"]),
                              "apps": apps_for(target["kind"], found, target["path"]),
-                             **({} if opens(target["path"]) else {"default": False})}
+                             **({} if defaults(target["path"]) else {"default": False})}
                             for target in self._open_targets(ident)],
                 "fileManager": file_manager()}
 
     def _open_with(self, request, response) -> None:
-        """``POST /api/v1/local/open`` with ``{"id", "target", "app"}``: one of the document's files
-        (``_open_targets``) in an app found for its kind, or the operating system's own handler
-        (``"default"``), started detached (``apps.open_file``). 404 for a document or a file not there,
-        400 for a target the document does not have, an app not found for that file, a KiCad that cannot
-        read it, or the default handler of a file it may not open (``apps.opens``)."""
+        """``POST /api/v1/local/open`` with ``{"id", "target", "app"}``: one of the document's files, or the
+        file a folder listed (``_open_targets``), in an app found for its kind, or the operating system's own
+        handler (``"default"``), started detached (``apps.open_file``). 404 for an id or a file not there,
+        400 for a target the id does not have, an app not found for that file, a KiCad that cannot
+        read it, or the default handler of a file it may not open (``apps.defaults``), whatever the request
+        says."""
         from cad_server._internal import apps
 
         self._limit(request, 8192)
@@ -1274,12 +1283,12 @@ class CadApp:
         if chosen is None:
             raise ApiError(400, f"the document has no target {payload['target']!r}",
                            f"name one of {', '.join(targets)}: GET /api/v1/local/open-in?id= lists them")
-        takes_default = apps.opens(chosen["path"])
+        takes_default = apps.defaults(chosen["path"])
         app = None
         if payload["app"] == "default":
-            if not takes_default:
+            if not takes_default and chosen["path"]:
                 raise ApiError(400, f"{node_basename(chosen['path'])} is never opened in its default app from here",
-                               "open it in a KiCad Open in lists for it, or reveal it in the file manager and open it there")
+                               "open it in an app Open in lists for it, or reveal it in the file manager and open it there")
         else:
             found = apps.DETECTED.found()
             listed = apps.apps_for(chosen["kind"], found, chosen["path"])

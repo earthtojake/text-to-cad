@@ -1,8 +1,10 @@
 """Open in: the apps on this computer that open a document's files, found offline, and the opening.
 
 A page's Open in menu (``GET /api/v1/local/open-in``, ``POST /api/v1/local/open``: the viewer's
-``http_app``) offers, for each file of a document, the apps of ``APPS`` that take its kind
-(``KINDS``) and that this computer has. Which it has is found without the network and never on a
+``http_app``) offers, for each file of a document and for any other file a project's folder lists, the apps
+of ``APPS`` that take its kind (``KINDS``) and that this computer has. What a file that is no document is, and
+whether the operating system's own handler may open it, is one table by extension (``FILES``, ``defaults``): an
+allow-list, since a file in a cloned folder may be a program and a click must never run one. Which it has is found without the network and never on a
 request: ``DETECTED`` looks in the background -- once as the server starts (``warm``: no command is
 run), then on use, at most every ``REFRESH_SECONDS`` -- and a request reads what it last found.
 
@@ -59,8 +61,9 @@ from typing import NamedTuple
 
 from cad.engine import executables
 
-__all__ = ["APPS", "BLENDER_SCRIPT", "DETECTED", "KINDS", "REFRESH_SECONDS", "Detected", "KiCad", "NEVER_OPENED",
-           "apps_for", "detect", "file_manager", "kicad_label", "kicad_reads", "linux", "mac", "open_file", "opens", "windows"]
+__all__ = ["APPS", "BLENDER_SCRIPT", "DETECTED", "FILES", "KINDS", "REFRESH_SECONDS", "Detected", "KiCad",
+           "NEVER_OPENED", "apps_for", "defaults", "detect", "file_manager", "kicad_label", "kicad_reads", "kind_of",
+           "linux", "mac", "open_file", "opens", "windows"]
 
 # Every app Open in offers: its id and the name the menu shows.
 APPS = {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed", "pycharm": "PyCharm",
@@ -75,10 +78,32 @@ APPS = {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed", "pycha
 # Blender takes what its import script does (``BLENDER_SCRIPT``): a GLB and an STL, never a 3MF, which no
 # Blender reads without an add-on.
 _MESHES = ("bambu", "orca", "prusa", "freecad")
-KINDS = {"script": ("vscode", "cursor", "zed", "pycharm", "sublime"),
+_EDITORS = ("vscode", "cursor", "zed", "pycharm", "sublime")
+KINDS = {"script": _EDITORS, "code": _EDITORS, "text": _EDITORS,
          "step": ("fusion", "solidworks", "solidedge", "rhino", "plasticity", "freecad", "bambu", "orca", "prusa"),
          "stl": (*_MESHES, "blender"), "3mf": _MESHES, "glb": ("blender",),
+         "fcstd": ("freecad",), "blend": ("blender",),
          "kicad_pcb": ("kicad", "kicad-nightly"), "kicad_sch": ("kicad", "kicad-nightly")}
+
+# A file that is no document, by its extension: the kind Open in says it is (its apps are ``KINDS``'), and whether
+# the operating system's own handler may open it. An allow-list: an extension not here is ``file``, which no app
+# and no handler opens, so a page offers its folder (Reveal) and its path alone.
+#   code: source and structured text, in an editor; never the default handler, which on some systems runs it.
+#   text: plain text, markdown and tables. pdf, image: what a system shows and never runs.
+#   cad: another CAD tool's native file, in that tool; fcstd and blend also in a FreeCAD or a Blender found here.
+_FILES = (
+    ("code", False, ".py .pyi .ipynb .js .mjs .cjs .ts .tsx .jsx .json .jsonc .yaml .yml .toml .ini .cfg .xml .html "
+                    ".htm .css .scss .sh .bash .zsh .c .h .cc .cpp .cxx .hpp .rs .go .java .kt .swift .rb .lua .sql"),
+    ("text", True, ".txt .md .markdown .rst .csv .tsv .log"),
+    ("pdf", True, ".pdf"),
+    ("image", True, ".png .jpg .jpeg .gif .webp .svg .bmp .tif .tiff"),
+    ("cad", True, ".f3d .f3z .sldprt .sldasm .slddrw .ipt .iam .idw .ipn .dwg .3dm .catpart .catproduct .catdrawing "
+                  ".prt .par .psm .x_t .x_b .igs .iges .sat .sab .brep .jt .skp .scad"),
+    ("fcstd", True, ".fcstd"),
+    ("blend", True, ".blend"),
+)
+FILES: dict[str, tuple[str, bool]] = {extension: (kind, default) for kind, default, extensions in _FILES
+                                      for extension in extensions.split()}
 
 # Files no app but a KiCad record is started on, the operating system's default handler included (we cannot
 # show that it resolves to a KiCad that can open the file). The server never starts KiCad by itself (its work
@@ -654,9 +679,25 @@ DETECTED = Detected()
 
 
 def opens(path: str | None) -> bool:
-    """Whether an app other than a KiCad, or the default handler, may be started on the file at ``path``
-    (``NEVER_OPENED``)."""
+    """Whether an app other than a KiCad may be started on the file at ``path`` (``NEVER_OPENED``)."""
     return not os.path.splitext(str(path or ""))[1].lower().startswith(NEVER_OPENED)
+
+
+def kind_of(path: str | None) -> str:
+    """What Open in says a file that is no document is, by its extension (``FILES``); ``file`` for any other."""
+    return FILES.get(os.path.splitext(str(path or ""))[1].lower(), ("file", False))[0]
+
+
+def defaults(path: str | None) -> bool:
+    """Whether the operating system's own handler may be started on the file at ``path``: only for an extension
+    listed -- a document type's but KiCad's (``NEVER_OPENED``), or one ``FILES`` says so of. Never for code, and
+    never for an extension no list names: the handler of an unknown file may run it."""
+    from cad.registry import DOCUMENT_TYPES
+
+    extension = os.path.splitext(str(path or ""))[1].lower()
+    if extension in FILES:
+        return FILES[extension][1]
+    return opens(path) and any(extension in entry.extensions for entry in DOCUMENT_TYPES.values())
 
 
 def open_file(path: str, app: str | KiCad | None = None, *, app_id: str | None = None, platform: str = sys.platform,
@@ -666,15 +707,16 @@ def open_file(path: str, app: str | KiCad | None = None, *, app_id: str | None =
     it; a Blender with its import script (``BLENDER_SCRIPT``) and the file after ``--``. Detached and never
     waited on; never through a shell. Raises ``FileNotFoundError`` when Linux has no ``xdg-open`` for the
     default, and ``PermissionError`` for a file no app is started on (``opens``), a KiCad alone being started
-    on one of its editors' files."""
+    on one of its editors' files, and for the default handler of a file it may not open (``defaults``)."""
     editor = _KICAD_EDITORS.get(os.path.splitext(path)[1].lower())
     if isinstance(app, KiCad) and editor is not None:
         app = getattr(app, editor)
-    elif isinstance(app, KiCad) or not opens(path):
+    elif isinstance(app, KiCad) or not opens(path) or (app is None and not defaults(path)):
         raise PermissionError(f"{os.path.basename(path)} is never opened in that app from here")
     quiet = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
-    # Blender is handed its import script, and the file as the one argument after `--`: never inside code.
-    blender = app is not None and app_id == "blender"
+    # Blender is handed its import script, and the file as the one argument after `--`: never inside code. Its own
+    # ``.blend`` it opens from its command line as any app opens a file.
+    blender = app is not None and app_id == "blender" and not path.lower().endswith(".blend")
     given = ["--python", BLENDER_SCRIPT, "--", path] if blender else [path]
     if platform == "darwin":
         if blender:

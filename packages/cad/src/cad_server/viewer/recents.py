@@ -44,13 +44,14 @@ def row(ident: str, path: str, entry: dict[str, Any], note: dict[str, Any], foun
     """The file of id ``ident`` as every list carries it -- ``GET /api/v1/documents``'s rows, a project's
     folder's and a CAD app home's launch alike: at ``path`` (as the list reached it), with its library
     ``entry`` (``{}``: none), the cache's ``note`` of the file as it is now (``{}``: none), its ``stat`` and
-    the id of the project it is in."""
+    the id of the project it is in. A file no view opens (a folder lists every file) has no ``kind`` and no
+    ``api``: it is no document."""
     from .kinds import document_api, file_kind
 
     kind = file_kind(path)
     folder = os.path.dirname(path)
     pictured = note.get("pictured")
-    return {"id": ident, "kind": kind, "record": "file", "api": document_api(kind, ident),
+    return {"id": ident, "kind": kind, "record": "file", "api": document_api(kind, ident) if kind else None,
             "path": path, "name": os.path.basename(path), "folder": folder, "namespace": folder,
             "opened": entry.get("opened"), "updated": found.st_mtime, "created": entry.get("created"),
             "pinned": bool(entry.get("pinned")), "missing": False,

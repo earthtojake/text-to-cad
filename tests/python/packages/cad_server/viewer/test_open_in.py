@@ -80,7 +80,7 @@ class OpenInRoutesTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(answer, {"targets": [
             {"target": "source", "kind": "script", "name": "bracket.py", "present": True,
-             "apps": [entry("vscode"), entry("cursor")]},
+             "apps": [entry("vscode"), entry("cursor")], "default": False},  # code: an editor's, never the handler's
             {"target": "export:xbf", "kind": "xbf", "name": "bracket.xbf", "present": True, "apps": []},
             {"target": "export:step", "kind": "step", "name": "bracket.step", "present": True,
              "apps": [entry("freecad"), entry("bambu")]},
@@ -95,7 +95,8 @@ class OpenInRoutesTest(unittest.TestCase):
         # A model taken up from the engine's cache, no build of it written this run, and no script named.
         self.model = {"source": {"name": "bracket"}, "version": "v1", "state": "held"}
         self.assertEqual(self.get(MODEL)[1]["targets"], [{"target": "source", "kind": "script", "name": "",
-                                                          "present": False, "apps": [entry("vscode"), entry("cursor")]}])
+                                                          "present": False, "apps": [entry("vscode"), entry("cursor")],
+                                                          "default": False}])
 
     def test_a_files_target_is_the_file_itself(self) -> None:
         ident = self.step_file()
@@ -117,7 +118,7 @@ class OpenInRoutesTest(unittest.TestCase):
         step = self.step_file()
         for payload, expected in (({"id": MODEL, "target": "export:step", "app": "freecad"}, (str(self.step), FOUND["freecad"])),
                                   ({"id": MODEL, "target": "source", "app": "cursor"}, (str(self.script), FOUND["cursor"])),
-                                  ({"id": MODEL, "target": "source", "app": "default"}, (str(self.script), None)),
+                                  ({"id": MODEL, "target": "export:step", "app": "default"}, (str(self.step), None)),
                                   ({"id": step, "target": "source", "app": "bambu"},
                                    (os.path.normpath(self.fixture.app.file_of(step)), FOUND["bambu"]))):
             with self.subTest(payload=payload):
@@ -231,7 +232,8 @@ class OpenInRoutesTest(unittest.TestCase):
                         {"id": MODEL, "target": str(self.step), "app": "freecad"},    # a path is no target
                         {"id": step, "target": "export:step", "app": "freecad"},      # a file has its source alone
                         {"id": MODEL, "target": "source", "app": "/bin/sh"},
-                        {"id": MODEL, "target": "source", "app": "default", "path": "/etc/passwd"},
+                        {"id": MODEL, "target": "source", "app": "default"},          # a script's handler may run it
+                        {"id": MODEL, "target": "export:step", "app": "default", "path": "/etc/passwd"},
                         {"id": MODEL, "target": "source"}):
             with self.subTest(payload=payload):
                 status, answer = self.post(payload)
@@ -240,7 +242,7 @@ class OpenInRoutesTest(unittest.TestCase):
         # The file of a target it has, gone.
         self.assertEqual(self.post({"id": MODEL, "target": "export:stl", "app": "bambu"})[0], 404)
         self.script.unlink()
-        self.assertEqual(self.post({"id": MODEL, "target": "source", "app": "default"})[0], 404)
+        self.assertEqual(self.post({"id": MODEL, "target": "source", "app": "cursor"})[0], 404)
         self.opener.assert_not_called()
 
     def test_open_needs_the_write_header_and_only_posts(self) -> None:

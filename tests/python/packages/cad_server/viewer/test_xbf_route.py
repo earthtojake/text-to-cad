@@ -426,8 +426,9 @@ finally:
         self.assertEqual(status, 201, project)
 
         def listed(path: str = "") -> dict:
+            """The folder's documents: its CAD files (it lists its scripts too, which are none)."""
             found = self.get(f"/api/v1/projects/{project['project']['id']}?path={path}")[1]
-            return {row["name"]: row for row in found["documents"]}
+            return {row["name"]: row for row in found["documents"] if row["kind"] is not None}
 
         posix = lambda path: str(path).replace(os.sep, "/")
         self.assertEqual(sorted(listed()), ["arm-copy.xbf", "arm.xbf", "hub.step", "hub.xbf"],
