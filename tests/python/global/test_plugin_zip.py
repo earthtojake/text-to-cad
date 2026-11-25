@@ -54,7 +54,7 @@ class PluginZipTests(unittest.TestCase):
         self.assertIn(".codex-plugin/", members)
         self.assertEqual(changed, [])
         for name in (name for name in skills if name.endswith("/SKILL.md")):
-            self.assertIn("run `uv tool install cad`", skills[name], name)
+            self.assertIn("run `uv tool install --force cad`", skills[name], name)
             self.assertNotIn(plugin_zip.INSTALL_SCRIPT, skills[name], name)
         # Everything tracked under the plugin's roots ships, `.codex-plugin/` icons included,
         # plus exactly the files the archived manifest points at; nothing else from the repo.

@@ -24,12 +24,12 @@ Three copies, differing in what they carry:
   ZIP entry's.
 
 Commands carry no version and no copy names a store. Every copy holds the skills byte for byte as main has them:
-each setup block installs cad by uv's one line, `uv tool install cad`, and none runs our install script, which is
+each setup block installs cad by uv's one line, `uv tool install --force cad`, and none runs our install script, which is
 how a person installs the plugins; a store updates its own copy. No manifest of ours declares a hook.
 
 No copy names our install script or holds a download piped to a shell (`plugin_zip.text_errors`,
 `PIPE_TO_SHELL`): claude.ai's directory flags one as an install-time risk. In `latest` and the directory's copy
-the README installs by the skills' uv line (`UV_INSTALL`) in place of the Quickstart's two one-liners and the
+the README installs by uv's line (`UV_INSTALL`, which the skills give with `--force`) in place of the Quickstart's two one-liners and the
 paragraph after them (`by_uv`, a strict substitution that fails the build when what it replaces is not there
 exactly once). main's README keeps its Quickstart. The directory's copy differs once more: its manifest leaves
 out the listing links the directory's validation does not know (`UNLISTED`, also strict); the README, which the

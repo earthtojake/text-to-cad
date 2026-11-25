@@ -124,7 +124,7 @@ class VersionSyncMirrorTests(unittest.TestCase):
             # block's fixed first release of a global install (0.11.12), whatever release is stamped.
             skill = root / "skills/fixture/SKILL.md"
             skill.parent.mkdir(parents=True)
-            fixed = "0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.\n"
+            fixed = "0.11.12, run `uv tool install --force cad`.\n"
             unstamped = ("---\nname: fixture\n---\n"
                          "Written for `cad==1.0.0`. Before first use in a chat, run `cad --version`. If `cad` is missing "
                          "or older than\n" + fixed + "A pattern: `uv tool install cad==*`.\n"

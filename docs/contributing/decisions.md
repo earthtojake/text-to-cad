@@ -124,16 +124,23 @@ cad's Python: one that asks for a newer Python waits until the person installs c
 
 ## One line installs cad
 
-**Decision.** `uv tool install cad`, with no flags, is the one way we tell anyone to install cad,
-and it never changes. Every skill's Setup block runs it where `cad` is missing or older than 0.11.12,
-the first release installed this way
+**Decision.** `uv tool install cad`, with no version, no range and no Python, is the one way we tell
+anyone to install cad, and it never changes. Every skill's Setup block runs it with `--force`, `uv
+tool install --force cad`, where `cad` is missing or older than 0.11.12, the first release installed
+this way
 ([The shared blocks](writing-a-skill.md#the-shared-blocks), held by
 `tests/python/global/test_skill_requirements.py`); cad updates itself, so no skill updates it. No
 skill runs the install command. cad's `requires-python` has a floor and no upper bound.
 
 **Why.** A skill deals with cad alone: the install command changes every agent app on the computer,
-which is the person's call, not an agent's. A line with no flags works on whatever Python uv picks,
-and leaves a person's own `uv tool upgrade cad` working.
+which is the person's call, not an agent's. A line with no version and no Python works on whatever
+Python uv picks, and leaves a person's own `uv tool upgrade cad` working. `--force` is there because
+an agent runs the line on a computer it knows nothing of, and only with it does the line install
+the newest release whatever is there: plain, uv leaves a cad it installed earlier as it is (it says
+`cad` is already installed, and ends well), and stops at a `cad` file it did not write. Tried on uv
+0.5.20 to 0.13.10, each case; `cad@latest` and `--upgrade` take the newest over uv's own install,
+and stop at that file like the plain line. It is the line cad itself gives where it must be
+installed again.
 
 **What it costs.** uv chooses the Python, so cad cannot count on one: where the server's Python is
 newer than the CAD kernel's builds, the kernel's environment is made on an older Python uv fetches.

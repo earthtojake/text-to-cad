@@ -36,7 +36,7 @@ export it as a document of its own.
 ## Setup
 
 Written for `cad==0.11.17`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
-0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
+0.11.12, run `uv tool install --force cad`.
 
 If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
 https://github.com/earthtojake/text-to-cad

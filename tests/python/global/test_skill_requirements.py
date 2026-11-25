@@ -4,8 +4,10 @@ same in each.
 The block names the cad the skills were written for once, as `cad==<VERSION>`, which the release stamps
 (scripts/release/sync-version.mjs); no command and no install line carries a version. 0.11.12 in its first sentence
 is fixed, not stamped: the first release installed globally by uv. It has the agent run `cad --version` before
-first use, and install cad by uv's one line, `uv tool install cad`, where it is missing or older than 0.11.12
-(0.10.0 to 0.11.11 are a launcher, not a global install, and `--force` replaces its file). cad updates itself, so
+first use, and install cad by uv's one line, with `--force`, where it is missing or older than 0.11.12: `uv tool
+install --force cad` installs the newest release whatever is there, where the plain line leaves a cad uv installed
+earlier as it is and stops at a `cad` file uv did not write (0.10.0 to 0.11.11 are a launcher, not a global
+install). cad updates itself, so
 the block never has the agent update it: where cad is a major or minor version newer than the skill and something
 fails, the agent tells the person to update the plugin, whose skills are then the older half (docs/install.md,
 "Updating"). No skill runs our install script: that is how a
@@ -33,7 +35,7 @@ VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 # The owner's text, word for word (X is the release, stamped).
 SETUP = """Written for `cad=={X}`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
-0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
+0.11.12, run `uv tool install --force cad`.
 
 If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
 https://github.com/earthtojake/text-to-cad
