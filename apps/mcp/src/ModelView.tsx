@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createHttpPromptFiles, libraryRow, projectOf, type CadClient } from '@cad/core/client';
+import { createHttpPromptFiles, libraryRow, type CadClient } from '@cad/core/client';
 import { unavailablePromptContext } from '@cad/core/prompt';
 import { CadViewer, createCadFileActions, createCadFileSource, normalizePath, type CadViewerProps } from '@cad/ui/cad-viewer';
 import type { AppSetting, ColorSchemeSetting, LanguageSetting } from '@cad/ui/file-viewer';
 import type { HomeLocation, NavigationTarget, ViewerLinks } from '@cad/ui/host';
-import type { ModelLibrarySource } from '@cad/ui/library';
+import { samePlace, type ModelLibrarySource } from '@cad/ui/library';
 import type { TabStore } from '@cad/ui/tab-store';
 import type { Bridge } from './host/bridge';
 import { frameClipboard } from './host/clipboard';
@@ -20,7 +20,6 @@ const HISTORY_LIMIT = 100;
 // A step of a view's history: a file, by its absolute path, or the home ('') at a place on it.
 interface Step { file: string; place: HomeLocation }
 const RECENTS: HomeLocation = { view: 'recents' };
-const samePlace = (a: HomeLocation, b: HomeLocation) => a.view === b.view && (a.view !== 'project' || (b.view === 'project' && a.project === b.project));
 const sameStep = (a: Step | undefined, b: Step) => Boolean(a) && a!.file === b.file && (b.file !== '' || samePlace(a!.place, b.place));
 
 export interface ViewReporter {
@@ -133,8 +132,8 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   }), [sync, client]);
   useEffect(() => { reporter.showing(file || null); }, [reporter, file]);
 
-  // Every other view has the home: the projects and the documents opened before, from every view and the web viewer.
-  // What it opens is shown in place.
+  // Every other view has the home: the projects (a project's page is one folder of it) and the documents opened before,
+  // from every view and the web viewer. What it opens is shown in place.
   // The home's first lists came with its launch, as `GET /api/v1/documents` and `GET /api/v1/projects` list them: the
   // cards draw at once, each its picture read by its document's id, and later reads ask.
   const seeded = useRef(launch.recents ?? null);
@@ -151,8 +150,10 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
     projects: () => {
       const first = seededProjects.current;
       seededProjects.current = null;
-      return first ? Promise.resolve(first.map(projectOf)) : client.projects?.() ?? Promise.resolve([]);
+      return first ? Promise.resolve(first) : client.projects?.() ?? Promise.resolve([]);
     },
+    // A project's page: one folder of it, or a search below it, through the tunnel as every read is.
+    ...(client.projectFolder ? { folder: (project: string, options: { path?: string; q?: string }) => client.projectFolder!(project, options) } : {}),
     removeProject: project => client.removeProject?.(project.id) ?? Promise.resolve([]),
     // Import, with the desktop's chooser where this computer has one: a file it picks is shown in place, a folder
     // opened as a project.

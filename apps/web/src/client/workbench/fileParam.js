@@ -1,36 +1,38 @@
 /**
- * What a page shows, in its address. A document, in the path: `/<id>` -- a document's id (`cad.engine.ids`): a
- * model's, or a file's, which the server derives from its canonical path and registers when a
- * launcher or the page opens it. The home, at `/`, at a place on it its query names: `/` Recents,
- * `/?view=pinned`, `/?view=standalone`, `/?project=<id>` a project's page. A path that names no id is the home, and a
- * query that names no place is Recents.
+ * What a page shows, in its address. A document, in the path: `/<id>` -- a document's id (`cad.engine.ids`), its
+ * file's, which the server derives from its canonical path and knows once a launcher, the page or a folder's listing
+ * has named it. The home, at `/`, at a place on it its query names: `/` Recents, `/?view=pinned`, `/?view=standalone`,
+ * `/?project=<id>` a project's page at its top, `&path=<folder>` at a folder of it (below its root, `/`-separated). A
+ * path that names no id is the home, and a query that names no place is Recents.
  */
-const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+import { documentOfPage, documentPage } from "@cad/core/lib/documentPages.js";
+
 /** The places of the home the query's `view` names; Recents is the home with none. */
 const VIEWS = new Set(["pinned", "standalone"]);
-/** The query's parameters that name a place: a document's page carries neither. */
-const PLACE_PARAMETERS = ["view", "project"];
+/** The query's parameters that name a place: a document's page carries none of them. */
+const PLACE_PARAMETERS = ["view", "project", "path"];
 
 /** The id the URL's path names, or null: the home. */
 export function readDocumentId(pathname = window.location.pathname) {
-  const value = String(pathname || "").replace(/^\/+|\/+$/g, "");
-  return ID.test(value) ? value : null;
+  return documentOfPage(pathname);
 }
 
 /**
- * @typedef {{ view: "recents" | "pinned" | "standalone" } | { view: "project", project: string }} HomePlace  A place
- *   on the home (`@cad/ui/host`'s `HomeLocation`).
+ * @typedef {{ view: "recents" | "pinned" | "standalone" } | { view: "project", project: string, path?: string }} HomePlace
+ *   A place on the home (`@cad/ui/host`'s `HomeLocation`).
  */
 
 /**
- * The place on the home the URL's query names: a project's page, Pinned or Standalone; Recents for anything else.
+ * The place on the home the URL's query names: a project's page (at the folder `path` names, its top with none), Pinned
+ * or Standalone; Recents for anything else.
  * @param {string} [search]
  * @returns {HomePlace}
  */
 export function readHomePlace(search = window.location.search) {
   const query = new URLSearchParams(search);
   const project = query.get("project");
-  if (project) return { view: "project", project };
+  const path = (query.get("path") ?? "").replace(/^\/+|\/+$/g, "");
+  if (project) return path ? { view: "project", project, path } : { view: "project", project };
   const view = query.get("view");
   return { view: view === "pinned" || view === "standalone" ? view : "recents" };
 }
@@ -49,11 +51,13 @@ export function readDefaultFileParam() {
  */
 export function pageAddress({ id = "", place = null } = {}, { search = window.location.search, hash = window.location.hash } = {}) {
   const query = new URLSearchParams();
-  if (!id && place?.view === "project" && place.project) query.set("project", place.project);
-  else if (!id && place && VIEWS.has(place.view)) query.set("view", place.view);
+  if (!id && place?.view === "project" && place.project) {
+    query.set("project", place.project);
+    if (place.path) query.set("path", place.path);
+  } else if (!id && place && VIEWS.has(place.view)) query.set("view", place.view);
   for (const [name, value] of new URLSearchParams(search)) if (!PLACE_PARAMETERS.includes(name)) query.append(name, value);
   const rest = query.toString();
-  return `/${id || ""}${rest ? `?${rest}` : ""}${hash}`;
+  return `${id ? documentPage(id) : "/"}${rest ? `?${rest}` : ""}${hash}`;
 }
 
 /**

@@ -259,9 +259,8 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // host gives it an address), and its documents, the previous and next of which `[` and `]` and the ⋯ show here
   // (`projectKeys.js`). A view that shows its file alone (no `openFile`) moves to none.
   const projectCrumb = useMemo(() => (project ? { name: project.name, href: project.href ?? null, onOpen: project.onShow } : null), [project]);
-  // The document on screen among the project's is the file's by its own path (`filePath`: a host shows a file by its
-  // document's id), a model's by its id.
-  const current = filePath ?? path ?? "";
+  // The document on screen among its folder's, by its file's own path (`filePath`) or the id the host shows it by.
+  const current = useMemo(() => [filePath, path], [filePath, path]);
   const usage = useControlUsage();
   // The name of the document moved to, kept for the navbar until the host reads it (as a library card's is).
   const [arriving, setArriving] = useState<{ path: string; name: string } | null>(null);
@@ -336,7 +335,7 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // The navbar is drawn over every file and over the host's home — there the logo (the way to Recents), the sidebar's
   // toggle, Back and Forward where the host keeps the view's history, and the host's
   // actions, as over a file — never over a view drawn small with no chrome
-  // (`compact`: an offscreen picture), and not while the renderer's Preview is up, which draws its own
+  // (`compact`: a small inline view), and not while the renderer's Preview is up, which draws its own
   // bar in its place.
   const navbar = (Boolean(path) || home) && !appearance.compact && previewing !== key;
   const homeSlotRefs = useMemo(() => ({ left: setHomeLeft, right: setHomeRight }), []);

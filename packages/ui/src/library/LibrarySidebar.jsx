@@ -7,7 +7,8 @@ import { MAX_PANEL_WIDTH, MIN_PANEL_WIDTH, clampPanelWidth } from "../file-viewe
 import { useViewerMobile } from "../file-viewer/responsive.js";
 import { TreeRowsLoading } from "../primitives/tree-row.jsx";
 import { useI18n } from "../i18n/index.js";
-import { PlacesList } from "./LibraryPlaces.jsx";
+import { useAppMenu } from "../file-viewer/navbarSlots.js";
+import { PlacesList, placesClass } from "./LibraryPlaces.jsx";
 
 // The home's sidebar (`ModelLibrary.tsx`): its places, over the panel's foot (`file-viewer/PanelFoot.jsx`: the host's
 // links and Settings, the same foot a document's panel ends in). It is the viewer's panel over another
@@ -95,12 +96,14 @@ export function LibraryFrame({ places, panel = null, onPanelChange = null, child
   const closeSheet = frame.sheet.close;
   const onVisit = places?.onVisit;
   const visit = useCallback(place => { closeSheet(); onVisit?.(place); }, [closeSheet, onVisit]);
-  const list = onPlace => (places ? <PlacesList {...places} onVisit={onPlace} />
-    : <div className="cad-library-places" aria-busy="true"><TreeRowsLoading label={t("home.loadingProjects")} /></div>);
+  // The panel's foot is there wherever the file viewer hands the app's menu (`PanelFoot`).
+  const footed = Boolean(useAppMenu());
+  const list = onPlace => (places ? <PlacesList {...places} onVisit={onPlace} footed={footed} />
+    : <div className={placesClass(footed)} aria-busy="true" data-library-places=""><TreeRowsLoading label={t("home.loadingProjects")} /></div>);
   const label = t("home.sidebar");
   const foot = <PanelFoot />;
   const peeking = mode === "closed" && peek.shown;
-  return <div ref={setElement} className="cad-library-frame" data-sidebar={mobile ? undefined : mode} data-sidebar-peek={peek.peeking ? "" : undefined}
+  return <div ref={setElement} className="relative flex min-h-0 min-w-0 flex-1" data-library-frame="" data-sidebar={mobile ? undefined : mode} data-sidebar-peek={peek.peeking ? "" : undefined}
     onPointerDownCapture={event => {
       // A press on the page puts a peek away (the keyboard goes where the press does). Not one in the peek itself, nor
       // in a menu opened from it, which stands outside the frame (React hands its presses up through here all the same).

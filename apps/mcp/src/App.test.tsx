@@ -186,20 +186,25 @@ it('every view has the home and its projects, but the host\'s file handler shows
   expect([viewer.props!.file, viewer.props!.library]).toEqual(['/work/a.step', undefined]);
 });
 
-it("the home's projects came with its launch, each document's row as the library reads one; Import's Folder opens the folder chosen as a project", async () => {
+it("the home's projects came with its launch; a project's folder is read through the tunnel, each row as the library reads one; Import's Folder opens the folder chosen as a project", async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   const document = { id: '6f1c2a4e-1b2c-5d3e-8f4a-000000000001', kind: 'stl', record: 'file' as const, api: '/api/v1/documents/stl/6f1c2a4e-1b2c-5d3e-8f4a-000000000001',
-    path: '/work/tag/a.stl', name: 'a.stl', folder: '/work/tag', opened: null, updated: 1, created: null, pinned: false, missing: false, thumbnail: null,
+    path: '/work/tag/STL/a.stl', name: 'a.stl', folder: '/work/tag/STL', opened: null, updated: 1, created: null, pinned: false, missing: false, thumbnail: null,
     pictured: null, project: 'p1' };
-  const project = { id: 'p1', name: 'tag', root: '/work/tag', created: 1, opened: 1, missing: false, truncated: false, documents: [document] };
+  const project = { id: 'p1', name: 'tag', root: '/work/tag', created: 1, opened: 1, missing: false };
+  const read: string[] = [];
+  server.answers['/api/v1/projects/p1'] = (_sent: unknown, target: URL) => { read.push(target.search);
+    return new Status(200, { project, path: 'STL', folders: [], documents: [document], truncated: false }); };
   server.answers['/api/v1/local/pick'] = () => new Status(200, { path: '/work/tag/STL' });
-  server.answers['/api/v1/projects'] = () => new Status(200, { project: { id: 'p1', name: 'tag', root: '/work/tag' }, made: false });
+  server.answers['/api/v1/projects'] = () => new Status(200, { project, made: false });
   render(<App bridge={bridge as any} server={server as any} launch={{ ...home, pick: true, projects: [project] }} />);
-  const [seeded] = await viewer.props!.library!.projects!();
-  expect(seeded.documents[0]).toMatchObject({ id: document.id, kind: 'file', documentKind: 'stl', project: 'p1' });
+  expect(await viewer.props!.library!.projects!()).toEqual([project]);
   expect(server.asked('/api/v1/projects')).toEqual([]);  // nothing read: they came with the launch
+  // A project's page: one folder of it, asked by its path below the project's root.
+  const folder = await viewer.props!.library!.folder!('p1', { path: 'STL' });
+  expect([read, folder.path, folder.documents[0]]).toEqual([['?path=STL'], 'STL', expect.objectContaining({ id: document.id, kind: 'file', documentKind: 'stl', project: 'p1' })]);
   // Import's Folder: the chooser of a folder, opening where the page names, then the folder opened as a project.
-  expect(await viewer.props!.library!.importFolder!('/work/tag')).toEqual({ project: { id: 'p1', name: 'tag', root: '/work/tag' }, made: false, folder: '/work/tag/STL' });
+  expect(await viewer.props!.library!.importFolder!('/work/tag')).toEqual({ project, made: false, folder: '/work/tag/STL' });
   expect([server.asked('/api/v1/local/pick'), server.asked('/api/v1/projects')]).toEqual([[{ folder: true, start: '/work/tag' }], [{ path: '/work/tag/STL' }]]);
 });
 

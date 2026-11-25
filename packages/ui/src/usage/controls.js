@@ -97,7 +97,9 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'export_step', 'export_stl', 'export_threemf', 'export_glb', 'export_dxf', 'export_xbf', 'export_original',
   'export_gerbers', 'export_drill', 'export_pos', 'export_bom', 'export_odb', 'export_ipc', 'export_pdf',
   // The home: a kind's chip (`home_kind_<kind>`, All's `home_kind_all`); `home_pick` is Import's File (its Open,
-  // before), `home_import_folder` its Folder; and a project's menu and a long place's Show more (`home_project_more`).
+  // before), `home_import_folder` its Folder; `home_delete` a card's Remove from Recents (no view asks first now, so
+  // none sends `home_delete_cancel`, nor a long place's Show more, `home_project_more`: older releases do); and a
+  // project's menu.
   'home_search', 'home_kind_all', 'home_kind_models', 'home_kind_drawings', 'home_kind_boards', 'home_kind_schematics', 'home_kind_robots',
   'home_layout_grid', 'home_layout_list',
   'home_open', 'home_pick', 'home_copy_path', 'home_copy_link', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',

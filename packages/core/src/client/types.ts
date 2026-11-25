@@ -13,10 +13,10 @@ export interface CadEntry {
   /** Whether the document's source (a model's script, a file) is on disk now (its envelope's `source.present`). */
   sourcePresent?: boolean;
   /**
-   * The project it is in (a file by its path, a model by its script: the nearest above it), named in full; null for a
-   * standalone one. A list's row (`CadRecent`) names its project by id alone.
+   * The project it is in (the nearest above its file), named in full with the folder the file is in below its root;
+   * null for a standalone one. A list's row (`CadRecent`) names its project by id alone.
    */
-  project?: CadProjectRef | null;
+  project?: CadEntryProject | null;
   kind?: string;
   format?: string;
   sourceFormat?: string;
@@ -57,58 +57,69 @@ export interface CadServerInfo {
   [key: string]: unknown;
 }
 /**
- * A model in the library every CAD view shares (`GET /api/v1/documents`): times in seconds. The API
- * names a row's document kind `kind` and its record's `record`; the client hands the library the
- * record's as `kind`, the document's as `documentKind`.
+ * A document in the library every CAD view shares (`GET /api/v1/documents`), or a file of a project's folder
+ * (`GET /api/v1/projects/<id>`): a CAD file, or in a folder a file that is no document (`documentKind` and `api` null:
+ * no page, picture or pin; opened in an app, `openInApps` and `openIn`), times in seconds. The API names a row's document kind `kind` and
+ * its record's (always `file`) `record`; the client hands the library the record's as `kind`, the document's
+ * as `documentKind`.
  */
 export interface CadRecent {
   /** The document's id: its page is `/<id>`, its picture `thumbnail()`'s. */
   id: string;
-  /** Where its kind's reads are (`/api/v1/documents/<kind>/<id>`). */
-  api?: string;
-  /** The document's kind (`model` -- built from code, or its `.xbf` opened from disk --, `step`, `stl`, ...); a
-   * released server's `xbf` is a model's file (`documentKind`, `lib/fileFormats.js`). */
-  documentKind?: string;
-  path: string; name: string; folder: string;
-  /** Identity namespace: the script folder in 0.8; a file’s folder for an opened file. */
+  /** Where its kind's reads are (`/api/v1/documents/<kind>/<id>`); null for a file that is no document. */
+  api?: string | null;
+  /** The document's kind (`model` for an `.xbf`, `step`, `stl`, ...); a released server's `xbf` is an `.xbf` too
+   * (`documentKind`, `lib/fileFormats.js`). Null: a folder's file that is no document. */
+  documentKind?: string | null;
+  /** The file, absolute: Recents' by its canonical path, a folder's as reached in it, `/`-separated. */
+  path: string;
+  /** The file's name, with its extension. */
+  name: string;
+  /** Its folder. */
+  folder: string;
   namespace?: string;
-  /** When a page last opened it; null for a model no page has opened. */
+  /** When a page last opened it; null for a file no page has opened. */
   opened: number | null;
-  /** When it last changed: a file's time on disk (null once it is gone), a model's run. */
+  /** The file's time on disk. */
   updated: number | null;
-  /** When its record was first made: a model's first run, a file's first open; null for a record from before the engine kept it. */
+  /** When the library first knew it; null for a folder's file it does not know. */
   created: number | null;
-  pinned: boolean; missing: boolean;
-  /** The picture's name (its content's), and when it was taken. */
+  pinned: boolean;
+  /** Always false: a file that is gone is not listed. */
+  missing: boolean;
+  /** A token that changes with the picture, and when it was taken; null with no picture of the file as it is now. */
   thumbnail: string | null; pictured: number | null;
-  /** A file's size on disk, in bytes; null once it is gone, and for a document built from code (its script is never read). */
+  /** The file's size on disk, in bytes. */
   size?: number | null;
-  /**
-   * How many part occurrences its document holds, where the engine knows: a model's or a shape's from its last build,
-   * while its `.xbf` is the version the engine wrote; an `.xbf` exported, from the document it was written from; another
-   * file from the engine's read of it for a page; a file's while the file is that version; null where it does not.
-   */
+  /** How many part occurrences its document holds, where the engine knows it for the file as it is now; null where not. */
   parts?: number | null;
-  /** A model's (and a shape's): its `.xbf`, its document, whose id is the model's: a model and its file are one row. */
-  file?: string;
-  /** A CAD file on disk, or a document built from code: a model's, or a shape a program handed over. */
-  kind: 'file' | 'model' | 'shape';
-  /** A model's or a shape's: the script it was built from (a shape's home). */
-  script?: string;
-  /** The id of the project it is in (a document's own entry, `CadEntry`, names it in full); null for a standalone one. */
+  /** Every row is a file. */
+  kind: 'file';
+  /** The id of the nearest project above it (a document's own entry, `CadEntry`, names it in full); null for none. */
   project?: string | null;
 }
 /** A project as a document names it: its id, its name (its folder's) and its folder, `/`-separated. */
 export interface CadProjectRef { id: string; name: string; root: string }
+/** A document's own project (`CadEntry.project`): with the folder it is in below the project's root (`""` at the root). */
+export interface CadEntryProject extends CadProjectRef { folder: string }
 /**
  * A folder a person opened as a project (`GET /api/v1/projects`): when it was first and last opened as one
- * (seconds), whether its folder is gone, and its documents -- its models, by name, then its CAD files, by
- * folder then name, as the library's rows -- and whether its walk stopped early (`truncated`).
+ * (seconds), and whether its folder is gone.
  */
 export interface CadProject extends CadProjectRef {
   created: number | null;
   opened: number | null;
   missing: boolean;
+}
+/**
+ * One folder of a project (`GET /api/v1/projects/<id>?path=`): the folder (`path`, below the project's root, `""` its
+ * root), its subfolders, then every file in it, CAD files and the rest together; or, asked with words, every file below
+ * it that holds them, and no folders. `truncated`: not all of it is listed.
+ */
+export interface CadProjectFolder {
+  project: CadProject;
+  path: string;
+  folders: { name: string; path: string }[];
   documents: CadRecent[];
   truncated: boolean;
 }
@@ -118,7 +129,7 @@ export interface CadConsent { share: boolean; reason: 'default' | 'untold' | 'ch
 export interface CadWhatsNew { seen: string[]; release: string | null }
 export interface CadCatalog {
   entries: CadEntry[];
-  /** Why an id asked for has no row: the engine holds no such document (its words name the command that builds it again). */
+  /** Why an id asked for has no row: the engine holds no such document (its words). */
   missing?: string;
   [key: string]: unknown;
 }
@@ -269,10 +280,10 @@ export interface CadWorkspaceService {
   /** The home's library, newest first. */
   recents(options?: CadRequestOptions): Promise<CadRecent[]>;
   /**
-   * A change to the library (`open`, `pin`, `unpin`, `thumbnail`; `remove` a file's entry, its file
-   * untouched; `delete` a model, its entry and the engine's copy): the library as it now is.
+   * A change to the library (`PATCH /api/v1/documents`: `open`, `pin`, `unpin`, `thumbnail`; `remove`, the file's
+   * entry forgotten, the file untouched): the library as it now is.
    */
-  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
+  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
   /** Keep a model's picture in the library: the light viewport's, which the home shows in both themes. */
   keepThumbnail(png: Blob, path: string): Promise<CadRecent[]>;
   /** A library picture, of the row it is of (its document's id, the picture's name), as a data URL; null when there is none. */
@@ -284,16 +295,19 @@ export interface CadWorkspaceService {
    * opening in `start` where one is named -- by its absolute path, or null.
    */
   pick(options?: { folder?: boolean; start?: string | null }): Promise<string | null>;
-  /** The projects, each with its documents, the latest activity first (`GET /api/v1/projects`). */
+  /** The projects, the latest activity first (`GET /api/v1/projects`). */
   projects?(options?: CadRequestOptions): Promise<CadProject[]>;
-  /** One project and its documents (`GET /api/v1/projects/<id>`). */
-  project?(id: string, options?: CadRequestOptions): Promise<CadProject>;
+  /**
+   * `GET /api/v1/projects/<id>?path=&q=`: one folder of a project (`path`, below its root; the root with none), or with
+   * words (`q`) a search of everything below it. Each is sent only when it is not empty.
+   */
+  projectFolder?(id: string, options?: CadRequestOptions & { path?: string; q?: string }): Promise<CadProjectFolder>;
   /**
    * A folder opened as a project, by its absolute path (`POST /api/v1/projects`): the project, and whether it was
    * made now (false: the folder was one already, or is inside the one answered).
    */
-  openProject?(path: string): Promise<{ project: Omit<CadProject, 'documents' | 'truncated'>; made: boolean }>;
-  /** A project forgotten: its record alone, nothing in its folder. The projects as they now are. */
+  openProject?(path: string): Promise<{ project: CadProject; made: boolean }>;
+  /** A project forgotten, nothing in its folder. The projects as they now are. */
   removeProject?(id: string): Promise<CadProject[]>;
   /** Show a file, by its absolute path, in the desktop's file manager. */
   reveal(path: string): Promise<void>;

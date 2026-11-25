@@ -12,17 +12,21 @@ import { FLOATING_SURFACE_CLASS } from "../lib/floatingSurface.js";
 export const VALUE_DROPDOWN_TRIGGER_CLASS = "flex h-control min-w-24 max-w-full items-center justify-between gap-1.5 justify-self-end rounded-md border border-input bg-transparent px-2 "
   + "text-left text-ui shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/45 aria-expanded:bg-accent disabled:cursor-not-allowed disabled:opacity-50 "
   + "dark:bg-input/30 dark:hover:bg-input/50";
+/** A dropdown set to fit beside its own label (the Home's Sort): as wide as its value, with no field drawn round it. */
+export const VALUE_DROPDOWN_GHOST_CLASS = "min-w-0 w-auto border-transparent bg-transparent shadow-none hover:bg-accent dark:bg-transparent dark:hover:bg-accent/50";
 
 /**
  * @typedef {{ value: unknown, label: import("react").ReactNode, Icon?: import("react").ComponentType<any> | null, disabled?: boolean }} ValueOption
  * @param {{ value: unknown, options: readonly ValueOption[], onChange(value: unknown): void, label: string, disabled?: boolean,
- *   fallback?: import("react").ReactNode, align?: "start" | "center" | "end", fixedWidth?: boolean, iconClassName?: string,
+ *   fallback?: import("react").ReactNode, align?: "start" | "center" | "end", fixedWidth?: boolean, ghost?: boolean, iconClassName?: string,
  *   className?: string, triggerProps?: object | null, optionProps?: ((option: ValueOption) => object) | null }} props
  *   `label`: the list's accessible name, and the trigger's ("label: value") unless `triggerProps` names it. `fallback`: what
  *   the trigger says where no option is the value. `fixedWidth`: the trigger as wide as its widest option, so a card's
- *   dropdowns keep one width whatever is chosen. `optionProps(option)`: what each item carries (its data attributes).
+ *   dropdowns keep one width whatever is chosen. `ghost`: set to fit, as wide as its value with no field round it, for a
+ *   dropdown that stands beside its own `FieldLabel` in a row of controls. `optionProps(option)`: what each item carries
+ *   (its data attributes).
  */
-export function ValueDropdown({ value, options, onChange, label, disabled = false, fallback = "", align = "end", fixedWidth = false,
+export function ValueDropdown({ value, options, onChange, label, disabled = false, fallback = "", align = "end", fixedWidth = false, ghost = false,
   iconClassName = "size-4", className, triggerProps = null, optionProps = null }) {
   const active = options.find(option => option.value === value) || null;
   const shown = active?.label ?? fallback;
@@ -33,7 +37,7 @@ export function ValueDropdown({ value, options, onChange, label, disabled = fals
   return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild disabled={disabled}>
       <button type="button" disabled={disabled} aria-label={`${label}: ${typeof shown === "string" ? shown : ""}`}
-        className={cn(VALUE_DROPDOWN_TRIGGER_CLASS, className)} data-value-dropdown="" {...triggerProps}>
+        className={cn(VALUE_DROPDOWN_TRIGGER_CLASS, ghost && VALUE_DROPDOWN_GHOST_CLASS, className)} data-value-dropdown="" {...triggerProps}>
         {fixedWidth
           // Every option laid in the one cell, the chosen one seen: the trigger is as wide as its widest.
           ? <span className="grid min-w-0 flex-1" data-value-dropdown-faces="">

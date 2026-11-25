@@ -12,10 +12,10 @@ import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 import { PANEL_PEEK_DELAY_MS, PANEL_PEEK_EXIT_FALLBACK_MS, PANEL_PEEK_LEAVE_MS } from '../../dist/file-viewer/panelPeek.js';
 import { testHost } from '../../dist/host/testing/host.js';
 import { ViewerMobileContext } from '../../dist/file-viewer/responsive.js';
-import { DOCUMENT_KINDS, PLACE_ROWS, below, deletes, documentKind, formatLabel, kindChips, sortDocuments } from '../../dist/library/ModelLibrary.js';
+import { DOCUMENT_KINDS, below, documentKind, formatLabel, kindChips, sortDocuments } from '../../dist/library/ModelLibrary.js';
 import { libraryRow } from '@cad/core/client';
 import { DOCUMENT_TYPE_REGISTRY } from '@cad/core/lib/documentTypes.generated.js';
-import type { LibraryModel, LibraryNavigation, LibraryProject, ModelLibrarySource } from './ModelLibrary.js';
+import type { LibraryFolder, LibraryModel, LibraryNavigation, LibraryProject, ModelLibrarySource } from './ModelLibrary.js';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -46,7 +46,7 @@ it('starts with its bar (Home at the left, the search at the right), its places 
   render(<ModelLibrary library={library([])} onLayoutChange={() => {}} onSortChange={() => {}} />);
   await screen.findByText('Nothing here yet');
   // With no navbar over it, the page's own bar: Home, the page's heading, and the search.
-  const bar = document.querySelector('.cad-library-bar')!;
+  const bar = document.querySelector('[data-library-bar]')!;
   expect(bar.querySelector('h1')?.textContent).toBe('Home');
   expect([...bar.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Search models']);
   // The search keeps its placeholder; every control is the scale's control (28px), its icons 16px.
@@ -61,7 +61,7 @@ it('starts with its bar (Home at the left, the search at the right), its places 
   expect(screen.getByRole('group', { name: 'Layout' }).hasAttribute('data-segmented-control')).toBe(true);
   expect(['Grid', 'List'].map(name => screen.getByRole('button', { name }).className.includes('h-control'))).toEqual([true, true]);
   // No count; the one picture is the welcome's C mark.
-  expect(row.querySelector('.cad-library-count')).toBeNull();
+  expect(main.querySelector('[data-pill-count]')).toBeNull();
   expect([...main.querySelectorAll('img')].map(image => Boolean(image.closest('[data-library-empty]')))).toEqual([true]);
   // Its one navigation is its places; a host with no addresses has no link anywhere.
   expect(screen.getAllByRole('navigation').map(node => node.getAttribute('aria-label'))).toEqual(['Places']);
@@ -74,7 +74,7 @@ it('ends its bar in Import where the host has a chooser -- a file, or a folder o
   const importFolder = vi.fn(async () => null);
   const view = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={library([], { pick, importFolder })} onLayoutChange={() => {}} /></ControlUsageProvider>);
   await screen.findByText('Nothing here yet');
-  const row = document.querySelector('.cad-library-bar')!;
+  const row = document.querySelector('[data-library-bar]')!;
   // Last of the bar, after the search: the folder icon, "Import", 28px as its neighbours, neutral (never a filled primary).
   expect([...row.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label') ?? node.textContent)).toEqual(['Search models', 'Import']);
   const trigger = screen.getByRole('button', { name: 'Import', exact: true });
@@ -123,7 +123,7 @@ it('opens and pins through the host, and with nothing yet says how a file gets h
   cleanup();
   render(<ModelLibrary library={library([model('b.stl', { pinned: true })])} />);
   await screen.findByRole('button', { name: 'Open b.stl' });
-  expect(items(await menu('b.stl'))).toEqual(['Open', 'Unpin', 'Delete']);
+  expect(items(await menu('b.stl'))).toEqual(['Open', 'Unpin', 'Remove from Recents']);
 });
 
 it('stands placeholders where the models will be while the list is read, and opens one at a time with a spinner over it', async () => {
@@ -171,19 +171,16 @@ it('names a card by its file and how long ago it was last active, and switches b
   expect(layouts).toEqual(['list']);
   rerender(<ModelLibrary library={library([model('bracket.step')])} layout="list" onLayoutChange={layout => layouts.push(layout)} />);
   expect(screen.getByRole('button', { name: 'List' }).getAttribute('aria-pressed')).toBe('true');
-  expect(screen.getByRole('list', { name: 'Files' }).className).toContain('cad-library-list');
+  expect(screen.getByRole('list', { name: 'Files' }).closest('.cad-library-table')).not.toBeNull();
   // A row has the card's one menu.
   expect(screen.getByRole('button', { name: 'Actions for bracket.step' })).toBeTruthy();
 });
 
 it('lists rows under a Name, Kind, Size, Updated and Created header: each its picture and name, its kind and size, then both ages with no verb, its pin and ⋯ at its end', async () => {
   const hour = 3600, now = Date.now() / 1000;
-  const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
   render(<ModelLibrary library={library([
     model('plate.step', { opened: now - 5 * hour, updated: now - 30 * hour, created: now - 3 * 86400, size: 89_000 }),
-    model('arm', { path: id, kind: 'model', script: '/work/parts/arm.py', opened: null, updated: now - 2 * hour, created: now - 2 * hour }),
-    model('gone.step', { missing: true, updated: null, opened: now - 3 * 86400, created: null }),
-    model('kit.xbf', { opened: now - 5 * hour, updated: now - 30 * hour, created: now - 3 * 86400, size: 2_048 }),
+    model('arm.xbf', { opened: null, updated: now - 2 * hour, created: null, size: 2_048 }),
   ])} layout="list" onLayoutChange={() => {}} />);
   await screen.findByRole('button', { name: 'Open plate.step' });
   const list = screen.getByRole('list', { name: 'Files' });
@@ -192,104 +189,94 @@ it('lists rows under a Name, Kind, Size, Updated and Created header: each its pi
   expect([header.getAttribute('aria-hidden'), [...header.children].map(cell => cell.textContent)]).toEqual(['true', ['Name', 'Kind', 'Size', 'Updated', 'Created']]);
   const cells = (name: string) => {
     const row = screen.getByRole('button', { name: `Open ${name}` });
-    return [Boolean(row.querySelector('.cad-library-name > .cad-library-thumbnail')), row.querySelector('.cad-library-label')?.textContent,
+    return [Boolean(row.querySelector('[data-library-name] > [data-library-picture]')), row.querySelector('[data-library-label]')?.textContent,
       ...[...row.querySelectorAll('[data-column]')].map(cell => [cell.getAttribute('data-column'), cell.textContent])];
   };
   expect(cells('plate.step')).toEqual([true, 'plate.step', ['kind', 'STEP'], ['size', '87 KB'], ['updated', '1d ago'], ['created', '3d ago']]);
-  // A model built from code is a Model with no size; its Created is its first run's; a record from before the time was kept
-  // has an empty Created, and a file that is gone says so where its time on disk was.
-  expect(cells('arm')).toEqual([true, 'arm', ['kind', 'XBF'], ['size', '—'], ['updated', '2h ago'], ['created', '2h ago']]);
-  expect(cells('gone.step')).toEqual([true, 'gone.step', ['kind', 'STEP'], ['size', '—'], ['updated', 'File unavailable'], ['created', '']]);
-  // An xbf is the engine's own document saved as a file: a Model too, and still a file, with its size.
-  expect(cells('kit.xbf')).toEqual([true, 'kit.xbf', ['kind', 'XBF'], ['size', '2 KB'], ['updated', '1d ago'], ['created', '3d ago']]);
+  // An xbf is the engine's own document saved as a file: a model, XBF where its parts are not known. One the library
+  // does not know yet (a folder's) has an empty Created.
+  expect(cells('arm.xbf')).toEqual([true, 'arm.xbf', ['kind', 'XBF'], ['size', '2 KB'], ['updated', '2h ago'], ['created', '']]);
   // A row's picture has no badge: its Kind says it. Its pin and ⋯ follow its button, at its end.
-  expect(list.querySelector('.cad-library-format')).toBeNull();
+  expect(list.querySelector('[data-library-format]')).toBeNull();
   const row = screen.getByRole('button', { name: 'Open plate.step' }).closest('li')!;
   expect(within(row).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Open plate.step', 'Pin', 'Actions for plate.step']);
 });
 
-it('gives each card one menu: Open, a file\'s Copy path and Reveal where the host can, Pin, then Delete; a model has no path to offer', async () => {
-  const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
+it('gives each card one menu: Open, Copy path, Copy link and Reveal where the host can, Pin, then Remove from Recents', async () => {
   const copied: string[] = [], revealed: string[] = [], linked: unknown[] = [];
   const fileActions = { platform: 'darwin' as const, perform: { 'copy-path': ({ path }: { path: string }) => { copied.push(path); },
     'copy-link': (entry: unknown) => { linked.push(entry); }, reveal: ({ path }: { path: string }) => { revealed.push(path); } } };
-  const source = library([model('bracket.step'), model('arm', { path: id, kind: 'model', script: '/work/parts/arm.py' })]);
-  const shown = async (name: string) => {
+  const source = library([model('bracket.step', { id: 'id-bracket' })]);
+  const shown = async () => {
     cleanup();
     render(<ModelLibrary library={source} fileActions={fileActions} />);
-    await screen.findByRole('button', { name: `Open ${name}` });
-    return menu(name);
+    await screen.findByRole('button', { name: 'Open bracket.step' });
+    return menu('bracket.step');
   };
-  let open = await shown('bracket.step');
-  expect(items(open)).toEqual(['Open', 'Copy path', 'Copy link', 'Reveal in Finder', 'Pin', 'Delete']);
-  // Delete is the last, after a rule, and destructive.
-  expect(open.querySelector('[role=separator]')?.nextElementSibling?.textContent).toBe('Delete');
-  expect(within(open).getByRole('menuitem', { name: 'Delete' }).getAttribute('data-variant')).toBe('destructive');
+  let open = await shown();
+  expect(items(open)).toEqual(['Open', 'Copy path', 'Copy link', 'Reveal in Finder', 'Pin', 'Remove from Recents']);
+  // Remove from Recents is the last, after a rule; it deletes nothing, so it is drawn as any other item.
+  expect(open.querySelector('[role=separator]')?.nextElementSibling?.textContent).toBe('Remove from Recents');
+  expect(within(open).getByRole('menuitem', { name: 'Remove from Recents' }).getAttribute('data-variant')).not.toBe('destructive');
   await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Copy path' })); });
   expect(copied).toEqual(['/work/parts/bracket.step']);
-  // A model is no file: it is not tied to the script it was built from. Its page is: Copy link,
-  // by its document's id.
-  open = await shown('arm');
-  expect(items(open)).toEqual(['Open', 'Copy link', 'Pin', 'Delete']);
+  open = await shown();
   await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Copy link' })); });
-  expect(linked).toEqual([expect.objectContaining({ path: id, kind: 'file' })]);
-  open = await shown('bracket.step');
+  expect(linked).toEqual([expect.objectContaining({ path: '/work/parts/bracket.step', id: 'id-bracket', kind: 'file' })]);
+  open = await shown();
   await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Reveal in Finder' })); });
   expect(revealed).toEqual(['/work/parts/bracket.step']);
-  open = await shown('bracket.step');
+  open = await shown();
   await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Open' })); });
   expect(source.open).toHaveBeenCalledWith(expect.objectContaining({ name: 'bracket.step' }));
   cleanup();
   // A host that can do nothing with a file on disk offers neither.
   render(<ModelLibrary library={library([model('bracket.step')])} />);
   await screen.findByRole('button', { name: 'Open bracket.step' });
-  expect(items(await menu('bracket.step'))).toEqual(['Open', 'Pin', 'Delete']);
+  expect(items(await menu('bracket.step'))).toEqual(['Open', 'Pin', 'Remove from Recents']);
 });
 
 it('gives a card no glyph, and narrows the place to one kind with a chip: All first, then each kind it holds, with its count', async () => {
-  const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
-  const source = library([model('bracket.step'), model('arm', { path: id, kind: 'model', script: '/work/parts/arm.py' }), model('plate.dxf'),
+  const source = library([model('bracket.step'), model('arm.xbf'), model('plate.dxf'),
     model('blinky.kicad_pcb'), model('arm.stl')]);
   const names = () => within(screen.getByRole('list', { name: 'Files' })).getAllByRole('listitem').map(item => within(item).getAllByRole('button')[0].getAttribute('aria-label'));
   const chips = () => within(screen.getByRole('group', { name: 'Show' })).getAllByRole('button')
     .map(chip => [chip.getAttribute('aria-label'), chip.getAttribute('aria-pressed')]);
   render(<ModelLibrary library={source} onSortChange={() => {}} />);
-  const arm = await screen.findByRole('button', { name: 'Open arm' });
+  const arm = await screen.findByRole('button', { name: 'Open arm.xbf' });
   // The picture and its badge say what a card is: no glyph beside its name.
-  expect([arm.querySelector('[data-glyph]'), screen.getByRole('button', { name: 'Open bracket.step' }).querySelector('[data-glyph]')]).toEqual([null, null]);
+  const caption = (card: HTMLElement) => card.querySelector('[data-library-label]')!.parentElement!;
+  expect([caption(arm).querySelector('svg'), caption(screen.getByRole('button', { name: 'Open bracket.step' })).querySelector('svg')]).toEqual([null, null]);
   // A row of pills of its own, under the heading row: a model and the files exported from it are 3D models alike.
   const row = screen.getByRole('group', { name: 'Show' });
-  expect([row.previousElementSibling?.classList.contains('cad-library-toolbar'), row.closest('.cad-library-toolbar')]).toEqual([true, null]);
+  expect([row.previousElementSibling?.hasAttribute('data-library-toolbar'), row.closest('[data-library-toolbar]')]).toEqual([true, null]);
   expect(chips()).toEqual([['All, 5', 'true'], ['3D models, 3', 'false'], ['Drawings, 1', 'false'], ['Boards, 1', 'false']]);
   expect(within(row).getAllByRole('button').map(chip => [chip.textContent, chip.className.includes('h-control')]))
     .toEqual([['AllAll5', true], ['3D models3D models3', true], ['DrawingsDrawings1', true], ['BoardsBoards1', true]]);
   fireEvent.click(screen.getByRole('button', { name: '3D models, 3' }));
-  expect(names()).toEqual(['Open bracket.step', 'Open arm', 'Open arm.stl']);
+  expect(names()).toEqual(['Open bracket.step', 'Open arm.xbf', 'Open arm.stl']);
   expect(chips().map(([, pressed]) => pressed)).toEqual(['false', 'true', 'false', 'false']);
   fireEvent.click(screen.getByRole('button', { name: 'Boards, 1' }));
   expect(names()).toEqual(['Open blinky.kicad_pcb']);
   // A search and the chip narrow together, and the counts follow the search: of the place before the chip.
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'arm' } });
   expect(chips()).toEqual([['All, 2', 'false'], ['3D models, 2', 'false'], ['Drawings, 0', 'false'], ['Boards, 0', 'true']]);
-  expect(screen.getByRole('main').querySelector('.cad-library-empty')?.textContent).toBe('No matching models.');
+  expect(screen.getByRole('main').querySelector('[data-library-state]')?.textContent).toBe('No matching models.');
   fireEvent.click(screen.getByRole('button', { name: '3D models, 2' }));
-  expect(names()).toEqual(['Open arm', 'Open arm.stl']);
+  expect(names()).toEqual(['Open arm.xbf', 'Open arm.stl']);
   fireEvent.click(screen.getByRole('button', { name: 'All, 2' }));
-  expect(names()).toEqual(['Open arm', 'Open arm.stl']);
+  expect(names()).toEqual(['Open arm.xbf', 'Open arm.stl']);
   cleanup();
-  // With one kind alone there is nothing to tell apart: no chips. A model and its STEP are one kind.
-  render(<ModelLibrary library={library([model('bracket.step'), model('arm', { path: id, kind: 'model' })])} />);
+  // With one kind alone there is nothing to tell apart: no chips. A model's .xbf and its STEP are one kind.
+  render(<ModelLibrary library={library([model('bracket.step'), model('arm.xbf')])} />);
   await screen.findByRole('button', { name: 'Open bracket.step' });
   expect(screen.queryByRole('group', { name: 'Show' })).toBeNull();
 });
 
 it('offers a place\'s own kinds, and shows all of a place that lacks the kind chosen in another', async () => {
-  const projects = [
-    { ...project('p1', 'tag', 0), documents: [model('tag.step', { project: 'p1' }), model('tag.dxf', { project: 'p1' }), model('tag.urdf', { project: 'p1' })] },
-    { ...project('p2', 'gear', 0), documents: [model('gear.step', { project: 'p2' }), model('gear.kicad_sch', { project: 'p2' })] },
-    { ...project('p3', 'lone', 2) },
-  ];
-  const source = library([], { projects: async () => projects });
+  const p1 = project('p1', 'tag'), p2 = project('p2', 'gear'), p3 = project('p3', 'lone');
+  const source = library([], hosted([p1, p2, p3], [file(p1, 'tag.step'), file(p1, 'tag.dxf'), file(p1, 'tag.urdf'),
+    file(p2, 'gear.step'), file(p2, 'gear.kicad_sch'), file(p3, 'part_0.stl'), file(p3, 'part_1.stl')]));
   const chips = () => [...document.querySelectorAll('[data-library-kinds] button')].map(chip => chip.getAttribute('aria-label'));
   const view = render(<ModelLibrary library={source} place={{ view: 'project', project: 'p1' }} />);
   await screen.findByRole('button', { name: 'Open tag.step' });
@@ -316,131 +303,52 @@ it('knows every document type and every extension the viewer opens as a kind, by
   // Every type the registry has, as a row names it, and each of its files' extensions; and a glTF, which opens as a GLB.
   const types = DOCUMENT_TYPE_REGISTRY.documentTypes;
   const missing = [
-    ...types.filter((type: { wire: string }) => !documentKind(model('x', { kind: 'file', documentKind: type.wire, path: '/w/x' }))).map((type: { wire: string }) => type.wire),
+    ...types.filter((type: { wire: string }) => !documentKind(model('x', { documentKind: type.wire, path: '/w/x' }))).map((type: { wire: string }) => type.wire),
     ...[...types.flatMap((type: { extensions: string[] }) => type.extensions), '.gltf'].filter(extension => !documentKind(model(`x${extension}`))),
   ];
   expect(missing).toEqual([]);
   expect(DOCUMENT_KINDS).toEqual(['models', 'drawings', 'boards', 'schematics', 'robots']);
   expect(['a.STEP', 'a.stp', 'a.3mf', 'a.xbf', 'a.glb', 'a.dxf', 'a.kicad_pcb', 'a.kicad_sch', 'a.urdf', 'a.srdf'].map(name => documentKind(model(name))))
     .toEqual(['models', 'models', 'models', 'models', 'models', 'drawings', 'boards', 'schematics', 'robots', 'robots']);
-  // A document built from code is a 3D model, whatever it is named; a row's type wins over its name; a file the viewer
-  // does not open is no kind (All alone lists it).
-  expect(documentKind(model('plate.dxf', { kind: 'model' }))).toBe('models');
+  // A row's type wins over its name; a file the viewer does not open is no kind (All alone lists it).
   expect(documentKind(model('board', { documentKind: 'kicad_pcb' }))).toBe('boards');
   expect(documentKind(model('notes.txt'))).toBeNull();
   expect(kindChips([model('a.step'), model('notes.txt')], '')).toEqual([]);
   expect(kindChips([model('a.step'), model('b.dxf'), model('notes.txt')], '')).toEqual([{ kind: 'all', count: 3 }, { kind: 'models', count: 1 }, { kind: 'drawings', count: 1 }]);
 });
 
-it('gives every model of a script its own card and row, each opening itself, with nothing folded', async () => {
-  const ids = ['0', '1', '2'].map(digit => `8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f1${digit}`);
-  const script = '/work/juno/juno.py';
-  const models = [
-    model('wheel', { path: ids[0], kind: 'model', script, updated: 30 }),
-    model('juno', { path: ids[1], kind: 'model', script, updated: 10 }),
-    model('axle', { path: ids[2], kind: 'model', script, updated: 20 }),
-    model('bracket.step'),
-  ];
-  const names = () => within(screen.getByRole('list', { name: 'Files' })).getAllByRole('listitem').map(item => within(item).getAllByRole('button')[0].getAttribute('aria-label'));
-  for (const layout of ['grid', 'list'] as const) {
-    const source = library(models);
-    render(<ModelLibrary library={source} layout={layout} />);
-    await screen.findByRole('button', { name: 'Open juno' });
-    expect(names()).toEqual(['Open bracket.step', 'Open wheel', 'Open axle', 'Open juno']);
-    expect(screen.queryByRole('button', { name: /more$/ })).toBeNull();
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Open axle' })); });
-    expect(source.open).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'axle' }));
-    // A search finds the model it names, alone.
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'axle' } });
-    expect(names()).toEqual(['Open axle']);
-    cleanup();
-  }
-});
 
-it('asks before Delete, in words that say what stays on disk, and the card leaves at once', async () => {
-  const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
-  const bracket = model('bracket', { path: id, kind: 'model', script: '/work/parts/bracket.py' });
+it('removes a document from Recents at once, asking nothing: its file is untouched', async () => {
   let settle!: () => void;
-  const source = library([bracket, model('bracket.step')], {
+  const source = library([model('bracket.xbf'), model('bracket.step')], {
     change: vi.fn(() => new Promise<readonly LibraryModel[]>(resolve => { settle = () => resolve([model('bracket.step')]); })),
   });
   render(<ModelLibrary library={source} />);
-  await screen.findByRole('button', { name: 'Open bracket' });
-  await act(async () => { fireEvent.click(within(await menu('bracket')).getByRole('menuitem', { name: 'Delete' })); });
-  const dialog = await screen.findByRole('alertdialog');
-  expect(within(dialog).getByRole('heading').textContent).toBe('Delete bracket?');
-  expect(within(dialog).getByText("Removes the engine's record and its saved build. The script and any exported files stay on disk. Run the script to build it again.")).toBeTruthy();
-  expect(within(dialog).getAllByRole('button').map(button => button.textContent)).toEqual(['Cancel', 'Delete']);
-  // Cancel deletes nothing.
-  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' })); });
+  await screen.findByRole('button', { name: 'Open bracket.xbf' });
+  await act(async () => { fireEvent.click(within(await menu('bracket.xbf')).getByRole('menuitem', { name: 'Remove from Recents' })); });
+  // No question, and through the host's one change for it; gone from the list before it answers.
   expect(screen.queryByRole('alertdialog')).toBeNull();
-  expect(source.change).not.toHaveBeenCalled();
-  cleanup();
-  render(<ModelLibrary library={source} />);
-  await screen.findByRole('button', { name: 'Open bracket' });
-  await act(async () => { fireEvent.click(within(await menu('bracket')).getByRole('menuitem', { name: 'Delete' })); });
-  await act(async () => { fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' })); });
-  // Deleted through the client, and gone from the list before it answers.
-  expect(source.change).toHaveBeenCalledWith('delete', expect.objectContaining({ path: id }));
-  expect(screen.queryByRole('button', { name: 'Open bracket' })).toBeNull();
+  expect(source.change).toHaveBeenCalledWith('remove', expect.objectContaining({ name: 'bracket.xbf' }));
+  expect(screen.queryByRole('button', { name: 'Open bracket.xbf' })).toBeNull();
   await act(async () => { settle(); });
-  expect(screen.queryByRole('button', { name: 'Open bracket' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Open bracket.xbf' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Open bracket.step' })).toBeTruthy();
+  // Nothing anywhere on the home says it deletes.
+  expect(document.body.textContent).not.toMatch(/delete/i);
 });
 
-it('takes an .xbf the server lists as a model\'s document (kind model, record file) for the file it is: a Part or an Assembly among the 3D models, after those built from code, with a file\'s menu and a file\'s Delete', async () => {
+it('takes an .xbf the server lists (kind model, record file) as a model: a Part or an Assembly among the 3D models, before the other formats', async () => {
   // As the server lists them: a document's kind, and its record's (`libraryRow` hands the library the record's as `kind`).
-  const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f13', fileId = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f14';
   const listed = (name: string, extra: Record<string, unknown>) => libraryRow({ ...model(name), ...extra }) as LibraryModel;
-  const built = listed('arm', { path: id, id, kind: 'model', record: 'model', script: '/work/parts/arm.py', parts: 1 });
-  const saved = listed('rig.xbf', { id: fileId, kind: 'model', record: 'file', parts: 3, size: 4_096 });
+  const saved = listed('rig.xbf', { id: 'id-rig', kind: 'model', record: 'file', parts: 3, size: 4_096 });
+  const single = listed('pin.xbf', { id: 'id-pin', kind: 'model', record: 'file', parts: 1 });
   const step = listed('rig.step', { kind: 'step', record: 'file', parts: 3 });
-  expect([built, saved, step].map(item => [item.kind, item.documentKind, deletes(item), documentKind(item)]))
-    .toEqual([['model', 'model', true, 'models'], ['file', 'model', false, 'models'], ['file', 'step', false, 'models']]);
+  expect([saved, step].map(item => [item.documentKind, documentKind(item)])).toEqual([['model', 'models'], ['step', 'models']]);
   const labels = { xbf: 'XBF', part: 'Part', assembly: 'Assembly' };
-  expect([built, saved, step].map(item => formatLabel(item, labels))).toEqual(['Part', 'Assembly', 'STEP']);
-  expect(sortDocuments([step, saved, built], 'kind').map(item => item.name)).toEqual(['arm', 'rig.xbf', 'rig.step']);
-  const fileActions = { platform: 'darwin' as const, perform: { 'copy-path': () => {}, 'copy-link': () => {}, reveal: () => {} } };
-  const source = library([built, saved]);
-  render(<ModelLibrary library={source} fileActions={fileActions} />);
-  await screen.findByRole('button', { name: 'Open rig.xbf' });
-  const open = await menu('rig.xbf');
-  expect(items(open)).toEqual(['Open', 'Copy path', 'Copy link', 'Reveal in Finder', 'Pin', 'Delete']);
-  await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Delete' })); });
-  const dialog = await screen.findByRole('alertdialog');
-  expect(within(dialog).getByRole('heading').textContent).toBe('Delete rig.xbf from the viewer?');
-  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' })); });
-  expect(source.change).toHaveBeenCalledWith('remove', expect.objectContaining({ name: 'rig.xbf' }));
+  expect([saved, single, step].map(item => formatLabel(item, labels))).toEqual(['Assembly', 'Part', 'STEP']);
+  expect(sortDocuments([step, single, saved], 'kind', item => formatLabel(item, labels)).map(item => item.name)).toEqual(['rig.xbf', 'pin.xbf', 'rig.step']);
 });
 
-it('asks to delete a file from the viewer alone, and one model of a script alone', async () => {
-  const file = library([model('bracket.step')]);
-  render(<ModelLibrary library={file} />);
-  await screen.findByRole('button', { name: 'Open bracket.step' });
-  await act(async () => { fireEvent.click(within(await menu('bracket.step')).getByRole('menuitem', { name: 'Delete' })); });
-  let dialog = await screen.findByRole('alertdialog');
-  expect(within(dialog).getByRole('heading').textContent).toBe('Delete bracket.step from the viewer?');
-  expect(within(dialog).getByText("Removes the engine's record of this file. The file itself stays on disk.")).toBeTruthy();
-  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' })); });
-  expect(file.change).toHaveBeenCalledWith('remove', expect.objectContaining({ name: 'bracket.step' }));
-  cleanup();
-  const script = '/work/juno/juno.py';
-  const ids = ['0', '1', '2'].map(digit => `8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f1${digit}`);
-  const models = [model('juno', { path: ids[0], kind: 'model', script }), model('wheel', { path: ids[1], kind: 'model', script }),
-    model('axle', { path: ids[2], kind: 'model', script })];
-  const juno = library(models, { change: vi.fn(async (_action, item) => models.filter(entry => entry.path !== item.path)) });
-  render(<ModelLibrary library={juno} />);
-  await screen.findByRole('button', { name: 'Open wheel' });
-  await act(async () => { fireEvent.click(within(await menu('wheel')).getByRole('menuitem', { name: 'Delete' })); });
-  dialog = await screen.findByRole('alertdialog');
-  expect(within(dialog).getByRole('heading').textContent).toBe('Delete wheel?');
-  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' })); });
-  await waitFor(() => expect(juno.change).toHaveBeenCalledTimes(1));
-  expect((juno.change as ReturnType<typeof vi.fn>).mock.calls.map(([action, item]) => [action, item.name])).toEqual([['delete', 'wheel']]);
-  // The script's other models stay.
-  expect(screen.getByRole('button', { name: 'Open juno' })).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Open wheel' })).toBeNull();
-});
 
 it('says how long ago with no verb, in the largest unit that is at least one, then the short date', () => {
   const ago = (seconds: number) => ageLabel(NOW / 1000 - seconds, NOW);
@@ -467,14 +375,13 @@ it("says a tile's last activity with its verb: Edited for a change after the las
   expect(activityLabel({ opened: null, updated: null }, NOW)).toBe('');
 });
 
-it('shows a model by its run and a file by its opening, whichever came last, each with its verb', async () => {
+it('shows a card by its last change or its last opening, whichever came last, each with its verb', async () => {
   const hour = 3600, now = Date.now() / 1000;
-  const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
   render(<ModelLibrary library={library([
-    model('arm', { path: id, kind: 'model', opened: null, updated: now - 2 * hour }),
+    model('arm.xbf', { opened: null, updated: now - 2 * hour }),
     model('plate.step', { opened: now - 5 * hour, updated: now - 30 * hour }),
   ])} />);
-  expect((await screen.findByRole('button', { name: 'Open arm' })).textContent).toBe('XBFarmEdited 2h ago');
+  expect((await screen.findByRole('button', { name: 'Open arm.xbf' })).textContent).toBe('XBFarm.xbfEdited 2h ago');
   expect(screen.getByRole('button', { name: 'Open plate.step' }).textContent).toBe('STEPplate.stepViewed 5h ago');
 });
 
@@ -486,44 +393,7 @@ it('shows why an open failed where the library shows it', async () => {
   expect((await screen.findByRole('alert')).textContent).toBe('That model is gone.');
 });
 
-it('asks for a picture of each card on screen that has none or an old one, one at a time, and reads the list again once one is kept', async () => {
-  const edited = Date.now() / 1000 - 60;
-  let models = [
-    model('new.step', { updated: edited + 10 }),
-    model('current.step', { thumbnail: 'current.png', pictured: edited + 30, updated: edited }),
-    model('old.step', { thumbnail: 'old.png', pictured: edited - 3600, updated: edited - 10 }),
-    model('gone.step', { missing: true }),
-  ];
-  const list = vi.fn(async () => models);
-  let finish!: (kept: boolean) => void;
-  const picture = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
-  render(<ModelLibrary library={library(models, { list })} picture={picture} />);
-  await screen.findByRole('button', { name: 'Open new.step' });
-  // The first, alone: the next waits for it.
-  await waitFor(() => expect(picture.mock.calls.map(([item]) => item.name)).toEqual(['new.step']));
-  models = models.map(item => item.name === 'new.step' ? { ...item, thumbnail: 'new.png', pictured: Date.now() / 1000 } : item);
-  await act(async () => finish(true));
-  expect(list).toHaveBeenCalledTimes(2);
-  await waitFor(() => expect(picture.mock.calls.map(([item]) => item.name)).toEqual(['new.step', 'old.step']));
-  // One not drawn is not asked for again while the page is up; the current and the missing never are.
-  await act(async () => finish(false));
-  expect(picture).toHaveBeenCalledTimes(2);
-  expect(list).toHaveBeenCalledTimes(2);
-});
 
-// The home stays up while an agent rebuilds a model it lists: the card is pictured again.
-it('pictures a card again when it is updated while the home is up', async () => {
-  const edited = Date.now() / 1000 - 60;
-  let models = [model('plate.step', { thumbnail: 'plate.png', pictured: edited + 30, updated: edited })];
-  const list = vi.fn(async () => models);
-  const picture = vi.fn(async () => true);
-  render(<ModelLibrary library={library(models, { list })} picture={picture} />);
-  await screen.findByRole('button', { name: 'Open plate.step' });
-  expect(picture).not.toHaveBeenCalled();
-  models = [{ ...models[0], updated: edited + 60 }];
-  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
-  await waitFor(() => expect(picture.mock.calls.map(([item]) => item.updated)).toEqual([edited + 60]));
-});
 
 it('reads its list again every couple of seconds while the home is up, keeping the cards when nothing changed', async () => {
   vi.useFakeTimers();
@@ -539,16 +409,13 @@ it('reads its list again every couple of seconds while the home is up, keeping t
   } finally { vi.useRealTimers(); }
 });
 
-it("counts what a person does on the home by name: a kind chosen, a search begun, a card opened, a delete cancelled and one confirmed", async () => {
+it("counts what a person does on the home by name: a kind chosen, a search begun, a card opened, one removed from Recents", async () => {
   const reports: { control: string; count: number; seconds: number }[][] = [];
-  const script = '/work/juno/juno.py';
-  const ids = ['0', '1'].map(digit => `8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f1${digit}`);
-  const source = library([model('juno', { path: ids[0], kind: 'model', script, updated: 10 }),
-    model('wheel', { path: ids[1], kind: 'model', script, updated: 5 }), model('bracket.dxf')]);
+  const source = library([model('juno.xbf', { updated: 10 }), model('wheel.xbf', { updated: 5 }), model('bracket.dxf')]);
   // A kind chosen by its chip, each by its name; the one already on is no use.
   const choose = async (...chips: string[]) => {
     const view = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={source} /></ControlUsageProvider>);
-    await screen.findByRole('button', { name: 'Open juno' });
+    await screen.findByRole('button', { name: 'Open juno.xbf' });
     for (const chip of chips) fireEvent.click(screen.getByRole('button', { name: chip }));
     view.unmount();
     cleanup();
@@ -557,24 +424,13 @@ it("counts what a person does on the home by name: a kind chosen, a search begun
   expect(reported(reports)).toEqual({ home_kind_drawings: 1, home_kind_models: 1, home_kind_all: 1 });
   reports.length = 0;
   const view = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={source} /></ControlUsageProvider>);
-  await screen.findByRole('button', { name: 'Open juno' });
+  await screen.findByRole('button', { name: 'Open juno.xbf' });
   const search = screen.getByRole('searchbox', { name: 'Search models' });
   for (const value of ['b', 'br', '']) fireEvent.change(search, { target: { value } });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Open bracket.dxf' })); });
-  await act(async () => { fireEvent.click(within(await menu('bracket.dxf')).getByRole('menuitem', { name: 'Delete' })); });
-  await act(async () => { fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' })); });
+  await act(async () => { fireEvent.click(within(await menu('bracket.dxf')).getByRole('menuitem', { name: 'Remove from Recents' })); });
   view.unmount();
-  const said = Object.fromEntries(reports.flat().map(({ control, count }) => [control, count]));
-  expect(said).toEqual({ home_search: 1, home_open: 1, home_delete_cancel: 1 });
-  // A delete the person confirms is counted as one.
-  cleanup();
-  reports.length = 0;
-  const again = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={source} /></ControlUsageProvider>);
-  await screen.findByRole('button', { name: 'Open bracket.dxf' });
-  await act(async () => { fireEvent.click(within(await menu('bracket.dxf')).getByRole('menuitem', { name: 'Delete' })); });
-  await act(async () => { fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' })); });
-  again.unmount();
-  expect(reports.flat()).toEqual([{ control: 'home_delete', count: 1, seconds: 0 }]);
+  expect(reported(reports)).toEqual({ home_search: 1, home_open: 1, home_delete: 1 });
 });
 
 it('counts the pin, from its button or the menu, the grid/list switch, and Copy path, Copy link and Reveal', async () => {
@@ -614,92 +470,103 @@ it('counts the pin, from its button or the menu, the grid/list switch, and Copy 
 // or a drawing's included) is turned for the dark theme.
 it("shows every card's light picture in both themes, never turned, and badges it with its format", async () => {
   const thumbnail = vi.fn(async (item: LibraryModel) => `data:${item.name}:${item.thumbnail}`);
-  const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
   const source = library([model('video.kicad_pcb', { thumbnail: 'light.png', pictured: Date.now() / 1000 }),
-    model('plate.dxf', { thumbnail: 'plate.png', pictured: Date.now() / 1000 }), model('arm', { path: id, kind: 'model' })], { thumbnail });
+    model('plate.dxf', { thumbnail: 'plate.png', pictured: Date.now() / 1000 }), model('arm.xbf')], { thumbnail });
   const home = (colorScheme: 'light' | 'dark') => <ViewerHostContext.Provider value={{ environment: { colorScheme } } as any}><ModelLibrary library={source} /></ViewerHostContext.Provider>;
   const view = render(home('dark'));
-  const picture = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).closest('.cad-library-card')!.querySelector('.cad-library-thumbnail')!;
+  const picture = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).closest('.cad-library-card')!.querySelector('[data-library-picture]')!;
   await waitFor(() => expect(picture('video.kicad_pcb').querySelector('img')?.getAttribute('src')).toBe('data:video.kicad_pcb:light.png'));
   await waitFor(() => expect(picture('plate.dxf').querySelector('img')?.getAttribute('src')).toBe('data:plate.dxf:plate.png'));
   view.rerender(home('light'));
   expect(picture('video.kicad_pcb').querySelector('img')?.getAttribute('src')).toBe('data:video.kicad_pcb:light.png');
   expect(thumbnail.mock.calls.every(call => call.length === 1)).toBe(true);
+  // A card whose row names no picture is its format's tile: nothing is asked for it, and nothing draws one.
+  expect([...new Set(thumbnail.mock.calls.map(([item]) => item.name))].sort()).toEqual(['plate.dxf', 'video.kicad_pcb']);
+  expect(picture('arm.xbf').querySelector('img')).toBeNull();
   expect(['video.kicad_pcb', 'plate.dxf'].map(name => [picture(name).hasAttribute('data-drawing'), picture(name).hasAttribute('data-thumbnail-variant')])).toEqual([[false, false], [false, false]]);
-  expect(['video.kicad_pcb', 'plate.dxf', 'arm'].map(name => picture(name).querySelector('.cad-library-format')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'XBF']);
+  expect(['video.kicad_pcb', 'plate.dxf', 'arm.xbf'].map(name => picture(name).querySelector('[data-library-format]')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'XBF']);
 });
 
-// A model is named as desktop CAD names its own documents: a Part when its document holds one part, an Assembly when it
-// holds more, and by its format, XBF, where the host does not know how many. A file of another format keeps its format's name.
 it('calls a model a Part or an Assembly by its parts, XBF where they are not known, and every other file by its format', async () => {
-  const id = (at: number) => `8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f1${at}`;
-  const documents = [model('bracket', { path: id(1), kind: 'model', parts: 1 }), model('gearbox', { path: id(2), kind: 'model', parts: 12 }),
-    model('sketch', { path: id(3), kind: 'model' }), model('crate', { path: id(4), kind: 'shape', parts: 2 }),
-    model('empty', { path: id(5), kind: 'model', parts: 0 }),
-    model('hinge.xbf', { parts: 1 }), model('rig.xbf', { parts: 3 }), model('unread.xbf', { parts: null }),
+  const documents = [model('hinge.xbf', { parts: 1 }), model('rig.xbf', { parts: 3 }), model('unread.xbf', { parts: null }), model('empty.xbf', { parts: 0 }),
     model('pair.step', { parts: 2 }), model('plate.stl', { parts: 1 })];
   const names = documents.map(item => item.name);
-  const said = ['Part', 'Assembly', 'XBF', 'Assembly', 'XBF', 'Part', 'Assembly', 'XBF', 'STEP', 'STL'];
+  const said = ['Part', 'Assembly', 'XBF', 'XBF', 'STEP', 'STL'];
   // On a card, its badge.
   render(<ModelLibrary library={library(documents)} />);
-  await screen.findByRole('button', { name: 'Open bracket' });
-  const badge = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).closest('.cad-library-card')!.querySelector('.cad-library-format')?.textContent;
+  await screen.findByRole('button', { name: 'Open hinge.xbf' });
+  const badge = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).closest('.cad-library-card')!.querySelector('[data-library-format]')?.textContent;
   expect(names.map(badge)).toEqual(said);
   cleanup();
   // In the list, its Kind.
   render(<ModelLibrary library={library(documents)} layout="list" onLayoutChange={() => {}} />);
-  await screen.findByRole('button', { name: 'Open bracket' });
+  await screen.findByRole('button', { name: 'Open hinge.xbf' });
   expect(names.map(name => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-column="kind"]')?.textContent)).toEqual(said);
-  // Sorted by Kind, the models stay first, those built from code before the xbf files, each by what it is called.
+  // Sorted by Kind, the models stay first, each by what it is called.
   const labels = { xbf: 'XBF', part: 'Part', assembly: 'Assembly' };
   expect(sortDocuments(documents, 'kind', item => formatLabel(item, labels)).map(item => item.name))
-    .toEqual(['crate', 'gearbox', 'bracket', 'empty', 'sketch', 'rig.xbf', 'hinge.xbf', 'unread.xbf', 'pair.step', 'plate.stl']);
+    .toEqual(['rig.xbf', 'hinge.xbf', 'empty.xbf', 'unread.xbf', 'pair.step', 'plate.stl']);
 });
 
 // A card's line is the age alone, a file's as a model's: a file's size, the server's, is the list's column.
 it("says a card's age alone, a file's size being the list's", async () => {
-  const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
   const now = Date.now() / 1000;
   render(<ModelLibrary library={library([model('plate.step', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 1_700_000 }),
-    model('tiny.stl', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 900 }), model('arm', { path: id, kind: 'model', opened: null, updated: now - 2 * 3600 })])} />);
-  const status = async (name: string) => (await screen.findByRole('button', { name: `Open ${name}` })).querySelector('.cad-library-status')!.textContent;
-  expect([await status('plate.step'), await status('tiny.stl'), await status('arm')]).toEqual(['Viewed 5h ago', 'Viewed 5h ago', 'Edited 2h ago']);
+    model('tiny.stl', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 900 }), model('arm.xbf', { opened: null, updated: now - 2 * 3600 })])} />);
+  const status = async (name: string) => (await screen.findByRole('button', { name: `Open ${name}` })).querySelector('[data-library-status]')!.textContent;
+  expect([await status('plate.step'), await status('tiny.stl'), await status('arm.xbf')]).toEqual(['Viewed 5h ago', 'Viewed 5h ago', 'Edited 2h ago']);
   expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Home');
 });
 
-// A project as the host lists it: `models` models, then `files` files in its folder that no page has opened.
-const project = (id: string, name: string, files: number, models = 0, extra: Partial<LibraryProject> = {}): LibraryProject => ({
-  id, name, root: `/Users/sam/cad/${name}`, opened: 1, missing: false,
-  documents: [
-    ...Array.from({ length: models }, (_, index) => model(`${name}_model_${index}`, { path: `8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f${String(index).padStart(2, '0')}`,
-      id: `8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f${String(index).padStart(2, '0')}`, kind: 'model', project: id, opened: null,
-      script: `/Users/sam/cad/${name}/src/${name}.py`, folder: `/Users/sam/cad/${name}/src` })),
-    ...Array.from({ length: files }, (_, index) => model(`part_${index}.stl`, { path: `/Users/sam/cad/${name}/STL/part_${index}.stl`, id: `file-${id}-${index}`,
-      folder: `/Users/sam/cad/${name}/STL`, project: id, opened: null, created: null })),
-  ],
-  ...extra,
-});
+// A project as the host lists it.
+const project = (id: string, name: string, extra: Partial<LibraryProject> = {}): LibraryProject =>
+  ({ id, name, root: `/Users/sam/cad/${name}`, opened: 1, missing: false, ...extra });
+// A file of a project, by its path below the project's root, as its folder lists it: one no page has opened.
+const file = (of: LibraryProject, below: string, extra: Partial<LibraryModel> = {}) => model(below.split('/').pop()!, {
+  path: `${of.root}/${below}`, id: `file-${of.id}-${below}`, folder: `${of.root}/${below}`.replace(/\/[^/]*$/, ''), project: of.id,
+  opened: null, created: null, ...extra });
+// A host's projects, and each one's folder answered from the files below it as a CAD host answers it
+// (`GET /api/v1/projects/<id>`): its subfolders that hold a file, then its files; with words, every file below that
+// holds them all, and no folders. A folder that holds nothing is not there.
+function hosted(projects: LibraryProject[], files: LibraryModel[] = [], extra: Partial<LibraryFolder> = {}) {
+  const folder = vi.fn(async (id: string, { path = '', q = '' }: { path?: string; q?: string }): Promise<LibraryFolder> => {
+    const found = projects.find(entry => entry.id === id);
+    if (!found) throw new Error(`no project ${id}`);
+    const base = path ? `${found.root}/${path}` : found.root;
+    const below = files.filter(item => item.project === id && item.path.startsWith(`${base}/`)).map(item => ({ item, rest: item.path.slice(base.length + 1) }));
+    if (path && !below.length) throw new Error(`no folder ${path} in ${found.name}`);
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length) return { project: found, path, folders: [], truncated: false, ...extra,
+      documents: below.filter(({ rest }) => words.every(word => rest.toLowerCase().includes(word))).map(({ item }) => item) };
+    const names = [...new Set(below.filter(({ rest }) => rest.includes('/')).map(({ rest }) => rest.split('/')[0]))];
+    return { project: found, path, folders: names.map(name => ({ name, path: path ? `${path}/${name}` : name })), truncated: false, ...extra,
+      documents: below.filter(({ rest }) => !rest.includes('/')).map(({ item }) => item) };
+  });
+  return { projects: async () => projects, folder };
+}
 // The place's documents, by their press targets' names (a button's or a link's), in order.
 const opens = () => [...document.querySelectorAll('.cad-library-open[aria-label]')].map(node => node.getAttribute('aria-label'));
 const place = (key: string) => document.querySelector<HTMLElement>(`[data-place="${key}"]`)!;
 const reported = (reports: { control: string; count: number }[][]) => reports.flat().reduce<Record<string, number>>((sums, { control, count }) =>
   ({ ...sums, [control]: (sums[control] ?? 0) + count }), {});
 
-it('lists its places in a sidebar: Recents, Pinned with its count, each project with its count, then Standalone, the one on screen marked', async () => {
+it('lists its places in a sidebar: Recents, Pinned with its count, each project, then Standalone, the one on screen marked', async () => {
   const reports: { control: string; count: number; seconds: number }[][] = [];
-  const tag = project('p1', 'heart-tag', 9, 2), lamp = project('p2', 'lamp', 0, 0, { missing: true });
+  const tag = project('p1', 'heart-tag'), lamp = project('p2', 'lamp', { missing: true });
   const recents = [model('opened.stl', { path: '/Users/sam/cad/heart-tag/STL/part_0.stl', project: 'p1', pinned: true }), model('loose.step'), model('other.stl', { pinned: true })];
   const places: unknown[] = [];
   const view = render(<ControlUsageProvider report={counts => reports.push(counts)}>
-    <ModelLibrary library={library(recents, { projects: async () => [tag, lamp] })} home="/Users/sam" onPlaceChange={next => places.push(next)} />
+    <ModelLibrary library={library(recents, hosted([tag, lamp], [file(tag, 'top.step'), file(tag, 'STL/part_0.stl'), file(tag, 'STL/part_1.stl')]))}
+      home="/Users/sam" onPlaceChange={next => places.push(next)} />
   </ControlUsageProvider>);
   await screen.findByRole('button', { name: 'Open loose.step' });
   const sidebar = screen.getByRole('navigation', { name: 'Places' });
-  // The panel's surface (the viewer's own, docked) and its rows: a glyph, the name, its count on the right; none where there is nothing to count.
+  // The panel's surface (the viewer's own, docked) and its rows: a glyph, the name, and Pinned's and Standalone's
+  // count on the right; none on a project's (its folder is not walked to count it), nor where there is nothing to count.
   expect([sidebar.closest('aside')!.getAttribute('data-panel-surface'), sidebar.closest('aside')!.getAttribute('aria-label')]).toEqual(['docked', 'Sidebar']);
   const rows = [...sidebar.querySelectorAll<HTMLElement>('[data-place]')];
   expect(rows.map(row => [row.getAttribute('data-place'), row.textContent, row.hasAttribute('data-tree-row'), row.querySelectorAll('svg').length]))
-    .toEqual([['recents', 'Recents', true, 1], ['pinned', 'Pinned2', true, 1], ['project:p1', 'heart-tag11', true, 1], ['project:p2', 'lamp', true, 1], ['standalone', 'Standalone2', true, 1]]);
+    .toEqual([['recents', 'Recents', true, 1], ['pinned', 'Pinned2', true, 1], ['project:p1', 'heart-tag', true, 1], ['project:p2', 'lamp', true, 1], ['standalone', 'Standalone2', true, 1]]);
   expect(within(sidebar).getByRole('heading', { level: 2 }).textContent).toBe('Projects');
   // A host with no addresses: every row a button. The one on screen is marked and said; a project whose folder is gone is muted.
   expect(rows.map(row => [row.tagName, row.getAttribute('aria-current')])).toEqual([['BUTTON', 'page'], ['BUTTON', null], ['BUTTON', null], ['BUTTON', null], ['BUTTON', null]]);
@@ -714,7 +581,7 @@ it('lists its places in a sidebar: Recents, Pinned with its count, each project 
   await act(async () => { fireEvent.click(place('standalone')); });
   expect(opens()).toEqual(['Open loose.step', 'Open other.stl']);
   await act(async () => { fireEvent.click(place('project:p1')); });
-  expect(opens()).toHaveLength(11);
+  await waitFor(() => expect(opens()).toEqual(['Open STL', 'Open top.step']));
   await act(async () => { fireEvent.click(place('project:p1')); });  // the place on screen: no move
   await act(async () => { fireEvent.click(place('recents')); });
   expect(places).toEqual([{ view: 'pinned' }, { view: 'standalone' }, { view: 'project', project: 'p1' }, { view: 'recents' }]);
@@ -732,7 +599,8 @@ it('lists its places in a sidebar: Recents, Pinned with its count, each project 
 
 it("shows the place the host names, and tells the host its name as the person reads it", async () => {
   const names: string[] = [];
-  const source = library([model('loose.step')], { projects: async () => [project('p1', 'heart-tag', 2, 1)] });
+  const tag = project('p1', 'heart-tag');
+  const source = library([model('loose.step')], hosted([tag], [file(tag, 'part_0.stl'), file(tag, 'housing/v3/lid.step')]));
   const home = (at: Parameters<typeof ModelLibrary>[0]['place']) => <ModelLibrary library={source} place={at} onPlaceShown={name => names.push(name)} home="/Users/sam" />;
   const view = render(home({ view: 'project', project: 'p1' }));
   // Until the projects are read, the project's page waits where its documents will be.
@@ -745,44 +613,219 @@ it("shows the place the host names, and tells the host its name as the person re
   // Nothing pinned: its row has no count, and its page says how a document gets there.
   expect(place('pinned').textContent).toBe('Pinned');
   expect(screen.getByText('Nothing pinned yet. Pin a document to keep it here.')).toBeTruthy();
-  expect(names).toEqual(['Project', 'heart-tag', 'Standalone', 'Pinned']);
+  // A folder of a project is named by its own name.
+  view.rerender(home({ view: 'project', project: 'p1', path: 'housing/v3' }));
+  await screen.findByRole('button', { name: 'Open lid.step' });
+  expect(names).toEqual(['Project', 'heart-tag', 'Standalone', 'Pinned', 'v3']);
 });
 
-it("gives a project a page of its own: its name, its folder from the home folder and its menu, then every one of its documents, each saying where it is", async () => {
-  const tag = project('p1', 'heart-tag', 9, 2, { truncated: true });
-  render(<ModelLibrary library={library([], { projects: async () => [tag] })} home="/Users/sam" place={{ view: 'project', project: 'p1' }} />);
-  await screen.findByRole('button', { name: 'Open part_0.stl' });
-  const heading = screen.getByRole('main').firstElementChild!;
-  expect([heading.querySelector('h2')?.textContent, heading.querySelector('.cad-library-path')?.textContent, Boolean(heading.querySelector('svg.lucide-folder'))])
+it("a project's page lists its folders first, then its files, and its heading leads back up", async () => {
+  const tag = project('p1', 'heart-tag');
+  const files = [file(tag, 'top.step'), file(tag, 'housing/v3/housing.xbf', { opened: 5, parts: 3 }), file(tag, 'housing/v3/lid.step'),
+    file(tag, 'housing/v3/drawings/plan.dxf'), file(tag, 'dxf/plate.dxf')];
+  const places: unknown[] = [];
+  const page = (path?: string, layout: 'grid' | 'list' = 'grid') => <ModelLibrary library={library([], hosted([tag], files))} home="/Users/sam" layout={layout}
+    place={{ view: 'project', project: 'p1', ...(path ? { path } : {}) }} onPlaceChange={next => places.push(next)} />;
+  const view = render(page());
+  await screen.findByRole('button', { name: 'Open top.step' });
+  const heading = () => screen.getByRole('main').firstElementChild!;
+  expect([heading().querySelector('h2')?.textContent, heading().querySelector('[data-library-path]')?.textContent, Boolean(heading().querySelector('svg.lucide-folder'))])
     .toEqual(['heart-tag', '~/cad/heart-tag', true]);
-  // All eleven, with no Show all: its models by last activity among its files.
-  expect(opens()).toHaveLength(11);
-  expect(screen.queryByRole('button', { name: /^Show \d/ })).toBeNull();
-  // A card's second line is its last activity alone: a model's script and a file's folder and size are the list's.
-  const second = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('.cad-library-status')?.textContent;
-  expect([second('heart-tag_model_0'), second('part_0.stl')]).toEqual(['Edited 16h ago', 'Edited 16h ago']);
-  // A file of the project's that no page opened: no pin, and no Delete (its folder lists it).
-  expect(within(screen.getByRole('button', { name: 'Open part_0.stl' }).closest('li')!).queryByRole('button', { name: 'Pin' })).toBeNull();
-  expect(items(await menu('part_0.stl'))).toEqual(['Open']);
-  // The host's walk of its folder stopped early: said under the last of them.
-  expect(screen.getByText('Not every file is listed: this folder holds more than CAD lists at once.')).toBeTruthy();
+  // Its folders first, in the host's order, then the files directly in it: nothing below is flattened here.
+  expect(opens()).toEqual(['Open housing', 'Open dxf', 'Open top.step']);
+  // A folder is its glyph and its name in a list of its own, with no picture, count, pin or menu: a way into it.
+  const folders = screen.getByRole('list', { name: 'Folders' });
+  const housing = within(folders).getByRole('button', { name: 'Open housing' });
+  expect([housing.textContent, Boolean(housing.querySelector('svg.lucide-folder')), housing.querySelector('[data-library-picture]'),
+    within(housing.closest('li')!).getAllByRole('button').length]).toEqual(['housing', true, null, 1]);
+  await act(async () => { fireEvent.click(housing); });
+  expect(places).toEqual([{ view: 'project', project: 'p1', path: 'housing' }]);
+  // Two levels down: the path in the heading, each part but the last a way back up. The folder from `~` is said at the
+  // project's top alone: below it, it would say the heading's path a second time.
+  view.rerender(page('housing/v3'));
+  await screen.findByRole('button', { name: 'Open lid.step' });
+  expect(opens()).toEqual(['Open drawings', 'Open housing.xbf', 'Open lid.step']);
+  const crumbs = [...heading().querySelectorAll('[data-library-crumb]')].map(crumb => crumb.textContent);
+  expect([crumbs, heading().querySelector('h2')?.textContent, heading().querySelector('[data-library-path]')])
+    .toEqual([['heart-tag', 'housing'], 'v3', null]);
+  places.length = 0;
+  for (const crumb of ['heart-tag', 'housing']) await act(async () => { fireEvent.click(within(heading() as HTMLElement).getByRole('button', { name: crumb })); });
+  expect(places).toEqual([{ view: 'project', project: 'p1' }, { view: 'project', project: 'p1', path: 'housing' }]);
+  // A file of the folder has its pin and its menu, but no Remove from Recents: it is here for being in the folder.
+  expect(within(screen.getByRole('button', { name: 'Open lid.step' }).closest('li')!).getByRole('button', { name: 'Pin' })).toBeTruthy();
+  expect(items(await menu('lid.step'))).toEqual(['Open', 'Pin']);
+  // In a list a folder is a row, its glyph where a picture is and a dash in each column, first.
+  view.rerender(page('housing/v3', 'list'));
+  const row = within(screen.getByRole('list', { name: 'Files' })).getAllByRole('listitem')[0];
+  expect([row.textContent, [...row.querySelectorAll('[data-column]')].map(cell => cell.textContent)]).toEqual(['drawings————', ['—', '—', '—', '—']]);
 });
 
-it("adds a Where column to a project's list, a model's script and a file's folder under the project's, and a Project column to Recents and Pinned", async () => {
-  const tag = project('p1', 'heart-tag', 1, 1);
-  tag.documents = [...tag.documents, model('top.step', { path: '/Users/sam/cad/heart-tag/top.step', folder: '/Users/sam/cad/heart-tag', project: 'p1', opened: null })];
-  const source = library([model('loose.step'), { ...tag.documents[0], opened: 5 }], { projects: async () => [tag] });
+// A folder's page lists every file in it. A file the viewer does not open (`documentKind: null`, as a CAD host's row of it
+// says) is a card or a row like the rest, and a press on it opens it, as a press on a document does: in an app of the
+// computer's, there being no page for it.
+it("lists every file of a folder; a press on one that is no document opens it with the default handler, else the host's first app, and says so where nothing opens it", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  // A submenu's list scrolls in the chrome's scroll region, which measures itself.
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  const tag = project('p1', 'heart-tag');
+  const other = (below: string) => file(tag, below, { documentKind: null, thumbnail: null, size: 2048 });
+  const files = [file(tag, 'arm.xbf', { documentKind: 'model' }), other('datasheet.pdf'), other('build.py'), other('Makefile'), other('run.sh'), other('locked.pdf'), file(tag, 'lid.step', { documentKind: 'step' })];
+  const asked: string[] = [], opened: unknown[] = [], done: string[] = [];
+  // Open in's answer for each, as a CAD host gives it: one target, the file; `default` there only as false.
+  const answers: Record<string, object> = {
+    'datasheet.pdf': { target: 'source', kind: 'pdf', name: 'datasheet.pdf', present: true, apps: [{ id: 'preview', name: 'Preview' }] },
+    'build.py': { target: 'source', kind: 'code', name: 'build.py', present: true, apps: [{ id: 'vscode', name: 'Visual Studio Code' }, { id: 'cursor', name: 'Cursor' }], default: false },
+    Makefile: { target: 'source', kind: 'file', name: 'Makefile', present: true, apps: [] },
+    'run.sh': { target: 'source', kind: 'file', name: 'run.sh', present: true, apps: [], default: false },
+    'locked.pdf': { target: 'source', kind: 'pdf', name: 'locked.pdf', present: true, apps: [] },
+  };
+  const fileActions = { platform: 'darwin' as const,
+    perform: { 'copy-path': ({ path }: { path: string }) => { done.push(`copy ${path}`); }, reveal: ({ path }: { path: string }) => { done.push(`reveal ${path}`); }, 'copy-link': () => {} },
+    apps: async (entry: { path: string; id?: string }) => { asked.push(entry.id ?? ''); return { targets: [answers[entry.path.split('/').pop()!]], fileManager: 'finder' } as never; },
+    openApp: async (entry: { path: string; id?: string }, target: string, app: string) => {
+      if (entry.path.endsWith('locked.pdf')) throw new Error('This file cannot be opened. Check its permissions.');
+      opened.push([entry.id, target, app]);
+    } };
+  const navigation: LibraryNavigation = { hrefOf: target => 'document' in target ? `/${target.document}` : null, openBeside: { kind: 'tab', open() {} } };
+  const reports: { control: string; count: number; seconds: number }[][] = [];
+  const page = (layout: 'grid' | 'list') => <ControlUsageProvider report={counts => reports.push(counts)}>
+    <ModelLibrary library={library([], hosted([tag], files))} fileActions={fileActions} navigation={navigation} layout={layout} place={{ view: 'project', project: 'p1' }} /></ControlUsageProvider>;
+  const entryOf = (name: string) => document.querySelector<HTMLElement>(`[aria-label="Open ${name}"]`)!.closest('li')!;
+  const press = async (name: string) => { await act(async () => { fireEvent.click(screen.getByRole('button', { name: `Open ${name}` })); }); };
+  for (const layout of ['grid', 'list'] as const) {
+    asked.length = 0;
+    const view = render(page(layout));
+    await screen.findByRole('link', { name: 'Open arm.xbf' });
+    // Every file, in the host's order, documents and the rest together.
+    expect(opens()).toEqual(['Open arm.xbf', 'Open datasheet.pdf', 'Open build.py', 'Open Makefile', 'Open run.sh', 'Open locked.pdf', 'Open lid.step']);
+    // A document is a link with its pin and ⋯. A file that is none has no page, so it is a button, with its ⋯ and no
+    // pin; it is neither dimmed nor disabled, and never the ringed one.
+    expect([entryOf('arm.xbf').querySelector('a')?.getAttribute('href'), within(entryOf('arm.xbf')).getAllByRole('button').map(button => button.getAttribute('aria-label'))])
+      .toEqual(['/file-p1-arm.xbf', ['Pin', 'Actions for arm.xbf']]);
+    for (const name of ['datasheet.pdf', 'build.py', 'Makefile', 'run.sh']) {
+      const entry = entryOf(name), button = within(entry).getByRole('button', { name: `Open ${name}` });
+      expect([entry.querySelector('a'), within(entry).getAllByRole('button').map(each => each.getAttribute('aria-label')), button.hasAttribute('disabled'), button.getAttribute('aria-haspopup'),
+        entry.hasAttribute('data-missing'), entry.hasAttribute('data-from')]).toEqual([null, [`Open ${name}`, `Actions for ${name}`], false, null, false, false]);
+    }
+    // Its badge (a card's) or Kind (a row's) is its extension as its name writes it, upper case; with none, nothing.
+    const kind = (name: string) => layout === 'grid' ? entryOf(name).querySelector('[data-library-format]')?.textContent ?? null : entryOf(name).querySelector('[data-column="kind"]')?.textContent;
+    expect(['datasheet.pdf', 'build.py', 'Makefile'].map(kind)).toEqual(layout === 'grid' ? ['PDF', 'PY', null] : ['PDF', 'PY', '—']);
+    if (layout === 'grid') expect(entryOf('build.py').querySelector('[data-library-status]')?.textContent).toMatch(/^Edited /);
+    // Nothing is asked of the host until a press. Then the file is opened: by the OS's own handler where it is offered...
+    expect(asked).toEqual([]);
+    await press('datasheet.pdf');
+    await waitFor(() => expect(opened).toEqual([['file-p1-datasheet.pdf', 'source', 'default']]));
+    expect([asked, screen.queryByRole('menu'), screen.queryByRole('alert')]).toEqual([['file-p1-datasheet.pdf'], null, null]);
+    // ...a file with no app listed too...
+    await press('Makefile');
+    await waitFor(() => expect(opened.at(-1)).toEqual(['file-p1-Makefile', 'source', 'default']));
+    // ...else by the first app the host lists (code, with an editor installed)...
+    await press('build.py');
+    await waitFor(() => expect(opened.at(-1)).toEqual(['file-p1-build.py', 'source', 'vscode']));
+    expect(opened.length).toBe(3);
+    // ...and where it lists neither, nothing opens it here: said in the place's line, by the file's name.
+    await press('run.sh');
+    expect((await screen.findByRole('alert')).textContent).toBe('No app on this computer opens run.sh.');
+    expect(opened.length).toBe(3);
+    // An open the host refuses is said in its own words; the next press clears the line.
+    await press('locked.pdf');
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('This file cannot be opened. Check its permissions.'));
+    await press('datasheet.pdf');
+    await waitFor(() => expect(opened.length).toBe(4));
+    expect(screen.queryByRole('alert')).toBeNull();
+    opened.length = 0;
+    view.unmount();
+  }
+  // Its ⋯: Open in, a submenu of the host's apps and Default app (the rows the navbar's Open in draws), looked up as the
+  // menu opens; then Copy path and the file manager. No Open, Open in new tab, Copy link, Pin or Remove from Recents.
+  const menuOf = async (name: string) => {
+    const open = await menu(name);
+    await waitFor(() => expect(asked.at(-1)).toBe(`file-p1-${name}`));
+    return open;
+  };
+  let view = render(page('grid'));
+  await screen.findByRole('link', { name: 'Open arm.xbf' });
+  let open = await menuOf('build.py');
+  await within(open).findByRole('menuitem', { name: 'Open in' });
+  expect(items(open)).toEqual(['Open in', 'Copy path', 'Reveal in Finder']);
+  await user.click(within(open).getByRole('menuitem', { name: 'Open in' }));
+  const openIn = await screen.findByRole('menu', { name: 'Open in' });
+  // No Default app where the host says the OS's handler is not offered.
+  expect(items(openIn)).toEqual(['Visual Studio Code', 'Cursor']);
+  await act(async () => { fireEvent.click(within(openIn).getByRole('menuitem', { name: 'Cursor' })); });
+  expect(opened).toEqual([['file-p1-build.py', 'source', 'cursor']]);
+  view.unmount();
+  // No app and no handler: Copy path and the file manager alone, both working.
+  view = render(page('list'));
+  await screen.findByRole('link', { name: 'Open arm.xbf' });
+  open = await menuOf('run.sh');
+  expect(items(open)).toEqual(['Copy path', 'Reveal in Finder']);
+  await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Reveal in Finder' })); });
+  expect(done).toEqual(['reveal /Users/sam/cad/heart-tag/run.sh']);
+  view.unmount();
+  // A document's ⋯ has Open in too, after its Open and Open in new tab.
+  view = render(page('grid'));
+  await screen.findByRole('link', { name: 'Open arm.xbf' });
+  answers['arm.xbf'] = { target: 'source', kind: 'model', name: 'arm.py', present: true, apps: [{ id: 'vscode', name: 'Visual Studio Code' }], default: false };
+  open = await menuOf('arm.xbf');
+  await within(open).findByRole('menuitem', { name: 'Open in' });
+  expect(items(open)).toEqual(['Open', 'Open in new tab', 'Open in', 'Copy path', 'Copy link', 'Reveal in Finder', 'Pin']);
+  view.unmount();
+  // Each open handed to an app is counted, a refused one too; never which app.
+  expect(reported(reports)).toMatchObject({ file_open_app: 11, home_reveal: 1 });
+});
+
+it('a file that is no document does what its host can: shown in the file manager where the host opens no apps, and no control at all where it can do neither', async () => {
+  const tag = project('p1', 'heart-tag');
+  const files = [file(tag, 'arm.xbf', { documentKind: 'model' }), file(tag, 'notes.md', { documentKind: null })];
+  const done: string[] = [];
+  const page = (fileActions?: object) => <ModelLibrary library={library([], hosted([tag], files))} fileActions={fileActions as never} place={{ view: 'project', project: 'p1' }} />;
+  // A host that opens no apps: a press shows the file in its file manager, and the ⋯ has what the host can do.
+  let view = render(page({ platform: 'linux', perform: { 'copy-path': () => {}, reveal: ({ path }: { path: string }) => { done.push(path); } } }));
+  const notes = await screen.findByRole('button', { name: 'Open notes.md' });
+  await act(async () => { fireEvent.click(notes); });
+  expect(done).toEqual(['/Users/sam/cad/heart-tag/notes.md']);
+  expect(items(await menu('notes.md'))).toEqual(['Copy path', 'Show in file manager']);
+  view.unmount();
+  // A host that can only copy a path: the card is there, named and badged, and is no control; its ⋯ offers Copy path.
+  view = render(page({ platform: 'linux', perform: { 'copy-path': () => {} } }));
+  await screen.findByRole('button', { name: 'Open arm.xbf' });
+  let card = screen.getByText('notes.md').closest('li')!;
+  expect([within(card).queryByRole('link'), within(card).getAllByRole('button').map(button => button.getAttribute('aria-label')), card.querySelector('[data-library-format]')?.textContent])
+    .toEqual([null, ['Actions for notes.md'], 'MD']);
+  expect(items(await menu('notes.md'))).toEqual(['Copy path']);
+  view.unmount();
+  // A host that can do nothing with a file: no control at all.
+  view = render(page());
+  await screen.findByRole('button', { name: 'Open arm.xbf' });
+  card = screen.getByText('notes.md').closest('li')!;
+  expect([within(card).queryByRole('button'), within(card).queryByRole('link')]).toEqual([null, null]);
+  view.unmount();
+});
+
+it("a search on a project's page asks the host and lists what is below, flat, each saying where it is; Recents and Pinned say each one's project", async () => {
+  const tag = project('p1', 'heart-tag');
+  const host = hosted([tag], [file(tag, 'housing/v3/housing.xbf'), file(tag, 'housing/v3/drawings/housing-plan.dxf'), file(tag, 'housing/lid.step'), file(tag, 'top.step')]);
+  const source = library([model('loose.step'), { ...file(tag, 'top.step'), opened: 5 }], host);
   const home = (at: Parameters<typeof ModelLibrary>[0]['place']) => <ModelLibrary library={source} layout="list" place={at} />;
-  const view = render(home({ view: 'project', project: 'p1' }));
-  await screen.findByRole('button', { name: 'Open part_0.stl' });
+  const view = render(home({ view: 'project', project: 'p1', path: 'housing' }));
+  await screen.findByRole('button', { name: 'Open lid.step' });
   const header = () => [...screen.getByRole('list', { name: 'Files' }).previousElementSibling!.children].map(cell => cell.textContent);
   const where = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-column=where]')?.textContent;
+  // A folder's listing: every row is in it, so there is no Where.
+  expect([header(), opens()]).toEqual([['Name', 'Kind', 'Size', 'Updated', 'Created'], ['Open v3', 'Open lid.step']]);
+  // Words typed: once typing rests, the host is asked for everything below the folder on screen that holds them.
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'hous' } });
+  await waitFor(() => expect(host.folder).toHaveBeenLastCalledWith('p1', { path: 'housing', q: 'hous' }));
+  await waitFor(() => expect(opens()).toEqual(['Open housing.xbf', 'Open housing-plan.dxf']));
   expect(header()).toEqual(['Name', 'Where', 'Kind', 'Size', 'Updated', 'Created']);
-  // A file in the project's own folder is nowhere under it.
-  expect([where('heart-tag_model_0'), where('part_0.stl'), where('top.step')]).toEqual(['src/heart-tag.py', 'STL', '']);
+  expect([where('housing.xbf'), where('housing-plan.dxf')]).toEqual(['v3', 'v3/drawings']);
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'nothing' } });
+  expect(await screen.findByText('No matching models.')).toBeTruthy();
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: '' } });
   view.rerender(home({ view: 'recents' }));
   expect(header()).toEqual(['Name', 'Project', 'Kind', 'Size', 'Updated', 'Created']);
-  expect([where('heart-tag_model_0'), where('loose.step')]).toEqual(['heart-tag', 'Standalone']);
+  expect([where('top.step'), where('loose.step')]).toEqual(['heart-tag', 'Standalone']);
   // Standalone's documents are in no project: nothing to say.
   view.rerender(home({ view: 'standalone' }));
   expect(header()).toEqual(['Name', 'Kind', 'Size', 'Updated', 'Created']);
@@ -791,46 +834,31 @@ it("adds a Where column to a project's list, a model's script and a file's folde
 });
 
 it("leads a card's second line with its project's name in Recents and Pinned, where projects are listed", async () => {
-  const tag = project('p1', 'heart-tag', 0, 1);
-  const source = library([{ ...tag.documents[0], pinned: true }, model('loose.step', { size: 2048, pinned: true })], { projects: async () => [tag] });
+  const tag = project('p1', 'heart-tag');
+  const source = library([{ ...file(tag, 'src/arm.xbf'), opened: 5, pinned: true }, model('loose.step', { size: 2048, pinned: true })], hosted([tag]));
   const home = (at: Parameters<typeof ModelLibrary>[0]['place']) => <ModelLibrary library={source} place={at} />;
   const view = render(home({ view: 'recents' }));
   await waitFor(() => expect(place('project:p1')).toBeTruthy());
-  const second = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('.cad-library-status')?.textContent;
-  expect([second('heart-tag_model_0'), second('loose.step')]).toEqual(['heart-tag · Edited 16h ago', 'Standalone · Edited 16h ago']);
+  const second = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-library-status]')?.textContent;
+  expect([second('arm.xbf'), second('loose.step')]).toEqual(['heart-tag · Edited 16h ago', 'Standalone · Edited 16h ago']);
   view.rerender(home({ view: 'pinned' }));
-  expect([second('heart-tag_model_0'), second('loose.step')]).toEqual(['heart-tag · Edited 16h ago', 'Standalone · Edited 16h ago']);
+  expect([second('arm.xbf'), second('loose.step')]).toEqual(['heart-tag · Edited 16h ago', 'Standalone · Edited 16h ago']);
   view.rerender(home({ view: 'standalone' }));
   expect(second('loose.step')).toBe('Edited 16h ago');
 });
 
-it('shows the first of a long place, and the rest once its Show more is pressed', async () => {
-  const reports: { control: string; count: number; seconds: number }[][] = [];
-  const big = project('p1', 'bolts', PLACE_ROWS + 7);
-  const view = render(<ControlUsageProvider report={counts => reports.push(counts)}>
-    <ModelLibrary library={library([], { projects: async () => [big] })} place={{ view: 'project', project: 'p1' }} />
-  </ControlUsageProvider>);
-  await screen.findByRole('button', { name: 'Open part_0.stl' });
-  expect([PLACE_ROWS, opens().length, place('project:p1').textContent]).toEqual([120, 120, 'bolts127']);
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Show 7 more' })); });
-  expect(opens()).toHaveLength(127);
-  expect(screen.queryByRole('button', { name: /^Show \d/ })).toBeNull();
-  view.unmount();
-  expect(reported(reports)).toEqual({ home_project_more: 1 });
-});
 
 it("sorts the place on screen by last activity, by name or by kind, the host keeping the choice", async () => {
   const reports: { control: string; count: number; seconds: number }[][] = [];
-  const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
-  const documents = [model('b10.step', { updated: 30 }), model('b9.step', { updated: 40, opened: null }), model('arm', { path: id, kind: 'model', updated: 10 }),
+  const documents = [model('b10.step', { updated: 30 }), model('b9.step', { updated: 40, opened: null }), model('arm.xbf', { updated: 10 }),
     model('Axle.dxf', { updated: 20, pinned: true })];
   const sorts: string[] = [];
   const home = (sort?: 'activity' | 'name' | 'kind') => <ControlUsageProvider report={counts => reports.push(counts)}>
     <ModelLibrary library={library(documents)} sort={sort} onSortChange={next => sorts.push(next)} /></ControlUsageProvider>;
   const view = render(home());
-  await screen.findByRole('button', { name: 'Open arm' });
+  await screen.findByRole('button', { name: 'Open arm.xbf' });
   // Last activity, newest first: a pinned document is not first (Pinned is a place of its own).
-  expect(opens()).toEqual(['Open b9.step', 'Open b10.step', 'Open Axle.dxf', 'Open arm']);
+  expect(opens()).toEqual(['Open b9.step', 'Open b10.step', 'Open Axle.dxf', 'Open arm.xbf']);
   const trigger = screen.getByRole('button', { name: 'Sort by Last activity' });
   expect([trigger.textContent, trigger.previousElementSibling?.textContent]).toEqual(['Last activity', 'Sort']);
   await act(async () => { fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
@@ -841,42 +869,42 @@ it("sorts the place on screen by last activity, by name or by kind, the host kee
   expect(sorts).toEqual(['name']);
   // By name, as a person counts: 9 before 10, whatever the case.
   view.rerender(home('name'));
-  expect(opens()).toEqual(['Open arm', 'Open Axle.dxf', 'Open b9.step', 'Open b10.step']);
+  expect(opens()).toEqual(['Open arm.xbf', 'Open Axle.dxf', 'Open b9.step', 'Open b10.step']);
   expect(screen.getByRole('button', { name: 'Sort by Name' }).textContent).toBe('Name');
-  // By kind: the 3D models (the models first: those built from code, then the xbf files), then the drawings, each kind
+  // By kind: the 3D models (the models, the xbf files, first), then the drawings, each kind
   // by format, then by name.
   view.rerender(home('kind'));
-  expect(opens()).toEqual(['Open arm', 'Open b9.step', 'Open b10.step', 'Open Axle.dxf']);
+  expect(opens()).toEqual(['Open arm.xbf', 'Open b9.step', 'Open b10.step', 'Open Axle.dxf']);
   expect(sortDocuments([model('z.step'), model('a.stl'), model('m.dxf'), model('n.urdf'), model('q.kicad_sch'), model('p.kicad_pcb'), model('a.3mf'),
-    model('notes.txt'), model('k', { kind: 'model' }), model('b.xbf'), model('a.xbf'), model('j', { kind: 'model' })], 'kind')
-    .map(item => item.name)).toEqual(['j', 'k', 'a.xbf', 'b.xbf', 'a.3mf', 'z.step', 'a.stl', 'm.dxf', 'p.kicad_pcb', 'q.kicad_sch', 'n.urdf', 'notes.txt']);
+    model('notes.txt'), model('b.xbf'), model('a.xbf')], 'kind')
+    .map(item => item.name)).toEqual(['a.xbf', 'b.xbf', 'a.3mf', 'z.step', 'a.stl', 'm.dxf', 'p.kicad_pcb', 'q.kicad_sch', 'n.urdf', 'notes.txt']);
   view.unmount();
   expect(reported(reports)).toEqual({ home_sort_name: 1 });
   cleanup();
   // A host that keeps no order has no Sort.
   render(<ModelLibrary library={library(documents)} />);
-  await screen.findByRole('button', { name: 'Open arm' });
+  await screen.findByRole('button', { name: 'Open arm.xbf' });
   expect(screen.queryByRole('button', { name: /^Sort/ })).toBeNull();
 });
 
-it('narrows the place on screen with a search, and says when nothing matches', async () => {
-  const source = library([model('loose.step')], { projects: async () => [project('p1', 'heart-tag', 3), project('p2', 'gear', 2)] });
-  render(<ModelLibrary library={source} place={{ view: 'project', project: 'p1' }} />);
+it('narrows Recents, Pinned and Standalone with a search of the rows in hand, and says when nothing matches', async () => {
+  const source = library([model('part_1.stl', { pinned: true }), model('part_2.stl', { pinned: true })]);
+  render(<ModelLibrary library={source} place={{ view: 'pinned' }} />);
   await screen.findByRole('button', { name: 'Open part_2.stl' });
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'part_2' } });
   expect(opens()).toEqual(['Open part_2.stl']);
   // The sidebar's counts are the places', not the search's.
-  expect([place('project:p1').textContent, place('project:p2').textContent]).toEqual(['heart-tag3', 'gear2']);
+  expect(place('pinned').textContent).toBe('Pinned2');
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'nothing' } });
-  expect(screen.getByRole('main').querySelector('.cad-library-empty')?.textContent).toBe('No matching models.');
+  expect(screen.getByRole('main').querySelector('[data-library-state]')?.textContent).toBe('No matching models.');
 });
 
-it("gives a project's page a menu: its folder's Copy path and Reveal, and Remove from CAD, which forgets the project alone, goes to Recents and says so", async () => {
+it("gives a project's page a menu: the folder on screen's Copy path and Reveal, and Remove from CAD, which forgets the project alone, goes to Recents and says so", async () => {
   const perform = { 'copy-path': vi.fn(async () => {}), reveal: vi.fn(async () => {}) };
-  let listed = [project('p1', 'heart-tag', 1)];
+  let listed = [project('p1', 'heart-tag')];
   const removeProject = vi.fn(async () => { listed = []; return listed; });
   const places: unknown[] = [];
-  const source = library([model('loose.step')], { projects: async () => listed, removeProject });
+  const source = library([model('loose.step')], { ...hosted(listed, [file(listed[0], 'part_0.stl')]), projects: async () => listed, removeProject });
   const page = () => <ModelLibrary library={source} fileActions={{ platform: 'darwin', perform }} onPlaceChange={next => places.push(next)} />;
   let view = render(page());
   await waitFor(() => expect(place('project:p1')).toBeTruthy());
@@ -906,14 +934,16 @@ it("gives a project's page a menu: its folder's Copy path and Reveal, and Remove
 
 it("goes to the page of the project Import's Folder opened, from the sidebar's + too, and says what came of it", async () => {
   let listed: LibraryProject[] = [];
+  const gear = project('p2', 'gear', { root: '/w/gear' });
+  const folders = hosted([gear], [file(gear, 'part_0.stl'), file(gear, 'STEP/gear.step')]);
   const answers = [{ project: { id: 'p2', name: 'gear', root: '/w/gear' }, made: true, folder: '/w/gear' },
     { project: { id: 'p2', name: 'gear', root: '/w/gear' }, made: false, folder: '/w/gear/STEP' },
     { project: { id: 'p2', name: 'gear', root: '/w/gear' }, made: false, folder: '/w/gear' }];
   // The projects list it a read later than its answer: its page waits for it meanwhile.
   let arrive!: () => void;
-  const importFolder = vi.fn(async () => { arrive = () => { listed = [project('p2', 'gear', 1, 0, { root: '/w/gear' })]; }; return answers.shift()!; });
+  const importFolder = vi.fn(async () => { arrive = () => { listed = [gear]; }; return answers.shift()!; });
   const places: unknown[] = [];
-  render(<ModelLibrary library={library([], { projects: async () => listed, importFolder, pick: async () => {} })} onPlaceChange={next => places.push(next)} />);
+  render(<ModelLibrary library={library([], { folder: folders.folder, projects: async () => listed, importFolder, pick: async () => {} })} onPlaceChange={next => places.push(next)} />);
   await screen.findByText('Nothing here yet');
   // No projects yet: said where they would be.
   expect(within(screen.getByRole('navigation', { name: 'Places' })).getByText('No projects yet.')).toBeTruthy();
@@ -929,7 +959,10 @@ it("goes to the page of the project Import's Folder opened, from the sidebar's +
   await screen.findByRole('button', { name: 'Open part_0.stl' });
   expect([screen.getByRole('main').querySelector('h2')?.textContent, place('project:p2').getAttribute('aria-current')]).toEqual(['gear', 'page']);
   await choose();
+  // A folder inside a project: the project's page, at that folder.
   expect(await screen.findByText('STEP is inside gear, which is already a project.')).toBeTruthy();
+  expect(places.at(-1)).toEqual({ view: 'project', project: 'p2', path: 'STEP' });
+  await screen.findByRole('button', { name: 'Open gear.step' });
   // The sidebar's +, by Projects: the same chooser.
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Open a folder as a project' })); });
   expect(await screen.findByText('gear is already a project.')).toBeTruthy();
@@ -941,11 +974,15 @@ it("goes to the page of the project Import's Folder opened, from the sidebar's +
   expect(screen.queryByRole('button', { name: 'Open a folder as a project' })).toBeNull();
 });
 
-it('says what each place lacks: an empty project, one whose folder is gone, one no longer listed, and projects that cannot be read', async () => {
-  const source = library([model('loose.step', { project: 'p1' })], { projects: async () => [project('p1', 'heart-tag', 0), project('p2', 'lamp', 2, 0, { missing: true })] });
+it('says what each place lacks: an empty project, one whose folder is gone, one no longer listed, a folder that cannot be read, and projects that cannot be read', async () => {
+  const tag = project('p1', 'heart-tag'), lamp = project('p2', 'lamp', { missing: true });
+  const source = library([model('loose.step', { project: 'p1' })], hosted([tag, lamp], [file(lamp, 'part_0.stl')]));
   const home = (at: Parameters<typeof ModelLibrary>[0]['place'], from = source) => <ModelLibrary library={from} place={at} />;
   const view = render(home({ view: 'project', project: 'p1' }));
-  expect(await screen.findByText('No models or CAD files here yet.')).toBeTruthy();
+  expect(await screen.findByText('This folder is empty.')).toBeTruthy();
+  view.rerender(home({ view: 'project', project: 'p1', path: 'renamed' }));
+  expect(await screen.findByText("Couldn't read this folder. It may have been moved or renamed.")).toBeTruthy();
+  expect([...document.querySelectorAll('[data-library-crumb]')].map(crumb => crumb.textContent)).toEqual(['heart-tag']);
   view.rerender(home({ view: 'project', project: 'p2' }));
   expect(screen.getByText("This project's folder is gone. Remove it, or put the folder back.")).toBeTruthy();
   expect(opens()).toEqual([]);
@@ -967,15 +1004,16 @@ it('says what each place lacks: an empty project, one whose folder is gone, one 
 // The host's addresses (`navigation.hrefOf`): a document's page by its id, a place's on the home; a document named by
 // its path (its row carries no id) has none.
 const addresses: LibraryNavigation = { hrefOf: target => 'document' in target ? (target.document.startsWith('/') ? null : `/${target.document}?token=t`)
-  : `/?${target.home.view === 'project' ? `project=${target.home.project}` : `view=${target.home.view}`}` };
+  : `/?${target.home.view === 'project' ? `project=${target.home.project}${target.home.path ? `&path=${target.home.path}` : ''}` : `view=${target.home.view}`}` };
 
 it("makes a card's and a row's main press a real link where the host gives the document an address, and a button where it gives none", async () => {
-  const tag = project('p1', 'heart-tag', 1, 1);
-  const source = library([model('bracket.step', { id: 'id-bracket' }), model('gone.step', { id: 'id-gone', missing: true }), model('unnamed.step')], { projects: async () => [tag] });
+  const tag = project('p1', 'heart-tag');
+  const source = library([model('bracket.step', { id: 'id-bracket' }), model('gone.step', { id: 'id-gone', missing: true }), model('unnamed.step')],
+    hosted([tag], [file(tag, 'part_0.stl'), file(tag, 'STL/part_1.stl')]));
   for (const layout of ['grid', 'list'] as const) {
     const view = render(<ModelLibrary library={source} layout={layout} navigation={addresses} />);
     const card = await screen.findByRole('link', { name: 'Open bracket.step' });
-    expect([card.tagName, card.getAttribute('href'), card.className]).toEqual(['A', '/id-bracket?token=t', 'cad-library-open']);
+    expect([card.tagName, card.getAttribute('href'), card.classList.contains('cad-library-open')]).toEqual(['A', '/id-bracket?token=t', true]);
     // A plain click opens it in this view, and the browser follows nothing.
     const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
     await act(async () => { card.dispatchEvent(click); });
@@ -991,10 +1029,16 @@ it("makes a card's and a row's main press a real link where the host gives the d
     expect([(screen.getByRole('button', { name: 'Open gone.step' }) as HTMLButtonElement).disabled, screen.queryByRole('link', { name: 'Open gone.step' })]).toEqual([true, null]);
     // A document the host has no address for (its row carries no id): a button, opened here.
     expect(screen.getByRole('button', { name: 'Open unnamed.step' }).tagName).toBe('BUTTON');
-    // A project's model has its page, and so has its file no page has opened yet: the host knows each by its id.
+    // A project's file no page has opened yet has its page (the host knows each file it lists by its id), and its
+    // folder has its own address: a plain click goes there in this view.
     await act(async () => { fireEvent.click(place('project:p1')); });
-    expect(screen.getByRole('link', { name: 'Open heart-tag_model_0' }).getAttribute('href')).toBe('/8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f00?token=t');
-    expect(screen.getByRole('link', { name: 'Open part_0.stl' }).getAttribute('href')).toBe('/file-p1-0?token=t');
+    expect((await screen.findByRole('link', { name: 'Open part_0.stl' })).getAttribute('href')).toBe('/file-p1-part_0.stl?token=t');
+    const folder = screen.getByRole('link', { name: 'Open STL' });
+    expect(folder.getAttribute('href')).toBe('/?project=p1&path=STL');
+    await act(async () => { fireEvent.click(folder); });
+    expect((await screen.findByRole('link', { name: 'Open part_1.stl' })).getAttribute('href')).toBe('/file-p1-STL/part_1.stl?token=t');
+    // And so has each part of the path back up.
+    expect(within(screen.getByRole('main')).getByRole('link', { name: 'heart-tag' }).getAttribute('href')).toBe('/?project=p1');
     view.unmount();
     cleanup();
     (source.open as ReturnType<typeof vi.fn>).mockClear();
@@ -1003,7 +1047,7 @@ it("makes a card's and a row's main press a real link where the host gives the d
 
 it("makes each place's row a link where the host gives places an address: a plain click shows it here", async () => {
   const places: unknown[] = [];
-  render(<ModelLibrary library={library([model('a.step')], { projects: async () => [project('p1', 'heart-tag', 1)] })} navigation={addresses} onPlaceChange={next => places.push(next)} />);
+  render(<ModelLibrary library={library([model('a.step')], hosted([project('p1', 'heart-tag')]))} navigation={addresses} onPlaceChange={next => places.push(next)} />);
   await waitFor(() => expect(place('project:p1')).toBeTruthy());
   expect([...document.querySelectorAll('[data-place]')].map(row => [row.tagName, row.getAttribute('href')]))
     .toEqual([['A', '/?view=recents'], ['A', '/?view=pinned'], ['A', '/?project=p1'], ['A', '/?view=standalone']]);
@@ -1018,8 +1062,8 @@ it("makes each place's row a link where the host gives places an address: a plai
 it("offers Open in new tab in every document's menu, directly after Open, and first in a project's, where the host can open a target beside the view", async () => {
   const reports: { control: string; count: number; seconds: number }[][] = [];
   const opened: unknown[] = [];
-  const tag = project('p1', 'heart-tag', 1, 1);
-  const source = library([model('bracket.step', { id: 'id-bracket' })], { projects: async () => [tag], removeProject: async () => [] });
+  const tag = project('p1', 'heart-tag');
+  const source = library([model('bracket.step', { id: 'id-bracket' })], { ...hosted([tag], [file(tag, 'part_0.stl'), file(tag, 'STL/part_1.stl')]), removeProject: async () => [] });
   const home = (navigation: LibraryNavigation, at: Parameters<typeof ModelLibrary>[0]['place'] = { view: 'project', project: 'p1' }) =>
     render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={source} navigation={navigation} place={at} /></ControlUsageProvider>);
   const tab: LibraryNavigation = { openBeside: { kind: 'tab', open: target => { opened.push(target); } } };
@@ -1027,38 +1071,35 @@ it("offers Open in new tab in every document's menu, directly after Open, and fi
   let view = home(tab, { view: 'recents' });
   await screen.findByRole('button', { name: 'Open bracket.step' });
   let open = await menu('bracket.step');
-  expect(items(open)).toEqual(['Open', 'Open in new tab', 'Pin', 'Delete']);
+  expect(items(open)).toEqual(['Open', 'Open in new tab', 'Pin', 'Remove from Recents']);
   await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Open in new tab' })); });
   view.unmount();
   cleanup();
-  // A project's file no page has opened, and a model, each by its id.
-  for (const name of ['part_0.stl', 'heart-tag_model_0']) {
-    view = home(tab);
-    await screen.findByRole('button', { name: `Open ${name}` });
-    open = await menu(name);
-    expect(items(open).slice(0, 2)).toEqual(['Open', 'Open in new tab']);
-    await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Open in new tab' })); });
-    view.unmount();
-    cleanup();
-  }
-  // A project's ⋯: Open in new tab first.
+  // A project's file no page has opened, by its id.
   view = home(tab);
   await screen.findByRole('button', { name: 'Open part_0.stl' });
+  open = await menu('part_0.stl');
+  expect(items(open)).toEqual(['Open', 'Open in new tab', 'Pin']);
+  await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Open in new tab' })); });
+  view.unmount();
+  cleanup();
+  // A project's ⋯, on one of its folders: Open in new tab first, which opens that folder.
+  view = home(tab, { view: 'project', project: 'p1', path: 'STL' });
+  await screen.findByRole('button', { name: 'Open part_1.stl' });
   await act(async () => { fireEvent.pointerDown(screen.getByRole('button', { name: 'Actions for the project heart-tag' }), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
   open = await screen.findByRole('menu');
   expect(items(open)).toEqual(['Open in new tab', 'Remove from CAD']);
   await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Open in new tab' })); });
-  await waitFor(() => expect(opened).toHaveLength(4));
-  expect(opened).toEqual([{ document: 'id-bracket' }, { document: 'file-p1-0' }, { document: '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f00' },
-    { home: { view: 'project', project: 'p1' } }]);
+  await waitFor(() => expect(opened).toHaveLength(3));
+  expect(opened).toEqual([{ document: 'id-bracket' }, { document: 'file-p1-part_0.stl' }, { home: { view: 'project', project: 'p1', path: 'STL' } }]);
   view.unmount();
-  expect(reported(reports)).toEqual({ home_open_new_tab: 3, home_project_open_new_tab: 1 });
+  expect(reported(reports)).toEqual({ home_open_new_tab: 2, home_project_open_new_tab: 1 });
   cleanup();
   // A page in an app's frame: Open in browser, a document's alone where the host opens no place beside the view.
   const browser: LibraryNavigation = { openBeside: { kind: 'browser', places: false, open: () => {} } };
   view = home(browser);
   await screen.findByRole('button', { name: 'Open part_0.stl' });
-  expect(items(await menu('heart-tag_model_0')).slice(0, 2)).toEqual(['Open', 'Open in browser']);
+  expect(items(await menu('part_0.stl')).slice(0, 2)).toEqual(['Open', 'Open in browser']);
   view.unmount();
   cleanup();
   home(browser);
@@ -1069,7 +1110,7 @@ it("offers Open in new tab in every document's menu, directly after Open, and fi
   // A host that cannot: no such item (the first tests' menus).
   render(<ModelLibrary library={source} />);
   await screen.findByRole('button', { name: 'Open bracket.step' });
-  expect(items(await menu('bracket.step'))).toEqual(['Open', 'Pin', 'Delete']);
+  expect(items(await menu('bracket.step'))).toEqual(['Open', 'Pin', 'Remove from Recents']);
 });
 
 it('names a document whose row carries no id by its path, and says why Open in new tab failed where the library shows it', async () => {
@@ -1090,22 +1131,23 @@ it("rings the document just left, brings it into view, and goes back to it from 
   const reports: { control: string; count: number; seconds: number }[][] = [];
   const scrolled = vi.fn();
   Element.prototype.scrollIntoView = scrolled;
-  const tag = project('p1', 'heart-tag', 3, 2);
+  const tag = project('p1', 'heart-tag');
   const back = vi.fn();
-  const left = tag.documents[1];
-  const source = library([model('loose.step')], { projects: async () => [tag] });
+  const files = ['part_0.stl', 'part_1.stl', 'part_2.stl'].map(name => file(tag, name));
+  const left = { ...files[1], path: '/elsewhere/part_1.stl' };
+  const source = library([model('loose.step')], hosted([tag], files));
   const home = (from: Parameters<typeof ModelLibrary>[0]['from'], layout: 'grid' | 'list' = 'grid') => <ControlUsageProvider report={counts => reports.push(counts)}>
     <ModelLibrary library={source} layout={layout} place={{ view: 'project', project: 'p1' }} from={from} onBack={back} /></ControlUsageProvider>;
   const view = render(home({ path: left.path, id: left.id, name: left.name }));
   await screen.findByRole('button', { name: 'Open part_0.stl' });
-  // Its card, and no other, is the one marked; it is brought into view once it is drawn.
+  // Its card, and no other, is the one marked (by its id: it was reached by another path); brought into view once drawn.
   const ringed = () => [...document.querySelectorAll('[data-from]')].map(item => within(item as HTMLElement).getAllByRole('button')[0].getAttribute('aria-label'));
-  expect(ringed()).toEqual(['Open heart-tag_model_1']);
+  expect(ringed()).toEqual(['Open part_1.stl']);
   await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
   expect([scrolled.mock.contexts[0], scrolled.mock.calls[0]]).toEqual([document.querySelector('[data-from]'), [{ block: 'nearest' }]]);
   // The way back stands in the heading row, with its key.
-  const button = screen.getByRole('button', { name: 'Back to heart-tag_model_1' });
-  expect([button.closest('.cad-library-toolbar') !== null, button.querySelector('kbd')?.textContent, button.getAttribute('aria-keyshortcuts')]).toEqual([true, 'Esc', 'Escape']);
+  const button = screen.getByRole('button', { name: 'Back to part_1.stl' });
+  expect([button.closest('[data-library-toolbar]') !== null, button.querySelector('kbd')?.textContent, button.getAttribute('aria-keyshortcuts')]).toEqual([true, 'Esc', 'Escape']);
   fireEvent.click(button);
   expect(back).toHaveBeenCalledTimes(1);
   // Escape goes back too...
@@ -1119,7 +1161,7 @@ it("rings the document just left, brings it into view, and goes back to it from 
   expect(back).toHaveBeenCalledTimes(2);
   // A row is ringed as a card is.
   view.rerender(home({ path: left.path, id: left.id, name: left.name }, 'list'));
-  expect(ringed()).toEqual(['Open heart-tag_model_1']);
+  expect(ringed()).toEqual(['Open part_1.stl']);
   // The host forgets it (another document opened, another place): no ring, no way back, and Escape is nobody's.
   cleanup();
   render(home(null));
@@ -1130,37 +1172,6 @@ it("rings the document just left, brings it into view, and goes back to it from 
   expect(reported(reports)).toEqual({ home_back: 2 });
 });
 
-it('shows the document just left even where it is past the first of a long place', async () => {
-  const big = project('p1', 'bolts', PLACE_ROWS + 5);
-  const last = big.documents.at(-1)!;
-  // Oldest of all: last by last activity.
-  big.documents = big.documents.map(item => item === last ? { ...item, updated: 1 } : item);
-  render(<ModelLibrary library={library([], { projects: async () => [big] })} place={{ view: 'project', project: 'p1' }} from={{ path: last.path, name: last.name }} onBack={() => {}} />);
-  await screen.findByRole('button', { name: 'Open part_0.stl' });
-  expect([opens().length, opens().at(-1), document.querySelectorAll('[data-from]').length]).toEqual([PLACE_ROWS + 5, `Open ${last.name}`, 1]);
-});
-
-// A narrow home keeps its sidebar's ways (`LibrarySidebar.jsx`): what narrows is the place's own gutters.
-it('puts the place on the narrow gutters in a home narrower than 720px, measured on the home and never the window; its heading stays Home and the place keeps its name', async () => {
-  let width = 719;
-  const boxes = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-    const wide = this.classList.contains('cad-library') ? width : 0;
-    return { x: 0, y: 0, left: 0, top: 0, right: wide, bottom: 0, width: wide, height: 0, toJSON() {} } as DOMRect;
-  });
-  const resized: (() => void)[] = [];
-  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resized.push(callback); } observe() {} disconnect() {} });
-  try {
-    render(<ModelLibrary library={library([model('a.step')])} />);
-    await screen.findByRole('button', { name: 'Open a.step' });
-    const narrow = () => document.querySelector('[data-library-narrow]') !== null;
-    // No menu of places on the heading: Home, and the place's name in its own row, at any width.
-    expect([narrow(), screen.getByRole('heading', { level: 1 }).textContent, screen.getByRole('main').querySelector('h2')?.textContent, screen.queryByRole('button', { name: /^Places/ })])
-      .toEqual([true, 'Home', 'Recents', null]);
-    width = 720;
-    await act(async () => { resized.forEach(callback => callback()); });
-    expect([narrow(), screen.getByRole('heading', { level: 1 }).textContent]).toEqual([false, 'Home']);
-  } finally { boxes.mockRestore(); }
-});
 
 // The home under the viewer's navbar, as a host shows it (`FileViewer`): the sidebar is the viewer's panel over this
 // page (`LibrarySidebar.jsx`, on `file-viewer/panelFrame.jsx`), so its toggle is the navbar's, after the logo. The page
@@ -1177,7 +1188,7 @@ function page({ width = 1200, panel, onPanelChange, onPlaceChange, links = true,
     unobserve() {}
     disconnect() { this.entry.targets = []; }
   });
-  const MEASURED = '.cad-library-frame, .cad-library, .text-to-cad-file-viewer';
+  const MEASURED = '[data-library-frame], .cad-library, .text-to-cad-file-viewer';
   const boxes = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     const own = this.matches(MEASURED) ? wide : 0;
     return { x: 0, y: 0, left: 0, top: 0, right: own, bottom: 0, width: own, height: 0, toJSON() {} } as DOMRect;
@@ -1185,7 +1196,7 @@ function page({ width = 1200, panel, onPanelChange, onPlaceChange, links = true,
   const home = vi.fn();
   const host = testHost({ navigation: { openFile() {}, home }, environment: { colorScheme: 'light', platform },
     ...(links ? { links: links === true ? viewerLinks({ version: '0.7.4', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x' }) : links as any } : null) });
-  const source = library([model('loose.step')], { projects: async () => projects });
+  const source = library([model('loose.step')], hosted(projects));
   const share = vi.fn(), theme = vi.fn();
   const view = render(<ControlUsageProvider report={report}><FileViewer file={null} host={host} renderers={[]} state={{}} onStateChange={() => {}}
     appSettings={links ? [{ id: 'analytics', label: 'Telemetry', checked: true, onCheckedChange: share }] : undefined}
@@ -1198,7 +1209,7 @@ function page({ width = 1200, panel, onPanelChange, onPlaceChange, links = true,
     restore: () => boxes.mockRestore(),
     toggle: () => document.querySelector<HTMLElement>('[data-viewer-navbar] [data-navbar-panel="left"]')!,
     sidebar: () => document.querySelector<HTMLElement>('aside[data-library-sidebar]'),
-    frame: () => document.querySelector<HTMLElement>('.cad-library-frame')!,
+    frame: () => document.querySelector<HTMLElement>('[data-library-frame]')!,
   };
 }
 // Where the sidebar is: pinned beside the place, peeking over it, or gone; and what its toggle says.
@@ -1381,7 +1392,7 @@ it('with no host to keep it, the home keeps its sidebar for as long as it is up;
 
 it("on a phone the sidebar is the panel's sheet under the navbar: closed until its toggle opens it, a place chosen in it closes it, and nothing of it is kept", async () => {
   const kept: object[] = [], places: unknown[] = [];
-  const home = page({ width: 390, onPanelChange: next => kept.push(next), onPlaceChange: next => places.push(next), projects: [project('p1', 'heart-tag', 2)] });
+  const home = page({ width: 390, onPanelChange: next => kept.push(next), onPlaceChange: next => places.push(next), projects: [project('p1', 'heart-tag')] });
   try {
     await screen.findByRole('button', { name: 'Open loose.step' });
     await waitFor(() => expect(document.querySelector('[data-viewer-layout]')?.getAttribute('data-viewer-layout')).toBe('mobile'));
@@ -1415,7 +1426,7 @@ it("on a phone the sidebar is the panel's sheet under the navbar: closed until i
 
 it('Escape puts a peek of the sidebar away before it goes back to the document just left; a pinned sidebar never takes the key', async () => {
   const onBack = vi.fn();
-  const home = page({ width: 1200, panel: { open: false }, projects: [project('p1', 'heart-tag', 2)],
+  const home = page({ width: 1200, panel: { open: false }, projects: [project('p1', 'heart-tag')],
     home: { place: { view: 'project', project: 'p1' }, from: { path: '/Users/sam/cad/heart-tag/STL/part_0.stl', name: 'part_0.stl' }, onBack } });
   try {
     await screen.findByRole('button', { name: 'Back to part_0.stl' });

@@ -82,17 +82,15 @@ choice belongs in the tab record.
 
 ## The library's pictures
 
-The home's card pictures are not browser storage: the page draws one when a file's view settles
-(`useModelThumbnail`, once per revision) and hands it to the server, which keeps it in the state
-folder (`cad_server/viewer/recents.py`). They are bounded however often a file is edited: an entry
-keeps at most one picture, and a board one per theme, each replaced in place by the next; every
-entry keeps its picture, with no count or total bound, until it is removed or deleted, which takes its pictures
-with it. The page asks for a picture by its name
-(`?v=`), so a new picture is never hidden by an older one in a cache.
+The home's card pictures are not browser storage: the page takes one when a file's view settles
+(`useModelThumbnail`, once per revision) and hands it to the server, which keeps it in its cache folder, one picture
+a file, replaced in place by the next and shown only while the file is the version it was taken of. The home draws
+none of its own. The page asks for a picture by the row's token (`?v=`), so a new picture is never hidden by an older
+one in a cache.
 
 ## Projects
 
 A project (a folder a person opened as one: the home's Import › Folder, a standalone document's Import its folder as
-a project, or `cad viewer <folder>`) is not browser storage either: it is one record in the server's state folder,
-`projects/<id>.json` (`cad_server/viewer/projects.py`), which every CAD view reads. Nothing is written to the folder
-itself, and removing a project forgets its record alone.
+a project, or `cad viewer <folder>`) is not browser storage either: it is an entry of the library in the server's
+state folder, which every CAD view reads, with the files a person opened or pinned. Nothing is written to the folder
+itself, and removing a project forgets its entry alone.

@@ -1,14 +1,10 @@
-import { Box } from "lucide-react";
-
 import { FileIcon } from "./icons.jsx";
 
 /**
- * What a document is, as one small glyph, the same wherever the viewer lists documents (the
- * Home's cards and rows, the explorer's and the name menu's rows), 16px: a model, built from
- * code, is lucide's cube (`Box`); a CAD file lucide's plain `File`, whatever its kind (its name
- * says which).
+ * What a document is, as one small glyph, the same wherever the viewer lists documents (the search's rows), 16px:
+ * every document is a CAD file, lucide's plain `File`, whatever its kind (its name says which).
  *
- * @param {{ model?: boolean, path: string, className?: string, strokeWidth?: number }} props
+ * @param {{ path: string, className?: string, strokeWidth?: number }} props
  */
 /**
  * A document's glyph in a compact 24px row (the explorer's, the name menu's): 16px, as the Home's,
@@ -16,8 +12,6 @@ import { FileIcon } from "./icons.jsx";
  */
 export const DOCUMENT_ROW_GLYPH_CLASS = "-mx-0.5 size-4 shrink-0 text-muted-foreground/70";
 
-export function DocumentGlyph({ model = false, path, className, strokeWidth = 1.75 }) {
-  return model
-    ? <Box className={className} strokeWidth={strokeWidth} aria-hidden="true" data-glyph="model" />
-    : <span className="contents" data-glyph="file"><FileIcon className={className} path={path} strokeWidth={strokeWidth} /></span>;
+export function DocumentGlyph({ path, className, strokeWidth = 1.75 }) {
+  return <span className="contents" data-glyph="file"><FileIcon className={className} path={path} strokeWidth={strokeWidth} /></span>;
 }

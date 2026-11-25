@@ -8,7 +8,7 @@ import { DESKTOP_SCALE, PHONE_SCALE } from "./scale.js";
 test("the scale's numbers in script are the stylesheet's tokens, a desktop's and a phone's", () => {
   const css = readFileSync(new URL("../styles/globals.css", import.meta.url), "utf8");
   const block = selector => css.slice(css.indexOf(selector)).split("}")[0];
-  const desktop = block(":root {\n  --cad-text-tiny"), phone = block(':root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) {');
+  const desktop = block(":root {\n  --cad-text-tiny"), phone = block(':root:has([data-viewer-layout="mobile"]) {');
   const names = { control: "control", iconButton: "icon-button", row: "row", rowSm: "row-sm", glyph: "glyph", glyphSm: "glyph-sm", pad: "pad", step: "step", radiusControl: "radius-control",
     switchH: "switch-h", switchW: "switch-w", thumb: "thumb", check: "check" };
   for (const [scale, text] of [[DESKTOP_SCALE, desktop], [PHONE_SCALE, phone]]) {

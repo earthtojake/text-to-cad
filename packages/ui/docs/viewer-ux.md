@@ -64,7 +64,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   frame never looks inside a format ([cad-renderer.md](cad-renderer.md#kit)).
 - A pick or a tool never opens the panel, and never closes the pinned panel.
 - The navbar is always there, over a file and over the home, in every host. Only Preview (which draws its own bar) and
-  a compact view are without it: a compact view (the home's thumbnails, a small inline view) draws the model alone, with
+  a compact view are without it: a compact view (a small inline view) draws the model alone, with
   no navbar, panel, tools, corner or Quick Edit.
 - An open Display card stands over the strip and covers the cube; menus, tooltips and dialogs stand over everything
   ([Layering](design-system.md#layering)).
@@ -78,8 +78,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
   tab kept it, with placeholder rows. Why: nothing appears or moves as the app takes over.
 - **Left**, edge to edge: the logo; the panel toggle (over a file that has a panel, and over the home); Back and
   Forward where the host keeps the view's history (the CAD app; desktop only, disabled with nowhere to go); for a
-  document in a project, the project's name and a slash, muted, which goes to that project's page on the home (Figma's
-  location before a file's name); the file's name (no glyph, no menu of its own); its ⋯. Apart from the toggle (the
+  document in a project, the project's name and a slash, muted, which goes to that project's page on the home, at the
+  folder the document is in (Figma's location before a file's name); the file's name (no glyph, no menu of its own); its ⋯. Apart from the toggle (the
   strip's tile), they have no fill at rest, the accent fill on hover and while their menu is open; the name and the ⋯
   have no tooltip, since each says what it is. The Tab key moves through them in that order.
 - **The logo comes first.** Why: it is the way home, and a way somewhere stands in the same place on every page. The
@@ -116,31 +116,38 @@ chrome that floats over the picture. The home is the navbar over the library: it
   another page: the logo goes home, and the search is a key and a document's ⋯.
 - **The ⋯ file menu**, from the document itself outwards: Copy path, Copy link; where it opens: Open in new tab (from
   an app's frame, Open in browser, left out where Open in's Browser already is it), Open in ▸ (Browser, the file
-  manager, the source's apps, each export's apps, Default app); what is made of it: the host's items, Export ▸; last,
-  after a rule, other documents and its project: Search documents with ⌘K (Ctrl+K) at the right (every document,
-  where the host has a library), then Previous in project and Next in project with `[` and `]` at the right (a project
-  of more than one document; each off at its end), or, for a document in no project, Import its folder as a project
+  manager, the source's apps, each export's apps, then Default app unless the host says the OS's own handler is not
+  offered for the source: never for a script or a KiCad file); what is made of it: the host's items, Export ▸; last,
+  after a rule, other documents and its project: Search documents with ⌘K (Ctrl+K) at the right (where the host has a
+  library), then Previous in project and Next in project with `[` and `]` at the right (a folder of more than one
+  document; each off at its end), or, for a document in no project, Import its folder as a project
   (the desktop's chooser opening at its folder, so the person picks the level). Each only where the host can do it. Apps
   are looked up as the menu opens; where the source was moved or deleted, what would open it is disabled and says why.
-- **Moving between documents** replaced the Project tab that once led the panel: the project's name goes to its page
-  on the home; `[` and `]` step through the project, in the order it lists its documents, stopping at its ends; and the
-  search (⌘K) reaches every document in every project ([Search](#search)). Why: the tab pushed the model's own tree
-  aside on every document of a project, to offer what a key or the search does without taking room.
+- **Moving between documents** is the navbar's and the keys', never a tab in the panel: the project's name goes to its
+  page on the home, at the document's folder; `[` and `]` step through the documents of that folder, in the order its page
+  lists them (passing a file no page opens), stopping at its ends; and the search (⌘K) reaches the whole project and every document the library knows
+  ([Search](#search)). Why: a tab of documents pushes the model's own tree aside on every document of a project, to
+  offer what a key or the search does without taking room; and the documents beside one are those of its folder, as
+  a file manager's are.
 
 #### Search
 
-- One search of every document in every project (`search/DocumentSearch.tsx`), over a document and over the home:
+- One search of documents (`search/DocumentSearch.tsx`), over a document and over the home:
   ⌘K (Ctrl+K off a Mac) from anywhere but Preview, a text field too, or Search documents in a document's ⋯. Escape, a
   press outside or a pick closes it, and the focus goes back where it was. It never opens over another dialog.
 - A card near the top of the page, about 560px wide, on the popups' surface, nothing dimmed behind it; on a phone a
   sheet the width of the view under the navbar, as the panel's is. Its input has the keyboard; under it the results; on
   a desktop a line of the keys (Move, Open, Open in new tab where the host can, Close).
-- It reads the library as it opens. With nothing typed it lists the project of the document on screen (the latest
-  documents on the home or for a standalone one); typing finds as the home's search does, every word in a name or a
-  file's path, "In <project>" first, then "Other projects", at most 50 rows and a line saying how many more there are.
-- A row: the document's picture (the kind's glyph until it loads), its name, and at its right its format in the project
-  on screen ("Part" or "Assembly" for one built from code or an `.xbf` file, "XBF", its format, where its parts are not known, as
-  on a card), else its project's name, "Standalone" for one in none. The document on screen's row is marked and opens
+- It reads the library as it opens. With nothing typed it lists the documents of the folder the document on screen is
+  in (the latest documents on the home or for a standalone one); a folder's files that no page opens are its page's,
+  never the search's. Typed words ask the host, once typing rests, for every file of the
+  document's project, from its root, whose path holds them all, "In <project>"; then the library's other documents
+  that hold them in a name or a path, "Other projects"; at most 50 rows and a line saying how many more there are.
+  Why: the project on screen is searched whole, every level of it, which nothing else on screen does; other projects
+  are reached through what the library knows of them, so one search never walks every project.
+- A row: the document's picture (the kind's glyph until it loads, and where it has none), its name, and at its right its
+  format in the project on screen ("Part" or "Assembly" for an `.xbf` file, "XBF", its format, where its parts are not
+  known, as on a card), else its project's name, "Standalone" for one in none. The document on screen's row is marked and opens
   nothing. While it reads, placeholder rows; a read that fails or finds nothing says so.
 - Up and Down move, Home and End go to the ends, Enter opens the row here and ⌘Enter (Ctrl+Enter) in a new tab; typing
   always goes to the input. A click opens a row here; where the host gives a document an address the row is a real
@@ -153,6 +160,9 @@ chrome that floats over the picture. The home is the navbar over the library: it
   Import, or the "+" by Projects in the sidebar), a standalone document's Import its folder as a project, or
   `cad viewer <folder>`. Nothing else makes one: a run never does, and nothing is written to the folder. Removing one
   forgets it, and nothing on disk changes.
+- **A project is its folder, linked.** Its page lists what is in the folder now, so a file another tool drops in
+  appears, and one deleted in the file manager goes; nothing is recorded of a project but where its folder is. Why: the
+  folder is what the person keeps their work in, and a second list of it would only fall behind.
 - A document is in the nearest project above it: a file by its path as reached (a file in a linked folder inside a
   project's is that project's, as one stored there is), a model by its `.xbf`. A folder opened inside a
   project is that project (they do not nest by accident). Every other document is standalone.
@@ -168,83 +178,159 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - The same navbar: the logo (which goes to Recents), the sidebar's toggle, then "Home", and at the right the search
   and Import (where the host has a chooser: File…, Folder…). No ⋯. The search narrows the place on screen.
 - **One place at a time** (`library/ModelLibrary.tsx`, the `.cad-library` rules): Recents (the default: every document
-  opened lately, across projects), Pinned, one project's page, or Standalone (the documents in no project). Why: each
-  is a question a person asks ("what was I on?", "what is in this project?"), and one list answers one question.
+  opened lately, across projects), Pinned, one folder of a project, or Standalone (the documents in no project). Why:
+  each is a question a person asks ("what was I on?", "what is in this folder?"), and one list answers one question.
 - **The sidebar** lists the places (`library/LibraryPlaces.jsx`) and behaves as the viewer's panel does, because it is
   that panel over another page (`library/LibrarySidebar.jsx`, on `file-viewer/panelFrame.jsx` and `PanelSurface.jsx`):
   pinned it pushes the place, collapsed it leaves nothing, it peeks from its toggle, ⌘\ shows and hides it, its grip
   sets its width, and on a phone it is a sheet ([The panel](#the-panel)). Its rows are the panel's rows on the panel's
   16px inset. Why: one sidebar to learn, not two that look alike and differ.
   - Recents; Pinned with its count; "Projects", with a "+" that is Import's Folder (where the host has a chooser), over
-    one row a project (its folder glyph, name and count, the latest activity first; one whose folder is gone muted);
-    then Standalone with its count.
-  - The place on screen is marked as an open tab is (the accent fill, medium weight) and said (`aria-current`). Up and
-    Down move between the rows, Home and End to the first and the last.
+    one row a project (its folder glyph and name, the latest activity first; one whose folder is gone muted); then
+    Standalone with its count. A project's row has no count: counting its files would read every folder of it, on
+    every read of the sidebar, for a number nobody acts on.
+  - The place on screen is marked as an open tab is (the accent fill, medium weight) and said (`aria-current`), a
+    project's whichever of its folders is on screen; pressed there, it goes to the project's top. Up and Down move
+    between the rows, Home and End to the first and the last.
   - Every row is always there, so the list keeps its shape: Pinned with nothing pinned has no count, and its page says
     how a document gets there. A count of none is not written.
   - It ends in the panel's foot, as a document's panel does: the app's links and Settings
     ([The panel's foot](#the-panels-foot)).
-- **The place** fills the rest, on the page's colour, on 24px gutters, 20px under the navbar. Its heading row: the
-  place's name, the page's one larger text (a project's after its folder glyph, with its folder from `~` and its ⋯:
-  Open in new tab, Copy path, Reveal, Remove from CAD, which says nothing on disk changed and goes to Recents); at the
-  right Sort (Last activity, the default; Name; Kind: by the chips' kinds in their order, then the
-  models (those built from code, then `.xbf` files), then format (a model's Part, Assembly or XBF among them), then
-  name) and grid or list, one segmented control. Sort and the layout are the tab's
-  ([Settings memory](#settings-memory)).
-- **The kinds**, a row of chips of its own under the heading row: All, then 3D models, Drawings, Boards, Schematics and
+- **The place** fills the rest, on the page's colour, padded by the panel's inset (16px) on all four sides, at every
+  width and on a phone, its blocks (the heading, the folders, the cards, a line) 16px apart. Why: the navbar's logo, the
+  sidebar's rows and the place then stand on one 16px line, and a box padded alike across and down reads as meant; the
+  24px gutters and 20px top it had were on no scale. Its heading row: the place's name, the page's one larger text; at
+  the right Sort (Last activity, the default; Name; Kind: by the chips' kinds in their order, then the models, the
+  `.xbf` files, then format (a model's Part, Assembly or XBF among them), then name) and grid or list, one segmented
+  control. Sort and the layout are the tab's ([Settings memory](#settings-memory)).
+- **A project's heading is the folder's path**: its folder glyph, then the project's name and each folder down to the
+  one on screen (`gearbox / housing / v3`), each part but the last a link back up to its folder, muted, and the last the
+  heading, all in the heading's step; then its ⋯: Open in new tab (this folder), Copy path, Reveal (this folder), then
+  Remove from CAD (the project), which says nothing on disk changed and goes to Recents. At the project's top, where the
+  heading is its name alone, its folder from `~` follows the name, muted (`~/work/gearbox`); below the top it is left
+  out. Why: there the heading is already the path, and the same folders said twice in one row is noise; where the
+  project's folder is on disk is asked at its top, and Copy path says the rest. A path too long for the row gives way
+  from its start: the parts above, down to their first letters, then the folder's own name, so the folder on screen is
+  the last to go. Why: it is the way a file browser says where you are, and the one way back up, with no Back button
+  of its own.
+- **The kinds**, a row of chips of its own 8px under the heading row: All, then 3D models, Drawings, Boards, Schematics and
   Robots, each only where the place holds one, always in that order, each with its count. One is on at a time (All at
   first); a search and the chip narrow together, and the counts are the place's under the search, before the chip.
   There is no row where the place holds one kind or none, and a kind chosen in another place that this one lacks shows
-  all of it. The choice is the page's own, as the search is. A document built from code, a STEP, an STL, a 3MF, a GLB
-  and an XBF are 3D models; a DXF a drawing; a KiCad board and schematic a board and a schematic; a URDF or an SRDF a
+  all of it. The choice is the page's own, as the search is. An XBF, a STEP, an STL, a 3MF and a GLB are 3D
+  models; a DXF a drawing; a KiCad board and schematic a board and a schematic; a URDF or an SRDF a
   robot (`DOCUMENT_KINDS`: by the row's document type, else its file's extension). Why: a person calls a STEP, an STL
-  or a GLB a model too; "built from code" against "a file on disk" was the implementation showing. A model and the
-  files exported from it stay cards of their own.
-- **A model is its `.xbf`, one card.** A model's document is its `.xbf` (every model has one: `<name>.xbf` beside its
-  script, or the path `@model("arm.xbf")` gives it; a shape's handed over too), and its id is that file's: one record,
-  one row, one card, in Recents, Pinned, a project's page, Standalone and the search. Opening the file opens the
-  model, live while the engine holds its build, else read from the file. Why: one document, one identity, one
-  "model" type; two Assembly cards of the same thing asked the person which to open. An `.xbf` exported to another
-  path, or copied, is another file, so a card of its own, and STEP, GLB and the other exports always are. A model
-  whose `.xbf` is gone is listed missing, as a file is.
-- **Its documents**, all of them: the first 120, then "Show N more". Cards in columns at least 232px wide (the picture
-  on the light gradient with its format's badge, then the name and one line), or 44px rows. A document built from
-  code or an `.xbf` file is badged "Part" when its document holds one part and "Assembly" when it holds more (the
-  row's `parts`: its parts' occurrences, as `cad model inspect` counts them and the Model tree shows them), and "XBF", its format,
-  where the engine does not know (an `.xbf` it neither wrote nor read for a page since it changed, a model's `.xbf`
-  edited since its build, a model last built before the count was kept): never a guess, and never a read to find out. Why: desktop CAD names its own documents that way, a part or an assembly, and a person
-  reads a card the same way; an xbf is the engine's own document saved as a file, the same thing a model's page
-  shows, so it is named as a model is. STEP, STL, 3MF, GLB and the rest are other formats and keep their format's
-  name, whatever they hold. Only the label: an xbf is still a file (its menu, its size and path, what Delete and Pin
-  do).
-  - A card's line is its last activity ("Edited now", "Viewed 7h ago"), after its project's name in Recents and
-    Pinned ("Standalone" for one in none). A card has no glyph, script or size. Why: the picture and its badge say
-    what it is, and a script's path and a size are for the list, where they are columns to read down. A list's columns are Name, then the same as a column (Project, or in a project's page
-    Where: a model's or a file's folder), Kind (its format, as the badge: "Part", "Assembly", "STEP", "KiCad PCB"), Size,
-    Updated and Created.
-  - Each has a pin and a ⋯ (Open, Open in new tab, Copy path, Copy link, Reveal, Pin, Delete, which asks first), shown
-    on hover or focus and always on touch; a project's file, listed for being in its folder, has no Delete, and a Pin
-    once a page opened it. A pinned document is not listed first: Pinned is its own place.
+  or a GLB a model too; "a model" against "a file on disk" would be the implementation showing. A model's `.xbf` and
+  the files exported from it stay cards of their own.
+- **A document is its file, one card.** Every row is a file: a model's document is its `.xbf` (every model has one:
+  `<name>.xbf` beside its script, or the path `@model("arm.xbf")` gives it; a shape's handed over too), and its id is
+  that file's: one file, one row, one card, in Recents, Pinned, a folder's page, Standalone and the search, named by
+  its file's name. Opening the file opens the model, live while the engine holds its build, else read from the file.
+  Why: one document, one identity, one "model" type; two Assembly cards of the same thing asked the person which to
+  open. An `.xbf` exported to another path, or copied, is another file, so a card of its own, and STEP, GLB and the
+  other exports always are. A file that is gone is gone from every list.
+- **A folder's page** (`library.folder`): its subfolders first, then every file directly in it, the CAD files and the
+  rest together, nothing below them flattened in; hidden files and folders are not listed. Why: a folder shows its
+  direct children, folders and files together, as Finder, Explorer, Drive and a CAD data panel do; a flat list of
+  everything below lost where each file was, and a tree is a second way to see the same thing. One way to see a
+  project, with no setting or switch between ways. And a project's folder holds an engineer's other files too
+  (datasheets, drawings, scripts, another tool's native files): the page shows the folder as it is and hands each
+  file to the app that opens it.
+  - A subfolder is the plainest thing that reads as a folder: its glyph and its name, a row of the list primitive
+    (`PlaceLink`, the sidebar's row: the row tall, its glyph on the place's line, its fill hanging 8px past it, no box).
+    Among cards the folders are rows in the cards' columns, in a list of their own 16px over the cards (Drive's
+    folders over its files); in the list, a row of the list, its glyph where a file's picture stands and a dash in each
+    column. It has no picture, count, pin or menu: it is a way into the folder, a real link where the host gives places
+    an address. Why a row, not a tile: [a row is the system's box for a glyph and a name](design-system.md#rows), and a
+    border round each folder was a box that said nothing; what a folder holds is found by opening it, and nothing is
+    read to say more.
+  - **A file the viewer does not open** (a PDF, a script, notes, another CAD tool's native file) is a card or a row
+    like the rest: the plain tile with its kind's glyph, its extension as its name writes it for a badge and a Kind,
+    upper case (`PDF`, `PY`, `F3D`; none with no extension), its name, and when it was edited. Nothing about it is
+    dimmed: it is a file of the folder. **A press opens it**, as a press on a document opens the document: with no page
+    for it, in an app of the computer's, chosen from what the host answers for the file as it is pressed: the OS's own
+    handler where the host offers it; else the first app the host lists (an editor, for code); and where it lists
+    neither, the place's line says no app here opens it, by its name. An open the host refuses is said on the same line,
+    in the host's words. It is a button, not a link (it has no address), worked as a document's card is: the same ring,
+    Enter and Space, the same pointer. Its ⋯ is the card's menu with what applies: Open in ▸ (each app the host lists,
+    then Default app where it is offered; the rows the navbar's Open in draws), Copy path and the file manager; with no
+    app and no handler, those two alone. It has no pin, no Open in new tab and no Remove from Recents, being in no
+    library; `[` and `]` and the search of documents pass it by. A host that opens no apps shows it in its file
+    manager on a press, and where it can do neither the card is no control at all.
+  - The kinds' chips count the documents; Sort orders every file; the folders stand first in the folder's own order.
+  - The folder is read as it is shown and again every two seconds while it is up, so a file written meanwhile joins
+    it. Where the host listed only part of a very large folder, a line under its last row says so.
+- **Its documents**, all of them, with no Show more: a folder lists at most what the host answers of it, and Recents a
+  couple of hundred. Cards in columns at least 232px wide, 16px apart across and down, or rows.
+  - **A card** is one box on the card's colour with a card's 10px corners: the picture edge to edge with its format's
+    chip 8px in from its corner, then the caption on a card's 12px inset, the name (medium, a card's title) over one
+    muted line in the small step. Why 232: the panel's width, the page's one measure for a column on the 8px grid; it
+    puts four across beside the sidebar on a 1280px page, three on a 760px one and one on a phone.
+  - **A document's picture is 3:2 wherever it is drawn** (a card's, a row's, the search's), on the light viewport's
+    gradient in both themes. Why: one picture, one shape; a card's, a row's and the search's had three.
+  - **A row** is the search's: the control + 16 tall (44px; a phone's 52), its picture the control + 4 tall, then its
+    name and its facts in one size, the name in the foreground and the facts muted, under a header of muted labels the
+    control tall with no rule under it. Its fill hangs 8px past the place's line, so the header's labels, the pictures
+    and the folders' glyphs stand on the line; its pin and ⋯ float over its right end. A narrower place drops Created
+    (under 820px), then Where (680), Kind (560) and Size (440). Why that tall: a row with a picture is as tall as its
+    picture needs, the same in the search; a list's emphasis is colour, never a second size.
+  - An `.xbf` file is badged "Part" when its document holds one part and
+  "Assembly" when it holds more (the row's `parts`: its parts' occurrences, as `cad model inspect` counts them and the
+  Model tree shows them), and "XBF", its format, where the host does not know for the file as it now is: never a
+  guess, and never a read to find out. Why: desktop CAD names its own documents that way, a part or an assembly, and
+  a person reads a card the same way; an xbf is the engine's own document saved as a file, the same thing a model's
+  page shows, so it is named as a model is. STEP, STL, 3MF, GLB and the rest are other formats and keep their format's
+  name, whatever they hold. Only the label: an xbf is still a file (its menu, its size and path, what Pin does).
+  - **A card's picture is the one its row names**, the one taken when a page last showed that file as it now is; a
+    file with none shows its kind's glyph on the plain tile. The home draws no picture of its own. Why: a picture drawn out of sight
+    reads a file nobody opened, on a timer, and a folder of a thousand files is a thousand reads.
+  - A card's line is its last activity ("Edited now", "Viewed 7h ago"), after where it is: its project's name in
+    Recents and Pinned ("Standalone" for one in none), its folder below the folder on screen in a project's search. A
+    card has no glyph or size. Why: the picture and its badge say what it is, and a size is for the list, where it is
+    a column to read down. A list's columns are Name, then where it is as a column (Project in Recents and Pinned,
+    Where in a project's search; a folder's own listing has none, every row being in it), Kind (its format, as the
+    badge: "Part", "Assembly", "STEP", "KiCad PCB"), Size, Updated and Created.
+  - Each has a pin and a ⋯ (Open, Open in new tab, Open in ▸, Copy path, Copy link, Reveal, Pin, then Remove from
+    Recents), shown on hover or focus and always on touch. Open in is the navbar's: the apps the host lists for the
+    document's files and Default app, looked up as the menu opens, and there only where it lists one. Remove from Recents forgets the library's entry of the file, at once and
+    without a question: nothing on disk changes, and opening the file again brings it back. A card on a folder's page
+    has no Remove from Recents: the file is there because it is in the folder. Nothing on the home says Delete or
+    deletes a file. Why: a document is its file, and removing a file is the person's own act, in their file manager;
+    a delete in a viewer that only reads files would say it does what it never does. A pinned document is not listed
+    first: Pinned is its own place.
 - **Links.** Where the host gives a target an address (the web page), a card's or a row's main press and every row of
   the sidebar is a real link: a plain click shows it in this view, and ⌘ or Ctrl and a click, a middle click and the
   browser's own link menu open it in a new tab. Where the host can open a target beside the view, every document's ⋯
   has Open in new tab directly after Open, and a project's ⋯ has it first; in an app's frame (the CAD app) the words
-  are Open in browser, on a document's ⋯ alone. A project's file no page has opened yet is a link as the rest are.
-- **Coming from a document.** The navbar's project name, pressed over a document, shows that project's page with the
-  document remembered: its card or row ringed in the brand's colour and brought into view, and "Back to <name>", with
-  an Esc hint, in the heading row. Escape returns to the document while no menu, dialog or field has the keyboard. It
-  lasts until another document is opened or the person goes to another place. Why: the project's page is where its
-  other documents are, and the way back should cost nothing.
-- **After Import's Folder** the home goes to that project's page, with a line saying what came of it (made, already a
-  project, or inside another). **After Remove from CAD** it goes to Recents and says so.
+  are Open in browser, on a document's ⋯ alone. A project's file no page has opened yet is a link as the rest are, and
+  so is each folder of a project and each part of its path: a folder's address is the project's and its path below
+  the project's root.
+- **Coming from a document.** The navbar's project name, pressed over a document, shows that project's page at the
+  folder the document is in, with the document remembered: its card or row ringed in the brand's colour and brought
+  into view, and "Back to <name>", with an Esc hint, in the heading row. Escape returns to the document while no menu,
+  dialog or field has the keyboard. It lasts until another document is opened or the person goes to another place.
+  From the sidebar a project opens at its top. Why: the document's folder is where the documents beside it are, and
+  the way back should cost nothing. "Back to <name>" is the scale's outline button, as tall as the row's other
+  controls, its name the first to give way.
+- **Search** narrows the place on screen. Recents, Pinned and Standalone narrow the rows in hand. A folder's page asks
+  the host, once typing rests, for every file anywhere below the folder on screen whose path below it holds every
+  word, and lists them flat, with no folders, each saying where it is below that folder. Why: a search is the one place
+  a person wants every level at once, and it is the one place they are flattened.
+- **After Import's Folder** the home goes to that project's page, at the folder chosen where it is inside the
+  project, with a line saying what came of it (made, already a project, or inside another). **After Remove from CAD** it goes to Recents and says so.
 - **Every state stands where its content will**: placeholder cards or rows while the list is read, placeholder rows
-  where the projects will be; "No projects yet." under Projects; a line in a place with nothing to list (an empty
-  project, nothing pinned, a project whose folder is gone, one no longer in CAD), and under a project's last document
-  when the host's walk of its folder stopped early. With nothing at all yet, Recents shows the C mark, "Nothing here
-  yet", one line, Import file and Import folder, and the formats the viewer opens.
-- **Narrower than 720px, and on a phone**, the place is on 16px gutters, 12px under the navbar, one card across on a
-  phone; Import is its icon. The sidebar is collapsed there until the person opens it (the panel's rule, from 872px
-  down), and a phone's is the sheet. The width is the home's, never the window's.
+  where the projects will be; "No projects yet." under Projects; one muted line, where the place's first row would
+  stand, in a place with nothing to list (an empty folder, nothing pinned, a project whose folder is gone, one no
+  longer in CAD, a folder that could not be read: the path above it still leads back up), and under a folder's last
+  file when the host listed only part of it. What came of an Import's Folder or a Remove from CAD, and an action that
+  failed, are a line there too, the failure in the destructive colour: no box, no tint. With nothing at all yet,
+  Recents shows the C mark (two controls tall, with no stage under it: it is a mark, not a picture), "Nothing here
+  yet" in the heading's step, one muted line, Import file and Import folder, and the formats the viewer opens, 16px
+  apart in a column centred in the place.
+- **On a phone and in a narrow home** nothing of the place's own changes: the same 16px inset, one card across on a
+  phone, as many as fit elsewhere; Import is its icon in a navbar under 480px. The sidebar is collapsed there until the
+  person opens it (the panel's rule, from 872px down), and a phone's is the sheet. The width is the home's, never the
+  window's.
 
 ### The panel
 
@@ -819,8 +905,9 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 
 - **Single keys** need no ⌘, Ctrl or Alt, do not repeat, and never fire in a text field or in Preview: V Select,
   M Measure, F Zoom to fit, and Draw's tools, each taking Draw up with that tool: P Pen, ⇧P Highlighter, E Eraser,
-  L Line, ⇧L Arrow, R Rectangle, O Ellipse, T Text; and `[` and `]`, the previous and next document of the project
-  (nothing at its ends), through the same keys of the view (`file-viewer/projectKeys.js`).
+  L Line, ⇧L Arrow, R Rectangle, O Ellipse, T Text; and `[` and `]`, the previous and next file of the folder the
+  document is in, in its page's order (nothing at its ends), through the same keys of the view
+  (`file-viewer/projectKeys.js`).
 - **⌘K** (Ctrl+K) opens the search from anywhere but Preview, a field included, and closes it again; it waits while
   another dialog is up. Inside it, its own keys ([Search](#search)).
 - **Zoom**: + (or =) in and − out, by half again (also with ⌘ or Ctrl, which then zoom the view, not the page); ⇧1
@@ -902,3 +989,10 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   home; the links and Settings are the foot of the sidebar, on the home and over a document.
 - **Settings as a row of words, with the links inside its menu.** Three links one press deep in a menu named for
   something else; they are icons in the foot, and the cog's menu holds settings alone.
+- **A project as one flat grid of everything below it, a tree, or a setting or switch between ways.** A flat grid
+  lost where each file was; a tree is a second way to see one folder; a switch asks the person to choose how to look
+  before they look. A project's page is one folder of it, and the search is where levels are flattened.
+- **Pictures drawn out of sight for cards.** The home read and drew files nobody had opened, on a timer. A card shows
+  the picture a page took of its file, or its format's tile.
+- **Delete on a card, and a question before it.** A viewer that reads files never deletes one: Remove from Recents
+  forgets the library's entry, asks nothing, and is undone by opening the file again.

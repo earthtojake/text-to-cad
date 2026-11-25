@@ -30,12 +30,13 @@ after(async () => { await browser?.close(); if (server) await new Promise((resol
 
 /** The home in a window of its own, at `query`: closed by the test that opened it. */
 async function home(query = "", viewport = { width: 1440, height: 900 }, options = {}) {
-  const context = await browser.newContext({ viewport, ...options });
+  const context = await browser.newContext({ viewport, ...Object.fromEntries(Object.entries(options).filter(([name]) => name !== "waitFor")) });
   const page = await context.newPage();
   page.setDefaultTimeout(10_000);
   page.on("pageerror", (error) => console.error("Browser harness error:", error.message));
+  const { waitFor = ".cad-library-card, .cad-library-row" } = options;
   await page.goto(`${origin}/?${query}`);
-  await page.locator(".cad-library-card, .cad-library-row").first().waitFor();
+  await page.locator(waitFor).first().waitFor();
   return { context, page };
 }
 const box = (locator) => locator.evaluate((node) => { const { x, y, width, height, right, bottom } = node.getBoundingClientRect(); return { x, y, width, height, right, bottom }; });
@@ -75,14 +76,14 @@ test("a wide home has its places in a 232px sidebar on the panel's surface, full
     assert.deepEqual(await style(pinned, "backgroundColor", "fontWeight"), ["rgba(0, 0, 0, 0)", "400"]);
     // A project whose folder is gone is muted.
     assert.equal((await style(sidebar.locator('[data-place="project:lamp"]'), "color"))[0], await token(page, "--muted-foreground"));
-    // The place: its name the page's one larger text, 24px in from the sidebar and 20px under the navbar; Sort and the
-    // layout at the row's right end, every control the scale's 28px.
-    const title = page.locator(".cad-library-title");
+    // The place: its name the page's one larger text, on the panel's inset (16px) from the sidebar and under the navbar;
+    // Sort and the layout at the row's right end, every control the scale's 28px.
+    const title = page.locator("[data-library-title]");
     assert.deepEqual([await title.textContent(), ...(await style(title, "fontSize", "lineHeight", "fontWeight"))], ["Recents", "15px", "20px", "600"]);
-    const toolbar = await box(page.locator(".cad-library-toolbar"));
-    assert.deepEqual([toolbar.x, toolbar.y, toolbar.right], [232 + 24, navbar.bottom + 20, 1440 - 24]);
+    const toolbar = await box(page.locator("[data-library-toolbar]"));
+    assert.deepEqual([toolbar.x, toolbar.y, toolbar.right], [232 + 16, navbar.bottom + 16, 1440 - 16]);
     for (const name of ["Sort by Last activity", "Grid", "List"]) assert.equal((await box(page.getByRole("button", { name }))).height, 28, name);
-    assert.equal(Math.round((await box(page.getByRole("button", { name: "List" }))).right), 1440 - 24);
+    assert.equal(Math.round((await box(page.getByRole("button", { name: "List" }))).right), 1440 - 16);
     // Grid and list are one segmented control: a 28px track on the muted fill, each option's face 2px in, the chosen one
     // raised on the page's colour.
     const layout = page.getByRole("group", { name: "Layout" });
@@ -90,14 +91,14 @@ test("a wide home has its places in a 232px sidebar on the panel's surface, full
       const { width, height } = node.getBoundingClientRect(); return [Math.round(width), Math.round(height), getComputedStyle(node).backgroundColor]; }));
     assert.deepEqual([(await box(layout)).height, (await box(layout)).width, ...(await style(layout, "backgroundColor"))], [28, 64, await token(page, "--muted")]);
     assert.deepEqual(faces, [[28, 24, await token(page, "--background")], [28, 24, "rgba(0, 0, 0, 0)"]]);
-    // The kinds' chips, a row of their own 12px under the heading row and 16px over the cards: the panel's tab pills,
+    // The kinds' chips, a row of their own 8px under the heading row and 16px over the cards: the panel's tab pills,
     // their words on the place's line, All on.
     const kinds = page.getByRole("group", { name: "Show" });
     const chips = await kinds.getByRole("button").evaluateAll((nodes) => nodes.map((node) => [node.getAttribute("aria-label"), node.getAttribute("aria-pressed"),
       Math.round(node.getBoundingClientRect().height), getComputedStyle(node).paddingLeft]));
     assert.deepEqual(chips, [["All, 8", "true", 28, "6px"], ["3D models, 6", "false", 28, "6px"], ["Drawings, 1", "false", 28, "6px"], ["Robots, 1", "false", 28, "6px"]]);
     const row = await box(kinds);
-    assert.deepEqual([row.x, row.y], [232 + 24 - 6, toolbar.bottom + 12]);
+    assert.deepEqual([row.x, row.y], [232 + 16 - 6, toolbar.bottom + 8]);
     assert.deepEqual(await style(kinds.getByRole("button", { name: "All, 8" }), "backgroundColor", "fontWeight"), [await token(page, "--accent"), "400"]);
     assert.equal((await box(page.locator(".cad-library-card").first())).y, row.bottom + 16);
     await kinds.getByRole("button", { name: "Drawings, 1" }).click();
@@ -106,33 +107,50 @@ test("a wide home has its places in a 232px sidebar on the panel's surface, full
     // Cards at least 232px a column, filling the place's width.
     const cards = await page.locator(".cad-library-card").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect()).map(({ x, width }) => [x, width]));
     assert.ok(cards.every(([, width]) => width >= 232), "every card at least 232px");
-    assert.equal(cards[0][0], 232 + 24);
+    assert.equal(cards[0][0], 232 + 16);
     // Recents says each card's project before its facts.
-    assert.match(await page.getByRole("link", { name: "Open housing", exact: true }).locator(".cad-library-status").textContent(), /^gearbox · /);
+    assert.match(await page.getByRole("link", { name: "Open housing.xbf", exact: true }).locator("[data-library-status]").textContent(), /^gearbox · /);
   } finally { await context.close(); }
 });
 
 test("a card and a place are real links: a plain click stays in this view, and ⌘ or Ctrl and a click opens a new tab at the address", async () => {
   const { context, page } = await home();
   try {
-    const card = page.getByRole("link", { name: "Open housing", exact: true });
-    assert.equal(await card.getAttribute("href"), "/id-housing");
+    const card = page.getByRole("link", { name: "Open housing.xbf", exact: true });
+    assert.equal(await card.getAttribute("href"), "/id-housing.xbf");
     const [tab] = await Promise.all([context.waitForEvent("page"), card.click({ modifiers: ["ControlOrMeta"] })]);
-    assert.equal(tab.url(), `${origin}/id-housing`);
+    assert.equal(tab.url(), `${origin}/id-housing.xbf`);
     await tab.close();
     // A place too; and this view has not moved.
     const project = page.locator('[data-place="project:gearbox"]');
     const [other] = await Promise.all([context.waitForEvent("page"), project.click({ modifiers: ["ControlOrMeta"] })]);
     assert.equal(other.url(), `${origin}/?place=gearbox`);
     await other.close();
-    assert.deepEqual([page.url(), await page.locator(".cad-library-title").textContent()], [`${origin}/?`, "Recents"]);
+    assert.deepEqual([page.url(), await page.locator("[data-library-title]").textContent()], [`${origin}/?`, "Recents"]);
     // A plain click shows the place here: no navigation of the page, its row the marked one.
     await project.click();
-    await page.locator('.cad-library-title:text-is("gearbox")').waitFor();
+    await page.locator('[data-library-title]:text-is("gearbox")').waitFor();
     assert.deepEqual([page.url(), await project.getAttribute("aria-current"), context.pages().length], [`${origin}/?`, "page", 1]);
-    // Its page: its folder from the home folder beside its name; a file of it no page has opened is a link as the rest are.
-    assert.equal(await page.locator(".cad-library-path").textContent(), "~/work/gearbox");
+    // Its page: its folder from the home folder beside its name; its folders first, each a link to its own page, a row
+    // of the list primitive (the row tall) in the cards' columns, then its files.
+    assert.equal(await page.locator("[data-library-path]").textContent(), "~/work/gearbox");
+    const folder = page.getByRole("link", { name: "Open dxf", exact: true });
+    assert.equal(await folder.getAttribute("href"), "/?place=gearbox&path=dxf");
+    const tiles = await page.locator("[data-library-folders] > li").evaluateAll((nodes) => nodes.map((node) => { const { x, width, height } = node.getBoundingClientRect(); return [x, width, height]; }));
+    const columns = await page.locator(".cad-library-card").evaluateAll((nodes) => nodes.map((node) => { const { x, width } = node.getBoundingClientRect(); return [x, width]; }));
+    assert.deepEqual([tiles.length, tiles.every(([, , height]) => height === 28)], [3, true]);
+    assert.deepEqual(tiles.map(([x, width]) => [x, width]), columns.slice(0, tiles.length));
+    const [folderTab] = await Promise.all([context.waitForEvent("page"), folder.click({ modifiers: ["ControlOrMeta"] })]);
+    assert.equal(folderTab.url(), `${origin}/?place=gearbox&path=dxf`);
+    await folderTab.close();
+    // A plain click goes into it here; a file of it no page has opened is a link as the rest are; the path leads back up.
+    await folder.click();
+    await page.locator('[data-library-title]:text-is("dxf")').waitFor();
     assert.equal(await page.getByRole("link", { name: "Open plate_0.dxf" }).getAttribute("href"), "/id-plate_0.dxf");
+    const up = page.locator("[data-library-crumb]");
+    assert.deepEqual([await up.textContent(), await up.getAttribute("href"), page.url()], ["gearbox", "/?place=gearbox", `${origin}/?`]);
+    await up.click();
+    await page.locator('[data-library-title]:text-is("gearbox")').waitFor();
     // The keyboard: Up and Down walk the places, and Enter on one goes there.
     await project.focus();
     await page.keyboard.press("ArrowUp");
@@ -140,7 +158,7 @@ test("a card and a place are real links: a plain click stays in this view, and �
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("data-place")), "recents");
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
-    await page.locator('.cad-library-title:text-is("Pinned")').waitFor();
+    await page.locator('[data-library-title]:text-is("Pinned")').waitFor();
     assert.equal(page.url(), `${origin}/?`);
   } finally { await context.close(); }
 });
@@ -148,21 +166,21 @@ test("a card and a place are real links: a plain click stays in this view, and �
 test("the document just left is ringed in the brand's colour and in view, with the way back in the heading row, as a card and as a row", async () => {
   for (const layout of ["grid", "list"]) {
     // A window too short for the whole place: the one just left is scrolled to.
-    const { context, page } = await home(`place=gearbox&from=plate_8.dxf&layout=${layout}`, { width: 1100, height: 420 });
+    const { context, page } = await home(`place=gearbox&path=dxf&from=plate_8.dxf&layout=${layout}`, { width: 1100, height: 420 });
     try {
       const ringed = page.locator("[data-from]");
       await ringed.waitFor();
       assert.equal(await ringed.count(), 1);
       assert.equal(await ringed.locator(".cad-library-open").getAttribute("aria-label"), "Open plate_8.dxf");
       const brand = await token(page, "--brand");
-      const shadow = (await style(layout === "grid" ? ringed : ringed.locator(".cad-library-main"), "boxShadow"))[0];
-      assert.ok(shadow.startsWith(brand) && /0px 0px 0px 2px/.test(shadow), `a 2px ring in the brand's colour: ${shadow}`);
-      const place = await box(page.locator(".cad-library-content"));
+      const shadow = (await style(layout === "grid" ? ringed : ringed.locator(".cad-library-open"), "boxShadow"))[0];
+      assert.ok(shadow.includes(`${brand} 0px 0px 0px 2px`), `a 2px ring in the brand's colour: ${shadow}`);
+      const place = await box(page.locator("[data-library-content]"));
       await page.waitForFunction(() => { const { top, bottom } = document.querySelector("[data-from]").getBoundingClientRect(); return top >= 40 && bottom <= innerHeight; });
       const at = await box(ringed);
       assert.ok(at.y >= place.y && at.bottom <= place.bottom, "the ringed document is in view");
       const back = page.getByRole("button", { name: "Back to plate_8.dxf" });
-      assert.deepEqual([await back.locator("kbd").textContent(), await back.evaluate((node) => Boolean(node.closest(".cad-library-toolbar")))], ["Esc", true]);
+      assert.deepEqual([await back.locator("kbd").textContent(), await back.evaluate((node) => Boolean(node.closest("[data-library-toolbar]")))], ["Esc", true]);
     } finally { await context.close(); }
   }
 });
@@ -175,9 +193,9 @@ test("a home too narrow for its sidebar collapses it and keeps its heading; at a
     // Collapsed by its width, nothing of it left: the place from the pane's edge, on the narrow gutters.
     assert.equal(await page.getByRole("navigation", { name: "Places" }).count(), 0);
     assert.equal(await page.locator('[data-viewer-navbar] [data-navbar-panel="left"]').getAttribute("aria-expanded"), "false");
-    assert.deepEqual([(await box(page.locator(".cad-library-content"))).x, (await box(page.locator(".cad-library-title"))).x], [0, 16]);
+    assert.deepEqual([(await box(page.locator("[data-library-content]"))).x, (await box(page.locator("[data-library-title]"))).x], [0, 16]);
     // No menu of places on the heading: Home in the navbar, the place's name in its own row.
-    assert.deepEqual([await page.locator("[data-navbar-home-left] h1").textContent(), await page.locator(".cad-library-title").textContent(),
+    assert.deepEqual([await page.locator("[data-navbar-home-left] h1").textContent(), await page.locator("[data-library-title]").textContent(),
       await page.getByRole("button", { name: /^Places/ }).count()], ["Home", "Recents", 0]);
   } finally { await pane.context.close(); }
   const phone = await home("place=gearbox&from=housing", { width: 390, height: 844 });
@@ -209,8 +227,8 @@ const kept = (page) => page.evaluate(() => window.homePanel ?? null);
 test("the home's sidebar pushes the place while pinned and leaves nothing collapsed; its width follows the home until the person chooses", async () => {
   const { context, page } = await home();
   try {
-    const content = page.locator(".cad-library-content");
-    assert.deepEqual([(await box(content)).x, (await box(page.locator(".cad-library-title"))).x], [232, 256]);
+    const content = page.locator("[data-library-content]");
+    assert.deepEqual([(await box(content)).x, (await box(page.locator("[data-library-title]"))).x], [232, 248]);
     // Narrower than 872px (640 for the place beside the default 232) it collapses by itself, and opens again past it; nothing is kept.
     await page.setViewportSize({ width: 871, height: 900 });
     await page.locator(SIDEBAR).waitFor({ state: "hidden" });
@@ -223,13 +241,13 @@ test("the home's sidebar pushes the place while pinned and leaves nothing collap
     await page.locator(SIDEBAR).waitFor({ state: "hidden" });
     await page.mouse.move(700, 500);
     await page.setViewportSize({ width: 1600, height: 900 });
-    await page.waitForFunction(() => document.querySelector(".cad-library-content").getBoundingClientRect().width === 1600);
+    await page.waitForFunction(() => document.querySelector("[data-library-content]").getBoundingClientRect().width === 1600);
     assert.deepEqual([(await box(content)).x, await page.locator(SIDEBAR).isVisible(), await kept(page)], [0, false, { open: false }]);
     // Its key (Ctrl+\ off a Mac) opens it again, their choice too, and it then holds in a narrow window.
     await page.keyboard.press("Control+Backslash");
     await page.locator(SIDEBAR).waitFor({ state: "visible" });
     await page.setViewportSize({ width: 700, height: 900 });
-    await page.waitForFunction(() => document.querySelector(".cad-library-content").getBoundingClientRect().width === 700 - 232);
+    await page.waitForFunction(() => document.querySelector("[data-library-content]").getBoundingClientRect().width === 700 - 232);
     assert.deepEqual([(await box(content)).x, await kept(page)], [232, { open: true }]);
   } finally { await context.close(); }
 });
@@ -238,7 +256,7 @@ test("resting on the toggle peeks the collapsed sidebar as a card over the place
   const { context, page } = await home('panel={"open":false}');
   try {
     const navbar = await box(page.locator("[data-viewer-navbar]"));
-    const content = page.locator(".cad-library-content");
+    const content = page.locator("[data-library-content]");
     assert.deepEqual([await page.locator(SIDEBAR).isVisible(), (await box(content)).x], [false, 0]);
     await page.locator(TOGGLE).hover();
     await page.locator(`${SIDEBAR}[data-panel-peek]`).waitFor();
@@ -255,7 +273,7 @@ test("resting on the toggle peeks the collapsed sidebar as a card over the place
     assert.deepEqual([cog.bottom, cog.right <= card.right], [900 - 8, true]);
     // From the toggle into the card it stays; a place chosen in it is shown without pinning it.
     await page.locator(`${SIDEBAR} [data-place="pinned"]`).click();
-    await page.locator('.cad-library-title:text-is("Pinned")').waitFor();
+    await page.locator('[data-library-title]:text-is("Pinned")').waitFor();
     assert.deepEqual([await page.locator(`${SIDEBAR}[data-panel-peek]`).count(), await kept(page)], [1, null]);
     // Left, it goes; Escape puts it away too.
     await page.mouse.move(900, 500);
@@ -269,7 +287,7 @@ test("resting on the toggle peeks the collapsed sidebar as a card over the place
     await page.locator(TOGGLE).hover();
     await page.locator(`${SIDEBAR}[data-panel-peek]`).waitFor();
     await page.locator(TOGGLE).click();
-    await page.waitForFunction(() => document.querySelector(".cad-library-content").getBoundingClientRect().x === 232);
+    await page.waitForFunction(() => document.querySelector("[data-library-content]").getBoundingClientRect().x === 232);
     assert.deepEqual([await page.locator(`${SIDEBAR}[data-panel-peek]`).count(), await page.locator(TOGGLE).getAttribute("aria-expanded"), await kept(page)], [0, "true", { open: true }]);
   } finally { await context.close(); }
 });
@@ -283,7 +301,7 @@ test("the sidebar's grip sets its width between 200 and 480px, the place taking 
     await page.mouse.move(x, y);
     await page.mouse.down();
     await page.mouse.move(x + 100, y, { steps: 4 });
-    assert.deepEqual([(await box(page.locator(SIDEBAR))).width, (await box(page.locator(".cad-library-content"))).x, await kept(page)], [332, 332, null]);
+    assert.deepEqual([(await box(page.locator(SIDEBAR))).width, (await box(page.locator("[data-library-content]"))).x, await kept(page)], [332, 332, null]);
     // Past its bounds it stops; it is written once, as the drag lets go.
     await page.mouse.move(x + 900, y, { steps: 4 });
     assert.equal((await box(page.locator(SIDEBAR))).width, 480);
@@ -295,7 +313,7 @@ test("the sidebar's grip sets its width between 200 and 480px, the place taking 
   } finally { await context.close(); }
   const again = await home('panel={"width":300}');
   try {
-    assert.deepEqual([(await box(again.page.locator(SIDEBAR))).width, (await box(again.page.locator(".cad-library-content"))).x], [300, 300]);
+    assert.deepEqual([(await box(again.page.locator(SIDEBAR))).width, (await box(again.page.locator("[data-library-content]"))).x], [300, 300]);
   } finally { await again.context.close(); }
 });
 
@@ -400,7 +418,7 @@ test("on a phone the sidebar is the panel's sheet under the navbar, ending in th
     // A place chosen is shown, and the sheet gives the page back; the toggle shuts it too, and nothing was kept.
     await sheet.locator('[data-place="project:gearbox"]').tap();
     await sheet.waitFor({ state: "detached" });
-    assert.equal(await page.locator(".cad-library-title").textContent(), "gearbox");
+    assert.equal(await page.locator("[data-library-title]").textContent(), "gearbox");
     await page.locator(TOGGLE).tap();
     await sheet.waitFor();
     await page.locator(TOGGLE).tap();
@@ -410,7 +428,7 @@ test("on a phone the sidebar is the panel's sheet under the navbar, ending in th
     await sheet.waitFor();
     await page.touchscreen.tap(360, 600);
     await sheet.waitFor({ state: "detached" });
-    assert.equal(await page.locator(".cad-library-title").textContent(), "gearbox");
+    assert.equal(await page.locator("[data-library-title]").textContent(), "gearbox");
     assert.equal(await kept(page), null);
   } finally { await context.close(); }
 });
@@ -425,10 +443,10 @@ test("the navbar's logo is a link home: a plain click shows Recents in this view
     const [tab] = await Promise.all([context.waitForEvent("page"), logo.click({ modifiers: ["ControlOrMeta"] })]);
     assert.equal(tab.url(), `${origin}/?place=recents`);
     await tab.close();
-    assert.equal(await page.locator(".cad-library-title").textContent(), "gearbox");
+    assert.equal(await page.locator("[data-library-title]").textContent(), "gearbox");
     // A plain click: Recents here, with no navigation of the page, and no menu.
     await logo.click();
-    await page.locator('.cad-library-title:text-is("Recents")').waitFor();
+    await page.locator('[data-library-title]:text-is("Recents")').waitFor();
     assert.deepEqual([page.url(), await page.getByRole("menu").count(), context.pages().length], [`${origin}/?place=gearbox`, 0, 1]);
   } finally { await context.close(); }
   // A host with no addresses (an app's frame): the same logo, a button.
@@ -436,7 +454,7 @@ test("the navbar's logo is a link home: a plain click shows Recents in this view
   try {
     assert.equal(await framed.page.getByRole("link", { name: "Home" }).count(), 0);
     await framed.page.getByRole("button", { name: "Home" }).click();
-    await framed.page.locator('.cad-library-title:text-is("Recents")').waitFor();
+    await framed.page.locator('[data-library-title]:text-is("Recents")').waitFor();
   } finally { await framed.context.close(); }
 });
 
@@ -461,7 +479,7 @@ test("the kinds' chips wrap on a narrow page, and at a phone's scale every chip 
   const narrow = await home("width=240", { width: 800, height: 800 });
   try {
     const { page } = narrow;
-    const content = await box(page.locator(".cad-library-content"));
+    const content = await box(page.locator("[data-library-content]"));
     const chips = await page.getByRole("group", { name: "Show" }).getByRole("button").evaluateAll((nodes) => nodes.map((node) => {
       const { y, right } = node.getBoundingClientRect(); return [Math.round(y), Math.round(right)]; }));
     assert.ok(new Set(chips.map(([y]) => y)).size > 1, `the chips wrap: ${JSON.stringify(chips)}`);
@@ -476,4 +494,130 @@ test("the kinds' chips wrap on a narrow page, and at a phone's scale every chip 
     assert.deepEqual(await page.locator("[data-segment] > span").evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().height))), [32, 32]);
     assert.deepEqual(await style(page.getByRole("button", { name: "All, 8" }), "fontSize"), ["15px"]);
   } finally { await phone.context.close(); }
+});
+
+// What the home is drawn with (`docs/design-system.md`): the spacing scale, the tokens' radii and the type scale's steps,
+// read from what is drawn, never from a class.
+const px = (locator, ...names) => style(locator, ...names);
+const type = async (locator) => (await style(locator.first(), "fontSize", "lineHeight", "fontWeight")).join(" ");
+
+test("the place is padded by the panel's inset on every side, its blocks 16px apart; a card has a card's corners and inset, a folder is a row, and a list's row is the search's", async () => {
+  const { context, page } = await home("place=gearbox");
+  try {
+    const line = 232 + 16;
+    // One inset on all four sides (16px), and the heading's glyph, a folder's glyph and the first card all on its line.
+    assert.deepEqual(await px(page.locator("[data-library-content]"), "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"), ["16px", "16px", "16px", "16px"]);
+    const folders = page.locator("[data-library-folders] > li");
+    const cards = page.locator(".cad-library-card");
+    assert.deepEqual([(await box(page.locator("[data-library-toolbar] svg").first())).x, (await box(folders.first().locator("svg"))).x, (await box(cards.first())).x], [line, line, line]);
+    // A folder: the list primitive's row, 28px with a row's corners and no box of its own, its fill hanging 8px past the
+    // line; 16px over the cards.
+    const folder = folders.first().locator("[data-tree-row]");
+    assert.deepEqual([(await box(folder)).height, (await box(folder)).x, ...(await px(folder, "borderTopWidth", "borderTopLeftRadius", "backgroundColor"))], [28, line - 8, "0px", "8px", "rgba(0, 0, 0, 0)"]);
+    assert.equal(await type(folder), "13px 20px 400");
+    assert.equal((await box(cards.first())).y - (await box(folders.first())).bottom, 16);
+    // A card: a card's 10px corners, the picture at 3:2 edge to edge, the caption padded by a card's 12px inset all round;
+    // 16px between cards, across and down.
+    const [first, second, below] = [await box(cards.nth(0)), await box(cards.nth(1)), await box(cards.nth(4))];
+    assert.deepEqual([second.x - first.right, below.y - first.bottom, (await px(cards.first(), "borderTopLeftRadius"))[0]], [16, 16, "10px"]);
+    const picture = await box(cards.first().locator("[data-library-picture]"));
+    assert.deepEqual([picture.width, Math.round(picture.height * 3)], [first.width - 2, Math.round(picture.width * 2)]);
+    const caption = cards.first().locator("[data-library-label]").locator("xpath=..");
+    assert.deepEqual(await px(caption, "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"), ["12px", "12px", "12px", "12px"]);
+    // Its format is the system's chip: the chip tall, 8px in, a row's corners, 8px in from the picture's corner.
+    const badge = cards.first().locator("[data-library-format]");
+    assert.deepEqual([(await box(badge)).height, (await box(badge)).x - picture.x, (await box(badge)).y - picture.y, ...(await px(badge, "paddingLeft", "borderTopLeftRadius"))], [20, 8, 8, "8px", "8px"]);
+    // The type: the one heading, text-ui with a card's name at medium weight, the age text-tiny, the chip's own step.
+    assert.deepEqual([await type(page.locator("[data-library-title]")), await type(page.locator("[data-library-path]")), await type(cards.first().locator("[data-library-label]")),
+      await type(cards.first().locator("[data-library-status]")), await type(badge), await type(page.locator("[data-field-label]")), await type(page.locator("[data-navbar-home-left] h1"))],
+    ["15px 20px 600", "13px 20px 400", "13px 20px 500", "11px 16px 400", "12px 16px 500", "13px 20px 400", "13px 20px 400"]);
+    // The list: a header of muted labels the control tall, on the line, then rows the control + 16 tall with a row's
+    // corners, each picture the control + 4 tall at 3:2 on the line; names and facts one size, told apart by colour.
+    await page.getByRole("button", { name: "List" }).click();
+    const rows = page.locator(".cad-library-row");
+    await rows.first().waitFor();
+    const header = page.locator("[data-library-columns]");
+    assert.deepEqual([(await box(header)).height, (await box(header)).x, await type(header.locator("span")), (await style(header, "borderBottomWidth"))[0]], [28, line, "13px 20px 400", "0px"]);
+    const file = rows.filter({ has: page.locator("[data-library-picture]") }).first();
+    const small = await box(file.locator("[data-library-picture]"));
+    assert.deepEqual([(await box(file)).height, (await box(file)).x, small.x, small.width, small.height, (await px(file.locator(".cad-library-open"), "borderTopLeftRadius"))[0]], [44, line - 8, line, 48, 32, "8px"]);
+    assert.deepEqual([await type(file.locator("[data-library-label]")), await type(file.locator('[data-column="kind"]')), (await box(rows.nth(1))).y - (await box(rows.nth(0))).bottom], ["13px 20px 400", "13px 20px 400", 0]);
+    assert.deepEqual([(await style(file.locator("[data-library-label]"), "color"))[0], (await style(file.locator('[data-column="kind"]'), "color"))[0]], [await token(page, "--foreground"), await token(page, "--muted-foreground")]);
+  } finally { await context.close(); }
+  // Below the project's top the heading is the path, each part in the heading's step, and the folder from `~` is not said again.
+  const deep = await home("place=gearbox&path=housing/v3&from=lid.step");
+  try {
+    const { page } = deep;
+    assert.deepEqual([await page.locator("[data-library-crumb]").allTextContents(), await page.locator("[data-library-title]").textContent(), await page.locator("[data-library-path]").count()], [["gearbox", "housing"], "v3", 0]);
+    assert.deepEqual([await type(page.locator("[data-library-crumb]")), (await style(page.locator("[data-library-crumb]").first(), "color"))[0]], ["15px 20px 600", await token(page, "--muted-foreground")]);
+    // The way back: the scale's button, the control tall and 8px in at each side, its key a tiny hint in a hairline box.
+    const back = page.getByRole("button", { name: "Back to lid.step" });
+    assert.deepEqual([(await box(back)).height, await type(back), ...(await px(back, "paddingLeft", "paddingRight")), await type(back.locator("kbd")), (await style(back.locator("kbd"), "borderTopWidth"))[0]],
+      [28, "13px 20px 400", "8px", "8px", "11px 16px 400", "1px"]);
+  } finally { await deep.context.close(); }
+  // A place with nothing to list says so in one muted line where its first row would stand.
+  const bare = await home("place=bare", undefined, { waitFor: "[data-library-state]" });
+  try {
+    const empty = bare.page.locator("[data-library-state]");
+    assert.deepEqual([(await box(empty)).x, (await box(empty)).y - (await box(bare.page.locator("[data-library-toolbar]"))).bottom, await type(empty), (await style(empty, "color", "textAlign")).join(" ")],
+      [232 + 16, 16, "13px 20px 400", `${await token(bare.page, "--muted-foreground")} start`]);
+  } finally { await bare.context.close(); }
+});
+
+test("at a phone's scale the home's rows, texts and gutters are the phone's: 36px folders, 52px list rows, each text 2px up, the same 16px inset", async () => {
+  const { context, page } = await home("place=gearbox", { width: 390, height: 844 });
+  try {
+    await page.locator('[data-viewer-layout="mobile"]').waitFor();
+    await still(page);
+    assert.deepEqual(await px(page.locator("[data-library-content]"), "paddingTop", "paddingLeft", "paddingRight"), ["16px", "16px", "16px"]);
+    const card = page.locator(".cad-library-card").first();
+    assert.deepEqual([(await box(page.locator("[data-library-folders] [data-tree-row]").first())).height, await type(page.locator("[data-library-title]")), await type(card.locator("[data-library-label]")),
+      await type(card.locator("[data-library-status]")), (await box(card.locator("[data-library-format]"))).height], [36, "17px 22px 600", "15px 20px 500", "13px 18px 400", 28]);
+    await page.getByRole("button", { name: "List" }).click();
+    const row = page.locator(".cad-library-row").filter({ has: page.locator("[data-library-picture]") }).first();
+    await row.waitFor();
+    // Its two actions, a finger's 36px each, stand clear of its last column.
+    const [open, action, updated] = [await box(row), await box(row.getByRole("button").last()), await box(row.locator('[data-column="updated"]'))];
+    assert.deepEqual([open.height, (await box(page.locator("[data-library-columns]"))).height, action.height, updated.right <= (await box(row.getByRole("button").nth(1))).x], [52, 36, 36, true]);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "nothing wider than the phone");
+  } finally { await context.close(); }
+});
+
+test("a file that is no document is a card and a row like the rest, pressed as a button: it opens in an app, and its ⋯ holds Open in", async () => {
+  const { context, page } = await home("place=gearbox");
+  try {
+    // The same card: its extension for a badge, the plain tile, its name and when it was edited; a button, not a link.
+    const script = page.getByRole("button", { name: "Open build.py", exact: true });
+    const [card, document] = [page.locator(".cad-library-card", { has: script }), page.locator(".cad-library-card", { has: page.getByRole("link", { name: "Open gearbox.xbf", exact: true }) })];
+    assert.deepEqual([await card.locator("[data-library-format]").textContent(), await card.locator("[data-library-status]").textContent(), await script.getAttribute("href"), await card.locator("a").count(),
+      (await box(card)).height, (await style(card, "opacity"))[0], (await style(script, "cursor"))[0]], ["PY", "Edited 1d ago", null, 0, (await box(document)).height, "1", "pointer"]);
+    assert.equal(await page.locator(".cad-library-card", { has: page.getByRole("button", { name: "Open Makefile", exact: true }) }).locator("[data-library-format]").count(), 0, "no badge with no extension");
+    // The keyboard reaches it as it reaches a document's card, with the same ring; Enter opens it: here, a script, in
+    // the first app the host lists.
+    await script.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    const brand = await token(page, "--brand");
+    assert.ok((await style(card, "boxShadow"))[0].includes(`${brand} 0px 0px 0px 1px`), "the focused card's ring");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => window.homeOpenedIn?.length === 1);
+    // A file the OS's handler takes opens with it; the page goes nowhere and no menu opens.
+    await page.getByRole("button", { name: "Open bearing-6204-datasheet.pdf", exact: true }).click();
+    await page.waitForFunction(() => window.homeOpenedIn?.length === 2);
+    assert.deepEqual([await page.evaluate(() => window.homeOpenedIn.map(({ path, target, app }) => [path.split("/").pop(), target, app])), page.url(), await page.getByRole("menu").count()],
+      [[["build.py", "source", "vscode"], ["bearing-6204-datasheet.pdf", "source", "default"]], `${origin}/?place=gearbox`, 0]);
+    // Its ⋯, there under the pointer: Open in (the host's apps), Copy path and the file manager.
+    await card.hover();
+    await card.getByRole("button", { name: "Actions for build.py" }).click();
+    await page.getByRole("menuitem", { name: "Open in", exact: true }).click();
+    assert.deepEqual([await page.getByRole("menu", { name: "Open in" }).getByRole("menuitem").allTextContents(), await page.getByRole("menu").first().locator(":scope [role=menuitem]").allTextContents()],
+      [["VS Code", "PyCharm"], ["Open in", "Copy path", "Show in file manager"]]);
+  } finally { await context.close(); }
+  // Nothing here opens it: said in the place's line, under the heading row.
+  const none = await home("place=gearbox&path=housing/v3");
+  try {
+    await none.page.getByRole("button", { name: "Open run.sh", exact: true }).click();
+    const said = none.page.getByRole("alert");
+    assert.deepEqual([await said.textContent(), (await style(said, "color"))[0], await type(said)], ["No app on this computer opens run.sh.", await token(none.page, "--destructive"), "13px 20px 400"]);
+  } finally { await none.context.close(); }
 });

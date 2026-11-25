@@ -2,19 +2,22 @@ import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, us
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { ExternalLink, Search } from "lucide-react";
 import { ScrollArea as ScrollAreaPrimitive } from "../primitives/scroll-area.jsx";
+import { Kbd } from "../primitives/kbd.jsx";
 import { TooltipHint } from "../primitives/tooltip.jsx";
 import { TreeFilterHighlight, matchIndices } from "../primitives/tree-filter.jsx";
 import { DocumentGlyph } from "../file-viewer/navigation/DocumentGlyph.jsx";
 import { useViewerMobile } from "../file-viewer/responsive.js";
 import { ViewerElementContext, ViewerHostContext } from "../host/context.js";
 import type { NavigationTarget, ViewerHost } from "../host/types.js";
+import { documentTarget } from "../host/addresses.js";
 import { useI18n } from "../i18n/index.js";
 import { FLOATING_SURFACE_CLASS } from "../lib/floatingSurface.js";
 import { cn } from "../lib/utils.js";
-import { deletes, formatLabel, type LibraryModel, type ModelLabels, type ModelLibrarySource } from "../library/ModelLibrary.js";
+import { formatLabel, isDocument, type LibraryModel, type ModelLabels, type ModelLibrarySource } from "../library/ModelLibrary.js";
+import { ROW_PICTURE_CLASS } from "../library/thumbnails.js";
 import { useControlUsage } from "../usage/controls.js";
 import { searchShortcut, isSearchKey } from "./searchKey.js";
-import { searchGroups, searchRows, type SearchGroup, type SearchRow } from "./searchRows.js";
+import { searchGroups, type SearchGroup, type SearchRow } from "./searchRows.js";
 
 // The chrome's one scroll region (`primitives/scroll-area.jsx`), as this card uses it.
 const ScrollArea = ScrollAreaPrimitive as unknown as ComponentType<{ viewportRef?: RefObject<HTMLDivElement | null>; className?: string; children?: ReactNode }>;
@@ -46,8 +49,10 @@ export function useDocumentSearch(): DocumentSearchState {
   return useMemo(() => ({ open, show, close, opener }), [open, show, close]);
 }
 
-/** What the search reads as it opens: reading, failed (said, nothing else drawn), or every document, one row each. */
-type Read<Model extends LibraryModel> = { status: "reading" } | { status: "failed" } | { status: "ready"; rows: SearchRow<Model>[] };
+/** What the search reads as it opens: reading, failed (said, nothing else drawn), or the library's documents and the projects' names. */
+type Read<Model extends LibraryModel> = { status: "reading" } | { status: "failed" } | { status: "ready"; list: readonly Model[]; names: ReadonlyMap<string, string> };
+/** How long typing rests before the search asks the host for the project on screen's files that hold the words. */
+const SEARCH_WAIT_MS = 150;
 
 /** Every word of the query lit where it falls in a name (`TreeFilterHighlight`: the brand's text, medium). */
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -58,8 +63,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
 // A row: the control + 16 tall (44px; a phone's 52), its picture the control + 4 tall at 3:2 (32px), on the light
 // model area a library picture is taken on, in both themes.
 const ROW_CLASS = "relative flex min-h-[calc(var(--cad-control)+16px)] items-center gap-3 rounded-md px-2 text-foreground outline-none";
-const PICTURE_CLASS = "relative grid h-[calc(var(--cad-control)+4px)] aspect-[3/2] shrink-0 place-items-center overflow-hidden rounded-control "
-  + "bg-[linear-gradient(to_bottom,#f4f5f6,#dfe2e5)] text-[#9aa0a6] shadow-[inset_0_0_0_1px_rgba(0,0,0,.07)]";
+const PICTURE_CLASS = ROW_PICTURE_CLASS;
 
 /**
  * A document's picture: the library's (`thumbnail()`), read once its row comes on screen in the list (`root`) and
@@ -84,26 +88,32 @@ function Picture<Model extends LibraryModel>({ model, load, root }: { model: Mod
   }, [model.path, model.thumbnail, model.missing, load, root]);
   return <span ref={element} className={PICTURE_CLASS} data-search-picture="">
     {image ? <img src={image} alt="" className="absolute inset-0 size-full object-contain p-0.5" draggable={false} />
-      : <DocumentGlyph model={deletes(model)} path={model.path} className="size-(--cad-glyph)" strokeWidth={1.5} />}
+      : <DocumentGlyph path={model.path} className="size-(--cad-glyph)" strokeWidth={1.5} />}
   </span>;
 }
 
 /** A key as the footer writes it: a small bordered key, then what it does. */
 function KeyHint({ keys, children }: { keys: string; children: string }) {
   return <span className="flex items-center gap-1">
-    <kbd className="inline-flex h-[calc(var(--cad-chip)-2px)] items-center rounded-[4px] border border-border bg-background px-1 font-sans text-tiny font-medium text-muted-foreground">{keys}</kbd>
+    <Kbd>{keys}</Kbd>
     {children}
   </span>;
 }
 
 export interface DocumentSearchProps<Model extends LibraryModel> {
   search: DocumentSearchState;
-  /** The host's library: every document (`list`) and the projects with theirs (`projects`), read as the search opens. */
+  /**
+   * The host's library: its documents (`list`) and the projects' names (`projects`), read as the search opens, and the
+   * project on screen's folder and search (`folder`).
+   */
   library: ModelLibrarySource<Model>;
   /** The host's navigation: a row's own address (`hrefOf`) and Open in new tab (`openBeside`), where it has them. */
   navigation: ViewerHost["navigation"];
-  /** The document on screen, by its id and its own path, and the project it is in; none over the home. */
-  current?: { id?: string | null; path?: string | null; project?: { id: string; name: string } | null } | null;
+  /**
+   * The document on screen, by its id and its own path, and the project it is in, with the folder of it the document is
+   * in (below its root); none over the home.
+   */
+  current?: { id?: string | null; path?: string | null; project?: { id: string; name: string; folder?: string } | null } | null;
   onError?(error: Error): void;
 }
 
@@ -113,11 +123,12 @@ export interface DocumentSearchProps<Model extends LibraryModel> {
  * floating surface with nothing dimmed behind it (a phone's: a sheet the width of the view under the navbar, as its
  * panel's sheet is). An input with the keyboard, the documents under it, and on a desktop a line of the keys.
  *
- * It reads the library as it opens (`list` and `projects`: one row a document) and says while it reads, when the
- * read failed and when nothing matches. With nothing typed it lists the project of the document on screen (with no
- * project, the latest documents); typing finds as the home's search does (every word in the name, or in a file's
- * path), the project on screen's first ("In <project>"), then the rest ("Other projects"), at most `SEARCH_LIMIT`
- * rows drawn, and a line saying how many more there are. A row is its picture (`thumbnail`, read for the rows on
+ * It reads the library as it opens (`list`, and `projects` for their names) and says while it reads, when the read
+ * failed and when nothing matches. With nothing typed it lists the folder of its project the document on screen is in
+ * (`folder`; with no project, the latest documents); typing asks the host for every file of that project that holds
+ * the words (`folder` with `q`, once typing rests, the last answer winning) under "In <project>", then finds the
+ * library's other documents as the home's search does (every word in a name or a path) under "Other projects", at
+ * most `SEARCH_LIMIT` rows drawn, and a line saying how many more there are. A row is its picture (`thumbnail`, read for the rows on
  * screen, the kind's glyph until then), its name and, at its right, its kind in the project on screen, else its
  * project's name ("Standalone" for one in none); the document on screen's row is marked and opens nothing.
  *
@@ -149,7 +160,7 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
   const platform = useContext(ViewerHostContext)?.environment?.platform;
 
   // Read as it opens, every time it opens: a model built since is listed. A read of the projects that fails leaves the
-  // documents opened before; a read of those that fails is said.
+  // documents unnamed by their project; a read of the documents that fails is said.
   useEffect(() => {
     if (!open) return undefined;
     usage.used("search_open");
@@ -158,10 +169,31 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
     let live = true;
     const projects = source.current.projects ? source.current.projects().catch(() => []) : Promise.resolve([]);
     Promise.all([source.current.list(), projects]).then(([list, found]) => {
-      if (live) setRead({ status: "ready", rows: searchRows(list, found) });
+      if (live) setRead({ status: "ready", list, names: new Map(found.map(project => [project.id, project.name])) });
     }, () => { if (live) setRead({ status: "failed" }); });
     return () => { live = false; };
   }, [open, usage]);
+  // The project on screen's files, from its host: its folder with nothing typed, then each search of it once typing
+  // rests. The last asked wins; until it answers, the one before stays (narrowed by the words). A read that fails
+  // lists none of it.
+  const project = current?.project ?? null;
+  const words = query.trim();
+  const [here, setHere] = useState<{ project: string; rows: readonly Model[] } | null>(null);
+  const asked = useRef(0);
+  useEffect(() => {
+    const reader = source.current.folder;
+    if (!open || !project) return undefined;
+    if (!reader) { setHere({ project: project.id, rows: [] }); return undefined; }
+    const turn = ++asked.current;
+    const ask = () => reader(project.id, words ? { q: words } : { path: project.folder ?? "" })
+      // A folder lists every file in it; the search is of documents, the files a page opens.
+      .then(folder => folder.documents.filter(isDocument), () => [] as readonly Model[])
+      .then(rows => { if (turn === asked.current) setHere({ project: project.id, rows }); });
+    if (!words) { void ask(); return undefined; }
+    const timer = setTimeout(() => { void ask(); }, SEARCH_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [open, project?.id, project?.folder, words]);
+  useEffect(() => { if (!open) setHere(null); }, [open]);
 
   // A picture is kept by its name (its content's): read once while the search is mounted.
   const pictures = useRef(new Map<string, Promise<string | null>>());
@@ -175,9 +207,12 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
     return image;
   }, []);
 
-  const project = current?.project ?? null;
-  const shown = useMemo(() => (read.status === "ready" ? searchGroups(read.rows, { query, project: project?.id ?? null }) : { groups: [] as SearchGroup<Model>[], total: 0 }),
-    [read, query, project?.id]);
+  const hereRows = here && project && here.project === project.id ? here.rows : null;
+  // Ready once the library is read and, with a project on screen, its first answer is in.
+  const ready = read.status === "ready" && (!project || hereRows !== null);
+  const shown = useMemo(() => (read.status === "ready" && ready ? searchGroups({ list: read.list, here: hereRows, names: read.names, query,
+    project: project ? { id: project.id, name: project.name } : null }) : { groups: [] as SearchGroup<Model>[], total: 0 }),
+  [read, ready, hereRows, query, project?.id, project?.name]);
   const rows = useMemo(() => shown.groups.flatMap(group => group.rows.map(row => ({ row, group: group.id }))), [shown]);
   const drawn = rows.length;
   // The document on screen's row, by its id or its own path: marked, and never opened onto itself.
@@ -192,7 +227,7 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
     document.getElementById(optionId(active))?.scrollIntoView?.({ block: "nearest" });
   }, [active]);
 
-  const target = (row: SearchRow<Model>): NavigationTarget => ({ document: row.key });
+  const target = (row: SearchRow<Model>): NavigationTarget => documentTarget(row.model);
   const beside = navigation.openBeside ?? null;
   const besideLabel = beside?.kind === "browser" ? t("search.openBrowser") : t("search.openNewTab");
   const pick = (row: SearchRow<Model>) => {
@@ -264,8 +299,9 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
     : group.id === "other" ? t("search.otherProjects") : group.id === "recent" ? t("search.recent") : null;
   const detail = (row: SearchRow<Model>, group: SearchGroup<Model>["id"]) => onScreen(row) ? t("search.current")
     : group === "here" ? formatLabel(row.model, labels) : row.project?.name ?? t("search.standalone");
-  const listed = read.status === "ready" && drawn > 0;
-  const status = read.status === "reading" ? t("search.reading") : read.status === "failed" ? t("search.failed")
+  const reading = read.status === "reading" || (read.status === "ready" && !ready);
+  const listed = ready && drawn > 0;
+  const status = reading ? t("search.reading") : read.status === "failed" ? t("search.failed")
     : drawn === 0 ? (query.trim() ? t("search.nothingFound", { query: query.trim() }) : t("search.empty")) : null;
   const modifier = platform === "darwin" ? "⌘" : "Ctrl+";
   let index = -1;
@@ -293,12 +329,11 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
             placeholder={t("search.placeholder")} spellCheck={false} autoComplete="off" value={query}
             onChange={event => setQuery(event.target.value)} onKeyDown={onKeyDown}
             className="h-full min-w-0 flex-1 bg-transparent text-ui text-foreground outline-none placeholder:text-muted-foreground" />
-          {mobile ? null : <kbd className="inline-flex h-[calc(var(--cad-chip)-2px)] shrink-0 items-center rounded-[4px] border border-border bg-background px-1 font-sans text-tiny font-medium text-muted-foreground">
-            {searchShortcut(platform)}</kbd>}
+          {mobile ? null : <Kbd>{searchShortcut(platform)}</Kbd>}
         </div>
         <ScrollArea viewportRef={viewport} className={mobile ? "flex-1" : "max-h-[min(28rem,calc(100vh-14rem))]"}>
-          <div role="listbox" id={listId} aria-label={t("search.results")} aria-busy={read.status === "reading" || undefined} className="flex flex-col p-1" data-search-list="">
-            {read.status === "reading" ? [0, 1, 2].map(at => <div key={at} aria-hidden="true" className={ROW_CLASS} data-search-placeholder="">
+          <div role="listbox" id={listId} aria-label={t("search.results")} aria-busy={reading || undefined} className="flex flex-col p-1" data-search-list="">
+            {reading ? [0, 1, 2].map(at => <div key={at} aria-hidden="true" className={ROW_CLASS} data-search-placeholder="">
               <span className={cn(PICTURE_CLASS, "motion-safe:animate-pulse")} />
               <span className="h-2 rounded-full bg-muted-foreground/20 motion-safe:animate-pulse" style={{ width: `${[48, 36, 56][at]}%` }} />
             </div>) : null}
@@ -344,9 +379,9 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
               </div>;
             })}
           </div>
-          {status ? <p role="status" className="px-3 py-6 text-center text-muted-foreground" data-search-status={read.status === "ready" ? "empty" : read.status}>
+          {status ? <p role="status" className="px-3 py-6 text-center text-muted-foreground" data-search-status={reading ? "reading" : read.status === "ready" ? "empty" : read.status}>
             {status}</p> : null}
-          {read.status === "ready" && shown.total > drawn ? <p role="status" className="px-3 pt-1 pb-3 text-center text-tiny text-muted-foreground" data-search-more="">
+          {ready && shown.total > drawn ? <p role="status" className="px-3 pt-1 pb-3 text-center text-tiny text-muted-foreground" data-search-more="">
             {t("search.more", { shown: drawn, total: shown.total })}</p> : null}
         </ScrollArea>
         {mobile ? null : <div className="flex h-[calc(var(--cad-control)+8px)] shrink-0 items-center gap-4 border-t border-border bg-sidebar px-3 text-tiny text-muted-foreground" data-search-keys="">

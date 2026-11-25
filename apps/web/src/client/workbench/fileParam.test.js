@@ -77,3 +77,19 @@ test("a place on the home is a step in the history, and leaving for a document d
     globalThis.window = originalWindow;
   }
 });
+
+test("a folder of a project has an address", () => {
+  const carried = { search: "?project=old&path=gone&token=1800000000.mac", hash: "" };
+  const deep = { view: "project", project: "p1", path: "housing/v 3" };
+  const address = pageAddress({ place: deep }, carried);
+  assert.equal(address, "/?project=p1&path=housing%2Fv+3&token=1800000000.mac");
+  // What it writes is what it reads; the project's top names no folder.
+  assert.deepEqual(readHomePlace(address.slice(1)), deep);
+  assert.deepEqual(readHomePlace("?project=p1&path="), { view: "project", project: "p1" });
+  assert.deepEqual(readHomePlace("?project=p1&path=/housing/"), { view: "project", project: "p1", path: "housing" });
+  assert.equal(pageAddress({ place: { view: "project", project: "p1" } }, carried), "/?project=p1&token=1800000000.mac");
+  // Pinned carries none, nor a document's page.
+  assert.equal(pageAddress({ place: { view: "pinned" } }, carried), "/?view=pinned&token=1800000000.mac");
+  assert.equal(pageAddress({ id: ID }, carried), `/${ID}?token=1800000000.mac`);
+  assert.deepEqual(readHomePlace("?view=pinned&path=housing"), { view: "pinned" });
+});

@@ -94,10 +94,10 @@
  * control's padding 10px (an icon's inset in its tile), its radius 6px, the gap between neighbours still 4px, a Quick
  * Edit chip 28px, a switch 36x20 level with the controls, a slider's thumb and a checkbox 20px. The whole page follows,
  * so a menu, a dropdown or a hint portalled out of the viewer is the same size as the chrome it opened from. Only the
- * page's own viewer says so: a viewer drawn out of sight for a picture (`OffscreenPicture.tsx`) pins its layout, and
- * one inside `[data-offscreen-picture]` is never read, so Home's type never jumps while its cards get pictures. A field
+ * page's own viewer says so: a viewer that is not the page's own pins its layout (`FileViewerProps.layout`) and is not
+ * read. A field
  * keeps 15px: the page's viewport, not a 16px font, stops a phone zooming in on it. */
-:root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *)) {
+:root:has([data-viewer-layout="mobile"]) {
   --cad-text-tiny: 13px;
   --cad-text-xs: 14px;
   --cad-text-ui: 15px;
@@ -201,75 +201,19 @@
  * mark, 16px, the same over the home and over a document. */
 .cad-navbar-mark { display: block; width: 16px; height: 16px; max-width: none; user-select: none; -webkit-user-drag: none; }
 
-/* The host's home (`library/`): every document the viewer knows, one place at a time, to open again. The navbar is
- * over it (Home, the search, Import; a bar of the page's own where there is none); under it, a sidebar of places, the
- * viewer's panel over this page, and the place on screen on the page's colour, full width. The chrome's type scale: the place's name
- * text-heading (15/20, weight 600, the one larger text); the controls text-ui (13/20); the sidebar the panel's one size;
- * a tile's name 12/16 at 500 over its facts, 11/16 muted; the table's cells the same two. Every control is the scale's
- * (28px; a phone's 36), its icons 16px, and neutral: the document just left's ring alone is the brand's. Spacing on the
- * 4/8/16 scale. */
-.cad-library { display: flex; flex-direction: column; width: 100%; height: 100%; background: var(--background); }
-/* The model area's light gradient, every picture's ground in both themes (the pictures are the light
- * viewport's), with its faint edge. */
-.cad-library { --cad-library-area: linear-gradient(to bottom, #f4f5f6, #dfe2e5); --cad-library-area-edge: rgba(0, 0, 0, .07); }
-/* With no navbar over it, the page's own bar in the navbar's place and shape: Home at its left, the search and Import at its right. */
-.cad-library-bar { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 8px; box-sizing: border-box;
-  height: calc(var(--cad-control) + 12px); padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--sidebar); }
-/* The frame under the navbar: the sidebar, then the place in the room it leaves. A peek of the collapsed sidebar stands
-   over it, at its left (`file-viewer/panelPeek.js`). */
-.cad-library-frame { position: relative; display: flex; flex: 1 1 0; min-width: 0; min-height: 0; }
-/* The sidebar is the viewer's panel (`file-viewer/PanelSurface.jsx`: docked chrome, `bg-sidebar`, a rule on its inner
-   edge, the home's full height, 232px until the person drags its grip; a card while it peeks; a phone's sheet). Its
-   content is on the panel's 16px inset, 8px under the navbar; its groups (Recents and Pinned, the projects,
-   Standalone) 16px apart; a row's fill hangs 8px past the inset (`primitives/tree-row.jsx`). */
-.cad-library-places { display: flex; flex-direction: column; gap: 16px; padding: 8px var(--panel-inset) max(16px, calc(var(--cad-host-bottom-inset, 0px) + 8px)); }
-.cad-library-places ul { margin: 0; padding: 0; list-style: none; }
-.cad-library-places-head { display: flex; align-items: center; min-width: 0; }
-/* The "+" by Projects: a small icon button, its glyph ending on the inset. */
-.cad-library-places-add { flex: none; margin-right: -6px; color: var(--muted-foreground); }
-.cad-library-places-note { margin: 0; padding: 4px 0; color: var(--muted-foreground); }
-/* Over the panel's foot (`file-viewer/PanelFoot.jsx`: the host's links and Settings, under its rule) the places end 8px
-   over it; the foot keeps clear of a host's composer itself. */
-[data-library-sidebar]:has([data-app-foot]) .cad-library-places { padding-bottom: 8px; }
-/* The place on screen. Below its last row: 40px, or room to scroll it clear of a host's composer floating over the
-   bottom (`--cad-host-bottom-inset`), whichever is more. Added together, a library that fits would still scroll. */
-.cad-library-content { box-sizing: border-box; flex: 1 1 0; min-width: 0; padding: 20px 24px max(40px, calc(var(--cad-host-bottom-inset, 0px) + 16px)); container-type: inline-size; }
-[data-library-narrow] .cad-library-content { padding: 12px 16px max(40px, calc(var(--cad-host-bottom-inset, 0px) + 16px)); }
-/* The place's heading row, every control the scale's: at its left the place's name (a project's after its folder glyph,
-   its folder and its ⋯ following) and the way back to the document just left; at its right Sort and the grid/list
-   segmented control. It wraps where it must. Where the place holds more than one kind, the kinds' chips are a row of
-   their own 12px under it and 16px over the documents. */
-.cad-library-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; min-height: var(--cad-control); margin-bottom: 16px; }
-.cad-library-toolbar:has(+ .cad-library-kinds) { margin-bottom: 12px; }
-/* The kinds' chips: the panel's tab pills (`primitives/pill.jsx`), 4px apart, hanging 6px (their padding) past the
-   place's edge so their words start on its line; they wrap on a narrow page. */
-.cad-library-kinds { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 16px -6px; }
-.cad-library-place { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; }
-.cad-library-title { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); font-weight: 600; letter-spacing: -0.01em; color: var(--foreground); }
-.cad-library-path { flex: 0 1 auto; min-width: 0; font-size: var(--cad-text-xs); line-height: var(--cad-leading-xs); color: var(--muted-foreground); }
-.cad-library-place-actions { flex: none; color: var(--muted-foreground); }
-.cad-library-place-actions button[data-state=open] { background: var(--accent); color: var(--foreground); }
-/* Back to the document just left: a small outline button, its name the first to give way, its key a hint after it
-   (left out where nothing hovers: a finger has no Escape). */
-.cad-library-back { flex: 0 1 auto; min-width: 0; gap: 6px; padding: 0 4px 0 8px; font-size: var(--cad-text-xs); line-height: var(--cad-leading-xs); font-weight: 400; }
-.cad-library-key { flex: none; display: inline-flex; align-items: center; height: 16px; padding: 0 4px; border: 1px solid var(--border); border-radius: 4px;
-  font: inherit; font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); color: var(--muted-foreground); }
-@media (hover: none) { .cad-library-key { display: none; } .cad-library-back { padding-right: 8px; } }
-/* "Home" in the navbar's type, 13/20 at weight 500, in the navbar (`ViewerNavbar.jsx`'s `homeSlots`) and in the page's
-   own bar. */
-.cad-library-heading { display: inline-flex; align-items: center; gap: 8px; min-width: 0; height: var(--cad-control); margin: 0; padding: 0;
-  font-size: var(--cad-text-ui); line-height: var(--cad-leading-ui); font-weight: 500; white-space: nowrap; color: var(--foreground); }
-.cad-library-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-/* Sort: a muted label, then the value dropdown as the row's ghost control. */
-.cad-library-field { display: inline-flex; align-items: center; min-width: 0; }
-.cad-library-choice { color: var(--foreground); padding: 0 8px; }
-.cad-library-choice > svg { color: var(--muted-foreground); }
-.cad-library-choice[data-state=open] { background: var(--accent); }
-.cad-library-search { position: relative; width: 240px; }
+/* The host's home (`library/`, `docs/viewer-ux.md`, "The home"): the navbar over a sidebar of places (the viewer's
+ * panel over this page) and the place on screen, on the page's colour. It is drawn with the scale's tokens and the
+ * shared primitives where it is written (`library/ModelLibrary.tsx`): the panel's inset for its gutters, the spacing
+ * scale between its blocks, `text-ui` with the one heading and the ages' `text-tiny`, the row primitive for a folder,
+ * the system's chip for a format. What is left here is what a class cannot say where it stands: a card's marks under
+ * the pointer and the keyboard, and the navbar's search and Import giving way in a narrow navbar. */
+/* A card under the pointer: its edge the foreground at 20%, a field's hover outline. In keyboard focus, or being opened:
+   the brand's edge and a 1px ring. The document just left (`data-from`): ringed 2px in the brand, under the pointer too. */
+.cad-library-card:not([data-missing]):hover { border-color: color-mix(in srgb, var(--foreground) 20%, transparent); }
+.cad-library-card:has(.cad-library-open:focus-visible), .cad-library-card[data-opening] { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.cad-library-card[data-from], .cad-library-card[data-from]:hover { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand); }
 /* Under 700px of navbar the search is its control-sized icon until it is pressed (`data-open`), then the field, 200px;
    under 480px Import is its icon alone. */
-.cad-home-search { display: flex; align-items: center; }
 .cad-home-search-button { display: none; }
 @container cad-navbar (max-width: 699px) {
   .cad-home-search:not([data-open]) .cad-library-search { display: none; }
@@ -280,123 +224,3 @@
   [data-navbar-home] .cad-library-pick { width: var(--cad-control); padding: 0; }
   [data-navbar-home] .cad-library-pick > :not(:first-child) { display: none; }
 }
-.cad-library-search > svg { position: absolute; left: 8px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--muted-foreground); pointer-events: none; }
-.cad-library-search input { padding-left: 32px; padding-right: 8px; }
-/* Tiles: at least 232px a column, 16px apart, 24px between rows. B, the
-   framed card: the picture edge to edge over its caption inside one 1px-bordered box on the card's
-   colour; under the pointer its border a step darker, selected (in keyboard focus, or being opened) the
-   brand's ring with the caption on --brand-subtle. */
-.cad-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); align-items: start; gap: 24px 16px; margin: 0; padding: 0; list-style: none; }
-.cad-library-card, .cad-library-row { position: relative; min-width: 0; scroll-margin: 16px; }
-.cad-library-main { position: relative; min-width: 0; }
-.cad-library-card { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--card); transition: border-color .15s ease, box-shadow .15s ease; }
-.cad-library-card:not([data-missing]):hover { border-color: color-mix(in srgb, var(--foreground) 22%, transparent); box-shadow: 0 2px 10px rgba(0, 0, 0, .06); }
-.cad-library-card:has(.cad-library-open:focus-visible), .cad-library-card[data-opening] { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
-.cad-library-card:has(.cad-library-open:focus-visible) .cad-library-body, .cad-library-card[data-opening] .cad-library-body { background: var(--brand-subtle); }
-/* The document just left for this place (`data-from`): ringed in the brand's colour, 2px round its border, under the pointer too. */
-.cad-library-card[data-from], .cad-library-card[data-from]:not([data-missing]):hover { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand); }
-/* A card's or a row's main press: a link where the host gives the document an address, a button otherwise, drawn alike. */
-.cad-library-open { display: flex; box-sizing: border-box; width: 100%; min-width: 0; text-align: left; text-decoration: none; cursor: pointer; outline: none; color: inherit; background: none; border: 0; padding: 0; font: inherit; }
-.cad-library-open:disabled { cursor: default; }
-.cad-library-card .cad-library-open { flex-direction: column; }
-.cad-library-thumbnail { position: relative; display: grid; place-items: center; overflow: hidden; background: var(--cad-library-area); color: #9aa0a6; }
-.cad-library-thumbnail img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-.cad-library-thumbnail > svg { width: 24px; height: 24px; opacity: .7; }
-.cad-library-card .cad-library-thumbnail { width: 100%; aspect-ratio: 330 / 185; border-bottom: 1px solid var(--border); }
-/* A card's format, a small badge at its picture's top-left: on the picture, so light in both themes. */
-.cad-library-format { position: absolute; left: 8px; top: 8px; z-index: 1; height: 16px; padding: 0 5px; border-radius: 4px;
-  font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); font-weight: 500; white-space: nowrap; color: #3d4247;
-  background: rgba(255, 255, 255, .82); box-shadow: 0 0 0 1px rgba(0, 0, 0, .06); }
-/* The caption, 8px by 12px: the name (12/16, 500) over one line, its project's name where projects are listed and its age (11/16, muted). */
-.cad-library-body { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 8px 12px; }
-.cad-library-text { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
-.cad-library-card .cad-library-label { font-size: var(--cad-text-xs); line-height: var(--cad-leading-xs); font-weight: 500; color: var(--foreground); }
-.cad-library-name { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--foreground); }
-.cad-library-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A project's folder before its name in its page's heading, 16px. */
-.cad-library-glyph { flex: none; width: 16px; height: 16px; color: var(--muted-foreground); }
-.cad-library-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); color: var(--muted-foreground); }
-.cad-library-card[data-missing] .cad-library-thumbnail, [data-missing] .cad-library-name, .cad-library-card[data-missing] .cad-library-body { opacity: .55; }
-/* A card's pin and ⋯ (Figma's star): at its picture's top-right, shown on hover or focus, the pin always
- * while the model is pinned, and both always where nothing hovers (touch). On the picture, so in its
- * light colours in both themes. A row's stand on the page's own. */
-.cad-library-actions { position: absolute; display: flex; align-items: center; gap: 4px; color: var(--muted-foreground); }
-.cad-library-card .cad-library-actions { top: 8px; right: 8px; }
-.cad-library-card .cad-library-actions button { background: rgba(255, 255, 255, .9); color: #4a4f55; box-shadow: 0 0 0 1px rgba(0, 0, 0, .08); }
-.cad-library-card .cad-library-actions button:hover, .cad-library-card .cad-library-actions button[data-state=open] { background: #fff; color: #111; }
-.cad-library-actions button { opacity: 0; transition: opacity .15s ease; }
-.cad-library-card:hover .cad-library-actions button, .cad-library-row:hover .cad-library-actions button, .cad-library-actions:focus-within button,
-  .cad-library-actions button[data-state=open], .cad-library-actions .cad-library-pin[aria-pressed=true] { opacity: 1; }
-.cad-library-row .cad-library-actions button[data-state=open] { background: var(--accent); color: var(--foreground); }
-.cad-library-pin[aria-pressed=true] { color: var(--foreground); }
-.cad-library-card .cad-library-pin[aria-pressed=true] { color: #111; }
-@media (hover: none) { .cad-library-actions button { opacity: 1; } }
-/* The list, Figma's table: a 28px header of muted 11/16 labels (Name, then Where in a project's page or Project in
-   Recents and Pinned, Kind, Size, Updated, Created) over 44px rows, each its picture (40 by 28 on the model area) and
-   name (12/16, 500), then its facts, 11/16 muted, in fixed columns; rows transparent, the palette's hover (--muted)
-   under the pointer, a selected row (in keyboard focus, or being opened) on --brand-subtle, the document just left
-   ringed, the pin and ⋯ at the row's end. A narrower page drops Created, then Where, then Kind. */
-.cad-library-table { --cad-library-columns: minmax(0, 1fr) 96px 88px 120px 120px; }
-.cad-library-table[data-where] { --cad-library-columns: minmax(0, 3fr) minmax(0, 2fr) 96px 88px 120px 120px; }
-.cad-library-columns { display: grid; grid-template-columns: var(--cad-library-columns); align-items: center; height: 28px; padding: 0 64px 0 8px;
-  border-bottom: 1px solid var(--border); font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); font-weight: 500; color: var(--muted-foreground); user-select: none; }
-.cad-library-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 0; padding: 0; list-style: none; }
-.cad-library-row .cad-library-main { border-radius: 6px; transition: background-color .15s ease; }
-.cad-library-row:not([data-missing]) .cad-library-main:hover { background: var(--muted); }
-.cad-library-row:has(.cad-library-open:focus-visible) .cad-library-main, .cad-library-row[data-opening] .cad-library-main { background: var(--brand-subtle); }
-.cad-library-row[data-from] .cad-library-main { box-shadow: inset 0 0 0 2px var(--brand); }
-.cad-library-row .cad-library-open { display: grid; grid-template-columns: var(--cad-library-columns); align-items: center; height: 44px; padding: 0 64px 0 8px; border-radius: inherit; }
-.cad-library-row .cad-library-open:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
-.cad-library-row .cad-library-label { font-size: var(--cad-text-xs); line-height: var(--cad-leading-xs); font-weight: 500; }
-.cad-library-row [data-column=where] { padding-right: 12px; }
-.cad-library-row .cad-library-thumbnail { flex: none; width: 40px; height: 28px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--cad-library-area-edge); }
-.cad-library-row .cad-library-thumbnail img { padding: 2px; box-sizing: border-box; }
-.cad-library-row .cad-library-thumbnail > svg { width: 14px; height: 14px; }
-.cad-library-row .cad-library-actions { right: 8px; top: 50%; transform: translateY(-50%); }
-@container (max-width: 820px) {
-  .cad-library-table { --cad-library-columns: minmax(0, 1fr) 80px 72px 104px; }
-  .cad-library-table[data-where] { --cad-library-columns: minmax(0, 3fr) minmax(0, 2fr) 80px 72px 104px; }
-  .cad-library-table [data-column=created] { display: none; }
-}
-@container (max-width: 680px) {
-  .cad-library-table[data-where] { --cad-library-columns: minmax(0, 1fr) 80px 72px 104px; }
-  .cad-library-table [data-column=where] { display: none; }
-}
-@container (max-width: 560px) {
-  .cad-library-table, .cad-library-table[data-where] { --cad-library-columns: minmax(0, 1fr) 72px 96px; }
-  .cad-library-table [data-column=kind] { display: none; }
-}
-/* A place with nothing to list, or nothing that matches, says so in one muted line. */
-.cad-library-empty { margin: 48px 0 0; text-align: center; color: var(--muted-foreground); line-height: 1.6; }
-/* Past the first of a long place: Show more, a quiet button under the last row; and, under a project's last row, that
-   the host's walk of its folder stopped early. */
-.cad-library-more { margin-top: 16px; padding: 2px 6px; margin-left: -6px; border-radius: 6px; color: var(--muted-foreground); cursor: pointer; }
-.cad-library-more:hover { background: var(--accent); color: var(--foreground); }
-.cad-library-more:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
-.cad-library-truncated { margin: 16px 0 0; color: var(--muted-foreground); }
-/* What came of an Import's Folder or a project removed: one line over the place it led to. */
-.cad-library-note { margin: 0 0 16px; padding: 6px 10px; border-radius: 6px; background: var(--brand-subtle); color: var(--foreground); }
-/* No models yet: the C mark on the model area, a 15/20 title, one short line, Open file where the host has
-   a chooser, and the formats the viewer opens. */
-.cad-library-welcome { display: flex; flex-direction: column; align-items: center; max-width: 560px; margin: 24px auto 0; text-align: center; }
-.cad-library-welcome-stage { display: grid; place-items: center; width: 100%; height: 200px; margin-bottom: 24px; border-radius: 12px;
-  background: var(--cad-library-area); box-shadow: inset 0 0 0 1px var(--cad-library-area-edge); }
-.cad-library-welcome-stage img { display: block; width: 64px; height: 64px; user-select: none; -webkit-user-drag: none; }
-.cad-library-welcome-title { margin: 0 0 4px; font-size: var(--cad-text-heading); line-height: var(--cad-leading-heading); font-weight: 600; letter-spacing: -0.01em; color: var(--foreground); }
-.cad-library-welcome-body { margin: 0 0 16px; color: var(--muted-foreground); }
-.cad-library-welcome-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.cad-library-welcome-formats { margin: 16px 0 0; font-size: var(--cad-text-tiny); line-height: var(--cad-leading-tiny); letter-spacing: .02em; color: var(--muted-foreground); }
-/* While the list is read: the cards' own shapes, pulsing. */
-.cad-library [data-loading] .cad-library-open { cursor: default; }
-.cad-library [data-loading] .cad-library-thumbnail, .cad-library-placeholder { animation: cad-library-pulse 1.4s ease-in-out infinite; }
-.cad-library-placeholder { display: block; width: 60%; height: 10px; margin: 3px 0; border-radius: 4px; background: var(--muted); }
-.cad-library-placeholder[data-short] { width: 32%; }
-.cad-library-row .cad-library-placeholder { width: 40%; }
-@keyframes cad-library-pulse { 50% { opacity: .5; } }
-/* The model being opened: a spinner over its picture until the host has it on screen. */
-.cad-library-opening { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklab, var(--background) 45%, transparent); color: var(--foreground); }
-.cad-library-row .cad-library-opening [data-slot=spinner], .cad-library-row .cad-library-opening svg { width: 14px; height: 14px; }
-.cad-library-opening > svg { width: 20px; height: 20px; opacity: 1; }
-.cad-library-error { margin-bottom: 16px; color: var(--destructive); }
-.cad-library-error p { margin: 0; }
-@media (prefers-reduced-motion: reduce) { .cad-library-actions button, .cad-library-row .cad-library-main { transition: none; } .cad-library [data-loading] .cad-library-thumbnail, .cad-library-placeholder { animation: none; } }

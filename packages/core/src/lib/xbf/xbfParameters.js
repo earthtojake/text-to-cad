@@ -9,7 +9,7 @@
 // fetches.
 
 /** Why a parameter cannot be written, the engine's closed set (any other reads as read-only, unexplained). */
-export const PARAMETER_REASONS = Object.freeze(["file", "no_worker", "shared", "expression"]);
+export const PARAMETER_REASONS = Object.freeze(["no_worker", "shared", "expression"]);
 /** Why a save was refused, the engine's closed set of `code`s. */
 export const PARAMETER_REFUSALS = Object.freeze([
   "no_worker", "unknown_parameter", "not_writable", "not_a_number", "out_of_range", "script_changed", "busy", "build_failed"

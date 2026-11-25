@@ -28,3 +28,12 @@ export const Pill = React.forwardRef(/**
     {count === null ? null : <span className="font-normal tabular-nums text-muted-foreground" data-pill-count="">{count}</span>}
   </button>;
 });
+
+/**
+ * A row of pills: a labelled group of toggles, one on, 4px apart, hanging 6px (a pill's padding) past its line so their
+ * words stand on it, and wrapping where the row is short.
+ * @param {React.ComponentPropsWithoutRef<"div"> & { label: string }} props
+ */
+export function PillGroup({ label, className, ...props }) {
+  return <div role="group" aria-label={label} data-slot="pill-group" className={cn("-ml-1.5 flex flex-wrap items-center gap-step", className)} {...props} />;
+}

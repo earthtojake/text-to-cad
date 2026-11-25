@@ -196,8 +196,6 @@ export default {
   "file.opening": "여는 중…",
   "file.missing": "파일이 없습니다",
   "file.notHeld": "이 모델은 더 이상 유지되지 않습니다",
-  "file.notSaved": "이 모델은 저장되지 않았습니다",
-  "file.detached": "이 모델의 스크립트가 없습니다",
   "file.openFailed": "이 파일을 열 수 없습니다",
   "file.displayFailed": "이 파일을 표시할 수 없습니다",
   "file.goHome": "홈으로",
@@ -218,7 +216,7 @@ export default {
   "file.browser": "브라우저",
   "file.fileExplorer": "파일 탐색기",
   "file.fileManager": "파일 관리자",
-  "file.sourceMissing": "소스가 이동되었거나 삭제되었습니다.",
+  "file.sourceMissing": "소스가 이동되었거나 없습니다.",
   "file.kicadBoardTooNew": "{app}에서 이 기판을 열 수 없습니다. 더 새로운 버전의 KiCad로 저장되었습니다.",
   "file.kicadSchematicTooNew": "{app}에서 이 회로도를 열 수 없습니다. 더 새로운 버전의 KiCad로 저장되었습니다.",
   "file.defaultApp": "기본 앱",
@@ -312,7 +310,8 @@ export default {
   "home.projectInside": "{name}은(는) 이미 프로젝트인 {project} 안에 있습니다.",
 
 
-  "home.projectEmpty": "아직 모델이나 CAD 파일이 없습니다.",
+  "home.projectEmpty": "이 폴더는 비어 있습니다.",
+  "home.folderFailed": "이 폴더를 읽을 수 없습니다. 이동되었거나 이름이 바뀌었을 수 있습니다.",
 
 
   "home.projectMissing": "이 프로젝트의 폴더가 없습니다. 제거하거나 폴더를 원래 자리에 되돌려 놓으세요.",
@@ -361,7 +360,6 @@ export default {
   "home.standaloneEmpty": "독립 문서가 없습니다. 모든 문서가 프로젝트에 속해 있습니다.",
 
 
-  "home.showMore": "{count}개 더 보기",
 
 
   "home.sortAria": "정렬",
@@ -406,11 +404,13 @@ export default {
   "home.grid": "그리드",
   "home.list": "목록",
   "home.openAria": "{name} 열기",
+  "home.noAppOpens": "이 컴퓨터에는 {name}을(를) 열 수 있는 앱이 없습니다.",
   "format.xbf": "XBF",
   "home.formatPart": "부품",
   "home.formatAssembly": "어셈블리",
   "home.noMatchingModels": "일치하는 모델이 없습니다.",
   "home.filesAria": "파일",
+  "home.foldersAria": "폴더",
   "home.loadingFiles": "파일 불러오는 중",
   "home.modelsAria": "CAD 모델",
   "home.fileUnavailable": "파일을 사용할 수 없음",
@@ -418,12 +418,7 @@ export default {
   "home.menuOpen": "열기",
   "home.pin": "고정",
   "home.unpin": "고정 해제",
-  "home.delete": "삭제",
-  "home.deleteModelTitle": "{name}을(를) 삭제할까요?",
-  "home.deleteModelBody": "엔진의 기록과 저장된 빌드를 삭제합니다. 스크립트와 내보낸 파일은 디스크에 남습니다. 다시 빌드하려면 스크립트를 실행하세요.",
-  "home.deleteFileTitle": "뷰어에서 {name}을(를) 삭제할까요?",
-  "home.deleteFileBody": "이 파일에 대한 엔진의 기록을 삭제합니다. 파일 자체는 디스크에 남습니다.",
-  "home.cancel": "취소",
+  "home.removeFromRecents": "최근 항목에서 제거",
   "home.kindsAria": "표시",
   "home.kind.all": "전체",
   "home.kind.models": "3D 모델",
@@ -848,7 +843,6 @@ export default {
   "parameters.error.build_failed": "이 값으로는 빌드되지 않습니다.",
   "parameters.error.preview_build_failed": "이 값으로는 빌드되지 않습니다.",
   "parameters.error.preview_failed": "이 값을 표시하지 못했습니다.",
-  "parameters.reason.file": "스크립트에서 편집하세요.",
   "parameters.reason.no_worker": "편집하려면 스크립트를 다시 실행하세요.",
   "parameters.reason.shared": "다른 파일에서 설정됩니다.",
   "parameters.reason.sharedIn": "{source}에서 설정됩니다.",

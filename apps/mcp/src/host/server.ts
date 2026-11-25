@@ -25,9 +25,8 @@ export interface Launch {
   platform?: string;
   /** The home's library as it stood, so the home draws its cards without asking first. */
   recents?: Recent[];
-  /** The projects as they stood (`GET /api/v1/projects`'s), each with its documents' rows: the home's sections, at once. */
-  projects?: { id: string; name: string; root: string; created: number | null; opened: number | null; missing: boolean;
-    documents: Recent[]; truncated?: boolean }[];
+  /** The projects as they stood (`GET /api/v1/projects`'s): the home's sidebar, at once. */
+  projects?: { id: string; name: string; root: string; created: number | null; opened: number | null; missing: boolean }[];
   /** Whether this computer has a chooser for the home's Import (a file, a folder). */
   pick?: boolean;
   /**
@@ -43,10 +42,10 @@ export interface Launch {
   order?: { createdAt: number; seq: number };
 }
 /**
- * A model in the library every CAD view shares, as `GET /api/v1/documents` lists it: its document's
- * `id`, `kind` and `api`, its record's kind as `record` (the home hands it on as the library's, `libraryRow`).
+ * A document in the library every CAD view shares, as `GET /api/v1/documents` lists it: its document's
+ * `id`, `kind` and `api`, its record's kind as `record`, always `file` (the home hands it on as the library's, `libraryRow`).
  */
-export type Recent = Omit<LibraryModel, 'kind'> & { id: string; kind: string; record: LibraryModel['kind']; api?: string };
+export type Recent = LibraryModel & { id: string; kind: string; record: 'file'; api?: string };
 export type ViewEvent =
   | { seq: number; type: 'show'; launch: Launch }
   | { seq: number; type: 'capture'; requestId: string };

@@ -5,13 +5,12 @@ import { DocumentGlyph } from '../../../dist/file-viewer/navigation/DocumentGlyp
 afterEach(cleanup);
 
 // The lucide icon a glyph draws, by its class (`lucide-file` for File).
-const icon = (props: { model?: boolean; path: string }) => {
+const icon = (props: { path: string }) => {
   const { container } = render(<DocumentGlyph {...props} />);
   return [...container.querySelector('svg')!.classList].find(name => name.startsWith('lucide-'));
 };
 
-it('draws a model as the cube and every CAD file, whatever its kind, as the one plain file glyph', () => {
-  expect(icon({ model: true, path: '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab' })).toBe('lucide-box');
+it('draws every CAD file, whatever its kind, as the one plain file glyph', () => {
   const kinds = ['a.step', 'a.stp', 'a.xbf', 'a.stl', 'a.3mf', 'a.glb', 'a.dxf', 'a.urdf', 'a.srdf'].map(path => icon({ path }));
   expect(new Set(kinds)).toEqual(new Set(['lucide-file']));
 });

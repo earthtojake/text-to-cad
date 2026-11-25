@@ -63,10 +63,8 @@ Below 600px of its own width FileViewer is mobile (`useViewerMobile`). The width
 breakpoint boolean, never a pixel value, so a resize within one layout does not
 re-render the renderer. Its root says which (`data-viewer-layout`), and the page's stylesheet reads it: a phone's
 type and touch targets a step up, page-wide, so a menu portalled out of the view matches it. Only the page's own
-viewer says so. A viewer that is not the page's (a library card's picture, drawn out of sight at 480px:
-`OffscreenPicture.tsx`) pins its layout (`layout="mobile"` or `"desktop"`), measures nothing and carries no
-`data-viewer-layout`, and the page-wide rules ignore anything inside `[data-offscreen-picture]`, so Home's type never
-changes while its cards get their pictures.
+viewer says so. A viewer that is not the page's (one drawn small, or out of sight) pins its layout (`layout="mobile"`
+or `"desktop"`), measures nothing and carries no `data-viewer-layout`, so the page's type never follows it.
 
 A renderer is handed, besides its document: `onNavigationActionsChange`, for its
 nav-row actions (`FileNavigationAction`, with an optional shorter `hint`), hidden
@@ -85,7 +83,7 @@ The navbar is drawn over every file from the moment one is asked for, and over t
 host's home — there the logo, the home's sidebar's toggle, Back and Forward where the
 host keeps the view's history, and the host's actions, where they stand over
 a file — never for a `compact` view (a
-picture: the home's thumbnails), and not while a renderer says its
+small inline view), and not while a renderer says its
 Preview is up (`RendererViewProps.onPreviewChange`): the viewer's Preview draws its own
 bar in its place and gives it back as it closes. Over a file, left to right:
 
@@ -139,9 +137,9 @@ which the view portals into the navbar's view slot (`navbarSlots.js`); and last,
 (`navbarActions`: the CAD app's Full size, inline). Back and Forward are a desktop row's alone: a phone's has no room
 for them. Preview's settings and Exit preview are Preview's bar's.
 
-The view's panel is the document's own: no project list leads it. `[` and `]` move to the previous and next of
-the project's documents (`project.documents`, in the host's order, a document gone skipped, nothing past either
-end), opened through `navigation.openFile`, the name the navbar shows kept until the host reads the document
+The view's panel is the document's own: no project list leads it. `[` and `]` move to the previous and next file of
+the folder the document is in (`project.documents`, in the host's order, the home's Sort; the document on screen found
+by its path or its id, a document gone skipped, nothing past either end), opened through `navigation.openFile`, the name the navbar shows kept until the host reads the document
 (`projectKeys.js`). FileViewer hands the two to its view (`ProjectKeysContext`, a ref, so a project read again
 re-renders no view), and the view's own keys reach them (`useProjectKey`, from `kit/shell/useViewerShortcuts.js`):
 single keys, never in a field, held, with a modifier or in Preview. The ⋯'s Previous and Next do the same; both are

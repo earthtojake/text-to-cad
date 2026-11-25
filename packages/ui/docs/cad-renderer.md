@@ -842,8 +842,8 @@ const renderers = [createModelRenderer({ client, preferences })];
 
 `source.id` names the file source a document's key is made of, independently of the
 backend's port. The client serves a
-file by its absolute path and catalogs only the files on screen; `client.projects()` and
-`client.project(id)` read the projects a person opened and their documents, and `isMissingFileError(error)`
+file by its absolute path and catalogs only the files on screen; `client.projects()` lists the projects a person
+opened and `client.projectFolder(id, { path, q })` reads one folder of one (or searches below it), and `isMissingFileError(error)`
 says the file asked for is not there. The host owns source access, file selection,
 URL/history, title, navigation, browser storage and application color scheme. It calls
 `client.dispose()` when the connection is no longer owned.
@@ -1623,7 +1623,7 @@ alert card the model survives: the card's own icon, which brings it back (see
 [Inspect, Render and live revisions](#inspect-render-and-live-revisions)). What a person
 tells the agent is Quick Edit's. The renderer's update
 status is in the viewport, under the strip, never in the navbar. So a view drawn as a
-picture (`compact`, as the home draws its thumbnails) needs no navbar at all.
+small (`compact`, a small inline view) needs no navbar at all.
 
 The host's `captureRequest` command captures the view (with its annotations, when there
 are some): to a composer destination it goes through the prompt-context port

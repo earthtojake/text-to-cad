@@ -79,12 +79,16 @@ const catalogOf = (envelopes) => ({ entries: envelopes.map(rowOfEnvelope).filter
   revision: envelopes.length === 1 ? envelopes[0]?.revision ?? '' : '' });
 /**
  * A Recents row as the library reads it (`CadRecent`): the API names a row's document kind `kind`
- * and its record's (`file`, `model`, `shape`) `record`; the library's `kind` is the record's.
+ * and its record's (always `file`) `record`; the library's `kind` is the record's.
  */
 export const libraryRow = (row) => ({ ...row, kind: row.record, documentKind: row.kind });
 const libraryRows = (reply) => (Array.isArray(reply?.documents) ? reply.documents.map(libraryRow) : []);
-/** A project as the routes answer it, its documents' rows as the library reads them (`libraryRow`). */
-export const projectOf = (project) => ({ ...project, documents: libraryRows(project), truncated: project?.truncated === true });
+/** Whether a change was refused because the engine holds no document by that name (`PATCH /api/v1/documents`' 400). */
+const isNotHeld = (error) => error?.failure?.status === 400 && /^no document\b.*\bis held\b/i.test(String(error.failure.detail || ''));
+const projectList = (reply) => (Array.isArray(reply?.projects) ? reply.projects : []);
+/** One folder of a project as `GET /api/v1/projects/<id>` answers it, its documents' rows as the library reads them. */
+const folderOf = (reply) => ({ project: reply?.project, path: typeof reply?.path === 'string' ? reply.path : '',
+  folders: Array.isArray(reply?.folders) ? reply.folders : [], documents: libraryRows(reply), truncated: reply?.truncated === true });
 
 /**
  * An explicit connection to a viewer, which serves files by absolute path. Its catalog holds
@@ -108,8 +112,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
   const activeFiles = new Map();
   // Each path a view asked for, and the id of the document the server answered it with.
   const aliases = new Map();
-  // Why the server has no row for an id it was asked for (the engine's words) and the state it
-  // names for it (`unsaved`, `detached`, or ''), by that id.
+  // Why the server has no row for an id it was asked for (the engine's words), by that id.
   const missing = new Map();
   let preferredFile = '';
   /** The key of the row `file` names: its document's id once the server said it. */
@@ -202,7 +205,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     let gone = '';
     if (isDocumentId(asked)) {
       if (typeof catalog?.missing === 'string' && !incoming.length) {
-        missing.set(asked, { text: catalog.missing, state: typeof catalog.missingState === 'string' ? catalog.missingState : '' });
+        missing.set(asked, catalog.missing);
         gone = asked;
       } else missing.delete(asked);
     }
@@ -233,7 +236,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     const work = (async () => {
       try {
         // A document named by its id is read by id (its envelope; an id no document has is a 404
-        // saying why, and the state the engine names for it); a file by its path, which registers it.
+        // saying why); a file by its path, which registers it.
         let catalog;
         if (isDocumentId(file)) {
           try {
@@ -241,8 +244,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
           } catch (error) {
             const failure = error?.failure;
             if (failure?.status !== 404 || isEngineGone(error)) throw error;
-            catalog = { entries: [], revision: '', missing: failure.detail,
-              ...(typeof failure.payload?.state === 'string' ? { missingState: failure.payload.state } : {}) };
+            catalog = { entries: [], revision: '', missing: failure.detail };
           }
         } else {
           // The path rides in the query even empty: a page with no file asks the cheapest read there is.
@@ -329,10 +331,8 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       }
       if (signal?.aborted || disposed) throw abortError();
       if (!entry) {
-        // An id the engine does not hold says why, and names the command that builds it again, and
-        // its state, the engine's (`unsaved`, `detached`), where it names one.
-        const why = missing.get(path);
-        throw Object.assign(new Error(why?.text || `File does not exist: ${path}`), { code: 'cad-file-missing', ...(why?.state ? { state: why.state } : {}) });
+        // An id the engine does not hold says why, in the engine's words.
+        throw Object.assign(new Error(missing.get(path) || `File does not exist: ${path}`), { code: 'cad-file-missing' });
       }
       return entry;
     },
@@ -358,8 +358,13 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     recents({ signal } = {}) {
       return request(`${API}/documents`, { signal, operation: 'recents' }).then(libraryRows);
     },
+    // A change to a document the engine holds no more (its file is gone: a 400, `no document <id> is held`) changes
+    // nothing and is no failure to tell: the answer is the library as it now is, which lists the file no longer.
     changeRecents(change) {
-      return request(`${API}/documents`, { method: 'PATCH', headers: JSON_POST, body: change, operation: 'recents' }).then(libraryRows);
+      return request(`${API}/documents`, { method: 'PATCH', headers: JSON_POST, body: change, operation: 'recents' }).then(libraryRows, (error) => {
+        if (!isNotHeld(error)) throw error;
+        return client.recents();
+      });
     },
     async keepThumbnail(png, path) {
       return client.changeRecents({ action: 'thumbnail', path, png: encodeBase64(new Uint8Array(await png.arrayBuffer())) });
@@ -379,14 +384,16 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       const body = folder ? { folder: true, ...(start ? { start } : {}) } : {};
       return request(`${API}/local/pick`, { method: 'POST', headers: JSON_POST, body, operation: 'pick' }).then((reply) => reply.path ?? null);
     },
-    // The projects (`GET /api/v1/projects`): folders a person opened as one, each with its documents
-    // (rows as the library's, `libraryRow`), the latest activity first.
+    // The projects (`GET /api/v1/projects`): folders a person opened as one, the latest activity first.
     projects({ signal } = {}) {
-      return request(`${API}/projects`, { signal, operation: 'projects' })
-        .then((reply) => (Array.isArray(reply?.projects) ? reply.projects.map(projectOf) : []));
+      return request(`${API}/projects`, { signal, operation: 'projects' }).then(projectList);
     },
-    project(id, { signal } = {}) {
-      return request(`${API}/projects/${encodeURIComponent(id)}`, { signal, operation: 'projects' }).then(projectOf);
+    // One folder of a project (`GET /api/v1/projects/<id>?path=`, below its root; the root with none): its subfolders
+    // and every file in it (rows as the library's, `libraryRow`; one that is no document has no `documentKind`); with
+    // words (`q`), every file below it that holds them all. Each sent only when it says something.
+    projectFolder(id, { signal, path = '', q = '' } = {}) {
+      return request(`${API}/projects/${encodeURIComponent(id)}`, { signal, params: { path, q: q ? String(q).trim() : '' }, operation: 'projects' })
+        .then(folderOf);
     },
     // A folder opened as a project, by its absolute path: `{ project, made }` (`made` false: it was one
     // already, or is inside one, which is the project answered).
@@ -394,10 +401,10 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       return request(`${API}/projects`, { method: 'POST', headers: JSON_POST, body: { path }, operation: 'projects' })
         .then((reply) => ({ project: reply.project, made: reply.made === true }));
     },
-    // A project forgotten (its record alone: nothing in its folder changes): the projects as they now are.
+    // A project forgotten (nothing in its folder changes): the projects as they now are.
     removeProject(id) {
       return request(`${API}/projects/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'x-cad-viewer': '1' }, operation: 'projects' })
-        .then((reply) => (Array.isArray(reply?.projects) ? reply.projects.map(projectOf) : []));
+        .then(projectList);
     },
     async reveal(path) {
       const response = await fetchImpl(cadApiUrl(`${API}/local/reveal`, { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify({ path }) });
@@ -416,8 +423,9 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     async openIn(id, target, app) {
       const response = await fetchImpl(cadApiUrl(`${API}/local/open`, { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify({ id, target, app }) });
       if (!response.ok) {
+        // The server's refusal, and what it says to do about it (`hint`) where it says so.
         const detail = await response.json().catch(() => null);
-        throw new Error(detail?.error || 'Could not open this file.');
+        throw new Error([detail?.error, detail?.hint].filter((part) => typeof part === 'string' && part).join(' ') || 'Could not open this file.');
       }
     },
     // The person's settings (`/api/v1/settings`): whether usage stats are shared, and the language.

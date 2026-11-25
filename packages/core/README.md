@@ -149,7 +149,9 @@ src/
                    #   fit/pan/zoom maths, batched Path2D, screen-width strokes),
                    #   cadRefs (the ref grammars: the engine's, for an .xbf
                    #   and a STEP, parity-tested against engine/refs.py;
-                   #   a label, for any other file)
+                   #   a label, for any other file), documentPages (a
+                   #   document's page in the viewer's origin, `/<id>`: the
+                   #   one place a document's address is spelt and read)
 scripts/           # chunk-ids.mjs (the pages' builds: a chunk's debug id) and
                    #   source-maps.mjs (the pages' builds: maps into the packages'
                    #   src/), beside the package's own build and test runners
@@ -217,11 +219,14 @@ by which rows join: one file however its path is spelled (a symlink, a case vari
 server lacks is an `isMissingFileError`, in the engine's words for an id it does not hold),
 `entryOf(file)` is the row the catalog has, and `createRenderSession({ file })` keeps the displayed
 file's entry current as polling refreshes it. A cancelled or older request
-cannot overwrite a newer file revision. `projects()` lists the folders a person opened as projects, each with its
-documents (rows as `recents()` reads them), `project(id)` reads one, `openProject(path)` opens a folder as one (the
-project it already is, or is inside, where it is), `removeProject(id)` forgets one, and `pick({ folder, start })`
-asks the desktop's chooser for a folder, opening in `start`. A row, and an entry, names the project it is in
-(`project`).
+cannot overwrite a newer file revision. `projects()` lists the folders a person opened as projects (no
+documents: a project is its folder), `projectFolder(id, { path, q })` reads one folder of one, below its root (its
+subfolders, then every file in it, rows as `recents()` reads them; a file that is no document has no `documentKind`,
+`api`, picture or pin, and is opened in an app with `openInApps(id)` and `openIn(id, "source", app)`) or with words
+searches everything below that folder, `openProject(path)` opens a folder as one (the project it already is, or is
+inside, where it is), `removeProject(id)` forgets one, and `pick({ folder, start })` asks the desktop's chooser for a
+folder, opening in `start`. A row names the project it is in by its id (`project`); an entry names it in full, with
+the folder the document is in below the project's root (`project.folder`).
 
 `CadWorkspaceService` exposes a scoped `resources` provider and, where its host serves
 the engine, where the page reads a document the engine serves

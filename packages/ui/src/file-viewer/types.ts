@@ -30,22 +30,22 @@ export interface FileMetadata extends FileEntry {
   mediaType?: string;
   revision?: string;
 }
-/** A document of a project, as the project lists it (`@cad/ui/library`'s rows): what `[` and `]` move through. */
+/** A file of the folder the document on screen is in (`@cad/ui/library`'s rows): what `[` and `]` move through. */
 export interface ProjectDocument {
-  /** A file's absolute path, a model's id: what `navigation.openFile` opens. */
+  /** The file's absolute path: what `navigation.openFile` opens. */
   path: string;
+  /** Its document's id, where the host names one: the document on screen is found by it too. */
+  id?: string;
   name: string;
-  /** `model` or `shape` for a document built from code; a file otherwise. */
-  kind?: string;
-  /** A file's folder (a model's script's), `/`-separated. */
+  /** Its folder, `/`-separated. */
   folder?: string;
   missing?: boolean;
 }
 /**
  * The project the document on screen is in (`FileViewerProps.project`): its name before the document's in the navbar,
- * which goes to the host's home at it (`onShow`), and its documents, in its order, the previous and next of which `[`
- * and `]` and the file menu show (`projectKeys.js`) -- null while they are read, with `truncated` where the host's walk
- * of its folder stopped early, `missing` where its folder is gone, `error` where they could not be read.
+ * which goes to the host's home at the document's folder of it (`onShow`), and that folder's files, in its page's
+ * order, the previous and next of which `[` and `]` and the file menu show (`projectKeys.js`) -- null while they are
+ * read, with `missing` where its folder is gone, `error` where they could not be read.
  */
 export interface FileProject {
   id: string;
@@ -53,7 +53,6 @@ export interface FileProject {
   /** Its folder, `/`-separated. */
   root: string;
   documents: readonly ProjectDocument[] | null;
-  truncated?: boolean;
   missing?: boolean;
   error?: string | null;
   onShow(): void;
@@ -85,10 +84,11 @@ export interface FileActions {
    * Open in's apps, where the host can open a document's files in this computer's apps: the files
    * and their apps for the document on screen (asked as its file menu opens, never before; null or a
    * failure, and the menu is as without), and one opened in one of them -- `app` an app's id, or
-   * `"default"`, the OS's own handler. Both or neither.
+   * `"default"`, the OS's own handler. Both or neither. A file the host listed is named by the id it listed it with
+   * (`id`): a folder's file that is no document has no other name.
    */
-  apps?: (entry: Pick<FileEntry, "path" | "kind">, options?: { signal?: AbortSignal }) => Promise<OpenInFiles | null>;
-  openApp?: (entry: Pick<FileEntry, "path" | "kind">, target: string, app: string) => void | Promise<void>;
+  apps?: (entry: Pick<FileEntry, "path" | "kind"> & { id?: string }, options?: { signal?: AbortSignal }) => Promise<OpenInFiles | null>;
+  openApp?: (entry: Pick<FileEntry, "path" | "kind"> & { id?: string }, target: string, app: string) => void | Promise<void>;
 }
 /** The files a view reads, by absolute path (`/`-separated): one file's metadata. */
 export interface FileSource {
@@ -265,8 +265,8 @@ export interface FileViewerProps {
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */
   notice?: ReactNode;
   /**
-   * The viewer's layout pinned, for a viewer that is not the page's own (a picture drawn out of sight,
-   * `OffscreenPicture.tsx`): neither measured nor said to the page, so its size never changes the page's.
+   * The viewer's layout pinned, for a viewer that is not the page's own (one drawn small, or out of sight): neither
+   * measured nor said to the page, so its size never changes the page's.
    * Unset (the page's viewer): measured from its own width (`responsive.js`), and its root carries
    * `data-viewer-layout`, which the page's stylesheet reads (a phone's type a step up: `styles/globals.css`).
    */

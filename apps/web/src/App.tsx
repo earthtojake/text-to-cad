@@ -3,8 +3,10 @@ import { CadViewer, createCadFileSource, normalizePath, type CadViewerProps } fr
 import { createCadFileActions } from '@cad/ui/catalog';
 import type { ModelLibrarySource } from '@cad/ui/library';
 import { createLiveRegistry, type HomeLocation, type NavigationTarget } from '@cad/ui/host';
+import { samePlace } from '@cad/ui/library';
 import type { TabStore, Appearance } from '@cad/ui/tab-store';
 import { createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerInfo } from '@cad/core/client';
+import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
 import { reloadWhenClean } from './host/reloadWhenClean.js';
@@ -37,14 +39,12 @@ export function useTabAppearance(tabStore: TabStore): { preference: Appearance; 
   return { preference: settings.appearance, colorScheme: resolveColorSchemeMode(settings.appearance, { prefersDark }) as 'light' | 'dark' };
 }
 
-const DOCUMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const RECENTS: HomeLocation = { view: 'recents' };
-const samePlace = (a: HomeLocation, b: HomeLocation) => a.view === b.view && (a.view !== 'project' || (b.view === 'project' && a.project === b.project));
 
 /**
  * The viewer's page: one document at a time, by the id its URL's path names (`/<id>`: a model's,
  * or a file's, which the server registers when it is opened), or the home (`/`) at the place its query names
- * (`fileParam.js`: Recents, `?view=pinned`, `?view=standalone`, `?project=<id>`). A file opened by its path (from the
+ * (`fileParam.js`: Recents, `?view=pinned`, `?view=standalone`, `?project=<id>&path=<folder>`). A file opened by its path (from the
  * home's Open) is asked for its id first, and shown by it. The browser's own history is the way back: showing a
  * document, the home or another place on it is a new entry, and every one of them has its own address, for a link
  * and for Open in new tab.
@@ -88,7 +88,7 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   const show = useCallback(async (next: string, { place: where = RECENTS, history = 'push' }: { place?: HomeLocation; history?: 'push' | 'replace' } = {}) => {
     const turn = ++asked.current;
     const wanted = normalizePath(next);
-    let id = !wanted || DOCUMENT_ID.test(wanted) ? wanted : '';
+    let id = !wanted || isDocumentId(wanted) ? wanted : '';
     if (wanted && !id) {
       id = await client.resolveEntry(wanted).then(entry => String(entry.id || ''), () => '');
       if (turn !== asked.current) return;
@@ -132,7 +132,7 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   // path's last segment); the home after its place ("Recents · text-to-cad", "gearbox · text-to-cad"), so a tab of
   // each tells them apart; a document whose name is not known yet, or the home before it has said, is "text-to-cad".
   useEffect(() => {
-    const fileName = (path: string | null) => (path && !DOCUMENT_ID.test(path) ? normalizePath(path).split('/').pop() || '' : '');
+    const fileName = (path: string | null) => (path && !isDocumentId(path) ? normalizePath(path).split('/').pop() || '' : '');
     document.title = file ? name || fileName(shownPath) || fileName(file) || 'text-to-cad' : homeName ? `${homeName} · text-to-cad` : 'text-to-cad';
   }, [name, shownPath, file, homeName]);
   // Once the catalog has the document, the library every CAD view
@@ -142,8 +142,9 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     setShownPath(path);
     if (path) void client.changeRecents({ action: 'open', path }).catch(() => {});
   }, [client]);
-  // The home: the projects and the library every CAD view shares, and Import with the desktop's chooser where the
-  // server's computer has one -- a file, shown, or a folder, opened as a project. A card's picture is the server's, by name.
+  // The home: the projects (a project's page is one folder of it, read from the server) and the library every CAD view
+  // shares, and Import with the desktop's chooser where the server's computer has one -- a file, shown, or a folder,
+  // opened as a project. A card's picture is the server's, by its token.
   const library = useMemo<ModelLibrarySource>(() => ({
     list: () => client.recents(),
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
@@ -154,6 +155,7 @@ export default function App({ client, server, tabStore, language: chosenLanguage
       await show(entry.path);
     },
     projects: () => client.projects?.() ?? Promise.resolve([]),
+    ...(client.projectFolder ? { folder: (project: string, options: { path?: string; q?: string }) => client.projectFolder!(project, options) } : {}),
     removeProject: project => client.removeProject?.(project.id) ?? Promise.resolve([]),
     ...(server.pick ? {
       pick: async () => { const picked = await client.pick(); if (picked) await show(picked); },
@@ -201,7 +203,7 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   // this browser.
   const navigation = useMemo(() => {
     const hrefOf = (target: NavigationTarget) => 'document' in target
-      ? (DOCUMENT_ID.test(target.document) ? pageAddress({ id: target.document }) : null) : pageAddress({ place: target.home });
+      ? (isDocumentId(target.document) ? pageAddress({ id: target.document }) : null) : pageAddress({ place: target.home });
     return { hrefOf, openBeside: { kind: 'tab' as const, open: createNewTabOpener({ hrefOf,
       resolve: path => client.resolveEntry(normalizePath(path)).then(entry => String(entry.id || '')) }) } };
   }, [client]);

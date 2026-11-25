@@ -196,8 +196,6 @@ export default {
   "file.opening": "開いています…",
   "file.missing": "ファイルが存在しません",
   "file.notHeld": "このモデルは保持されていません",
-  "file.notSaved": "このモデルは保存されていません",
-  "file.detached": "このモデルのスクリプトがありません",
   "file.openFailed": "このファイルを開けませんでした",
   "file.displayFailed": "このファイルを表示できませんでした",
   "file.goHome": "ホームへ戻る",
@@ -218,7 +216,7 @@ export default {
   "file.browser": "ブラウザ",
   "file.fileExplorer": "エクスプローラー",
   "file.fileManager": "ファイルマネージャー",
-  "file.sourceMissing": "ソースは移動または削除されました。",
+  "file.sourceMissing": "ソースは移動したか、見つかりません。",
   "file.kicadBoardTooNew": "{app} ではこの基板を開けません。新しいバージョンの KiCad で保存されています。",
   "file.kicadSchematicTooNew": "{app} ではこの回路図を開けません。新しいバージョンの KiCad で保存されています。",
   "file.defaultApp": "既定のアプリ",
@@ -312,7 +310,8 @@ export default {
   "home.projectInside": "{name} は、すでにプロジェクトである {project} の中にあります。",
 
 
-  "home.projectEmpty": "まだモデルも CAD ファイルもありません。",
+  "home.projectEmpty": "このフォルダーは空です。",
+  "home.folderFailed": "このフォルダーを読み込めませんでした。移動または名前が変更された可能性があります。",
 
 
   "home.projectMissing": "このプロジェクトのフォルダーが見つかりません。削除するか、フォルダーを元に戻してください。",
@@ -361,7 +360,6 @@ export default {
   "home.standaloneEmpty": "単独のドキュメントはありません。すべてのドキュメントがプロジェクトに入っています。",
 
 
-  "home.showMore": "さらに {count} 件を表示",
 
 
   "home.sortAria": "並べ替え",
@@ -406,11 +404,13 @@ export default {
   "home.grid": "グリッド",
   "home.list": "リスト",
   "home.openAria": "{name} を開く",
+  "home.noAppOpens": "このコンピューターには {name} を開けるアプリがありません。",
   "format.xbf": "XBF",
   "home.formatPart": "部品",
   "home.formatAssembly": "アセンブリ",
   "home.noMatchingModels": "一致するモデルはありません。",
   "home.filesAria": "ファイル",
+  "home.foldersAria": "フォルダー",
   "home.loadingFiles": "ファイルを読み込み中",
   "home.modelsAria": "CAD モデル",
   "home.fileUnavailable": "ファイルを利用できません",
@@ -418,12 +418,7 @@ export default {
   "home.menuOpen": "開く",
   "home.pin": "ピン留め",
   "home.unpin": "ピン留めを外す",
-  "home.delete": "削除",
-  "home.deleteModelTitle": "{name} を削除しますか?",
-  "home.deleteModelBody": "エンジンの記録と保存済みのビルドを削除します。スクリプトと書き出したファイルはディスクに残ります。もう一度ビルドするにはスクリプトを実行してください。",
-  "home.deleteFileTitle": "{name} をビューアーから削除しますか?",
-  "home.deleteFileBody": "このファイルのエンジンの記録を削除します。ファイル自体はディスクに残ります。",
-  "home.cancel": "キャンセル",
+  "home.removeFromRecents": "最近から外す",
   "home.kindsAria": "表示",
   "home.kind.all": "すべて",
   "home.kind.models": "3Dモデル",
@@ -848,7 +843,6 @@ export default {
   "parameters.error.build_failed": "この値ではビルドできません。",
   "parameters.error.preview_build_failed": "この値ではビルドできません。",
   "parameters.error.preview_failed": "この値を表示できませんでした。",
-  "parameters.reason.file": "スクリプトで編集してください。",
   "parameters.reason.no_worker": "編集するにはスクリプトを再実行してください。",
   "parameters.reason.shared": "別のファイルで設定されています。",
   "parameters.reason.sharedIn": "{source} で設定されています。",

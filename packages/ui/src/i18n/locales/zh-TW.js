@@ -197,8 +197,6 @@ export default {
   "file.opening": "正在開啟…",
   "file.missing": "檔案不存在",
   "file.notHeld": "此模型已不再保留",
-  "file.notSaved": "此模型未儲存",
-  "file.detached": "此模型的指令碼已不存在",
   "file.openFailed": "無法開啟這個檔案",
   "file.displayFailed": "無法顯示這個檔案",
   "file.goHome": "回到首頁",
@@ -219,7 +217,7 @@ export default {
   "file.browser": "瀏覽器",
   "file.fileExplorer": "檔案總管",
   "file.fileManager": "檔案管理員",
-  "file.sourceMissing": "來源檔案已被移動或刪除。",
+  "file.sourceMissing": "來源檔案已被移動或已不存在。",
   "file.kicadBoardTooNew": "{app} 無法開啟此電路板：它由較新版本的 KiCad 儲存。",
   "file.kicadSchematicTooNew": "{app} 無法開啟此電路圖：它由較新版本的 KiCad 儲存。",
   "file.defaultApp": "預設應用程式",
@@ -313,7 +311,8 @@ export default {
   "home.projectInside": "{name} 位於已經是專案的 {project} 中。",
 
 
-  "home.projectEmpty": "這裡還沒有模型或 CAD 檔案。",
+  "home.projectEmpty": "此資料夾是空的。",
+  "home.folderFailed": "無法讀取此資料夾。它可能已被移動或重新命名。",
 
 
   "home.projectMissing": "此專案的資料夾已不存在。請移除它，或將資料夾放回原處。",
@@ -362,7 +361,6 @@ export default {
   "home.standaloneEmpty": "沒有獨立文件。所有文件都在專案中。",
 
 
-  "home.showMore": "再顯示 {count} 個",
 
 
   "home.sortAria": "排序",
@@ -407,11 +405,13 @@ export default {
   "home.grid": "格狀",
   "home.list": "清單",
   "home.openAria": "開啟 {name}",
+  "home.noAppOpens": "這台電腦上沒有可開啟 {name} 的應用程式。",
   "format.xbf": "XBF",
   "home.formatPart": "零件",
   "home.formatAssembly": "組合件",
   "home.noMatchingModels": "沒有符合的模型。",
   "home.filesAria": "檔案",
+  "home.foldersAria": "資料夾",
   "home.loadingFiles": "正在載入檔案",
   "home.modelsAria": "CAD 模型",
   "home.fileUnavailable": "無法使用檔案",
@@ -419,12 +419,7 @@ export default {
   "home.menuOpen": "開啟",
   "home.pin": "釘選",
   "home.unpin": "取消釘選",
-  "home.delete": "刪除",
-  "home.deleteModelTitle": "刪除 {name}?",
-  "home.deleteModelBody": "刪除引擎的記錄及其儲存的建置。指令碼和任何匯出的檔案仍保留在磁碟上。執行指令碼即可重新建置。",
-  "home.deleteFileTitle": "從檢視器中刪除 {name}?",
-  "home.deleteFileBody": "刪除引擎對此檔案的記錄。檔案本身仍保留在磁碟上。",
-  "home.cancel": "取消",
+  "home.removeFromRecents": "從最近中移除",
   "home.kindsAria": "顯示",
   "home.kind.all": "全部",
   "home.kind.models": "3D 模型",
@@ -849,7 +844,6 @@ export default {
   "parameters.error.build_failed": "這些值無法建置。",
   "parameters.error.preview_build_failed": "這些值無法建置。",
   "parameters.error.preview_failed": "無法顯示這些值。",
-  "parameters.reason.file": "請在腳本中編輯。",
   "parameters.reason.no_worker": "請重新執行腳本後再編輯。",
   "parameters.reason.shared": "在另一個檔案中設定。",
   "parameters.reason.sharedIn": "在 {source} 中設定。",
