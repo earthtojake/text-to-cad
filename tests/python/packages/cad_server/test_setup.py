@@ -401,6 +401,8 @@ class Tool(Computer):
         environment = tools / "cad"
         site = environment / "lib" / "python3.14" / "site-packages" / f"cad-{release}.dist-info"
         site.mkdir(parents=True, exist_ok=True)
+        for name in ("METADATA", "RECORD"):  # an install that ended: the release its processes run
+            (site / name).write_text("", encoding="utf-8")
         (environment / "uv-receipt.toml").write_text('[tool]\nrequirements = [{ name = "cad" }]\n', encoding="utf-8")
         for name in ("cad", "python"):
             (environment / "bin").mkdir(exist_ok=True)
@@ -458,8 +460,10 @@ class Moving(Handing):
                                                  "that cad starts the next"])
         [(command,)] = self.started
         told = json.loads(command[-1])
-        self.assertEqual((told["cad"], told["target"], told["from"], told["prefix"]),
-                         (str(environment / "bin" / "cad"), "0.12.2", Y, str(environment)))
+        self.assertEqual((told["cad"], told["target"], told["from"], command[:4]),
+                         (str(environment / "bin" / "cad"), "0.12.2", Y,
+                          [str(environment / "bin" / "python"), "-P", "-m", "cad_server._internal.auto_update_helper"]),
+                         "cad's update worker, run by the global cad's own interpreter: it finds that release there")
         self.assertEqual(Path(told["record"]).name, setup.MOVE_RECORD)
         self.assertNotIn("auto-update.json", told["record"], "never cad's own update's record")
         current = installations.current()
@@ -478,9 +482,12 @@ class Moving(Handing):
         self.assertEqual(self.started, [])
         self.assertIsNone(installations.current_version())
 
-    def test_a_pipx_global_cad_gets_a_helper_with_pipx_s_commands(self) -> None:
+    def test_a_pipx_global_cad_is_handed_over_to_as_uv_s_is(self) -> None:
         environment = self.root / "pipx" / "venvs" / "cad"
-        (environment / "lib" / "python3.14" / "site-packages" / "cad-0.12.2.dist-info").mkdir(parents=True)
+        record = environment / "lib" / "python3.14" / "site-packages" / "cad-0.12.2.dist-info"
+        record.mkdir(parents=True)
+        for name in ("METADATA", "RECORD"):
+            (record / name).write_text("", encoding="utf-8")
         (environment / "bin").mkdir()
         for name in ("cad", "python"):
             (environment / "bin" / name).write_text("", encoding="utf-8")
@@ -494,14 +501,8 @@ class Moving(Handing):
                                                              "stops, and that cad starts the next"])
         [(command,)] = self.started
         told = json.loads(command[-1])
-        self.assertEqual((told["cad"], told["target"], told["prefix"]),
-                         (str(environment / "bin" / "cad"), "0.12.2", str(environment)))
-        # pipx's upgrade inside this release's major, which the helper runs only where the global cad holds less than
-        # the release it hands over to (here it holds it: nothing runs).
-        self.assertEqual((told["upgrade"], told["launchers"]),
-                         (["/opt/pipx", "upgrade", "cad", f"--pip-args=cad>={Y},<1"],
-                          ["/opt/pipx", "environment", "--value", "PIPX_BIN_DIR"]))
-        self.assertEqual(self.envs[0]["PIPX_HOME"], str(self.root / "pipx"), "pipx acts on this cad's folder")
+        self.assertEqual((told["cad"], told["target"], told["installer"], command[0]),
+                         (str(environment / "bin" / "cad"), "0.12.2", "pipx", str(environment / "bin" / "python")))
         self.assertEqual(installations.current()["prefix"], str(environment))
 
 
@@ -540,7 +541,7 @@ class Carrying(Handing):
         self.assertEqual(self.tending(tending, quiet=False), [], "work in flight: not yet")
         self.assertEqual(self.tending(tending), ["handing over to the global cad 0.12.2: this server stops, and that "
                                                  "cad starts the next"])
-        self.assertEqual(json.loads(self.started[0][0][-1])["prefix"], str(self.root / "uv-tools" / "cad"))
+        self.assertEqual(self.started[0][0][0], str(self.root / "uv-tools" / "cad" / "bin" / "python"))
         self.assertEqual(installations.current()["prefix"], str(self.root / "uv-tools" / "cad"))
         self.assertEqual((self.tending(tending), self.installs), ([], [setup.CARRY_SECONDS]), "once a server")
         self.assertIsNone(install_script.read(), "nothing owed: the install command never runs")

@@ -44,7 +44,7 @@
  *             whether it was typed (`asked`), and for a newer cad installed how the install command's run for it
  *             ended (`plugin`, `UPDATE_PLUGIN`: `underway` where a new attempt began before it ended; `none` for any
  *             other outcome). From schema 13, where it did not install a newer cad, why (`cause`, `UPDATE_CAUSES`),
- *             a word cad chose; and two more outcomes, an attempt whose helper never said how it ended (`lost`) and
+ *             a word cad chose; and two more outcomes, an attempt whose worker never said how it ended (`lost`) and
  *             an update that could not begin (`blocked`, no try made: `tries` 0).
  *   install   one run of the plugin's install in the agent apps (schema 12's; `cad plugin install`, `cad plugin
  *             update`): who began it (`INSTALL_BY`), how it ended (`INSTALL_OUTCOMES`), what its terminal showed
@@ -97,7 +97,7 @@
  *
  * Schema 13 is schema 12 with an update's `cause`: on every outcome but `installed`, one word of a closed list for why
  * it did not install a newer cad (`UPDATE_CAUSES`, by outcome; `none` where the attempt's record names none), never
- * the installer's words; and two outcomes no schema before it sends, `lost` and `blocked`. A row of schema 12 or
+ * uv's words; and two outcomes no schema before it sends, `lost` and `blocked`. A row of schema 12 or
  * earlier keeps its key, and carries no cause.
  */
 
@@ -274,17 +274,17 @@ const UPDATE_OUTCOMES = new Set(['installed', 'current', 'failed', 'restored']);
 const UPDATE_FAILURES = { failed: new Set(['upgrade', 'older', 'put_back']), restored: new Set(['upgrade', 'older']) };
 const UPDATE_INSTALLERS = new Set(['uv', 'pipx']);
 const UPDATE_PLUGIN = new Set(['none', 'ok', 'failed', 'underway']);
-// Schema 13's: an update's helper gone without saying how it ended (`lost`), or an update that could not begin
+// Schema 13's: an update's worker gone without saying how it ended (`lost`), or an update that could not begin
 // (`blocked`); and, on every outcome but `installed`, why it did not install a newer cad (`cad_server/analytics.py`:
-// `UPDATE_ENDED`, `UPDATE_CAUSES`) -- an attempt that ended, by what its helper told (`current` also `already`: the
-// environment held the release already), `none` where its record names none; a lost one, whether its helper stopped
-// with an error; a blocked one, no installer or no Python to run the update with.
+// `UPDATE_ENDED`, `UPDATE_CAUSES`) -- an attempt that ended, by what its worker told (`current` also `already`: the
+// environment ran the release already), `none` where its record names none; a lost one, whether its worker stopped
+// with an error; a blocked one, no uv to build with or an environment that does not read cad's pointer.
 const UPDATE_OUTCOMES_13 = new Set([...UPDATE_OUTCOMES, 'lost', 'blocked']);
-const UPDATE_ENDED = new Set(['timeout', 'no_program', 'in_use', 'denied', 'disk_full', 'half_made', 'network', 'offline',
-  'no_release', 'python', 'platform', 'config_exclude', 'config_index', 'config_tls', 'uv_old', 'kept', 'server_running',
+const UPDATE_ENDED = new Set(['timeout', 'no_program', 'in_use', 'denied', 'disk_full', 'network', 'offline',
+  'no_release', 'python', 'platform', 'config_exclude', 'config_index', 'config_tls', 'broken', 'start_failed',
   'helper_start', 'packaged', 'unknown', 'none']);
 const UPDATE_CAUSES = { current: new Set([...UPDATE_ENDED, 'already']), failed: UPDATE_ENDED, restored: UPDATE_ENDED,
-  lost: new Set(['lost', 'helper_crash']), blocked: new Set(['no_installer', 'no_python']) };
+  lost: new Set(['lost', 'helper_crash']), blocked: new Set(['no_installer', 'no_switch']) };
 // One run of the plugin's install in the agent apps, schema 12's (`cad_server/analytics.py`): who began it -- a person
 // who typed the command, the install command handing over, or cad's server; how it ended -- well, every app found
 // failed, its deadline stopped it before it was done (a run the server began has one), or another run held the lock

@@ -45,8 +45,8 @@ from pathlib import Path
 from typing import Any
 
 __all__ = ["BUILDING", "FOLDER", "Failed", "LINK", "MARKER", "TRASH", "active", "build", "clean", "environment",
-           "folder", "marker", "own", "packages", "point", "pointed", "pointer", "pointer_path", "publish", "remove",
-           "restore", "root", "running", "switches", "tag", "verify"]
+           "folder", "held", "marker", "own", "packages", "point", "pointed", "pointer", "pointer_path", "publish",
+           "remove", "restore", "root", "running", "switches", "tag", "verify"]
 
 # ``_cad_release``'s names and rules, which never change: the store's folder in the state folder, a stored release's
 # marker, and where an environment's pointer is (``environment``, ``pointer_path``). Kept here too, since nothing
@@ -253,6 +253,25 @@ def active(prefix: str | os.PathLike[str] | None = None) -> str | None:
     here = _packages_of(prefix)
     installed = own(here) if here is not None else None
     return installed[0] if installed is not None else None
+
+
+def held(prefix: str | os.PathLike[str]) -> str | None:
+    """The newest release of cad the environment at ``prefix`` holds, whatever interpreter asks and however whole the
+    install there is: the stored release its pointer names, where the pointer still means something (``_lasting``),
+    and each ``cad-<release>.dist-info`` among its own packages, one an install left half made too. For an installer
+    that must never move cad down (``tool_install``); what a process there runs is ``active``. None where it holds
+    none."""
+    import re
+
+    names: list[Any] = []
+    kept = pointer(prefix)
+    if kept is not None and kept.get("prefix") == environment(prefix) and _lasting(kept):
+        names.append((_read(Path(str(kept.get("path"))) / MARKER) or {}).get("release"))
+    for pattern in ("Lib/site-packages/cad-*.dist-info", "lib/python*/site-packages/cad-*.dist-info"):
+        names += [found.name[len("cad-"):-len(".dist-info")] for found in Path(prefix).glob(pattern)]
+    releases = [(tuple(map(int, match.groups())), name) for name in names
+                if isinstance(name, str) and (match := re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", name))]
+    return max(releases)[1] if releases else None
 
 
 def _write(path: Path, kept: dict[str, Any] | None) -> None:

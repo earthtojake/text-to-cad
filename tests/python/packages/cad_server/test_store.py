@@ -281,6 +281,23 @@ class PointerTest(StoreCase):
                 self.assertIsNone(store.pointed(self.prefix))
                 self.assertEqual(store.active(self.prefix), "1.0.0")
 
+    def test_the_newest_release_an_environment_holds_whatever_python_asks_and_however_whole_it_is(self) -> None:
+        """``held``: what an installer that must never move cad down asks."""
+        self.assertIsNone(store.held(self.root / "nothing"))
+        self.assertEqual(store.held(self.prefix), "1.0.0", "the cad installed there")
+        half_made = dist_info(self.packages, "2.0.1", record=False, metadata=False)
+        self.assertEqual(store.held(self.prefix), "2.0.1", "an install left half made is read by its name")
+        shutil.rmtree(half_made)
+        written = store.point(self.published("3.1.0"), prefix=self.prefix)
+        self.assertEqual(store.held(self.prefix), "3.1.0", "the stored release its pointer names")
+        store.restore({**written, "python": "cpython-27"}, prefix=self.prefix)
+        self.assertIsNone(store.pointed(self.prefix), "not this interpreter's to take")
+        self.assertEqual(store.held(self.prefix), "3.1.0", "and held all the same")
+        record = self.packages / "cad-1.0.0.dist-info" / "RECORD"
+        stamp = record.stat()
+        os.utime(record, ns=(stamp.st_atime_ns, stamp.st_mtime_ns + 1_000_000_000))
+        self.assertEqual(store.held(self.prefix), "1.0.0", "cad installed again since: the pointer means nothing")
+
     def test_point_refuses_a_folder_that_is_no_stored_release_and_an_environment_with_no_cad(self) -> None:
         with self.assertRaises(OSError):
             store.point(self.root / "nothing", prefix=self.prefix)

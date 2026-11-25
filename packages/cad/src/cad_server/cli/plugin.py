@@ -115,7 +115,7 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
 # sender it starts, and what they read: whether this is a development build, the app the command runs in, this cad's
 # version).
 _USES = ("cad_server.plugin.run", "cad_server._internal.plugin_catch_up", "cad_server._internal.auto_update",
-         "cad_server._internal.auto_update_helper", "cad_server._internal.file_lock", "cad_server._internal.cli_errors",
+         "cad_server._internal.file_lock", "cad_server._internal.cli_errors",
          "cad_server.settings", "cad.engine.places", "cad._internal.atomic_replace", "cad_server.analytics",
          "cad_server._internal.telemetry_send", "cad_server._internal.editable", "cad_server._internal.engine_host",
          "cad_server._internal.apps", "cad_server._internal.api", "cad.engine.previous")

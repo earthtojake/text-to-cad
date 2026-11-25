@@ -46,7 +46,7 @@ folder, as the update's own record does, and not in the person's settings. ``cad
 check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a development build); no test
 saying to run nothing (``silenced``: ``CAD_ENGINE_UPDATE_INSTALLER`` set and empty, the variable that names the bridge's
 stand-in for the hosted install command -- ``cad plugin install`` itself runs no install command and reads no such
-variable); this cad a global install (``tool``: an installer of ``auto_update.INSTALLERS`` made its environment) of a
+variable); this cad a global install (``tool``: ``auto_update.global_install``) of a
 plain release; install mode not owed (BRIDGE-ONLY: a computer the bridge still carries gets that run,
 ``install_script``, and no other, until that run is done, which it is once cad is installed: an app that failed there
 is this rule's from then on); and this cad newer than ``for``, or owed a run (``owed``, of this release or an
@@ -65,7 +65,7 @@ keeps its run (``_wanted``), so two servers on one state folder never both begin
 (``auto_update.tool_command``) runs ``cad plugin install``, detached, with no window, in an environment that points at
 nothing of this one (``auto_update._UNSET``) and names the run (``SERVER_ENV``: its ``at``), its output in
 ``install-command.log`` (``auto_update.INSTALL_LOG``). Named so, and only so, that command is a server's run: it has
-``INSTALL_SECONDS`` (``deadline``), its hard stop, a server's place at the lock, and it closes the record's run as it
+``RUN_SECONDS`` (``deadline``), its hard stop, a server's place at the lock, and it closes the record's run as it
 ends (``ended``: ``ok`` only where every app it found went well, else ``failed``). No released cad sets
 ``SERVER_ENV``. The name 0.11.12 and 0.11.13 give their server's run,
 ``ATTEMPT_ENV``, is no such mark: their run is their own ``cad plugin update``, which runs the hosted install
@@ -94,9 +94,7 @@ run waits for it -- but one a server began (``SERVER_ENV``), which ends with exi
 The server begins none while the lock is held, and none in its first ``START_SECONDS``: a person's install command
 that updated cad restarted the server, and goes on to the plugin a moment later; it takes the lock and does the work,
 and keeps this release, so the server, asking after it, finds the plugin up to date and runs nothing. Where nobody ran
-that command (cad's own update, one by hand), the run begins that much later. cad's own update begins none while the
-lock is held (``auto_update.due``, ``auto_update.asked``): it would replace this environment's files under the
-run. Whether it is held can only be asked by trying for it (``running``: neither ``flock`` nor Windows' ``locking``
+that command (cad's own update, one by hand), the run begins that much later. Whether it is held can only be asked by trying for it (``running``: neither ``flock`` nor Windows' ``locking``
 says who holds a lock without taking it), so a server that asks holds it for an instant. A run therefore tries for
 ``SETTLE_SECONDS`` before it takes the lock as another run's (``run_lock``): only then does a server's run answer
 ``BUSY``, and a person's say that it waits.
@@ -154,6 +152,8 @@ SETTLE_STEP = 0.25
 # of its tendings (``daemon.TEND_SECONDS``; on a test's computer, two of its own, ``daemon.catch_up_seconds``). A
 # person's install command that just updated cad, and with it restarted the server, goes on to the plugin within it.
 START_SECONDS = 60.0
+# How long a run a server began may take (``deadline``): 15 minutes.
+RUN_SECONDS = 15 * 60.0
 TRIES = 3  # how many runs one release gets: once, and twice more, each an hour or more after the one before
 RETRY_SECONDS = 60 * 60.0
 UNDERWAY, OK, FAILED = "underway", "ok", "failed"
@@ -172,12 +172,10 @@ def server_run() -> str | None:
 
 def deadline() -> float | None:
     """How long ``cad plugin install`` may take: where this release's server began this run (``server_run``),
-    ``INSTALL_SECONDS``, the bound cad's update helper puts on an install; any other run, none."""
+    ``RUN_SECONDS``; any other run, none."""
     if server_run() is None:
         return None
-    from cad_server._internal.auto_update_helper import INSTALL_SECONDS
-
-    return float(INSTALL_SECONDS)
+    return float(RUN_SECONDS)
 
 
 def _folder() -> Path:
@@ -397,14 +395,12 @@ class HardStop:
 
 
 def tool() -> Path | None:
-    """This cad's environment where it is a global install (an installer of ``auto_update.INSTALLERS`` made it), else
-    None. Only whether it is one: the installer's program need not be found, as the update's must."""
-    import sys
-
+    """This cad's environment where it is a global install (``auto_update.global_install``: uv or pipx made it), else
+    None. Only whether it is one: no uv need be found, as the update's must."""
     from cad_server._internal import auto_update
 
-    prefix = Path(sys.prefix)
-    return prefix if any(installer.owns(prefix) for installer in auto_update.INSTALLERS) else None
+    found = auto_update.global_install()
+    return found.prefix if found is not None else None
 
 
 def _stale(found: dict[str, Any], now: float) -> bool:

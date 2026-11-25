@@ -1370,23 +1370,20 @@ class CadApp:
     def _version(self) -> dict:
         """The release this engine runs, which a page compares with its own to reload into a new one, the token
         of this start of it (``instance``), and what the update button shows (``cadUpdate``: ``auto_update.button``,
-        null where cad cannot update itself), with whether a person's update waits for the work in flight to end
-        (the engine's ``update``, asked to begin nothing)."""
+        null where cad cannot update itself)."""
         from cad_server import __version__
         from cad_server._internal import auto_update
 
-        ask = getattr(getattr(self, "server", None), "update", None)
-        waiting = bool(ask(False).get("waiting")) if callable(ask) else False
-        return {"release": __version__, "instance": INSTANCE, "cadUpdate": auto_update.button(queued=waiting)}
+        return {"release": __version__, "instance": INSTANCE, "cadUpdate": auto_update.button()}
 
     def _update(self, request) -> tuple[int, dict]:
         """``POST /api/v1/local/update``: the update button. ``{}``: a person's update of cad, as ``cad update`` asks it
-        of the engine (``Daemon.update``: PyPI asked now, the attempt underway joined, else begun once nothing is in
-        flight, never past this cad's major; ``asked`` in its record, so it spends none of the automatic tries),
+        of the engine (``Daemon.update``: PyPI asked now, the attempt underway joined, else begun at once, never past
+        this cad's major; ``asked`` in its record, so it spends none of the automatic tries),
         answered ``202`` with ``GET /api/v1/server``'s ``release``, ``instance`` and ``cadUpdate``. ``{"dismiss": at}``:
         the failure of the attempt begun at ``at`` put away (``auto_update.dismiss``), answered ``200`` the same way.
-        Refused (409, its ``cause`` where it is one of ``auto_update.SAID``) where cad cannot update itself, or where no
-        engine serves this page (a test's server of its own). Behind every check a route that changes something has."""
+        Refused (409, its ``cause`` where it is one of ``auto_update.SAID``: ``no_switch``, ``no_installer``) where cad
+        cannot update itself, or where no engine serves this page (a test's server of its own). Behind every check a route that changes something has."""
         from cad_server import updates
         from cad_server._internal import auto_update
 
@@ -1409,8 +1406,8 @@ class CadApp:
             raise ApiError(409, auto_update.CHECK_OFF, hint)
         blocked = auto_update.blocked(found)
         if blocked is not None:
-            said = auto_update.in_words(blocked, found.installer.name)
-            raise ApiError(409, said, hint, cause=blocked, said=said, installer=found.installer.name)
+            said = auto_update.in_words(blocked)
+            raise ApiError(409, said, hint, cause=blocked, said=said, installer=found.installer)
         answer = ask(True)
         if "failed" in answer:
             raise ApiError(409, str(answer["failed"]), hint)

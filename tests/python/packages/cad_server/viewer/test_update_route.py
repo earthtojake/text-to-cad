@@ -18,7 +18,7 @@ from unittest import mock
 
 import cad_server
 from cad_server import updates
-from cad_server._internal import auto_update
+from cad_server._internal import auto_update, store
 
 RECEIPT = '[tool]\nrequirements = [{ name = "cad" }]\nentrypoints = [{ name = "cad" }]\n'
 
@@ -54,20 +54,22 @@ class UpdateRouteTest(unittest.TestCase):
                       mock.patch.object(cad_server, "__version__", "0.1.0"),
                       mock.patch.object(updates, "checking", return_value=True),
                       mock.patch.object(auto_update, "find_uv", return_value=str(uv)),
+                      mock.patch.object(auto_update, "carried_uv", return_value=None),
+                      mock.patch.object(store, "switches", return_value=True),
                       mock.patch.object(updates, "feed", return_value={"latest": "0.2.0", "lines": {"0": "0.2.0"}})):
             patch.start()
             self.addCleanup(patch.stop)
         self.asked: list[bool] = []
-        self.waiting = False
         self.server.update = self.engine_update
         self.addCleanup(setattr, self.server, "update", None)
 
     def engine_update(self, begin: bool = True) -> dict:
-        """The engine's ``Daemon.update``, as the route asks it: ``True`` a person's update, ``False`` begins nothing."""
+        """The engine's ``Daemon.update``, as the route asks it: ``True`` a person's update, begun at once (its record
+        kept underway, as ``auto_update.begin`` keeps it); ``False`` begins nothing."""
         self.asked.append(begin)
         if not begin:
-            return {"ok": True, "version": "0.1.0", "last": auto_update.last(), "waiting": "0.2.0" if self.waiting else None}
-        self.waiting = True
+            return {"ok": True, "version": "0.1.0", "last": auto_update.last(), "waiting": None}
+        self.keep(outcome="underway", at=time.time(), beat=time.time(), asked=True, phase="building")
         return {"ok": True, "updating": "0.2.0", "from": "0.1.0", "since": time.time()}
 
     def ask(self, method: str, path: str, body: dict | None = None, *, link: bool = True, guard: bool = True):
@@ -101,10 +103,9 @@ class UpdateRouteTest(unittest.TestCase):
     def test_a_click_begins_a_person_s_update_and_the_page_follows_it(self) -> None:
         self.keep(outcome="failed", ended=time.time(), cause="network")
         status, answer = self.ask("POST", "/api/v1/local/update", {})
-        self.assertEqual((status, answer["cadUpdate"]["state"]), (202, "waiting"), "a new attempt: the failure gone")
-        self.assertEqual(self.asked[:1], [True])
-        self.keep(outcome="underway", at=time.time(), asked=True)
-        self.waiting = False
+        self.assertEqual((status, answer["cadUpdate"]["state"], answer["cadUpdate"]["asked"]), (202, "working", True),
+                         "begun at once: the failure gone")
+        self.assertEqual(self.asked, [True])
         self.assertEqual(self.ask("GET", "/api/v1/server")[1]["cadUpdate"]["state"], "working")
 
     def test_a_failure_is_put_away_for_every_page(self) -> None:
@@ -113,7 +114,7 @@ class UpdateRouteTest(unittest.TestCase):
         self.assertNotIn("dismissed", self.ask("GET", "/api/v1/server")[1]["cadUpdate"])
         status, answer = self.ask("POST", "/api/v1/local/update", {"dismiss": at})
         self.assertEqual((status, answer["cadUpdate"]["state"], answer["cadUpdate"]["dismissed"]), (200, "failed", True))
-        self.assertEqual(self.asked, [False, False], "nothing begun: asked only whether one waits")
+        self.assertEqual(self.asked, [], "nothing asked of the engine")
         update = self.ask("GET", "/api/v1/server")[1]["cadUpdate"]
         self.assertEqual((update["state"], update["dismissed"]), ("failed", True), "put away for every page, and a reload")
         for body in ({"dismiss": "now"}, {"dismiss": True}, {"target": "1.0.0"}, ["x"]):
@@ -139,6 +140,9 @@ class UpdateRouteTest(unittest.TestCase):
             status, answer = self.ask("POST", "/api/v1/local/update", {})
         self.assertEqual((status, answer["cause"], answer["said"]),
                          (409, "no_installer", "uv cannot be found, so no update can begin"))
+        with mock.patch.object(store, "switches", return_value=False):
+            status, answer = self.ask("POST", "/api/v1/local/update", {})
+        self.assertEqual((status, answer["cause"], answer["said"]), (409, "no_switch", auto_update.in_words("no_switch")))
         self.assertEqual(self.asked, [], "nothing asked of the engine")
         self.server.update = None
         self.assertEqual(self.ask("POST", "/api/v1/local/update", {})[0], 409, "no engine under the page")

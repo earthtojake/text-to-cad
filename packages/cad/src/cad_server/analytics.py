@@ -75,7 +75,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
   itself) and from which version (``from``: the one installed before it, ``none`` where none was);
 - ``update`` (``update``): one attempt of cad's own update that ended, counted once by the server that runs after it
   (``cad_server._internal.auto_update.report``) -- the release before (``from``), how it ended (``UPDATE_OUTCOMES``:
-  installed, current, failed, or failed and the release before put back; lost, its helper gone without saying how it
+  installed, current, failed, or failed and the release before put back; lost, its worker gone without saying how it
   ended; or blocked, none could begin, counted once for each release the feed called for), for a failure which step
   failed (``UPDATE_FAILURES``), where it did not install a newer cad why, in one word of cad's (``cause``:
   ``UPDATE_CAUSES``), its ``tries``, the ``installer`` that made the global install (``uv``, ``pipx``), whether it
@@ -557,27 +557,26 @@ ARRIVAL_FAILURES = {"setup": frozenset({"uv", "network", "denied", "other"}),
 MAX_ATTEMPTS = 1000  # a hand-over's attempts, and an update's tries, past this many are counted as this many
 # How cad's own update of itself ended (``update``, schema 11's), as its record says (``auto_update.event``): a newer
 # cad installed, nothing newer to install, failed, or failed and the release before put back; from schema 13, its
-# helper gone without saying how it ended (``lost``: the record still underway, its helper silent), or none could begin
-# (``blocked``: counted once for each release the feed calls for, ``tries`` 0); for a failure, which
-# step -- the installer's upgrade never ended well, or (``--major``) did not cross to the higher major asked for
-# (``upgrade``), ended well on a release it may not end on, older than the one that ran or of another major
-# (``older``), and for one not put back, putting back the release before failed too (``put_back``) --; the installer
-# that made the global install; and, for a newer cad installed, how the install command's run for it ended (``none``:
-# none ran for it).
+# worker gone without saying how it ended (``lost``: the record still underway, its worker silent), or none could begin
+# (``blocked``: counted once for each release the feed calls for, ``tries`` 0); for a failure, which step -- the release
+# could not be built, did not run, or its server did not start (``upgrade``), it built a release it may not end on,
+# older than the one that ran or of another major (``older``), and for one not put back, putting back the release
+# before failed too (``put_back``) --; who made the global install (``uv``, ``pipx``); and, for a newer cad installed,
+# how the install command's run for it ended (``none``: none ran for it).
 UPDATE_OUTCOMES = frozenset({"installed", "current", "failed", "restored", "lost", "blocked"})
 UPDATE_FAILURES = {"failed": frozenset({"upgrade", "older", "put_back"}), "restored": frozenset({"upgrade", "older"})}
 # Why an update did not install a newer cad (``cause``, schema 13's; on every outcome but ``installed``): a word of the
 # attempt's record (``auto_update_helper.CAUSES``, which ``auto_update.SAID`` says in plain words), chosen where the
-# attempt ended, never the installer's words. An attempt that ended (``current``, ``failed``, ``restored``) names what
-# its helper told (``UPDATE_ENDED``) -- ``current`` also ``already``, the environment held the release already (a
-# server older than its own environment asked) --, or ``none`` where its record names none (a release before
-# ``cause``'s); one that never said how it ended (``lost``), whether its helper stopped with an error or without a word;
-# one that could not begin (``blocked``), why.
-UPDATE_ENDED = frozenset({"timeout", "no_program", "in_use", "denied", "disk_full", "half_made", "network", "offline",
-                          "no_release", "python", "platform", "config_exclude", "config_index", "config_tls", "uv_old",
-                          "kept", "server_running", "helper_start", "packaged", "unknown", "none"})
+# attempt ended, never uv's words. An attempt that ended (``current``, ``failed``, ``restored``) names what its worker
+# told (``UPDATE_ENDED``) -- ``current`` also ``already``, the environment ran the release already (another update got
+# there first) --, or ``none`` where its record names none (a release before ``cause``'s); one that never said how it
+# ended (``lost``), whether its worker stopped with an error or without a word; one that could not begin (``blocked``),
+# why.
+UPDATE_ENDED = frozenset({"timeout", "no_program", "in_use", "denied", "disk_full", "network", "offline", "no_release",
+                          "python", "platform", "config_exclude", "config_index", "config_tls", "broken",
+                          "start_failed", "helper_start", "packaged", "unknown", "none"})
 UPDATE_CAUSES = {"current": UPDATE_ENDED | {"already"}, "failed": UPDATE_ENDED, "restored": UPDATE_ENDED,
-                 "lost": frozenset({"lost", "helper_crash"}), "blocked": frozenset({"no_installer", "no_python"})}
+                 "lost": frozenset({"lost", "helper_crash"}), "blocked": frozenset({"no_installer", "no_switch"})}
 UPDATE_INSTALLERS = frozenset({"uv", "pipx"})
 # The install command's run for the cad an update installed: none ran for it, it ended well or failed, or it was still
 # underway when a new attempt took the record's place (``auto_update.report``).
