@@ -6,7 +6,7 @@ The engine holds no kicode of its own; KiCad runs in the environment of ``cad[ki
 is kept by the board's key (``cad.engine.formats.kicad.poured.key``: its bytes, its project's and rules',
 and the plotting code's), beside the board's document in the engine's document cache,
 ``<cache>/documents/<the board's document id>/kicad/<key>/`` (``poured.folder``), so a changed file is a new
-key and nothing stale is ever read, and deleting the document (``cad delete``, the home's Delete) deletes
+key and nothing stale is ever read, and forgetting the document (the home's Remove) removes
 them with it:
 
 * ``refill``: KiCad's refill of a copy's zones (``cad.kicad._refill``), which ``poured.payload`` plots the

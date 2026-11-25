@@ -48,7 +48,7 @@ def came_from(name: str) -> str | None:
     (``places.appdata_state_dir``), else None."""
     from cad.engine import places
     from cad_server._internal import installations
-    from cad_server.engine.registry import Folder
+    from cad_server.engine.state import Folder
 
     try:
         current = installations.current_version()

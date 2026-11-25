@@ -9,8 +9,6 @@ ordinary Python scripts call decorated models explicitly.
         [--size-profile P] [--json]
     cad serve DOC [--port N]
     cad server status [--json] | stop [--json]      (``cad_server.cli.server``, which starts it too)
-    cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]   documents deleted: record, what the engine derived
-                                                  and holds of it; asked first, or --yes
     cad <type> inspect DOC [REF] [--query Q] [--json]   what a document holds and its build closure, or what a ref names (``refs``)
 
 SRC and DOC are an on-disk CAD file's path, for the file's own type (``cad step``, ``cad stl``, ...), or, for
@@ -110,19 +108,6 @@ def _status_arguments(status: argparse.ArgumentParser) -> None:
 
 def _stop_arguments(stop: argparse.ArgumentParser) -> None:
     stop.add_argument("--json", action="store_true", help="what was stopped as JSON")
-
-
-def _delete_arguments(delete: argparse.ArgumentParser) -> None:
-    from cad_server._internal.consent import add_yes
-
-    delete.add_argument("documents", nargs="+", metavar="DOC",
-                        help="a document's id, a model's script (every document recorded of it), or a CAD file "
-                             "a page opened; your own files -- a script, its declared files, an opened file -- "
-                             "are never touched")
-    delete.add_argument("--dry-run", action="store_true",
-                        help="say which documents would be deleted, and how many, and delete nothing")
-    add_yes(delete, "delete them")
-    delete.add_argument("--json", action="store_true", help="what was deleted (or would be) as JSON")
 
 
 def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> None:
@@ -457,13 +442,10 @@ def told_state(source: Any, doing: str) -> None:
 def state_notice(model: dict[str, Any], doing: str) -> str | None:
     """The words ``told_state`` says of a model document (``model_info``'s record), or None when its
     last run did not fail."""
-    from cad.engine.records import rerun
-
     name = (model.get("source") or {}).get("name") or model.get("id")
     if model.get("state") == "failed":
         program = (model.get("source") or {}).get("script")  # the script that defines it, never a caller
-        fix = (f"; fix it and run `{rerun(program, model.get('python'), model.get('with'))}` to update it"
-               if program else "")
+        fix = f"; fix {program} and run it again" if program else ""
         return f"the last run of {name} failed; {doing} its previous good build{fix}"
     return None
 
@@ -591,7 +573,7 @@ def _parts(paths: list[str]) -> str:
 
 
 # Why a parameter cannot be set, in a line's words (``cad.engine.parameters.REASONS``).
-_NOT_WRITABLE = {"file": "read-only: a file's", "no_worker": "read-only until its script runs again",
+_NOT_WRITABLE = {"no_worker": "read-only until its script runs again",
                  "shared": "read-only: declared in another file",
                  "expression": "read-only: no plain number of its own in the code"}
 
@@ -776,99 +758,6 @@ def _stop(args: argparse.Namespace, prog: str) -> int:
     return 0
 
 
-def planned(documents: Any) -> list[dict[str, Any]]:
-    """What ``cad delete`` of ``documents`` deletes, read and nothing deleted: ``{"id", "name", "kind"}`` each,
-    in the order named, from the records (``delete``). One that names nothing recorded is refused
-    (``Failed``, ``not_found``), naming each."""
-    from cad_server.engine import registry as registering
-    from cad.engine.ids import canonical, file_id, is_id
-
-    held = registering.current()
-    rows: list[dict[str, Any]] = []
-    unknown: list[str] = []
-    listed: list[dict[str, Any]] | None = None
-    for named in [str(document) for document in documents]:
-        found: list[str] = []
-        if held is not None and is_id(named):
-            named = held.resolve(named)  # an id from before a model's id was its .xbf's: its alias
-            found = [named] if held.get(named) is not None else []
-        elif held is not None:
-            path = canonical(os.path.abspath(os.path.expanduser(named)))
-            record = held.get(file_id(path))
-            if record is not None:
-                found = [record["id"]]  # a file's, or a model's .xbf: its document
-            else:
-                listed = held.list() if listed is None else listed
-                found = sorted(row["id"] for row in listed if row.get("kind") != "file"
-                               and canonical(registering.home(held, row)) == path)
-        if not found:
-            unknown.append(named)
-        for ident in found:  # found only where a registry is
-            if held is not None and ident not in [row["id"] for row in rows]:
-                record = held.get(ident) or {}
-                name = record.get("entry") or os.path.basename(str(record.get("home") or "")) or ident
-                rows.append({"id": ident, "name": name, "kind": record.get("kind")})
-    if unknown:
-        raise Failed(f"no document is recorded for {', '.join(unknown)}: name a document's id, a model's "
-                     "script or a CAD file a page opened (`cad status` lists the documents); nothing "
-                     "was deleted", 2, "not_found")
-    return rows
-
-
-def delete(documents: Any) -> list[dict[str, Any]]:
-    """``cad delete``: documents deleted, each by the one deletion the home's Delete is too
-    (``models.delete``): what the engine holds of it, when one runs (never started for it), then its
-    record and what its cache derived of it. Each of ``documents`` is a document's id, a model's
-    script or a shape's home (every document recorded of it), or a CAD file's path (a model's ``.xbf`` among them)
-    a page opened or a build wrote; the
-    person's own files are never touched. One that names nothing recorded is refused (``planned``),
-    naming each, before anything is deleted. What was deleted, ``{"id", "name", "kind"}`` each, in
-    the order named."""
-    from cad_server.engine import registry as registering
-    from cad.engine.api import EngineError
-    from cad.engine.client import request
-    from cad_server.engine.models import delete as deleting
-
-    idents = [row["id"] for row in planned(documents)]
-    answer = request({"op": "delete", "ids": idents}, start=False)
-    if answer is not None:
-        if not answer.get("ok"):
-            raise EngineError(str(answer.get("failed") or answer.get("error") or answer))
-        return list(answer.get("deleted") or [])
-    held = registering.current()
-    return [found for found in (deleting(held, ident) for ident in idents) if found is not None]
-
-
-def _delete(args: argparse.Namespace, prog: str) -> int:
-    """``cad delete``: its plan said (``planned``), asked (``cad_server._internal.consent``), then done; with
-    ``--dry-run`` the plan alone, as the answer."""
-    from cad_server._internal.consent import confirm, retry
-
-    rows = planned(args.documents)
-    count = f"{len(rows)} document{'' if len(rows) == 1 else 's'}"
-    if args.dry_run:
-        if args.json:
-            print(json.dumps({"ok": True, "dryRun": True, "planned": rows}, indent=2))
-            return 0
-        print(f"would delete {count}: each one's record and what the engine holds of it (your own files stay)")
-        for row in rows:
-            print(f"  {row['name']} {row['id']}")
-        return 0
-    confirm(f"deleting {count}", f"Delete {'it' if len(rows) == 1 else 'them'}?", yes=bool(args.yes),
-            as_json=bool(args.json), command=retry(prog, [*map(str, args.documents), *(["--json"] if args.json else [])]),
-            preview=[f"{prog} deletes {count}: each one's record and what the engine holds of it; your own files "
-                     "-- a script, its .xbf and its other declared files, an opened file -- stay, and a model's next "
-                     "run records it again:", *(f"  {row['name']} {row['id']}" for row in rows)])
-    deleted = delete(args.documents)
-    if args.json:
-        print(json.dumps({"ok": True, "deleted": deleted}, indent=2))
-        return 0
-    # A line per document deleted, for a person or an agent; JSON only under ``--json``.
-    for row in deleted:
-        print(f"deleted {row['name']} {row['id']}")
-    return 0
-
-
 def main(argv: list[str] | None = None, prog: str = "python -m cad_server.engine") -> int:
     """The engine's own command: ``VERB [args]``, every verb of ``VERBS``."""
     args = build_parser(prog).parse_args(argv)
@@ -1004,23 +893,18 @@ def status_text(answer: dict[str, Any]) -> str:
                      + (f" · {_gb(held / 2**20)} of {_gb(memory['budget'] / 2**20)} held" if memory.get("budget") else ""))
         # What this engine's start said: a move of its port.
         lines.extend(f"  {said}" for said in (serving.get("portNotice") or "").splitlines())
-    identity = answer.get("identity")
-    if identity:
-        # What this engine's start brought to namespace/name identity (``identity.migrate``).
-        skipped = identity.get("skipped") or []
-        lines.append(f"identity migration at start: filled {identity.get('filled', 0)}, moved {identity.get('moved', 0)}, "
-                     f"skipped {len(skipped)}" + (f" ({skipped[0]}{', ...' if len(skipped) > 1 else ''})" if skipped else ""))
+    if answer.get("library"):
+        # What this engine's start carried of an earlier release's records (``library.Library.migrate``).
+        from cad_server.engine.library import said
+
+        lines.append(said(answer["library"]))
     models = answer.get("models") or []
     if models:
-        # Each model document, its state, and for one not held the command that builds it again.
+        # Each model document a worker holds, and its state.
         width = max(len(str(row.get("name"))) for row in models)
         lines.append("documents:")
         for row in models:
             line = f"  {row.get('state', ''):<8}  {str(row.get('name')):<{width}}  {row.get('id')}"
-            if row.get("rebuild"):
-                line += f"  run `{row['rebuild']}`"
-            elif row.get("kind") == "shape":
-                line += "  a shape handed over: no script to rerun"
             if row.get("state") == "failed":
                 line += "  serving its previous good build"
             lines.append(line)
@@ -1043,8 +927,6 @@ VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, st
     "status": ("the cad server's workers, what each is building, and its served documents", _status_arguments,
                _status),
     "stop": ("stop the cad server", _stop_arguments, _stop),
-    "delete": ("delete documents: each one's record and what the engine holds of it; never a file of yours",
-               _delete_arguments, _delete),
 }
 
 

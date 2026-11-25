@@ -83,7 +83,7 @@ def surface() -> dict:
     from cad_server._internal import installations, releases
     from cad_server.cli import setup as setup_cli
     from cad.engine import client
-    from cad_server.engine import daemon, registry
+    from cad_server.engine import daemon, state as engine_state
     from cad_server.viewer.engine_app import EngineApp
 
     # A server started by this release (``client.start``): its Python, these arguments, as the helper starts one.
@@ -129,7 +129,7 @@ def surface() -> dict:
             "current_bytes": (root / installations.CURRENT).read_bytes().decode("ascii"),
             "record": f"{installations.FOLDER}/<version>.json",
             "record_keys": sorted(record),
-            "token": registry.TOKEN,
+            "token": engine_state.TOKEN,
             "releases": releases.FOLDER,
             "release_marker": releases.MARKER,
             "release_schema": releases.SCHEMA,

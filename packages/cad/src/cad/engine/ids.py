@@ -9,9 +9,7 @@ its ``.xbf``, so a model's id is that file's (``Model.id``: its ``.xbf`` at ``@m
 beside its script), and so is a shape handed over's (``model(shape, name=...)``: its ``.xbf`` at the path given,
 else ``<name>.xbf`` beside the calling script, or in the working folder where there is none). Any process that
 knows the path knows the id without asking the engine. Whether a text is an id is ``is_id``; what an id names is
-the engine's to say, never the uuid's version. Before a model's id was its file's, it was this formula over its
-script and its function, or its folder and an explicit name (``identity.former``): an id a record or a page kept
-from then is that model's alias.
+the engine's to say, never the uuid's version.
 
 ``canonical`` is the one spelling of a path the engine and the viewer key by: ``realpath``,
 then, on macOS, each name as the file system spells it (``getattrlist``, which opens nothing), so

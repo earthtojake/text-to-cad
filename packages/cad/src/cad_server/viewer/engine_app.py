@@ -24,6 +24,7 @@ from cad.engine.ids import is_id
 from .documents import EngineDocuments
 from .scanner import to_posix_path
 from .http_app import CadApp, RAW_FILE_HEADERS, host_is_allowed
+from .projects import Projects, locate
 
 
 # The page's credentials all come from the user's one token (``engines/token``, read at the start:
@@ -192,12 +193,12 @@ class ViewerApp(CadApp):
     def file_of(self, ident):
         return self.server.file_of(ident)
 
-    def delete_document(self, ident):
-        # The engine's own deletion (``Server.delete``, the daemon's ``Models.delete``): what it holds
-        # of the document, then its record.
-        if self.server.delete is None:
-            return super().delete_document(ident)
-        return self.server.delete(ident)
+    def forget(self, ident):
+        # The engine's own (``Server.forget``, the daemon's ``Models.forget``): what it holds of the document
+        # first, then what the library and the cache keep of it.
+        if self.server.forget is None:
+            return super().forget(ident)
+        return self.server.forget(ident)
 
     def set_parameters(self, ident, values):
         # The engine's own ``set`` (``Server.set_parameters``, the daemon's ``parameters.Setting``): the one path
@@ -254,6 +255,15 @@ class EngineApp:
         self.viewer_analytics.started(client={"name": "cad-viewer", "version": __version__}, presentation="browser")
         self.analytics.start()
         self.viewer_analytics.start()
+        from cad_server.engine.library import Library
+
+        # The project folders an id is looked for in (``locate``).
+        self.projects = Projects(Library())
+
+    def locate(self, ident):
+        """The path of the file of id ``ident`` (``projects.locate``), which the engine's server knows from
+        then on; None for an id that names nothing. The server's ``locate``."""
+        return locate(ident, self.server, self.projects.library, self.projects)
 
     def active(self):
         with self.lock:
@@ -380,9 +390,7 @@ class EngineApp:
         from .main import Unopened, unopened
 
         if is_id(name):
-            if not self.server.holds(name):
-                self.server.revive(name)  # a model no worker holds: its .xbf
-            if not (self.server.holds(name) or self.server.file_of(name)):
+            if not self.server.holds(name) and self.server.locate(name) is None:
                 raise Unopened(f'no document {name} is held', 'not_found')
             return {'id': name, 'file': self.server.file_of(name)}
         refused = unopened(name, start)

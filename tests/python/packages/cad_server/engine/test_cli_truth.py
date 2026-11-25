@@ -79,7 +79,7 @@ class VerbsTest(unittest.TestCase):
         cls.failed = cls.run_("parts.py")
         with script.open("a", encoding="utf-8") as handle:
             handle.write("# an edit\n")
-        cls.command = f"cad run {script}"
+        cls.script = script
 
     @classmethod
     def run_(cls, *args: str):
@@ -114,7 +114,7 @@ class VerbsTest(unittest.TestCase):
 
     def test_a_document_whose_last_run_failed_is_said_to_be_its_previous_good_build(self) -> None:
         self.said(self.bad, "bad", f"the last run of bad failed; {{doing}} its previous good build; "
-                                   f"fix it and run `{self.command}` to update it")
+                                   f"fix {self.script} and run it again")
         self.assertTrue(self.status_line(self.bad).endswith("serving its previous good build"))
 
     def test_a_failed_run_prints_the_models_frames_once_then_the_line_naming_it(self) -> None:

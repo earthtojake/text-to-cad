@@ -311,7 +311,7 @@ class Documents(HttpLayerTestCase):
             with self.subTest(file=missing):
                 self.assertEqual(self.by_path(missing)[1]["documents"], [])
 
-    def test_a_model_by_its_id_is_its_envelope_at_the_build_held_and_one_not_held_names_its_state(self):
+    def test_a_model_by_its_id_is_its_envelope_at_the_build_held_and_one_not_held_names_nothing(self):
         ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
         script = os.path.join(self.fixture.root, "parts", "cube.py")
         answers = {"model_info": {"model": {"source": {"name": "cube", "script": script}, "version": "v1",
@@ -342,11 +342,11 @@ class Documents(HttpLayerTestCase):
                                                                 ["step", "stl", "threemf", "glb", "dxf", "xbf"]))
             answers["model_info"] = {"model": {"source": {"name": "cube"}, "version": "v2"}}
             self.assertEqual(envelope()[1]["entry"]["hash"], "model:v2")
-            # One it does not hold says why, in the engine's words, and its state.
-            answers["model_info"] = {"failed": f"cube ({ident}) is not saved: run `cad run /m/cube.py`", "state": "unsaved"}
-            status, answer = envelope()
-            self.assertEqual((status, answer["state"], set(answer)), (404, "unsaved", {"error", "hint", "state"}))
-            self.assertIn("is not saved", answer["error"])
+            # One no worker holds, with no file: the id names nothing.
+            answers["model_info"] = {"failed": f"no document {ident} is held"}
+            self.assertEqual(envelope(), (404, {
+                "error": f"no document {ident} is held",
+                "hint": "run the model's script again, or open the file from where it is now"}))
 
     def test_an_id_no_document_has_and_a_word_that_is_no_id_are_404s_that_say_so(self):
         status, _, body = self.fixture.request("GET", "/api/v1/documents/not-an-id")

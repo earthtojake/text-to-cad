@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import sys
 import tempfile
@@ -123,7 +122,7 @@ class BudgetTest(unittest.TestCase):
 
 
 class NotHeldRefusalTest(unittest.TestCase):
-    """An id the daemon does not hold is refused as ``NotHeld``, its state and rebuild with it."""
+    """An id that names nothing is refused as ``NotHeld``."""
 
     def test_the_refusal_crosses_the_daemon_as_its_type(self) -> None:
         from cad.engine import api
@@ -138,25 +137,18 @@ class NotHeldRefusalTest(unittest.TestCase):
         self.addCleanup(engine.supervisor.stop)
         ident = model_id(script, "cell")
         # Built before, its worker gone and its .xbf with it: no worker, no file.
-        from cad_server.engine import registry
-
-        registry.current().put({"id": ident, "kind": "model", "root": str(folder), "home": "cell.py", "entry": "cell",
-                                "namespace": str(folder), "name": "cell", "revision": "r1", "built": 0,
-                                "saved": "cell.xbf"})
-        engine.models.records[ident] = {"id": ident, "source": {"script": str(script), "name": "cell"}, "worker": None,
+        engine.models.records[ident] = {"id": ident, "source": {"script": str(script), "name": "cell",
+                                                                "xbf": str(folder / "cell.xbf")}, "worker": None,
                                         "program": str(script), "kind": "model", "version": "g1", "builtAt": 0,
                                         "files": [], "revision": "r1"}
         answers: list[dict] = []
         engine.handle({"op": "document", "id": ident}, answers.append)
         (answer,) = answers
-        command = f"cad run {script}"
-        self.assertEqual((answer["state"], answer["rebuild"]), ("unsaved", command))
+        self.assertEqual((answer["failed"], "state" in answer, "rebuild" in answer),
+                         (f"no document {ident} is held", False, False))
         error = api._failed(answer)
         self.assertIsInstance(error, NotHeld, "raised as its type: the CLI exits 2 for a ValueError")
-        self.assertEqual((error.state, error.rebuild, str(error)), ("unsaved", command, answer["failed"]))
-        answers.clear()
-        engine.handle({"op": "document", "id": model_id(Path("/nowhere/other.py"), "other")}, answers.append)
-        self.assertIsInstance(api._failed(answers[0]), NotHeld, "an id it never built is refused the same")
+        self.assertEqual(str(error), answer["failed"])
 
 
 class ListingTest(unittest.TestCase):
@@ -210,13 +202,6 @@ class StatusTextTest(unittest.TestCase):
                                         "portSource": "handed", "also": [3300], "documents": []}})
         self.assertIn("serving http://127.0.0.1:3246 (the port pages were on before this server started), and on port 3300 too: "
                       "0 documents opened by a page or a command", text.splitlines())
-
-    def test_a_shape_handed_over_is_worded_as_one_with_no_script_to_rerun(self) -> None:
-        from cad_server.engine.cli import status_text
-
-        text = status_text({"pid": 1, "up": 5, "cap": 4, "workers": [], "models": [
-            {"id": "id-1", "name": "plate", "state": "unsaved", "kind": "shape"}]})
-        self.assertIn("  unsaved   plate  id-1  a shape handed over: no script to rerun", text.splitlines())
 
 
 SCRIPT = """
@@ -483,33 +468,10 @@ class LifetimeDaemonTest(unittest.TestCase):
         self.assert_documents_worker_alone("hinge.py")
         self.assertFalse((self.folder / "hinge.ran").exists(), "nothing ran the script")
 
-    def test_a_document_whose_xbf_is_gone_names_its_rebuild_and_nothing_runs_it(self) -> None:
-        # Every document leaves memory and its worker, and the cache folder can keep nothing: its .xbf is its store.
-        tiny = {**self.env, "CAD_ENGINE_MEMORY_MB": "0.001", "CAD_CACHE_DIR": engine_daemon.unwritable(self.folder)}
-        self.restart(tiny)
-        unsaved = self.built("arm", env=tiny)
-        self.known(unsaved, "held")
-        (self.folder / "arm.xbf").unlink()
-        command = f"cad run {self.folder / 'arm.py'}"
-        found = self.known(unsaved, "unsaved")
-        self.assertEqual(found["rebuild"], command, "the script that defines it, not the program that called it")
-        status, body = self.page(unsaved)
-        self.assertEqual((status, body["state"], body["rebuild"]), (404, "unsaved", command))
-        self.assertEqual(body["error"], f"arm ({unsaved}) is not saved: its .xbf is gone; run `{command}` to build it again")
-        inspected = engine_daemon.run([sys.executable, "-m", "cad_server.engine", "inspect", unsaved],
-                                      cwd=self.folder, env=self.env)
-        self.assertEqual(inspected.returncode, 2, "a document not held is a refusal, not a failure")
-        self.assertIn(f"run `{command}`", inspected.stderr)
-        from cad_server.mcp.server import ToolFailed, _say_not_held
-
-        with self.assertRaisesRegex(ToolFailed, re.escape(f"run `{command}`")):
-            _say_not_held(unsaved)
-        self.assertFalse((self.folder / "arm.ran").exists(), "nothing ran the script to restore it")
-
 
 def setUpModule() -> None:
-    # The registry, cache and engine folder every test here reads are its own, never the developer's
-    # (``engine_daemon.isolate``): ListingTest's in-process daemon lists what the registry holds.
+    # The state, cache and engine folder every test here reads are its own, never the developer's
+    # (``engine_daemon.isolate``).
     from tests.python.support import engine_daemon
 
     engine_daemon.isolate(unittest.addModuleCleanup)

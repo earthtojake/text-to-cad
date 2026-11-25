@@ -27,7 +27,7 @@ from typing import Any, Callable
 
 from cad.engine.atomic_replace import replace_atomic
 
-__all__ = ["ENGINES", "ENGINE_FIELDS", "ENGINE_SCHEMA", "Folder", "State", "TOKEN", "current", "file_version", "lock"]
+__all__ = ["ENGINES", "ENGINE_FIELDS", "ENGINE_SCHEMA", "Folder", "State", "TOKEN", "current", "file_version", "lock", "stamp"]
 
 ENGINES = "engines"
 # The engine records' own schema: 3 holds, while the default port is another's, the port the
@@ -39,14 +39,19 @@ ENGINE_FIELDS = ("port", "schema")
 TOKEN = f"{ENGINES}/token"
 
 
+def stamp(found: os.stat_result) -> str:
+    """The version of a file as the engine names a file state it read (``mtime_ns-size``, a served structure's
+    ``version``), from its ``stat``."""
+    return f"{found.st_mtime_ns}-{found.st_size}"
+
+
 def file_version(path: str | os.PathLike) -> str | None:
-    """The version of the file at ``path`` as the engine names a file state it read (``mtime_ns-size``, a served
-    structure's ``version``), from one stat; None for none there (or no file)."""
+    """The version (``stamp``) of the file at ``path``, from one stat; None for none there (or no file)."""
     try:
         found = os.stat(path)
     except OSError:
         return None
-    return f"{found.st_mtime_ns}-{found.st_size}" if stat.S_ISREG(found.st_mode) else None
+    return stamp(found) if stat.S_ISREG(found.st_mode) else None
 
 
 # A page token as ``secrets.token_urlsafe`` makes one, long enough to guard anything.

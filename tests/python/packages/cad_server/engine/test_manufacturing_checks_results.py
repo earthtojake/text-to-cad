@@ -99,15 +99,15 @@ class SameResultTest(unittest.TestCase):
         self.assertEqual(held.measurements["process"], "cnc")
         self.assertTrue({"process_declared", "material_declared"} <= {f.code for f in held.findings})
         self.assertEqual(_plain(cad.model.dfm(exported)), _plain(_today("model", exported, exported.resolve(), None)))
-        before = _restarted()  # its worker gone: the restarted engine answers from the result it kept on disk
+        before = _restarted()  # its worker gone: the restarted engine measures its .xbf, the file it is now
         self.assertEqual(_plain(cad.model.dfm(block)), _plain(today))
-        self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"], before["restored"] + 1))
-        # Other checks: measured by the restarted engine from the bytes its cache holds, read once for both.
+        self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"] + 1, before["restored"]))
+        # Other checks: measured by the restarted engine from the same file, read once for all three.
         for process in ("cnc", "sheet"):
             with self.subTest(process=process):
                 self.assertEqual(_plain(cad.model.dfm(block, process=process, material="steel")),
                                  _plain(_today("model", exported, Path(block), process, material="steel")))
-        self.assertEqual((_counts()["measured"], _counts()["read"]), (before["measured"] + 2, before["read"] + 1))
+        self.assertEqual((_counts()["measured"], _counts()["read"]), (before["measured"] + 3, before["read"] + 1))
 
 
 class KeptResultTest(unittest.TestCase):
@@ -222,8 +222,9 @@ class KeptResultTest(unittest.TestCase):
         self.assertAlmostEqual(edited.measurements["bodies"][0]["bbox_mm"][0], 42.0, delta=1e-6)
 
     def test_a_kept_result_outlives_the_engine(self) -> None:
-        """Kept on disk beside the engine's cache: after a restart the same check of the same file or model
-        measures nothing; another file's bytes, an edited model or an entry that does not read measure again."""
+        """Kept on disk beside the engine's cache: after a restart the same check of the same file, or of the same
+        model once a worker holds it again, measures nothing; another file's bytes, an edited model or an entry that
+        does not read measure again."""
         import build123d as bd
 
         import cad
@@ -234,6 +235,7 @@ class KeptResultTest(unittest.TestCase):
         first = cad.step.dfm(step, process="printing")
         model = cad.model.dfm(plate, process="cnc", tools="11")
         before = _restarted()
+        fixture.build()  # taken from its .xbf by its key: a worker holds it at the revision the result was kept at
         self.assertEqual(_plain(cad.step.dfm(step, process="printing")), _plain(first))
         self.assertEqual(_plain(cad.model.dfm(plate, process="cnc", tools="11")), _plain(model))
         self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"], before["restored"] + 2),
@@ -243,6 +245,7 @@ class KeptResultTest(unittest.TestCase):
         self.assertEqual(len(kept), 1)
         kept[0].write_bytes(b"{not json")
         before = _restarted()
+        fixture.build()
         self.assertEqual(_plain(cad.model.dfm(plate, process="cnc", tools="11")), _plain(model))
         self.assertEqual(_counts()["measured"], before["measured"] + 1, "an entry that does not read is measured again")
         self.assertEqual(json.loads(kept[0].read_text(encoding="utf-8"))["result"]["measured"]["process"], "cnc")
@@ -293,33 +296,33 @@ class KeptResultTest(unittest.TestCase):
             store.keep(f"file:{name}", "d", "cnc", {"x": name})
         self.assertEqual((store.status()["held"], store.get("file:one", "d", "cnc")), (2, None))
 
-    def test_a_deleted_document_keeps_nothing_and_its_entries_leave_the_index(self) -> None:
-        """Deleting a document (``Registry.delete``) drops its results from memory and from the disk's index, and a
-        check of it that began before keeps nothing. The half-written files a stopped engine left are swept as the
+    def test_a_forgotten_document_keeps_nothing_and_its_entries_leave_the_index(self) -> None:
+        """Forgetting a document (``Models.forget``: its cache folder, then ``Checks.deleted``) drops its results from
+        memory and from the disk's index, and a check of it that began before keeps nothing. The half-written files a stopped engine left are swept as the
         folder is listed; a result gone since (its folder wiped) leaves the index as it is asked for; and a folder
         that takes no write keeps nothing, with nothing remembered of it."""
-        from cad_server.engine import registry
         from cad_server.engine.checks import Checks, Disk
-        from cad_server.engine.registry import Folder, Registry
+        from cad_server.engine.library import Notes
+        from cad_server.engine.state import Folder
 
         root = Path(tempfile.mkdtemp(prefix="engine-dfm-deleted-"))
         self.addCleanup(shutil.rmtree, root, True)
-        held = Registry(root / "state", cache=root / "cache")
-        store = Checks(folder=lambda: held)
-        registry.FORGOTTEN.append(store.deleted)
-        self.addCleanup(registry.FORGOTTEN.remove, store.deleted)
+        notes = Notes(root / "cache")
+        cache = notes.cache
+        store = Checks(folder=lambda: cache)
         a, b = str(uuid.uuid4()), str(uuid.uuid4())
         store.keep(f"model:{a}", "v", "cnc", {"x": 1}, (a, "r"))
         store.keep("file:2:3", "d", "cnc", {"x": 2}, (b, "d"))
         self.assertEqual(store.status()["disk"]["held"], 2)
         since = store.epoch(b)
-        held.delete(b)
+        notes.forget(b)
+        store.deleted(b)
         self.assertEqual((store.status()["held"], store.status()["disk"]["held"]), (1, 1), "its entries went")
         store.keep("file:2:3", "d", "cnc", {"x": 2}, (b, "d"), since)
-        self.assertEqual(held.cache.names(f"documents/{b}"), [], "a check that began before its deletion keeps nothing")
+        self.assertEqual(cache.names(f"documents/{b}"), [], "a check that began before it was forgotten keeps nothing")
         self.assertIsNone(store.get("file:2:3", "d", "cnc"))
 
-        shutil.rmtree(held.cache.path("documents"))  # a person wiping the cache folder
+        shutil.rmtree(cache.path("documents"))  # a person wiping the cache folder
         self.assertIsNone(store.disk.get(a, "r", "cnc"))
         self.assertEqual(store.status()["disk"]["held"], 0, "gone with its folder: out of the index as it is asked for")
 

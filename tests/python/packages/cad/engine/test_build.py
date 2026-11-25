@@ -549,16 +549,15 @@ class ChildFilesTest(EngineCase):
         self.assertFalse((self.folder / "bracket.stl").exists())
         # The bracket's own build, in a fresh worker, takes the document its parent's build made (its
         # .xbf, a child's as any model's), writing the file that went, nothing run.
-        state = self.folder / "state"
-        engine_restart.restart(state)
-        [own] = engine_restart.build(state, self.folder / "bracket.py", None, cwd=self.folder)
+        engine_restart.restart()
+        [own] = engine_restart.build(self.folder / "bracket.py", None, cwd=self.folder)
         self.assertEqual((own["cache"], own["memo"]["bodies_run"]), ({"used": True, "from": "xbf"}, 0))
         self.assertEqual({Path(path).name: row["written"] for path, row in own["files"].items()},
                          {"bracket.xbf": False, "bracket.stl": True})
         # Built cold, it writes the same bytes.
-        engine_restart.restart(state)
+        engine_restart.restart()
         (self.folder / "XBF/bracket.xbf").unlink()
-        engine_restart.build(state, self.folder / "bracket.py", None, cwd=self.folder)
+        engine_restart.build(self.folder / "bracket.py", None, cwd=self.folder)
         self.assertEqual((self.folder / "XBF/bracket.xbf").read_bytes(), written)
 
 

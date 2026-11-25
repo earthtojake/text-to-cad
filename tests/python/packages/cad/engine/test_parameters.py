@@ -109,14 +109,13 @@ class RecordingTest(unittest.TestCase):
         self.assertEqual(listed[1], {"name": "wall", "value": 2.0, "kind": "float", "min": 1, "max": 5, "step": None,
                                      "unit": None})
         live = {"script": str(self.script), "rows": list(rows.values())}
-        served = {row["name"]: row for row in parameters.served(listed, model=True, live=live)}
+        served = {row["name"]: row for row in parameters.served(listed, live=live)}
         self.assertEqual({name: (row["writable"], row["reason"], row["source"]) for name, row in served.items()},
                          {"pitch": (False, "shared", "spec.py"), "wall": (True, None, "bracket.py"),
                           "holes": (True, None, "bracket.py"), "twice": (False, "expression", "bracket.py")})
-        self.assertEqual({row["reason"] for row in parameters.served(listed, model=False, live=None)}, {"file"})
-        self.assertEqual({(row["reason"], row["source"]) for row in parameters.served(listed, model=True, live=None)},
+        self.assertEqual({(row["reason"], row["source"]) for row in parameters.served(listed, live=None)},
                          {("no_worker", None)})
-        self.assertEqual(parameters.served(None, model=True, live=live), [])
+        self.assertEqual(parameters.served(None, live=live), [])
 
     def test_a_change_is_checked_spelled_and_written_at_its_bytes_alone(self) -> None:
         rows = self.rows()

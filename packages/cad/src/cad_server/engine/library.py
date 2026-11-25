@@ -25,9 +25,10 @@ is the file's version now: a file that changed has no count and no picture until
 opens it, a run builds it), which replaces the note whole. Nothing is read to fill one. The cache folder
 deleted loses nothing that is not made again.
 
-One process writes both, the engine's, and ``cad delete`` where none runs. A change is a read and a write under
-one lock of this process (``state.lock``), landed whole (``state.Folder.write``), so no reader meets half a file;
-two processes writing at once can lose one of the two changes (an open's time, a pin) and corrupt nothing. A
+One process writes both, the engine's. A change is a read and a write under one lock of this process
+(``state.lock``), landed whole (``state.Folder.write``), so no reader meets half a file; two processes writing
+at once (a CAD app's server with no engine under it) can lose one of the two changes (an open's time, a pin)
+and corrupt nothing. A
 library file that does not read is set aside as ``library.json.unreadable`` and started again.
 
 What an earlier release kept, a record per document (``<state>/documents/<id>/document.json``) and per project
@@ -224,12 +225,9 @@ class Library:
 
         self.change(change)
 
-    def forget(self, ident: str) -> bool:
-        """The entry of the file of id ``ident`` removed; whether there was one. The file stays."""
-        if ident not in self.read()["files"]:
-            return False
+    def forget(self, ident: str) -> None:
+        """The entry of the file of id ``ident`` removed. The file stays."""
         self.change(lambda data: data["files"].pop(ident, None))
-        return True
 
     # --- an earlier release's records ----------------------------------------------------------
 
@@ -243,11 +241,31 @@ class Library:
         names none -- is not carried: its model is listed again, by its ``.xbf``, when its script next runs.
         What was done: ``{"files", "projects", "skipped"}``, the ids of the records not carried."""
         with self._lock():
-            files, projects, skipped = self._records()
+            now = self.clock()
+            found: dict[str, dict[str, Any]] = {"files": {}, "projects": {}}
+            skipped: list[str] = []
+            for name in self.state.names("documents"):
+                record = _record(self.state.read(f"documents/{name}/document.json"))
+                root, named = record.get("root"), record.get("home" if record.get("kind") == "file" else "saved")
+                try:
+                    path = canonical(os.path.join(root, named)) if os.path.isabs(root) else ""
+                except (OSError, TypeError, ValueError):
+                    path = ""
+                if not os.path.isfile(path):
+                    skipped.append(name)
+                    continue
+                times = _times(record)
+                found["files"][file_id(path)] = {"path": path, "created": times.get("opened", now), **times,
+                                                 **({"pinned": True} if record.get("pinned") is True else {})}
+            for name in self.state.names("projects"):
+                record = _record(self.state.read(f"projects/{name}"))
+                root = record.get("root")
+                if isinstance(root, str) and os.path.isabs(root) and f"{derived_id(root)}.json" == name:
+                    found["projects"][name[:-5]] = {"root": root, **_times(record)}
 
             def merge(data: dict[str, Any]) -> None:
-                for section, found in (("files", files), ("projects", projects)):
-                    for ident, entry in found.items():
+                for section, entries in found.items():
+                    for ident, entry in entries.items():
                         data[section].setdefault(ident, entry)
 
             _LOOKED.add(str(self.state.root))
@@ -258,39 +276,11 @@ class Library:
 
             cache = Folder(self._cache or cache_dir())
             for name in cache.names(DOCUMENTS):
-                if is_id(name):
-                    cache.remove(f"{DOCUMENTS}/{name}/document.xbf")
-            self.carried = {"files": len(files), "projects": len(projects), "skipped": skipped}
-            if files or projects or skipped:
+                cache.remove(f"{DOCUMENTS}/{name}/document.xbf")
+            self.carried = {"files": len(found["files"]), "projects": len(found["projects"]), "skipped": skipped}
+            if any(self.carried.values()):
                 print(f"cad: {said(self.carried)}", file=sys.stderr, flush=True)
             return self.carried
-
-    def _records(self) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
-        """The entries an earlier release's records give (``migrate``): the files', the projects', and the ids
-        of the document records that give none."""
-        files: dict[str, dict[str, Any]] = {}
-        skipped: list[str] = []
-        for name in self.state.names("documents"):
-            entry = _file_entry(_record(self.state.read(f"documents/{name}/document.json")), self.clock())
-            if entry is None:
-                skipped.append(name)
-                continue
-            ident = file_id(entry["path"])
-            old = files.get(ident)
-            if old is not None:  # two records of one file (a model's and its .xbf's a page opened)
-                entry = {**old, **entry, "created": min(entry["created"], old["created"])}
-                opened = max(entry.get("opened") or 0, old.get("opened") or 0)
-                if opened:
-                    entry["opened"] = opened
-            files[ident] = entry
-        projects: dict[str, dict[str, Any]] = {}
-        for name in self.state.names("projects"):
-            record = _record(self.state.read(f"projects/{name}")) or {}
-            root, ident = record.get("root"), name.removesuffix(".json")
-            if isinstance(root, str) and os.path.isabs(root) and derived_id(root) == ident:
-                projects[ident] = {"root": root, **{key: float(record[key]) for key in ("created", "opened")
-                                                     if _number(record.get(key))}}
-        return files, projects, skipped
 
 
 def said(carried: dict[str, Any]) -> str:
@@ -299,44 +289,19 @@ def said(carried: dict[str, Any]) -> str:
             f"earlier release; {len(carried['skipped'])} not carried")
 
 
-def _number(value: Any) -> bool:
-    return type(value) in (int, float) and value > 0
-
-
-def _record(raw: bytes | None) -> dict[str, Any] | None:
-    """An earlier release's record as its file holds it, or None for one that does not read."""
+def _record(raw: bytes | None) -> dict[str, Any]:
+    """An earlier release's record as its file holds it; ``{}`` for one that does not read."""
     try:
-        record = json.loads(raw) if raw is not None else None
+        record = json.loads(raw or b"")
     except ValueError:
-        return None
-    return record if isinstance(record, dict) and record.get("schema") == 1 else None
+        return {}
+    return record if isinstance(record, dict) and record.get("schema") == 1 else {}
 
 
-def _file_entry(record: dict[str, Any] | None, now: float) -> dict[str, Any] | None:
-    """The library's entry of the file an earlier release's document ``record`` names; None where it names
-    none, or one that is gone."""
-    record = record or {}
-    root = record.get("root")
-    named = record.get("home") if record.get("kind") == "file" else record.get("saved")
-    if not isinstance(root, str) or not os.path.isabs(root) or not isinstance(named, str) or not named:
-        return None
-    try:
-        path = canonical(os.path.join(root, named))
-    except (OSError, ValueError):
-        return None
-    if not os.path.isfile(path):
-        return None
-    opened = float(record["opened"]) if _number(record.get("opened")) else None
-    entry: dict[str, Any] = {"path": path, "created": float(record["created"]) if _number(record.get("created"))
-                             else opened or now}
-    if opened:
-        entry["opened"] = opened
-    if record.get("pinned") is True:
-        entry["pinned"] = True
-    reached = reaching(record.get("reached"), path)
-    if reached:
-        entry["reached"] = reached
-    return entry
+def _times(record: dict[str, Any]) -> dict[str, float]:
+    """When an earlier release's ``record`` was made and opened, each where it says."""
+    return {key: float(record[key]) for key in ("created", "opened")
+            if type(record.get(key)) in (int, float) and record[key] > 0}
 
 
 class Notes:

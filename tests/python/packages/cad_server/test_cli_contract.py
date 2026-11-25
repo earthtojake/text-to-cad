@@ -140,7 +140,7 @@ class TheParser(unittest.TestCase):
                 if "_runtime" not in path.relative_to(PACKAGE).parts  # the bundled plugin: skills, not the server
                 and re.search(r"\bArgumentParser\(", path.read_text(encoding="utf-8"))]
         self.assertEqual(made, [])
-        for name in ("status", "delete", "model export", "mujoco check", "kicad_pcb inspect", "setup", "telemetry"):
+        for name in ("status", "model export", "mujoco check", "kicad_pcb inspect", "setup", "telemetry"):
             with self.subTest(command=name):
                 found = cli.build_parser_for(name)
                 self.assertIsInstance(found, Parser)
@@ -154,26 +154,26 @@ class Consent(unittest.TestCase):
     def test_a_yes_a_question_or_the_command_that_says_yes(self) -> None:
         from cad_server._internal import consent
 
-        self.assertEqual(consent.retry("cad delete", ["a b", "--yes", "--json"]), "cad delete 'a b' --json --yes")
-        consent.confirm("deleting 1 document", "Delete it?", yes=True, as_json=True, command="unused")
+        self.assertEqual(consent.retry("cad server", ["a b", "--yes", "--json"]), "cad server 'a b' --json --yes")
+        consent.confirm("replacing the page token", "Replace it?", yes=True, as_json=True, command="unused")
         with mock.patch.object(consent, "interactive", return_value=False), self.assertRaises(Failure) as asked:
-            consent.confirm("deleting 1 document", "Delete it?", yes=False, as_json=False, command="cad delete X --yes")
+            consent.confirm("replacing the page token", "Replace it?", yes=False, as_json=False, command="cad server X --yes")
         self.assertEqual(document(asked.exception), {
-            "ok": False, "reason": "confirmation_required", "userActionRequired": True, "next": ["cad delete X --yes"],
-            "error": "deleting 1 document needs a yes, and no one can be asked here (no terminal, or --json): nothing "
-                     "was changed; `cad delete X --yes` says yes"})
+            "ok": False, "reason": "confirmation_required", "userActionRequired": True, "next": ["cad server X --yes"],
+            "error": "replacing the page token needs a yes, and no one can be asked here (no terminal, or --json): nothing "
+                     "was changed; `cad server X --yes` says yes"})
         for answer, goes_on in (("y\n", True), ("YES\n", True), ("n\n", False), ("\n", False), ("", False)):
             with self.subTest(answer=answer), mock.patch.object(consent, "interactive", return_value=True), \
                     mock.patch.object(sys, "stdin", io.StringIO(answer)), contextlib.redirect_stderr(io.StringIO()) as err:
                 try:
-                    consent.confirm("deleting 1 document", "Delete it?", yes=False, as_json=False, command="x",
+                    consent.confirm("replacing the page token", "Replace it?", yes=False, as_json=False, command="x",
                                     preview=["the plan"])
                     went = True
                 except Failure as failure:
                     self.assertEqual((failure.reason, failure.status), ("declined", 1))
                     went = False
                 self.assertEqual(went, goes_on)
-                self.assertEqual(err.getvalue(), "the plan\nDelete it? (y/N) ")
+                self.assertEqual(err.getvalue(), "the plan\nReplace it? (y/N) ")
 
     def test_no_one_is_asked_under_json_or_in_ci(self) -> None:
         from cad_server._internal import consent

@@ -60,11 +60,11 @@ __all__ = ["CODES", "KEYS", "REASONS", "UNITS", "Declared", "ParameterRefused", 
 KEYS = ("min", "max", "step", "unit")
 #: The units a parameter may say it is in (display only); None for a bare number.
 UNITS = ("mm", "deg")
-#: Why a parameter a document lists cannot be written, a closed set: the document is a file, not a model;
+#: Why a parameter a document lists cannot be written, a closed set:
 #: no live worker recorded where it is declared; another file than the model's own declares it; its default
 #: is no plain number the engine can find alone in the code (an expression, a name, a call whose name is no
 #: string in the code, a file not in UTF-8).
-REASONS = ("file", "no_worker", "shared", "expression")
+REASONS = ("no_worker", "shared", "expression")
 #: Why a change of parameters is refused, a closed set (``ParameterRefused.code``).
 CODES = ("no_worker", "unknown_parameter", "not_writable", "not_a_number", "out_of_range", "script_changed", "busy",
          "build_failed")
@@ -417,10 +417,10 @@ def source_of(file: str | None, script: str | None) -> str | None:
     return os.path.basename(file)
 
 
-def served(listed: list[dict[str, Any]] | None, *, model: bool, live: dict[str, Any] | None) -> list[dict[str, Any]]:
+def served(listed: list[dict[str, Any]] | None, *, live: dict[str, Any] | None) -> list[dict[str, Any]]:
     """A document's parameters as a page reads them: what the document records (``listed``), each with
     ``writable``, ``reason`` (None when writable, else one of ``REASONS``) and ``source`` (``source_of``).
-    ``model``: the document is a model's, not a file; ``live``: what the worker that built it recorded,
+    ``live``: what the worker that built it recorded,
     while it lives (``{"script", "rows"}``, ``rows``'s), else None. A parameter is writable only where
     that worker recorded the bytes of the value the document holds."""
     script = (live or {}).get("script")
@@ -428,9 +428,7 @@ def served(listed: list[dict[str, Any]] | None, *, model: bool, live: dict[str, 
     found = []
     for row in listed or []:
         held = known.get(row.get("name"))
-        if not model:
-            reason, file = "file", None
-        elif held is None or not _same(held.get("value"), row.get("value")):
+        if held is None or not _same(held.get("value"), row.get("value")):
             reason, file = "no_worker", None
         else:
             reason, file = held.get("reason"), held.get("file")

@@ -32,8 +32,7 @@ unrelated ``cad`` 1.x is never resolved.
 ``base._inputs``, nothing of where cad is installed), the spec, and what each local package, editable folder and
 requirements file is now (``fingerprints``): an edit to a local package is another environment, said in the line
 that makes it; an editable folder is keyed by its metadata alone, its code read as it is; a lock, a project's
-``pyproject.toml`` and a uv configuration by their contents. ``places.RUN_WITH`` tells the program how it was
-named, which a document it builds says builds it again. The spec of the build123d integration alone, on the
+``pyproject.toml`` and a uv configuration by their contents. The spec of the build123d integration alone, on the
 server's Python, is the base's own (``Spec.default``): ``ensure`` and ``making`` give the base for it.
 
 **Making one** (``ensure``): by the server -- outside any sandbox, its lines followed as it makes it (``{"op":
@@ -245,21 +244,6 @@ def _ordered(version: str) -> tuple[Any, ...]:
         pre = (first,) if dev and not post else (last,)  # a release's own development builds come first
     return (tuple(numbers), pre, (int(found["post_n"] or 0),) if post else (first,),
             (int(found["dev_n"] or 0),) if dev else (last,))
-
-
-def tell(given: list[str], script: str | None = None, named: list[str] | None = None) -> None:
-    """The program ``cad run`` runs told how it named its environment (``places.RUN_WITH``, as JSON; with
-    none, unset), normalized: the options and requirements its command line was given (``given``: each
-    option one word, ``--python=3.13``, a requirement as it is), and the ``script`` whose inline metadata
-    ``named`` the rest. What a document it builds names to build it again (``contract.interpreter``,
-    ``models.Models.register``): the command line's, and the header's but for a model that script defines,
-    whose header ``cad run`` reads again."""
-    from cad.engine.places import RUN_WITH
-
-    if given or named:
-        os.environ[RUN_WITH] = json.dumps({"with": list(given), "script": script, "header": list(named or ())})
-    else:
-        os.environ.pop(RUN_WITH, None)
 
 
 # --- cad's own requirement ---------------------------------------------------------------------------

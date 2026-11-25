@@ -407,9 +407,9 @@ def _failed(answer: dict[str, Any]) -> Exception:
         error = kind(text)
     except TypeError:  # a refusal whose type takes more than its words
         error = ValueError(text)
-    # A document not held: what it is, and what builds it again; a snapshot's refusal: the part it refused; a
-    # change of parameters refused: why, by one word, what to do, and a parameter's own reason.
-    for key in ("state", "rebuild", "part", "code", "hint", "reason"):
+    # A snapshot's refusal: the part it refused; a change of parameters refused: why, by one word, what to do,
+    # and a parameter's own reason.
+    for key in ("part", "code", "hint", "reason"):
         if key in answer and hasattr(error, key):
             setattr(error, key, answer[key])
     error._engine_refusal = True  # type: ignore[attr-defined]  # the worker's, not this process's (``_error``)
@@ -454,8 +454,8 @@ def say_notice() -> None:
 
 
 def _program() -> str | None:
-    """The program this process runs, ``__main__``'s file: what a document it builds names as the
-    command that builds it again (``models.Models.missing``); None where it has no file."""
+    """The program this process runs, ``__main__``'s file, which an order to the engine names; None where
+    it has no file."""
     found = getattr(sys.modules.get("__main__"), "__file__", None)
     return os.path.abspath(found) if isinstance(found, str) and os.path.isfile(found) else None
 

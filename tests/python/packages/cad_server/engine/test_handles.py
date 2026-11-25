@@ -29,7 +29,6 @@ from tests.python.support.paths import add_sources
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 from tests.python.support.ids import model_id  # noqa: E402
-from cad_server.engine.registry import Registry  # noqa: E402
 
 PARTS = """
 import build123d as bd
@@ -350,27 +349,16 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(sorted(path.name for path in (project / "loose").iterdir()), ["crate.step"])
         self.assertEqual(sorted(document.Loaded(project / "loose" / "crate.step").structure()["name"]
                                 for _ in (0,)), ["crate"])
-        record = Registry(self.state).get(ident)
-        self.assertEqual((record["kind"], record["entry"], record["program"]), ("shape", "crate", "hand.py"))
-        self.assertEqual(set(record), {"schema", "id", "kind", "root", "home", "entry", "program", "revision", "built",
-                                       "created", "namespace", "name", "facts", "saved", "version"},
-                         "a model's shape, the program that showed it, and the .xbf that is its document")
-        self.assertEqual(record["saved"], "crate.xbf")
-        from cad_server.viewer.recents import RecentStore
+        # Its .xbf is a file the library knows, as a model's a run built: one row, with its parts' occurrences, counted
+        # from the structure handed over: the crate and its lid; the tag is one part.
+        from cad_server.engine.library import Library, Notes
+        from cad_server.viewer.projects import Projects
+        from cad_server.viewer.recents import listing
 
-        # Its .xbf opened on a page is the shape's record: one row, one card.
-        store = RecentStore(self.state)
-        store.opened(str(project / "crate.xbf"))
-        rows = [entry.row() for entry in store.list()]
-        self.assertEqual([row["record"] for row in rows if row["id"] == ident], ["shape"])
-        self.assertNotIn(str(project / "crate.xbf"), [row["path"] for row in rows])
-        listed = {entry.path: entry.public() for entry in store.list()}
-        shown = listed[ident]
-        self.assertEqual(shown["file"], (project / "crate.xbf").as_posix())
-        # Its parts' occurrences, counted from the structure handed over: the crate and its lid; the tag is one part.
-        self.assertEqual((record["facts"], shown["parts"], listed[found["tag"]]["parts"]), ({"parts": 2}, 2, 1))
-        self.assertIn(f"a shape handed over by {project / 'hand.py'}, a program the engine did not run", shown["shown"],
-                      "its words, from its program")
+        library = Library(self.state, self.cache)
+        rows = {row["id"]: row for row in listing(library, Notes(self.cache), Projects(library))}
+        self.assertEqual((rows[ident]["path"], rows[ident]["name"], rows[ident]["record"], rows[ident]["parts"],
+                          rows[found["tag"]]["parts"]), (str(project / "crate.xbf"), "crate.xbf", "file", 2, 1))
         # From a REPL: its .xbf in the working folder.
         repl = self.run_python("-", cwd=project, input="import json, build123d as bd\nfrom cad import model\n"
                                "h = model(bd.Box(2, 2, 2), name='scratch')\nmodel(bd.Box(1, 1, 1), 'kept/kept.xbf', name='kept')\n"
@@ -383,15 +371,13 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(self.cli("export", ident, str(project / "again.stl")).returncode, 0)
         self.restart()
         self.assertEqual(self.cli("export", ident, str(project / "restarted.stl")).returncode, 0)
-        # With its .xbf gone, nothing builds it again, and the words say so.
+        # With its .xbf gone, its id names nothing.
         self.assertEqual(self.cli("stop").returncode, 0)
         (project / "crate.xbf").unlink()
         engine_daemon.start(self.env)
         refused = self.cli("export", ident, str(project / "gone.stl"))
         self.assertEqual(refused.returncode, 2, refused.stderr)
-        self.assertIn("a program the engine did not run: no script to rerun", refused.stderr)
-        answer = self.ask({"op": "state", "id": ident})
-        self.assertEqual((answer["state"], answer["rebuild"]), ("unsaved", None))
+        self.assertIn(f"no document {ident} is held", refused.stderr)
 
     def test_a_handle_is_posed_where_the_engine_holds_its_mechanism(self) -> None:
         # From a plain script, the handle is posed (its .shape carries no joints, and says what to pass

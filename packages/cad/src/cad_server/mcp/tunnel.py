@@ -130,9 +130,9 @@ def _result(status: int, headers: dict[str, str], body: bytes) -> dict[str, Any]
 class ViewerTunnel:
     """The viewer backend every view of this server shares, made when the first one asks."""
 
-    def __init__(self, *, recents=None, analytics=None, clock=time.monotonic, app=None) -> None:
+    def __init__(self, *, library=None, analytics=None, clock=time.monotonic, app=None) -> None:
         self._app = app
-        self._recents = recents
+        self._library = library
         self._analytics = analytics
         self._lock = threading.Lock()
         self._clock = clock
@@ -147,8 +147,8 @@ class ViewerTunnel:
                 from cad_server.viewer.http_app import create_cad_app
 
                 app = create_cad_app(host="127.0.0.1", port=0)
-                if self._recents is not None:
-                    app.recents = self._recents
+                if self._library is not None:
+                    app.library = self._library
                 # The server's recorder: a person's answer on a card here is the CAD app's.
                 app.analytics, app.consent_by = self._analytics, "app"
                 app.drawings.hold_seconds, app.drawings.retry_ms = DRAWING_HOLD_SECONDS, DRAWING_RETRY_MS

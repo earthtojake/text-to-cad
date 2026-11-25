@@ -444,15 +444,7 @@ class Pressure:
 
 
 class NotHeld(ValueError):
-    """A document the engine knows but no longer holds: its ``state`` (``unsaved``, ``detached``)
-    and the command that builds it again (``rebuild``), which the engine never runs."""
-
-    def __init__(self, text: str, state: str = "unsaved", rebuild: str | None = None) -> None:
-        super().__init__(text)
-        self.state, self.rebuild = state, rebuild
-
-    def payload(self) -> dict[str, Any]:
-        return {"error": str(self), "state": self.state, "rebuild": self.rebuild}
+    """An id that names no document: no worker holds one of it, and no file of it is there."""
 
 
 # --- the pools ---------------------------------------------------------------------------
@@ -1047,18 +1039,14 @@ class Server:
         # (``Supervisor.shed``).
         self.pressed: Callable[[], Any] = lambda: None
         self.stopping = threading.Event()
-        # What the engine knows of a document it no longer holds (``NotHeld.payload``), else None.
-        self.lost: Callable[[str], dict[str, Any] | None] = lambda _ident: None
-        # A document id this server does not hold yet, a model's no worker holds: its ``.xbf`` known as a file
-        # (``models.Models.revive``), read when it is asked for.
-        self.revive: Callable[[str], None] = lambda _ident: None
-        # Whether a document served from its file is a model's ``.xbf`` (the daemon's ``models.Models.file_of``): its
-        # parameters are a model's no live worker holds (``no_worker``), not a file's.
-        self.modelled: Callable[[str], bool] = lambda _ident: False
-        # A document deleted (the home's Delete): the daemon's ``models.Models.delete``, which drops what
-        # the engine holds of it and then its record; None for a server of
-        # its own (a test's), whose application deletes the record alone.
-        self.delete: Callable[[str], dict[str, Any] | None] | None = None
+        # The path of the file of an id this server was not named (its application's: the library's, a project
+        # folder's), known as a file from then on (``remember``) and read when it is asked for; None for an id
+        # that names nothing. A server of its own (a test's) knows the files it was named alone.
+        self.locate: Callable[[str], str | None] = self.file_of
+        # A document forgotten (the home's Remove): the daemon's ``models.Models.forget``, which drops what
+        # the engine holds of it, then what the library and the cache keep; None for a server of
+        # its own (a test's), whose application forgets those alone.
+        self.forget: Callable[[str], Any] | None = None
         # What the live worker that built a model document recorded of its parameters at the generation served
         # (the daemon's ``models.Models.live``: where each is spelled in the code), else None; and their ``set``,
         # which writes them into the model's script and builds it again (the daemon's ``parameters.Setting``),
@@ -1690,14 +1678,13 @@ class Server:
 
         found = dict(doc.structure)
         model = doc.ident in self.model_loaders
-        live = None
-        modelled = model or self.modelled(doc.ident)
+        live = None  # a document served from its ``.xbf`` is a model's no live worker holds (``no_worker``)
         if model:
             try:
                 live = self.parameters(doc.ident, doc.version)
             except Exception:  # noqa: BLE001 - what no worker can say is said not writable, never a failed read
                 live = None
-        found["parameters"] = parameters.served(doc.structure.get("parameters"), model=modelled, live=live)
+        found["parameters"] = parameters.served(doc.structure.get("parameters"), live=live)
         found["prototypes"] = prototypes = []
         for prototype in doc.structure["prototypes"]:
             unmeshed = self.cache.unmeshed(prototype["key"])
@@ -2078,14 +2065,10 @@ class Server:
                 return self._preview_route(handler, parts, query)
             ident, pose = self.poses.get(parts[2], (parts[2], None)) if len(parts) >= 3 else ("", None)
             if parts[:2] == ["api", "doc"] and ident in self.files and ident not in self.model_loaders \
-                    and not os.path.isfile(self.files[ident]) and self.lost(ident) is not None:
-                self.forget_model(ident)  # a model's .xbf gone: no longer held, its command said below
-            if parts[:2] == ["api", "doc"] and ident and not self.holds(ident) and is_id(ident):
-                self.revive(ident)  # a model no worker holds: its .xbf
-            if parts[:2] == ["api", "doc"] and ident and not self.holds(ident):
-                lost = self.lost(ident)  # a document the engine knows but holds no more: what rebuilds it
-                if lost is not None:
-                    return self.send(handler, 404, json.dumps(lost).encode(), "application/json")
+                    and not os.path.isfile(self.files[ident]):
+                self.forget_model(ident)  # its file is gone: the id names nothing
+            if parts[:2] == ["api", "doc"] and is_id(ident) and not self.holds(ident) and self.locate(ident) is None:
+                raise NotHeld(f"no document {ident} is held")
             if parts[:2] == ["api", "doc"] and self.holds(ident):
                 if len(parts) == 4 and parts[3] == "version":
                     after = (query.get("after") or [None])[0]
@@ -2100,11 +2083,8 @@ class Server:
                     except KeyError:
                         if self.holds(ident):
                             raise
-                        # Deleted while the page waited (`cad delete`): not found, as every read of it is now.
-                        lost = self.lost(ident)
-                        if lost is not None:
-                            return self.send(handler, 404, json.dumps(lost).encode(), "application/json")
-                        return self.error(handler, 404, "not found")
+                        # Forgotten while the page waited (the home's Remove): not held, as every read of it is now.
+                        raise NotHeld(f"no document {ident} is held") from None
                     build = self.build_of(ident)
                     return self.json(handler, {"version": doc.version, **build})
                 doc = self.document(ident)
@@ -2148,8 +2128,8 @@ class Server:
             self.error(handler, 404, "not found")
         except (BrokenPipeError, ConnectionResetError):
             pass
-        except NotHeld as error:  # no worker, no .xbf: the command that builds it again
-            self.send(handler, 404, json.dumps(error.payload()).encode(), "application/json")
+        except NotHeld as error:  # no worker, no file
+            self.error(handler, 404, str(error))
         except ValueError as error:  # a pose refused by name (``mechanism.KinematicsError``), a body not JSON
             self.error(handler, 400, str(error))
         except Exception as error:  # noqa: BLE001 - a request's failure is its answer

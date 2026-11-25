@@ -469,8 +469,7 @@ class SchedulingTest(unittest.TestCase):
             "script": "/w/a.py", "function": "a", "held": ident, "via": "/w/a.py",
             "python_key": "/venv\x000.10.0"}}, sent.append)
         self.assertEqual(asked, [], "never asked of the server's own worker of its script")
-        self.assertEqual(sent[0]["state"], "unsaved")
-        self.assertIn(ident, sent[0]["failed"])
+        self.assertEqual(sent[0]["failed"], f"no document {ident} is held")
 
 
 # The child a protocol test starts: the frames as a service's process sends them, by request.

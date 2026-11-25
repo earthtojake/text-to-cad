@@ -46,7 +46,6 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "serve": ("cad_server.cli.serve", "serve a document over HTTP and print its URL"),
     "status": ("cad_server.cli.status", "`cad server status`"),
     "stop": ("cad_server.cli.stop", "`cad server stop`"),
-    "delete": ("cad_server.cli.delete", "delete documents: record and the engine's copy; never a file of yours"),
     # The CAD app an agent app's plugin starts: the server started as `cad server start` starts it, then MCP on stdio.
     "mcp": ("cad_mcp.shim", "serve the CAD app to the agent app that starts it, over MCP on stdin and stdout"),
     # Generic / services

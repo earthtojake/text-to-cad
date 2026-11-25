@@ -244,7 +244,7 @@ class Setting:
         models = self.daemon.models
         live = models.live(ident)
         if live is None:
-            if models.held(ident) is None and models.file_of(ident) is None:
+            if models.held(ident) is None and models.locate(ident) is None:
                 raise models.not_held(ident)
             name = (models.row(ident) or {}).get("source", {}).get("name") or ident
             raise ParameterRefused(f"{name} ({ident}) has no live worker that recorded where its parameters are in "
@@ -444,7 +444,7 @@ class Previewing:
         models = self.daemon.models
         live = models.live(ident)
         if live is None:
-            if models.held(ident) is None and models.file_of(ident) is None:
+            if models.held(ident) is None and models.locate(ident) is None:
                 raise models.not_held(ident)
             name = (models.row(ident) or {}).get("source", {}).get("name") or ident
             raise ParameterRefused(f"{name} ({ident}) has no live worker that recorded where its parameters are in "

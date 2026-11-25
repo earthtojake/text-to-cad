@@ -57,7 +57,6 @@ import itertools
 import threading
 import time
 import uuid
-from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
@@ -151,20 +150,6 @@ ICON = {
     "mimeType": "image/svg+xml",
     "sizes": ["any"],
 }
-
-
-def _say_not_held(named: Any) -> None:
-    """A document id the engine knows but holds no more (unsaved, detached): refused with the command
-    that builds it again, which nothing here runs."""
-    from cad.engine.ids import is_id
-
-    if not is_id(named):
-        return
-    from cad.engine.client import request
-
-    answer = request({"op": "state", "id": named}, start=False) or {}
-    if answer.get("error"):
-        raise ToolFailed(f"{answer['error']}. Nothing runs it for you; once it is run, show {named} again.", "no_file")
 
 
 class ToolFailed(Exception):
@@ -335,7 +320,7 @@ def _data(structured: dict[str, Any]) -> dict[str, Any]:
 
 
 class Server:
-    def __init__(self, *, page: AppPage | None = None, recents=None, tunnel=None, viewer_url=None, browser_opener=None,
+    def __init__(self, *, page: AppPage | None = None, library=None, tunnel=None, viewer_url=None, browser_opener=None,
                  sidebar_views=None, analytics=None, sync_document=lambda path: None, warm=lambda: None,
                  in_browser=lambda model: False, browser_opened=lambda model: None, engine_origin: str | None = None,
                  app_token: str | None = None) -> None:
@@ -348,7 +333,8 @@ class Server:
         self.sync_document = sync_document
         self.warm = warm  # the engine's meshing pool, started when a view is launched (``Server.warm``)
         self.views = ViewRegistry()
-        self._recents = recents
+        # The library its views read and write (``cad_server.engine.library``); None: the state folder's.
+        self.library = library
         self._tunnel = tunnel
         self._sidebar_views = sidebar_views
         self._model: str | None = None  # what this thread last opened or showed
@@ -388,14 +374,6 @@ class Server:
     # -- lazily built parts ----------------------------------------------------
 
     @property
-    def recents(self):
-        if self._recents is None:
-            from cad_server.viewer.recents import RecentStore
-
-            self._recents = RecentStore()
-        return self._recents
-
-    @property
     def sidebar_views(self):
         """The CAD sidebar's views, which every process reaches (``sidebar.py``)."""
         if self._sidebar_views is None:
@@ -414,7 +392,7 @@ class Server:
             from cad_server.settings import FILE
 
             # The settings beside the model library (the state folder, by default): shared by its every process.
-            path = Path(self._recents.root).parent / FILE if self._recents is not None else None
+            path = self.library.state.root / FILE if self.library is not None else None
             self._analytics = Recorder(path=path)
         return self._analytics
 
@@ -425,7 +403,7 @@ class Server:
         if self._tunnel is None:
             from .tunnel import ViewerTunnel
 
-            self._tunnel = ViewerTunnel(recents=self.recents, analytics=self.analytics)
+            self._tunnel = ViewerTunnel(library=self.library, analytics=self.analytics)
         return self._tunnel
 
     # -- the protocol ----------------------------------------------------------
@@ -890,10 +868,6 @@ class Server:
         return views
 
     def _tool_cad_show(self, arguments, context):
-        _say_not_held(arguments.get("source"))
-        return self._show(arguments, context)
-
-    def _show(self, arguments, context):
         if self._no_app(context):
             return self._show_in_browser(self._model_path(arguments.get("source")))
         if not self.tabs:

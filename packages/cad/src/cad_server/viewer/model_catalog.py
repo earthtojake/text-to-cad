@@ -2,30 +2,13 @@
 from __future__ import annotations
 
 from cad.engine.client import request
-from cad.engine.ids import is_id
 
 
-def held(ident: str) -> tuple[dict | None, str, str]:
-    """The model the engine holds of id ``ident``, why it holds none (``""`` when it does) -- the
-    engine's own words, naming the command that builds it again -- and the state the engine names
-    for one it does not hold (``unsaved``, ``detached``; ``""`` when it names none). Nothing is built."""
-    answer = request({"op": "model_info", "id": ident}, start=False)
-    if not answer:
-        return None, f"no document {ident} is held: no engine is running", ""
-    if "failed" in answer:
-        return None, str(answer["failed"]), str(answer.get("state") or "")
-    return answer["model"], "", ""
-
-
-def entry(value: str) -> dict | None:
-    """The catalog row of the model document ``value`` (its id) while the engine holds it; None for
-    anything else. The row's ``file`` is the id: a model has no file of its own (``sourcePath``), and
-    nothing reads the script. Its ``hash`` is the build the engine holds (its ``version``), so a page that
-    shows the model hears a rebuild as it hears a file written again: its picture is taken again."""
-    if not is_id(value):
-        return None
-    model, _why, _state = held(value)
-    return None if model is None else row(value, model)
+def held(ident: str) -> dict | None:
+    """The model a live worker holds of id ``ident``, asked of the engine; None where none does, or no engine
+    runs. Nothing is built."""
+    answer = request({"op": "model_info", "id": ident}, start=False) or {}
+    return answer.get("model")
 
 
 def row(value: str, model: dict) -> dict:

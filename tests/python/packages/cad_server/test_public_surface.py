@@ -105,8 +105,6 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "serve": frozenset({"document", "port"}),
     "status": frozenset({"json"}),
     "stop": frozenset({"json"}),
-    # A command that destroys asks first, or takes --yes (cad_server._internal.consent); a delete says its plan alone.
-    "delete": frozenset({"documents", "dry_run", "yes", "json"}),
     # The server's commands (start, stop, status), and the page token replaced, asking first.
     "server": frozenset({"command", "start", "stop", "status", "port", "rotate_token", "yes"}),
     # This version installed on this computer (and the hidden flag the updaters of 0.10.0 to 0.11.11 run).
@@ -247,6 +245,10 @@ class Manifest(unittest.TestCase):
         code, out, err = self._dispatch("frobnicate", "export")
         self.assertEqual((2, ""), (code, out))
         self.assertEqual("cad: unknown command 'frobnicate'; 'cad --help' lists the commands\n", err)
+        # A command a release took away is one more unknown word, with no note about history.
+        code, out, err = self._dispatch("delete", "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab", "--yes")
+        self.assertEqual((2, ""), (code, out))
+        self.assertTrue(err.startswith("cad: unknown command 'delete'"), err)
         code, out, err = self._dispatch("stauts")
         self.assertEqual(2, code)
         self.assertEqual("cad: unknown command 'stauts' (did you mean 'status'?); 'cad --help' lists the commands\n",
@@ -262,7 +264,7 @@ class Manifest(unittest.TestCase):
 
     def test_the_engines_verbs_are_commands_of_their_own(self):
         # One parser per verb, the engine's (cad_server.engine.cli), named by the command that runs it.
-        for verb in ("step export", "stl snapshot", "serve", "step inspect", "status", "stop", "delete", "server"):
+        for verb in ("step export", "stl snapshot", "serve", "step inspect", "status", "stop", "server"):
             with self.subTest(verb=verb):
                 self.assertEqual(cli.build_parser_for(verb).prog, f"cad {verb}")
 

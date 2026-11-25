@@ -133,7 +133,9 @@ class LauncherTest(unittest.TestCase):
                          ('work', True, launched['home'], []))
         status, _, body = self.get(launched, '/api/v1/projects')
         [listed] = json.loads(body)['projects']
-        self.assertEqual((status, listed['id'], [row['name'] for row in listed['documents']]), (200, project['id'], ['tag.stl']))
+        self.assertEqual((status, listed['id'], listed['name']), (200, project['id'], 'work'))
+        folder = json.loads(self.get(launched, f"/api/v1/projects/{project['id']}?path=STL")[2])
+        self.assertEqual([row['name'] for row in folder['documents']], ['tag.stl'])
         # Again, from inside it: the same project; a file in it is its page, as any file's is.
         again = self.launch('.', 'tag.stl', cwd=work / 'STL')
         self.assertEqual((again['projects'][0]['id'], again['projects'][0]['made']), (project['id'], False))

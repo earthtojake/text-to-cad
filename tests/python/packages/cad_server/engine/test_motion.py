@@ -295,8 +295,8 @@ class MotionReadsTest(unittest.TestCase):
         self.table(40)
 
     def restart(self) -> None:
-        """A fresh worker: nothing held but the models' .xbf files as the engine recorded them (``engine_restart``)."""
-        engine_restart.restart(self.folder / "state")
+        """A fresh worker: nothing held but the models' .xbf files (``engine_restart``)."""
+        engine_restart.restart()
 
     def table(self, base: float) -> None:
         path = self.folder / "table.json"
@@ -304,7 +304,7 @@ class MotionReadsTest(unittest.TestCase):
         os.utime(path, ns=(time.time_ns(), time.time_ns()))
 
     def hinge(self, *, verify: bool = False) -> dict:
-        [report] = engine_restart.build(self.folder / "state", self.folder / "hinge.py", ["hinge"], cwd=self.folder,
+        [report] = engine_restart.build(self.folder / "hinge.py", ["hinge"], cwd=self.folder,
                                         verify=verify)
         self.assertTrue(report["ok"], report)
         return report

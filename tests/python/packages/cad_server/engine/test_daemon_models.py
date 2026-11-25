@@ -56,18 +56,18 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
         inspected = self.cli("inspect", ident, "face 1")
         self.assertEqual(inspected.returncode, 0, inspected.stderr)
         self.assertFalse(marker.exists())
-        # Its .xbf gone, the registry knows it: refused with the command that builds it again, run by no one.
+        # Its .xbf gone, its id names nothing: refused, and nothing runs to bring it back.
         (self.folder / "XBF/block.xbf").rename(self.folder / "aside.xbf")
         missing = self.cli("inspect", ident, "face 1")
         self.assertEqual(missing.returncode, 2)
-        self.assertIn(f"block ({ident}) is not saved: its .xbf is gone; run `cad run ", missing.stderr)
+        self.assertIn(f"no document {ident} is held", missing.stderr)
         self.assertFalse(marker.exists())
         (self.folder / "aside.xbf").rename(self.folder / "XBF/block.xbf")
         inspected = self.cli("inspect", str(self.folder / "XBF/block.xbf"), "--query", "build")
         self.assertEqual(inspected.returncode, 0, inspected.stderr)
         self.assertIsNone(json.loads(inspected.stdout)["live"])
 
-    def test_a_named_model_updates_one_address_and_after_a_restart_names_its_command(self) -> None:
+    def test_a_named_model_updates_one_address_and_after_a_restart_is_its_xbf(self) -> None:
         from urllib.parse import urlparse, parse_qs
 
         aside = Path(tempfile.mkdtemp(prefix="engine-daemon-cache-")).resolve()
@@ -108,7 +108,7 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
         (self.folder / "bracket.xbf").unlink()
         missing = self.cli("inspect", f"{address}#face 1")
         self.assertEqual(missing.returncode, 2)
-        self.assertIn(f"bracket ({address}) is not saved: its .xbf is gone; run `cad run ", missing.stderr)
+        self.assertIn(f"no document {address} is held", missing.stderr)
 
     def test_a_script_is_never_a_source_and_an_id_is_read_as_held(self) -> None:
         """No verb imports, runs or builds a script: ``x.py`` and ``x.py::f`` are refused as any file

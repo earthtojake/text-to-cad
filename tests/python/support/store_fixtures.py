@@ -26,7 +26,6 @@ from tests.python.support.paths import add_sources
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 from tests.python.support.ids import model_id  # noqa: E402
-from cad_server.engine.registry import Registry  # noqa: E402
 
 SCRIPT = """
 import pathlib
@@ -88,8 +87,8 @@ def get(url: str, token: str) -> tuple[int, dict]:
 
 class StoreCase(unittest.TestCase):
     """Through a real daemon. The class shares one engine, with a state and a cache folder of its
-    own (so its workers' bytecode is compiled once), and each test starts with nothing recorded in
-    it; a test whose engine needs another environment, or folders of its own, starts that engine
+    own (so its workers' bytecode is compiled once), and each test builds in a folder of its own; a test whose
+    engine needs another environment, or folders of its own, starts that engine
     (``use``), which reads the class's bytecode."""
 
     @classmethod
@@ -123,17 +122,6 @@ class StoreCase(unittest.TestCase):
         (self.state, self.cache), self.env = self.shared, self.engine_env
         self.engine = Path(self.env["CAD_ENGINE_DIR"])
         self.start()  # the class's engine, which a test before may have left stopped
-        self.reset()
-
-    def reset(self) -> None:
-        """Nothing recorded in the class's engine: every document an earlier test left, deleted."""
-        from cad_server.engine import cli
-
-        with mock.patch.dict(os.environ, {name: self.env[name] for name in
-                                          ("CAD_ENGINE_DIR", "CAD_STATE_DIR", "CAD_CACHE_DIR")}):
-            left = [row["id"] for row in Registry(self.state).list()]
-            if left:
-                cli.delete(left)
 
     def use(self, state: Path, cache: Path, **extra: str) -> None:
         """The engine the test talks to from now on: one of its own, on ``state`` and ``cache``."""
@@ -163,8 +151,12 @@ class StoreCase(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.engine)}):
             return request(message, start=False) or {}
 
-    def record(self, ident: str) -> dict:
-        return Registry(self.state).get(ident) or {}
+    def entry(self, ident: str) -> dict | None:
+        """The library's entry of the file of id ``ident``, as its file holds it now."""
+        try:
+            return json.loads((self.state / "library.json").read_text(encoding="utf-8"))["files"].get(ident)
+        except FileNotFoundError:
+            return None
 
     def xbf(self, name: str) -> Path:
         """Model ``name``'s ``.xbf``, beside its script: its document, its store."""

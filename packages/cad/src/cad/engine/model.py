@@ -184,24 +184,12 @@ class Model:
         return file_id(xbf if xbf is not None else self.plan()[0].path)
 
     @property
-    def fingerprint(self) -> str | None:
-        """SHA-256 of its script's bytes (``identity.fingerprint``), read once a build per script
-        (``_FINGERPRINTS``) and only when a report or a re-attachment asks: never at declaration."""
-        script = str(self.script)
-        if script not in _FINGERPRINTS:
-            from cad.engine.identity import fingerprint
-
-            _FINGERPRINTS[script] = fingerprint(self.script)
-        return _FINGERPRINTS[script]
-
-    @property
     def source(self) -> dict[str, Any]:
         """What a build's report says of this model's declaration: its script and function, its
-        first line, its explicit name, its script's fingerprint, its module and its ``.xbf`` (None without one)."""
+        first line, its explicit name and its ``.xbf`` (None without one)."""
         xbf = self.xbf
         return {"script": str(self.script), "name": self.name,
                 "line": self.function.__code__.co_firstlineno, "explicit_name": self.explicit_name,
-                "fingerprint": self.fingerprint, "module": self.function.__module__,
                 "xbf": str(xbf) if xbf is not None else None}
 
     def declare(self, output: Output) -> "Model":
@@ -372,10 +360,6 @@ def as_package_module(main: Any) -> None:
         return
     seat(script, root)
     main.__spec__, main.__package__ = spec, package
-
-
-# Each script's fingerprint (``Model.fingerprint``), read once a build.
-_FINGERPRINTS: dict[str, str | None] = {}
 
 
 def _no_animations(animations: Any) -> None:

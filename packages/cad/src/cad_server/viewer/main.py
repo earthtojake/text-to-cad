@@ -3,8 +3,7 @@ says to run ``cad server start``).
 
 The page is the engine's one page. Each FILE (an on-disk CAD file, a relative one read from this folder, or a
 document id the engine holds) is registered and printed as its page, ``/<id>``. A folder is opened as a
-project: its models and CAD files are listed together, beside each of them and on the home, whose page is
-printed. Nothing is written to the folder."""
+project, shown a folder at a time on the home, whose page is printed. Nothing is written to the folder."""
 # A FILE that is not there, or that the viewer does not open -- a model's script among them -- is the
 # command line's (the ``cad`` command's failure contract, ``cad_server._internal.cli_errors``): refused
 # here, before the engine is asked, as the engine refuses it (``unopened``); a document id the engine does

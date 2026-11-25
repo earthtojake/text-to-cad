@@ -23,7 +23,7 @@ from cad_mcp.browser import deliver
 from cad_server.mcp.browser import OPEN, OPENED
 from cad_mcp.shim import initialize_params
 from cad_server.mcp.protocol import RequestContext, RpcError
-from cad_server.viewer.recents import RecentStore
+from cad_server.engine.library import Library
 from cad_server.mcp.server import _AGENT_TOOLS, NO_TOOLS_INSTRUCTIONS, UNPROVEN, Server, local_path, no_drive
 from cad_server.mcp.tunnel import MAX_REPLY_BYTES
 from cad_server.mcp.ui import AppPage
@@ -112,7 +112,7 @@ class _Session(unittest.TestCase):
                         mock.patch.object(transport, "display_refusal", return_value=None)):
             patched.start()
             self.addCleanup(patched.stop)
-        self.server = Server(page=AppPage(page), recents=RecentStore(self.tmp / "state"), viewer_url=self.viewer_url,
+        self.server = Server(page=AppPage(page), library=Library(self.tmp / "state"), viewer_url=self.viewer_url,
                              browser_opener=lambda target: self.opened.append(target) or True)
         self.initialized = greet(self.server, self.client, self.offered, self.launcher, self.presentation)
 
@@ -305,7 +305,7 @@ class TabServerTest(_Session):
             self.assertFalse({"notice", "update"} & set(read))
             self.assertNotIn("notice", self.launch("cad_home"))
             self.assertNotIn("notice", self.launch("cad_open", {"source": self.bracket}))
-            store = Server(page=self.server.page, recents=self.server.recents)
+            store = Server(page=self.server.page, library=self.server.library)
             params = initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX})
             params["_meta"]["dev.texttocad/transport"]["pin"] = {"channel": "codex"}  # what PR #835's launchers said
             store.handle("initialize", params, None)
@@ -329,7 +329,7 @@ class TabServerTest(_Session):
                              {"openai/resource": {"path": as_codex_spells_it(self.loose)}})
         self.assertEqual((handed["model"], handed["surface"]), (self.loose, "file"))
         # A launch adds nothing to the library: the view does, once the model is on screen.
-        self.assertEqual(self.server.recents.list(), [])
+        self.assertEqual(self.server.library.read()["files"], {})
 
     def test_a_bad_path_is_the_tools_answer_not_a_protocol_error(self) -> None:
         missing = self.call("cad_open", {"source": str(self.workspace / "parts" / "nope.step")})
@@ -557,7 +557,7 @@ class TabServerTest(_Session):
         [seeded] = home["recents"]
         self.assertEqual((seeded["id"], seeded["kind"], seeded["record"]), (file_id(self.bracket), "stl", "file"))
         self.assertEqual(home["recents"], self.http("GET", "/api/v1/documents")[1]["documents"])
-        fresh = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
+        fresh = Server(page=AppPage(self.tmp / "app"), library=Library(self.tmp / "other"))
         fresh.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX}), None)
         context = RequestContext(1, {"threadId": "t"})
         tab = fresh.handle("tools/call", {"name": "cad_tab", "arguments": {}}, context)["structuredContent"]["launch"]
@@ -588,7 +588,7 @@ class SidebarAcrossThreadsTest(_Session):
         super().setUp()
         # The sidebar's own process: another server over the same state directory.
         from cad_server.mcp.sidebar import SidebarViews
-        self.sidebar = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
+        self.sidebar = Server(page=AppPage(self.tmp / "app"), library=Library(self.tmp / "state"),
                               sidebar_views=SidebarViews(self.server.sidebar_views.registry))
         self.sidebar.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX},
                                                             CODEX_APP), None)
@@ -711,7 +711,7 @@ class InlineServerTest(_Session):
         self.assertNotIn("browser", launch)
         self.assertNotIn("engine", launch)
         # A tab host's launches carry the page alone, for Open in browser: its card always has its channel.
-        tabs = Server(page=self.server.page, recents=self.server.recents, viewer_url=page)
+        tabs = Server(page=self.server.page, library=self.server.library, viewer_url=page)
         greet(tabs, CODEX, launcher=CODEX_APP)
         home = tabs.handle("tools/call", {"name": "cad_home", "arguments": as_page(tabs, "cad_home", {})},
                            RequestContext(1, {"threadId": "t"}))["structuredContent"]["launch"]
@@ -765,7 +765,7 @@ class InlineServerTest(_Session):
     def test_an_inline_cards_sandbox_may_fetch_the_engine_s_origin_and_a_tab_s_is_served_as_it_was(self) -> None:
         # An inline host is asked to let the card fetch the engine; a server given no engine adds nothing.
         uri = self.server.handle("resources/list", {}, None)["resources"][0]["uri"]
-        server = Server(page=self.server.page, recents=self.server.recents, engine_origin="http://127.0.0.1:3245")
+        server = Server(page=self.server.page, library=self.server.library, engine_origin="http://127.0.0.1:3245")
         greet(server, CLAUDE, presentation="inline")
         for listed in (server.handle("resources/list", {}, None)["resources"][0],
                        server.handle("resources/read", {"uri": uri}, None)["contents"][0]):
@@ -773,7 +773,7 @@ class InlineServerTest(_Session):
         self.assertEqual(self.server.handle("resources/list", {}, None)["resources"][0]["_meta"]["ui"]["csp"]["connectDomains"],
                          ["data:", "blob:"])
         # A host that shows tabs is served what it was, engine or not: its card always has its channel.
-        tabs = Server(page=self.server.page, recents=self.server.recents, engine_origin="http://127.0.0.1:3245")
+        tabs = Server(page=self.server.page, library=self.server.library, engine_origin="http://127.0.0.1:3245")
         greet(tabs, CODEX, launcher=CODEX_APP)
         self.assertEqual(tabs.handle("resources/list", {}, None)["resources"][0]["_meta"]["ui"]["csp"]["connectDomains"],
                          ["data:", "blob:"])
@@ -920,7 +920,7 @@ class InlineServerTest(_Session):
         self.assertEqual(stale["structuredContent"], {"refused": "stale"})
         # Claude Desktop's card reads it from the launch alone: no tool's metadata carries it.
         self.assertNotIn(token, json.dumps(self.server.handle("tools/list", {}, None)))
-        other = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state-other"))
+        other = Server(page=AppPage(self.tmp / "app"), library=Library(self.tmp / "state-other"))
         greet(other, self.client, self.offered, presentation=self.presentation)
         self.assertTrue(other.handle("tools/call", {"name": "cad_http", "arguments": {"method": "GET", "url": "/api/v1/server",
                         "headers": {"x-cad-app": token}}}, RequestContext(1, {}))["isError"])
@@ -965,7 +965,7 @@ class CursorServerTest(_Session):
     def test_every_other_host_keeps_its_catalog_as_it_was(self) -> None:
         for client, launcher, presentation in ((CLAUDE, None, "inline"), (CODEX, CODEX_APP, None), (CURSOR, None, "tabs")):
             with self.subTest(client=client["name"], presentation=presentation):
-                server = Server(page=self.server.page, recents=RecentStore(self.tmp / "state"))
+                server = Server(page=self.server.page, library=Library(self.tmp / "state"))
                 greet(server, client, RENDERS_APPS, launcher, presentation)
                 self.assertTrue(server.handle("tools/list", {}, None)["tools"])
                 self.assertNotIn(server._app_token, json.dumps(server.handle("tools/list", {}, None)))
@@ -1002,7 +1002,7 @@ class HeadlessCodexTest(_Session):
         self.assertTrue(target.startswith("file:"), target)
         self.assertEqual(told, [self.bracket])
         # The Viewer adds the model to the library once it shows it; a link alone adds nothing.
-        self.assertEqual(self.server.recents.list(), [])
+        self.assertEqual(self.server.library.read()["files"], {})
 
     def test_cad_show_takes_a_path_or_a_document_id_and_says_so(self) -> None:
         cad_show = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}["cad_show"]
@@ -1104,7 +1104,7 @@ class HeadlessCodexTest(_Session):
         self.server.notify(OPENED, {"url": link, "opened": True})
         self.server.notify(OPENED, {"url": "http://127.0.0.1:3245/elsewhere", "opened": True})
         # Asked of this session's peer: another session's word on that page is not this one's.
-        other = Server(page=self.server.page, recents=self.server.recents, viewer_url=self.viewer_url,
+        other = Server(page=self.server.page, library=self.server.library, viewer_url=self.viewer_url,
                        browser_opened=told.append)
         other.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {},
                                                       "clientInfo": self.client}), None)
@@ -1125,7 +1125,7 @@ class HeadlessCodexTest(_Session):
     def test_a_client_with_no_stdio_peer_is_given_the_url_and_nothing_opens(self) -> None:
         # A direct HTTP client: no peer said it opens a browser, so nothing does.
         told = []
-        server = Server(page=self.server.page, recents=self.server.recents, viewer_url=self.viewer_url,
+        server = Server(page=self.server.page, library=self.server.library, viewer_url=self.viewer_url,
                         browser_opened=told.append)
         server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": self.client}, None)
         shown = server.handle("tools/call", {"name": "cad_show", "arguments": {"source": self.bracket}},
@@ -1145,7 +1145,7 @@ class HeadlessCodexTest(_Session):
         refusal = "this is a remote session with no display to open a browser on"
         with mock.patch.object(browser_open, "display_refusal", return_value=refusal), \
                 mock.patch.object(transport, "display_refusal", return_value=refusal):
-            server = Server(page=self.server.page, recents=self.server.recents, viewer_url=self.viewer_url)
+            server = Server(page=self.server.page, library=self.server.library, viewer_url=self.viewer_url)
             server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {},
                                                            "clientInfo": self.client}), None)
         shown = server.handle("tools/call", {"name": "cad_show", "arguments": {"source": self.bracket}},
@@ -1180,7 +1180,7 @@ class CodexExecTest(_Session):
     APP = {"x-codex-turn-metadata": {"sandbox": "seatbelt"}}
 
     def greet(self, launcher: dict | None, offered: dict | None = None, **kwargs) -> Server:
-        server = Server(page=self.server.page, recents=self.server.recents, viewer_url=self.viewer_url,
+        server = Server(page=self.server.page, library=self.server.library, viewer_url=self.viewer_url,
                         browser_opener=lambda target: self.opened.append(target) or True, **kwargs)
         greet(server, CODEX, offered, launcher)
         return server
@@ -1276,7 +1276,7 @@ class NoToolsTest(_Session):
         claude_code = {"name": "claude-code", "title": "Claude Code", "version": "2.1.316"}
         for client in (CURSOR, CLAUDE, claude_code, OTHER_HOST):
             with self.subTest(client=client["name"]):
-                server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
+                server = Server(page=AppPage(self.tmp / "app"), library=Library(self.tmp / "other"))
                 said = greet(server, client, RENDERS_APPS, {"host": "claude desktop", "renders": True})
                 self.assertEqual((server.handle("tools/list", {}, None), said["instructions"]),
                                  ({"tools": []}, NO_TOOLS_INSTRUCTIONS))
@@ -1296,7 +1296,7 @@ class NoToolsTest(_Session):
         self.assertEqual(self.opened, [])
 
     def test_the_development_switch_serves_cards_to_any_app(self) -> None:
-        server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
+        server = Server(page=AppPage(self.tmp / "app"), library=Library(self.tmp / "other"))
         greet(server, self.client, presentation="inline")
         self.assertIn("ui", {tool["name"]: tool for tool in server.handle("tools/list", {}, None)["tools"]}["cad_show"]["_meta"])
 
@@ -1321,7 +1321,7 @@ class ToolArgumentsTest(unittest.TestCase):
         page = self.tmp / "app"
         page.mkdir(exist_ok=True)
         (page / "shell.html").write_text("<!doctype html><title>CAD</title>", encoding="utf-8")
-        server = Server(page=AppPage(page), recents=RecentStore(self.tmp / "state"))
+        server = Server(page=AppPage(page), library=Library(self.tmp / "state"))
         greet(server, client, presentation=presentation)
         return server
 
@@ -1370,7 +1370,7 @@ class ToolArgumentsTest(unittest.TestCase):
     def test_every_host_is_told_the_commands_that_export_inspect_and_snapshot(self) -> None:
         # No tool exports, inspects or draws a picture for the agent: it learns the commands that do from the
         # instructions, in every presentation and where it is offered no tools.
-        told = [greet(Server(page=AppPage(self.tmp), recents=RecentStore(self.tmp / "state")), client,
+        told = [greet(Server(page=AppPage(self.tmp), library=Library(self.tmp / "state")), client,
                       presentation=presentation)["instructions"]
                 for client, presentation in CATALOGS.values()]
         for instructions in told:
@@ -1415,7 +1415,7 @@ class ImportBudgetTest(unittest.TestCase):
             "server = Server()\n"
             "server.handle('initialize', {'protocolVersion': '2025-06-18'}, None)\n"
             "server.handle('tools/list', {}, None)\n"
-            "print(','.join(name for name in ('OCP', 'build123d', 'ezdxf', 'cad_server.mcp.tunnel', 'cad_server.viewer.recents') if name in sys.modules))\n"
+            "print(','.join(name for name in ('OCP', 'build123d', 'ezdxf', 'cad_server.mcp.tunnel', 'cad_server.engine.library') if name in sys.modules))\n"
         )
         done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120, env={**os.environ})
         self.assertEqual(done.returncode, 0, done.stderr)

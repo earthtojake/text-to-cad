@@ -68,7 +68,6 @@ class PreviousTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
         self.script = self.folder / "kit.py"
         self.xbf = self.folder / "XBF/kit.xbf"
-        self.state = self.folder / "state"
         (self.folder / "inputs").mkdir()
         bd.export_step(bd.Cylinder(3, 4), str(self.folder / "inputs" / "cap.step"))
         (self.folder / "peg.json").write_text(json.dumps({"size": 4}), encoding="utf-8")
@@ -77,17 +76,9 @@ class PreviousTest(unittest.TestCase):
         self.addCleanup(self.restart)
         memo.install()
 
-    def restart(self, saved: bool = True) -> None:
-        """What a new worker holds: nothing; and the kit's .xbf recorded as the engine wrote it (``saved``: the
-        daemon's record of the build, before the worker went)."""
-        from cad.engine.kernel import memo
-
-        if saved:
-            engine_restart.record(self.state)
-        memo.clear()
-        engine_build._WRITTEN.clear()
-        engine_build._PARTS.clear()
-        engine_build._BUILT.clear()
+    def restart(self) -> None:
+        """What a new worker holds: nothing but the kit's .xbf."""
+        engine_restart.restart()
 
     def source(self, peg: float = 10, plate: float = 40) -> None:
         self.script.write_text(textwrap.dedent(KIT.format(peg=peg, plate=plate)), encoding="utf-8")
@@ -95,16 +86,15 @@ class PreviousTest(unittest.TestCase):
 
     def kit(self, said: list | None = None) -> dict:
         """The kit built, what the build logs (the files it wrote or kept) appended to ``said``."""
-        (report,) = engine_restart.build(self.state, self.script, ["kit"], cwd=self.folder,
+        (report,) = engine_restart.build(self.script, ["kit"], cwd=self.folder,
                                          log=said.append if said is not None else lambda _line: None)
         self.assertTrue(report["ok"], report)
         return report
 
     def cold(self, **values) -> bytes:
-        """The kit as a process that never built it, with no file and nothing recorded, builds it."""
-        self.restart(saved=False)
+        """The kit as a process that never built it, with no file, builds it."""
+        self.restart()
         self.xbf.unlink(missing_ok=True)
-        shutil.rmtree(self.state, ignore_errors=True)
         self.source(**values)
         report = self.kit()
         self.assertEqual(report["cache"]["reason"], "it has no .xbf")
@@ -137,12 +127,11 @@ class PreviousTest(unittest.TestCase):
 
         self.source()
         code = ("import json, sys; from pathlib import Path; from tests.python.support import engine_restart; "
-                "script, state = Path(sys.argv[1]), Path(sys.argv[2]); "
-                "report = engine_restart.build(state, script, ['kit'], cwd=script.parent)[0]; "
-                "engine_restart.record(state); print(json.dumps(report))")
+                "script = Path(sys.argv[1]); "
+                "report = engine_restart.build(script, ['kit'], cwd=script.parent)[0]; print(json.dumps(report))")
         found = []
         for seed in ("1", "2"):
-            done = subprocess.run([sys.executable, "-c", code, str(self.script), str(self.state)], capture_output=True,
+            done = subprocess.run([sys.executable, "-c", code, str(self.script)], capture_output=True,
                                   text=True, env={**os.environ, "PYTHONHASHSEED": seed},
                                   cwd=Path(__file__).resolve().parents[5])
             self.assertEqual(done.returncode, 0, done.stderr)
@@ -161,10 +150,9 @@ class PreviousTest(unittest.TestCase):
         self.kit()
         self.source(peg=12)
         code = ("import sys; from pathlib import Path; from tests.python.support import engine_restart; "
-                "script, state = Path(sys.argv[1]), Path(sys.argv[2]); "
-                "assert engine_restart.build(state, script, ['kit'], cwd=script.parent)[0]['ok']; "
-                "engine_restart.record(state)")
-        done = subprocess.run([sys.executable, "-c", code, str(self.script), str(self.state)], capture_output=True,
+                "script = Path(sys.argv[1]); "
+                "assert engine_restart.build(script, ['kit'], cwd=script.parent)[0]['ok']")
+        done = subprocess.run([sys.executable, "-c", code, str(self.script)], capture_output=True,
                               text=True, cwd=Path(__file__).resolve().parents[5])
         self.assertEqual(done.returncode, 0, done.stderr)
         report = self.kit()
@@ -249,11 +237,11 @@ class PreviousTest(unittest.TestCase):
         self.assertEqual((report["cache"], report["memo"]["bodies_run"]), ({"used": True, "from": "memory"}, 0))
         self.assertTrue(report["files"][str(self.xbf)]["written"])
         self.assertEqual(self.xbf.read_bytes(), first, "written again from the document, the cold bytes")
-        # After a restart, an .xbf edited by hand is not the engine's: the model builds, and writes the cold bytes.
+        # After a restart, an .xbf that holds no document of the engine's: the model builds, and writes the cold bytes.
         self.restart()
         self.xbf.write_bytes(b"edited by hand")
         report = self.kit()
-        self.assertEqual(report["cache"]["reason"], "its .xbf is not the one the engine wrote")
+        self.assertEqual(report["cache"]["reason"], "its .xbf was written by another program")
         self.assertGreater(report["memo"]["bodies_run"], 0)
         self.assertTrue(report["files"][str(self.xbf)]["written"])
         self.assertEqual(self.xbf.read_bytes(), first)
@@ -313,22 +301,15 @@ class PreviousTest(unittest.TestCase):
         self.assertNotIn(b"thickness", text, "no source text")
         self.assertEqual(writer, document._writer())
 
-    def test_an_xbf_another_program_wrote_is_built_again_and_one_replaced_by_hand_is_never_taken(self) -> None:
+    def test_an_xbf_another_program_wrote_is_built_again(self) -> None:
         first = self.cold()
         writer = document._writer().encode()
         self.restart()
-        # Another program's writer in its place, recorded as the engine's: the run says whose, and builds.
+        # Another program's writer in its place: the run says whose, and builds.
         self.xbf.write_bytes(first.replace(writer, writer.replace(b"(cadgen ", b"(cadgem ")))
-        engine_restart.stamp(self.state, self.xbf)
         report = self.kit()
         self.assertEqual(report["cache"]["reason"], "its .xbf was written by another program")
         self.assertTrue(report["files"][str(self.xbf)]["written"], "built again, and its .xbf written over")
-        self.assertEqual(self.xbf.read_bytes(), first)
-        # Replaced by hand, its record never told: not the engine's, so never taken; written over by the build.
-        self.restart()
-        self.xbf.write_bytes(first.replace(writer, writer.replace(b"(cadgen ", b"(cadgem ")))
-        report = self.kit()
-        self.assertEqual(report["cache"]["reason"], "its .xbf is not the one the engine wrote")
         self.assertEqual(self.xbf.read_bytes(), first)
 
     def test_the_writers_release_is_information_and_another_format_builds_once(self) -> None:
@@ -340,14 +321,12 @@ class PreviousTest(unittest.TestCase):
         other_release = writer.replace(b"(cadgen " + release, b"(cadgen " + b"9" * len(release))
         self.restart()
         self.xbf.write_bytes(first.replace(writer, other_release))
-        engine_restart.stamp(self.state, self.xbf)
         self.assertEqual(self.kit()["cache"], {"used": True, "from": "xbf"})
         # A document of the format before (the key made differently): built again, once.
         old = other_release.replace(f"cadgen.engine {previous.FORMAT} ".encode(), b"cadgen.engine xbf/1 ")
         self.assertEqual(len(old), len(other_release))
-        self.restart(saved=False)
+        self.restart()
         self.xbf.write_bytes(self.xbf.read_bytes().replace(other_release, old))
-        engine_restart.stamp(self.state, self.xbf)
         report = self.kit()
         self.assertEqual(report["cache"]["reason"], f"its .xbf was written by {old.decode()}")
         self.restart()
@@ -367,7 +346,6 @@ class PreviousTest(unittest.TestCase):
         head = first[: first.index(b"\x00", first.index(b'{"schema":' + json.dumps(previous.SCHEMA).encode())) + 1]
         self.restart()
         self.xbf.write_bytes(head)
-        engine_restart.stamp(self.state, self.xbf)
         report = self.kit()
         self.assertTrue(report["cache"]["reason"].startswith("its .xbf does not read"), report["cache"])
         self.assertEqual(self.xbf.read_bytes(), first, "built, and written again whole")
@@ -461,7 +439,6 @@ class ClosureTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
         self.script = self.folder / "plate.py"
         self.xbf = self.folder / "XBF/plate.xbf"
-        self.state = self.folder / "state"
         self.script.write_text(textwrap.dedent(PLATE), encoding="utf-8")
         self.helper()
         (self.folder / "depth.json").write_text(json.dumps({"depth": 6}), encoding="utf-8")
@@ -470,14 +447,8 @@ class ClosureTest(unittest.TestCase):
         memo.install()
 
     def restart(self) -> None:
-        """A new worker: nothing held but the plate's .xbf, as the engine recorded it."""
-        from cad.engine.kernel import memo
-
-        engine_restart.record(self.state)
-        memo.clear()
-        engine_build._WRITTEN.clear()
-        engine_build._PARTS.clear()
-        engine_build._BUILT.clear()
+        """A new worker: nothing held but the plate's .xbf."""
+        engine_restart.restart()
 
     def helper(self, width: float = 20, comment: str = "", unused: int = 1) -> None:
         path = self.folder / "dims.py"
@@ -487,7 +458,7 @@ class ClosureTest(unittest.TestCase):
     def plate(self, restart: bool = True) -> dict:
         if restart:
             self.restart()
-        (report,) = engine_restart.build(self.state, self.script, ["plate"], cwd=self.folder)
+        (report,) = engine_restart.build(self.script, ["plate"], cwd=self.folder)
         self.assertTrue(report["ok"], report)
         return report
 

@@ -653,52 +653,26 @@ class RunWithTest(unittest.TestCase):
                          r"^cad run: uv could not export .+uv\.lock: The lockfile at `uv\.lock` needs to be updated, "
                          r"but `--locked` was provided")
 
-    def rebuild(self, done: subprocess.CompletedProcess) -> str | None:
-        from cad.engine import records
-
-        ident = re.search(r"id: ([0-9a-f-]{36})", done.stdout).group(1)
-        return records.command(records.current(), records.current().get(ident))
-
     def test_a_local_package_through_with_and_through_the_header_in_one_environment_made_once(self) -> None:
-        from cad.engine.records import rerun
-
         (self.project / "plate.py").write_text(PLATE.format(header=""), encoding="utf-8")
         first = self.run_("--with", f"./{self.wheel.name}", "plate.py")
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         self.assertIn("cad run: making the environment of the model's packages, once: ", first.stderr)
         self.assertRegex(first.stdout, r"bounds 42\D+10\D+2 mm", "the model imported its package")
         self.assertNotIn("cad here is", first.stderr, "of one release with the server: no update notice")
-        self.assertEqual(self.rebuild(first), rerun(self.project / "plate.py", given=[str(self.wheel)]),
-                         "built with --with: cad run --with it again")
         again = self.run_("--with", str(self.wheel), "plate.py")
         self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
         self.assertNotIn("making", again.stderr, "made once, used again")
         self.assertIn("took plate.py::plate warm", again.stdout, "a warm worker of that environment's Python")
-        # Its header names the same package: the same environment, and `cad run` alone builds it again.
+        # Its header names the same package: the same environment.
         header = f"# /// script\n# dependencies = [{str(self.wheel)!r}]\n# ///\n".replace("'", '"')
         (self.project / "headed.py").write_text(PLATE.format(header=header), encoding="utf-8")
         headed = self.run_("headed.py")
         self.assertEqual(headed.returncode, 0, headed.stdout + headed.stderr)
         self.assertNotIn("making", headed.stderr)
-        self.assertEqual(self.rebuild(headed), rerun(self.project / "headed.py"))
         made = [path for path in (Path(os.environ["CAD_CACHE_DIR"]) / base.BASE).iterdir()
                 if (base.complete(path) or {}).get("with") == [str(self.wheel)]]
         self.assertEqual(len(made), 1, "one environment")
-
-    def test_a_program_s_header_names_the_packages_a_model_it_calls_is_built_again_with(self) -> None:
-        # The header is the check script's; the model is model_part.py's, whose own script names no package.
-        from cad.engine import records
-        from tests.python.support.ids import model_id
-
-        (self.project / "model_part.py").write_text(PLATE.format(header=""), encoding="utf-8")
-        (self.project / "check.py").write_text(f"# /// script\n# dependencies = ['{self.wheel}']\n# ///\n"
-                                               "import model_part\n\nmodel_part.plate()\n", encoding="utf-8")
-        done = self.run_("check.py")
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        held = records.current().get(model_id(self.project / "model_part.py", "plate"))
-        self.assertEqual(records.command(records.current(), held),
-                         records.rerun(self.project / "model_part.py", given=[str(self.wheel)]),
-                         "cad run --with the program's packages and the model's own script")
 
     def test_an_edited_local_package_makes_its_environment_again_and_says_so(self) -> None:
         folder = self.project / "edited"

@@ -270,15 +270,11 @@ def _env_file(paths: list[str]) -> None:
 
 @dataclass
 class Prepared:
-    """What a plan's environment is made of (``prepare``): its spec, the words that build it again
-    (``given``, ``extras.tell``), the script whose header named packages and those it named, the
-    header's ``requires-python``, and the Python line one of its integrations is built for alone, with that
-    integration's name (``extras.python_line``; None for none)."""
+    """What a plan's environment is made of (``prepare``): its spec, the header's ``requires-python``, and the
+    Python line one of its integrations is built for alone, with that integration's name
+    (``extras.python_line``; None for none)."""
 
     spec: object
-    given: list[str]
-    script: str | None
-    declared: list[str]
     wanted: str | None
     line: tuple[str, str] | None = None
 
@@ -385,19 +381,7 @@ def prepare(plan: Plan, release: str, engine: str | None = None) -> Prepared:
         python_options=python_options, environment=extras.uv_settings(),
         config=extras.uv_config(folder), lock=lock, lock_options=tuple(lock_options),
         transient=_words(plan.transient, here), folder=folder)
-    # What builds a document of its run again, from any folder: its command line's options, one word each, and
-    # its requirements (``extras.tell``).
-    again = [*(f"--with-editable={item}" for item in editable if project is None or not item.startswith(project.root)),
-             *(f"--with-requirements={item}" for item in files
-               if project is None or item != str(Path(project.root) / "pyproject.toml")),
-             *([f"--project={project.root}"] if project is not None else []),
-             *(f"--extra={extra}" for extra in sorted(set(plan.extras)) if project is not None),
-             *(dict.fromkeys(plan.lock_mode) if lock else []),
-             *(project_options if lock else []),
-             *([f"--python={given}"] if given else []), *plan.python_options, *options,
-             *([f"cad[{','.join(sorted(given_cad))}]"] if given_cad else []), *sorted(set(with_))]
-    return Prepared(spec, again, str(script) if declared else None, sorted(set(declared)), found.get("requires-python"),
-                    line)
+    return Prepared(spec, found.get("requires-python"), line)
 
 
 def _line(named: str, chosen: tuple[str, ...], python: str | None, wanted: str | None) -> tuple[str, str] | None:
@@ -554,7 +538,6 @@ def main(argv: list[str] | None = None) -> int:
     except (base.Refused, OSError) as refused:
         said(str(refused) if isinstance(refused, base.Refused) else f"{refused.strerror or refused}")
         return 1
-    extras.tell(prepared.given, prepared.script, prepared.declared)  # what builds a document of it again
     command = _command(plan, env.python)
     if command is None:
         said(f"{plan.target} is no command of its environment: run a script, -m MODULE or -c CODE")

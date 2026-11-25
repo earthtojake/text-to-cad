@@ -30,6 +30,7 @@ def http_factory(server, host, port):
     server.clients_working = app.working
     server.on_close = app.close
     server.on_hold_end = app.hold_ended
+    server.locate = app.locate
     try:
         return CadHTTPServer((host, port), make_handler_class(app), app)
     except BaseException:

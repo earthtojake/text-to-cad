@@ -223,17 +223,14 @@ UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update", "plugin_auto_updat
 
 
 def refused(error: Exception) -> dict[str, Any]:
-    """A refusal as the daemon answers it: its words, its type (``worker.refusal``), and for a
-    document the engine does not hold (``serve.NotHeld``) its state and the command that builds it
-    again, so the caller raises it as that type (``api._failed``) and the CLI exits 2."""
-    from cad.engine.serve import NotHeld
+    """A refusal as the daemon answers it: its words and its type (``worker.refusal``), so the caller
+    raises it as that type (``api._failed``: ``serve.NotHeld`` for a document the engine does not hold) and
+    the CLI exits 2."""
     from cad.engine.worker import refusal
 
     from cad.engine.parameters import ParameterRefused
 
     found: dict[str, Any] = {"failed": str(error), **refusal(error)}
-    if isinstance(error, NotHeld):
-        found.update(state=error.state, rebuild=error.rebuild)
     if isinstance(error, ParameterRefused):
         # Why a change of parameters is refused (``code``), what to do, a parameter's own reason, and a failed
         # build's whole words (``parameters.Setting``).
@@ -636,9 +633,10 @@ class Daemon:
                                      pressed=self.pressure.under, on_progress=self.progressed)
         self.workers_lock = threading.Lock()  # each worker's ``held``
         self.born = time.time()
-        # What the startup identity migration did (``identity.migrate``), which ``status`` says when it
+        # What the library's first read carried of an earlier release's records (``library.Library.migrate``),
+        # which ``status`` says when it
         # did anything: a started engine's stderr is no one's.
-        self.identity: dict[str, Any] | None = None
+        self.carried: dict[str, Any] | None = None
         self.last = time.monotonic()
         self.busy = 0
         self.busy_lock = threading.Lock()
@@ -696,7 +694,6 @@ class Daemon:
         from cad_server.engine.parameters import Previewing
 
         self.previewing = Previewing(self)
-        from cad_server.engine import registry
         from cad_server.engine.checks import Checks, Pool, pool_size
         from cad_server.engine.checks_runner import Limits, Runner
 
@@ -708,12 +705,10 @@ class Daemon:
             if line:
                 print(f"cad: {line}", file=sys.stderr, flush=True)
         self.checks = Runner(
-            Checks(folder=self._checks_folder), Pool(self.supervisor, size, said),
+            Checks(folder=lambda: self.models.notes.cache), Pool(self.supervisor, size, said),
             lease=lambda slot: self.supervisor.lease("checks", slot, {}),
             release=self.supervisor.release, version=self._check_version, read=self._check_document,
             durable=self._durable, stopping=lambda: self.draining or self.stopping.is_set(), limits=limits)
-        # Told of each document the registry deletes, under its lock (``Registry.delete``): its kept checks go.
-        registry.FORGOTTEN.append(self.checks.store.deleted)
 
     def touch(self) -> None:
         self.last = time.monotonic()
@@ -1077,10 +1072,7 @@ class Daemon:
                 # processes.
                 self.server.pressure = self.pressure
                 self.server.pressed = lambda: self.supervisor.shed(True)
-                self.server.lost = self.models.rebuild
-                self.server.revive = self.models.revive
-                self.server.modelled = lambda ident: self.models.file_of(ident) is not None
-                self.server.delete = self.models.delete
+                self.server.forget = self.models.forget
                 # A model's parameters as its live worker recorded them, and their ``set`` (``parameters``).
                 self.server.parameters = self.models.live
                 self.server.set_parameters = self.setting.set
@@ -1157,8 +1149,8 @@ class Daemon:
         """What the document ``ident`` is while this engine knows it, as an export reads it, and the
         bytes it carries: a model a live worker holds (``{"script", "function", "held"}``, read from
         that worker, never built); a model no worker holds, its ``.xbf`` (``{"path"}``: the file is the
-        document); a file this engine serves or served (``{"path"}``). Refused (``Models.not_held``), naming its
-        state and the command that builds it again, for any other id: the engine runs nothing."""
+        document); any other file its id names (``{"path"}``: ``Models.locate``). Refused (``Models.not_held``)
+        for an id that names nothing: the engine runs nothing."""
         self.models.prune()
         record = self.models.held(ident)
         server = self.server
@@ -1167,35 +1159,12 @@ class Daemon:
             # Asked of the worker that built it (``via``: a child model's is its parent's script's).
             return {"script": record["source"]["script"], "function": record["source"]["name"], "held": ident,
                     "via": worker.label, **({"python_key": worker.python_key} if worker.python_key else {})}, b""
-        found = self.models.file_of(ident)
+        found = self.models.locate(ident)
         if found is not None:
             return {"path": str(found)}, b""
-        if self.models.recorded(ident) is not None:
-            # A model's (or a shape's) whose .xbf is gone: no longer held, whatever a page read of it before.
-            if server is not None:
-                server.forget_model(ident)
-            raise self.models.not_held(ident)
-        if server is not None and ident in server.served and not isinstance(server.served[ident].path, str):
-            return {"path": str(server.served[ident].path)}, b""
-        known = server.file_of(ident) if server is not None else None
-        if known is not None:
-            return {"path": known}, b""
+        if server is not None:
+            server.forget_model(ident)  # its file is gone: no longer held, whatever a page read of it before
         raise self.models.not_held(ident)
-
-    def known(self, ident: str) -> str:
-        """The id document ``ident`` is known by now: itself, or, for an id from before a model's id was its
-        ``.xbf``'s, the id whose record keeps it (``Registry.resolve``)."""
-        with self.models.lock:
-            if ident in self.models.records:
-                return ident
-        held = self.models.registry()
-        return held.resolve(ident) if held is not None else ident
-
-    def _checks_folder(self) -> Any:
-        """The engine's registry, in whose cache folder the kept checks' results are written under its lock of
-        their document (``checks.Disk``), or None: no cache folder."""
-        held = self.models.registry()
-        return None if held is None or held.cache is None else held
 
     def _check_version(self, ident: str) -> str | None:
         """Model document ``ident``'s generation, as its row has it, else its ``.xbf``'s version (the file is the
@@ -1204,30 +1173,23 @@ class Daemon:
             record = self.models.records.get(ident)
         if record is not None:
             return str(record["version"])
-        found = self.models.file_of(ident)
+        found = self.models.locate(ident)
         if found is None:
             return None
-        from cad_server.engine.registry import file_version
+        from cad_server.engine.state import file_version
 
         return file_version(found)
 
     def _durable(self, ident: str, version: str | None) -> tuple[str, str] | None:
-        """Model document ``ident``'s version that outlives the engine, while its generation is ``version``: its
-        revision, its build closure's key (``models.revision``), with its id -- of one no worker holds, while its
-        ``.xbf`` is the version the engine wrote; None for a build with no key (a token of its own), or another
-        generation."""
+        """Model document ``ident``'s version that outlives the engine, while a worker holds it at generation
+        ``version``: its revision, its build closure's key (``models.revision``), with its id; None for a build
+        with no key (a token of its own), another generation, or a document no worker holds, whose check is kept
+        in memory alone."""
         from cad_server.engine.models import durable
 
         with self.models.lock:
             record = self.models.records.get(ident)
-        if record is None:
-            # No worker holds it: its .xbf, while that file is the one the engine wrote at the revision recorded.
-            held = self.models.registry()
-            found = held.get(ident) if held is not None and version is not None else None
-            if found is None or found.get("version") != version or self.models.file_of(ident) is None:
-                return None
-            return (ident, found["revision"]) if durable(found.get("revision")) else None
-        if version is None or str(record["version"]) != version:
+        if record is None or version is None or str(record["version"]) != version:
             return None
         revision = record.get("revision")
         return (ident, revision) if durable(revision) else None
@@ -1393,58 +1355,35 @@ class Daemon:
     def _handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
         self.touch()
         op = request.get("op")
-        if op == "reattach":
-            # A worker's models with nothing to take up, before it reads their .xbf (``build._reattach``).
-            sources = request.get("models")
-            if not isinstance(sources, list) or not all(
-                    isinstance(row, dict) and isinstance(row.get("script"), str) and isinstance(row.get("name"), str)
-                    for row in sources):
-                send(refused(ValueError("reattach takes models: [{script, name, ...}]")))
-                return
-            try:
-                send({"ok": True, "lines": self.models.reattach(sources, request.get("pid"))})
-            except (OSError, ValueError) as error:
-                send(refused(error))
-            return
         if op == "models":
             send({"ok": True, "models": self.models.listing()})
             return
-        if op == "delete":
-            # ``cad delete`` (``cli.delete``): each id deleted by the one deletion (``models.delete``).
-            deleted = [self.models.delete(self.known(str(ident))) for ident in request.get("ids") or []]
-            for ident in request.get("ids") or []:
-                self.checks.store.forget(f"model:{ident}")
-                self.checks.built(str(ident))  # a check of it measures a document that is gone: stopped
-            send({"ok": True, "deleted": [found for found in deleted if found is not None]})
-            return
         if op == "model_info":
-            # The model a live worker holds by this id; one no worker holds is its .xbf, a file's document, or
-            # refused with its state and the command that builds it again.
+            # The model a live worker holds by this id; one no worker holds is its .xbf, a file's document.
             self.models.prune()
-            ident = self.known(str(request.get("id")))
+            ident = str(request.get("id"))
             record = self.models.held(ident)
             if record is None:
                 send(refused(self.models.not_held(ident)))
             else:
                 model = {key: record.get(key) for key in ("id", "source", "program", "builtAt", "version", "files",
-                                                          "kind", "python", "with")}
+                                                          "kind")}
                 model["state"] = self.models.state(ident)
                 send({"model": model})
             return
         if op == "document":
             # What an id names while this engine holds it (``document``), asked without building.
             try:
-                send({"ok": True, "document": self.document(self.known(str(request.get("id"))))[0]})
+                send({"ok": True, "document": self.document(str(request.get("id")))[0]})
             except ValueError as error:
                 send(refused(error))
             return
         if op == "state":
-            # What the engine knows of a document by its id: held or not, and what builds it again.
-            ident = self.known(str(request.get("id")))
+            # What the engine knows of a document by its id: its state, or that the id names nothing.
+            ident = str(request.get("id"))
             self.models.prune()
-            lost = self.models.rebuild(ident)
-            state = self.models.state(ident) if lost is None else lost["state"]
-            send({"ok": True, "state": state, **({"rebuild": lost["rebuild"], "error": lost["error"]} if lost else {})})
+            state = self.models.state(ident)
+            send({"ok": True, "state": state, **({} if state else {"error": str(self.models.not_held(ident))})})
             return
         if op == "export" and request.get("check") is not None:
             # A manufacturing check (``checks_runner``): no worker's, so it counts toward no drain.
@@ -1454,7 +1393,7 @@ class Daemon:
                 self.touch()
         payload = b""
         if op == "export" and "id" in (request.get("source") or {}):
-            ident = self.known(str(request["source"]["id"]))
+            ident = str(request["source"]["id"])
             try:
                 source, payload = self.document(ident)
             except ValueError as error:
@@ -1464,7 +1403,7 @@ class Daemon:
                 # The viewer's export of a model whose worker is gone since the page showed it: its file now.
                 send({"failed": "The source changed. Open Export again to use the displayed revision."})
                 return
-            if "path" in source and self.models.file_of(ident) is not None and not any(
+            if "path" in source and Path(source["path"]).suffix.lower() == ".xbf" and not any(
                     Path(given).resolve() == Path(source["path"]).resolve() for given in request.get("destinations") or ()):
                 # A model no worker holds, by its id: its .xbf's bytes, read as a held document's, so it exports to any
                 # format, another .xbf among them, as the document it is (over its own file, as a file would: refused).
@@ -1499,7 +1438,7 @@ class Daemon:
             # A handle's shape (``api.Document.shape``): the document its id names, as the engine
             # holds it -- asked of the worker that holds it, or read from the bytes the engine holds --
             # and never built.
-            ident = self.known(str(request["id"]))
+            ident = str(request["id"])
             try:
                 self.contracted(request)  # its shapes are read in its caller's Python
                 source, payload = self.document(ident)
@@ -1585,29 +1524,15 @@ class Daemon:
                                  "profile": bool(request.get("profile")), "run": request.get("run")}
                         if request.get("env"):
                             order["env"] = request["env"]  # the run's own (``worker.adopt``)
-                        if self.models.registry() is not None:
-                            order["take"] = True  # a fresh worker takes a model from its .xbf, by its key
+                        order["take"] = True  # a fresh worker takes a model from its .xbf, by its key
                         answer = worker.request(order, send)
                         from cad_server.engine.parameters import ran
 
                         ran(worker, request, answer)  # the run its parameters' ``set`` builds again, and how it ended
                         answer["worker"] = {"pid": worker.pid, "fresh": fresh}
                         # This server's release, which a script run in its own Python says once a run
-                        # when it is another (``contract.notice``); and how that run was made, which the
-                        # documents' records say to build them again by (``models.Models.register``): in an
-                        # environment ``cad run`` made for the model's own packages, how it named them (the
-                        # requirements its ``--with`` was given, and a script's header's with the script);
-                        # else that Python.
+                        # when it is another (``contract.notice``).
                         answer["release"] = version()
-                        if python is not None:
-                            interpreter = request.get("interpreter") or {}
-                            given = interpreter.get("with")
-                            if isinstance(given, list):
-                                answer["with"] = [item for item in given if isinstance(item, str)]
-                                if isinstance(interpreter.get("header"), dict):
-                                    answer["header"] = interpreter["header"]
-                            else:
-                                answer["python"] = python
                         if gone is not None:
                             for report in answer.get("done") or []:
                                 if isinstance(report, dict):
@@ -1663,7 +1588,6 @@ class Daemon:
         elif op == "serve":
             server = self.serve(request)
             named = str(request["path"])
-            named = self.known(named) if is_id(named) else named
             try:
                 if not is_id(named):
                     ident = server.add(Path(named))
@@ -1887,7 +1811,7 @@ class Daemon:
                                                              "memory": self.server.memory()},
                 "models": self.models.listing(),
                 "checks": self.checks.status(),
-                "identity": self.identity if self.identity and any(self.identity.values()) else None,
+                "library": self.carried if self.carried and any(self.carried.values()) else None,
                 "renders": [] if self.renders is None else self.renders.status(),
                 "base": _making().status(),
                 "sessions": (self.server.http.app.sessions() if self.server is not None
@@ -2012,11 +1936,7 @@ class Daemon:
         threading.Thread(target=wait, name="cad-drain", daemon=True).start()
 
     def shutdown(self) -> None:
-        from cad_server.engine import registry
-
         self.checks.halt()  # every check answered that the engine stopped, its checks process killed
-        if self.checks.store.deleted in registry.FORGOTTEN:
-            registry.FORGOTTEN.remove(self.checks.store.deleted)
         _halt()  # a making of the base under way: its uv goes with the engine
         self.supervisor.stop()  # its workers, the standby and the render processes
         display.stop()  # the Xvfb it started for their stills, if it did
@@ -2410,16 +2330,13 @@ def main(argv: list[str] | None = None, *, port: int | None = None, foreground: 
         return 1
     daemon = Daemon(port=port)
 
-    # And the records from before namespace/name identity brought to it, once (``identity.migrate``:
-    # JSON and file names, no XBF, independent of the closure's pass). It never keeps the engine
-    # from starting.
-    from cad.engine.identity import migrate
-
+    # The library read once before the engine is reachable: an earlier release's records are carried into it
+    # here (``library.Library.migrate``). It never keeps the engine from starting.
     try:
-        daemon.identity = migrate(daemon.models.registry())
+        daemon.models.library.read()
+        daemon.carried = daemon.models.library.carried
     except Exception as error:  # noqa: BLE001
-        daemon.identity = {"filled": 0, "moved": 0, "skipped": [f"the pass failed: {type(error).__name__}: {error}"]}
-        print(f"cad: identity migration failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+        print(f"cad: the library could not be read: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
     daemon.stand()
     pages = resumed()  # taken whatever this start does with it: the next start's is the next stop's
     try:  # a port named comes first (``--port``, else ``CAD_ENGINE_PORT``): the pages' port where it is that one

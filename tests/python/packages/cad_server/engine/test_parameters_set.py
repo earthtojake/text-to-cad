@@ -105,11 +105,12 @@ class SetTest(SetCase):
         rows = lambda source: {(row["name"], row["value"], row["writable"], row["reason"], row["source"])  # noqa: E731
                                for row in cad.model.inspect(source, query="structure")["summary"]["parameters"]}
         self.assertEqual(rows(self.folder / "XBF" / "bracket.xbf"), rows(self.ident))
-        # An .xbf exported is a file of its own: its record read from the file alone, every parameter read-only.
+        # An .xbf exported is a file of its own, a model's no worker holds: its record read from the file alone,
+        # every parameter read-only.
         copy = self.folder / "copy.xbf"
         cad.model.export(self.ident, copy)
-        self.assertEqual(rows(copy), {("pitch", 30.0, False, "file", None), ("wall", 2.5, False, "file", None),
-                                      ("holes", 8, False, "file", None), ("twice", 5.0, False, "file", None)})
+        self.assertEqual(rows(copy), {(name, value, False, "no_worker", None) for name, value in (
+            ("pitch", 30.0), ("wall", 2.5), ("holes", 8), ("twice", 5.0))})
         self.assertEqual(save(self.ident, wall=2.5), {"id": self.ident, "written": [], "rebuilt": []})
 
     def test_each_refusal_says_its_code_and_writes_nothing(self) -> None:
@@ -228,7 +229,7 @@ class SiblingsTest(unittest.TestCase):
         api.export(self.a, out / "a.xbf", progress=False)
         listed = cad.model.inspect(out / "a.xbf", query="structure")["summary"]["parameters"]
         self.assertEqual([(row["name"], row["value"], row["kind"], row["min"], row["max"], row["writable"], row["reason"])
-                          for row in listed], [("wall", 2.0, "float", 1, 5, False, "file")])
+                          for row in listed], [("wall", 2.0, "float", 1, 5, False, "no_worker")])
 
     def test_a_model_that_built_and_fails_at_the_new_values_fails_the_set(self) -> None:
         with self.assertRaises(ParameterRefused) as caught:

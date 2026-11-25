@@ -79,8 +79,7 @@ class LibraryTest(unittest.TestCase):
         self.library.pin(kept, True)
         gone.unlink()
         kept.unlink()
-        self.assertTrue(self.library.forget(file_id(tag)))
-        self.assertFalse(self.library.forget(file_id(tag)))
+        self.library.forget(file_id(tag))
         self.assertEqual(sorted(self.on_disk()["files"]), sorted([file_id(arm), file_id(kept)]))
         self.assertIsNone(self.library.path_of(file_id(gone)))
 

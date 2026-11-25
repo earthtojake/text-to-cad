@@ -1,328 +1,88 @@
-"""Recents: the registry's view, shared by concurrent processes, tolerant of records it cannot read."""
+"""Recents: the library's files that are there now, each a row read from its entry, one ``stat`` and the cache's
+note of the file as it is."""
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
-import subprocess
-import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
 
-from tests.python.support.ids import model_id
-from cad_server.engine.registry import Registry
-from cad_server.viewer.recents import RecentStore
+from cad.engine.ids import file_id
+from cad_server.engine.library import Library, Notes
+from cad_server.viewer.projects import Projects
+from cad_server.viewer.recents import listing
+
+STL = b"solid t\nendsolid t\n"
 
 
-class RecentStoreTest(unittest.TestCase):
+class RecentsTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(os.path.realpath(tempfile.mkdtemp()))
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.library = Library(self.tmp / "state", self.tmp / "cache")
+        self.notes = Notes(self.tmp / "cache")
+        self.projects = Projects(self.library)
 
-    def test_pins_lead_then_the_most_recent_and_a_removal_forgets(self) -> None:
-        store = RecentStore(self.tmp)
-        a, b, c = (str(self.tmp / name) for name in ("a.step", "b.step", "c.step"))  # absolute on every platform
-        for path in (a, b, c):
-            store.opened(path)
-        store.pin(a, True)
-        store.remove(b)
-        store.thumbnail(c, b"\x89PNG fake")
-        entries = store.list()
-        self.assertEqual([(entry.path, entry.pinned) for entry in entries], [(a, True), (c, False)])
-        self.assertEqual(store.read_thumbnail(entries[1].thumbnail), b"\x89PNG fake")
-        self.assertIsNone(store.read_thumbnail("../escape.png"))
-        # A picture says when it was taken: a file changed since has an old one.
-        self.assertIsNotNone(entries[1].pictured)
-        self.assertIsNone(entries[0].public()["pictured"])
-        self.assertEqual(len(Registry(self.tmp).list()), 2, "one record per file; the removed one's folder went")
-        self.assertEqual(set(Registry(self.tmp).list()[0]) - {"pinned", "preview"},
-                         {"schema", "id", "kind", "root", "home", "opened", "created", "namespace", "name"}, "its path, and when it was opened, first and last")
+    def file(self, name: str, data: bytes = STL) -> Path:
+        path = self.tmp / name
+        path.write_bytes(data)
+        return path
 
-    def test_twenty_edits_keep_one_picture_and_a_forgotten_entry_keeps_none(self) -> None:
-        # Each revision a view pictures replaces the entry's picture in place: lots of edits are no bloat.
-        store = RecentStore(self.tmp)
-        board = str(self.tmp / "a.kicad_pcb")
-        store.opened(board)
-        for edit in range(21):
-            store.thumbnail(board, b"\x89PNG light %d" % edit)
-        [entry] = store.list()
-        self.assertEqual([path.name for path in store.thumbnails.iterdir()], [entry.thumbnail])
-        self.assertEqual(store.read_thumbnail(entry.thumbnail), b"\x89PNG light 20")
-        # Two files with the same picture are two names: forgetting one leaves the other's.
-        other = str(self.tmp / "b.kicad_pcb")
-        store.opened(other)
-        store.thumbnail(other, b"\x89PNG light 20")
-        store.remove(board)
-        [kept] = store.list()
-        self.assertEqual([path.name for path in store.thumbnails.iterdir()], [kept.thumbnail])
-        self.assertEqual(store.read_thumbnail(kept.thumbnail), b"\x89PNG light 20")
+    def rows(self) -> dict[str, dict]:
+        return {row["name"]: row for row in listing(self.library, self.notes, self.projects)}
 
-    def test_every_record_keeps_its_picture_however_many_and_an_orphan_goes_once_old(self) -> None:
-        from cad_server.viewer import recents
-
-        store = RecentStore(self.tmp)
-        paths = [str(self.tmp / f"{index}.step") for index in range(recents.LIMIT + 5)]
-        for index, path in enumerate(paths):
-            store.opened(path)
-            store.registry.update(store._ident(path), lambda record, at=index: {**record, "opened": 1_700_000_000.0 + at})
-        # A crash's picture no record names: kept while a writer could still name it, then gone.
-        orphan = store.thumbnails / ("f" * 32 + ".png")
-        for path in paths:
-            store.thumbnail(path, b"\x89PNG " + path.encode() + b" " + b"\0" * 4096)
-            orphan.parent.mkdir(parents=True, exist_ok=True)
-            orphan.write_bytes(b"\x89PNG orphan")
-        self.assertTrue(orphan.exists())
-        old = time.time() - 3600
-        os.utime(orphan, (old, old))
-        store.thumbnail(paths[3], b"\x89PNG again")
-        # No count and no total bound: every record, listed in Recents or past its rows, keeps its picture.
-        named = {store.registry.get(store._ident(path))["preview"]["thumbnail"] for path in paths}
-        self.assertEqual(len(named), len(paths))
-        self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()), sorted(named))
-        self.assertEqual(len(store.list()), recents.LIMIT, "Recents lists its rows, its pictures aside")
-
-    def test_an_earlier_release_s_dark_picture_is_not_listed_and_goes_once_old(self) -> None:
-        # An earlier release kept a board's dark theme's picture beside its light one. The light one is
-        # still the record's picture; the dark one no record names now, so it goes once old, as an orphan.
-        store = RecentStore(self.tmp)
-        board = str(self.tmp / "a.kicad_pcb")
-        store.opened(board)
-        light = store.thumbnail(board, b"\x89PNG light")
-        dark = "d" * 32 + ".png"
-        (store.thumbnails / dark).write_bytes(b"\x89PNG dark")
-        store.registry.update(store._ident(board),
-                              lambda record: {**record, "preview": {**record["preview"], "thumbnailDark": dark}})
-        [entry] = store.list()
-        self.assertNotIn("thumbnailDark", entry.public())
-        self.assertEqual(store.read_thumbnail(entry.thumbnail), b"\x89PNG light")
-        old = time.time() - 3600
-        for path in store.thumbnails.iterdir():
-            os.utime(path, (old, old))
-        other = str(self.tmp / "b.kicad_pcb")
-        store.opened(other)
-        theirs = store.thumbnail(other, b"\x89PNG other")
-        self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()), sorted([light, theirs]))
-        self.assertEqual({entry.path: entry.thumbnail for entry in store.list()}[board], light)
-
-    def test_a_file_is_updated_and_sized_as_it_is_on_disk_and_a_gone_one_says_nothing(self) -> None:
-        store = RecentStore(self.tmp / "state")
-        model = self.tmp / "part.stl"
-        model.write_bytes(b"solid t\nendsolid t\n")
-        os.utime(model, (1_700_000_000, 1_700_000_000))
-        store.opened(str(model))
-        store.opened(str(self.tmp / "gone.stl"))
-        shown = {entry["name"]: entry for entry in (recent.public() for recent in store.list())}
-        self.assertEqual((shown["part.stl"]["updated"], shown["part.stl"]["size"], shown["part.stl"]["missing"]), (1_700_000_000, len(b"solid t\nendsolid t\n"), False))
-        self.assertEqual((shown["gone.stl"]["updated"], shown["gone.stl"]["size"], shown["gone.stl"]["missing"]), (None, None, True))
-        model.write_bytes(b"solid t\nfacet\nendsolid t\n")  # written again: the next read has its new size
-        self.assertEqual({recent.name or os.path.basename(recent.path): recent.size for recent in store.list()}["part.stl"], len(b"solid t\nfacet\nendsolid t\n"))
-        self.assertGreater(shown["part.stl"]["opened"], 1_700_000_000, "opened is the page's, now")
-        self.assertNotIn("modified", shown["part.stl"])
-
-    def test_a_model_is_updated_by_its_run_never_its_scripts_time_and_says_when_a_page_opened_it(self) -> None:
-        from unittest import mock
-
-        from cad_server.viewer import recents
-
-        script = self.tmp / "parts.py"
-        script.write_text("", encoding="utf-8")
-        os.utime(script, (1_800_000_000, 1_800_000_000))  # edited after the run: no row says so
-        ident, built = model_id(script, "plate"), 1_700_000_000.0
-        Registry(self.tmp).put({"id": ident, "kind": "model", "root": str(self.tmp), "home": "parts.py",
-                                "entry": "plate", "revision": "r1", "built": built})
-        store = RecentStore(self.tmp)
-        timed = []
-        with mock.patch.object(recents, "_on_disk", side_effect=lambda path: timed.append(path)):
-            [entry] = [recent.public() for recent in store.list()]
-        self.assertEqual(timed, [], "a model's script's time and size are never read")
-        self.assertEqual((entry["updated"], entry["opened"], entry["missing"], entry["size"]), (built, None, False, None))
-        self.assertIsNone(entry["created"], "a record from before the engine kept it says no creation time")
-        store.opened(ident)  # a page opened it: its record says when, and its run's time stays
-        [entry] = [recent.public() for recent in store.list()]
-        self.assertEqual(entry["updated"], built)
-        self.assertGreater(entry["opened"], built)
-        self.assertEqual(Registry(self.tmp).get(ident)["built"], built)
-        self.assertIsNone(entry["created"], "an opening makes no creation time up")
-
-    def test_a_file_is_created_at_its_first_open_and_a_model_at_its_first_run(self) -> None:
-        store = RecentStore(self.tmp)
-        path = str(self.tmp / "part.step")
-        store.opened(path)
-        [first] = [recent.public() for recent in store.list()]
-        self.assertEqual(first["created"], first["opened"], "a file's record is made as a page first opens it")
-        time.sleep(0.01)
-        store.opened(path)
-        [again] = [recent.public() for recent in store.list()]
-        self.assertEqual(again["created"], first["created"], "a second open keeps the first")
-        self.assertGreater(again["opened"], first["opened"])
-        # A model's run writes its record with the time it was first built (``Models.record``).
-        ident = model_id(self.tmp / "parts.py", "plate")
-        Registry(self.tmp).put({"id": ident, "kind": "model", "root": str(self.tmp), "home": "parts.py",
-                                "entry": "plate", "revision": "r2", "built": 1_700_000_100.0, "created": 1_700_000_000.0})
-        by_path = {recent.path: recent.public() for recent in store.list()}
-        self.assertEqual((by_path[ident]["created"], by_path[ident]["updated"]), (1_700_000_000.0, 1_700_000_100.0))
-
-    def test_rows_are_ordered_by_last_activity_after_the_pinned(self) -> None:
-        store = RecentStore(self.tmp / "state")
-        old, new, pinned = (self.tmp / name for name in ("old.stl", "new.stl", "pinned.stl"))
-        for path in (old, new, pinned):
-            path.write_bytes(b"solid t\nendsolid t\n")
-            store.opened(str(path))
-        store.pin(str(pinned), True)
+    def test_pins_lead_then_the_latest_activity_and_a_file_that_is_gone_is_not_listed(self) -> None:
+        old, new, pinned, gone = (self.file(name) for name in ("old.stl", "new.stl", "pinned.stl", "gone.stl"))
+        for path in (old, new, pinned, gone):
+            self.library.opened(path)
+        self.library.pin(pinned, True)
+        gone.unlink()
         # Opened in that order, but old.stl written since: its last activity is the latest.
         future = time.time() + 3600
         os.utime(old, (future, future))
-        self.assertEqual([os.path.basename(entry.path) for entry in store.list()], ["pinned.stl", "old.stl", "new.stl"])
+        self.assertEqual(list(self.rows()), ["pinned.stl", "old.stl", "new.stl"])
+        self.file("gone.stl")
+        self.assertIn("gone.stl", self.rows(), "back with its file")
 
-    def test_a_built_model_is_listed_by_its_id_and_one_whose_script_went_is_missing_until_removed(self) -> None:
-        script = self.tmp / "parts.py"
-        script.write_text("", encoding="utf-8")
-        ident = model_id(script, "plate")
-        Registry(self.tmp).put({"id": ident, "kind": "model", "root": str(self.tmp),
-                                "home": "parts.py", "entry": "plate", "revision": "r1",
-                                "built": time.time()})
-        store = RecentStore(self.tmp)
-        [entry] = [recent.public() for recent in store.list()]
-        self.assertEqual((entry["path"], entry["id"], entry["kind"], entry["name"], entry["missing"]),
-                         (ident, ident, "model", "plate", False))
-        self.assertEqual(entry["rebuild"], f"cad run {self.tmp / 'parts.py'}")
-        script.unlink()  # moved away: detached, still listed, and says so
-        self.assertTrue(store.list()[0].public()["missing"])
-        store.remove(ident)
-        self.assertEqual((store.list(), Registry(self.tmp).get(ident)), ([], None))
+    def test_a_row_is_its_file_as_it_is_on_disk_with_its_entry(self) -> None:
+        part = self.file("part.stl")
+        os.utime(part, (1_700_000_000, 1_700_000_000))
+        self.library.opened(part)
+        arm = self.file("arm.xbf", b"not read here")
+        self.library.know(arm)  # a run wrote it: listed, never opened
+        self.library.opened(self.file("notes.xyz"))  # a file no page reads is listed nowhere
+        rows = self.rows()
+        self.assertEqual(set(rows), {"part.stl", "arm.xbf"})
+        row = rows["part.stl"]
+        self.assertEqual(set(row), {"id", "kind", "record", "api", "path", "name", "folder", "namespace", "opened",
+                                    "updated", "created", "pinned", "missing", "thumbnail", "pictured", "size", "parts",
+                                    "project"})
+        self.assertEqual((row["id"], row["kind"], row["record"], row["path"], row["folder"], row["namespace"]),
+                         (file_id(part), "stl", "file", str(part), str(self.tmp), str(self.tmp)))
+        self.assertEqual((row["updated"], row["size"], row["missing"], row["pinned"], row["project"]),
+                         (1_700_000_000, len(STL), False, False, None))
+        self.assertEqual(row["created"], row["opened"], "made as a page first opened it")
+        model = rows["arm.xbf"]
+        self.assertEqual((model["kind"], model["record"], model["api"], model["opened"]),
+                         ("model", "file", f"/api/v1/documents/model/{file_id(arm)}", None))
+        part.write_bytes(STL + b"\n")  # written again: the next read has its new size
+        self.assertEqual(self.rows()["part.stl"]["size"], len(STL) + 1)
 
-    def test_a_shape_handed_over_is_where_its_xbf_is_and_says_what_it_is(self) -> None:
-        from cad.engine.ids import file_id
-
-        xbf, built = self.tmp / "plate.xbf", time.time() - 60
-        xbf.write_bytes(b"not read here")
-        ident = file_id(xbf)
-        Registry(self.tmp).put({"id": ident, "kind": "shape", "root": str(self.tmp), "home": ".",
-                                "entry": "plate", "revision": "h1", "built": built, "saved": "plate.xbf"})
-        [entry] = [recent.public() for recent in RecentStore(self.tmp).list()]
-        self.assertEqual((entry["id"], entry["missing"], entry["rebuild"], entry["kind"], entry["updated"], entry["folder"]),
-                         (ident, False, None, "shape", built, str(self.tmp)), "its folder is its .xbf's")
-        self.assertIn("a shape handed over", entry["shown"])
-        self.assertIn("no script to rerun", entry["shown"])
-
-    def test_a_row_lists_its_documents_parts_where_its_record_counts_them_and_none_where_not(self) -> None:
-        store = RecentStore(self.tmp / "state")
-        script = self.tmp / "parts.py"
-        script.write_text("", encoding="utf-8")
-        for name, facts in (("plate", {"parts": 1, "bounds": [1, 1, 1]}), ("gearbox", {"parts": 7}), ("old", None)):
-            store.registry.put({"id": model_id(script, name), "kind": "model", "root": str(self.tmp), "home": "parts.py",
-                                "entry": name, "name": name, "revision": "r1", "built": 1_700_000_000.0,
-                                **({"facts": facts} if facts is not None else {})})
-        kit = self.tmp / "kit.xbf"
-        kit.write_bytes(b"not read here")
-        store.opened(str(kit))
-        parts = lambda: {row["name"]: row["parts"] for row in (recent.public() for recent in store.list())}
-        self.assertEqual(parts(), {"plate": 1, "gearbox": 7, "old": None, "kit.xbf": None},
-                         "a model's from its build; one whose record has none, and a file the engine has not read, none")
-        status = kit.stat()
-        store.counted(store._ident(str(kit)), {"version": f"{status.st_mtime_ns}-{status.st_size}", "instances": [{}, {}, {}]})
-        self.assertEqual(parts()["kit.xbf"], 3, "the engine's read of it, while the file is that version")
+    def test_a_row_says_its_parts_and_its_picture_while_the_note_is_of_the_file_as_it_is(self) -> None:
+        kit = self.file("kit.xbf", b"not read here")
+        self.library.opened(kit)
+        self.assertEqual([self.rows()["kit.xbf"][key] for key in ("parts", "thumbnail", "pictured")], [None, None, None])
+        self.notes.count(kit, 3)
+        self.notes.picture(kit, b"\x89PNG kit")
+        row = self.rows()["kit.xbf"]
+        self.assertEqual((row["parts"], row["thumbnail"]), (3, str(round(row["pictured"] * 1000))))
         later = time.time_ns() + 5_000_000_000
         os.utime(kit, ns=(later, later))
-        self.assertIsNone(parts()["kit.xbf"], "written since: its count is of another version")
-        # A file no page opened or pictured has no record, and is given none for its count.
-        loose = self.tmp / "loose.xbf"
-        store.counted(store._ident(str(loose)), {"version": "1-1", "instances": [{}]})
-        self.assertIsNone(store.registry.get(store._ident(str(loose))))
-
-    def test_a_model_and_its_xbf_are_one_row_and_an_export_or_a_copy_is_its_own(self) -> None:
-        from cad.engine.ids import file_id
-        from cad_server.engine.registry import file_version
-
-        store = RecentStore(self.tmp / "state")
-        script, arm, out, copy = self.tmp / "arm.py", self.tmp / "arm.xbf", self.tmp / "out.xbf", self.tmp / "copy.xbf"
-        script.write_text("", encoding="utf-8")
-        arm.write_bytes(b"not read here")
-        ident = model_id(script, "arm")
-        self.assertEqual(ident, file_id(arm))
-        store.registry.put({"id": ident, "kind": "model", "root": str(self.tmp), "home": "arm.py", "entry": "arm",
-                            "name": "arm", "revision": "r1", "built": 1_700_000_000.0, "saved": "arm.xbf",
-                            "version": file_version(arm), "facts": {"parts": 2}})
-        # An export of it, counted as the engine wrote it (``Models.exported``), and a copy: files of their own.
-        out.write_bytes(b"not read here")
-        store.registry.counted(file_id(out), 2, file_version(out), make=str(out))
-        copy.write_bytes(arm.read_bytes())
-        for path in (arm, out, copy):
-            store.opened(str(path))  # opened on a page: the model's .xbf is the model's record
-
-        def rows():
-            return {row["name"]: row for row in (recent.row() for recent in store.list())}
-
-        self.assertEqual({name: (row["id"], row["kind"], row["record"], row["parts"]) for name, row in rows().items()},
-                         {"arm": (ident, "model", "model", 2), "out.xbf": (file_id(out), "model", "file", 2),
-                          "copy.xbf": (file_id(copy), "model", "file", None)})
-        self.assertEqual((rows()["arm"]["file"], rows()["arm"]["path"]), (arm.as_posix(), ident))
-        self.assertEqual(store.registry.get(ident)["kind"], "model", "a page's open notes the time on the model's record")
-        self.assertTrue(store.registry.get(ident)["opened"])
-        self.assertNotIn("of", rows()["out.xbf"])
-        self.assertNotIn("saved", rows()["arm"])
-        # Edited since its build: still its row, its count no longer known.
-        later = time.time_ns() + 5_000_000_000
-        os.utime(arm, ns=(later, later))
-        self.assertEqual((rows()["arm"]["parts"], rows()["arm"]["missing"]), (None, False))
-        # Its .xbf gone: listed missing, as a file is; deleted, the files stay, rows of their own.
-        arm.unlink()
-        self.assertTrue(rows()["arm"]["missing"])
-        store.remove(ident)
-        self.assertEqual(sorted(rows()), ["copy.xbf", "out.xbf"])
-        self.assertTrue(script.is_file())
-
-    def test_a_record_of_a_file_no_type_reads_is_kept_unlisted_and_removable(self) -> None:
-        # A state folder as a release that read SDFormat left it: records of .sdf files a page opened (one pinned,
-        # with its picture; one since deleted), beside a URDF's and one of a suffix no release read. An .sdf is
-        # no type now: its record reads as the unknown suffix's does, and nothing fails on either.
-        from cad.engine.ids import file_id
-
-        files, state = self.tmp / "files", self.tmp / "state"
-        files.mkdir()
-        for name in ("robot.sdf", "arm.urdf", "notes.xyz"):
-            (files / name).write_text("<robot/>", encoding="utf-8")
-        (state / "recents" / "thumbnails").mkdir(parents=True)
-        picture = "f5a964f8fe0a7db4ddfeaf22876587a8.png"
-        (state / "recents" / "thumbnails" / picture).write_bytes(b"\x89PNG sdf")
-        for name, extra in (("robot.sdf", {"pinned": True, "preview": {"thumbnail": picture, "pictured": 1_700_000_002.0}}),
-                            ("gone.sdf", {}), ("arm.urdf", {}), ("notes.xyz", {})):
-            ident = file_id(str(files / name))
-            (state / "documents" / ident).mkdir(parents=True)
-            record = {"schema": 1, "id": ident, "kind": "file", "root": str(files), "home": name,
-                      "namespace": str(files), "name": name, "opened": 1_700_000_001.0, "created": 1_700_000_000.0,
-                      **extra}
-            (state / "documents" / ident / "document.json").write_text(json.dumps(record), encoding="utf-8")
-        store = RecentStore(state)
-        entries = {os.path.basename(entry.path): entry for entry in store.list()}
-        self.assertEqual(set(entries), {"robot.sdf", "gone.sdf", "arm.urdf", "notes.xyz"})
-        self.assertEqual({name: entry.row() is None for name, entry in entries.items()},
-                         {"robot.sdf": True, "gone.sdf": True, "arm.urdf": False, "notes.xyz": True},
-                         "no page reads it: listed nowhere, as a suffix no release read")
-        self.assertEqual(entries["arm.urdf"].row()["kind"], "urdf")
-        store.thumbnail(str(files / "arm.urdf"), b"\x89PNG urdf")
-        store.remove(str(files / "robot.sdf"))
-        self.assertEqual({os.path.basename(entry.path) for entry in store.list()}, {"gone.sdf", "arm.urdf", "notes.xyz"})
-        self.assertIsNone(store.read_thumbnail(picture), "its picture went with it")
-
-    def test_two_processes_write_at_once_and_a_record_it_cannot_read_is_skipped(self) -> None:
-        code = "import sys\nfrom cad_server.viewer.recents import RecentStore\nstore = RecentStore(__import__('pathlib').Path(sys.argv[1]))\n" \
-               "for index in range(120):\n    store.opened(f'/{sys.argv[2]}/{index}.stl')\n"
-        writers = [subprocess.Popen([sys.executable, "-c", code, str(self.tmp), name], env={**os.environ}) for name in ("x", "y")]
-        for writer in writers:
-            self.assertEqual(writer.wait(120), 0)
-        documents = self.tmp / "documents"
-        # A record of another schema, a torn one, and a folder that is no id: none of them is read.
-        for name, text in (("00000000-0000-4000-8000-000000000001", json.dumps({"schema": 99})),
-                           ("00000000-0000-4000-8000-000000000002", '{"schema": 1, "id": "00000000'), ("notes", "{}")):
-            (documents / name).mkdir()
-            (documents / name / "document.json").write_text(text, encoding="utf-8")
-        entries = RecentStore(self.tmp).list()
-        self.assertEqual(len({entry.path for entry in entries}), 200, "the newest 200 of the 240")
-        self.assertEqual({entry.thumbnail for entry in entries}, {None})
+        self.assertEqual([self.rows()["kit.xbf"][key] for key in ("parts", "thumbnail", "pictured")], [None, None, None],
+                         "written since: the note is of another version")
 
 
 if __name__ == "__main__":

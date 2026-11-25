@@ -2902,56 +2902,22 @@
    "description": 126
   },
   {
-   "command": "cad delete",
-   "summary": "delete documents: record and the engine's copy; never a file of yours",
-   "usage": "cad delete [--dry-run] [--yes] [--json] DOC [DOC ...]",
-   "description": 127,
-   "arguments": [
-    {
-     "name": "DOC",
-     "help": 128,
-     "repeatable": true
-    }
-   ],
-   "options": [
-    {
-     "flags": [
-      "--dry-run"
-     ],
-     "help": 129
-    },
-    {
-     "flags": [
-      "-y",
-      "--yes"
-     ],
-     "help": 130
-    },
-    {
-     "flags": [
-      "--json"
-     ],
-     "help": 131
-    }
-   ]
-  },
-  {
    "command": "cad doctor",
    "summary": "report this cad, its folders, its kernel and the server; it changes nothing",
    "usage": "cad doctor [--check] [--json]",
-   "description": 132,
+   "description": 127,
    "options": [
     {
      "flags": [
       "--check"
      ],
-     "help": 133
+     "help": 128
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 134
+     "help": 129
     }
    ]
   },
@@ -2959,13 +2925,13 @@
    "command": "cad mcp",
    "summary": "serve the CAD app to the agent app that starts it, over MCP on stdin and stdout",
    "usage": "cad mcp",
-   "description": 135
+   "description": 130
   },
   {
    "command": "cad plugin",
    "summary": "the plugin in your agent apps: `install` puts it in or updates it; `update auto`: whether cad's updates update it too",
    "usage": "cad plugin {install} ...",
-   "description": 136,
+   "description": 131,
    "arguments": [
     {
      "name": "{install} ...",
@@ -2980,7 +2946,7 @@
    "command": "cad plugin install",
    "summary": "install the plugin in every agent app found on this computer, or update it there",
    "usage": "cad plugin install",
-   "description": 137
+   "description": 132
   },
   {
    "command": "cad plugin update",
@@ -2999,7 +2965,7 @@
    "command": "cad plugin update auto",
    "summary": "show or change whether cad's updates update the plugin too",
    "usage": "cad plugin update auto [{status,on,off}]",
-   "description": 138,
+   "description": 133,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3016,13 +2982,13 @@
    "command": "cad run",
    "summary": "run a script (or -m, -c) as uv run does, cad pinned at this device's release with the integrations its imports use",
    "usage": "cad run [uv run's options] SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE [ARGS...] | COMMAND [ARGS...]",
-   "description": 139
+   "description": 134
   },
   {
    "command": "cad server",
    "summary": "the cad server: start, stop, status",
    "usage": "cad server [--rotate-token] [--yes] {start,stop,status} ...",
-   "description": 140,
+   "description": 135,
    "arguments": [
     {
      "name": "{start,stop,status} ...",
@@ -3038,14 +3004,14 @@
      "flags": [
       "--rotate-token"
      ],
-     "help": 141
+     "help": 136
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 142
+     "help": 137
     }
    ]
   },
@@ -3053,20 +3019,20 @@
    "command": "cad server start",
    "summary": "start the cad server where it is not running",
    "usage": "cad server start [--port PORT] [--foreground]",
-   "description": 143,
+   "description": 138,
    "options": [
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 144
+     "help": 139
     },
     {
      "flags": [
       "--foreground"
      ],
-     "help": 145
+     "help": 140
     }
    ]
   },
@@ -3079,7 +3045,7 @@
      "flags": [
       "--json"
      ],
-     "help": 146
+     "help": 141
     }
    ]
   },
@@ -3092,7 +3058,7 @@
      "flags": [
       "--json"
      ],
-     "help": 147
+     "help": 142
     }
    ]
   },
@@ -3100,7 +3066,7 @@
    "command": "cad telemetry",
    "summary": "show or change the usage stats and crash reports CAD sends: status, on, off",
    "usage": "cad telemetry [{status,on,off}]",
-   "description": 148,
+   "description": 143,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3117,7 +3083,7 @@
    "command": "cad update",
    "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
    "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
-   "description": 149,
+   "description": 144,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -3131,7 +3097,7 @@
      "flags": [
       "--major"
      ],
-     "help": 150
+     "help": 145
     }
    ]
   },
@@ -3139,7 +3105,7 @@
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 151,
+   "description": 146,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3156,11 +3122,11 @@
    "command": "cad viewer",
    "summary": "open a viewer page on the running cad server",
    "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 152,
+   "description": 147,
    "arguments": [
     {
      "name": "FILE",
-     "help": 153,
+     "help": 148,
      "optional": true,
      "repeatable": true
     }
@@ -3171,39 +3137,39 @@
       "--host"
      ],
      "metavar": "HOST",
-     "help": 154
+     "help": 149
     },
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 155
+     "help": 150
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 156
+     "help": 151
     },
     {
      "flags": [
       "--no-open"
      ],
-     "help": 157
+     "help": 152
     },
     {
      "flags": [
       "--dist"
      ],
      "metavar": "DIST",
-     "help": 158
+     "help": 153
     },
     {
      "flags": [
       "--api-only"
      ],
-     "help": 159
+     "help": 154
     }
    ]
   }
@@ -3336,11 +3302,6 @@
   "Print where cad's cache is.",
   "Remove what this release of cad cannot use: environments made for other releases, and the release folders of 0.11.11 and earlier.",
   "Remove all of cad's cache, and what prune removes; cad makes it again as it needs it. Refused while the cad server runs.",
-  "delete documents: each one's record and what the engine holds of it; never a file of yours",
-  "a document's id, a model's script (every document recorded of it), or a CAD file a page opened; your own files -- a script, its declared files, an opened file -- are never touched",
-  "say which documents would be deleted, and how many, and delete nothing",
-  "delete them without asking; where nobody can be asked (an agent, a pipe, --json) the command does nothing without it",
-  "what was deleted (or would be) as JSON",
   "Report this cad: its release, its data and cache folders and what `cad cache prune` would free, the CAD kernel environment and the integrations', and the server. It changes nothing. Exit 1 when the CAD kernel is installed and does not load.",
   "the same report",
   "the report as one JSON document: each check's name, status (ok, info, warning, failed) and detail",
@@ -3361,7 +3322,7 @@
   "cad installs every newer release of its major version by itself, and a new major version only when you run `cad update --major`. `cad update` updates cad now to the newest release of its major version, even with automatic updates off: cad asks PyPI and, once nothing is running, installs it. A cad server that was running starts again; with none running, none is started. `cad update auto` shows or changes whether cad updates itself.",
   "install the newest release of all, a new major version included, which may ask for changes (https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations)",
   "Show or change whether cad updates itself to the newest release of its major version: once nothing has run for a minute, the cad server stops, installs it and starts again. A new major version never installs itself: `cad update --major` installs it. On by default, for a global install (`uv tool install cad`).",
-  "Open the running server's viewer page: the home, or each file named (no server running: its one line, which says to run ``cad server start``). The page is the engine's one page. Each FILE (an on-disk CAD file, a relative one read from this folder, or a document id the engine holds) is registered and printed as its page, ``/<id>``. A folder is opened as a project: its models and CAD files are listed together, beside each of them and on the home, whose page is printed. Nothing is written to the folder.",
+  "Open the running server's viewer page: the home, or each file named (no server running: its one line, which says to run ``cad server start``). The page is the engine's one page. Each FILE (an on-disk CAD file, a relative one read from this folder, or a document id the engine holds) is registered and printed as its page, ``/<id>``. A folder is opened as a project, shown a folder at a time on the home, whose page is printed. Nothing is written to the folder.",
   "a CAD file to open (or a document id the engine holds): its page is /<id>; a folder opens as a project, on the home",
   "Pin the engine bind address; default loopback.",
   "Pin this installation’s engine HTTP port.",

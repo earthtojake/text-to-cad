@@ -1,9 +1,8 @@
-"""Projects: a folder a person opened as one, its record in the state folder, the documents in it, and the
+"""Projects: a folder a person opened as one, its entry in the library, the page of one folder of it, and the
 routes the home and every page's Project list read them by."""
 
 from __future__ import annotations
 
-import base64
 import http.client
 import json
 import os
@@ -14,17 +13,17 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from urllib.parse import quote
+
 from cad.engine.ids import derived_id, file_id
-from tests.python.support.ids import model_id
-from cad_server.engine.registry import Folder, Registry
+from cad_server.engine.library import Library, Notes
+from cad_server.viewer import folders as folders_module
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer import projects as projects_module
 from cad_server.viewer.http_app import create_cad_app
-from cad_server.viewer.projects import Projects, Refused, walk
-from cad_server.viewer.recents import RecentStore
+from cad_server.viewer.projects import NoFolder, Projects, Refused, has_cad_below, scan, walk
 
 STL = b"solid t\nendsolid t\n"
-PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 
 
 def slashed(path) -> str:
@@ -36,18 +35,20 @@ class ProjectsTest(unittest.TestCase):
         self.tmp = Path(os.path.realpath(tempfile.mkdtemp()))  # as the projects spell it (ids.canonical)
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.state = self.tmp / "state"
-        self.projects = Projects(Folder(self.state))
+        self.library = Library(self.state, self.tmp / "cache")
+        self.notes = Notes(self.tmp / "cache")
+        self.projects = Projects(self.library)
         self.work = self.tmp / "work"
         for name in ("heart_tag.stl", "STEP/heart_tag.step", "STEP/old/gift.step", "src/heart_tag.py", "notes.txt",
                      ".git/x.step", "node_modules/y.stl", "build/z.stl", ".hidden.stl", "lib/inner/part.stl"):
             (self.work / name).parent.mkdir(parents=True, exist_ok=True)
             (self.work / name).write_bytes(STL)
 
-    def test_a_folder_opened_is_one_record_and_opened_again_is_that_one(self) -> None:
+    def test_a_folder_opened_is_one_entry_and_opened_again_is_that_one(self) -> None:
         record, made = self.projects.add(str(self.work))
         self.assertTrue(made)
         self.assertEqual((record["id"], record["root"]), (derived_id(self.work), str(self.work)))
-        self.assertEqual(sorted(os.listdir(self.state / "projects")), [f"{record['id']}.json"])
+        self.assertEqual(list(self.library.read()["projects"]), [record["id"]])
         again, made = self.projects.add(str(self.work))
         self.assertFalse(made)
         self.assertEqual((again["id"], again["created"]), (record["id"], record["created"]))
@@ -87,7 +88,7 @@ class ProjectsTest(unittest.TestCase):
             with self.subTest(path=path), self.assertRaises(ValueError):
                 self.projects.add(path)
 
-    def test_removing_a_project_forgets_its_record_alone(self) -> None:
+    def test_removing_a_project_forgets_its_entry_alone(self) -> None:
         record, _ = self.projects.add(str(self.work))
         self.assertTrue(self.projects.remove(record["id"]))
         self.assertEqual(self.projects.list(), [])
@@ -95,22 +96,11 @@ class ProjectsTest(unittest.TestCase):
         self.assertFalse(self.projects.remove(record["id"]))
         self.assertFalse(self.projects.remove("not an id"))
 
-    def test_a_record_this_schema_does_not_read_is_none(self) -> None:
-        record, _ = self.projects.add(str(self.work))
-        path = self.state / "projects" / f"{record['id']}.json"
-        for text in ("{", "[]", json.dumps({**record, "schema": 99}), json.dumps({**record, "root": "relative"}),
-                     json.dumps({**record, "schema": 1, "id": model_id(self.work / "a.py", "a")})):
-            with self.subTest(text=text):
-                path.write_text(text, encoding="utf-8")
-                self.assertEqual(self.projects.list(), [])
-
-    def test_the_walk_lists_cad_files_by_folder_past_hidden_build_and_nested_project_folders(self) -> None:
+    def test_the_walk_lists_cad_files_by_folder_past_hidden_and_build_folders(self) -> None:
         found, truncated = walk(str(self.work))
         self.assertEqual(found, [slashed(self.work / name) for name in (
             "heart_tag.stl", "lib/inner/part.stl", "STEP/heart_tag.step", "STEP/old/gift.step")])
         self.assertFalse(truncated)
-        found, _ = walk(str(self.work), skip=(str(self.work / "STEP"),))
-        self.assertEqual(found, [slashed(self.work / name) for name in ("heart_tag.stl", "lib/inner/part.stl")])
 
     def test_the_walk_stops_at_its_bounds_and_says_so(self) -> None:
         # Breadth first: a walk cut short keeps the shallower files.
@@ -142,100 +132,95 @@ class ProjectsTest(unittest.TestCase):
             os.symlink(self.work, self.work / "lib" / "again", target_is_directory=True)
         except (OSError, NotImplementedError):
             self.skipTest("this platform makes no symbolic link here")
-        self.assertEqual(walk(str(self.work))[0], walk(str(self.work), skip=(str(self.work / "lib" / "again"),))[0])
+        self.assertEqual(walk(str(self.work))[0], [slashed(self.work / name) for name in (
+            "heart_tag.stl", "lib/inner/part.stl", "STEP/heart_tag.step", "STEP/old/gift.step")])
+        self.assertIs(has_cad_below(str(self.work / "src"), deadline=float("inf")), False, "and a test of it ends")
 
-    def test_a_projects_documents_are_its_models_then_its_files_with_their_records(self) -> None:
-        store = RecentStore(self.state)
-        inner, _ = self.projects.add(str(self.work / "lib"))  # opened first: a project inside the one opened next
+    def test_a_folder_lists_its_files_and_only_the_subfolders_with_cad_below(self) -> None:
+        inner, _ = self.projects.add(str(self.work / "lib"))  # a project inside it is a folder like any other
         record, _ = self.projects.add(str(self.work))
-        script = self.work / "src" / "heart_tag.py"
-        for name in ("heart_tag", "blank"):
-            store.registry.put({"id": model_id(script, name), "kind": "model", "root": str(script.parent), "home": script.name,
-                                "entry": name, "namespace": str(script.parent), "name": name, "built": 1_700_000_000.0})
-        store.opened(str(self.work / "heart_tag.stl"))
-        store.pin(str(self.work / "heart_tag.stl"), True)
-        listed = self.projects.documents(record, store.entries())
-        self.assertEqual((listed["id"], listed["name"], listed["root"], listed["missing"], listed["truncated"]),
-                         (record["id"], "work", slashed(self.work), False, False))
-        documents = listed["documents"]
-        self.assertEqual([(row["name"], row["record"]) for row in documents], [
-            ("blank", "model"), ("heart_tag", "model"), ("heart_tag.stl", "file"), ("heart_tag.step", "file"), ("gift.step", "file")])
-        self.assertEqual({row["project"] for row in documents}, {record["id"]})
-        self.assertTrue(documents[2]["pinned"], "a file's row is its record's where it has one")
-        self.assertEqual((documents[3]["id"], documents[3]["opened"]), (file_id(self.work / "STEP" / "heart_tag.step"), None))
-        # The project inside it has its own.
-        self.assertEqual([row["name"] for row in self.projects.documents(inner, store.entries())["documents"]], ["part.stl"])
+        self.assertNotEqual(inner["id"], record["id"])
+        for name in ("empty/deep/notes.txt", "many/a.stl", "many/b.stl", "many/c/d.stl"):
+            (self.work / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.work / name).write_bytes(STL)
+        self.library.opened(self.work / "heart_tag.stl")
+        self.library.pin(self.work / "heart_tag.stl", True)
+        self.notes.count(self.work / "heart_tag.stl", 4)
+        read: list[str] = []
+        entries = folders_module._entries
 
-    def test_a_project_lists_one_row_per_model_and_an_exported_or_copied_xbf_as_its_own(self) -> None:
-        from cad_server.engine.registry import file_version
+        def counted(folder):
+            read.append(os.path.relpath(folder, self.work).replace(os.sep, "/"))
+            return entries(folder)
 
-        store = RecentStore(self.state)
-        record, _ = self.projects.add(str(self.work))
-        script = self.work / "src" / "heart_tag.py"
-        own, out, copy = script.parent / "heart_tag.xbf", self.work / "share" / "x.xbf", script.parent / "copy.xbf"
-        for path in (own, out, copy):
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"not read here")
-        store.registry.put({"id": model_id(script, "heart_tag"), "kind": "model", "root": str(script.parent),
-                            "home": script.name, "entry": "heart_tag", "namespace": str(script.parent), "name": "heart_tag",
-                            "built": 1_700_000_000.0, "saved": "heart_tag.xbf", "version": file_version(own)})
-        store.opened(str(own))  # opened by its path: the model's record
-        documents = self.projects.documents(record, store.entries())["documents"]
-        rows = [(row["name"], row["record"], row["id"]) for row in documents if row["name"].endswith(("tag", ".xbf"))]
-        self.assertEqual(rows, [("heart_tag", "model", file_id(own)), ("x.xbf", "file", file_id(out)),
-                                ("copy.xbf", "file", file_id(copy))],
-                         "the model is its .xbf, one row; an export and a copy are files of their own")
-        self.assertNotIn(slashed(own), [row["path"] for row in documents])
-
-    def test_a_file_a_page_opened_is_listed_whatever_the_walk_found(self) -> None:
-        store = RecentStore(self.state)
-        record, _ = self.projects.add(str(self.work))
-        gone = self.work / "gone.stl"
-        gone.write_bytes(STL)
-        for path in (self.work / "build" / "z.stl", self.work / ".git" / "x.step", gone, self.work / "heart_tag.stl"):
-            store.opened(str(path))
-        gone.unlink()
-        rows = self.projects.documents(record, store.entries())["documents"]
-        self.assertEqual([row["name"] for row in rows], ["heart_tag.stl", "part.stl", "heart_tag.step", "gift.step",
-                                                         "x.step", "z.stl", "gone.stl"], "the walk's, then the opened ones by path")
-        self.assertEqual([row["name"] for row in rows if row["missing"]], ["gone.stl"])
-        self.assertNotIn("y.stl", [row["name"] for row in rows], "a build folder's file no page opened is not listed")
-
-    def test_a_walk_is_kept_a_moment_then_walked_again(self) -> None:
-        record, _ = self.projects.add(str(self.work))
-        first = self.projects.documents(record, [])
-        (self.work / "new.stl").write_bytes(STL)
-        self.assertEqual(self.projects.documents(record, [])["documents"], first["documents"])
+        with mock.patch.object(projects_module, "_entries", counted):
+            listed = self.projects.folder(record, None, self.notes)
+        self.assertEqual((listed["project"]["id"], listed["path"], listed["truncated"]), (record["id"], "", False))
+        self.assertEqual(listed["folders"], [{"name": name, "path": name} for name in ("lib", "many", "STEP")],
+                         "no src, no empty: no CAD file below; never a hidden or a build folder")
+        self.assertEqual([(row["name"], row["path"], row["project"], row["pinned"], row["parts"], row["opened"] is None)
+                          for row in listed["documents"]],
+                         [("heart_tag.stl", slashed(self.work / "heart_tag.stl"), record["id"], True, 4, False)])
+        # The test of a subfolder stops at the first CAD file it meets: of many/, its own read alone.
+        self.assertEqual(sorted(read), [".", "STEP", "empty", "empty/deep", "lib", "lib/inner", "many", "src"])
         with mock.patch.object(projects_module, "WALK_KEPT_SECONDS", 0.0):
-            self.assertIn("new.stl", [row["name"] for row in self.projects.documents(record, [])["documents"]])
+            below = self.projects.folder(record, "STEP", self.notes)
+            self.assertEqual((below["path"], below["folders"], [row["name"] for row in below["documents"]]),
+                             ("STEP", [{"name": "old", "path": "STEP/old"}], ["heart_tag.step"]))
+            self.assertEqual((below["documents"][0]["id"], below["documents"][0]["opened"], below["documents"][0]["created"]),
+                             (file_id(self.work / "STEP" / "heart_tag.step"), None, None), "no entry: no time of either")
+            with self.assertRaises(NoFolder):
+                self.projects.folder(record, "STEP/none", self.notes)
+            for path in ("/STEP", "STEP/", "STEP//old", "./STEP", "STEP/../src", str(self.work / "STEP")):
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    self.projects.folder(record, path, self.notes)
+        # A subfolder that cannot be read to the end in time is listed, and the answer says so.
+        ticks = iter([0.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0])
+        folders, files, truncated = scan(str(self.work), seconds=1.0, clock=lambda: next(ticks))
+        self.assertEqual((folders, [name for name, _ident in files], truncated),
+                         (["empty", "lib", "many", "src", "STEP"], ["heart_tag.stl"], True))
+        with mock.patch.object(projects_module, "LIST_LIMIT", 2):
+            self.assertEqual(scan(str(self.work)), (["lib"], [], True), "of more than it lists, the first in order")
 
-    def test_readers_at_once_cost_one_walk(self) -> None:
+    def test_a_search_finds_the_files_below_whose_path_holds_every_word(self) -> None:
         record, _ = self.projects.add(str(self.work))
-        entered, release, walks = threading.Event(), threading.Event(), []
+        found = self.projects.search(record, None, "STEP  Heart", self.notes)
+        self.assertEqual((found["folders"], [row["path"] for row in found["documents"]], found["truncated"]),
+                         ([], [slashed(self.work / "STEP" / "heart_tag.step")], False))
+        self.assertEqual([row["name"] for row in self.projects.search(record, "STEP", "step", self.notes)["documents"]],
+                         ["heart_tag.step", "gift.step"], "below the folder on screen, by its path below it")
+        with mock.patch.object(projects_module, "WALK_KEPT_SECONDS", 0.0), \
+                mock.patch.object(projects_module, "walk", lambda folder: walk(folder, limit=1)):
+            cut = self.projects.search(record, "STEP", "step", self.notes)
+        self.assertEqual(([row["name"] for row in cut["documents"]], cut["truncated"]), (["heart_tag.step"], True))
 
-        def slow(root, **options):
-            walks.append(root)
+    def test_a_folders_read_is_kept_a_moment_then_read_again(self) -> None:
+        record, _ = self.projects.add(str(self.work))
+        first = self.projects.folder(record, None, self.notes)
+        (self.work / "new.stl").write_bytes(STL)
+        self.assertEqual(self.projects.folder(record, None, self.notes)["documents"], first["documents"])
+        with mock.patch.object(projects_module, "WALK_KEPT_SECONDS", 0.0):
+            self.assertIn("new.stl", [row["name"] for row in self.projects.folder(record, None, self.notes)["documents"]])
+
+    def test_readers_at_once_cost_one_read(self) -> None:
+        record, _ = self.projects.add(str(self.work))
+        entered, release, scans = threading.Event(), threading.Event(), []
+
+        def slow(folder, level):
+            scans.append(folder)
             entered.set()
             release.wait(10)
-            return walk(root, **options)
+            return scan(folder, level)
 
-        with mock.patch.object(projects_module, "walk", slow):
-            readers = [threading.Thread(target=self.projects.documents, args=(record, [])) for _ in range(4)]
+        with mock.patch.object(projects_module, "scan", slow):
+            readers = [threading.Thread(target=self.projects.folder, args=(record, None, self.notes)) for _ in range(4)]
             for reader in readers:
                 reader.start()
             self.assertTrue(entered.wait(10))
             release.set()
             for reader in readers:
                 reader.join(10)
-        self.assertEqual(len(walks), 1, "the readers that arrived while it was walked took its answer")
-
-    def test_a_record_from_before_created_was_kept_stays_without_it(self) -> None:
-        store = RecentStore(self.state)
-        path = self.work / "heart_tag.stl"
-        store.registry.put({"id": file_id(path), "kind": "file", "root": str(path.parent), "home": path.name,
-                            "namespace": str(path.parent), "name": path.name, "opened": 1_000_000_000.0})
-        store.opened(str(path))
-        self.assertNotIn("created", store.registry.get(file_id(path)))
+        self.assertEqual(len(scans), 1, "the readers that arrived while it was read took its answer")
 
 
 class ProjectRoutesTest(unittest.TestCase):
@@ -270,26 +255,68 @@ class ProjectRoutesTest(unittest.TestCase):
         finally:
             connection.close()
 
-    def test_a_folder_opened_lists_with_its_documents_and_removed_is_gone(self) -> None:
+    def test_the_folder_route_answers_its_contract(self) -> None:
         self.assertEqual(self.request("GET", "/api/v1/projects"), (200, {"projects": []}))
         status, opened = self.request("POST", "/api/v1/projects", {"path": str(self.work)})
         self.assertEqual((status, opened["made"], opened["project"]["name"]), (201, True, "work"))
         ident = opened["project"]["id"]
-        self.assertEqual(set(opened["project"]), {"id", "name", "root", "created", "opened", "missing"})
+        project = {"id": ident, "name": "work", "root": slashed(self.work), "created": opened["project"]["created"],
+                   "opened": opened["project"]["opened"], "missing": False}
+        self.assertEqual(opened["project"], project)
         self.assertEqual(self.request("POST", "/api/v1/projects", {"path": str(self.work / "STL")})[0:1], (200,))
         status, listed = self.request("GET", "/api/v1/projects")
-        [project] = listed["projects"]
-        self.assertEqual((status, project["id"], [row["path"] for row in project["documents"]]),
-                         (200, ident, [slashed(self.work / "STL" / "tag.stl")]))
-        self.assertEqual(self.request("GET", f"/api/v1/projects/{ident}")[1], project)
-        # A file listed is known by its id, opened by a page or not.
-        [row] = project["documents"]
-        self.assertEqual(self.request("GET", f"/api/v1/documents/{row['id']}")[1]["entry"]["project"]["id"], ident)
+        self.assertEqual((status, [{**row, "opened": project["opened"]} for row in listed["projects"]]), (200, [project]),
+                         "a project's row: no documents, no count")
+        # A listing: the folder's own files, and its subfolders that hold a CAD file.
+        (self.work / "docs").mkdir()
+        (self.work / "docs" / "readme.txt").write_text("no CAD here", encoding="utf-8")
+        status, root = self.request("GET", f"/api/v1/projects/{ident}")
+        self.assertEqual((status, set(root)), (200, {"project", "path", "folders", "documents", "truncated"}))
+        self.assertEqual((root["project"]["id"], root["path"], root["folders"], root["documents"], root["truncated"]),
+                         (ident, "", [{"name": "STL", "path": "STL"}], [], False))
+        status, below = self.request("GET", f"/api/v1/projects/{ident}?path=STL")
+        [row] = below["documents"]
+        self.assertEqual((status, below["path"], below["folders"]), (200, "STL", []))
+        tag = self.work / "STL" / "tag.stl"
+        self.assertEqual(row, {"id": file_id(tag), "kind": "stl", "record": "file",
+                               "api": f"/api/v1/documents/stl/{file_id(tag)}", "path": slashed(tag), "name": "tag.stl",
+                               "folder": slashed(tag.parent), "namespace": slashed(tag.parent), "opened": None,
+                               "updated": tag.stat().st_mtime, "created": None, "pinned": False, "missing": False,
+                               "thumbnail": None, "pictured": None, "size": len(STL), "parts": None, "project": ident})
+        # A file listed is known by its id, opened by a page or not, and its envelope says the folder it is in.
+        self.assertEqual(self.request("GET", f"/api/v1/documents/{row['id']}")[1]["entry"]["project"],
+                         {"id": ident, "name": "work", "root": slashed(self.work), "folder": "STL"})
+        # A search: every file below the folder whose path holds every word, flat; a blank one is the listing.
+        status, found = self.request("GET", f"/api/v1/projects/{ident}?q={quote('stl TAG')}")
+        self.assertEqual((status, found["path"], found["folders"], found["documents"], found["truncated"]),
+                         (200, "", [], [row], False))
+        self.assertEqual(self.request("GET", f"/api/v1/projects/{ident}?q=bolt")[1]["documents"], [])
+        self.assertEqual(self.request("GET", f"/api/v1/projects/{ident}?q={quote('  ')}")[1], root)
+        # Its errors.
+        status, none = self.request("GET", f"/api/v1/projects/{ident}?path=STL/none")
+        self.assertEqual((status, none), (404, {"error": "no folder STL/none in work",
+                                               "hint": "list the project's folder: leave path out"}))
+        for path in ("/STL", "STL/", "../work", "STL/./x", slashed(self.work / "STL")):
+            with self.subTest(path=path):
+                status, refused = self.request("GET", f"/api/v1/projects/{ident}?path={quote(path, safe='')}")
+                self.assertEqual((status, set(refused)), (400, {"error", "hint"}))
+        self.assertEqual(self.request("PUT", f"/api/v1/projects/{ident}", {})[0], 405)
+        # Removed, it is no project, and nothing in its folder changed.
         self.assertEqual(self.request("DELETE", f"/api/v1/projects/{ident}"), (200, {"projects": []}))
         self.assertEqual(self.request("DELETE", f"/api/v1/projects/{ident}")[0], 404)
-        self.assertEqual(self.request("GET", f"/api/v1/projects/{ident}")[0], 404)
+        status, none = self.request("GET", f"/api/v1/projects/{ident}")
+        self.assertEqual((status, none), (404, {"error": f"no project {ident}",
+                                               "hint": "GET /api/v1/projects lists the projects"}))
         self.assertEqual(self.request("GET", "/api/v1/projects/not-an-id")[0], 404)
-        self.assertTrue((self.work / "STL" / "tag.stl").is_file())
+        self.assertTrue(tag.is_file())
+        # Its folder gone: the project is answered missing, with nothing in it, whatever the path.
+        gone = self.tmp / "gone"
+        gone.mkdir()
+        ident = self.request("POST", "/api/v1/projects", {"path": str(gone)})[1]["project"]["id"]
+        gone.rmdir()
+        status, missing = self.request("GET", f"/api/v1/projects/{ident}?path=any/where")
+        self.assertEqual((status, missing["project"]["missing"], missing["folders"], missing["documents"]),
+                         (200, True, [], []))
 
     def test_a_folder_that_is_no_project_says_why_and_what_to_open(self) -> None:
         status, refused = self.request("POST", "/api/v1/projects", {"path": os.path.abspath(os.sep)})
@@ -312,7 +339,8 @@ class ProjectRoutesTest(unittest.TestCase):
         status, rows = self.request("GET", "/api/v1/documents")
         self.assertEqual({row["name"]: row["project"] for row in rows["documents"]}, {"tag.stl": ident, "loose.stl": None})
         status, envelope = self.request("GET", f"/api/v1/documents/{file_id(self.work / 'STL' / 'tag.stl')}")
-        self.assertEqual((status, envelope["entry"]["project"]), (200, {"id": ident, "name": "work", "root": slashed(self.work)}))
+        self.assertEqual((status, envelope["entry"]["project"]),
+                         (200, {"id": ident, "name": "work", "root": slashed(self.work), "folder": "STL"}))
         before = envelope["revision"]
         self.assertIsNone(self.request("GET", f"/api/v1/documents/{file_id(self.loose)}")[1]["entry"]["project"])
         # A link to it is the file it names: in its project, however the page spelled its path.
@@ -340,25 +368,28 @@ class ProjectRoutesTest(unittest.TestCase):
             self.skipTest("no symbolic links here")
         reached = self.work / "vendor" / "bolt.stl"
         ident = self.request("POST", "/api/v1/projects", {"path": str(self.work)})[1]["project"]["id"]
-        listed = lambda: {row["name"]: row for row in self.request("GET", f"/api/v1/projects/{ident}")[1]["documents"]}
-        # Walked through the link: listed where it was reached, the project's, as a file stored in the folder is.
+        self.assertEqual(self.request("GET", f"/api/v1/projects/{ident}")[1]["folders"],
+                         [{"name": "STL", "path": "STL"}, {"name": "vendor", "path": "vendor"}])
+        listed = lambda: {row["name"]: row for row in
+                          self.request("GET", f"/api/v1/projects/{ident}?path=vendor")[1]["documents"]}
+        # Listed through the link: where it was reached, the project's, as a file stored in the folder is.
         self.assertEqual((listed()["bolt.stl"]["path"], listed()["bolt.stl"]["project"]), (slashed(reached), ident))
         # Its page, by its id (as the home opens a row) and by the path it was reached by, says the project too.
         bolt = listed()["bolt.stl"]["id"]
-        self.assertEqual(self.request("GET", f"/api/v1/documents/{bolt}")[1]["entry"]["project"]["id"], ident)
+        self.assertEqual(self.request("GET", f"/api/v1/documents/{bolt}")[1]["entry"]["project"],
+                         {"id": ident, "name": "work", "root": slashed(self.work), "folder": "vendor"})
         status, found = self.request("GET", f"/api/v1/documents?path={slashed(reached)}")
         self.assertEqual((status, [row["entry"]["project"]["id"] for row in found["documents"]]), (200, [ident]))
-        # Opened by the page, which names it where it is: its record keeps the path it was reached by, and its Recents
+        # Opened by the page, which names it where it is: its entry keeps the path it was reached by, and its Recents
         # row says the project.
         self.assertEqual(self.request("PATCH", "/api/v1/documents", {"action": "open",
                                                                       "path": str(shared / "bolt.stl")})[0], 200)
-        self.assertEqual(Registry(self.tmp / "state").get(bolt)["reached"], str(reached))
+        self.assertEqual(Library(self.tmp / "state").read()["files"][bolt]["reached"], str(reached))
         [row] = [row for row in self.request("GET", "/api/v1/documents")[1]["documents"] if row["name"] == "bolt.stl"]
         self.assertEqual(row["project"], ident)
         self.assertEqual(self.request("GET", f"/api/v1/documents/{row['id']}")[1]["entry"]["project"]["id"], ident)
-        # Opened, it is still one row of the project's, its record's, where it was reached.
-        rows = [row for row in self.request("GET", f"/api/v1/projects/{ident}")[1]["documents"] if row["name"] == "bolt.stl"]
-        self.assertEqual([(row["path"], row["opened"] is not None) for row in rows], [(slashed(reached), True)])
+        # Opened, it is still one row of the folder's, its entry's, where it was reached.
+        self.assertEqual([(row["path"], row["opened"] is not None) for row in listed().values()], [(slashed(reached), True)])
         # Named where it is, outside the folder, it is still the file the project reaches: the project's.
         status, found = self.request("GET", f"/api/v1/documents?path={slashed(shared / 'bolt.stl')}")
         self.assertEqual([row["entry"]["project"]["id"] for row in found["documents"]], [ident])
@@ -366,39 +397,17 @@ class ProjectRoutesTest(unittest.TestCase):
         os.unlink(self.work / "vendor")
         self.assertIsNone(self.request("GET", f"/api/v1/documents/{bolt}")[1]["entry"]["project"])
 
-    def test_the_home_pictures_a_projects_file_before_a_page_opens_it_and_recents_still_lists_opened_files(self) -> None:
-        self.request("POST", "/api/v1/projects", {"path": str(self.work)})
-        tag = self.work / "STL" / "tag.stl"
-        status, rows = self.request("PATCH", "/api/v1/documents", {"action": "thumbnail", "path": str(tag),
-                                                                   "png": base64.b64encode(PNG).decode("ascii")})
-        self.assertEqual((status, rows["documents"]), (200, []), "pictured, not opened: not in Recents")
-        [project] = self.request("GET", "/api/v1/projects")[1]["projects"]
-        [row] = project["documents"]
-        self.assertTrue(row["thumbnail"], "its picture is kept on a record of its own")
-        self.assertEqual((row["opened"], row["created"]), (None, None), "no page opened it: no time of either")
-        # Opened, it is in Recents, made then, its picture kept.
-        [opened] = self.request("PATCH", "/api/v1/documents", {"action": "open", "path": str(tag)})[1]["documents"]
-        self.assertEqual((opened["created"], opened["thumbnail"]), (opened["opened"], row["thumbnail"]))
-        # A file that is no CAD file there gets no record, nor does one in no project that no page opened.
-        for path in (self.work / "gone.stl", self.loose):
-            self.request("PATCH", "/api/v1/documents", {"action": "thumbnail", "path": str(path),
-                                                        "png": base64.b64encode(PNG).decode("ascii")})
-        self.assertEqual([record["name"] for record in Registry(self.tmp / "state").list()], ["tag.stl"])
-
     def test_projects_are_listed_latest_activity_first(self) -> None:
         other = self.tmp / "other"
         other.mkdir()
-        (other / "a.stl").write_bytes(STL)
-        os.utime(other / "a.stl", (1_000_000_000, 1_000_000_000))
-        os.utime(self.work / "STL" / "tag.stl", (1_000_000_000, 1_000_000_000))
-        self.app.projects.clock = lambda: 1_100_000_000.0
+        self.app.library.clock = lambda: 1_100_000_000.0
         self.request("POST", "/api/v1/projects", {"path": str(self.work)})
-        self.app.projects.clock = lambda: 1_200_000_000.0
+        self.app.library.clock = lambda: 1_200_000_000.0
         self.request("POST", "/api/v1/projects", {"path": str(other)})
         self.assertEqual([project["name"] for project in self.request("GET", "/api/v1/projects")[1]["projects"]], ["other", "work"])
-        os.utime(self.work / "STL" / "tag.stl")  # written now
-        with mock.patch.object(projects_module, "WALK_KEPT_SECONDS", 0.0):
-            self.assertEqual([project["name"] for project in self.request("GET", "/api/v1/projects")[1]["projects"]], ["work", "other"])
+        self.app.library.clock = lambda: 1_300_000_000.0  # a file of it opened by a page, now
+        self.request("PATCH", "/api/v1/documents", {"action": "open", "path": str(self.work / "STL" / "tag.stl")})
+        self.assertEqual([project["name"] for project in self.request("GET", "/api/v1/projects")[1]["projects"]], ["work", "other"])
 
 
 if __name__ == "__main__":

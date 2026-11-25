@@ -82,9 +82,6 @@ class _Written:
     tree: Any = None
     # The document's bytes as taken from its ``.xbf`` (``_previous``): what it answers with.
     data: bytes | None = None
-    # A document taken from an ``.xbf`` built where its script was before a move: that script and
-    # its module (its record's ``relocated``), what its closure is compared as (``identity.relocated``).
-    relocated: dict[str, Any] | None = None
     # A model declaring an xbf: the document's xbf bytes as its build made them, before any export
     # (a mesh export leaves the shapes meshed, which a later serialisation would write too): what
     # its xbf is written from on every run.
@@ -488,7 +485,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
     differs runs on every call for the worker's life (``memo.always``)."""
     from cad.engine import parameters, previous
     from cad.engine.kernel import determinism, memo
-    from cad.engine.model import _FINGERPRINTS, _MODELS, BuildContext, models_in
+    from cad.engine.model import _MODELS, BuildContext, models_in
 
     script = Path(script).resolve()
     if not script.is_file():
@@ -516,7 +513,6 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             reader.session():
         run.verify = verify
         _MODELS.clear()  # the models this build defines, known by name to what its replays ran
-        _FINGERPRINTS.clear()  # and their scripts' fingerprints, read again once
         load_key = (run_token, str(script), str(cwd))
         kept = _kept_load(load_key) if run_token and not verify else None
         fresh = None
@@ -595,11 +591,6 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                     found.append((child, made))
             return found
 
-        if take:
-            try:
-                _reattach(models)
-            except Exception as error:  # noqa: BLE001 - identity never fails a build: a new document
-                print(f"cad: re-attachment failed: {type(error).__name__}: {error}", file=sys.stderr)
         for model in models:
             body_started = time.perf_counter()
             tally = dict(run.tally)
@@ -725,7 +716,7 @@ def preview(script: Path, name: str, values: dict[str, Any], *, cwd: Path | None
     from cad.engine.kernel import determinism, memo
     from cad.engine.kernel.trace import first_party_file
     from cad.engine.mesh import shape_bytes
-    from cad.engine.model import _FINGERPRINTS, _MODELS, BuildContext, models_in
+    from cad.engine.model import _MODELS, BuildContext, models_in
 
     script = Path(script).resolve()
     if not script.is_file():
@@ -736,7 +727,6 @@ def preview(script: Path, name: str, values: dict[str, Any], *, cwd: Path | None
     started = time.perf_counter()
     with memo.run(script, model=("preview", name)) as run, BuildContext() as context, reader.session():
         _MODELS.clear()
-        _FINGERPRINTS.clear()
         _LOAD.clear()  # its modules are about to be replaced: a run's next call loads again
         try:
             with warnings.catch_warnings():
@@ -1158,8 +1148,8 @@ def _previous(model: Any, context: Any, shown: str, take: bool = False) -> tuple
     the model's report where the document is what the body would make -- the key the model has now
     is the one the document holds -- so the body is neither run nor replayed. The key alone decides,
     asked of this worker's own record of the document it last built or took (``"from": "memory"``),
-    else, in the engine's build (``take``), of the model's ``.xbf`` (``"from": "xbf"``) while that file is the
-    one the engine wrote (``_written_by_engine``) -- the one take-up of every model, warm and after a restart.
+    else, in the engine's build (``take``), of the model's ``.xbf`` (``"from": "xbf"``), whoever wrote it last
+    -- the one take-up of every model, warm and after a restart.
     Its other declared files play no part: they are written after it, from the document taken, as an
     export of it is (``_taken_outputs``).
 
@@ -1177,25 +1167,6 @@ def _previous(model: Any, context: Any, shown: str, take: bool = False) -> tuple
         if report is not None:
             return other, report
     return verdict, report
-
-
-def _written_by_engine(model: Any, xbf: Path | None) -> str | None:
-    """Why the model's ``.xbf`` is not the file the engine last wrote of it, or None when it is: its record
-    (``records``) names the file's version as written (``version``, ``mtime_ns-size``), and the file is that
-    version still. A file edited, replaced or copied over since, or one no record names, is not taken."""
-    from cad.engine import records
-
-    if xbf is None:
-        return "it saves no .xbf (no @model)"
-    try:
-        found = xbf.stat()
-    except OSError:
-        return "it has no .xbf"
-    record = records.current().get(model.id) or {}
-    if record.get("kind") != "model" or record.get("version") != f"{found.st_mtime_ns}-{found.st_size}":
-        return "its .xbf is not the one the engine wrote" if record.get("kind") == "model" else \
-            "the engine wrote no .xbf of it"
-    return None
 
 
 def _taken(model: Any, context: Any, shown: str, remembered: Any) -> tuple[dict, dict | None]:
@@ -1218,38 +1189,26 @@ def _taken(model: Any, context: Any, shown: str, remembered: Any) -> tuple[dict,
     if remembered is not None:
         where = "memory"  # the document this process last built or took: its record is in memory
         text = remembered.record
-        moved = remembered.relocated
         if text is None:
             return {"used": False, "reason": "its last build wrote no key"}, None
     else:
         where = "xbf"
-        why = _written_by_engine(model, xbf)
-        if why is not None:
-            return {"used": False, "reason": why}, None
+        if xbf is None:
+            return {"used": False, "reason": "it saves no .xbf (no @model)"}, None
+        if not xbf.is_file():
+            return {"used": False, "reason": "it has no .xbf"}, None
         writer, text = previous.scan(xbf)
         if document.written_format(writer) != previous.FORMAT:
             return {"used": False, "reason": f"its .xbf was written by {writer or 'another program'}"}, None
         if text is None:
             return {"used": False, "reason": "its .xbf holds no key"}, None
-        moved = _relocation(model)
     found = json.loads(text)
     if found.get("key") is None:
         return {"used": False, "reason": "its .xbf holds no key" if from_file else "its last build wrote no key"}, None
     modules, _unkeyable = context.modules(model)
-    compared = found
-    if moved is not None:
-        # Built where its script was before a move: compared as the same files named from here,
-        # and its module's symbols under the name they had there (``identity.relocated``).
-        from cad.engine.identity import relocated
-
-        compared = relocated(found, moved["script"], model.script, folder)
-        origin = moved.get("module")
-        if origin and origin != model.function.__module__:
-            symbols = context.symbols if context.script is None or model.script == context.script else context.others[model.script]
-            modules, _unkeyable = symbols.modules(model.function, aliases={model.function.__module__: origin})
-    now, changes = previous.again(compared, model, folder, modules, context.named(model))
+    now, changes = previous.again(found, model, folder, modules, context.named(model))
     keyed = time.perf_counter()
-    if now != (previous.key(compared) if compared is not found else found["key"]):
+    if now != found["key"]:
         changes = changes or ["its closure changed"]
         shown_changes = changes[:3] + ([f"{len(changes) - 3} more"] if len(changes) > 3 else [])
         return {"used": False, "reason": ", ".join(shown_changes), "changed": changes}, None
@@ -1278,8 +1237,7 @@ def _taken(model: Any, context: Any, shown: str, remembered: Any) -> tuple[dict,
         if recorded != wanted:
             return {"used": False, "reason": "its parameters changed", "changed": ["its parameters changed"]}, None
         timings["read"] = round(time.perf_counter() - keyed, 4)
-        _WRITTEN[name] = _Written(("loaded", found["key"]), xbf, None, text, data=data, relocated=moved,
-                                  parameters=recorded)
+        _WRITTEN[name] = _Written(("loaded", found["key"]), xbf, None, text, data=data, parameters=recorded)
     else:
         # What the bodies made stays the memo's, as a replay would keep it: an edit after
         # any number of these builds replays all it leaves alone.
@@ -1294,45 +1252,8 @@ def _taken(model: Any, context: Any, shown: str, remembered: Any) -> tuple[dict,
                             "reads": {}},
               "children": {}, "bodies": {model.identity: "loaded"}, "cache": {"used": True, "from": where},
               "timings": timings, "files": {}, "parameters": declared}
-    report["closure"] = previous.located(compared, folder)
+    report["closure"] = previous.located(found, folder)
     return report["cache"], report
-
-
-def _relocation(model: Any) -> dict[str, Any] | None:
-    """Where the ``.xbf`` of ``model``'s document was built, when that is where its script was
-    before a move (its record's ``relocated``: ``{script, module}``); else None. One record read."""
-    from cad.engine import records
-
-    found = (records.current().get(model.id) or {}).get("relocated")
-    return found if isinstance(found, dict) and isinstance(found.get("script"), str) else None
-
-
-def _reattach(models: list) -> None:
-    """Before a build takes its models from anything: each model with nothing to take up -- no
-    document this worker built or took, and no record at its id, or a record of another script -- is
-    asked of the engine in one request (``op: reattach``), which re-attaches the record of its script
-    moved, or of its id before its id was its ``.xbf``'s (``identity.reattach``), before its file is read. A
-    model this worker holds, or whose record is its own, costs a record's read, and nothing is asked. Asked
-    of the engine that runs this worker, never of one it would start."""
-    from cad.engine import records
-
-    held = records.current()
-    asked = []
-    for model in models:
-        if _WRITTEN.get(f"{model.script}::{model.name}") is not None or model.xbf is None:
-            continue  # held in this worker, or no .xbf: no record to re-attach
-        record = held.get(model.id)
-        if record is not None and record.get("kind") == "model" and records.home(held, record) == model.script \
-                and record.get("entry") == model.name:
-            continue  # its own record: nothing moved
-        asked.append(model.source)
-    if not asked:
-        return
-    from cad.engine.client import request
-
-    answer = request({"op": "reattach", "models": asked, "pid": os.getpid()}, start=False) or {}
-    for line in answer.get("lines") or []:
-        print(line, file=sys.stderr)
 
 
 def _names(run: Any, part: Any) -> tuple[Any, dict[str, dict[str, Any]], dict[tuple[str, str], str | None]]:

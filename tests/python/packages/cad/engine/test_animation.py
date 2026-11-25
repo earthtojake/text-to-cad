@@ -542,9 +542,8 @@ class GlbTest(_Folder):
         self.assertNotIn("animations", document.Loaded(self.folder / "XBF/pair.xbf").closure, "the record is its own")
         from tests.python.support import engine_restart
 
-        state = self.folder / "state"
-        engine_restart.restart(state)  # a fresh worker: no memo, no document in memory, its .xbf as the engine wrote it
-        (again,) = engine_restart.build(state, self.folder / "model.py", ["pair"], cwd=self.folder)
+        engine_restart.restart()  # a fresh worker: no memo, no document in memory, its .xbf as the engine wrote it
+        (again,) = engine_restart.build(self.folder / "model.py", ["pair"], cwd=self.folder)
         self.assertEqual(again["cache"], {"used": True, "from": "xbf"})
         self.assertEqual(again["memo"]["bodies_run"], 0, "taken from its .xbf: nothing ran")
         out = self.folder / "again.glb"

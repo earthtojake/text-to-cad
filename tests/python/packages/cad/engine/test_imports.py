@@ -260,11 +260,11 @@ class ReadsTest(unittest.TestCase):
         bd.export_stl(bd.Box(length, 30, 2), str(self.stl))
 
     def restart(self) -> None:
-        """What a new worker holds: nothing but the models' .xbf files, as the engine recorded them (``engine_restart``)."""
-        engine_restart.restart(self.folder / "state")
+        """What a new worker holds: nothing but the models' .xbf files (``engine_restart``)."""
+        engine_restart.restart()
 
     def built(self, name: str) -> dict:
-        (report,) = engine_restart.build(self.folder / "state", self.folder / "reads.py", [name], cwd=self.folder)
+        (report,) = engine_restart.build(self.folder / "reads.py", [name], cwd=self.folder)
         self.assertTrue(report["ok"], report)
         return report
 
@@ -366,8 +366,9 @@ class ReadsTest(unittest.TestCase):
 
     def test_a_model_reading_its_inputs_beside_it_restarts_from_its_xbf_wherever_it_is_copied(self) -> None:
         # tom reads vendor parts past the engine (import_brep) from beside its sources: copied
-        # elsewhere with them, it is another document (its id is its .xbf's), built once there;
-        # then a restart with nothing changed takes the document, and an edited input builds it.
+        # elsewhere with them and its .xbf, it is another document (its id is its .xbf's), taken there
+        # from the file that came with it (its closure's paths are relative to it), and an edited input
+        # builds it.
         self.built("by_occt")
         moved = Path(tempfile.mkdtemp(prefix="engine-reads-moved-")).resolve() / "copy"
         self.addCleanup(shutil.rmtree, moved.parent, ignore_errors=True)
@@ -375,11 +376,9 @@ class ReadsTest(unittest.TestCase):
         self.restart()
 
         def build() -> dict:
-            (report,) = engine_restart.build(self.folder / "state", moved / "reads.py", ["by_occt"], cwd=moved)
+            (report,) = engine_restart.build(moved / "reads.py", ["by_occt"], cwd=moved)
             return report
 
-        self.assertEqual(build()["cache"]["reason"], "the engine wrote no .xbf of it", "a copy is a document of its own")
-        self.restart()
         self.assertEqual(build()["cache"], {"used": True, "from": "xbf"})
         import build123d as bd
 

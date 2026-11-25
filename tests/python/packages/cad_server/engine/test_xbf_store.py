@@ -1,8 +1,8 @@
-"""A model's store is its ``.xbf``: a build records the file's id and its version as written, and writes no copy of
+"""A model's store is its ``.xbf``: a build adds the file to the library, and writes no record and no copy of
 the document anywhere; a restarted engine answers every verb of a model from its ``.xbf`` -- page, export, snapshot,
-inspect, cad_show -- with nothing run; an unchanged run after a restart is taken from the file's own key while the
-file is the one the engine wrote, and one edited or replaced by hand is built and written again; a function with a
-file decorator alone writes that file alone, is no document, and says each run that a restart builds it again. On a
+inspect -- with nothing run, and finds an id's file from the library or a project's folder alone; an unchanged run
+after a restart is taken from the file's own key, whoever wrote the file last, and one that does not read is built
+and written again; a function with a file decorator alone writes that file alone, is no document, and says each run that a restart builds it again. On a
 class engine of the file's own (``store_fixtures.StoreCase``), with an engine, a state and a cache folder of its own
 (``CAD_ENGINE_DIR``, ``CAD_STATE_DIR``, ``CAD_CACHE_DIR``)."""
 
@@ -11,14 +11,14 @@ from __future__ import annotations
 import json
 import os
 import sys
+import shutil
 import textwrap
 import unittest
-from unittest import mock
 
 from tests.python.support import engine_daemon, opengl, store_fixtures
+from tests.python.support.store_fixtures import get
 
-from cad.engine.ids import file_id
-from cad_server.engine.registry import Registry
+from cad.engine.ids import derived_id, file_id
 
 # A function declaring a STEP and no xbf, whose body says on stderr that it ran.
 STEPPED = """
@@ -60,19 +60,16 @@ class XbfStoreTest(store_fixtures.StoreCase):
         with urllib.request.urlopen(request, timeout=30) as answer:
             return json.loads(answer.read())["version"]
 
-    def test_a_build_records_its_xbf_s_id_and_version_and_writes_no_copy(self) -> None:
-        from cad_server.engine.registry import file_version
-
+    def test_a_build_adds_its_xbf_to_the_library_and_writes_no_record_and_no_copy(self) -> None:
         ident = self.write("cube")
         self.assertEqual(ident, file_id(self.xbf("cube")), "a model's id is its .xbf's")
         done = self.run_script("cube")
         self.assertIn(f"id: {ident}", done.stdout)
-        record = self.record(ident)
-        self.assertEqual(set(record), {"schema", "id", "kind", "root", "home", "entry", "revision", "built", "created",
-                                       "facts", "namespace", "name", "fingerprint", "module", "saved", "version"})
-        self.assertEqual((record["kind"], record["saved"], record["version"]),
-                         ("model", "cube.xbf", file_version(self.xbf("cube"))))
-        self.assertEqual(sorted(os.listdir(self.state / "documents" / ident)), ["document.json"])
+        entry = self.entry(ident)
+        self.assertEqual((set(entry), entry["path"]), ({"path", "created"}, str(self.xbf("cube"))))
+        self.run_script("cube")
+        self.assertEqual(self.entry(ident), entry, "known once: a later run writes nothing")
+        self.assertFalse((self.state / "documents").exists(), "no record of a document")
         self.assertEqual(self.copies(), [], "the store is the file: no copy in the cache folder")
         compiled = [path for path in (self.cache / "pycache").glob("*/**/build123d/__init__.*.pyc")  # the prefix mirrors its path
                     if path.parent.parent.name != "cad"]  # build123d's own, not the library's integration of it
@@ -108,53 +105,84 @@ class XbfStoreTest(store_fixtures.StoreCase):
         self.assertEqual(status, 200, structure)
         self.assertEqual(structure["closure"]["source"]["function"], "cube")
         self.assertEqual(self.ask({"op": "state", "id": ident}), {"ok": True, "state": "held"})
-        from cad_server.mcp.server import _say_not_held
-
-        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.engine)}):
-            self.assertIsNone(_say_not_held(ident), "cad_show shows it, with nothing to add")
         # An unchanged run is taken from the file's own key, and writes nothing.
-        before = (self.xbf("cube").read_bytes(), self.xbf("cube").stat().st_mtime_ns, self.record(ident))
+        before = (self.xbf("cube").read_bytes(), self.xbf("cube").stat().st_mtime_ns, self.entry(ident))
         self.assert_taken()
-        self.assertEqual((self.xbf("cube").read_bytes(), self.xbf("cube").stat().st_mtime_ns, self.record(ident)), before)
+        self.assertEqual((self.xbf("cube").read_bytes(), self.xbf("cube").stat().st_mtime_ns, self.entry(ident)), before)
         self.assertEqual(self.copies(), [])
 
-    def test_an_xbf_edited_by_hand_is_not_taken_it_is_built_and_written_again(self) -> None:
-        from cad_server.engine.registry import file_version
-
+    def test_an_xbf_that_does_not_read_is_built_again_and_one_whose_key_holds_is_taken(self) -> None:
         ident = self.said()
         self.run_script("cube")
         built = self.xbf("cube").read_bytes()
         self.assertEqual(self.cli("stop").returncode, 0)
         self.start()
-        # Broken in place, its size and time kept: the engine's file by its version, but its bytes no longer read as
-        # the document; the run builds it, and writes it whole.
+        # Broken in place: its head shows the model's key, but its bytes no longer read as the document; the run
+        # builds it, and writes it whole.
         broken = bytearray(built)
         broken[-1024:] = bytes(1024)
-        stamp = self.xbf("cube").stat()
         self.xbf("cube").write_bytes(bytes(broken))
-        os.utime(self.xbf("cube"), ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
         self.assertIn("the body ran", self.run_script("cube").stderr)
         self.assertEqual(self.xbf("cube").read_bytes(), built, "written again from the build")
-        # Edited by hand (another version): not taken; built, and written again; then taken again after a restart.
+        # Written by another hand, its key the model's still: the file is the model, taken, and left as it is.
         self.assertEqual(self.cli("stop").returncode, 0)
         self.start()
         with self.xbf("cube").open("ab") as edited:
             edited.write(b"by hand")
-        self.assertIn("the body ran", self.run_script("cube").stderr)
-        self.assertEqual(self.xbf("cube").read_bytes(), built)
-        self.assertEqual(self.record(ident)["version"], file_version(self.xbf("cube")))
-        self.assertEqual(self.cli("stop").returncode, 0)
-        self.start()
         self.assert_taken()
-        # Gone: the model is unsaved, its command said; its run writes it again.
+        self.assertEqual(self.xbf("cube").read_bytes(), built + b"by hand")
+        # Gone: its id names nothing, and its run writes it again.
         self.assertEqual(self.cli("stop").returncode, 0)
         self.start()
         self.xbf("cube").unlink()
-        state = self.ask({"op": "state", "id": ident})
-        self.assertEqual((state["state"], state["rebuild"]), ("unsaved", f"cad run {self.project / 'cube.py'}"))
-        self.assertIn("its .xbf is gone", state["error"])
+        self.assertEqual(self.ask({"op": "state", "id": ident}),
+                         {"ok": True, "state": None, "error": f"no document {ident} is held"})
         self.assertIn("the body ran", self.run_script("cube").stderr)
         self.assertTrue(self.xbf("cube").is_file())
+
+    def test_an_id_answers_after_a_restart_from_the_library_or_a_project_folder_alone(self) -> None:
+        # Folders of its own: this test's project is the only one, and its Recents hold what it built.
+        self.use(self.folder / "state", self.folder / "cache")
+        self.start()
+        built = self.said()
+        self.run_script("cube")
+        work = self.folder / "work" / "parts"
+        work.mkdir(parents=True)
+        dropped = work / "dropped.xbf"
+        shutil.copyfile(self.xbf("cube"), dropped)  # a file another program drops in a project: nobody opens it
+        launched = engine_daemon.run([sys.executable, "-m", "cad_server.viewer", "--json", "--api-only",
+                                      str(work.parent)], cwd=self.project, env=self.env)
+        self.assertEqual(launched.returncode, 0, launched.stderr)
+        self.assertEqual(self.cli("stop").returncode, 0)
+        self.start()
+
+        def envelope(ident: str) -> tuple[int, dict]:
+            served = self.ask({"op": "http"})
+            return get(f"{served['url']}/api/v1/documents/{ident}", served["token"])
+
+        # A model outside every project: the library knows its .xbf, for a verb before anything is served as for a
+        # page. A project's file nobody opened: its folder knows it.
+        self.assertEqual(self.cli("inspect", built).returncode, 0)
+        status, found = envelope(built)
+        self.assertEqual((status, found["source"]["path"], found["entry"]["project"]), (200, str(self.xbf("cube")), None))
+        dropped_id = file_id(self.folder / "work" / "parts" / "dropped.xbf")
+        self.assertEqual(self.cli("inspect", dropped_id).returncode, 0)
+        status, found = envelope(dropped_id)
+        self.assertEqual((status, found["source"]["path"], found["entry"]["project"]["folder"]), (200, str(dropped), "parts"))
+        self.assertEqual(self.entry(dropped_id), None, "found, with no entry made for it")
+        self.assertFalse((self.state / "documents").exists(), "and no record of either")
+        # An unchanged run after the restart is taken from its file by its key.
+        self.assert_taken()
+        # A file that is gone names nothing: a 404, with no state and no command.
+        dropped.unlink()
+        status, gone = envelope(file_id(dropped))
+        self.assertEqual((status, gone), (404, {
+            "error": f"no document {file_id(dropped)} is held",
+            "hint": "run the model's script again, or open the file from where it is now"}))
+        refused = self.cli("inspect", file_id(dropped))
+        self.assertEqual((refused.returncode, f"no document {file_id(dropped)} is held" in refused.stderr), (2, True))
+        self.assertEqual(envelope(derived_id(self.project / "cube.py", "cube"))[0], 404,
+                         "an id of an earlier release's formula names nothing")
 
     def test_two_unchanged_runs_leave_one_generation_and_the_page_idle(self) -> None:
         # A document is what its last run made: nothing ran, nothing changed, so a page has nothing to fetch.
@@ -198,7 +226,7 @@ class XbfStoreTest(store_fixtures.StoreCase):
         self.assertIn(f"id: {ident}", done.stdout, "its id is its file's")
         self.assertIn(f"/{ident}?", done.stdout, "its page is its file's")
         self.assertEqual(sorted(path.name for path in self.project.iterdir()), ["plate.py", "plate.step"], "no .xbf")
-        self.assertEqual(Registry(self.state).list(), [], "no document: no record")
+        self.assertIsNone(self.entry(ident), "no document: nothing of it in the library")
         # Warm: taken from the worker's memory, nothing ran, and said again.
         warm = self.run_script("plate")
         self.assertIn("took plate.py::plate warm in", warm.stdout)
