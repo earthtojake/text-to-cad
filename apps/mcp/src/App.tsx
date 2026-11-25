@@ -242,9 +242,11 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   }), [sync]);
   // Everything else the view asks of the server travels as viewer requests over `cad_http`: its
   // model, the library, Open, Reveal and the person's settings. The client polls
-  // nothing: the sync says when the file's catalog entry moved.
+  // nothing: the sync says when the file's catalog entry moved. Reached directly, with no sync, it reads its catalog
+  // again itself while the view is seen; a hidden one asks nothing.
   const tunnel = useMemo(() => direct ?? createTunnelFetch(server), [server, direct]);
-  const client = useMemo(() => createTunnelClient(tunnel, direct ? {} : { pollIntervalMs: 0 }), [tunnel, direct]);
+  const client = useMemo(() => createTunnelClient(tunnel, direct ? { shouldPoll: () => document.visibilityState !== 'hidden' }
+    : { pollIntervalMs: 0 }), [tunnel, direct]);
   useEffect(() => () => client.dispose(), [client]);
 
   useEffect(() => {

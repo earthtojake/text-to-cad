@@ -438,6 +438,27 @@ it('reads its list again every couple of seconds while the home is up, keeping t
   } finally { vi.useRealTimers(); }
 });
 
+it('asks nothing while the page is hidden, and reads its list again as it is shown', async () => {
+  vi.useFakeTimers();
+  const hide = (hidden: boolean) => {
+    if (hidden) Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    else delete (document as { visibilityState?: string }).visibilityState;
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
+  try {
+    const list = vi.fn(async () => [model('plate.step')]);
+    render(<ModelLibrary library={library([], { list })} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(list).toHaveBeenCalledTimes(1);
+    await act(async () => { hide(true); await vi.advanceTimersByTimeAsync(10_000); });
+    expect(list).toHaveBeenCalledTimes(1);
+    await act(async () => { hide(false); await vi.advanceTimersByTimeAsync(0); });
+    expect(list).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(list).toHaveBeenCalledTimes(3);
+  } finally { hide(false); vi.useRealTimers(); }
+});
+
 it("counts what a person does on the home by name: a type chosen, a search begun, a card opened, a delete cancelled and one confirmed", async () => {
   const reports: { control: string; count: number; seconds: number }[][] = [];
   const script = '/work/juno/juno.py';

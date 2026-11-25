@@ -477,8 +477,10 @@ the launch's `_meta` first (`host/capability.ts`).
 The card shows the update button the browser viewer shows (`@cad/ui/update`, [the web README](../web/README.md)),
 outermost in its navbar, while a global install of cad is behind a newer release of its own major: its launch carries
 what the server last knew (`cadUpdate`, `auto_update.button`, left out where cad cannot update itself), so it draws with
-the card, and the card reads `GET /api/v1/server` again, through `cad_http`, when the person comes back to it. A click
-is `POST /api/v1/local/update` through `cad_http`, the same request as `cad update`. While the update runs the card
+the card, and the card reads `GET /api/v1/server` again, through `cad_http`, when the person comes back to it and once
+a minute while it is seen; it shows too where a release is installed and only the server's restart is left. A click
+opens the popover that asks (Update or Restart, and Later); its action is `POST /api/v1/local/update` through
+`cad_http`, the same request as `cad update`. While the update runs the card
 asks where it is; the server restarts onto the new release, and the four failed syncs that would say the plugin stopped say
 nothing then (the shim opens a new session with the server that comes back). Once a server of another release
 answers, the card loads that release's app in its own place (`host/release.ts`, the shell's `reload`), which says it

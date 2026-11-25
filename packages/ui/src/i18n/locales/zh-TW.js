@@ -930,6 +930,12 @@ export default {
   // The update button (`@cad/ui/update`): its states, and why an update failed, by its cause.
   "update.label": "更新",
   "update.toAria": "更新至 {version}",
+  "update.readyTitle": "更新已就緒",
+  "update.readyText": "cad {version} 已安裝。重新啟動即可完成。",
+  "update.restart": "重新啟動",
+  "update.availableTitle": "有可用的更新",
+  "update.availableText": "cad {version} 已發布。更新時會重新啟動伺服器。",
+  "update.later": "稍後",
   "update.updating": "正在更新到 {version}",
   "update.progress": "正在更新，{percent}%",
   "update.restarting": "正在以 {version} 重新啟動",

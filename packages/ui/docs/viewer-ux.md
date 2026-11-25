@@ -75,12 +75,21 @@ chrome that floats over the picture. The home is the navbar over the library.
   button. Over the home: a failed update's put-away icon, then the update button.
 - **The update button** (`@cad/ui/update`), over every file and over the home, as 0.11.1 had it: a 24px brand-blue icon
   (a download arrow) and nothing else, shown while a global install of cad is behind a newer release of its own major,
-  automatic updates on or off; none where cad cannot update itself. Its tooltip says "Update". A click updates: the
-  icon becomes a ring that fills a stage at a time (the release installing beside the one that runs, the switch to
-  it, the server away while it restarts), each step eased, then a spinner until the new server answers, and the page
-  reloads into the new release once nothing on it is unsaved. An automatic update underway shows the same. A failed update, automatic or not, is the viewer's alert
-  card, the one every error is said in ([the alert card](#loading-and-status-screens)), and the button shows as it
-  is offered. Why: automatic updates fail on some computers, and this is where the person learns why and what to do;
+  or while a release is already installed beside the one that runs and only the server's restart is left, automatic
+  updates on or off; none where cad cannot update itself. Its tooltip says "Update". A click asks first: a small
+  popover under it, at the navbar's right edge, names the release, "Update ready" with Restart where it is installed,
+  else "Update available" with Update, beside Later, which closes it and keeps nothing. The action updates: the icon
+  becomes a ring that fills a stage at a time (the release installing beside the one that runs, the switch to it, the
+  server away while it restarts), each step eased, or, for a release that is ready, the spinner at once; then a spinner
+  until the new server answers, and the page reloads into the new release once nothing on it is unsaved. An automatic
+  update underway shows the same. Nothing opens by itself: the page reads the server again once a minute while it is
+  seen, and as it is shown again, so the button appears by itself, and never while it is hidden. Why: a quiet button
+  and a question before the server restarts, as desktop apps ask, because the restart reloads the page; no popup of
+  its own, because one over a model someone is looking at interrupts them. cad installs a release in the background
+  and restarts onto it only when the person says so or when nobody is looking, which a hidden page that kept asking
+  would never let it be. A failed update, automatic or not, is the viewer's alert card, the one every error is said in
+  ([the alert card](#loading-and-status-screens)), and the button shows as it is offered; the card's Try again updates
+  at once. Why: automatic updates fail on some computers, and this is where the person learns why and what to do;
   nothing is blocked, and an error looks like every other error.
 - The first glyph stands 16px in, on the page's gutter: the panel toggle's icon, on the panel's 16px line; else the
   logo's drawn mark (the row's 8px, the tile's 6px and the artwork's 2px).

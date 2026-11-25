@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { build } from "esbuild";
 import { chromium } from "playwright";
+import en from "../i18n/locales/en.js";
 
 let server, browser, temporary, page;
 before(async () => {
@@ -111,7 +112,7 @@ test("the update button is the navbar's outermost control, and a failed update i
   assert.ok(at.y >= row.y + row.height, "under the navbar");
   assert.equal(await card.getByRole("heading").textContent(), "Couldn’t update to 0.9.1");
   assert.deepEqual((await card.innerText()).split("\n").filter(Boolean), ["Couldn’t update to 0.9.1",
-    "cad is in use by another program: close the apps using cad, then try again.", "Details", "Try again"]);
+    en["update.cause.in_use"], "Details", en["update.retry"]]);
   await payload().click();
   await settle();
   assert.ok(await card.isVisible(), "a press elsewhere leaves it");
@@ -127,6 +128,44 @@ test("the update button is the navbar's outermost control, and a failed update i
   await card.waitFor({ state: "detached" });
   assert.deepEqual(await page.evaluate(() => window.harness.events.filter((event) => ["dismiss", "reopen", "update"].includes(event))), ["dismiss", "reopen", "dismiss"]);
   await page.evaluate(() => window.harness.update("none"));
+});
+
+test("the update button asks first: its popover sits under it at the navbar's right edge, inside the window at a desktop's width and a phone's, the navbar unmoved", async () => {
+  await reset();
+  await waitPayload("root-a notes");
+  const navbar = pane().locator("[data-viewer-navbar]");
+  const button = navbar.locator("[data-update]");
+  const popover = page.locator("[data-update-prompt]");
+  const box = (locator) => locator.evaluate((node) => node.getBoundingClientRect().toJSON());
+  // Opened from `state`, measured at rest once its opening animation has run, then its action pressed.
+  const ask = async (state, action, after) => {
+    await page.evaluate((next) => window.harness.update(next), state);
+    await button.waitFor();
+    const [row, at] = [await box(navbar), await box(button)];
+    await button.click();
+    await popover.waitFor();
+    await popover.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)));
+    const [shown, rowAfter, width] = [await box(popover), await box(navbar), await page.evaluate(() => window.innerWidth)];
+    assert.deepEqual(rowAfter, row, "the navbar unmoved");
+    assert.ok(shown.top >= at.bottom && shown.top - at.bottom <= 10, `under the button, not over it: ${JSON.stringify([at, shown])}`);
+    assert.ok(Math.abs(shown.right - at.right) <= 1, `its right edge on the button's: ${JSON.stringify([at, shown])}`);
+    assert.ok(shown.left >= 8 && shown.right <= width - 8, `inside the window: ${JSON.stringify([width, shown])}`);
+    assert.ok(await popover.evaluate((node) => [...node.querySelectorAll("p, button")].every((part) => part.scrollWidth <= part.clientWidth)), "nothing cut");
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), action, "the action takes the focus");
+    await popover.getByRole("button", { name: action, exact: true }).click();
+    await navbar.locator(`[data-update="${after}"]`).waitFor();
+    await popover.waitFor({ state: "detached" });
+  };
+  await ask("ready", "Restart", "restarting");
+  await ask("behind", "Update", "working");
+  // A phone: the viewer and the window 390px wide.
+  await page.setViewportSize({ width: 390, height: 720 });
+  await page.evaluate(() => { document.querySelector("#root > div").style.width = "390px"; });
+  await pane().locator('[data-viewer-layout="mobile"]').waitFor();
+  await ask("ready", "Restart", "restarting");
+  await ask("behind", "Update", "working");
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.evaluate(() => { document.querySelector("#root > div").style.width = "1000px"; window.harness.update("none"); });
 });
 
 test("a viewer drawn out of sight for a picture never changes the page: its layout pinned, no data-viewer-layout, the page's type its own", async () => {

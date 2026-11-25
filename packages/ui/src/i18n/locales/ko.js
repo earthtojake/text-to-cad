@@ -929,6 +929,12 @@ export default {
   // The update button (`@cad/ui/update`): its states, and why an update failed, by its cause.
   "update.label": "업데이트",
   "update.toAria": "{version}(으)로 업데이트",
+  "update.readyTitle": "업데이트 준비 완료",
+  "update.readyText": "cad {version}을(를) 설치했습니다. 다시 시작하면 완료됩니다.",
+  "update.restart": "다시 시작",
+  "update.availableTitle": "업데이트 가능",
+  "update.availableText": "cad {version}을(를) 사용할 수 있습니다. 업데이트하면 서버가 다시 시작됩니다.",
+  "update.later": "나중에",
   "update.updating": "{version}(으)로 업데이트하는 중",
   "update.progress": "업데이트 중, {percent}%",
   "update.restarting": "{version}(으)로 다시 시작하는 중",

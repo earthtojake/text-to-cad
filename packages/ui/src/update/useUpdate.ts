@@ -13,8 +13,14 @@ export interface UpdateState {
   version: string;
   /** The newer release of its own major the button offers, or null: the install is current (a higher major is never offered). */
   latest: string | null;
-  /** `working`: an attempt is underway; `failed`: the last one did not install. */
-  state: "idle" | "working" | "failed";
+  /**
+   * `ready`: a release is installed beside this one and only the server's restart onto it is left (`ready` names it);
+   * `working`: an attempt that restarts the server is underway; `failed`: the last one did not install. An older
+   * server never says `ready`.
+   */
+  state: "idle" | "ready" | "working" | "failed";
+  /** While `ready`: the release installed and waiting, which a click restarts the server onto. */
+  ready?: string;
   /** While `working`: `building` (the release installs beside this one), then `switching` (the server restarts onto it); none from an older server. */
   phase?: "building" | "switching";
   /** When the attempt began: what a failure is put away by. */
@@ -55,7 +61,8 @@ export interface UpdateCalls {
 export type UpdatePhase =
   | { phase: "idle" }
   | { phase: "working"; done: number; total: number }
-  | { phase: "restarting" };
+  /** `version`: the release a click on a ready one restarts onto, said while the server's answers name none. */
+  | { phase: "restarting"; version?: string };
 
 /** Why an update did not install, as its alert says it (`updateAlert`). */
 export interface UpdateFailure {
@@ -73,6 +80,8 @@ export interface UpdateFailure {
 
 /** How often a page asks where an update it follows is. */
 export const UPDATE_POLL_MS = 500;
+/** How often a page that is seen and follows no update reads the update's state again: a release made ready meanwhile shows. */
+export const UPDATE_READ_MS = 60_000;
 /**
  * The ring's stages: building (the release installs beside this one: asked, and the server's `building` phase),
  * switching (the server restarts onto it), and the server gone meanwhile; then the spinner, the server back and the
@@ -90,11 +99,15 @@ const refusalOf = (error: unknown): UpdateFailure => {
 /**
  * The update button's state, from the host's server: what the host already read with the server's
  * description (`initial`, so the button draws with the page; none: read once), read again whenever the
- * person comes back to the page. `update()` is the click: the server begins a person's update
- * (`start`), and the page asks where it is (`read`) until it ends -- building, then switching, then, the
- * server gone while it restarts, still asking -- and once another start of the server answers
+ * person comes back to the page (its window focused, or the page shown again) and once a minute while the page
+ * is seen and follows no update (`UPDATE_READ_MS`), so a release made ready meanwhile shows by itself; never while
+ * the page is hidden, whose asking would keep the server from ever counting as left alone. `update()` is the click: the server
+ * begins a person's update (`start`), and the page asks where it is (`read`) until it ends -- building, then
+ * switching, then, the server gone while it restarts, still asking -- and once another start of the server answers
  * (`instance`), the server restarted: `restarting`, and the host's `onRestarted` (a page reloads into
- * it, once nothing it holds is unsaved). An automatic update the page finds underway is followed the
+ * it, once nothing it holds is unsaved). A click on a release that is `ready` has nothing left to install: it shows
+ * `restarting` at once and keeps it while the server switches, unless an answer says it is `building` a newer release
+ * after all (then the ring, as for any update). An automatic update the page finds underway is followed the
  * same way. A failure is the viewer's alert (`alert`, `CadViewer`'s: `updateAlert`'s card, its Try again the
  * click), from the server's record and so through a reload, until another attempt begins; put away (`dismiss`:
  * its X or Escape) it stays behind its icon in the navbar, on every page and through a reload (the server
@@ -119,6 +132,8 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
   // A page loaded after the restart its page before followed: the spinner until the update's end is written.
   const after = useRef(Boolean(followed));
   const restarted = useRef(false);
+  // The release a click on one that is ready restarts the server onto (the spinner throughout), else null.
+  const restart = useRef<string | null>(null);
   // The start of the server the page follows, and the release it ran: a restart onto the same release is the update
   // failed and the release before started again, which the page goes on following.
   const server = useRef({ instance, version: initial?.release ?? initial?.cadUpdate?.version ?? "" });
@@ -126,8 +141,8 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
   // (on this page alone: the server keeps a failure put away for every page).
   const chosen = useRef<{ at?: number; dismissed: boolean } | null>(null);
   const { t } = useI18n();
-  const latest = useRef({ calls, onRestarted, restartForSkills, t });
-  latest.current = { calls, onRestarted, restartForSkills, t };
+  const latest = useRef({ calls, onRestarted, restartForSkills, t, state });
+  latest.current = { calls, onRestarted, restartForSkills, t, state };
 
   const stopPolling = () => {
     if (polling.current !== null) clearTimeout(polling.current);
@@ -142,7 +157,7 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
       // A server of another release: the update installed it, and the page goes to it.
       restarted.current = true;
       following.current = false;
-      setPhase({ phase: "restarting" });
+      setPhase({ phase: "restarting", ...(restart.current ? { version: restart.current } : {}) });
       latest.current.onRestarted?.(reply);
       return false;
     }
@@ -157,11 +172,14 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
     if (update?.state === "working") {
       following.current = true;
       setFailure(null);
-      setPhase(after.current ? { phase: "restarting" }
+      // A newer release than the one that was ready: it installs first, as any update does.
+      if (update.phase === "building") restart.current = null;
+      setPhase(restart.current !== null ? { phase: "restarting", version: restart.current } : after.current ? { phase: "restarting" }
         : { phase: "working", done: update.phase === "building" ? 0 : 1, total: UPDATE_STAGES });
       return true;
     }
     following.current = false;
+    restart.current = null;
     if (update?.state === "failed") {
       const mine = chosen.current && chosen.current.at === update.at ? chosen.current.dismissed : undefined;
       setFailure({ cause: update.cause ?? "", said: update.said, at: update.at,
@@ -184,7 +202,7 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
       void latest.current.calls.read().then(reply => { if (apply(reply)) follow(); }, () => {
         if (!alive.current || !following.current) return;
         // The server gone while the update switches: the next stage, and asked again.
-        if (!after.current) setPhase({ phase: "working", done: 2, total: UPDATE_STAGES });
+        if (!after.current && restart.current === null) setPhase({ phase: "working", done: 2, total: UPDATE_STAGES });
         follow();
       });
     }, UPDATE_POLL_MS);
@@ -196,11 +214,15 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
     following.current = true;
     after.current = false;
     chosen.current = null;
+    const offered = latest.current.state;
+    restart.current = offered?.state === "ready" ? offered.ready ?? "" : null;
     setFailure(null);
-    setPhase({ phase: "working", done: 0, total: UPDATE_STAGES });
+    setPhase(restart.current !== null ? { phase: "restarting", version: restart.current }
+      : { phase: "working", done: 0, total: UPDATE_STAGES });
     void latest.current.calls.start().then(reply => { if (apply(reply)) follow(); else following.current = false; }, error => {
       if (!alive.current) return;
       following.current = false;
+      restart.current = null;
       setFailure(refusalOf(error));
       setPhase({ phase: "idle" });
     });
@@ -231,11 +253,21 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
       if (start.current) { if (apply(start.current)) follow(); } else read();
     } else if (following.current && polling.current === null) follow();
     const back = () => { if (!following.current) read(); };
+    // A tab shown again fires no window focus; a hidden one is never asked for.
+    const seen = () => { if (document.visibilityState !== "hidden") back(); };
+    const minute = setInterval(seen, UPDATE_READ_MS);
     window.addEventListener("focus", back);
-    return () => { alive.current = false; window.removeEventListener("focus", back); stopPolling(); };
+    document.addEventListener("visibilitychange", seen);
+    return () => {
+      alive.current = false;
+      clearInterval(minute);
+      window.removeEventListener("focus", back);
+      document.removeEventListener("visibilitychange", seen);
+      stopPolling();
+    };
   }, [read]);
-  const shown = Boolean(state?.latest) || phase.phase !== "idle";
-  const version = state?.latest ?? "";
+  const shown = Boolean(state?.latest) || state?.state === "ready" || phase.phase !== "idle";
+  const version = (state?.state === "ready" && state.ready) || (state?.latest ?? "");
   const alert = useMemo<HostAlert | null>(() => failure ? { alert: updateAlert(failure, version, t),
     dismissed: Boolean(failure.dismissed), onDismiss: dismiss, onReopen: reopen, ...(version ? { onRetry: update } : {}) } : null,
   [failure, version, t, dismiss, reopen, update]);
